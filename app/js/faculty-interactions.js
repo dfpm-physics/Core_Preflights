@@ -38,9 +38,10 @@ export async function loadManager(ctx) {
     ? await db.from('preflight_interaction_reports').select('student_id, interaction_id').in('student_id', studentIds)
     : { data: [] };
 
-  const countByInter = {}, doneKey = {};
+  const countByInter = {}, doneKey = {}, doneStudentsByInter = {};
   (reports || []).forEach(r => {
     countByInter[r.interaction_id] = (countByInter[r.interaction_id] || 0) + 1;
+    (doneStudentsByInter[r.interaction_id] ||= new Set()).add(r.student_id);
     const sec = sectionOf[r.student_id];
     if (sec) doneKey[`${r.interaction_id}|${sec}`] = (doneKey[`${r.interaction_id}|${sec}`] || 0) + 1;
   });
@@ -56,7 +57,8 @@ export async function loadManager(ctx) {
       done += d; total += n;
       return { sectionId: secId, done: d, total: n };
     });
-    return { ...it, count: countByInter[it.id] || 0, perSection, done, total };
+    return { ...it, count: countByInter[it.id] || 0, perSection, done, total,
+      doneStudentIds: [...(doneStudentsByInter[it.id] || [])] };
   });
 
   const sections = sectionIds.map(id => ({

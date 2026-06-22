@@ -10,6 +10,26 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-06-22 — Matthew Recker
 
+### Added — clickable interaction completion with a per-student report viewer
+
+On the faculty interactions page ([`app/faculty/interactions.html`](app/faculty/interactions.html) +
+[`app/js/faculty-interactions.js`](app/js/faculty-interactions.js)), the completion percentage and
+each per-section progress chip are now **clickable** (keyboard-accessible too) and open a redesigned
+**lesson report** modal:
+
+- A **course-wide summary** banner — placeholder text for now; the misconception/understanding
+  summary will populate it once the interaction-analysis pipeline lands (plan item D).
+- A **section scope** selector ("All sections" or one section) with live completion stats.
+- A **completion list**: every student in scope with a ✓ Complete / Not yet badge, and a
+  **View report** button next to each completed student that renders their saved report inline
+  (sanitized with DOMPurify, as before).
+
+The data layer now returns `doneStudentIds` per interaction (the set of students who submitted a
+report), replacing the old dropdown-driven viewer that could only page through students one at a
+time. Implements item C of the day's plan; the report viewing/completion half is fully functional
+now, while the aggregate-summary body stays stubbed pending D. A small `.clickable` affordance was
+added to [`app/css/styles.css`](app/css/styles.css).
+
 ### Changed — faculty dashboard roll-up is now interactions-only, split by ownership
 
 Reworked the faculty dashboard ([`app/faculty/dashboard.html`](app/faculty/dashboard.html) +

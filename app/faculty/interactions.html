@@ -41,16 +41,34 @@
     </div>
   </div>
 
-  <!-- Report viewer modal -->
+  <!-- Lesson report viewer: aggregate summary + completion list + per-student report -->
   <div class="modal-backdrop" id="report-modal">
-    <div class="modal">
-      <div class="modal-head"><h2 id="rm-title">Student report</h2><button class="modal-close" data-close>×</button></div>
-      <div class="row wrap" style="gap:10px;margin-bottom:14px;align-items:flex-end">
-        <div class="grow" style="min-width:120px"><label for="sel-section">Section</label><select id="sel-section"></select></div>
-        <div class="grow" style="min-width:160px"><label for="sel-student">Student</label><select id="sel-student"></select></div>
-        <button class="btn btn-primary" id="load-report">View</button>
+    <div class="modal" style="max-width:760px">
+      <div class="modal-head"><h2 id="rm-title">Lesson report</h2><button class="modal-close" data-close>×</button></div>
+
+      <!-- Course-wide summary — placeholder until the interaction-analysis pipeline lands -->
+      <div class="alert alert-info" id="rm-aggregate">
+        <strong>Course-wide summary</strong> — pending analysis. Completion is shown below; the
+        misconception &amp; understanding summary will appear here once analysis runs.
       </div>
-      <div class="md-render" id="rm-body"><div class="muted">Pick a section and student, then choose <strong>View</strong>.</div></div>
+
+      <!-- Scope + completion stats -->
+      <div class="row wrap" style="gap:12px;margin-bottom:12px;align-items:flex-end">
+        <div class="grow" style="min-width:150px"><label for="sel-section">Section</label><select id="sel-section"></select></div>
+        <div class="grow" style="text-align:right"><span class="muted" id="rm-stats"></span></div>
+      </div>
+
+      <!-- Completion list -->
+      <div id="rm-list"></div>
+
+      <!-- One student's report (shown after picking a student) -->
+      <div id="rm-report" style="display:none">
+        <div class="row" style="gap:10px;align-items:center;margin-bottom:10px">
+          <button class="btn btn-ghost btn-sm" id="rm-back">← Back to list</button>
+          <strong id="rm-report-name"></strong>
+        </div>
+        <div class="md-render" id="rm-body"></div>
+      </div>
     </div>
   </div>
 
@@ -100,7 +118,11 @@
 
       root.innerHTML = head + vm.interactions.map(card).join('');
       wireNew();
-      document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => openReports(b.dataset.view, b.dataset.title)));
+      document.querySelectorAll('[data-report]').forEach(b => {
+        const open = () => openReports(b.dataset.report, b.dataset.title, b.dataset.section || null);
+        b.addEventListener('click', open);
+        b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+      });
       document.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openEdit(b.dataset.edit)));
       document.querySelectorAll('[data-pub]').forEach(b => b.addEventListener('click', () => doTogglePublish(b.dataset.pub)));
       document.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => doDelete(b.dataset.del, b.dataset.title)));
@@ -112,18 +134,19 @@
         ? `<span class="score-badge full">Published</span>`
         : `<span class="score-badge pending">Draft</span>`;
       const completion = it.is_published
-        ? `<div style="font-size:1.4em;font-weight:800">${it.total ? p + '%' : '—'}</div>
-           <div class="muted" style="font-size:0.78em">${it.done}/${it.total} reports</div>`
+        ? `<div role="button" tabindex="0" class="clickable" data-report="${esc(it.id)}" data-title="${esc(it.title)}" title="View completion & reports">
+             <div style="font-size:1.4em;font-weight:800">${it.total ? p + '%' : '—'}</div>
+             <div class="muted" style="font-size:0.78em">${it.done}/${it.total} reports</div></div>`
         : `<div class="muted" style="font-size:0.82em">Draft · ${it.count} report${it.count === 1 ? '' : 's'}</div>`;
 
       const chips = (it.is_published && it.perSection.length) ? `<div class="row wrap" style="gap:14px;margin-top:14px">${
-        it.perSection.map(s => { const sp = pct(s.done, s.total); return `<div class="progress-row" style="min-width:150px;flex:1">
+        it.perSection.map(s => { const sp = pct(s.done, s.total); return `<div class="progress-row clickable" style="min-width:150px;flex:1" data-report="${esc(it.id)}" data-title="${esc(it.title)}" data-section="${esc(s.sectionId)}" title="View ${esc(s.sectionId)} completion">
           <span class="pr-label">${esc(s.sectionId)}</span><span class="pr-count">${s.done}/${s.total}</span>
           <div class="pr-track"><div class="pr-fill ${barClass(sp)}" style="width:${sp}%"></div></div></div>`; }).join('')
       }</div>` : '';
 
-      const view = it.count
-        ? `<button class="btn btn-ghost btn-sm" data-view="${esc(it.id)}" data-title="${esc(it.title)}">View reports</button>` : '';
+      const view = (it.is_published || it.count)
+        ? `<button class="btn btn-ghost btn-sm" data-report="${esc(it.id)}" data-title="${esc(it.title)}">View completion</button>` : '';
       const manage = isDirector() ? `
         <button class="btn btn-ghost btn-sm" data-edit="${esc(it.id)}">Edit</button>
         <button class="btn btn-ghost btn-sm" data-pub="${esc(it.id)}">${it.is_published ? 'Unpublish' : 'Publish'}</button>
@@ -153,8 +176,8 @@
         m.addEventListener('click', (e) => { if (e.target.id === id || e.target.dataset.close !== undefined) m.classList.remove('open'); });
       });
       document.getElementById('em-save').addEventListener('click', saveEdit);
-      document.getElementById('sel-section').addEventListener('change', fillStudents);
-      document.getElementById('load-report').addEventListener('click', viewReport);
+      document.getElementById('sel-section').addEventListener('change', showList);
+      document.getElementById('rm-back').addEventListener('click', showList);
     }
 
     // id set → update that existing slug; id null → insert a new row.
@@ -227,27 +250,68 @@
       load();
     }
 
-    // ── Report viewer ──
-    function openReports(interactionId, title) {
+    // ── Lesson report viewer: completion list + per-student report ──
+    // Opened from any progress bar/chip. `section` (optional) preselects a single section;
+    // otherwise the list spans every section in scope.
+    function openReports(interactionId, title, section) {
       reportInteraction = interactionId;
-      document.getElementById('rm-title').textContent = title || 'Student report';
-      document.getElementById('sel-section').innerHTML = vm.sections.map(s => `<option value="${esc(s.id)}">${esc(s.id)} (${s.students.length})</option>`).join('')
-        || `<option value="">No sections</option>`;
-      fillStudents();
-      document.getElementById('rm-body').innerHTML = `<div class="muted">Pick a section and student, then choose <strong>View</strong>.</div>`;
+      const it = vm.interactions.find(x => x.id === interactionId);
+      document.getElementById('rm-title').textContent = title || it?.title || 'Lesson report';
+
+      const sel = document.getElementById('sel-section');
+      sel.innerHTML = [`<option value="all">All sections</option>`]
+        .concat(vm.sections.map(s => `<option value="${esc(s.id)}">${esc(s.id)} (${s.students.length})</option>`)).join('');
+      sel.value = (section && vm.sections.some(s => s.id === section)) ? section : 'all';
+
+      showList();
       document.getElementById('report-modal').classList.add('open');
     }
-    function fillStudents() {
-      const sec = vm.sections.find(s => s.id === document.getElementById('sel-section').value);
-      document.getElementById('sel-student').innerHTML = (sec?.students || []).map(s => `<option value="${esc(s.student_id)}">${esc(s.name)}</option>`).join('')
-        || `<option value="">No students</option>`;
+
+    // Roster for the chosen scope, each student tagged with its section id.
+    function rosterInScope() {
+      const sec = document.getElementById('sel-section').value;
+      const src = sec === 'all' ? vm.sections : vm.sections.filter(s => s.id === sec);
+      return src.flatMap(s => s.students.map(st => ({ ...st, section: s.id })));
     }
-    async function viewReport() {
-      const sid = document.getElementById('sel-student').value;
+
+    // Render the completion list for the current interaction + section scope.
+    function showList() {
+      document.getElementById('rm-report').style.display = 'none';
+      const listEl = document.getElementById('rm-list');
+      listEl.style.display = '';
+
+      const it = vm.interactions.find(x => x.id === reportInteraction);
+      const done = new Set(it?.doneStudentIds || []);
+      const roster = rosterInScope();
+      const complete = roster.filter(st => done.has(st.student_id)).length;
+      const p = pct(complete, roster.length);
+      document.getElementById('rm-stats').textContent =
+        roster.length ? `${complete}/${roster.length} complete · ${p}%` : 'No students in scope';
+
+      listEl.innerHTML = roster.length ? roster.map(st => {
+        const isDone = done.has(st.student_id);
+        const status = isDone ? `<span class="score-badge full">✓ Complete</span>`
+                              : `<span class="score-badge pending">Not yet</span>`;
+        const view = isDone
+          ? `<button class="btn btn-ghost btn-sm" data-student="${esc(st.student_id)}" data-name="${esc(st.name)}">View report</button>` : '';
+        return `<div class="row" style="gap:10px;align-items:center;padding:8px 2px;border-bottom:1px solid var(--border)">
+          <span style="font-weight:600">${esc(st.name)}</span>
+          <span class="muted" style="font-size:0.8em">${esc(st.section)}</span>
+          <span class="grow"></span>${status}${view}
+        </div>`;
+      }).join('') : `<div class="muted" style="padding:8px 2px">No students in this scope.</div>`;
+
+      listEl.querySelectorAll('[data-student]').forEach(b =>
+        b.addEventListener('click', () => showStudentReport(b.dataset.student, b.dataset.name)));
+    }
+
+    async function showStudentReport(studentId, name) {
+      document.getElementById('rm-list').style.display = 'none';
+      document.getElementById('rm-report').style.display = '';
+      document.getElementById('rm-report-name').textContent = name || '';
       const body = document.getElementById('rm-body');
-      if (!sid || !reportInteraction) return;
       body.innerHTML = `<div class="center-load"><span class="spinner"></span></div>`;
-      const md = await I.loadReport(reportInteraction, sid);
+      const md = await I.loadReport(reportInteraction, studentId);
       // Report markdown is an inert, user-controllable blob — sanitize at render time.
       body.innerHTML = md ? DOMPurify.sanitize(marked.parse(md))
         : `<div class="alert alert-info">This student hasn't submitted a report for this interaction yet.</div>`;

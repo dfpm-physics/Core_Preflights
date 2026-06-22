@@ -483,6 +483,11 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
 .score-badge.zero    { background: var(--alert-error-bg); color: var(--alert-error-fg); }
 .score-badge.pending { background: var(--surface-hover);  color: var(--muted); }
 
+/* Affordance for clickable progress bars / completion tiles (interaction report viewer). */
+.clickable { cursor: pointer; border-radius: 8px; transition: background 0.12s, opacity 0.12s; }
+.clickable:hover { background: var(--surface-hover); }
+.clickable:focus-visible { outline: 2px solid var(--blue-lt); outline-offset: 2px; }
+
 .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
 table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
 th { background: var(--th-bg); color: #fff; padding: 10px 12px; text-align: left; white-space: nowrap; }
