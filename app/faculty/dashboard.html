@@ -62,10 +62,10 @@
           <div class="stat-body"><div class="stat-num">${num}</div><div class="stat-label">${esc(label)}</div></div>
         </div>`;
       return `<div class="stat-grid">
-        ${tile('blue',  'sections',      '🗂️', t.sections, t.sections === 1 ? 'Section' : 'Sections')}
-        ${tile('gold',  'students',      '👥', t.students, 'Students')}
-        ${tile('amber', 'pending-grade', '✍️', t.needsGrading, 'Submissions to grade')}
-        ${tile('green', 'submissions',   '📥', t.submittedPct + '%', 'Avg submitted')}
+        ${tile('blue',  'sections',     '🗂️', t.sections, t.sections === 1 ? 'Section' : 'Sections')}
+        ${tile('gold',  'students',     '👥', t.students, 'Students')}
+        ${tile('amber', 'interactions', '💡', t.lessonsPublished, t.lessonsPublished === 1 ? 'Lesson published' : 'Lessons published')}
+        ${tile('green', 'completion',   '✅', t.interactionsPct + '%', 'Avg completion')}
       </div>`;
     }
 
@@ -88,41 +88,53 @@
 
     function barClass(p) { return p >= 80 ? '' : p >= 40 ? 'partial' : 'low'; }
 
-    function rollup(vm) {
-      const cards = vm.sections.map(sec => {
-        const rows = sec.perAssignment.length ? sec.perAssignment.map(a => {
-          const p = pct(a.submitted, a.total);
-          return `<div class="progress-row">
-            <span class="pr-label">${esc(a.title)}</span>
-            <span class="pr-count">${a.submitted}/${a.total} sub · ${a.graded} graded</span>
-            <div class="pr-track"><div class="pr-fill ${barClass(p)}" style="width:${p}%"></div></div>
-          </div>`;
-        }).join('') : `<div class="muted" style="font-size:0.84em">No published assignments yet.</div>`;
-
-        const ip = pct(sec.interaction.done, sec.interaction.total);
-        const interRow = sec.interaction.total ? `<div class="progress-row">
-          <span class="pr-label">${iconHTML('completion', '💡', 'ic-sm')} Interactions</span>
-          <span class="pr-count">${ip}% complete</span>
-          <div class="pr-track"><div class="pr-fill ${barClass(ip)}" style="width:${ip}%"></div></div>
-        </div>` : '';
-
-        return `<div class="section-card">
-          <div class="sc-head">
-            <span class="sc-tag">${esc(sec.id)}</span>
-            <div class="grow"><div class="sc-meta">${sec.studentCount} student${sec.studentCount===1?'':'s'}</div>
-              ${sec.instructorName ? `<div class="sc-instr">${esc(sec.instructorName)}</div>` : ''}</div>
-          </div>
-          <div class="sc-body">${rows}${interRow}</div>
+    // One section card: interaction completion only (preflight data lives on Grade/Report now).
+    function sectionCard(sec) {
+      const rows = sec.perInteraction.length ? sec.perInteraction.map(it => {
+        const p = pct(it.done, it.total);
+        return `<div class="progress-row">
+          <span class="pr-label">${esc(it.title)}</span>
+          <span class="pr-count">${it.done}/${it.total}</span>
+          <div class="pr-track"><div class="pr-fill ${barClass(p)}" style="width:${p}%"></div></div>
         </div>`;
-      }).join('');
+      }).join('') : `<div class="muted" style="font-size:0.84em">No published interactions yet.</div>`;
 
-      return `<section class="dash-section">
-        <div class="section-head"><h2>${iconHTML('class', '🏫', 'ic')} Section roll-up</h2>
-          <span class="count-pill">${vm.sections.length}</span>
-          <span class="grow"></span>
-          <span class="muted" style="font-size:0.82em">Recent ${vm.assignments.length} assignment${vm.assignments.length===1?'':'s'}</span>
+      return `<div class="section-card">
+        <div class="sc-head">
+          <span class="sc-tag">${esc(sec.id)}</span>
+          <div class="grow"><div class="sc-meta">${sec.studentCount} student${sec.studentCount===1?'':'s'}</div>
+            ${sec.instructorName ? `<div class="sc-instr">${esc(sec.instructorName)}</div>` : ''}</div>
         </div>
-        <div class="rollup-grid">${cards}</div></section>`;
+        <div class="sc-body">${rows}</div>
+      </div>`;
+    }
+
+    function rollupGroup(title, icon, emoji, cards, sub, emptyMsg) {
+      const body = cards.length
+        ? `<div class="rollup-grid">${cards.map(sectionCard).join('')}</div>`
+        : `<div class="muted" style="font-size:0.86em">${esc(emptyMsg)}</div>`;
+      return `<section class="dash-section">
+        <div class="section-head"><h2>${iconHTML(icon, emoji, 'ic')} ${esc(title)}</h2>
+          <span class="count-pill">${cards.length}</span>
+          <span class="grow"></span>
+          <span class="muted" style="font-size:0.82em">${esc(sub)}</span>
+        </div>
+        ${body}</section>`;
+    }
+
+    function rollup(vm) {
+      const lessons = vm.interactions.length;
+      const sub = `${lessons} lesson${lessons === 1 ? '' : 's'} published`;
+      const director = ctx.isDirectorForCurrent();
+
+      let html = rollupGroup('Your sections', 'class', '🏫', vm.mySections, sub,
+        director ? "You aren't personally assigned to any sections in this course."
+                 : "You don't have any sections yet.");
+      if (director) {
+        html += rollupGroup('All other sections', 'sections', '🗂️', vm.otherSections, sub,
+          'Every section in this course is assigned to you.');
+      }
+      return html;
     }
   </script>
 </body>

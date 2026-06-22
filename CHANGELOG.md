@@ -8,6 +8,38 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-06-22 — Matthew Recker
+
+### Changed — faculty dashboard roll-up is now interactions-only, split by ownership
+
+Reworked the faculty dashboard ([`app/faculty/dashboard.html`](app/faculty/dashboard.html) +
+[`app/js/faculty-data.js`](app/js/faculty-data.js)) toward the interactions-first test:
+
+- The section roll-up no longer shows preflight assignment progress. Each section card now lists
+  **per-published-interaction completion** (`done/total` per lesson) instead. Preflight grading is
+  unchanged and still lives on the Grade/Report tabs.
+- The roll-up is split into **"Your sections"** (sections you personally teach) and, for
+  directors/admins only, a second **"All other sections"** group. Instructors see only the first.
+- The stat tiles dropped the assignment-centric "submissions to grade" / "avg submitted" in favor
+  of **lessons published** and **avg interaction completion**.
+- `loadFacultyDashboard` stopped querying `assignments`/`responses`/`scores` (and the now-unused
+  per-assignment helper was removed), returning `mySections` / `otherSections` / per-interaction
+  breakdowns instead. Implements items A + B of the day's plan.
+
+### Added — work plan for the next portal iteration
+
+Wrote [`app/PLAN-2026-06-22.md`](app/PLAN-2026-06-22.md): a dependency-ordered plan to push the
+faculty portal toward a lesson-interactions-first experience. Covers (A/B) splitting the section
+roll-up into "your sections" vs. "all other sections" and stripping preflight data from it in
+favor of interactions only, (C) a clickable interaction completion list with per-student report
+viewing, (D) a course-level interaction overview in Quick Actions, and (E) a native admin page
+with a new `reset-password` edge function (instructors reset their own students; directors reset
+all students/instructors and move section assignments). Records current state, blockers (notably
+the not-yet-built interaction-analysis aggregation and the missing password-reset function), and a
+recommended A→B→C→D→E priority order.
+
+---
+
 ## 2026-06-12 — Matthew Recker
 
 ### Fixed — footer pinned to the bottom on short pages

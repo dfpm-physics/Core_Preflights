@@ -7,18 +7,6 @@ import { db } from './supabase.js';
 
 const CHUNK = 300; // keep .in() URLs under GET length limits for large courses
 
-/** Run a select filtered by assignment_id IN asgnIds AND student_id IN (chunked) ids. */
-async function factsByAssignmentAndStudent(table, columns, asgnIds, studentIds) {
-  if (!asgnIds.length || !studentIds.length) return [];
-  const out = [];
-  for (let i = 0; i < studentIds.length; i += CHUNK) {
-    const { data } = await db.from(table).select(columns)
-      .in('assignment_id', asgnIds).in('student_id', studentIds.slice(i, i + CHUNK));
-    if (data) out.push(...data);
-  }
-  return out;
-}
-
 async function reportsByStudent(studentIds) {
   if (!studentIds.length) return [];
   const out = [];
@@ -35,31 +23,28 @@ export async function loadFacultyDashboard(ctx) {
   if (!course) return { noCourse: true };
 
   const isDirector = ctx.isDirectorForCurrent();
+  const myId = ctx.instructorRow.id;
 
-  // 1) Covered sections
+  // 1) Sections in scope. Directors see every section in the course (split below into the
+  //    ones they personally teach vs. everyone else's); instructors see only their own.
   let secQuery = db.from('sections').select('id, instructor_id').eq('course_id', course).order('id');
-  if (!isDirector) secQuery = secQuery.eq('instructor_id', ctx.instructorRow.id);
+  if (!isDirector) secQuery = secQuery.eq('instructor_id', myId);
   const { data: sectionRows } = await secQuery;
   const sections = sectionRows || [];
   if (!sections.length) return { noCourse: false, isDirector, noSections: true };
 
   const sectionIds = sections.map(s => s.id);
 
-  // 2) Roster + recent assignments + published interactions (parallel)
-  const [{ data: studentsRaw }, { data: asgnsRaw }, { data: interRaw }] = await Promise.all([
+  // 2) Roster + published interactions (parallel). Preflight assignments are intentionally
+  //    excluded — the dashboard roll-up is interactions-only (see app/PLAN-2026-06-22.md).
+  const [{ data: studentsRaw }, { data: interRaw }] = await Promise.all([
     db.from('students').select('student_id, name, section_id').in('section_id', sectionIds),
-    db.from('assignments').select('id, title, due_date_m, due_date_t')
-      .eq('course_id', course).eq('is_published', true)
-      .order('due_date_m', { ascending: false, nullsFirst: false }).limit(5),
-    db.from('interactions').select('id, title').eq('course_id', course).eq('is_published', true),
+    db.from('interactions').select('id, title').eq('course_id', course).eq('is_published', true).order('title'),
   ]);
 
   const students = studentsRaw || [];
-  const assignments = (asgnsRaw || []).slice().reverse(); // show oldest→newest in cards
   const interactions = interRaw || [];
   const studentIds = students.map(s => s.student_id);
-  const sectionOf = Object.fromEntries(students.map(s => [s.student_id, s.section_id]));
-  const asgnIds = assignments.map(a => a.id);
 
   // Instructor names for section labels (directors view shows who teaches each section)
   let instrName = {};
@@ -69,21 +54,10 @@ export async function loadFacultyDashboard(ctx) {
     instrName = Object.fromEntries((instrs || []).map(i => [i.id, i.name]));
   }
 
-  // 3) Submission + grading facts + interaction reports
-  const [responses, scores, reports] = await Promise.all([
-    factsByAssignmentAndStudent('responses', 'student_id, assignment_id', asgnIds, studentIds),
-    factsByAssignmentAndStudent('scores', 'student_id, assignment_id, is_finalized', asgnIds, studentIds),
-    reportsByStudent(studentIds),
-  ]);
-
-  // Index facts: assignmentId -> Set(studentId)
-  const submittedBy = {}, gradedBy = {};
-  asgnIds.forEach(id => { submittedBy[id] = new Set(); gradedBy[id] = new Set(); });
-  responses.forEach(r => submittedBy[r.assignment_id]?.add(r.student_id));
-  scores.forEach(s => { if (s.is_finalized) gradedBy[s.assignment_id]?.add(s.student_id); });
-
+  // 3) Interaction reports → studentId -> Set(published interactionId)
+  const reports = await reportsByStudent(studentIds);
   const interIds = new Set(interactions.map(i => i.id));
-  const reportsOf = {}; // studentId -> Set(interactionId) limited to published interactions
+  const reportsOf = {};
   reports.forEach(r => {
     if (!interIds.has(r.interaction_id)) return;
     (reportsOf[r.student_id] ||= new Set()).add(r.interaction_id);
@@ -94,35 +68,31 @@ export async function loadFacultyDashboard(ctx) {
   sectionIds.forEach(id => studentsBySection[id] = []);
   students.forEach(s => studentsBySection[s.section_id]?.push(s.student_id));
 
-  let totSubmitted = 0, totPossible = 0, totGraded = 0, totNeedsGrading = 0;
   let totInterDone = 0, totInterPossible = 0;
 
-  const sectionCards = sections.map(sec => {
+  const buildCard = (sec) => {
     const roster = studentsBySection[sec.id] || [];
     const n = roster.length;
-
-    const perAssignment = assignments.map(a => {
-      const submitted = roster.filter(id => submittedBy[a.id]?.has(id)).length;
-      const graded = roster.filter(id => gradedBy[a.id]?.has(id)).length;
-      totSubmitted += submitted; totPossible += n; totGraded += graded;
-      totNeedsGrading += Math.max(0, submitted - graded);
-      return { id: a.id, title: a.title, submitted, graded, total: n };
+    // Per published interaction: how many of this section's students submitted a report.
+    const perInteraction = interactions.map(it => {
+      const done = roster.filter(id => reportsOf[id]?.has(it.id)).length;
+      totInterDone += done; totInterPossible += n;
+      return { id: it.id, title: it.title, done, total: n };
     });
-
-    // interaction completion = reports across roster / (n × published count)
-    let interDone = 0;
-    roster.forEach(id => { interDone += [...(reportsOf[id] || [])].filter(x => interIds.has(x)).length; });
-    const interPossible = n * interactions.length;
-    totInterDone += interDone; totInterPossible += interPossible;
-
+    const interDone = perInteraction.reduce((sum, it) => sum + it.done, 0);
     return {
       id: sec.id,
       instructorName: instrName[sec.instructor_id] || null,
+      isMine: sec.instructor_id === myId,
       studentCount: n,
-      perAssignment,
-      interaction: { done: interDone, total: interPossible },
+      perInteraction,
+      interaction: { done: interDone, total: n * interactions.length },
     };
-  });
+  };
+
+  const sectionCards = sections.map(buildCard);
+  const mySections = sectionCards.filter(c => c.isMine);
+  const otherSections = isDirector ? sectionCards.filter(c => !c.isMine) : [];
 
   return {
     noCourse: false, noSections: false, isDirector,
@@ -130,13 +100,10 @@ export async function loadFacultyDashboard(ctx) {
     totals: {
       sections: sections.length,
       students: students.length,
-      assignmentsTracked: assignments.length,
-      needsGrading: totNeedsGrading,
-      submittedPct: totPossible ? Math.round((totSubmitted / totPossible) * 100) : 0,
-      gradedPct: totPossible ? Math.round((totGraded / totPossible) * 100) : 0,
+      lessonsPublished: interactions.length,
       interactionsPct: totInterPossible ? Math.round((totInterDone / totInterPossible) * 100) : 0,
     },
-    assignments, interactions, sections: sectionCards,
+    interactions, sections: sectionCards, mySections, otherSections,
   };
 }
 
