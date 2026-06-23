@@ -5,6 +5,8 @@
 
 import { db } from './supabase.js';
 
+const CHUNK = 300; // keep .in() URLs under GET length limits for large courses
+
 /**
  * @returns {{ noCourse?, interactions:[{...it, count, perSection, done, total}], sections:[{id,students}] }}
  *   Directors see all interactions (incl. drafts) across all course sections; instructors
@@ -90,4 +92,64 @@ export async function loadReport(interactionId, studentId) {
   const { data } = await db.from('preflight_interaction_reports')
     .select('report_markdown').eq('interaction_id', interactionId).eq('student_id', studentId).maybeSingle();
   return data?.report_markdown || null;
+}
+
+// ── Analysis export ──────────────────────────────────────────────────────────
+// Name + student ID + score is not treated as PII here, so reports are exported as-is.
+// Access is still gated by faculty auth + RLS (instructors: own sections; directors: course).
+
+/**
+ * Combine every report for one interaction into a single Markdown corpus for the analysis
+ * AI — one block per student, labeled with name · student ID · section. Scope matches the
+ * rest of the page: directors/admins get all sections in the course; instructors get their
+ * own. RLS independently gates which report rows the caller can read.
+ *
+ * @returns {{ title:string, interactionId:string, studentCount:number, text:string }}
+ */
+export async function buildLessonCorpus(ctx, interactionId) {
+  const course = ctx.currentCourse;
+  const isDirector = ctx.isDirectorForCurrent();
+
+  let secQuery = db.from('sections').select('id, instructor_id').eq('course_id', course).order('id');
+  if (!isDirector) secQuery = secQuery.eq('instructor_id', ctx.instructorRow.id);
+  const [{ data: secRows }, { data: itRow }] = await Promise.all([
+    secQuery,
+    db.from('interactions').select('id, title').eq('id', interactionId).maybeSingle(),
+  ]);
+  const title = itRow?.title || interactionId;
+  const sectionIds = (secRows || []).map(s => s.id);
+  if (!sectionIds.length) return { title, interactionId, studentCount: 0, text: '' };
+
+  const { data: studentsRaw } = await db.from('students')
+    .select('student_id, name, section_id').in('section_id', sectionIds);
+  const students = studentsRaw || [];
+  const byId = Object.fromEntries(students.map(s => [s.student_id, s]));
+  const studentIds = students.map(s => s.student_id);
+
+  const reports = [];
+  for (let i = 0; i < studentIds.length; i += CHUNK) {
+    const { data } = await db.from('preflight_interaction_reports')
+      .select('student_id, report_markdown')
+      .eq('interaction_id', interactionId)
+      .in('student_id', studentIds.slice(i, i + CHUNK));
+    if (data) reports.push(...data);
+  }
+
+  // Stable order: section, then student id.
+  reports.sort((a, b) => {
+    const sa = byId[a.student_id]?.section_id || '', sb = byId[b.student_id]?.section_id || '';
+    return sa.localeCompare(sb) || String(a.student_id).localeCompare(String(b.student_id));
+  });
+
+  const head = `# ${title} — combined reports for analysis\n`
+    + `Interaction: ${interactionId} · ${reports.length} report${reports.length === 1 ? '' : 's'}.\n`
+    + `Each block is labeled with the student's name, ID, and section.\n`;
+
+  const blocks = reports.map(r => {
+    const stu = byId[r.student_id] || {};
+    const who = stu.name ? `${stu.name} · ` : '';
+    return `\n\n---\n\n## ${who}${r.student_id} · Section ${stu.section_id || '—'}\n\n${r.report_markdown || ''}`;
+  });
+
+  return { title, interactionId, studentCount: reports.length, text: head + blocks.join('') };
 }

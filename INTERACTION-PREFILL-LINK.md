@@ -31,8 +31,10 @@ Append a query string with these parameters (URL-encode every value):
 ### ⚠️ Critical: the slug must match in two places
 The `id` in this link **must be the exact same slug** your artifact embeds when it sends a
 student's report back to the site — i.e. the `#i=<slug>` in
-`interaction-submit.html#i=<slug>&r=...`. Choose **one** slug and use it in both places. If
-they differ, the database rejects every student report (foreign key to `interactions.id`).
+`artifact-submit.html#i=<slug>&r=...` (see `INTERACTION-DATA-CONTRACT.md` for the full
+submission format; `interaction-submit.html` still works as a redirect alias). Choose **one**
+slug and use it in both places. If they differ, the database rejects every student report
+(foreign key to `interactions.id`).
 
 ### Encoding
 URL-encode each value (`encodeURIComponent`). For example a space → `%20`, an em dash

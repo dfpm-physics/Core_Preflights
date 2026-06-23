@@ -53,7 +53,9 @@ so promotion needs no find/replace:
    pages still render, and `config.js` is byte-identical).
 2. Keep the legacy `admin.html` and `interactions-admin.html` at the root; the portal's
    faculty links target them via `legacyUrl()`.
-3. The Claude artifacts still post back to `interaction-submit.html` at the root — unchanged.
+3. The Claude artifacts post back to `artifact-submit.html` at the root (with
+   `interaction-submit.html` kept as a redirect alias) — both stay at the root, unchanged by
+   promotion. See `INTERACTION-DATA-CONTRACT.md`.
 
 ## Not yet ported
 

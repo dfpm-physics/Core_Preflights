@@ -123,7 +123,13 @@ An AI skill will later summarize trends by section.
 
 **The artifact↔site contract:** the artifact's `#i=` slug **must match** an `interactions.id`
 the director created — otherwise the foreign key rejects the write. This is the one manual
-coordination point between the claude.ai artifact and this repo.
+coordination point between the claude.ai artifact and this repo. The **full, frozen contract**
+for what the artifact sends (permanent endpoint URL, `#t=`/`#i=`/`#r=`/`#d=` hash payload, and
+the `schema: 1` structured-data spec — effort-graded, understanding diagnostic) is
+`INTERACTION-DATA-CONTRACT.md`. The permanent receiver is `artifact-submit.html` at the repo
+root (excluded from the `app/` refactor; legacy `interaction-submit.html` stays as a redirect)
+so deployed artifacts never need revising. Effort (0–5) auto-derives a 0–2 `score` via DB
+trigger (migration `013`); a non-meaningful reading reflection caps effort at 2.
 
 **Prefill links:** a Claude artifact can hand the director a one-click link that opens
 `interactions-admin.html` with the New Interaction form already filled in

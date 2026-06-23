@@ -8,7 +8,75 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-06-23 — Matthew Recker
+
+### Added — generalized artifact receiver (`artifact-submit.html`)
+
+Built the receiver that realizes the v1 data contract. New
+[`artifact-submit.html`](artifact-submit.html) (based on the old `interaction-submit.html`)
+parses the `#t=`/`#i=`/`#r=`/`#d=` hash payload: reserved type (only `interaction` in v1, others
+rejected), decompresses the Markdown report and the optional structured JSON, validates `effort`
+as an integer 0–5 (else null), requires student login, and upserts `report_markdown`,
+`report_data`, and `effort` into `preflight_interaction_reports` (the `score` column is left to
+the migration-013 trigger; never written by the client). Structured data is handled defensively —
+malformed JSON is stored under `{_unparsed}` rather than dropped, and structured fields are only
+written when present so an older artifact (no `#d=`) re-submitting can't wipe them. The signed-in
+view and the post-submit status now show the assessed effort and the points it maps to.
+[`interaction-submit.html`](interaction-submit.html) is now a hash-preserving redirect to the new
+receiver, so artifacts deployed before the rename keep working. Updated the references in
+`INTERACTION-PREFILL-LINK.md` and `app/README.md`.
+
+### Added — locked v1 data contract for lesson-artifact submissions
+
+Wrote [`INTERACTION-DATA-CONTRACT.md`](INTERACTION-DATA-CONTRACT.md): the frozen contract
+between a claude.ai lesson artifact and the site's static receiver. Pins a generalized
+permanent endpoint (`artifact-submit.html` at the repo root, excluded from the `app/` refactor;
+legacy `interaction-submit.html` stays as a hash-preserving redirect so deployed artifacts
+never break), the URL-hash transport (reserved `#t=` artifact-type defaulting to `interaction`,
+`#i=` slug, `#r=` full Markdown report, optional `#d=` structured JSON, lz-string codec,
+student identity resolved from session not payload), and the `schema: 1` structured payload.
+Key modeling decisions baked in: **effort is the only grade-bearing field** (engagement, not
+correctness — full conversation + zero understanding still earns full marks; refusal/tangents
+score low), with a 0–5 engagement rubric and a **reading-reflection gate** (a non-meaningful
+reflection caps effort at 2); understanding, per-objective scores, misconceptions, and AI
+narrative are **diagnostic only**; misconception/objective entries are **self-describing**
+(carry their own label/description) so the aggregator needs no short-code dictionary;
+numeric/categorical fields are sized for the website to compute all rollups deterministically,
+leaving the AI only the text fields to scan for trends. Over-captured optional fields
+(`ai_summary`, `key_strengths`, `recommended_review`, per-objective `confidence`,
+`reading_reflection.meaningful`) since deployed artifacts can't be retrofitted. Includes the
+versioning policy (additive-only within v1, `schema: 2` for breaking changes) and size budget.
+
+### Added — DB migration 013: interaction effort → auto score
+
+[`supabase/migrations/013_interaction_effort_score.sql`](supabase/migrations/013_interaction_effort_score.sql)
+adds `effort` (0–5) and a trigger-derived `score` (0–2) to `preflight_interaction_reports`:
+effort 3–5 → 2 pts, 1–2 → 1 pt, 0/NULL → 0 pts. `score` is recomputed from `effort` on every
+write, so a student can't post a score independent of effort; legacy rows stay untouched (NULL)
+until re-submitted. Also adds a 32 KB `CHECK` on `report_data` and a `(interaction_id, score)`
+index for rollups. Apply via the Supabase SQL editor / migration runner.
+
+---
+
 ## 2026-06-22 — Matthew Recker
+
+### Added — per-lesson export for the analysis aggregator
+
+Settled the interaction-analysis data contract: the aggregator is fed the plain `report_markdown`
+(no structured `report_data`/view route for now). Name + student ID + score is **not treated as
+PII**, so reports are exported as-is — protection is the existing faculty auth + RLS, not content
+redaction. New function in [`app/js/faculty-interactions.js`](app/js/faculty-interactions.js):
+
+- `buildLessonCorpus(ctx, interactionId)` — concatenates every report for one lesson (directors:
+  all sections; instructors: their own; RLS independently gates reads) into one Markdown document,
+  one block per student labeled with name · student ID · section, ordered by section then ID.
+
+A new **Export for analysis ⬇** button in the lesson-report modal
+([`app/faculty/interactions.html`](app/faculty/interactions.html)) downloads
+`<interaction-id>-reports.md` for handoff to the aggregator.
+
+(An earlier name-redacting `redactReport()` step was built and then removed once the PII
+determination made it unnecessary — keeping the export simple.)
 
 ### Added — clickable interaction completion with a per-student report viewer
 
