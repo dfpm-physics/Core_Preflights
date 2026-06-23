@@ -1,133 +1,601 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>JiTT Report</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Progress bar sandbox · iPREP</title>
+<style>
+  /* ── App palette (copied from app/css/styles.css so this page stands alone) ── */
+  :root{
+    --bg:#f4f5f7; --card:#ffffff; --border:#e2e4e8; --text:#1a1a2e; --muted:#6b7280;
+    --surface-sunken:#fafbfc; --surface-hover:#f8fafc; --blue-lt:#2a5298;
+    --shadow-sm:0 1px 4px rgba(0,0,0,.06); --shadow-md:0 4px 12px rgba(0,0,0,.10);
+    --radius:10px;
+    /* 5-zone ramp for a 0–5 AVERAGE (one color per point band): red→orange→yellow→teal→green */
+    --s1:#e8505b; --s2:#f6803c; --s3:#f5c518; --s4:#17b890; --s5:#2ec46b;
+    /* 6-step ramp for DISCRETE scores 0,1,2,3,4,5 (used by the distribution views) */
+    --d0:#d23b4e; --d1:#ea5a5f; --d2:#f6803c; --d3:#f5c518; --d4:#21b58e; --d5:#2ec46b;
+    --empty:#e7e9ee;            /* unlit track */
+    --empty-edge:#d7dae1;
+  }
+  [data-theme="dark"]{
+    --bg:#0f172a; --card:#1e293b; --border:#334155; --text:#e2e8f0; --muted:#94a3b8;
+    --surface-sunken:#172033; --surface-hover:#243044; --blue-lt:#3b6fc4;
+    --shadow-sm:0 1px 4px rgba(0,0,0,.4); --shadow-md:0 4px 12px rgba(0,0,0,.5);
+    --s1:#f0606b; --s2:#fb8b48; --s3:#f7cf3a; --s4:#22c7a3; --s5:#37d072;
+    --d0:#e8576a; --d1:#f0606b; --d2:#fb8b48; --d3:#f7cf3a; --d4:#27c79e; --d5:#37d072;
+    --empty:#2a3548; --empty-edge:#3a475c;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    background:var(--bg);color:var(--text);line-height:1.5;padding:34px 24px 90px}
+  .wrap{max-width:760px;margin:0 auto}
+  h1{font-size:1.5em;letter-spacing:-.02em;margin-bottom:4px}
+  .lede{color:var(--muted);font-size:.92em;margin-bottom:22px}
 
-  <!-- Decompression + Markdown rendering, both client-side from cdnjs -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
+  /* ── Controls (value + style switcher) ── */
+  .controls{position:sticky;top:0;z-index:5;background:var(--card);border:1px solid var(--border);
+    border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:14px 18px;margin-bottom:24px}
+  .ctl-row{display:flex;flex-wrap:wrap;gap:14px 18px;align-items:center}
+  .big{font-size:1.7em;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;min-width:84px}
+  .big .u{font-size:.5em;font-weight:600;color:var(--muted)}
+  input[type=range]{flex:1;min-width:200px;accent-color:var(--blue-lt)}
+  .presets{display:flex;gap:6px;flex-wrap:wrap}
+  .presets button,.tbtn{font:inherit;font-size:.82em;font-weight:600;cursor:pointer;
+    background:var(--surface-hover);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 11px}
+  .presets button:hover,.tbtn:hover{border-color:var(--blue-lt)}
 
-  <style>
-    body {
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      color: #1b2a4a;
-      line-height: 1.55;
-      max-width: 760px;
-      margin: 32px auto;
-      padding: 0 20px;
-    }
+  .switch-wrap{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+  .switch-lbl{font-size:.72em;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:9px}
+  .styleswitch{display:flex;flex-wrap:wrap;gap:7px}
+  .stybtn{font:inherit;font-size:.84em;font-weight:600;cursor:pointer;background:var(--surface-hover);
+    color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 13px;transition:.12s}
+  .stybtn:hover{border-color:var(--blue-lt)}
+  .stybtn.active{background:var(--blue-lt);color:#fff;border-color:var(--blue-lt);box-shadow:var(--shadow-sm)}
+  .stydesc{margin-top:11px;font-size:.85em;color:var(--muted)}
 
-    /* The ?q= banner (kept from the earlier behavior) */
-    #banner {
-      display: none;
-      background: #1f6feb;
-      color: #fff;
-      padding: 12px 16px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      font-size: 0.95rem;
-    }
-    #banner.show { display: block; }
+  /* ── Panels ── */
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    box-shadow:var(--shadow-sm);padding:20px 22px 24px;margin-bottom:18px}
+  .panel .eyebrow{font-size:.72em;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--blue-lt);margin-bottom:3px}
+  .panel .ptitle{font-size:1.0em;font-weight:700;margin-bottom:2px}
+  .panel .psub{color:var(--muted);font-size:.83em;margin-bottom:20px}
+  .why{font-size:.8em;color:var(--muted);background:var(--surface-sunken);border:1px dashed var(--border);
+    border-radius:7px;padding:9px 12px;margin-top:16px}
+  .why b{color:var(--text)}
 
-    /* A visible message for empty / corrupt states — never a blank page */
-    #message {
-      display: none;
-      background: #fff4e5;
-      border: 1px solid #f0c890;
-      color: #7a4a00;
-      padding: 14px 16px;
-      border-radius: 8px;
-      font-size: 0.95rem;
-    }
-    #message.show { display: block; }
+  /* ============================================================= *
+   *  Gauge primitives — shared across hero / tile / compact       *
+   * ============================================================= */
+  .bar{display:flex;position:relative;width:100%}
+  .bar.hero{height:26px}
+  .bar.tile{height:9px}
+  .bar.compact{height:12px}
+  .bar.blocks{border-radius:999px;overflow:hidden;border:1px solid var(--empty-edge);background:var(--empty)}
+  .bar.blocks .seg{flex:1}
+  .bar.blocks .seg + .seg{border-left:2px solid var(--card)}
+  .bar.blocks.tile .seg + .seg{border-left:1px solid var(--card)}
+  .bar.cells{gap:6px}
+  .bar.cells.tile{gap:3px}
+  .bar.cells.compact{gap:4px}
+  .bar.cells .seg{flex:1;position:relative;overflow:hidden;border:1px solid var(--empty-edge);border-radius:7px}
+  .bar.cells.tile .seg{border-radius:3px}
+  .bar.cells.compact .seg{border-radius:4px}
+  .bar.cells .fill{position:absolute;inset:0;transition:width .45s cubic-bezier(.4,0,.2,1)}
+  .bar.smooth{border-radius:999px;overflow:hidden;border:1px solid var(--empty-edge);background:var(--empty)}
+  .bar.smooth .sfill{height:100%;transition:width .45s cubic-bezier(.4,0,.2,1)}
 
-    /* Rendered report */
-    #report h1 { font-size: 1.6rem; margin: 0.6em 0 0.4em; }
-    #report h2 { font-size: 1.3rem; margin: 1em 0 0.4em; }
-    #report h3 { font-size: 1.1rem; margin: 1em 0 0.4em; }
-    #report blockquote {
-      margin: 1em 0;
-      padding: 0.4em 1em;
-      border-left: 4px solid #1f6feb;
-      background: #f5f8ff;
-      color: #334;
-    }
-    #report table {
-      border-collapse: collapse;
-      width: 100%;
-      margin: 1em 0;
-      font-size: 0.95rem;
-    }
-    #report th,
-    #report td {
-      border: 1px solid #cbd5e1;
-      padding: 8px 10px;
-      text-align: left;
-      vertical-align: top;
-    }
-    #report th { background: #f1f5f9; }
-    #report code {
-      background: #f1f5f9;
-      padding: 1px 5px;
-      border-radius: 4px;
-      font-size: 0.9em;
-    }
-  </style>
+  /* mono (tame, single-accent) */
+  .bar.mono{border-radius:999px;overflow:hidden;border:1px solid var(--empty-edge);background:var(--empty)}
+  .bar.mono .mfill{height:100%;background:var(--blue-lt);transition:width .45s cubic-bezier(.4,0,.2,1)}
+
+  /* hairline (tame, ultra-thin) */
+  .bar.blocks.hairline{border:none}
+  .bar.hairline.hero{height:6px}
+  .bar.hairline.tile{height:4px}
+  .bar.hairline.compact{height:5px}
+  .bar.hairline .seg + .seg{border-left-width:1px}
+
+  /* inset soft (tame) */
+  .bar.blocks.inset{border:none;box-shadow:inset 0 1.5px 4px rgba(0,0,0,.16)}
+  [data-theme="dark"] .bar.blocks.inset{box-shadow:inset 0 1.5px 5px rgba(0,0,0,.5)}
+  .bar.inset .seg + .seg{border-left-color:transparent}
+
+  /* crayon (wild, hand-drawn) */
+  .bar.blocks.crayon{border:2.5px solid var(--text);background:var(--empty);
+    border-radius:255px 12px 225px 14px / 14px 225px 12px 255px;filter:url(#crayon)}
+  .bar.blocks.crayon.tile{border-width:1.5px}
+  .bar.crayon .seg + .seg{border-left:2px solid color-mix(in srgb, var(--text) 32%, transparent)}
+  .crayontex{position:absolute;inset:0;pointer-events:none;mix-blend-mode:overlay;opacity:.45;
+    background:repeating-linear-gradient(52deg, rgba(255,255,255,.6) 0 2px, transparent 2px 6px)}
+
+  /* Hero scaffold */
+  .gauge{position:relative}
+  .markerlayer{position:relative;height:30px}
+  .barwrap{position:relative}
+  .scale{display:flex;justify-content:space-between;margin-top:7px;font-size:.7em;color:var(--muted);font-variant-numeric:tabular-nums}
+  .caret{position:absolute;bottom:2px;transform:translateX(-50%);transition:left .45s cubic-bezier(.4,0,.2,1);white-space:nowrap}
+  .caret .pill{display:inline-block;background:var(--text);color:var(--bg);font-weight:800;font-size:.74em;
+    letter-spacing:.01em;padding:3px 9px;border-radius:7px;box-shadow:var(--shadow-sm)}
+  .caret .pill .lab{font-weight:600;opacity:.7;font-size:.84em;letter-spacing:.04em;text-transform:uppercase;margin-right:5px}
+  .caret::after{content:"";position:absolute;left:50%;top:100%;transform:translateX(-50%);
+    border:5px solid transparent;border-top-color:var(--text);margin-top:-1px}
+  .caret.tinted .pill{background:var(--cc);color:#fff}
+  .caret.tinted::after{border-top-color:var(--cc)}
+  .caret.crayon .pill{font-family:'Comic Sans MS','Chalkboard SE','Segoe Print',cursive;
+    border-radius:18px 7px 20px 8px / 8px 20px 7px 18px;transform:rotate(-2.5deg)}
+  .thumb{position:absolute;top:50%;transform:translate(-50%,-50%);z-index:3;transition:left .45s cubic-bezier(.4,0,.2,1);
+    min-width:34px;height:34px;padding:0 7px;border-radius:999px;background:var(--cc);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.82em;
+    border:3px solid var(--card);box-shadow:var(--shadow-md)}
+  .needle{position:absolute;bottom:0;transform:translateX(-50%);transition:left .45s cubic-bezier(.4,0,.2,1);text-align:center}
+  .needle .n{display:block;font-size:.72em;font-weight:700;font-variant-numeric:tabular-nums}
+  .needle .tick{display:block;width:2px;height:8px;margin:2px auto 0;background:var(--text);border-radius:1px}
+
+  /* Headline rollup boxes */
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+  .tile{background:var(--surface-sunken);border:1px solid var(--border);border-radius:10px;padding:13px 15px}
+  .tile .tnum{font-size:1.5em;font-weight:800;letter-spacing:-.02em}
+  .tile .tnum .u{font-size:.5em;font-weight:600;color:var(--muted)}
+  .tile .tk{font-size:.72em;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:2px 0 11px}
+
+  /* Compact objective rows */
+  .rows{display:flex;flex-direction:column;gap:17px}
+  .crow{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center}
+  .crow .lbl{font-size:.88em;font-weight:500}
+  .crow .val{font-size:.78em;color:var(--muted);font-variant-numeric:tabular-nums}
+  .crow .barwrap{grid-column:1/-1}
+
+  /* ============================================================= *
+   *  "Beyond the bar" — distribution + alternative views          *
+   * ============================================================= */
+  .wild-banner{margin:36px 0 14px}
+  .wild-banner h2{font-size:1.18em;letter-spacing:-.01em}
+  .wild-banner p{color:var(--muted);font-size:.9em;margin-top:4px}
+
+  .objrow{display:grid;grid-template-columns:190px 1fr;gap:8px 16px;align-items:center;margin-bottom:15px}
+  .objrow:last-child{margin-bottom:0}
+  .objrow .olbl{font-size:.85em;font-weight:500}
+  .objrow .olbl .sub{display:block;font-weight:400;color:var(--muted);font-size:.86em}
+  @media(max-width:560px){.objrow{grid-template-columns:1fr}}
+
+  /* histogram pill — YOUR five colors, zone height = count (the spread, in the bar you liked) */
+  .skyline{position:relative;display:flex;height:48px;border-radius:13px;overflow:hidden;
+    border:1px solid var(--empty-edge);background:var(--empty);align-items:flex-end}
+  .skyline .sky{flex:1;display:flex;align-items:flex-end}
+  .skyline .sky + .sky{border-left:2px solid var(--card)}
+  .skyline .col{width:100%;min-height:3px;border-radius:5px 5px 0 0;transition:height .4s}
+  .skyline .skymean{position:absolute;top:0;bottom:0;width:2px;background:var(--text);opacity:.5;transform:translateX(-50%);z-index:2}
+  .zscale{display:flex;margin-top:6px}
+  .zscale span{flex:1;text-align:center;font-size:.66em;color:var(--muted)}
+
+  /* fine-cell histogram — each region = 5 thin same-color cells (separated-cells style) */
+  .finewrap{position:relative}
+  .finehisto{display:flex;gap:8px;height:48px;align-items:flex-end}     /* gap BETWEEN regions */
+  .fhgroup{flex:1;display:flex;gap:2px;align-items:flex-end;height:100%} /* 5 cells WITHIN a region */
+  .fhbar{flex:1;min-height:2px;border-radius:3px 3px 0 0;transition:height .4s}
+  .finewrap .vmean{position:absolute;top:0;bottom:0;width:2px;background:var(--text);opacity:.5;transform:translateX(-50%);z-index:2}
+
+  /* composition pill — YOUR five colors, width = share of class at each level */
+  .spreadpill{display:flex;height:24px;border-radius:999px;overflow:hidden;border:1px solid var(--empty-edge)}
+  .spreadpill>div{transition:width .4s;min-width:0}
+  .zlegend{display:flex;gap:13px;flex-wrap:wrap;margin-top:12px;font-size:.72em;color:var(--muted)}
+  .zlegend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+
+  /* mastery composition (6-step share) */
+  .compbar{display:flex;height:24px;border-radius:6px;overflow:hidden;border:1px solid var(--empty-edge)}
+  .compbar>div{transition:width .4s;min-width:0}
+  .complegend{display:flex;gap:13px;flex-wrap:wrap;margin-top:12px;font-size:.72em;color:var(--muted)}
+  .complegend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+
+  /* distribution histogram (6 columns) */
+  .histo{display:flex;align-items:flex-end;gap:6px;height:72px;border-bottom:1px solid var(--empty-edge)}
+  .hcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+  .hbar{width:100%;border-radius:4px 4px 0 0;min-height:2px;transition:height .4s}
+  .hx{font-size:.66em;color:var(--muted);margin-top:3px}
+
+  /* dot strip */
+  .dotstrip{position:relative;height:46px;border-radius:8px;background:var(--surface-sunken);
+    border:1px solid var(--empty-edge);overflow:hidden}
+  .dotstrip .dot{position:absolute;width:8px;height:8px;border-radius:999px;transform:translate(-50%,-50%);
+    opacity:.92;box-shadow:0 0 0 1.5px var(--surface-sunken)}
+  .dotstrip .meanline{position:absolute;top:0;bottom:0;width:2px;background:var(--text);opacity:.55;transform:translateX(-50%)}
+
+  /* bullet chart */
+  .bullet{position:relative;height:24px;border-radius:6px;overflow:hidden;border:1px solid var(--empty-edge)}
+  .bullet .bands{position:absolute;inset:0}
+  .bullet .measure{position:absolute;left:0;top:50%;transform:translateY(-50%);height:9px;border-radius:5px;background:var(--text);transition:width .4s}
+  .bullet .target{position:absolute;top:-2px;bottom:-2px;width:3px;background:var(--blue-lt);transform:translateX(-50%)}
+
+  /* radial rings */
+  .ringgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:14px;text-align:center}
+  .ringbox{background:var(--surface-sunken);border:1px solid var(--border);border-radius:10px;padding:14px 8px}
+  .ringlbl{font-size:.78em;color:var(--muted);margin-top:7px;line-height:1.3}
+  .radarwrap{display:flex;justify-content:center}
+</style>
 </head>
 <body>
-  <div id="banner"></div>
-  <div id="message"></div>
-  <div id="report"></div>
+<!-- crayon roughening filter (referenced by .bar.crayon) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="crayon" x="-6%" y="-35%" width="112%" height="170%">
+  <feTurbulence type="fractalNoise" baseFrequency="0.012 0.022" numOctaves="2" seed="7" result="n"/>
+  <feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/>
+</filter></svg>
 
-  <script>
-    // ----- All processing is client-side. The hash is never sent to a server or logged. -----
+<div class="wrap">
+  <h1>Progress-bar sandbox</h1>
+  <p class="lede">Top half: pick a <b>style</b> (wild → tame, including a crayon one) and the expanded gauge,
+    headline boxes, and compact rows all redraw in it. Bottom half: <b>“beyond the bar”</b> — snapshots that
+    show the class’s <em>spread</em>, including a histogram built from the exact bar colors you liked. Sample
+    data is synthetic.</p>
 
-    function showMessage(text) {
-      var el = document.getElementById("message");
-      el.textContent = text;
-      el.classList.add("show");
+  <div class="controls">
+    <div class="ctl-row">
+      <div class="big"><span id="readout">2.5</span><span class="u"> / 5</span></div>
+      <input id="slider" type="range" min="0" max="5" step="0.05" value="2.5">
+      <div class="presets" id="presets"></div>
+      <button class="tbtn" id="theme">◐ Theme</button>
+    </div>
+    <div class="switch-wrap">
+      <div class="switch-lbl">Bar style</div>
+      <div class="styleswitch" id="styleswitch"></div>
+      <div class="stydesc" id="stydesc"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="eyebrow">Expanded</div><div class="ptitle">Hero gauge</div>
+    <div class="psub">The big version — driven by the slider above.</div>
+    <div class="gauge" id="hero"></div>
+  </div>
+
+  <div class="panel">
+    <div class="eyebrow">Rollup</div><div class="ptitle">Headline boxes</div>
+    <div class="psub">One box per top-line metric (effort, understanding, …) with a mini gauge.</div>
+    <div class="tiles" id="tiles"></div>
+  </div>
+
+  <div class="panel">
+    <div class="eyebrow">Compact</div><div class="ptitle">Per-objective rows</div>
+    <div class="psub">The list version — weakest objective first.</div>
+    <div class="rows" id="rows"></div>
+  </div>
+
+  <!-- ─────────────────────── BEYOND THE BAR ─────────────────────── -->
+  <div class="wild-banner">
+    <h2>Beyond the bar — show the spread, not just the mean</h2>
+    <p>An average of 2.5 can be “everyone’s mediocre” or “half aced it, half are lost.” These give faculty
+      the shape of the class at a glance — whether to reteach, extend, or chase a few outliers.</p>
+  </div>
+
+  <div class="panel">
+    <div class="eyebrow">Spread · your colors</div><div class="ptitle">Histogram pill ⭐</div>
+    <div class="psub">Your five favorite zones — but each zone’s <b>height</b> is how many students landed there.
+      Same bar, now it shows the spread. The line marks the class mean.</div>
+    <div id="w-sky"></div>
+    <div class="why"><b>Why:</b> this is your liked bar and a histogram at once — a tall green end means most
+      of the class is there; a tall red end means reteach. No new color vocabulary to learn.</div>
+  </div>
+
+  <div class="panel">
+    <div class="eyebrow">Spread · your colors</div><div class="ptitle">Histogram — fine cells (5×5)</div>
+    <div class="psub">Same histogram, but each color region is split into five thin same-color cells
+      (separated-cells style) for a finer, more textured silhouette.</div>
+    <div id="w-fine"></div>
+    <div class="why"><b>Why:</b> the extra subdivisions read as a smoother distribution curve while keeping
+      your five colors and the at-a-glance “where’s the class massed” story.</div>
+  </div>
+
+  <div class="panel">
+    <div class="eyebrow">Spread · your colors</div><div class="ptitle">Composition pill</div>
+    <div class="psub">Same five colors as one pill; each color’s <b>width</b> = the share of the class at that level.</div>
+    <div id="w-spread"></div>
+    <div class="why"><b>Why:</b> the most compact spread view — fits a single row, yet still answers “how much
+      of my class actually has this?”</div>
+  </div>
+
+  <div class="panel">
+    <div class="eyebrow">Wild</div><div class="ptitle">Distribution histogram (per score)</div>
+    <div class="psub">Mini column chart of how many students scored 0…5 — six discrete steps.</div>
+    <div id="w-histo"></div>
+    <div class="why"><b>Why:</b> the finest-grained look; exposes <b>bimodality</b> (two humps = a split class)
+      that any average hides.</div>
+  </div>
+
+  <div class="panel">
+    <div class="eyebrow">Wild</div><div class="ptitle">Student dot strip</div>
+    <div class="psub">One dot per student along the 0–5 axis; the line marks the class mean.</div>
+    <div id="w-dots"></div>
+    <div class="why"><b>Why:</b> faculty see actual people and outliers — “these four are stranded at 0/1” —
+      great for deciding who to follow up with.</div>
+  </div>
+
+  <div class="panel">
+    <div class="eyebrow">Tame</div><div class="ptitle">Bullet chart (mean vs. target)</div>
+    <div class="psub">Faint mastery bands behind a measure bar, with a target tick (3.5/5).</div>
+    <div id="w-bullet"></div>
+    <div class="why"><b>Why:</b> the classic dashboard metric — is this objective above or below where I want
+      it? The target line makes “good enough” explicit.</div>
+  </div>
+
+  <div class="panel">
+    <div class="eyebrow">Wild</div><div class="ptitle">Class profile radar</div>
+    <div class="psub">Every objective on one spider; solid = class mean, dashed = target. The whole lesson in one shape.</div>
+    <div id="w-radar"></div>
+    <div class="why"><b>Why:</b> shape-recognition — a dented corner is the weak objective; compare lessons by
+      silhouette at a glance.</div>
+  </div>
+
+  <div class="panel">
+    <div class="eyebrow">Tame-ish</div><div class="ptitle">Radial rings</div>
+    <div class="psub">A filled ring per objective — your “separate boxes,” gone circular.</div>
+    <div id="w-rings"></div>
+    <div class="why"><b>Why:</b> punchy and scannable for a headline strip; the number lives in the middle and
+      the color says “good/bad” before you read it.</div>
+  </div>
+</div>
+
+<script>
+const RAMP  = ['--s1','--s2','--s3','--s4','--s5'];               // 5-zone (average + your spread views)
+const RAMP6 = ['--d0','--d1','--d2','--d3','--d4','--d5'];        // 6-step (discrete scores 0–5)
+const ZONE  = ['0–1','1–2','2–3','3–4','4–5'];                    // 5-zone band labels
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = v => Number.isInteger(v) ? String(v) : v.toFixed(1);
+const round1 = v => Math.round(v * 10) / 10;
+const sum = a => a.reduce((x, y) => x + y, 0);
+const fills = (v, segs = 5) => Array.from({length: segs}, (_, i) => Math.max(0, Math.min(1, v - i)));
+const zoneColor = (v, segs = 5) => cssVar(RAMP[Math.max(0, Math.min(segs - 1, Math.ceil(v) - 1))] || RAMP[0]);
+const glowCss = (c, f, blur) => `box-shadow:0 0 ${blur}px color-mix(in srgb, ${c} ${Math.round(35 + f*40)}%, transparent);`;
+
+/* ── Style presets (wild → tame) ── */
+const STYLES = [
+  {id:'blocks',  name:'Connected blocks', shape:'blocks', marker:'bubble',
+    desc:'Single rounded pill, five zones touching, grayed past the value. Closest to your reference.'},
+  {id:'blocksG', name:'Blocks + glow', shape:'blocks', marker:'bubble', tint:true, glow:true,
+    desc:'Same pill, but it glows in the leading zone’s color and the caret tints to that zone.'},
+  {id:'ghost',   name:'Blocks + ghost ramp', shape:'blocks', marker:'bubble', ghost:true,
+    desc:'Unlit zones show a faint tint of their own color — hints where the scale is heading.'},
+  {id:'cells',   name:'Separated cells', shape:'cells', marker:'bubble',
+    desc:'Five distinct rounded cells with gaps — reads like a segmented meter.'},
+  {id:'cellsG',  name:'Cells + glow', shape:'cells', marker:'bubble', tint:true, glow:true,
+    desc:'Cells variant with a colored glow on each lit cell.'},
+  {id:'thumb',   name:'Value thumb', shape:'blocks', marker:'thumb',
+    desc:'A slider-style knob rides the fill edge with the number inside — no floating bubble.'},
+  {id:'crayon',  name:'Crayon ✏️', shape:'blocks', cls:'crayon', filter:true, tex:true, marker:'crayon',
+    desc:'Hand-drawn wobble, crayon texture, and a cursive caret — playful and friendly.'},
+  {id:'smooth',  name:'Smooth gradient · tame', shape:'smooth', marker:'bubble',
+    desc:'Continuous red→green blend up to the value, gray after. Soft; integer position is least obvious.'},
+  {id:'hairline',name:'Hairline · tame', shape:'blocks', cls:'hairline', marker:'needle',
+    desc:'Ultra-thin minimal track with a slim pointer. Quietest option; good when the bar is secondary.'},
+  {id:'inset',   name:'Inset soft · tame', shape:'blocks', cls:'inset', marker:'bubble',
+    desc:'Pill with a soft inner shadow and no hard dividers — gentle, iOS-ish.'},
+  {id:'mono',    name:'Mono accent · tame', shape:'mono', marker:'bubble',
+    desc:'Drops the rainbow: a single brand-blue fill on a gray track. Most corporate / least busy.'},
+];
+let curStyle = STYLES[0];
+let curValue = 2.5;
+
+function buildBar(style, value, ctx){
+  const blur = ctx === 'hero' ? 16 : ctx === 'tile' ? 9 : 8;
+  if (style.shape === 'smooth'){
+    const pct = (value / 5) * 100;
+    return `<div class="bar smooth ${ctx}"><div class="sfill" style="width:${pct}%;`
+      + `background:linear-gradient(90deg, ${RAMP.map(cssVar).join(',')});`
+      + `background-size:${pct ? 10000/pct : 100}% 100%"></div></div>`;
+  }
+  if (style.shape === 'mono'){
+    return `<div class="bar mono ${ctx}"><div class="mfill" style="width:${(value/5)*100}%"></div></div>`;
+  }
+  const useShape = style.shape === 'cells' ? 'cells' : 'blocks';
+  const extra = style.cls || '';
+  const segs = fills(value).map((f, i) => {
+    const c = cssVar(RAMP[i]);
+    const empty = style.ghost ? `color-mix(in srgb, ${c} 16%, var(--empty))` : 'var(--empty)';
+    if (useShape === 'cells'){
+      const glow = style.glow && f > 0 ? glowCss(c, f, blur) : '';
+      return `<div class="seg" style="background:${empty};${glow}"><div class="fill" style="width:${f*100}%;background:${c}"></div></div>`;
     }
+    const lit = `linear-gradient(to right, ${c} ${f*100}%, ${empty} ${f*100}%)`;
+    return `<div class="seg" style="background:${lit}"></div>`;
+  }).join('');
+  const barGlow = (style.glow && useShape === 'blocks')
+    ? `box-shadow:0 0 ${blur}px color-mix(in srgb, ${zoneColor(value)} 45%, transparent);` : '';
+  const tex = style.tex ? `<div class="crayontex"></div>` : '';
+  return `<div class="bar ${useShape} ${extra} ${ctx}" style="${barGlow}">${segs}${tex}</div>`;
+}
 
-    // 1) Keep the existing ?q= behavior (independent of the report path).
-    (function () {
-      var q = new URLSearchParams(location.search).get("q");
-      if (q) {
-        var banner = document.getElementById("banner");
-        banner.textContent = "✓ Received — q: " + q;
-        banner.classList.add("show");
-      }
-    })();
+function renderHero(){
+  const s = curStyle, v = curValue, pct = (v / 5) * 100;
+  let marker = '', overlay = '';
+  if (s.marker === 'bubble' || s.marker === 'crayon'){
+    const cc = s.tint ? `--cc:${zoneColor(v)};` : '';
+    const cls = (s.tint ? 'tinted ' : '') + (s.marker === 'crayon' ? 'crayon' : '');
+    marker = `<div class="caret ${cls}" style="left:${pct}%;${cc}">`
+      + `<span class="pill"><span class="lab">avg</span>${fmt(v)}</span></div>`;
+  } else if (s.marker === 'thumb'){
+    overlay = `<div class="thumb" style="left:${pct}%;--cc:${zoneColor(v)}">${fmt(v)}</div>`;
+  } else if (s.marker === 'needle'){
+    marker = `<div class="needle" style="left:${pct}%"><span class="n">${fmt(v)}</span><span class="tick"></span></div>`;
+  }
+  document.getElementById('hero').innerHTML =
+    `<div class="markerlayer">${marker}</div>`
+    + `<div class="barwrap">${buildBar(s, v, 'hero')}${overlay}</div>`
+    + `<div class="scale">${[0,1,2,3,4,5].map(n => `<span>${n}</span>`).join('')}</div>`;
+}
 
-    // 2) The report rides in the hash: #r=<lz-string compressed markdown>
-    (function () {
-      var params = new URLSearchParams(location.hash.slice(1));
-      var packed = params.get("r");
+const TILES = [{k:'Avg effort', v:3.8}, {k:'Understanding', v:2.9}, {k:'Reflection eng.', v:4.2}];
+function renderTiles(){
+  document.getElementById('tiles').innerHTML = TILES.map(t =>
+    `<div class="tile"><div class="tnum">${fmt(t.v)}<span class="u"> /5</span></div>`
+    + `<div class="tk">${t.k}</div>${buildBar(curStyle, t.v, 'tile')}</div>`).join('');
+}
+function renderRows(){
+  document.getElementById('rows').innerHTML = OBJS.map(o =>
+    `<div class="crow"><span class="lbl">${o.lbl}</span>`
+    + `<span class="val">${round1(distMean(o.c))}/5 · ${distN(o.c)} assessed</span>`
+    + `<div class="barwrap">${buildBar(curStyle, distMean(o.c), 'compact')}</div></div>`).join('');
+}
+function renderAll(){
+  document.getElementById('readout').textContent = fmt(curValue);
+  renderHero(); renderTiles(); renderRows();
+}
 
-      if (!packed) {
-        showMessage("No report data in the URL.");
-        return;
-      }
+/* ── Per-objective data ──
+   c = counts at discrete scores 0,1,2,3,4,5 (for histogram / dots / mean)
+   b = counts in the 5 mastery zones 0–1…4–5 (for the YOUR-COLORS spread views) */
+const OBJS = [
+  {lbl:"Coulomb's law — magnitude & inverse-square", short:'Coulomb',    c:[3,6,9,7,4,2], b:[7,9,8,4,3]},
+  {lbl:'Conductors vs. insulators (free electrons)', short:'Conductors', c:[1,2,4,8,10,8], b:[2,4,7,10,8]},
+  {lbl:'Induced charge on a neutral conductor',       short:'Induced',    c:[6,8,7,5,2,1], b:[11,9,5,2,1]},
+];
+const distN    = c => sum(c);
+const distMean = c => { const n = sum(c); return n ? c.reduce((s, v, i) => s + v*i, 0) / n : 0; };
+const zoneMean = b => { const n = sum(b); return n ? b.reduce((s, v, i) => s + v*(i + 0.5), 0) / n : 0; };  // 0–5 from zone centers
 
-      var markdown = null;
-      try {
-        markdown = LZString.decompressFromEncodedURIComponent(packed);
-      } catch (e) {
-        markdown = null;
-      }
+/* ── YOUR-COLORS spread views ── */
+function skyline(b){
+  const max = Math.max(...b, 1), m = zoneMean(b);
+  const cols = b.map((v, i) =>
+    `<div class="sky"><div class="col" style="height:${v/max*100}%;background:var(${RAMP[i]})" title="${ZONE[i]}: ${v}"></div></div>`).join('');
+  return `<div><div class="skyline"><div class="skymean" style="left:${m/5*100}%" title="mean ${round1(m)}"></div>${cols}</div>`
+    + `<div class="zscale">${ZONE.map(z => `<span>${z}</span>`).join('')}</div></div>`;
+}
+function fineHisto(b){
+  const max = Math.max(...b, 1), m = zoneMean(b);
+  const centers = b.map((_, i) => i + 0.5);
+  // piecewise-linear envelope through the zone counts, sampled at 5 points per region
+  const val = x => {
+    if (x <= centers[0]) return b[0];
+    if (x >= centers[centers.length - 1]) return b[b.length - 1];
+    let i = 0; while (i < centers.length - 1 && x > centers[i + 1]) i++;
+    const t = (x - centers[i]) / (centers[i + 1] - centers[i]);
+    return b[i] + (b[i + 1] - b[i]) * t;
+  };
+  let groups = '';
+  for (let zi = 0; zi < 5; zi++){
+    let bars = '';
+    for (let k = 0; k < 5; k++){
+      const h = Math.max(0, val(zi + (k + 0.5) / 5));
+      bars += `<div class="fhbar" style="height:${h/max*100}%;background:var(${RAMP[zi]})"></div>`;
+    }
+    groups += `<div class="fhgroup">${bars}</div>`;
+  }
+  return `<div><div class="finewrap"><div class="vmean" style="left:${m/5*100}%" title="mean ${round1(m)}"></div>`
+    + `<div class="finehisto">${groups}</div></div>`
+    + `<div class="zscale">${ZONE.map(z => `<span>${z}</span>`).join('')}</div></div>`;
+}
+function spreadPill(b){
+  const n = sum(b);
+  return `<div class="spreadpill">${b.map((v, i) => v
+    ? `<div style="width:${v/n*100}%;background:var(${RAMP[i]})" title="${ZONE[i]}: ${v} (${Math.round(v/n*100)}%)"></div>` : ''
+  ).join('')}</div>`;
+}
+function zlegend(){
+  return `<div class="zlegend">${ZONE.map((z, i) => `<span><i style="background:var(${RAMP[i]})"></i>${z}</span>`).join('')}<span>· understanding</span></div>`;
+}
 
-      if (!markdown) {
-        showMessage("Could not decode the report — the link may be incomplete.");
-        return;
-      }
+/* ── 6-step + alternative views ── */
+function compBar(c){
+  const n = sum(c);
+  return `<div class="compbar">${c.map((v, i) => v
+    ? `<div style="width:${v/n*100}%;background:var(${RAMP6[i]})" title="Score ${i}: ${v} (${Math.round(v/n*100)}%)"></div>` : ''
+  ).join('')}</div>`;
+}
+function histo(c){
+  const max = Math.max(...c, 1);
+  return `<div class="histo">${c.map((v, i) =>
+    `<div class="hcol" title="Score ${i}: ${v} student${v===1?'':'s'}"><div class="hbar" style="height:${v/max*100}%;background:var(${RAMP6[i]})"></div><span class="hx">${i}</span></div>`).join('')}</div>`;
+}
+const DOTLAYOUT = OBJS.map(o => {
+  const arr = [];
+  o.c.forEach((v, i) => { for (let k = 0; k < v; k++)
+    arr.push({ i, x: (i + 0.12 + Math.random()*0.76)/5*100, y: 12 + Math.random()*76 }); });
+  return arr;
+});
+function dotstrip(oi, c){
+  const dots = DOTLAYOUT[oi].map(d => `<span class="dot" style="left:${d.x}%;top:${d.y}%;background:var(${RAMP6[d.i]})"></span>`).join('');
+  return `<div><div class="dotstrip"><div class="meanline" style="left:${distMean(c)/5*100}%"></div>${dots}</div>`
+    + `<div class="scale">${[0,1,2,3,4,5].map(n => `<span>${n}</span>`).join('')}</div></div>`;
+}
+function bullet(c, target = 3.5){
+  const m = distMean(c);
+  const bands = `linear-gradient(90deg, ${RAMP.map((r, i) => `color-mix(in srgb, ${cssVar(r)} 22%, var(--card)) ${i*20}% ${(i+1)*20}%`).join(',')})`;
+  return `<div class="bullet"><div class="bands" style="background:${bands}"></div>`
+    + `<div class="measure" style="width:${m/5*100}%"></div>`
+    + `<div class="target" style="left:${target/5*100}%" title="Target ${target}/5"></div></div>`;
+}
+function ring(o){
+  const m = distMean(o.c), C = 2*Math.PI*34, col = zoneColor(m);
+  return `<div class="ringbox"><svg width="92" height="92" viewBox="0 0 92 92" aria-hidden="true">
+    <circle cx="46" cy="46" r="34" fill="none" stroke="var(--empty)" stroke-width="9"/>
+    <circle cx="46" cy="46" r="34" fill="none" stroke="${col}" stroke-width="9" stroke-linecap="round"
+      stroke-dasharray="${C}" stroke-dashoffset="${C*(1 - m/5)}" transform="rotate(-90 46 46)"/>
+    <text x="46" y="44" text-anchor="middle" font-size="19" font-weight="800" fill="var(--text)">${round1(m)}</text>
+    <text x="46" y="59" text-anchor="middle" font-size="9" fill="var(--muted)">/ 5</text>
+  </svg><div class="ringlbl">${o.short}</div></div>`;
+}
+function radarSVG(){
+  const objs = OBJS.map(o => ({ short:o.short, m:distMean(o.c) }));
+  const N = objs.length, cx = 150, cy = 142, R = 92;
+  const ang = i => (-Math.PI/2) + (i*2*Math.PI/N);
+  const pt = (i, rv) => [cx + Math.cos(ang(i))*R*(rv/5), cy + Math.sin(ang(i))*R*(rv/5)];
+  let grid = '';
+  for (let lvl = 1; lvl <= 5; lvl++){
+    grid += `<polygon points="${objs.map((_, i) => pt(i, lvl).join(',')).join(' ')}" fill="none" stroke="var(--empty-edge)" stroke-width="1" opacity="${lvl===5?0.9:0.45}"/>`;
+  }
+  let axes = '', labels = '';
+  objs.forEach((o, i) => {
+    const [x, y] = pt(i, 5); axes += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--empty-edge)" stroke-width="1"/>`;
+    const [lx, ly] = pt(i, 5.7);
+    const anchor = Math.abs(lx - cx) < 8 ? 'middle' : (lx > cx ? 'start' : 'end');
+    labels += `<text x="${lx}" y="${ly}" text-anchor="${anchor}" font-size="11" font-weight="600" fill="var(--text)">${o.short}</text>`
+      + `<text x="${lx}" y="${ly+13}" text-anchor="${anchor}" font-size="10" fill="var(--muted)">${round1(o.m)}/5</text>`;
+  });
+  const avg = objs.reduce((s, o) => s + o.m, 0) / objs.length, col = zoneColor(avg);
+  return `<svg width="300" height="284" viewBox="0 0 300 284" style="max-width:100%">${grid}${axes}
+    <polygon points="${objs.map((_, i) => pt(i, 3.5).join(',')).join(' ')}" fill="none" stroke="var(--blue-lt)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.85"/>
+    <polygon points="${objs.map((o, i) => pt(i, o.m).join(',')).join(' ')}" fill="color-mix(in srgb, ${col} 26%, transparent)" stroke="${col}" stroke-width="2.5"/>
+    ${objs.map((o, i) => { const [x, y] = pt(i, o.m); return `<circle cx="${x}" cy="${y}" r="3.5" fill="${col}"/>`; }).join('')}${labels}</svg>`;
+}
 
-      // Sanitize the rendered HTML before inserting — the payload comes from a
-      // user-controllable URL, so treat it as untrusted to prevent XSS.
-      var dirty = marked.parse(markdown);
-      document.getElementById("report").innerHTML = DOMPurify.sanitize(dirty);
-    })();
-  </script>
+function renderWild(){
+  document.getElementById('w-sky').innerHTML = OBJS.map(o => `<div class="objrow"><span class="olbl">${o.lbl}</span>${skyline(o.b)}</div>`).join('');
+  document.getElementById('w-fine').innerHTML = OBJS.map(o => `<div class="objrow"><span class="olbl">${o.lbl}</span>${fineHisto(o.b)}</div>`).join('');
+  document.getElementById('w-spread').innerHTML = OBJS.map(o => `<div class="objrow"><span class="olbl">${o.lbl}</span>${spreadPill(o.b)}</div>`).join('') + zlegend();
+  document.getElementById('w-histo').innerHTML = OBJS.map(o =>
+    `<div class="objrow"><span class="olbl">${o.lbl}<span class="sub">mean ${round1(distMean(o.c))}/5 · ${distN(o.c)} assessed</span></span>${histo(o.c)}</div>`).join('');
+  document.getElementById('w-dots').innerHTML = OBJS.map((o, oi) => `<div class="objrow"><span class="olbl">${o.lbl}</span>${dotstrip(oi, o.c)}</div>`).join('');
+  document.getElementById('w-bullet').innerHTML = OBJS.map(o => `<div class="objrow"><span class="olbl">${o.lbl}</span>${bullet(o.c)}</div>`).join('');
+  document.getElementById('w-radar').innerHTML = `<div class="radarwrap">${radarSVG()}</div>`;
+  document.getElementById('w-rings').innerHTML = `<div class="ringgrid">${OBJS.map(ring).join('')}</div>`;
+}
+
+/* ── Switcher + controls ── */
+function renderSwitch(){
+  document.getElementById('styleswitch').innerHTML = STYLES.map(s =>
+    `<button class="stybtn ${s.id === curStyle.id ? 'active' : ''}" data-id="${s.id}">${s.name}</button>`).join('');
+  document.getElementById('stydesc').textContent = curStyle.desc;
+}
+document.getElementById('styleswitch').addEventListener('click', e => {
+  const id = e.target.dataset.id; if (!id) return;
+  curStyle = STYLES.find(s => s.id === id) || STYLES[0];
+  renderSwitch(); renderAll();
+});
+const slider = document.getElementById('slider');
+slider.addEventListener('input', () => { curValue = parseFloat(slider.value);
+  document.getElementById('readout').textContent = fmt(curValue); renderHero(); });
+document.getElementById('presets').innerHTML = [0,1.5,2.5,3.8,4.5,5].map(v => `<button data-v="${v}">${v}</button>`).join('');
+document.getElementById('presets').addEventListener('click', e => {
+  const v = e.target.dataset.v; if (v == null) return;
+  slider.value = v; curValue = parseFloat(v);
+  document.getElementById('readout').textContent = fmt(curValue); renderHero();
+});
+document.getElementById('theme').addEventListener('click', () => {
+  const root = document.documentElement;
+  root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  renderAll(); renderWild();
+});
+
+renderSwitch(); renderAll(); renderWild();
+</script>
 </body>
 </html>
