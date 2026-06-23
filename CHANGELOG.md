@@ -15,18 +15,25 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 Reworked the faculty lesson rollup ([`app/faculty/interactions.html`](app/faculty/interactions.html)) into a
 fixed top-to-bottom layout and removed the all-students list:
 
-- **Row 1 — Overall understanding** (all topics) as the headline gauge.
-- **Row 2 — Effort distribution** with the class **average drawn in** as a labeled reference line, beside a
-  **radar** giving a quick read of understanding across every objective (shown with ≥3 objectives).
-- **Row 3 — Understanding by objective** as a **two-column** grid of 0–5 histograms; an odd final tile is
-  centered on its own row but capped to a single column's width (never wider than the others).
-- A **Section dropdown** at the top of the summary rescopes every plot (all sections / one section).
+- **Row 1 — Overall understanding** (all topics) as the headline gauge. The value tag is now a neutral
+  high-contrast pill (legible on any zone color — the old white-on-yellow was unreadable).
+- **Row 2 — Effort distribution** with the class **average drawn in** as a labeled reference line, sharing the
+  row with a **radar** giving a quick read of understanding across every objective (needs ≥3 objectives —
+  a spider needs ≥3 axes).
+- **Row 3 — Understanding by objective** as a **two-column** grid of fine-cell (5×5-style) histograms. Headers
+  reserve a fixed two-line height (and clamp to two lines), so a long title that wraps never pushes its chart
+  below a short-titled neighbor — every chart on the row stays aligned. An odd final tile is centered on its
+  own row but capped to a single column's width (never wider than the others).
+- A **Section dropdown** at the top of the summary rescopes every plot (all sections / one section); **Export
+  for analysis** moved to its own bottom row beneath the summary.
 
 The roster list is gone. **Flag chips now open a modal** of just the matching students; each shows the
 (well-liked) structured summary panel plus a **View full report ↗** button that opens that student's full
 Markdown report in a further stacked modal — no inline AI report by default. New `.lr-*`/`.fm-*` styles and a
-`lrEffort()` mean-line builder added; the unused `lrFine()` fine-cell histogram and inline list/report code
-were removed.
+`lrEffort()` mean-line builder added; inline list/report code removed.
+
+`supabase/seed_demo_interaction.sql` gained a **third objective** (`induced-charge`) so the synthetic demo
+exercises the radar (and the odd-tile centering in row 3). Re-run the seed to refresh existing demo data.
 
 ### Docs — recorded that Node is unavailable (and uninstallable) on the dev machine
 

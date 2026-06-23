@@ -543,12 +543,14 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
   border: 1px solid var(--track-edge); background: var(--track); }
 .lr-bar .lr-seg { flex: 1; }
 .lr-bar .lr-seg + .lr-seg { border-left: 2px solid var(--card); }
+/* Value tag: a neutral high-contrast pill (dark in light theme, light in dark theme) so the
+   number stays legible regardless of the zone color it points at. */
 .lr-tag { position: absolute; bottom: calc(100% + 7px); transform: translateX(-50%); white-space: nowrap;
-  background: var(--mk); color: #fff; font-weight: 800; font-size: 0.92em; padding: 2px 9px; border-radius: 8px;
+  background: var(--text); color: var(--card); font-weight: 800; font-size: 0.92em; padding: 2px 9px; border-radius: 8px;
   box-shadow: var(--shadow-sm); transition: left .4s cubic-bezier(.4,0,.2,1); }
-.lr-tag i { font-style: normal; font-weight: 600; opacity: 0.82; font-size: 0.66em; margin-left: 1px; }
+.lr-tag i { font-style: normal; font-weight: 600; opacity: 0.7; font-size: 0.66em; margin-left: 1px; }
 .lr-tag::after { content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
-  border: 5px solid transparent; border-top-color: var(--mk); margin-top: -1px; }
+  border: 5px solid transparent; border-top-color: var(--text); margin-top: -1px; }
 .lr-scale { display: flex; justify-content: space-between; margin-top: 6px; font-size: 0.68em; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* histogram (zone-height columns, 0–5) */
@@ -557,10 +559,12 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
 .lr-hbar { width: 100%; min-height: 3px; border-radius: 4px 4px 0 0; transition: height .4s; }
 .lr-hx { font-size: 0.64em; color: var(--muted); margin-top: 3px; }
 
-/* row 2: effort distribution (left) beside the objectives radar (right) */
+/* row 2: effort distribution (left) beside the objectives radar (right). Both eyebrows reserve a
+   two-line height so, if one title wraps, the two charts still start at the same Y. */
 .lr-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 28px; align-items: start; }
 .lr-row2.single { grid-template-columns: 1fr; }
-@media (max-width: 620px) { .lr-row2 { grid-template-columns: 1fr; } }
+.lr-row2 .lr-eyebrow { min-height: 2em; }
+@media (max-width: 620px) { .lr-row2 { grid-template-columns: 1fr; } .lr-row2 .lr-eyebrow { min-height: 0; } }
 
 /* effort histogram with the class-average reference line */
 .lr-histwrap { position: relative; }
@@ -568,13 +572,23 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
 .lr-mean-lbl { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 3px; white-space: nowrap;
   font-size: 0.62em; font-weight: 700; color: var(--text); background: var(--surface-sunken); border: 1px solid var(--border); padding: 1px 5px; border-radius: 5px; }
 
-/* row 3: understanding-by-objective histograms, two columns; odd tile centered, same width */
-.lr-obj-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 26px; }
+/* row 3: understanding-by-objective fine-cell (5×5-style) histograms, two columns; odd tile
+   centered on its own row but capped to a single column's width */
+.lr-obj-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 26px; align-items: start; }
 .lr-obj-grid .lr-objc.solo { grid-column: 1 / -1; max-width: calc(50% - 13px); justify-self: center; }
 @media (max-width: 620px) { .lr-obj-grid { grid-template-columns: 1fr; } .lr-obj-grid .lr-objc.solo { max-width: none; } }
-.lr-obj-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; }
-.lr-obj-head .nm { font-size: 0.86em; font-weight: 500; }
+/* Headers reserve a fixed 2-line height (and clamp to 2 lines), so a long title that wraps never
+   pushes its histogram below a short-titled neighbor — every chart on the row stays aligned. */
+.lr-obj-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; min-height: 2.7em; }
+.lr-obj-head .nm { font-size: 0.86em; font-weight: 500; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .lr-obj-head .mu { font-size: 0.74em; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* fine-cell histogram: each score region split into thin same-color cells (a smoothed envelope) */
+.lr-fine { display: flex; gap: 7px; height: 46px; align-items: flex-end; }
+.lr-fgroup { flex: 1; display: flex; gap: 2px; align-items: flex-end; height: 100%; }
+.lr-fbar { flex: 1; min-height: 2px; border-radius: 3px 3px 0 0; transition: height .4s; }
+.lr-fx { display: flex; margin-top: 4px; }
+.lr-fx span { flex: 1; text-align: center; font-size: 0.64em; color: var(--muted); }
 
 /* radar */
 .lr-radar { display: flex; justify-content: center; }

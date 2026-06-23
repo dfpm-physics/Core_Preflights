@@ -81,13 +81,16 @@ n2 AS (
     CASE WHEN (student_id % 13) = 0 THEN NULL
          ELSE GREATEST(0, overall_u - (student_id % 2)) END                       AS o1_u,
     CASE WHEN (student_id %  9) = 0 THEN NULL
-         ELSE LEAST(5, overall_u + ((student_id + 1) % 2)) END                    AS o2_u
+         ELSE LEAST(5, overall_u + ((student_id + 1) % 2)) END                    AS o2_u,
+    CASE WHEN (student_id %  7) = 0 THEN NULL
+         ELSE GREATEST(0, LEAST(5, overall_u + (student_id % 3) - 1)) END          AS o3_u
   FROM n
 ),
 t AS (
   SELECT n2.*,
     CASE WHEN o1_u IS NULL THEN NULL ELSE LEAST(5, o1_u + 1) END                  AS o1_c,
     CASE WHEN o2_u IS NULL THEN NULL ELSE LEAST(5, o2_u)     END                  AS o2_c,
+    CASE WHEN o3_u IS NULL THEN NULL ELSE LEAST(5, o3_u + 1) END                  AS o3_c,
     CASE WHEN effort = 0 THEN 1 WHEN effort = 1 THEN 3 ELSE 6 + (student_id % 12) END AS duration_min,
     CASE WHEN effort = 0 THEN 1 WHEN effort = 1 THEN 3 ELSE 8 + (student_id % 13) END AS message_count,
     CASE WHEN NOT meaningful
@@ -166,7 +169,8 @@ E'# Lesson Interaction — Induced Charge (DEMO)\n\n**Cadet:** %s  \n**Section:*
       'self_rated_understanding', self_u,
       'objectives', jsonb_build_array(
         jsonb_build_object('key','coulomb-magnitude','label','Coulomb''s law — magnitude & inverse-square','understanding', o1_u, 'confidence', o1_c),
-        jsonb_build_object('key','conductor-insulator','label','Conductors vs. insulators (free electrons)','understanding', o2_u, 'confidence', o2_c)
+        jsonb_build_object('key','conductor-insulator','label','Conductors vs. insulators (free electrons)','understanding', o2_u, 'confidence', o2_c),
+        jsonb_build_object('key','induced-charge','label','Induced charge on a neutral conductor','understanding', o3_u, 'confidence', o3_c)
       ),
       'misconceptions', misconceptions,
       'reading_reflection', jsonb_build_object(

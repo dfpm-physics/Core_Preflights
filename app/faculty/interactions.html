@@ -47,18 +47,22 @@
     <div class="modal" style="max-width:820px">
       <div class="modal-head"><h2 id="rm-title">Lesson report</h2><button class="modal-close" data-close>×</button></div>
 
-      <!-- Scope + completion stats + analysis export. The Section dropdown rescopes every plot below. -->
+      <!-- Scope + completion stats. The Section dropdown rescopes every plot below. -->
       <div class="row wrap" style="gap:12px;margin-bottom:18px;align-items:flex-end">
         <div style="min-width:150px"><label for="sel-section">Section</label><select id="sel-section"></select></div>
         <span class="grow"></span>
         <span class="muted" id="rm-stats"></span>
-        <button class="btn btn-secondary btn-sm" id="rm-export"
-          title="Download a combined Markdown report (all your sections for this lesson) to hand to the analysis AI">Export for analysis ⬇</button>
       </div>
 
       <!-- Course-wide rollup, all numeric, computed live from report_data (no AI):
            overall understanding · effort distribution + radar · understanding by objective · flags. -->
       <div class="lesson-summary" id="rm-aggregate"></div>
+
+      <!-- Analysis export lives on the bottom row, below the summary. -->
+      <div class="row" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);justify-content:flex-end">
+        <button class="btn btn-secondary btn-sm" id="rm-export"
+          title="Download a combined Markdown report (all your sections for this lesson) to hand to the analysis AI">Export for analysis ⬇</button>
+      </div>
     </div>
   </div>
 
@@ -394,7 +398,6 @@
     function lrGauge(value, label) {
       const v = (typeof value === 'number') ? value : null;
       const clamped = v == null ? 50 : Math.max(7, Math.min(93, (v / 5) * 100));
-      const mk = v == null ? 'var(--muted)' : zoneVar(v);
       const segs = [0, 1, 2, 3, 4].map(i => {
         const f = v == null ? 0 : Math.max(0, Math.min(1, v - i));
         return `<div class="lr-seg" style="background:linear-gradient(to right, var(${RAMP[i]}) ${f*100}%, var(--track) ${f*100}%)"></div>`;
@@ -402,7 +405,7 @@
       return `<div class="lr-metric">
         <div class="lr-ml">${label}</div>
         <div class="lr-barwrap">
-          <div class="lr-tag" style="left:${clamped}%;--mk:${mk}"><span>${v == null ? '—' : f1(v)}</span><i>/5</i></div>
+          <div class="lr-tag" style="left:${clamped}%"><span>${v == null ? '—' : f1(v)}</span><i>/5</i></div>
           <div class="lr-bar">${segs}</div>
         </div>
         <div class="lr-scale"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>
@@ -423,6 +426,32 @@
       const line = mean == null ? '' :
         `<div class="lr-mean" style="left:${((mean + 0.5) / 6) * 100}%"><span class="lr-mean-lbl">avg ${f1(mean)}</span></div>`;
       return `<div class="lr-histwrap">${line}${lrHist(eff.hist)}</div>`;
+    }
+
+    // Fine-cell ("5×5") histogram for a 0–5 distribution: each score region is split into five thin
+    // same-color cells sampled along a piecewise-linear envelope through the counts, for a finer,
+    // distribution-curve silhouette than the plain column histogram. A 0–5 axis sits underneath.
+    function lrFine(counts) {
+      const n = counts.length, max = Math.max(...counts, 1), CELLS = 5;
+      const centers = counts.map((_, i) => i + 0.5);
+      const val = x => {
+        if (x <= centers[0]) return counts[0];
+        if (x >= centers[n - 1]) return counts[n - 1];
+        let i = 0; while (i < n - 1 && x > centers[i + 1]) i++;
+        const t = (x - centers[i]) / (centers[i + 1] - centers[i]);
+        return counts[i] + (counts[i + 1] - counts[i]) * t;
+      };
+      let groups = '';
+      for (let zi = 0; zi < n; zi++) {
+        let bars = '';
+        for (let k = 0; k < CELLS; k++) {
+          const h = Math.max(0, val(zi + (k + 0.5) / CELLS));
+          bars += `<div class="lr-fbar" style="height:${h/max*100}%;background:var(${RAMP6[zi]})" title="Score ${zi}: ${counts[zi]}"></div>`;
+        }
+        groups += `<div class="lr-fgroup">${bars}</div>`;
+      }
+      return `<div><div class="lr-fine">${groups}</div>
+        <div class="lr-fx">${counts.map((_, i) => `<span>${i}</span>`).join('')}</div></div>`;
     }
 
     // Class-profile radar across objectives (solid = class mean, dashed = target 3.5). Needs ≥3 axes.
@@ -484,7 +513,7 @@
           return `<div class="lr-objc${solo}">
             <div class="lr-obj-head"><span class="nm">${esc(o.label)}</span>
               <span class="mu">${o.understanding == null ? 'n/a' : f1(o.understanding) + '/5'} · ${o.assessed} assessed</span></div>
-            ${lrHist(o.dist)}
+            ${lrFine(o.dist)}
           </div>`;
         }).join('');
         row3 = `<div class="lr-sec">
