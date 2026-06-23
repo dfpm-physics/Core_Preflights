@@ -88,7 +88,21 @@
     let vm = null, editingId = null, reportInteraction = null;
     // Structured report data for the open lesson: rows = null while loading, [] once loaded.
     let reportRows = null, reportByStudent = {};
+    let flagFilter = null;   // when set, the rollup's flag chips narrow the student list to matching reports
     const isDirector = () => ctx.isDirectorForCurrent();
+
+    // Predicate + label per clickable flag chip. Reads a report_data blob (contract schema 1).
+    const FLAG_PRED = {
+      needs_follow_up: d => d?.flags?.needs_follow_up === true,
+      notable:         d => d?.flags?.notable === true,
+      honor_disclosed: d => d?.honor?.status === 'disclosed',
+      honor_concern:   d => d?.honor?.status === 'concern',
+      refl_capped:     d => !!d?.reading_reflection && d.reading_reflection.meaningful === false,
+    };
+    const FLAG_LABEL = {
+      needs_follow_up: 'Needs follow-up', notable: 'Notable', honor_disclosed: 'Disclosed help',
+      honor_concern: 'Integrity concern', refl_capped: 'Reflection capped',
+    };
 
     function init() {
       initTheme();
@@ -181,9 +195,10 @@
         m.addEventListener('click', (e) => { if (e.target.id === id || e.target.dataset.close !== undefined) m.classList.remove('open'); });
       });
       document.getElementById('em-save').addEventListener('click', saveEdit);
-      document.getElementById('sel-section').addEventListener('change', showList);
+      document.getElementById('sel-section').addEventListener('change', () => { flagFilter = null; showList(); });
       document.getElementById('rm-back').addEventListener('click', showList);
       document.getElementById('rm-export').addEventListener('click', exportCorpus);
+      document.getElementById('rm-aggregate').addEventListener('click', onFlagClick);   // delegated: flag chips filter the list
     }
 
     // id set → update that existing slug; id null → insert a new row.
@@ -269,7 +284,7 @@
         .concat(vm.sections.map(s => `<option value="${esc(s.id)}">${esc(s.id)} (${s.students.length})</option>`)).join('');
       sel.value = (section && vm.sections.some(s => s.id === section)) ? section : 'all';
 
-      reportRows = null; reportByStudent = {};   // null → summary shows "computing…"
+      reportRows = null; reportByStudent = {}; flagFilter = null;   // null → summary shows "computing…"
       showList();
       document.getElementById('report-modal').classList.add('open');
 
@@ -306,7 +321,17 @@
       document.getElementById('rm-stats').textContent =
         roster.length ? `${complete}/${roster.length} complete · ${p}%` : 'No students in scope';
 
-      listEl.innerHTML = roster.length ? roster.map(st => {
+      // Optional flag filter (from a clicked rollup chip): show only students whose report fired it.
+      let shown = roster, note = '';
+      if (flagFilter && FLAG_PRED[flagFilter]) {
+        shown = roster.filter(st => {
+          const row = reportByStudent[String(st.student_id)];
+          return done.has(st.student_id) && row && FLAG_PRED[flagFilter](row.report_data);
+        });
+        note = `<div class="lr-filter-note">Showing ${shown.length} student${shown.length === 1 ? '' : 's'} flagged “${esc(FLAG_LABEL[flagFilter] || flagFilter)}”. <button id="lr-clear">Show all</button></div>`;
+      }
+
+      listEl.innerHTML = note + (shown.length ? shown.map(st => {
         const isDone = done.has(st.student_id);
         const status = isDone ? `<span class="score-badge full">✓ Complete</span>`
                               : `<span class="score-badge pending">Not yet</span>`;
@@ -317,8 +342,9 @@
           <span class="muted" style="font-size:0.8em">${esc(st.section)}</span>
           <span class="grow"></span>${status}${view}
         </div>`;
-      }).join('') : `<div class="muted" style="padding:8px 2px">No students in this scope.</div>`;
+      }).join('') : `<div class="muted" style="padding:8px 2px">${flagFilter ? 'No students match this flag in scope.' : 'No students in this scope.'}</div>`);
 
+      document.getElementById('lr-clear')?.addEventListener('click', () => { flagFilter = null; showList(); });
       listEl.querySelectorAll('[data-student]').forEach(b =>
         b.addEventListener('click', () => showStudentReport(b.dataset.student, b.dataset.name)));
     }
@@ -339,8 +365,8 @@
     }
 
     // ── Rollup summary rendering ──────────────────────────────────────────────
-    // Numeric aggregates are computed from report_data (no AI); free-text trend prose
-    // is left as a labeled placeholder until the interaction-analysis pass is built.
+    // All aggregates are numeric, computed from report_data (no AI): two headline gauges,
+    // the effort distribution, per-objective understanding (spread + radar), and clickable flags.
     const f1 = x => x == null ? '—' : (Number.isInteger(x) ? String(x) : x.toFixed(1));
 
     function renderAggregate() {
@@ -349,93 +375,144 @@
       if (reportRows === null) { el.innerHTML = `<div class="summary-placeholder">Computing course-wide summary…</div>`; return; }
       const ids = new Set(rosterInScope().map(st => String(st.student_id)));
       const rows = reportRows.filter(r => ids.has(String(r.student_id)));
-      el.innerHTML = aggregateHTML(I.summarizeReports(rows));
+      el.innerHTML = aggregateHTML(I.summarizeReports(rows), flagFilter);
     }
 
-    function aggregateHTML(s) {
+    // ── Rollup visual primitives (pure HTML builders; colors from CSS ramp tokens) ──
+    const RAMP  = ['--s1', '--s2', '--s3', '--s4', '--s5'];          // 5-zone, for a 0–5 average gauge
+    const RAMP6 = ['--d0', '--d1', '--d2', '--d3', '--d4', '--d5'];  // 6-step, for a 0–5 distribution
+    const zoneVar = v => `var(${RAMP[Math.max(0, Math.min(4, Math.ceil(v) - 1))]})`;
+    const shortLabel = s => {
+      const t = String(s || '').split(/[—–:]/)[0].split(' (')[0].trim();
+      return t.length > 20 ? t.slice(0, 19) + '…' : t;
+    };
+
+    // Connected-blocks gauge with a readable value tag (the headline metric).
+    function lrGauge(value, label) {
+      const v = (typeof value === 'number') ? value : null;
+      const clamped = v == null ? 50 : Math.max(7, Math.min(93, (v / 5) * 100));
+      const mk = v == null ? 'var(--muted)' : zoneVar(v);
+      const segs = [0, 1, 2, 3, 4].map(i => {
+        const f = v == null ? 0 : Math.max(0, Math.min(1, v - i));
+        return `<div class="lr-seg" style="background:linear-gradient(to right, var(${RAMP[i]}) ${f*100}%, var(--track) ${f*100}%)"></div>`;
+      }).join('');
+      return `<div class="lr-metric">
+        <div class="lr-ml">${label}</div>
+        <div class="lr-barwrap">
+          <div class="lr-tag" style="left:${clamped}%;--mk:${mk}"><span>${v == null ? '—' : f1(v)}</span><i>/5</i></div>
+          <div class="lr-bar">${segs}</div>
+        </div>
+        <div class="lr-scale"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>
+      </div>`;
+    }
+
+    // Zone-height histogram over discrete scores 0–5.
+    function lrHist(counts) {
+      const max = Math.max(...counts, 1);
+      return `<div class="lr-hist">${counts.map((c, i) =>
+        `<div class="lr-hcol" title="Score ${i}: ${c}"><div class="lr-hbar" style="height:${c/max*100}%;background:var(${RAMP6[i]})"></div><span class="lr-hx">${i}</span></div>`).join('')}</div>`;
+    }
+
+    // Fine-cell histogram: each score region split into thin same-color cells, smoothed envelope.
+    function lrFine(counts) {
+      const n = counts.length, max = Math.max(...counts, 1), CELLS = 4;
+      const centers = counts.map((_, i) => i + 0.5);
+      const val = x => {
+        if (x <= centers[0]) return counts[0];
+        if (x >= centers[n - 1]) return counts[n - 1];
+        let i = 0; while (i < n - 1 && x > centers[i + 1]) i++;
+        const t = (x - centers[i]) / (centers[i + 1] - centers[i]);
+        return counts[i] + (counts[i + 1] - counts[i]) * t;
+      };
+      let groups = '';
+      for (let zi = 0; zi < n; zi++) {
+        let bars = '';
+        for (let k = 0; k < CELLS; k++) {
+          const h = Math.max(0, val(zi + (k + 0.5) / CELLS));
+          bars += `<div class="lr-fbar" style="height:${h/max*100}%;background:var(${RAMP6[zi]})"></div>`;
+        }
+        groups += `<div class="lr-fgroup">${bars}</div>`;
+      }
+      return `<div class="lr-fine">${groups}</div>`;
+    }
+
+    // Class-profile radar across objectives (solid = class mean, dashed = target 3.5). Needs ≥3 axes.
+    function lrRadar(objectives) {
+      const objs = objectives.filter(o => o.understanding != null)
+        .map(o => ({ short: shortLabel(o.label), m: o.understanding }));
+      if (objs.length < 3) return '';
+      const N = objs.length, cx = 150, cy = 142, R = 90;
+      const ang = i => (-Math.PI / 2) + (i * 2 * Math.PI / N);
+      const pt = (i, rv) => [cx + Math.cos(ang(i)) * R * (rv / 5), cy + Math.sin(ang(i)) * R * (rv / 5)];
+      let grid = '';
+      for (let lvl = 1; lvl <= 5; lvl++)
+        grid += `<polygon points="${objs.map((_, i) => pt(i, lvl).join(',')).join(' ')}" fill="none" stroke="var(--track-edge)" stroke-width="1" opacity="${lvl === 5 ? 0.9 : 0.4}"/>`;
+      let axes = '', labels = '';
+      objs.forEach((o, i) => {
+        const [x, y] = pt(i, 5); axes += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--track-edge)" stroke-width="1"/>`;
+        const [lx, ly] = pt(i, 5.78);
+        const anchor = Math.abs(lx - cx) < 8 ? 'middle' : (lx > cx ? 'start' : 'end');
+        labels += `<text x="${lx}" y="${ly}" text-anchor="${anchor}" font-size="11" font-weight="600" fill="var(--text)">${esc(o.short)}</text>`
+          + `<text x="${lx}" y="${ly + 13}" text-anchor="${anchor}" font-size="10" fill="var(--muted)">${f1(o.m)}/5</text>`;
+      });
+      const avg = objs.reduce((s, o) => s + o.m, 0) / objs.length, col = zoneVar(avg);
+      return `<div class="lr-radar"><svg width="300" height="288" viewBox="0 0 300 288" role="img" aria-label="Class understanding by objective">${grid}${axes}
+        <polygon points="${objs.map((_, i) => pt(i, 3.5).join(',')).join(' ')}" fill="none" stroke="var(--blue-lt)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.85"/>
+        <polygon points="${objs.map((o, i) => pt(i, o.m).join(',')).join(' ')}" fill="color-mix(in srgb, ${col} 26%, transparent)" stroke="${col}" stroke-width="2.5"/>
+        ${objs.map((o, i) => { const [x, y] = pt(i, o.m); return `<circle cx="${x}" cy="${y}" r="3.5" fill="${col}"/>`; }).join('')}${labels}</svg></div>`;
+    }
+
+    // Rollup: two headline gauges, effort distribution, per-objective spread (+ radar), clickable flags.
+    function aggregateHTML(s, activeFlag) {
       if (!s.n) return `<div class="summary-placeholder">No reports submitted in this scope yet — the summary appears once students submit.</div>`;
-      const tile = (v, k, color) => `<div class="sum-tile"><div class="v"${color ? ` style="color:${color}"` : ''}>${v}</div><div class="k">${esc(k)}</div></div>`;
 
-      // Cohort narrative — needs the free-text AI aggregation pass.
-      const cohort = `<div class="summary-placeholder">Course-wide narrative summary — pending the interaction-analysis pass. <em>[placeholder]</em></div>`;
+      const metrics = `<div class="lr-sec"><div class="lr-metrics">
+        ${lrGauge(s.effort.avg, 'Effort · <b>graded</b>')}
+        ${lrGauge(s.understanding.overall, 'Understanding · diagnostic')}
+      </div></div>`;
 
-      // Effort & completion (graded).
-      const effChips = s.effort.hist.map((c, e) => `<span class="eff-chip e${e}" title="Effort ${e}: ${c}">${e}<b>${c}</b></span>`).join('')
-        + (s.effort.notAssessed ? `<span class="eff-chip na" title="Effort not assessed: ${s.effort.notAssessed}">n/a<b>${s.effort.notAssessed}</b></span>` : '');
-      const effort = `<div class="sum-section">
-        <div class="q-eyebrow">Effort &amp; completion · graded</div>
-        <div class="sum-grid">
-          ${tile(f1(s.effort.avg) + '<span class="u">/5</span>', 'Avg effort')}
-          ${tile(s.effort.pointsTotal + '<span class="u">/' + s.effort.pointsMax + '</span>', 'Points awarded')}
-          ${tile(s.completedPct + '<span class="u">%</span>', 'Completed flow')}
-          ${tile(s.n, 'Submissions')}
-        </div>
-        <div class="eff-hist" title="Effort distribution (0–5)">${effChips}</div>
+      const effDist = `<div class="lr-sec">
+        <div class="lr-eyebrow">Effort distribution <span class="dim">· 0–5, graded</span></div>
+        ${lrHist(s.effort.hist)}
       </div>`;
 
-      // Understanding (diagnostic).
-      const g = s.understanding.gap;
-      const gapStr = g == null ? '—' : (g > 0 ? '+' : '') + g.toFixed(1);
-      const gapColor = g == null ? '' : g >= 1 ? 'var(--red)' : g <= -1 ? 'var(--blue-lt)' : '';
-      const objBars = s.objectives.length ? `<div class="sum-bars">${s.objectives.map(o => {
-        const p = o.understanding == null ? 0 : Math.round(o.understanding / 5 * 100);
-        return `<div class="progress-row">
-          <span class="pr-label">${esc(o.label)}</span>
-          <span class="pr-count">${o.understanding == null ? 'n/a' : f1(o.understanding) + '/5'} · ${o.assessed} assessed</span>
-          <div class="pr-track"><div class="pr-fill ${barClass(p)}" style="width:${p}%"></div></div>
+      let objBlock = '';
+      if (s.objectives.length) {
+        const rows = s.objectives.map(o => `<div class="lr-obj">
+          <div class="lr-obj-head"><span class="nm">${esc(o.label)}</span>
+            <span class="mu">${o.understanding == null ? 'n/a' : f1(o.understanding) + '/5'} · ${o.assessed} assessed</span></div>
+          ${lrFine(o.dist)}
+        </div>`).join('');
+        objBlock = `<div class="lr-sec">
+          <div class="lr-eyebrow">Understanding by objective <span class="dim">· diagnostic, weakest first</span></div>
+          ${lrRadar(s.objectives)}${rows}
         </div>`;
-      }).join('')}</div>` : `<div class="muted" style="font-size:0.84em;margin-top:6px">No per-objective data reported.</div>`;
-      const understanding = `<div class="sum-section">
-        <div class="q-eyebrow">Understanding · diagnostic, not graded</div>
-        <div class="sum-grid">
-          ${tile(f1(s.understanding.overall) + '<span class="u">/5</span>', 'Assessed')}
-          ${tile(f1(s.understanding.self) + '<span class="u">/5</span>', 'Self-rated')}
-          ${tile(gapStr, 'Confidence gap', gapColor)}
-        </div>
-        ${objBars}
-      </div>`;
+      }
 
-      // Misconceptions (diagnostic) — counts now; clustering of novel ones is an AI pass.
-      const mc = s.misconceptions.length
-        ? `<div class="chip-wrap">${s.misconceptions.slice(0, 12).map(m =>
-            `<span class="tag ${m.major ? 'gold' : ''}" title="${esc(m.id)}${m.major ? ` · ${m.major} major` : ''}">${esc(m.label)} <b>${m.count}</b></span>`).join('')}</div>`
-        : `<div class="muted" style="font-size:0.84em">None reported in this scope.</div>`;
-      const misc = `<div class="sum-section">
-        <div class="q-eyebrow">Misconceptions · diagnostic</div>
-        ${mc}
-        <div class="summary-placeholder" style="margin-top:10px">AI clustering of novel / free-text misconceptions — pending the interaction-analysis pass. <em>[placeholder]</em></div>
-      </div>`;
-
-      // Reading reflection (diagnostic + grade gate).
-      const sent = Object.entries(s.reflection.sentiment).filter(([, c]) => c)
-        .map(([k, c]) => `<span class="tag">${esc(k)} <b>${c}</b></span>`).join('') || '<span class="muted" style="font-size:0.84em">—</span>';
-      const tops = s.reflection.topics.length
-        ? `<div class="chip-wrap" style="margin-top:8px">${s.reflection.topics.slice(0, 16).map(t => `<span class="tag blue">${esc(t.topic)} <b>${t.count}</b></span>`).join('')}</div>` : '';
-      const reflPct = s.reflection.assessed ? Math.round(s.reflection.meaningful / s.reflection.assessed * 100) : null;
-      const refl = `<div class="sum-section">
-        <div class="q-eyebrow">Reading reflection · diagnostic + grade gate</div>
-        <div class="sum-grid">
-          ${tile(reflPct == null ? '—' : reflPct + '<span class="u">%</span>', 'Meaningful')}
-          ${tile(s.reflection.capped, 'Effort-capped', s.reflection.capped ? 'var(--red)' : 'var(--muted)')}
-          ${tile(f1(s.reflection.engagement) + '<span class="u">/5</span>', 'Engagement')}
-        </div>
-        <div class="row wrap" style="gap:6px;margin-top:10px">${sent}</div>
-        ${tops}
-        <div class="summary-placeholder" style="margin-top:10px">Reflection themes &amp; sentiment narrative — pending the interaction-analysis pass. <em>[placeholder]</em></div>
-      </div>`;
-
-      // Integrity + triage flags (numeric; only shown when something fired).
-      const bits = [];
-      if (s.honor.disclosed) bits.push(`<span class="tag gold">disclosed help <b>${s.honor.disclosed}</b></span>`);
-      if (s.honor.concern)   bits.push(`<span class="tag danger">integrity concern <b>${s.honor.concern}</b></span>`);
-      if (s.flags.needs_follow_up) bits.push(`<span class="tag gold">needs follow-up <b>${s.flags.needs_follow_up}</b></span>`);
-      if (s.flags.notable)         bits.push(`<span class="tag blue">notable <b>${s.flags.notable}</b></span>`);
-      const integrity = bits.length ? `<div class="sum-section">
-        <div class="q-eyebrow">Integrity &amp; triage flags</div>
-        <div class="chip-wrap">${bits.join('')}</div>
+      const chip = (key, label, count, cls) => count
+        ? `<button class="lr-flag ${cls}${activeFlag === key ? ' active' : ''}" data-flag="${key}">${label} <b>${count}</b></button>` : '';
+      const flagBits = [
+        chip('needs_follow_up', 'Needs follow-up', s.flags.needs_follow_up, ''),
+        chip('notable', 'Notable', s.flags.notable, 'blue'),
+        chip('honor_disclosed', 'Disclosed help', s.honor.disclosed, 'gold'),
+        chip('honor_concern', 'Integrity concern', s.honor.concern, 'danger'),
+        chip('refl_capped', 'Reflection capped', s.reflection.capped, 'gold'),
+      ].filter(Boolean).join('');
+      const flags = flagBits ? `<div class="lr-sec">
+        <div class="lr-eyebrow">Flags <span class="dim">· click to filter the student list</span></div>
+        <div class="lr-flags">${flagBits}</div>
       </div>` : '';
 
-      return cohort + effort + understanding + misc + refl + integrity;
+      return metrics + effDist + objBlock + flags;
+    }
+
+    // Delegated handler for the rollup's flag chips → toggle the student-list filter.
+    function onFlagClick(e) {
+      const b = e.target.closest('[data-flag]');
+      if (!b) return;
+      const f = b.dataset.flag;
+      flagFilter = (flagFilter === f) ? null : f;
+      showList();
     }
 
     // Per-student structured panel shown above the Markdown report. Built from report_data

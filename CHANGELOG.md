@@ -10,6 +10,28 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-06-23 — Matthew Recker
 
+### Changed — redesigned the interaction rollup (gauges, histograms, radar, clickable flags)
+
+Rebuilt the faculty lesson-rollup ([`app/faculty/interactions.html`](app/faculty/interactions.html)) to be
+far less busy and to surface the **spread**, not just the average — a class mean of 2.5 can be "everyone
+mediocre" or "half aced it, half lost," and those need different responses. The new rollup is:
+
+- **Two headline gauges** — Effort (graded) and Understanding (diagnostic) — as 5-zone connected-blocks
+  bars (red→green, each zone = one point, lit to the value) with a readable value tag above the fill.
+- **Effort distribution** — a compact 0–5 histogram.
+- **Understanding by objective** — a **class-profile radar** (mean vs. a 3.5 target; shown only with ≥3
+  objectives) plus a **fine-cell histogram** per objective (each score region split into thin same-color
+  cells) showing each objective's distribution.
+- **Clickable flag chips** — *Needs follow-up / Notable / Disclosed help / Integrity concern / Reflection
+  capped* — clicking one filters the student list to just those reports (toggle off or "Show all" to clear).
+
+Removed for clarity: points-awarded, self-rated understanding (we never collect it — it only appeared
+because the demo seed invents it), confidence gap, the separate "completed flow" tile (the
+submissions/`28/33 · 85%` line already shows completion), the misconception pills, and the `[placeholder]`
+AI-narrative boxes. `summarizeReports()` ([`app/js/faculty-interactions.js`](app/js/faculty-interactions.js))
+now also returns a 0–5 distribution for overall understanding and per objective; new ramp tokens + `.lr-*`
+component styles live in [`app/css/styles.css`](app/css/styles.css). Styles were prototyped in `test.html`.
+
 ### Added — synthetic seed for previewing the interaction rollup
 
 New [`supabase/seed_demo_interaction.sql`](supabase/seed_demo_interaction.sql) populates a clearly-fake

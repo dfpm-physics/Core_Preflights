@@ -161,18 +161,20 @@ export function summarizeReports(rows) {
   const overall = list.map(({ d }) => int05(d.overall_understanding));
   const self    = list.map(({ d }) => int05(d.self_rated_understanding));
   const overallAvg = mean(overall), selfAvg = mean(self);
+  const overallHist = [0, 0, 0, 0, 0, 0];                 // distribution of overall understanding, scores 0–5
+  overall.forEach(u => { if (u != null) overallHist[u]++; });
 
-  // ── Objectives — group by key, average understanding/confidence, carry inline label.
+  // ── Objectives — group by key, average understanding/confidence + a 0–5 distribution, carry inline label.
   const objMap = {};
   list.forEach(({ d }) => (Array.isArray(d.objectives) ? d.objectives : []).forEach(o => {
     if (!o || typeof o !== 'object' || !o.key) return;
-    const m = (objMap[o.key] ||= { key: o.key, label: o.label || o.key, u: [], c: [] });
+    const m = (objMap[o.key] ||= { key: o.key, label: o.label || o.key, u: [], c: [], hist: [0, 0, 0, 0, 0, 0] });
     if ((!m.label || m.label === m.key) && o.label) m.label = o.label;
-    const u = int05(o.understanding); if (u != null) m.u.push(u);
+    const u = int05(o.understanding); if (u != null) { m.u.push(u); m.hist[u]++; }
     const c = int05(o.confidence);    if (c != null) m.c.push(c);
   }));
   const objectives = Object.values(objMap)
-    .map(m => ({ key: m.key, label: m.label, assessed: m.u.length, understanding: mean(m.u), confidence: mean(m.c) }))
+    .map(m => ({ key: m.key, label: m.label, assessed: m.u.length, understanding: mean(m.u), confidence: mean(m.c), dist: m.hist }))
     .sort((a, b) => (a.understanding ?? 99) - (b.understanding ?? 99));   // weakest first
 
   // ── Misconceptions — count by id (the AI pass later clusters novel ones by description).
@@ -220,7 +222,7 @@ export function summarizeReports(rows) {
     },
     completed, completedPct: n ? Math.round((completed / n) * 100) : 0,
     durationAvg: mean(durations), messageAvg: mean(messages),
-    understanding: { overall: overallAvg, self: selfAvg,
+    understanding: { overall: overallAvg, self: selfAvg, dist: overallHist,
       gap: (overallAvg != null && selfAvg != null) ? selfAvg - overallAvg : null },
     objectives, misconceptions,
     reflection: { meaningful: reflMeaningful, assessed: reflAssessed,
