@@ -41,19 +41,14 @@
     </div>
   </div>
 
-  <!-- Lesson report viewer: aggregate summary + completion list + per-student report -->
+  <!-- Lesson rollup: a single course-wide summary (no per-student list). Drill into individual
+       students only through the flag chips, which open the flagged-students modal below. -->
   <div class="modal-backdrop" id="report-modal">
-    <div class="modal" style="max-width:760px">
+    <div class="modal" style="max-width:820px">
       <div class="modal-head"><h2 id="rm-title">Lesson report</h2><button class="modal-close" data-close>×</button></div>
 
-      <!-- Course-wide rollup: numeric aggregates computed live from report_data (no AI).
-           The free-text trend prose (cohort narrative, misconception clustering of novel
-           descriptions, reflection themes) is shown as labeled placeholders until the
-           interaction-analysis pass lands. -->
-      <div class="lesson-summary" id="rm-aggregate"></div>
-
-      <!-- Scope + completion stats + analysis export -->
-      <div class="row wrap" style="gap:12px;margin-bottom:12px;align-items:flex-end">
+      <!-- Scope + completion stats + analysis export. The Section dropdown rescopes every plot below. -->
+      <div class="row wrap" style="gap:12px;margin-bottom:18px;align-items:flex-end">
         <div style="min-width:150px"><label for="sel-section">Section</label><select id="sel-section"></select></div>
         <span class="grow"></span>
         <span class="muted" id="rm-stats"></span>
@@ -61,17 +56,26 @@
           title="Download a combined Markdown report (all your sections for this lesson) to hand to the analysis AI">Export for analysis ⬇</button>
       </div>
 
-      <!-- Completion list -->
-      <div id="rm-list"></div>
+      <!-- Course-wide rollup, all numeric, computed live from report_data (no AI):
+           overall understanding · effort distribution + radar · understanding by objective · flags. -->
+      <div class="lesson-summary" id="rm-aggregate"></div>
+    </div>
+  </div>
 
-      <!-- One student's report (shown after picking a student) -->
-      <div id="rm-report" style="display:none">
-        <div class="row" style="gap:10px;align-items:center;margin-bottom:10px">
-          <button class="btn btn-ghost btn-sm" id="rm-back">← Back to list</button>
-          <strong id="rm-report-name"></strong>
-        </div>
-        <div class="md-render" id="rm-body"></div>
-      </div>
+  <!-- Flagged-students modal: opened from a rollup flag chip. Lists the matching students, each
+       with the structured summary panel + a button to open that student's full Markdown report. -->
+  <div class="modal-backdrop" id="flag-modal">
+    <div class="modal" style="max-width:720px">
+      <div class="modal-head"><h2 id="fm-title">Flagged students</h2><button class="modal-close" data-close>×</button></div>
+      <div id="fm-body"></div>
+    </div>
+  </div>
+
+  <!-- Full Markdown report for one student (inert, user-controllable blob — sanitized at render). -->
+  <div class="modal-backdrop" id="fullreport-modal">
+    <div class="modal" style="max-width:760px">
+      <div class="modal-head"><h2 id="fr-title">Report</h2><button class="modal-close" data-close>×</button></div>
+      <div class="md-render" id="fr-body"></div>
     </div>
   </div>
 
@@ -88,7 +92,6 @@
     let vm = null, editingId = null, reportInteraction = null;
     // Structured report data for the open lesson: rows = null while loading, [] once loaded.
     let reportRows = null, reportByStudent = {};
-    let flagFilter = null;   // when set, the rollup's flag chips narrow the student list to matching reports
     const isDirector = () => ctx.isDirectorForCurrent();
 
     // Predicate + label per clickable flag chip. Reads a report_data blob (contract schema 1).
@@ -190,15 +193,14 @@
 
     // ── Add / edit ──
     function wireModals() {
-      ['edit-modal', 'report-modal'].forEach(id => {
+      ['edit-modal', 'report-modal', 'flag-modal', 'fullreport-modal'].forEach(id => {
         const m = document.getElementById(id);
         m.addEventListener('click', (e) => { if (e.target.id === id || e.target.dataset.close !== undefined) m.classList.remove('open'); });
       });
       document.getElementById('em-save').addEventListener('click', saveEdit);
-      document.getElementById('sel-section').addEventListener('change', () => { flagFilter = null; showList(); });
-      document.getElementById('rm-back').addEventListener('click', showList);
+      document.getElementById('sel-section').addEventListener('change', updateScope);
       document.getElementById('rm-export').addEventListener('click', exportCorpus);
-      document.getElementById('rm-aggregate').addEventListener('click', onFlagClick);   // delegated: flag chips filter the list
+      document.getElementById('rm-aggregate').addEventListener('click', onFlagClick);   // delegated: flag chips open the flagged-students modal
     }
 
     // id set → update that existing slug; id null → insert a new row.
@@ -271,9 +273,9 @@
       load();
     }
 
-    // ── Lesson report viewer: completion list + per-student report ──
+    // ── Lesson rollup viewer ──
     // Opened from any progress bar/chip. `section` (optional) preselects a single section;
-    // otherwise the list spans every section in scope.
+    // otherwise the summary spans every section in scope.
     function openReports(interactionId, title, section) {
       reportInteraction = interactionId;
       const it = vm.interactions.find(x => x.id === interactionId);
@@ -284,8 +286,8 @@
         .concat(vm.sections.map(s => `<option value="${esc(s.id)}">${esc(s.id)} (${s.students.length})</option>`)).join('');
       sel.value = (section && vm.sections.some(s => s.id === section)) ? section : 'all';
 
-      reportRows = null; reportByStudent = {}; flagFilter = null;   // null → summary shows "computing…"
-      showList();
+      reportRows = null; reportByStudent = {};   // null → summary shows "computing…"
+      updateScope();
       document.getElementById('report-modal').classList.add('open');
 
       // Pull structured data for the whole in-scope roster once; the rollup summary and the
@@ -306,13 +308,9 @@
       return src.flatMap(s => s.students.map(st => ({ ...st, section: s.id })));
     }
 
-    // Render the completion list for the current interaction + section scope.
-    function showList() {
-      document.getElementById('rm-report').style.display = 'none';
-      const listEl = document.getElementById('rm-list');
-      listEl.style.display = '';
-      renderAggregate();   // recompute the rollup for the current section scope
-
+    // Recompute completion stats + the rollup for the current section scope. Called on open and
+    // whenever the Section dropdown changes — every plot below rescopes to the chosen section.
+    function updateScope() {
       const it = vm.interactions.find(x => x.id === reportInteraction);
       const done = new Set(it?.doneStudentIds || []);
       const roster = rosterInScope();
@@ -320,53 +318,58 @@
       const p = pct(complete, roster.length);
       document.getElementById('rm-stats').textContent =
         roster.length ? `${complete}/${roster.length} complete · ${p}%` : 'No students in scope';
-
-      // Optional flag filter (from a clicked rollup chip): show only students whose report fired it.
-      let shown = roster, note = '';
-      if (flagFilter && FLAG_PRED[flagFilter]) {
-        shown = roster.filter(st => {
-          const row = reportByStudent[String(st.student_id)];
-          return done.has(st.student_id) && row && FLAG_PRED[flagFilter](row.report_data);
-        });
-        note = `<div class="lr-filter-note">Showing ${shown.length} student${shown.length === 1 ? '' : 's'} flagged “${esc(FLAG_LABEL[flagFilter] || flagFilter)}”. <button id="lr-clear">Show all</button></div>`;
-      }
-
-      listEl.innerHTML = note + (shown.length ? shown.map(st => {
-        const isDone = done.has(st.student_id);
-        const status = isDone ? `<span class="score-badge full">✓ Complete</span>`
-                              : `<span class="score-badge pending">Not yet</span>`;
-        const view = isDone
-          ? `<button class="btn btn-ghost btn-sm" data-student="${esc(st.student_id)}" data-name="${esc(st.name)}">View report</button>` : '';
-        return `<div class="row" style="gap:10px;align-items:center;padding:8px 2px;border-bottom:1px solid var(--border)">
-          <span style="font-weight:600">${esc(st.name)}</span>
-          <span class="muted" style="font-size:0.8em">${esc(st.section)}</span>
-          <span class="grow"></span>${status}${view}
-        </div>`;
-      }).join('') : `<div class="muted" style="padding:8px 2px">${flagFilter ? 'No students match this flag in scope.' : 'No students in this scope.'}</div>`);
-
-      document.getElementById('lr-clear')?.addEventListener('click', () => { flagFilter = null; showList(); });
-      listEl.querySelectorAll('[data-student]').forEach(b =>
-        b.addEventListener('click', () => showStudentReport(b.dataset.student, b.dataset.name)));
+      renderAggregate();
     }
 
-    async function showStudentReport(studentId, name) {
-      document.getElementById('rm-list').style.display = 'none';
-      document.getElementById('rm-report').style.display = '';
-      document.getElementById('rm-report-name').textContent = name || '';
-      const body = document.getElementById('rm-body');
+    // The students (in the current section scope) whose submitted report fired a given flag.
+    function studentsForFlag(flagKey) {
+      const it = vm.interactions.find(x => x.id === reportInteraction);
+      const done = new Set(it?.doneStudentIds || []);
+      const pred = FLAG_PRED[flagKey];
+      if (!pred) return [];
+      return rosterInScope().filter(st => {
+        const row = reportByStudent[String(st.student_id)];
+        return done.has(st.student_id) && row && pred(row.report_data);
+      });
+    }
+
+    // Flag chip → modal listing the matching students. Each shows the structured summary panel
+    // and a button to open the full Markdown report in a further modal (no inline AI report).
+    function openFlagModal(flagKey) {
+      const matched = studentsForFlag(flagKey);
+      document.getElementById('fm-title').textContent =
+        `${FLAG_LABEL[flagKey] || flagKey} · ${matched.length} student${matched.length === 1 ? '' : 's'}`;
+      const body = document.getElementById('fm-body');
+      body.innerHTML = matched.length ? matched.map(st => `<div class="fm-student">
+          <div class="fm-shead">
+            <strong>${esc(st.name)}</strong>
+            <span class="muted" style="font-size:0.8em">${esc(st.section)}</span>
+            <span class="grow"></span>
+            <button class="btn btn-ghost btn-sm" data-full="${esc(st.student_id)}" data-name="${esc(st.name)}">View full report ↗</button>
+          </div>
+          ${studentPanelHTML(reportByStudent[String(st.student_id)]) || '<div class="muted" style="font-size:0.86em">No structured summary for this report.</div>'}
+        </div>`).join('') : `<div class="muted">No students match this flag in scope.</div>`;
+      body.querySelectorAll('[data-full]').forEach(b =>
+        b.addEventListener('click', () => openFullReport(b.dataset.full, b.dataset.name)));
+      document.getElementById('flag-modal').classList.add('open');
+    }
+
+    // The full Markdown report for one student, in its own modal (stacks above the flag modal).
+    async function openFullReport(studentId, name) {
+      document.getElementById('fr-title').textContent = name || 'Report';
+      const body = document.getElementById('fr-body');
       body.innerHTML = `<div class="center-load"><span class="spinner"></span></div>`;
-      const panel = studentPanelHTML(reportByStudent[String(studentId)]);
+      document.getElementById('fullreport-modal').classList.add('open');
       const md = await I.loadReport(reportInteraction, studentId);
       // Report markdown is an inert, user-controllable blob — sanitize at render time.
-      // The structured panel is assembled from escaped values only.
-      const rendered = md ? DOMPurify.sanitize(marked.parse(md))
+      body.innerHTML = md ? DOMPurify.sanitize(marked.parse(md))
         : `<div class="alert alert-info">This student hasn't submitted a report for this interaction yet.</div>`;
-      body.innerHTML = panel + rendered;
     }
 
     // ── Rollup summary rendering ──────────────────────────────────────────────
-    // All aggregates are numeric, computed from report_data (no AI): two headline gauges,
-    // the effort distribution, per-objective understanding (spread + radar), and clickable flags.
+    // All aggregates are numeric, computed from report_data (no AI): an overall-understanding
+    // gauge, the effort distribution (avg drawn in) + an objectives radar, per-objective
+    // understanding histograms, and clickable flags that open the flagged-students modal.
     const f1 = x => x == null ? '—' : (Number.isInteger(x) ? String(x) : x.toFixed(1));
 
     function renderAggregate() {
@@ -375,7 +378,7 @@
       if (reportRows === null) { el.innerHTML = `<div class="summary-placeholder">Computing course-wide summary…</div>`; return; }
       const ids = new Set(rosterInScope().map(st => String(st.student_id)));
       const rows = reportRows.filter(r => ids.has(String(r.student_id)));
-      el.innerHTML = aggregateHTML(I.summarizeReports(rows), flagFilter);
+      el.innerHTML = aggregateHTML(I.summarizeReports(rows));
     }
 
     // ── Rollup visual primitives (pure HTML builders; colors from CSS ramp tokens) ──
@@ -413,27 +416,13 @@
         `<div class="lr-hcol" title="Score ${i}: ${c}"><div class="lr-hbar" style="height:${c/max*100}%;background:var(${RAMP6[i]})"></div><span class="lr-hx">${i}</span></div>`).join('')}</div>`;
     }
 
-    // Fine-cell histogram: each score region split into thin same-color cells, smoothed envelope.
-    function lrFine(counts) {
-      const n = counts.length, max = Math.max(...counts, 1), CELLS = 4;
-      const centers = counts.map((_, i) => i + 0.5);
-      const val = x => {
-        if (x <= centers[0]) return counts[0];
-        if (x >= centers[n - 1]) return counts[n - 1];
-        let i = 0; while (i < n - 1 && x > centers[i + 1]) i++;
-        const t = (x - centers[i]) / (centers[i + 1] - centers[i]);
-        return counts[i] + (counts[i + 1] - counts[i]) * t;
-      };
-      let groups = '';
-      for (let zi = 0; zi < n; zi++) {
-        let bars = '';
-        for (let k = 0; k < CELLS; k++) {
-          const h = Math.max(0, val(zi + (k + 0.5) / CELLS));
-          bars += `<div class="lr-fbar" style="height:${h/max*100}%;background:var(${RAMP6[zi]})"></div>`;
-        }
-        groups += `<div class="lr-fgroup">${bars}</div>`;
-      }
-      return `<div class="lr-fine">${groups}</div>`;
+    // Effort 0–5 distribution with the class average drawn as a labeled reference line. The six
+    // score columns are equal slots, so the mean m maps to slot center (m + 0.5) / 6 of the width.
+    function lrEffort(eff) {
+      const mean = eff.avg;
+      const line = mean == null ? '' :
+        `<div class="lr-mean" style="left:${((mean + 0.5) / 6) * 100}%"><span class="lr-mean-lbl">avg ${f1(mean)}</span></div>`;
+      return `<div class="lr-histwrap">${line}${lrHist(eff.hist)}</div>`;
     }
 
     // Class-profile radar across objectives (solid = class mean, dashed = target 3.5). Needs ≥3 axes.
@@ -462,35 +451,50 @@
         ${objs.map((o, i) => { const [x, y] = pt(i, o.m); return `<circle cx="${x}" cy="${y}" r="3.5" fill="${col}"/>`; }).join('')}${labels}</svg></div>`;
     }
 
-    // Rollup: two headline gauges, effort distribution, per-objective spread (+ radar), clickable flags.
-    function aggregateHTML(s, activeFlag) {
+    // Rollup, top to bottom: (1) overall understanding gauge, (2) effort distribution (with the
+    // class average drawn in) + a radar across objectives, (3) per-objective histograms in two
+    // columns, (4) clickable flags. Each flag opens the flagged-students modal.
+    function aggregateHTML(s) {
       if (!s.n) return `<div class="summary-placeholder">No reports submitted in this scope yet — the summary appears once students submit.</div>`;
 
-      const metrics = `<div class="lr-sec"><div class="lr-metrics">
-        ${lrGauge(s.effort.avg, 'Effort · <b>graded</b>')}
-        ${lrGauge(s.understanding.overall, 'Understanding · diagnostic')}
+      // Row 1 — overall understanding across all topics (the headline).
+      const row1 = `<div class="lr-sec"><div class="lr-metrics">
+        ${lrGauge(s.understanding.overall, 'Overall understanding · <b>all topics</b>')}
       </div></div>`;
 
-      const effDist = `<div class="lr-sec">
-        <div class="lr-eyebrow">Effort distribution <span class="dim">· 0–5, graded</span></div>
-        ${lrHist(s.effort.hist)}
-      </div>`;
+      // Row 2 — effort distribution (avg indicated) beside a radar of performance per objective.
+      const radar = lrRadar(s.objectives);
+      const row2 = `<div class="lr-sec"><div class="lr-row2${radar ? '' : ' single'}">
+        <div class="lr-r2col">
+          <div class="lr-eyebrow">Effort distribution <span class="dim">· 0–5, graded</span></div>
+          ${lrEffort(s.effort)}
+        </div>
+        ${radar ? `<div class="lr-r2col">
+          <div class="lr-eyebrow">Performance across objectives <span class="dim">· understanding, 0–5</span></div>
+          ${radar}
+        </div>` : ''}
+      </div></div>`;
 
-      let objBlock = '';
+      // Row 3 — understanding by objective, two columns of histograms. With an odd count the last
+      // tile is centered on its own row (`.solo`) but capped to a single column's width.
+      let row3 = '';
       if (s.objectives.length) {
-        const rows = s.objectives.map(o => `<div class="lr-obj">
-          <div class="lr-obj-head"><span class="nm">${esc(o.label)}</span>
-            <span class="mu">${o.understanding == null ? 'n/a' : f1(o.understanding) + '/5'} · ${o.assessed} assessed</span></div>
-          ${lrFine(o.dist)}
-        </div>`).join('');
-        objBlock = `<div class="lr-sec">
+        const cards = s.objectives.map((o, i, arr) => {
+          const solo = (arr.length % 2 === 1 && i === arr.length - 1) ? ' solo' : '';
+          return `<div class="lr-objc${solo}">
+            <div class="lr-obj-head"><span class="nm">${esc(o.label)}</span>
+              <span class="mu">${o.understanding == null ? 'n/a' : f1(o.understanding) + '/5'} · ${o.assessed} assessed</span></div>
+            ${lrHist(o.dist)}
+          </div>`;
+        }).join('');
+        row3 = `<div class="lr-sec">
           <div class="lr-eyebrow">Understanding by objective <span class="dim">· diagnostic, weakest first</span></div>
-          ${lrRadar(s.objectives)}${rows}
+          <div class="lr-obj-grid">${cards}</div>
         </div>`;
       }
 
       const chip = (key, label, count, cls) => count
-        ? `<button class="lr-flag ${cls}${activeFlag === key ? ' active' : ''}" data-flag="${key}">${label} <b>${count}</b></button>` : '';
+        ? `<button class="lr-flag ${cls}" data-flag="${key}">${label} <b>${count}</b></button>` : '';
       const flagBits = [
         chip('needs_follow_up', 'Needs follow-up', s.flags.needs_follow_up, ''),
         chip('notable', 'Notable', s.flags.notable, 'blue'),
@@ -499,20 +503,17 @@
         chip('refl_capped', 'Reflection capped', s.reflection.capped, 'gold'),
       ].filter(Boolean).join('');
       const flags = flagBits ? `<div class="lr-sec">
-        <div class="lr-eyebrow">Flags <span class="dim">· click to filter the student list</span></div>
+        <div class="lr-eyebrow">Flags <span class="dim">· click to see the students</span></div>
         <div class="lr-flags">${flagBits}</div>
       </div>` : '';
 
-      return metrics + effDist + objBlock + flags;
+      return row1 + row2 + row3 + flags;
     }
 
-    // Delegated handler for the rollup's flag chips → toggle the student-list filter.
+    // Delegated handler for the rollup's flag chips → open the flagged-students modal.
     function onFlagClick(e) {
       const b = e.target.closest('[data-flag]');
-      if (!b) return;
-      const f = b.dataset.flag;
-      flagFilter = (flagFilter === f) ? null : f;
-      showList();
+      if (b) openFlagModal(b.dataset.flag);
     }
 
     // Per-student structured panel shown above the Markdown report. Built from report_data

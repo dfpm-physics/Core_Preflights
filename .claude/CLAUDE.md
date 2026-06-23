@@ -14,6 +14,13 @@ lesson interactions at USAFA. Replaces GradeScope for two courses: Physics 110 a
 - **Auth**: Supabase Auth for both instructors (email/password) and students (cadetID@usafa.edu / last-6-digits default password)
 - **Analysis**: `/preflight-analyze` Claude Code skill (see `.claude/skills/preflight-analyze/`)
 
+> **No Node on this machine — and it cannot be installed.** There is no build step, bundler, or
+> transpiler, and nothing here needs one. Do **not** reach for `node`, `npm`, `npx`, `node --check`,
+> eslint, jest, or any Node-based tool — none are available and none can be added. The frontend is
+> hand-authored ES modules + plain CSS the browser runs directly. **Verify changes by opening the
+> pages in a browser** (serve the repo root with `python -m http.server 8000`, then open
+> `http://localhost:8000/app/`) against Supabase — not with a JS test runner or linter.
+
 ## Hosting & Infrastructure
 
 - **GitHub Pages**: `https://dfpm-physics.github.io/Core_Preflights/`
@@ -226,3 +233,4 @@ Use these when writing tailored yellow (`warn`) feedback. Each pattern includes 
 - 3-state scoring: `full` (green), `warn` (yellow = full credit but wrong/vague), `zero` (red)
 - **Always update `CHANGELOG.md`** when shipping any feature, fix, or documentation change — include date (YYYY-MM-DD), your name, and what/why. For Claude-authored changes, attribute to the instructor who requested it (e.g. "Casey Pellizzari via Claude").
 - **Supabase free tier pauses after 1 week of inactivity** — unpause at the start of each semester via the Supabase dashboard (Project Settings → General → Restore project)
+- **Node is not installed and cannot be installed on this machine** — no `node`/`npm`/`npx`, no `node --check`, no build step. Verify frontend changes by opening the pages in a browser (`python -m http.server 8000` from the repo root), not with a JS linter/test runner. See the note under **Tech Stack**.

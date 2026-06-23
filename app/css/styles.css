@@ -557,15 +557,24 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
 .lr-hbar { width: 100%; min-height: 3px; border-radius: 4px 4px 0 0; transition: height .4s; }
 .lr-hx { font-size: 0.64em; color: var(--muted); margin-top: 3px; }
 
-/* per-objective rows + fine-cell histogram (each score region split into thin same-color cells) */
-.lr-obj { margin-top: 16px; }
-.lr-obj:first-child { margin-top: 0; }
-.lr-obj-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; }
-.lr-obj-head .nm { font-size: 0.88em; font-weight: 500; }
-.lr-obj-head .mu { font-size: 0.76em; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.lr-fine { display: flex; gap: 7px; height: 44px; align-items: flex-end; }
-.lr-fgroup { flex: 1; display: flex; gap: 2px; align-items: flex-end; height: 100%; }
-.lr-fbar { flex: 1; min-height: 2px; border-radius: 3px 3px 0 0; transition: height .4s; }
+/* row 2: effort distribution (left) beside the objectives radar (right) */
+.lr-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 28px; align-items: start; }
+.lr-row2.single { grid-template-columns: 1fr; }
+@media (max-width: 620px) { .lr-row2 { grid-template-columns: 1fr; } }
+
+/* effort histogram with the class-average reference line */
+.lr-histwrap { position: relative; }
+.lr-mean { position: absolute; top: -2px; bottom: 16px; width: 2px; background: var(--text); opacity: 0.5; transform: translateX(-50%); z-index: 2; pointer-events: none; }
+.lr-mean-lbl { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 3px; white-space: nowrap;
+  font-size: 0.62em; font-weight: 700; color: var(--text); background: var(--surface-sunken); border: 1px solid var(--border); padding: 1px 5px; border-radius: 5px; }
+
+/* row 3: understanding-by-objective histograms, two columns; odd tile centered, same width */
+.lr-obj-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 26px; }
+.lr-obj-grid .lr-objc.solo { grid-column: 1 / -1; max-width: calc(50% - 13px); justify-self: center; }
+@media (max-width: 620px) { .lr-obj-grid { grid-template-columns: 1fr; } .lr-obj-grid .lr-objc.solo { max-width: none; } }
+.lr-obj-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.lr-obj-head .nm { font-size: 0.86em; font-weight: 500; }
+.lr-obj-head .mu { font-size: 0.74em; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* radar */
 .lr-radar { display: flex; justify-content: center; }
@@ -581,10 +590,16 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
 .lr-flag.gold   { background: var(--feedback-bg);    color: var(--feedback-fg);    border-color: transparent; }
 .lr-flag.blue   { background: var(--mc-sel-bg);      color: var(--blue-lt);        border-color: transparent; }
 .lr-flag.danger { background: var(--alert-error-bg); color: var(--alert-error-fg); border-color: transparent; }
-.lr-flag.active { box-shadow: 0 0 0 2px var(--blue-lt); }
-.lr-flag.active::after { content: "✕"; font-weight: 700; opacity: .7; }
-.lr-filter-note { font-size: 0.82em; color: var(--muted); margin: 4px 0 10px; }
-.lr-filter-note button { font: inherit; font-size: inherit; background: none; border: none; color: var(--blue-lt); cursor: pointer; text-decoration: underline; padding: 0; }
+
+/* Flagged-students modal: one card per matching student (summary panel + full-report button) */
+.fm-student { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; background: var(--surface-hover); }
+.fm-student:last-child { margin-bottom: 0; }
+.fm-shead { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.fm-student .stu-panel { margin-bottom: 0; }
+
+/* stacked modals (flag chip → flagged-students → one student's full report) layer above the rollup */
+#flag-modal { z-index: 70; }
+#fullreport-modal { z-index: 80; }
 
 /* Per-student structured panel, shown above the Markdown report */
 .stu-panel { background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 10px;

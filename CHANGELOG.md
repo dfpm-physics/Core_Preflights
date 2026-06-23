@@ -10,6 +10,32 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-06-23 — Matthew Recker
 
+### Changed — restructured the interaction rollup into three rows + flag-driven student drill-down
+
+Reworked the faculty lesson rollup ([`app/faculty/interactions.html`](app/faculty/interactions.html)) into a
+fixed top-to-bottom layout and removed the all-students list:
+
+- **Row 1 — Overall understanding** (all topics) as the headline gauge.
+- **Row 2 — Effort distribution** with the class **average drawn in** as a labeled reference line, beside a
+  **radar** giving a quick read of understanding across every objective (shown with ≥3 objectives).
+- **Row 3 — Understanding by objective** as a **two-column** grid of 0–5 histograms; an odd final tile is
+  centered on its own row but capped to a single column's width (never wider than the others).
+- A **Section dropdown** at the top of the summary rescopes every plot (all sections / one section).
+
+The roster list is gone. **Flag chips now open a modal** of just the matching students; each shows the
+(well-liked) structured summary panel plus a **View full report ↗** button that opens that student's full
+Markdown report in a further stacked modal — no inline AI report by default. New `.lr-*`/`.fm-*` styles and a
+`lrEffort()` mean-line builder added; the unused `lrFine()` fine-cell histogram and inline list/report code
+were removed.
+
+### Docs — recorded that Node is unavailable (and uninstallable) on the dev machine
+
+Noted in `.claude/CLAUDE.md` (Tech Stack + Important Notes) and [`app/README.md`](app/README.md) that this
+machine has **no Node and cannot install it** — there is no `node`/`npm`/`npx`, `node --check`, eslint, or
+jest, and no build step. The frontend is hand-authored ES modules + plain CSS the browser runs directly, so
+changes are verified by **opening the pages in a browser** (`python -m http.server 8000` from the repo root),
+never with a JS linter/test runner/typecheck. This is a hard environment constraint, not a preference.
+
 ### Changed — redesigned the interaction rollup (gauges, histograms, radar, clickable flags)
 
 Rebuilt the faculty lesson-rollup ([`app/faculty/interactions.html`](app/faculty/interactions.html)) to be
