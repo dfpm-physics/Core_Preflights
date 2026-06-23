@@ -10,6 +10,51 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-06-23 — Matthew Recker
 
+### Added — synthetic seed for previewing the interaction rollup
+
+New [`supabase/seed_demo_interaction.sql`](supabase/seed_demo_interaction.sql) populates a clearly-fake
+demo interaction (`demo-rollup-sandbox`, an unpublished draft) with one synthetic `schema:1` report per
+real student in a course, so the faculty rollup (`summarizeReports()` in
+[`app/js/faculty-interactions.js`](app/js/faculty-interactions.js)) can be previewed with realistic data
+before any real artifact submissions exist. Run it in the Supabase SQL Editor (runs as `postgres`, so it
+bypasses the RLS rule that otherwise only lets a student write their own report). Variety (effort 0–5,
+decorrelated understanding, misconceptions from the Preflight-1 taxonomy, reading-reflection gate, honor
+statuses, triage flags) is derived deterministically from `student_id`, so re-runs are stable; effort and
+understanding are decorrelated on purpose to exercise the "full effort, low understanding" case. Scopes to
+real students' real sections via `sections.course_id` (matching how the rollup loads data) and never touches
+a real interaction or a real submission. Includes a copy/paste rollup-preview query for each UI aggregate and
+a one-line cascade teardown. Conforms to `INTERACTION-DATA-CONTRACT.md` (schema 1).
+
+### Changed — rebranded the platform to **iPREP**
+
+Renamed the website's user-facing brand to **iPREP** (*interactive Pre-lesson Readiness Engagement
+Platform*). Updated the `app/` portal nav brand + footer ([`app/js/nav.js`](app/js/nav.js)), the
+login screen (now shows the full name as a tagline, [`app/login.html`](app/login.html)), every
+`app/` page `<title>`, and the legacy page headers/titles (`index.html`, `admin.html`,
+`review.html`, `interactions.html`, `interactions-admin.html`, `artifact-submit.html`). The
+repository, GitHub Pages path, and CSV/JSON export filenames stay `Core_Preflights` on purpose —
+renaming them would break deployed-artifact links (the frozen data contract), bookmarks, and
+existing Blackboard grade imports. Documented the brand-vs-repo distinction at the top of
+`.claude/CLAUDE.md`.
+
+### Added — interaction summaries (numeric rollups from `report_data`)
+
+Built the per-lesson **summary** that the data contract said the site computes without AI. The
+faculty report modal ([`app/faculty/interactions.html`](app/faculty/interactions.html)) now shows a
+live, section-scoped rollup over every in-scope report: effort average + points + an effort 0–5
+distribution, completion, assessed-vs-self-rated understanding with the confidence gap, per-objective
+understanding bars, misconception counts, reading-reflection meaningful-rate / effort-capped count /
+sentiment / topic tags, and integrity + triage-flag tallies. All numbers are folded from
+`report_data` (schema 1) by a new pure aggregator `summarizeReports()` + fetcher `loadInteractionData()`
+in [`app/js/faculty-interactions.js`](app/js/faculty-interactions.js), coercing out-of-range/wrong-typed
+LLM output defensively. Each individual report also gets a structured panel above the Markdown (effort,
+understanding, objectives, misconceptions, reflection, honor, flags, and the artifact's per-student AI
+narrative). Students now see their own effort/points on the interactions page
+([`app/js/student-data.js`](app/js/student-data.js), [`app/student/interactions.html`](app/student/interactions.html)).
+The **free-text trend prose** that genuinely needs the AI aggregation pass — the cohort narrative,
+clustering of novel/free-text misconceptions, and reflection-theme synthesis — is rendered as labeled
+`[placeholder]` blocks pending that pipeline. Styles added to [`app/css/styles.css`](app/css/styles.css).
+
 ### Added — generalized artifact receiver (`artifact-submit.html`)
 
 Built the receiver that realizes the v1 data contract. New

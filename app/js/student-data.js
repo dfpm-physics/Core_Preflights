@@ -53,17 +53,22 @@ export async function loadAssignmentStatuses(ctx) {
   });
 }
 
-/** Published interactions for the course paired with the student's submitted reports. */
+/** Published interactions for the course paired with the student's submitted reports.
+ *  effort (0–5) is the engagement grade; score (0–2) is the trigger-derived points. */
 export async function loadInteractionStatuses(ctx) {
   const sid = ctx.studentRow.student_id;
   const [{ data: pub }, { data: reports }] = await Promise.all([
     db.from('interactions').select('id, title, description, artifact_url')
       .eq('course_id', ctx.currentCourse).eq('is_published', true).order('title'),
-    db.from('preflight_interaction_reports').select('interaction_id, updated_at')
+    db.from('preflight_interaction_reports').select('interaction_id, updated_at, effort, score')
       .eq('student_id', sid),
   ]);
-  const doneMap = Object.fromEntries((reports || []).map(r => [r.interaction_id, r.updated_at]));
-  return (pub || []).map(it => ({ ...it, done: it.id in doneMap, submittedAt: doneMap[it.id] || null }));
+  const repMap = Object.fromEntries((reports || []).map(r => [r.interaction_id, r]));
+  return (pub || []).map(it => {
+    const r = repMap[it.id];
+    return { ...it, done: !!r, submittedAt: r?.updated_at || null,
+      effort: r?.effort ?? null, score: r?.score ?? null };
+  });
 }
 
 /** Aggregate everything the student dashboard needs into one view-model. */

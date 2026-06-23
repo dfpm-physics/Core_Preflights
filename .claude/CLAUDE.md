@@ -1,6 +1,11 @@
-# Physics Assignments — Project Overview
+# iPREP — Project Overview
 
-A GitHub Pages + Supabase system for managing physics preflight assignments at USAFA. Replaces GradeScope for two courses: Physics 110 and Physics 215.
+**iPREP** — *interactive Pre-lesson Readiness Engagement Platform* — is the user-facing brand
+of this system. A GitHub Pages + Supabase system for managing physics preflight assignments and
+lesson interactions at USAFA. Replaces GradeScope for two courses: Physics 110 and Physics 215.
+
+> The brand name is **iPREP**; the repo, GitHub Pages path, and download/export filenames remain
+> `Core_Preflights` (changing those would break links, the artifact data contract, and Blackboard imports).
 
 ## Tech Stack
 

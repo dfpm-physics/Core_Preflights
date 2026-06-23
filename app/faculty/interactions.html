@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Interactions · Preflights</title>
+  <title>Interactions · iPREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
   <link rel="stylesheet" href="../css/styles.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -46,11 +46,11 @@
     <div class="modal" style="max-width:760px">
       <div class="modal-head"><h2 id="rm-title">Lesson report</h2><button class="modal-close" data-close>×</button></div>
 
-      <!-- Course-wide summary — placeholder until the interaction-analysis pipeline lands -->
-      <div class="alert alert-info" id="rm-aggregate">
-        <strong>Course-wide summary</strong> — pending analysis. Completion is shown below; the
-        misconception &amp; understanding summary will appear here once analysis runs.
-      </div>
+      <!-- Course-wide rollup: numeric aggregates computed live from report_data (no AI).
+           The free-text trend prose (cohort narrative, misconception clustering of novel
+           descriptions, reflection themes) is shown as labeled placeholders until the
+           interaction-analysis pass lands. -->
+      <div class="lesson-summary" id="rm-aggregate"></div>
 
       <!-- Scope + completion stats + analysis export -->
       <div class="row wrap" style="gap:12px;margin-bottom:12px;align-items:flex-end">
@@ -86,6 +86,8 @@
     if (!ctx) { /* redirected */ } else { init(); }
 
     let vm = null, editingId = null, reportInteraction = null;
+    // Structured report data for the open lesson: rows = null while loading, [] once loaded.
+    let reportRows = null, reportByStudent = {};
     const isDirector = () => ctx.isDirectorForCurrent();
 
     function init() {
@@ -267,8 +269,19 @@
         .concat(vm.sections.map(s => `<option value="${esc(s.id)}">${esc(s.id)} (${s.students.length})</option>`)).join('');
       sel.value = (section && vm.sections.some(s => s.id === section)) ? section : 'all';
 
+      reportRows = null; reportByStudent = {};   // null → summary shows "computing…"
       showList();
       document.getElementById('report-modal').classList.add('open');
+
+      // Pull structured data for the whole in-scope roster once; the rollup summary and the
+      // per-student panel both read it. RLS scopes which rows actually come back.
+      const allIds = vm.sections.flatMap(s => s.students.map(st => st.student_id));
+      I.loadInteractionData(interactionId, allIds).then(rows => {
+        if (reportInteraction !== interactionId) return;   // modal moved to another lesson
+        reportRows = rows;
+        reportByStudent = Object.fromEntries(rows.map(r => [String(r.student_id), r]));
+        renderAggregate();
+      });
     }
 
     // Roster for the chosen scope, each student tagged with its section id.
@@ -283,6 +296,7 @@
       document.getElementById('rm-report').style.display = 'none';
       const listEl = document.getElementById('rm-list');
       listEl.style.display = '';
+      renderAggregate();   // recompute the rollup for the current section scope
 
       const it = vm.interactions.find(x => x.id === reportInteraction);
       const done = new Set(it?.doneStudentIds || []);
@@ -315,10 +329,179 @@
       document.getElementById('rm-report-name').textContent = name || '';
       const body = document.getElementById('rm-body');
       body.innerHTML = `<div class="center-load"><span class="spinner"></span></div>`;
+      const panel = studentPanelHTML(reportByStudent[String(studentId)]);
       const md = await I.loadReport(reportInteraction, studentId);
       // Report markdown is an inert, user-controllable blob — sanitize at render time.
-      body.innerHTML = md ? DOMPurify.sanitize(marked.parse(md))
+      // The structured panel is assembled from escaped values only.
+      const rendered = md ? DOMPurify.sanitize(marked.parse(md))
         : `<div class="alert alert-info">This student hasn't submitted a report for this interaction yet.</div>`;
+      body.innerHTML = panel + rendered;
+    }
+
+    // ── Rollup summary rendering ──────────────────────────────────────────────
+    // Numeric aggregates are computed from report_data (no AI); free-text trend prose
+    // is left as a labeled placeholder until the interaction-analysis pass is built.
+    const f1 = x => x == null ? '—' : (Number.isInteger(x) ? String(x) : x.toFixed(1));
+
+    function renderAggregate() {
+      const el = document.getElementById('rm-aggregate');
+      if (!el) return;
+      if (reportRows === null) { el.innerHTML = `<div class="summary-placeholder">Computing course-wide summary…</div>`; return; }
+      const ids = new Set(rosterInScope().map(st => String(st.student_id)));
+      const rows = reportRows.filter(r => ids.has(String(r.student_id)));
+      el.innerHTML = aggregateHTML(I.summarizeReports(rows));
+    }
+
+    function aggregateHTML(s) {
+      if (!s.n) return `<div class="summary-placeholder">No reports submitted in this scope yet — the summary appears once students submit.</div>`;
+      const tile = (v, k, color) => `<div class="sum-tile"><div class="v"${color ? ` style="color:${color}"` : ''}>${v}</div><div class="k">${esc(k)}</div></div>`;
+
+      // Cohort narrative — needs the free-text AI aggregation pass.
+      const cohort = `<div class="summary-placeholder">Course-wide narrative summary — pending the interaction-analysis pass. <em>[placeholder]</em></div>`;
+
+      // Effort & completion (graded).
+      const effChips = s.effort.hist.map((c, e) => `<span class="eff-chip e${e}" title="Effort ${e}: ${c}">${e}<b>${c}</b></span>`).join('')
+        + (s.effort.notAssessed ? `<span class="eff-chip na" title="Effort not assessed: ${s.effort.notAssessed}">n/a<b>${s.effort.notAssessed}</b></span>` : '');
+      const effort = `<div class="sum-section">
+        <div class="q-eyebrow">Effort &amp; completion · graded</div>
+        <div class="sum-grid">
+          ${tile(f1(s.effort.avg) + '<span class="u">/5</span>', 'Avg effort')}
+          ${tile(s.effort.pointsTotal + '<span class="u">/' + s.effort.pointsMax + '</span>', 'Points awarded')}
+          ${tile(s.completedPct + '<span class="u">%</span>', 'Completed flow')}
+          ${tile(s.n, 'Submissions')}
+        </div>
+        <div class="eff-hist" title="Effort distribution (0–5)">${effChips}</div>
+      </div>`;
+
+      // Understanding (diagnostic).
+      const g = s.understanding.gap;
+      const gapStr = g == null ? '—' : (g > 0 ? '+' : '') + g.toFixed(1);
+      const gapColor = g == null ? '' : g >= 1 ? 'var(--red)' : g <= -1 ? 'var(--blue-lt)' : '';
+      const objBars = s.objectives.length ? `<div class="sum-bars">${s.objectives.map(o => {
+        const p = o.understanding == null ? 0 : Math.round(o.understanding / 5 * 100);
+        return `<div class="progress-row">
+          <span class="pr-label">${esc(o.label)}</span>
+          <span class="pr-count">${o.understanding == null ? 'n/a' : f1(o.understanding) + '/5'} · ${o.assessed} assessed</span>
+          <div class="pr-track"><div class="pr-fill ${barClass(p)}" style="width:${p}%"></div></div>
+        </div>`;
+      }).join('')}</div>` : `<div class="muted" style="font-size:0.84em;margin-top:6px">No per-objective data reported.</div>`;
+      const understanding = `<div class="sum-section">
+        <div class="q-eyebrow">Understanding · diagnostic, not graded</div>
+        <div class="sum-grid">
+          ${tile(f1(s.understanding.overall) + '<span class="u">/5</span>', 'Assessed')}
+          ${tile(f1(s.understanding.self) + '<span class="u">/5</span>', 'Self-rated')}
+          ${tile(gapStr, 'Confidence gap', gapColor)}
+        </div>
+        ${objBars}
+      </div>`;
+
+      // Misconceptions (diagnostic) — counts now; clustering of novel ones is an AI pass.
+      const mc = s.misconceptions.length
+        ? `<div class="chip-wrap">${s.misconceptions.slice(0, 12).map(m =>
+            `<span class="tag ${m.major ? 'gold' : ''}" title="${esc(m.id)}${m.major ? ` · ${m.major} major` : ''}">${esc(m.label)} <b>${m.count}</b></span>`).join('')}</div>`
+        : `<div class="muted" style="font-size:0.84em">None reported in this scope.</div>`;
+      const misc = `<div class="sum-section">
+        <div class="q-eyebrow">Misconceptions · diagnostic</div>
+        ${mc}
+        <div class="summary-placeholder" style="margin-top:10px">AI clustering of novel / free-text misconceptions — pending the interaction-analysis pass. <em>[placeholder]</em></div>
+      </div>`;
+
+      // Reading reflection (diagnostic + grade gate).
+      const sent = Object.entries(s.reflection.sentiment).filter(([, c]) => c)
+        .map(([k, c]) => `<span class="tag">${esc(k)} <b>${c}</b></span>`).join('') || '<span class="muted" style="font-size:0.84em">—</span>';
+      const tops = s.reflection.topics.length
+        ? `<div class="chip-wrap" style="margin-top:8px">${s.reflection.topics.slice(0, 16).map(t => `<span class="tag blue">${esc(t.topic)} <b>${t.count}</b></span>`).join('')}</div>` : '';
+      const reflPct = s.reflection.assessed ? Math.round(s.reflection.meaningful / s.reflection.assessed * 100) : null;
+      const refl = `<div class="sum-section">
+        <div class="q-eyebrow">Reading reflection · diagnostic + grade gate</div>
+        <div class="sum-grid">
+          ${tile(reflPct == null ? '—' : reflPct + '<span class="u">%</span>', 'Meaningful')}
+          ${tile(s.reflection.capped, 'Effort-capped', s.reflection.capped ? 'var(--red)' : 'var(--muted)')}
+          ${tile(f1(s.reflection.engagement) + '<span class="u">/5</span>', 'Engagement')}
+        </div>
+        <div class="row wrap" style="gap:6px;margin-top:10px">${sent}</div>
+        ${tops}
+        <div class="summary-placeholder" style="margin-top:10px">Reflection themes &amp; sentiment narrative — pending the interaction-analysis pass. <em>[placeholder]</em></div>
+      </div>`;
+
+      // Integrity + triage flags (numeric; only shown when something fired).
+      const bits = [];
+      if (s.honor.disclosed) bits.push(`<span class="tag gold">disclosed help <b>${s.honor.disclosed}</b></span>`);
+      if (s.honor.concern)   bits.push(`<span class="tag danger">integrity concern <b>${s.honor.concern}</b></span>`);
+      if (s.flags.needs_follow_up) bits.push(`<span class="tag gold">needs follow-up <b>${s.flags.needs_follow_up}</b></span>`);
+      if (s.flags.notable)         bits.push(`<span class="tag blue">notable <b>${s.flags.notable}</b></span>`);
+      const integrity = bits.length ? `<div class="sum-section">
+        <div class="q-eyebrow">Integrity &amp; triage flags</div>
+        <div class="chip-wrap">${bits.join('')}</div>
+      </div>` : '';
+
+      return cohort + effort + understanding + misc + refl + integrity;
+    }
+
+    // Per-student structured panel shown above the Markdown report. Built from report_data
+    // (the contract's `d`); all free-text fields are escaped (inert). Absent for legacy
+    // reports submitted before structured data existed.
+    function studentPanelHTML(row) {
+      const d = (row && row.report_data && typeof row.report_data === 'object') ? row.report_data : null;
+      const eff = (row && row.effort != null) ? row.effort : (d ? (Number.isInteger(d.effort) ? d.effort : null) : null);
+      const pts = (row && row.score != null) ? row.score : null;
+      if (d == null && eff == null) return '';   // legacy report — nothing structured to show
+
+      const effCls = eff == null ? 'pending' : eff >= 3 ? 'full' : eff >= 1 ? 'partial' : 'zero';
+      const meta = [];
+      if (d?.completed === true) meta.push('✓ completed flow');
+      else if (d?.completed === false) meta.push('did not complete');
+      if (typeof d?.duration_min === 'number') meta.push(`${d.duration_min} min`);
+      if (Number.isInteger(d?.message_count)) meta.push(`${d.message_count} msgs`);
+
+      const sect = (label, html) => html ? `<div class="sp-row"><span class="sp-k">${esc(label)}</span><span class="sp-v">${html}</span></div>` : '';
+      const num = v => Number.isInteger(v) && v >= 0 && v <= 5 ? `${v}/5` : null;
+
+      const understanding = [
+        d && num(d.overall_understanding) ? `assessed ${num(d.overall_understanding)}` : null,
+        d && num(d.self_rated_understanding) ? `self-rated ${num(d.self_rated_understanding)}` : null,
+      ].filter(Boolean).join(' · ');
+
+      const objs = (d && Array.isArray(d.objectives) ? d.objectives : [])
+        .filter(o => o && o.key).map(o => `<span class="tag">${esc(o.label || o.key)}${num(o.understanding) ? ` <b>${num(o.understanding)}</b>` : ''}</span>`).join('');
+
+      const mcs = (d && Array.isArray(d.misconceptions) ? d.misconceptions : [])
+        .filter(m => m && m.id).map(m =>
+          `<li>${esc(m.label || m.id)}${m.severity ? ` <span class="tag ${m.severity === 'major' ? 'gold' : ''}">${esc(m.severity)}</span>` : ''}${m.description ? ` — ${esc(m.description)}` : ''}</li>`).join('');
+
+      const r = d?.reading_reflection;
+      const reflBits = [];
+      if (r && typeof r.meaningful === 'boolean') reflBits.push(r.meaningful ? '<span class="tag">meaningful ✓</span>' : '<span class="tag gold">not meaningful — effort capped</span>');
+      if (r && num(r.engagement)) reflBits.push(`engagement ${num(r.engagement)}`);
+      if (r && r.sentiment) reflBits.push(esc(r.sentiment));
+      const reflText = r && r.text ? `<div class="sp-quote">${esc(r.text)}</div>` : '';
+
+      const honor = d?.honor;
+      const honorHTML = honor && (honor.status === 'disclosed' || honor.status === 'concern')
+        ? `<span class="tag ${honor.status === 'concern' ? 'danger' : 'gold'}">${esc(honor.status)}</span>${honor.note ? ` ${esc(honor.note)}` : ''}` : '';
+
+      const flags = d?.flags;
+      const flagBits = [];
+      if (flags?.needs_follow_up === true) flagBits.push('<span class="tag gold">needs follow-up</span>');
+      if (flags?.notable === true) flagBits.push('<span class="tag blue">notable</span>');
+      if (flags?.note) flagBits.push(esc(flags.note));
+
+      return `<div class="stu-panel">
+        <div class="row wrap" style="gap:10px;align-items:center">
+          <span class="score-badge ${effCls}">Effort ${eff == null ? '—' : eff}/5${pts != null ? ` · ${pts} pt${pts === 1 ? '' : 's'}` : ''}</span>
+          ${meta.length ? `<span class="muted" style="font-size:0.82em">${esc(meta.join(' · '))}</span>` : ''}
+        </div>
+        ${d?.effort_rationale ? `<div class="sp-note">${esc(d.effort_rationale)}</div>` : ''}
+        ${sect('Understanding', understanding ? esc(understanding) : '')}
+        ${sect('Objectives', objs)}
+        ${mcs ? `<div class="sp-row"><span class="sp-k">Misconceptions</span><span class="sp-v"><ul class="sp-list">${mcs}</ul></span></div>` : ''}
+        ${reflBits.length || reflText ? `<div class="sp-row"><span class="sp-k">Reflection</span><span class="sp-v">${reflBits.join(' · ')}${reflText}</span></div>` : ''}
+        ${honorHTML ? sect('Integrity', honorHTML) : ''}
+        ${flagBits.length ? sect('Flags', flagBits.join(' · ')) : ''}
+        ${d?.ai_summary ? sect('Summary', esc(d.ai_summary)) : ''}
+        ${d?.key_strengths ? sect('Strengths', esc(d.key_strengths)) : ''}
+        ${d?.recommended_review ? sect('Review', esc(d.recommended_review)) : ''}
+      </div>`;
     }
 
     // Build + download the combined report for this lesson (all in-scope sections),

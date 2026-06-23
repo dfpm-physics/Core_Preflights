@@ -488,6 +488,50 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
 .clickable:hover { background: var(--surface-hover); }
 .clickable:focus-visible { outline: 2px solid var(--blue-lt); outline-offset: 2px; }
 
+/* ============================================================= *
+ *  Interaction lesson summary (faculty report modal)            *
+ *  Numeric rollups computed from report_data; free-text trend   *
+ *  prose is shown via .summary-placeholder until the AI pass.   *
+ * ============================================================= */
+.lesson-summary { margin-bottom: 18px; }
+.lesson-summary .sum-section { margin-top: 18px; }
+.lesson-summary .sum-section:first-child { margin-top: 0; }
+
+.sum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; margin-top: 8px; }
+.sum-tile { background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; }
+.sum-tile .v { font-size: 1.5em; font-weight: 800; line-height: 1.05; letter-spacing: -0.02em; }
+.sum-tile .v .u { font-size: 0.5em; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+.sum-tile .k { font-size: 0.72em; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 3px; }
+
+.sum-bars { display: grid; gap: 12px; margin-top: 10px; }
+
+/* Effort 0–5 distribution chips */
+.eff-hist { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.eff-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 0.78em; font-weight: 600;
+  padding: 3px 9px; border-radius: 999px; background: var(--surface-hover); color: var(--muted); border: 1px solid var(--border); }
+.eff-chip b { font-weight: 800; color: var(--text); }
+.eff-chip.e0 { background: var(--alert-error-bg); color: var(--alert-error-fg); border-color: transparent; }
+.eff-chip.e1, .eff-chip.e2 { background: var(--alert-warn-bg); color: var(--alert-warn-fg); border-color: transparent; }
+.eff-chip.e4, .eff-chip.e5 { background: var(--alert-ok-bg); color: var(--alert-ok-fg); border-color: transparent; }
+.eff-chip.e0 b, .eff-chip.e1 b, .eff-chip.e2 b, .eff-chip.e4 b, .eff-chip.e5 b { color: inherit; }
+
+.chip-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag.danger { background: var(--alert-error-bg); color: var(--alert-error-fg); border-color: transparent; }
+.tag b { font-weight: 800; }
+
+/* Per-student structured panel, shown above the Markdown report */
+.stu-panel { background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 16px; margin-bottom: 16px; font-size: 0.9em; }
+.stu-panel .sp-row { display: grid; grid-template-columns: 104px 1fr; gap: 4px 12px; padding: 7px 0;
+  border-top: 1px solid var(--border); align-items: start; }
+.stu-panel .sp-row:first-of-type { border-top: none; padding-top: 10px; }
+.stu-panel .sp-k { font-size: 0.74em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding-top: 2px; }
+.stu-panel .sp-v { line-height: 1.5; }
+.stu-panel .sp-note { font-size: 0.86em; color: var(--muted); margin-top: 6px; font-style: italic; }
+.stu-panel .sp-list { margin: 0; padding-left: 18px; }
+.stu-panel .sp-list li { margin: 2px 0; }
+.stu-panel .sp-quote { margin-top: 6px; padding: 6px 10px; border-left: 3px solid var(--border); color: var(--muted); font-style: italic; }
+
 .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
 table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
 th { background: var(--th-bg); color: #fff; padding: 10px 12px; text-align: left; white-space: nowrap; }
