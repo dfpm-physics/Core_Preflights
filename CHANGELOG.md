@@ -10,6 +10,46 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-06-24 — Matthew Recker
 
+### Changed — portal theme reskinned to GitHub Primer + a self-hosted display font
+
+Promoted the [`test-summary.html`](test-summary.html) sandbox's new look into the live `app/` portal.
+The palette in [`app/css/styles.css`](app/css/styles.css) moved off Air Force navy/gold to a
+**GitHub-Primer** system — `--blue`/`--blue-lt` are now both `#0969da` (light) / `#4493f8` (dark),
+surfaces/borders/text and all four alert families adopt Primer values, and **USAFA gold is retained only
+as a restrained accent** (feedback rail). Both `:root` and `[data-theme="dark"]` were rewritten; a new
+`--text-soft` ink tone was added. Hero titles now use a **self-hosted Oswald** condensed display face —
+two woff2 subsets decoded into [`app/media/fonts/`](app/media/fonts/) and wired via `@font-face` + the
+new `--font-display` token (applied to `.page-head h1`, the nav brand, the login title, and the lesson
+rollup title; body/UI stay on the system stack, so there's no build step and no third-party network call).
+Every `app/` page inherits this through the shared stylesheet. [`app/DESIGN.md`](app/DESIGN.md) was updated
+to document the new palette, the display face, and the v3 rollup components.
+
+### Changed — faculty lesson-summary rollup rebuilt to match the sandbox (live data)
+
+Rebuilt the lesson report rollup in [`app/faculty/interactions.html`](app/faculty/interactions.html) to the
+sandbox design, wired to real `report_data` via `summarizeReports` (no AI). New layout: a **tinted full-bleed
+header** (Oswald title + a stacked **“Submitted N/total” completion badge** + clickable **flag pills** + an
+**adaptive scope control** — a segmented control for few sections, a dropdown for many); **bordered effort +
+radar tiles** (vertical effort bar chart; an **interactive radar** whose vertices show the objective + mean on
+hover); **“AI effort summary” and “Misconceptions & trends” placeholders** (the AI trend passes aren't built
+and the contract has nowhere to store their output yet); a **weakest-first, one-per-row** understanding-by-
+objective breakdown; and a new **Student Responses** panel that surfaces real reading-reflection quotes
+(names hidden by default, shuffle, copy-for-slides). Flag pills now drill down in **stacked modals**: pill →
+student names list → one student's structured summary → full Markdown report. The headline overall-
+understanding gauge was dropped (the radar conveys it). “AI pick” reflection rows and the two AI panels are
+inert until the matching data exists — see the data-needs note below.
+
+### Added — `app/DESIGN.md` design-system spec for the portal refactor
+
+Authored [`app/DESIGN.md`](app/DESIGN.md), a tokenized design-language document for the `app/` portal,
+following the DESIGN.md format (Google Stitch / getdesign.md): YAML front matter capturing the live
+tokens from [`app/css/styles.css`](app/css/styles.css) — the two-palette light/dark color roles, the
+em-based type scale, spacing/radius/elevation, and component compositions — followed by prose sections
+(Overview, Colors, Typography, Layout, Elevation, Components, Responsive Behavior, Known Gaps) that
+explain the *intent* behind each rule. Purpose: let a human or agent extend the UI on-brand without
+re-deriving the system, and codify the governing rule that pages are authored with tokens only (never a
+hardcoded surface/status color). Documentation only — no code or DB changes.
+
 ### Added — `test-summary.html` rollup sandbox (synthetic data, no DB) + `test.html` is now a hub
 
 To iterate on the lesson-rollup design without a database, the old `test.html` progress-bar playground was
