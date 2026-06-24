@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Summary rollup sandbox · iPREP</title>
+<script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+<style>
+  /* ── Palette (copied from app/css/styles.css so this page stands alone) ── */
+  :root{
+    --bg:#f4f5f7; --card:#fff; --border:#e2e4e8; --text:#1a1a2e; --text-soft:#454b5a; --muted:#6b7280;
+    --surface-sunken:#fafbfc; --surface-hover:#f8fafc; --blue:#1e3a6d; --blue-lt:#2a5298;
+    --red:#e8505b; --gold:#d97706;
+    --shadow-sm:0 1px 4px rgba(0,0,0,.06); --shadow-md:0 4px 12px rgba(0,0,0,.10); --shadow-lg:0 12px 32px rgba(0,0,0,.18);
+    --radius:10px; --overlay:rgba(15,23,42,.5);
+    /* 5-zone ramp (understanding columns + radar tint) */
+    --s1:#e8505b; --s2:#f6803c; --s3:#f5c518; --s4:#17b890; --s5:#2ec46b;
+    /* 6-step discrete ramp */
+    --d0:#d23b4e; --d1:#ea5a5f; --d2:#f6803c; --d3:#f5c518; --d4:#21b58e; --d5:#2ec46b;
+    --empty:#e7e9ee; --empty-edge:#d7dae1;
+    --feedback-bg:#fef6e7; --feedback-fg:#92580a; --mc-sel-bg:#e8f0fe;
+    --alert-error-bg:#fdecec; --alert-error-fg:#a12626;
+    --alert-warn-bg:#fff6e5;  --alert-warn-fg:#8a5a00;
+    --alert-ok-bg:#e7f7ee;    --alert-ok-fg:#1c7a45;
+  }
+  [data-theme="dark"]{
+    --bg:#0f172a; --card:#1e293b; --border:#334155; --text:#e2e8f0; --text-soft:#c3ccd9; --muted:#94a3b8;
+    --surface-sunken:#172033; --surface-hover:#243044; --blue:#1e3a6d; --blue-lt:#3b6fc4;
+    --red:#f0606b; --gold:#fbbf24;
+    --shadow-sm:0 1px 4px rgba(0,0,0,.4); --shadow-md:0 4px 12px rgba(0,0,0,.5); --shadow-lg:0 12px 32px rgba(0,0,0,.6);
+    --overlay:rgba(0,0,0,.6);
+    --s1:#f0606b; --s2:#fb8b48; --s3:#f7cf3a; --s4:#22c7a3; --s5:#37d072;
+    --d0:#e8576a; --d1:#f0606b; --d2:#fb8b48; --d3:#f7cf3a; --d4:#27c79e; --d5:#37d072;
+    --empty:#2a3548; --empty-edge:#3a475c;
+    --feedback-bg:#3a2f12; --feedback-fg:#fcd9a0; --mc-sel-bg:#1e3354;
+    --alert-error-bg:#3a1e1e; --alert-error-fg:#fca5a5;
+    --alert-warn-bg:#3a2f12;  --alert-warn-fg:#fcd9a0;
+    --alert-ok-bg:#16301f;    --alert-ok-fg:#86efac;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    background:var(--bg);color:var(--text);line-height:1.5;padding:30px 24px 90px}
+  .wrap{max-width:900px;margin:0 auto}
+  .topbar{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  .topbar h1{font-size:1.3em;letter-spacing:-.02em}
+  .backlink{font-size:.86em;color:var(--blue-lt);text-decoration:none}
+  .grow{flex:1}.muted{color:var(--muted)}
+  .row{display:flex;align-items:center;gap:10px}.row.wrap{flex-wrap:wrap}
+  .note{color:var(--muted);font-size:.86em;margin-bottom:18px}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:24px}
+  /* ── Lesson header (title + completion, flag subheader, section selector on the right) ── */
+  .lesson-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;
+    border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:18px}
+  .lh-main{flex:1;min-width:0}
+  .lh-title{font-size:1.2em;font-weight:700;letter-spacing:-.01em;color:var(--text-soft)}
+  .lh-stats{font-size:.62em;font-weight:600;color:var(--muted);letter-spacing:0;white-space:nowrap}
+  .lh-flags{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .lh-scope{flex:none}
+
+  /* buttons / fields */
+  .btn{font:inherit;font-weight:600;cursor:pointer;border-radius:8px;padding:8px 14px;border:1px solid var(--border);background:var(--surface-hover);color:var(--text)}
+  .btn:hover{border-color:var(--blue-lt)}
+  .btn-sm{font-size:.84em;padding:6px 11px}
+  .btn-secondary{background:var(--surface-hover);color:var(--text)}
+  .tbtn{font:inherit;font-size:.82em;font-weight:600;cursor:pointer;background:var(--surface-hover);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 11px}
+  .tbtn:hover{border-color:var(--blue-lt)}
+  label{display:block;font-size:.72em;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px}
+  select{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);min-width:160px}
+
+  .score-badge{display:inline-block;font-size:.74em;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid var(--border);background:var(--surface-hover);color:var(--muted)}
+  .score-badge.full{background:var(--alert-ok-bg);color:var(--alert-ok-fg);border-color:transparent}
+  .score-badge.partial{background:var(--alert-warn-bg);color:var(--alert-warn-fg);border-color:transparent}
+  .score-badge.zero{background:var(--alert-error-bg);color:var(--alert-error-fg);border-color:transparent}
+
+  /* ── Rollup sections ── */
+  .lr-sec{margin-top:24px}.lr-sec:first-child{margin-top:0}
+  .lr-eyebrow{font-size:.72em;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--blue-lt);margin-bottom:10px}
+  .lr-eyebrow .dim{color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0}
+
+  /* row 2: 2×2 grid — [effort][radar] / [AI summary][objective key]. Grid row tracks stretch so the
+     effort chart matches the radar height and the AI box matches the objective-key height. */
+  .sum-row2{display:grid;grid-template-columns:1fr 1fr;gap:20px 30px;align-items:stretch}
+  .sum-cell{display:flex;flex-direction:column;min-width:0}
+  @media(max-width:680px){.sum-row2{grid-template-columns:1fr}}
+
+  /* effort distribution (fills its cell so it ends up as tall as the radar) */
+  .eff-wrap{position:relative;flex:1;display:flex;flex-direction:column;min-height:150px}
+  .eff-bars{flex:1;display:flex;align-items:stretch;gap:7px;min-height:0}
+  .eff-col{flex:1;display:flex;align-items:flex-end}
+  .eff-bar{width:100%;border-radius:5px 5px 0 0;min-height:3px;transition:height .4s}
+  .eff-x{display:flex;gap:7px;margin-top:6px}
+  .eff-x span{flex:1;text-align:center;font-size:.66em;color:var(--muted)}
+
+  /* radar */
+  .radar-wrap{flex:1;display:flex;align-items:center;justify-content:center}
+  .radar-wrap svg{max-width:100%;height:auto}
+
+  /* AI aggregator placeholder (TBD) */
+  .ai-box{flex:1;display:flex;flex-direction:column;gap:10px;background:var(--surface-sunken);border:1px dashed var(--border);border-radius:9px;padding:14px 16px}
+  .ai-tbd{font-size:.85em;color:var(--muted)}
+  .sk{height:9px;border-radius:5px;background:linear-gradient(90deg,var(--empty),var(--surface-hover),var(--empty))}
+
+  /* objective key (radar legend, letters A,B,C…) */
+  .obj-legend{flex:1;display:flex;flex-direction:column;gap:9px}
+  .ol-item{display:flex;align-items:center;gap:10px;font-size:.88em}
+  .ol-key{flex:none;width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-weight:800;font-size:.8em;background:var(--blue-lt);color:#fff}
+  .ol-key.sm{width:18px;height:18px;font-size:.72em}
+  .ol-lbl{flex:1;min-width:0;color:var(--text-soft);font-weight:600}
+  .ol-val{flex:none;color:var(--muted);font-variant-numeric:tabular-nums;font-size:.9em}
+
+  /* understanding by objective — ONE objective per row, full-width fine histogram */
+  .obj-row{margin-top:18px}.obj-row:first-child{margin-top:0}
+  .obj-row-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px}
+  .obj-row-head .nm{font-size:.88em;font-weight:600;color:var(--text-soft);display:flex;align-items:center;gap:6px;min-width:0}
+  .obj-row-head .mu{font-size:.76em;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+  /* fine-cell histogram: 5 columns (1–5), each split into thin same-color cells */
+  .lr-fine{display:flex;gap:9px;height:54px;align-items:flex-end}
+  .lr-fgroup{flex:1;display:flex;gap:2px;align-items:flex-end;height:100%}
+  .lr-fbar{flex:1;min-height:2px;border-radius:3px 3px 0 0;transition:height .4s}
+  .lr-fx{position:relative;height:1.2em;margin-top:5px;font-size:.68em;color:var(--muted)}
+  .lr-fx span{position:absolute;top:0;white-space:nowrap}
+
+  /* flag pills — compact, color-coded count + icon; hover reveals detail, click opens the student list */
+  .fpill{position:relative;display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:.78em;font-weight:700;
+    cursor:pointer;border:1px solid var(--border);background:var(--surface-hover);color:var(--text);border-radius:999px;padding:3px 10px}
+  .fpill:hover{border-color:var(--blue-lt)}
+  .fpill .ic{font-size:1em;line-height:1;opacity:.9}
+  .fpill .ct{font-variant-numeric:tabular-nums}
+  .fpill.blue{background:var(--mc-sel-bg);color:var(--blue-lt);border-color:transparent}
+  .fpill.gold{background:var(--feedback-bg);color:var(--feedback-fg);border-color:transparent}
+  .fpill.danger{background:var(--alert-error-bg);color:var(--alert-error-fg);border-color:transparent}
+  .fpill.green{background:var(--alert-ok-bg);color:var(--alert-ok-fg);border-color:transparent}
+  .fpill .tip{position:absolute;top:calc(100% + 7px);left:0;z-index:30;width:max-content;max-width:230px;white-space:normal;text-align:left;
+    background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:9px;box-shadow:var(--shadow-md);
+    padding:8px 11px;font-size:.86em;font-weight:500;line-height:1.45;
+    opacity:0;visibility:hidden;transform:translateY(-3px);transition:opacity .12s,transform .12s,visibility .12s;pointer-events:none}
+  .fpill:hover .tip{opacity:1;visibility:visible;transform:translateY(0)}
+  .fpill .tip b{display:block;font-weight:700;margin-bottom:3px;color:var(--text)}
+  .fpill .tip .go{display:block;margin-top:5px;color:var(--blue-lt);font-weight:700;font-size:.92em}
+
+  .bottom-row{margin-top:22px;padding-top:16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end}
+
+  /* ── Modals (stacked: flag list → student summary → full report) ── */
+  .modal-backdrop{position:fixed;inset:0;background:var(--overlay);display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;z-index:60}
+  .modal-backdrop.open{display:flex}
+  .modal{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-lg);width:100%;max-width:720px;padding:24px}
+  .modal-head{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+  .modal-head h2{font-size:1.12em;font-weight:700;flex:1}
+  .modal-close{background:transparent;border:none;color:var(--muted);font-size:1.4em;cursor:pointer;line-height:1}
+  #flag-modal{z-index:70}#stu-modal{z-index:80}#fr-modal{z-index:90}
+
+  /* flag → student list (names + sections only) */
+  .fl-row{display:flex;align-items:center;gap:12px;width:100%;text-align:left;font:inherit;cursor:pointer;
+    background:var(--surface-hover);border:1px solid var(--border);border-radius:9px;padding:11px 14px;margin-bottom:8px;color:var(--text)}
+  .fl-row:last-child{margin-bottom:0}
+  .fl-row:hover{border-color:var(--blue-lt)}
+  .fl-name{font-weight:600;flex:1}
+  .fl-sec{font-size:.82em;color:var(--muted)}
+  .fl-go{font-size:.82em;color:var(--blue-lt);font-weight:700}
+
+  /* student summary panel */
+  .stu-panel{background:var(--surface-sunken);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:.9em}
+  .sp-row{display:grid;grid-template-columns:104px 1fr;gap:4px 12px;padding:7px 0;border-top:1px solid var(--border);align-items:start}
+  .sp-row:first-of-type{border-top:none;padding-top:10px}
+  .sp-k{font-size:.74em;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding-top:2px}
+  .sp-v{line-height:1.5}
+  .sp-note{font-size:.86em;color:var(--muted);margin-top:6px;font-style:italic}
+  .sp-list{margin:0;padding-left:18px}.sp-list li{margin:2px 0}
+  .sp-quote{margin-top:6px;padding:6px 10px;border-left:3px solid var(--border);color:var(--muted);font-style:italic}
+  .tag{display:inline-block;font-size:.74em;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--surface-hover);color:var(--muted);border:1px solid var(--border)}
+  .tag.blue{background:var(--mc-sel-bg);color:var(--blue-lt);border-color:transparent}
+  .tag.gold{background:var(--feedback-bg);color:var(--feedback-fg);border-color:transparent}
+  .tag.danger{background:var(--alert-error-bg);color:var(--alert-error-fg);border-color:transparent}
+  .tag.green{background:var(--alert-ok-bg);color:var(--alert-ok-fg);border-color:transparent}
+  .tag b{font-weight:800}
+
+  /* full markdown report */
+  .md-render{font-size:.9em;line-height:1.6}
+  .md-render h1,.md-render h2,.md-render h3{margin:14px 0 8px;line-height:1.3}
+  .md-render h1{font-size:1.3em}.md-render h2{font-size:1.12em}.md-render h3{font-size:1.0em}
+  .md-render h1:first-child,.md-render h2:first-child{margin-top:0}
+  .md-render p{margin-bottom:10px}
+  .md-render blockquote{border-left:3px solid var(--border);padding-left:12px;color:var(--muted);margin-bottom:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="backlink" href="test.html">← sandboxes</a>
+    <h1>Summary rollup</h1>
+    <span class="grow"></span>
+    <button class="tbtn" id="theme">◐ Theme</button>
+  </div>
+  <p class="note">Synthetic data only — no database connection. 24 fake cadets across 3 sections.</p>
+
+  <div class="card">
+    <header class="lesson-head">
+      <div class="lh-main">
+        <h2 class="lh-title">DEMO — Rollup Sandbox <span class="lh-stats" id="rm-stats"></span></h2>
+        <div class="lh-flags" id="flag-bar"></div>
+      </div>
+      <div class="lh-scope">
+        <select id="sel-section" aria-label="Section" title="Filter by section"></select>
+      </div>
+    </header>
+
+    <div id="rollup"></div>
+
+    <div class="bottom-row">
+      <button class="btn btn-secondary btn-sm" id="export"
+        title="In the real app this downloads the combined Markdown report for the analysis AI">Export for analysis ⬇</button>
+    </div>
+  </div>
+</div>
+
+<!-- Flag → list of matching students (names + sections only). -->
+<div class="modal-backdrop" id="flag-modal">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-head"><h2 id="fl-title">Flagged students</h2><button class="modal-close" data-close>×</button></div>
+    <div id="fl-body"></div>
+  </div>
+</div>
+
+<!-- A selected student's structured summary (opens on top of the flag list). -->
+<div class="modal-backdrop" id="stu-modal">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-head"><h2 id="stu-title">Student</h2><button class="modal-close" data-close>×</button></div>
+    <div id="stu-body"></div>
+  </div>
+</div>
+
+<!-- The full Markdown report (opens on top of the summary). -->
+<div class="modal-backdrop" id="fr-modal">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-head"><h2 id="fr-title">Report</h2><button class="modal-close" data-close>×</button></div>
+    <div class="md-render" id="fr-body"></div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// SIMULATED DATA — stands in for preflight_interaction_reports.report_data.
+// Deterministic (no randomness) so the page is stable across reloads.
+// ─────────────────────────────────────────────────────────────────────────────
+const SECTIONS = ['M1A', 'M1B', 'T3A'];
+const OBJ = [
+  { key: 'coulomb',    label: "Coulomb's law — magnitude & inverse-square" },
+  { key: 'conductors', label: 'Conductors vs. insulators (free electrons)' },
+  { key: 'induced',    label: 'Induced charge on a neutral conductor' },
+];
+const FIRST = ['Alex','Bailey','Casey','Devon','Emory','Finley','Gray','Harper','Iris','Jordan','Kai','Logan','Morgan','Noah','Quinn','Reese','Sage','Tatum','Avery','Blair','Cameron','Drew','Ellis','Frankie'];
+const LAST  = ['Adler','Boyd','Cole','Diaz','Ennis','Frost','Goss','Hahn','Ito','Joss','Kerr','Lowe','Mott','Nash','Ortiz','Pace','Quill','Rhee','Stein','Tran','Udall','Vance','Webb','Yost'];
+const MC = {
+  'forces-cancel':         { label: 'Forces cancel on the conductor',     sev: 'major', desc: 'Believes the attractive and repulsive forces sum to zero.' },
+  'same-charge-near-face': { label: 'Near face gets the same charge',      sev: 'major', desc: "Thinks the near face takes the insulator's sign." },
+  'shielding':             { label: 'Conductor shields the force',         sev: 'minor', desc: 'Uses interior shielding to argue there is no external force.' },
+  'neutral-no-force':      { label: 'Neutral means no force',              sev: 'major', desc: 'Concludes a neutral object feels no force.' },
+  'repel-wrong-direction': { label: 'Repelled / electrons move away',      sev: 'major', desc: 'Predicts repulsion or electrons moving away from the insulator.' },
+};
+const MC_KEYS = Object.keys(MC);
+
+const STUDENTS = (() => {
+  const out = [];
+  for (let i = 0; i < 24; i++) {
+    const section = SECTIONS[Math.floor(i / 8)];
+    const eb = i % 12;
+    const effort = eb < 4 ? 5 : eb < 7 ? 4 : eb < 9 ? 3 : eb === 9 ? 2 : eb === 10 ? 1 : 0;
+    const points = effort >= 3 ? 2 : effort >= 1 ? 1 : 0;          // mirrors migration-013 trigger
+    const ub = Math.floor(i / 2) % 6;
+    const overall = [2, 3, 4, 5, 1, 3][ub];                        // decorrelated from effort on purpose
+    const clamp = v => Math.max(0, Math.min(5, v));
+    const o1 = (i % 13 === 0) ? null : clamp(overall - (i % 2));
+    const o2 = (i %  9 === 0) ? null : clamp(overall + ((i + 1) % 2));
+    const o3 = (i %  7 === 0) ? null : clamp(overall + ((i % 3) - 1));
+    const meaningful = !(effort <= 1 || i % 11 === 0);
+    const hb = i % 17;
+    const honorStatus = hb === 0 ? 'disclosed' : hb === 1 ? 'concern' : 'none';
+    const honorNote   = hb === 0 ? 'Used outside resources later deemed inappropriate for this assignment.'
+                      : hb === 1 ? 'Phrasing shifts abruptly mid-conversation; possible pasted content.' : null;
+    const misconceptions = overall >= 4 ? [] : (() => {
+      const k = MC_KEYS[i % 5];
+      const arr = [{ id: k, label: MC[k].label, severity: MC[k].sev, description: MC[k].desc }];
+      if (overall <= 2) arr.push({ id: 'scalar-sum', label: 'Adds forces as scalars', severity: 'minor', description: 'Combines force magnitudes ignoring direction.' });
+      return arr;
+    })();
+    const effort_rationale = effort === 5 ? 'Sustained, genuine engagement across the full conversation.'
+                           : effort === 4 ? 'Solid engagement with minor lapses.'
+                           : effort === 3 ? 'Engaged but cut short / intermittently terse.'
+                           : effort === 2 ? 'Reading reflection was not meaningful, capping effort at 2.'
+                           : effort === 1 ? 'Token effort — mostly one-word answers.'
+                           : 'Did not engage substantively.';
+    const concept_blurb = overall >= 4 ? 'Solid command of the induced-charge mechanism.'
+                        : overall === 3 ? 'Partial grasp — reached attraction but reasoning incomplete.'
+                        : 'Reasoning showed misconceptions about induced charge.';
+    const reflText = !meaningful ? (i % 3 === 0 ? 'n/a' : i % 3 === 1 ? 'I read it.' : 'idk')
+                   : (i % 3 === 0 ? "I hadn't connected conductivity to how free a material's electrons are — that clicked for me."
+                   :  i % 3 === 1 ? "The induced charge on a neutral conductor surprised me; I assumed neutral meant no interaction."
+                   :  'Working the polarization step by step helped — seeing why the near face dominates made it click.');
+    out.push({
+      id: 100000 + i, name: FIRST[i] + ' ' + LAST[i], section, effort, points, overall,
+      objectives: [
+        { key: 'coulomb',    label: OBJ[0].label, understanding: o1 },
+        { key: 'conductors', label: OBJ[1].label, understanding: o2 },
+        { key: 'induced',    label: OBJ[2].label, understanding: o3 },
+      ],
+      completed: effort >= 2, duration_min: effort === 0 ? 1 : 6 + (i % 12), message_count: effort === 0 ? 1 : 8 + (i % 13),
+      reflection: { meaningful, engagement: meaningful ? 4 + (i % 2) : (effort === 0 ? 0 : 1),
+        sentiment: meaningful ? (i % 2 ? 'neutral' : 'positive') : 'negative', text: reflText },
+      misconceptions,
+      honor: { status: honorStatus, note: honorNote },
+      flags: { needs_follow_up: (effort <= 2 || overall <= 2), notable: (overall >= 4 && effort >= 3),
+        note: (overall >= 4 && effort >= 3) ? 'Strong understanding — ready for extension work.'
+            : effort <= 1 ? 'Very low engagement.' : overall <= 2 ? 'Conceptual gaps to revisit.' : null },
+      effort_rationale, concept_blurb,
+      ai_summary: `Effort ${effort}/5, overall understanding ${overall}/5. ` +
+        (overall >= 4 ? 'Solid command of induced charge.' : overall === 3 ? 'Partial grasp; some gaps remain.' : 'Notable misconceptions remain.'),
+      key_strengths: effort <= 1 ? 'Limited participation to assess.' : overall >= 4 ? 'Clear polarization / vector reasoning.'
+        : overall === 3 ? 'Correct conclusion with developing justification.' : 'Stayed engaged despite conceptual gaps.',
+      recommended_review: overall >= 4 ? 'Optional extension: multi-charge superposition.'
+        : 'Revisit induced charge on a neutral conductor and why the near face dominates.',
+    });
+  }
+  return out;
+})();
+const byId = Object.fromEntries(STUDENTS.map(r => [String(r.id), r]));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+const f1 = x => x == null ? '—' : (Number.isInteger(x) ? String(x) : x.toFixed(1));
+const RAMP5 = ['--s1', '--s2', '--s3', '--s4', '--s5'];
+const zoneVar = v => `var(${RAMP5[Math.max(0, Math.min(4, Math.ceil(v) - 1))]})`;
+// Effort bar color follows the shared 5-zone ramp (red→orange→yellow→green→green) used by the other
+// plots, with orange doubled so the six effort levels 0–5 map on: red, orange, orange, yellow, green, green2.
+const EFFORT_COL = ['var(--s1)', 'var(--s2)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)'];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AGGREGATE — numeric rollup over a set of student rows (mirrors summarizeReports).
+// ─────────────────────────────────────────────────────────────────────────────
+function summarize(rows) {
+  const effortHist = [0, 0, 0, 0, 0, 0], efforts = [];
+  rows.forEach(r => { if (r.effort != null) { effortHist[r.effort]++; efforts.push(r.effort); } });
+  const overallVals = [];
+  rows.forEach(r => { if (r.overall != null) overallVals.push(r.overall); });
+  const objMap = {};
+  rows.forEach(r => r.objectives.forEach(o => {
+    const m = (objMap[o.key] ||= { u: [], hist: [0, 0, 0, 0, 0, 0] });
+    if (o.understanding != null) { m.u.push(o.understanding); m.hist[o.understanding]++; }
+  }));
+  const objectives = OBJ.map(d => {
+    const m = objMap[d.key] || { u: [], hist: [0, 0, 0, 0, 0, 0] };
+    return { key: d.key, label: d.label, assessed: m.u.length, understanding: mean(m.u), dist: m.hist };
+  }).sort((a, b) => (a.understanding ?? 99) - (b.understanding ?? 99));   // weakest first
+  const flags = { needs_follow_up: 0, notable: 0 }, honor = { disclosed: 0, concern: 0 };
+  let capped = 0;
+  rows.forEach(r => {
+    if (r.flags.needs_follow_up) flags.needs_follow_up++;
+    if (r.flags.notable) flags.notable++;
+    if (r.honor.status === 'disclosed') honor.disclosed++;
+    if (r.honor.status === 'concern') honor.concern++;
+    if (r.reflection && r.reflection.meaningful === false) capped++;
+  });
+  return { n: rows.length, effort: { hist: effortHist, avg: mean(efforts) },
+    understanding: { overall: mean(overallVals) }, objectives, flags, honor, reflection: { capped } };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VISUAL BUILDERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Effort distribution; fills its grid cell (→ same height as the radar). Mean shown in the section heading.
+function effortChart(eff) {
+  const counts = eff.hist, max = Math.max(...counts, 1);
+  const cols = counts.map((c, i) =>
+    `<div class="eff-col" title="Effort ${i}: ${c}"><div class="eff-bar" style="height:${c / max * 100}%;background:${EFFORT_COL[i]}"></div></div>`).join('');
+  return `<div class="eff-wrap"><div class="eff-bars">${cols}</div>
+    <div class="eff-x">${counts.map((_, i) => `<span>${i}</span>`).join('')}</div></div>`;
+}
+
+// Radar of understanding across objectives — single-letter axis labels (A,B,C…). Needs ≥3.
+function radarSVG(objectives) {
+  const objs = objectives.filter(o => o.understanding != null).map(o => ({ letter: o.letter, m: o.understanding }));
+  if (objs.length < 3) return `<div class="muted" style="padding:24px;text-align:center">Radar needs ≥3 assessed objectives.</div>`;
+  const N = objs.length, cx = 150, cy = 150, R = 96;
+  const ang = i => (-Math.PI / 2) + (i * 2 * Math.PI / N);
+  const pt = (i, rv) => [cx + Math.cos(ang(i)) * R * (rv / 5), cy + Math.sin(ang(i)) * R * (rv / 5)];
+  let grid = '';
+  for (let lvl = 1; lvl <= 5; lvl++)
+    grid += `<polygon points="${objs.map((_, i) => pt(i, lvl).join(',')).join(' ')}" fill="none" stroke="var(--empty-edge)" stroke-width="1" opacity="${lvl === 5 ? 0.9 : 0.4}"/>`;
+  let axes = '', labels = '';
+  objs.forEach((o, i) => {
+    const [x, y] = pt(i, 5); axes += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--empty-edge)" stroke-width="1"/>`;
+    const [lx, ly] = pt(i, 5.42);
+    labels += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="800" fill="var(--text)">${o.letter}</text>`;
+  });
+  const avg = objs.reduce((s, o) => s + o.m, 0) / objs.length, col = zoneVar(avg);
+  return `<svg width="300" height="190" viewBox="0 30 300 190" role="img" aria-label="Understanding by objective">${grid}${axes}
+    <polygon points="${objs.map((_, i) => pt(i, 3.5).join(',')).join(' ')}" fill="none" stroke="var(--blue-lt)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.85"/>
+    <polygon points="${objs.map((o, i) => pt(i, o.m).join(',')).join(' ')}" fill="color-mix(in srgb, ${col} 26%, transparent)" stroke="${col}" stroke-width="2.5"/>
+    ${objs.map((o, i) => { const [x, y] = pt(i, o.m); return `<circle cx="${x}" cy="${y}" r="3.5" fill="${col}"/>`; }).join('')}${labels}</svg>`;
+}
+
+// The radar key: letter → objective name → mean.
+function legendHTML(objectives) {
+  return `<div class="obj-legend">${objectives.map(o => `<div class="ol-item">
+    <span class="ol-key">${o.letter}</span><span class="ol-lbl">${esc(o.label)}</span>
+    <span class="ol-val">${o.understanding == null ? 'n/a' : f1(o.understanding) + '/5'}</span></div>`).join('')}</div>`;
+}
+
+// AI aggregator placeholder (TBD). Fills its cell so it matches the objective-key height.
+function aiPlaceholder() {
+  return `<div class="ai-box">
+    <p class="ai-tbd">Effort and engagement trends, reflection quality, and notable outliers will be
+      summarized here once the analysis aggregator is built.</p>
+    <div class="sk"></div><div class="sk" style="width:88%"></div><div class="sk" style="width:70%"></div>
+  </div>`;
+}
+
+// Fine-cell histogram for a 0–5 distribution: 5 column-groups interpolate the curve across the score
+// range — group 0 covers [0,1], group 1 [1,2] … group 4 [4,5]. Integer scores therefore land on the
+// GROUP BOUNDARIES, so the axis is ticked 0–5 at the gaps (0 far-left edge, 5 far-right edge).
+function lrFine5(counts) {
+  const max = Math.max(...counts, 1), COLS = 5, CELLS = 5, GAP = 9;   // GAP must match .lr-fine gap in CSS
+  const val = x => { const i = Math.max(0, Math.min(4, Math.floor(x))), t = x - i; return counts[i] + (counts[i + 1] - counts[i]) * t; };
+  let groups = '';
+  for (let c = 0; c < COLS; c++) {
+    let bars = '';
+    for (let k = 0; k < CELLS; k++) {
+      const h = Math.max(0, val(c + (k + 0.5) / CELLS));
+      bars += `<div class="lr-fbar" style="height:${h / max * 100}%;background:var(${RAMP5[c]})"></div>`;
+    }
+    groups += `<div class="lr-fgroup">${bars}</div>`;
+  }
+  // Axis ticks sit on the GROUP BOUNDARIES, not column centers. Boundary s is at s/COLS of the width
+  // plus a px nudge for the accumulated inter-group gaps: GAP*(s/COLS − 0.5). The 0 and 5 ends pin to
+  // the chart edges (so the digits aren't clipped).
+  const ticks = [0, 1, 2, 3, 4, 5].map(s => {
+    if (s === 0)    return `<span style="left:0">0</span>`;
+    if (s === COLS) return `<span style="right:0">${COLS}</span>`;
+    const off = GAP * (s / COLS - 0.5);
+    return `<span style="left:calc(${s / COLS * 100}% ${off < 0 ? '-' : '+'} ${Math.abs(off).toFixed(2)}px);transform:translateX(-50%)">${s}</span>`;
+  }).join('');
+  return `<div><div class="lr-fine">${groups}</div>
+    <div class="lr-fx">${ticks}</div></div>`;
+}
+
+// Per-student structured summary panel.
+function studentPanel(r) {
+  const eff = r.effort, effCls = eff == null ? '' : eff >= 3 ? 'full' : eff >= 1 ? 'partial' : 'zero';
+  const meta = [r.completed ? '✓ completed flow' : 'did not complete'];
+  if (r.duration_min != null) meta.push(`${r.duration_min} min`);
+  if (r.message_count != null) meta.push(`${r.message_count} msgs`);
+  const sect = (k, html) => html ? `<div class="sp-row"><span class="sp-k">${k}</span><span class="sp-v">${html}</span></div>` : '';
+  const num = v => (Number.isInteger(v) && v >= 0 && v <= 5) ? `${v}/5` : null;
+  const understanding = num(r.overall) ? `assessed ${num(r.overall)}` : '';
+  const objs = r.objectives.filter(o => o.understanding != null)
+    .map(o => `<span class="tag">${esc(o.label)} <b>${num(o.understanding)}</b></span>`).join(' ');
+  const mcs = r.misconceptions.map(m =>
+    `<li>${esc(m.label)}${m.severity ? ` <span class="tag ${m.severity === 'major' ? 'gold' : ''}">${m.severity}</span>` : ''}${m.description ? ` — ${esc(m.description)}` : ''}</li>`).join('');
+  const refl = r.reflection, reflBits = [];
+  if (refl) {
+    reflBits.push(refl.meaningful ? '<span class="tag">meaningful ✓</span>' : '<span class="tag gold">not meaningful — effort capped</span>');
+    if (num(refl.engagement)) reflBits.push(`engagement ${num(refl.engagement)}`);
+    if (refl.sentiment) reflBits.push(esc(refl.sentiment));
+  }
+  const reflText = refl && refl.text ? `<div class="sp-quote">${esc(refl.text)}</div>` : '';
+  const honorHTML = (r.honor.status === 'disclosed' || r.honor.status === 'concern')
+    ? `<span class="tag danger">${r.honor.status === 'concern' ? 'integrity concern' : 'inappropriate resources'}</span>${r.honor.note ? ' ' + esc(r.honor.note) : ''}` : '';
+  const flagBits = [];
+  if (r.flags.needs_follow_up) flagBits.push('<span class="tag gold">needs follow-up</span>');
+  if (r.flags.notable) flagBits.push('<span class="tag green">notable</span>');
+  if (r.flags.note) flagBits.push(esc(r.flags.note));
+  return `<div class="stu-panel">
+    <div class="row wrap" style="gap:10px;align-items:center">
+      <span class="score-badge ${effCls}">Effort ${eff == null ? '—' : eff}/5 · ${r.points} pt${r.points === 1 ? '' : 's'}</span>
+      <span class="muted" style="font-size:0.82em">${esc(meta.join(' · '))}</span>
+    </div>
+    ${r.effort_rationale ? `<div class="sp-note">${esc(r.effort_rationale)}</div>` : ''}
+    ${sect('Understanding', understanding ? esc(understanding) : '')}
+    ${sect('Objectives', objs)}
+    ${mcs ? `<div class="sp-row"><span class="sp-k">Misconceptions</span><span class="sp-v"><ul class="sp-list">${mcs}</ul></span></div>` : ''}
+    ${reflBits.length || reflText ? `<div class="sp-row"><span class="sp-k">Reflection</span><span class="sp-v">${reflBits.join(' · ')}${reflText}</span></div>` : ''}
+    ${honorHTML ? sect('Integrity', honorHTML) : ''}
+    ${flagBits.length ? sect('Flags', flagBits.join(' · ')) : ''}
+    ${sect('Summary', esc(r.ai_summary))}
+    ${sect('Strengths', esc(r.key_strengths))}
+    ${sect('Review', esc(r.recommended_review))}
+  </div>`;
+}
+
+// A fake transcript-style report, rendered with a tiny markdown-lite converter (sandbox only).
+function reportMd(r) {
+  return `# Lesson Interaction — Induced Charge (DEMO)
+
+**Cadet:** ${r.name}   **Section:** ${r.section}
+
+## Effort (grade-bearing)
+Effort **${r.effort}/5** — ${r.effort_rationale}
+
+## Reading reflection
+> ${r.reflection.text}
+
+_Meaningful:_ ${r.reflection.meaningful ? 'yes' : 'no'}
+
+## Concept assessment (diagnostic)
+Overall understanding **${r.overall}/5**. ${r.concept_blurb}
+
+## Academic integrity
+${r.honor.status === 'none' ? 'Cadet affirmed no improper assistance.'
+  : r.honor.status === 'disclosed' ? 'Inappropriate resources: ' + r.honor.note
+  : 'Flagged for review: ' + r.honor.note}`;
+}
+function mdLite(md) {
+  const inline = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/_(.+?)_/g, '<em>$1</em>');
+  return md.split(/\n\n+/).map(b => {
+    b = b.trim();
+    if (b.startsWith('### ')) return `<h3>${esc(b.slice(4))}</h3>`;
+    if (b.startsWith('## '))  return `<h2>${esc(b.slice(3))}</h2>`;
+    if (b.startsWith('# '))   return `<h1>${esc(b.slice(2))}</h1>`;
+    if (b.startsWith('> '))   return `<blockquote>${inline(b.slice(2))}</blockquote>`;
+    return `<p>${inline(b)}</p>`;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FLAGS
+// ─────────────────────────────────────────────────────────────────────────────
+const FLAGS = [
+  { key: 'notable',         label: 'Notable',                 cls: 'green',  icon: '★', desc: 'High understanding with extension — cadets who went beyond the core objectives.', pred: r => r.flags.notable,                count: s => s.flags.notable },
+  { key: 'needs_follow_up', label: 'Needs follow-up',         cls: '',       icon: '⚑', desc: 'Low effort or weak understanding — a good candidate to check in with.',          pred: r => r.flags.needs_follow_up,        count: s => s.flags.needs_follow_up },
+  { key: 'refl_capped',     label: 'Poor reflection',         cls: 'gold',   icon: '✎', desc: 'Reading reflection was not meaningful, so effort was capped at 2.',              pred: r => r.reflection && r.reflection.meaningful === false, count: s => s.reflection.capped },
+  { key: 'honor_resources', label: 'Inappropriate resources', cls: 'danger', icon: '⚠', desc: 'Used resources deemed inappropriate or not allowed for this assignment.',         pred: r => r.honor.status === 'disclosed', count: s => s.honor.disclosed },
+  { key: 'honor_concern',   label: 'Integrity concern',       cls: 'danger', icon: '⚖', desc: 'Possible academic-integrity issue flagged for review.',                          pred: r => r.honor.status === 'concern',   count: s => s.honor.concern },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────────────────────────────────────
+const sel = document.getElementById('sel-section');
+const statsEl = document.getElementById('rm-stats');
+const rollupEl = document.getElementById('rollup');
+let currentRows = [];
+
+sel.innerHTML = `<option value="all">All sections</option>` +
+  SECTIONS.map(sc => `<option value="${sc}">${sc} (${STUDENTS.filter(s => s.section === sc).length})</option>`).join('');
+
+function render() {
+  const scope = sel.value;
+  currentRows = scope === 'all' ? STUDENTS : STUDENTS.filter(s => s.section === scope);
+  const s = summarize(currentRows);
+  s.objectives.forEach((o, i) => o.letter = String.fromCharCode(65 + i));   // A, B, C… in weakest-first order
+  statsEl.textContent = `(${currentRows.length}/${currentRows.length} complete · 100%)`;
+
+  const radar = radarSVG(s.objectives);
+  const row2 = `<div class="lr-sec sum-row2">
+    <div class="sum-cell">
+      <div class="lr-eyebrow">Effort distribution <span class="dim">· avg ${f1(s.effort.avg)}</span></div>
+      ${effortChart(s.effort)}
+    </div>
+    <div class="sum-cell">
+      <div class="lr-eyebrow">Understanding radar <span class="dim">· each point is an objective's understanding; dashed line marks the threshold</span></div>
+      <div class="radar-wrap">${radar}</div>
+    </div>
+    <div class="sum-cell">
+      <div class="lr-eyebrow">AI effort summary <span class="dim">· coming soon</span></div>
+      ${aiPlaceholder()}
+    </div>
+    <div class="sum-cell">
+      <div class="lr-eyebrow">Objectives <span class="dim">· radar key</span></div>
+      ${legendHTML(s.objectives)}
+    </div>
+  </div>`;
+
+  const objRows = s.objectives.map(o => `<div class="obj-row">
+    <div class="obj-row-head">
+      <span class="nm"><b class="ol-key sm">${o.letter}</b>${esc(o.label)}</span>
+      <span class="mu">${o.understanding == null ? 'n/a' : f1(o.understanding) + '/5'} · ${o.assessed} assessed</span></div>
+    ${lrFine5(o.dist)}
+  </div>`).join('');
+  const row3 = `<div class="lr-sec">
+    <div class="lr-eyebrow">Understanding by objective <span class="dim">· diagnostic, weakest first</span></div>${objRows}</div>`;
+
+  rollupEl.innerHTML = row2 + row3;
+
+  // Flag pills live in the header subheader row — compact icon + color-coded count, hover for detail, click for the list.
+  const pills = FLAGS.map(f => {
+    const c = f.count(s);
+    if (!c) return '';
+    return `<button class="fpill ${f.cls}" data-flag="${f.key}">
+      <span class="ic" aria-hidden="true">${f.icon}</span><span class="ct">${c}</span>
+      <span class="tip"><b>${esc(f.label)} · ${c}</b>${esc(f.desc)}<span class="go">Click to view students ›</span></span>
+    </button>`;
+  }).filter(Boolean).join('');
+  const flagBar = document.getElementById('flag-bar');
+  flagBar.innerHTML = pills || `<span class="muted" style="font-size:.82em">No flags raised in this scope.</span>`;
+  flagBar.querySelectorAll('[data-flag]').forEach(b => b.addEventListener('click', () => openFlagList(b.dataset.flag)));
+}
+
+// ── Modals ──
+const open  = id => document.getElementById(id).classList.add('open');
+const close = id => document.getElementById(id).classList.remove('open');
+['flag-modal', 'stu-modal', 'fr-modal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', e => {
+    if (e.target.id === id || e.target.dataset.close !== undefined) close(id);
+  });
+});
+
+// Flag chip → list of matching students (names + sections only — NO summaries here).
+function openFlagList(key) {
+  const f = FLAGS.find(x => x.key === key);
+  const matched = currentRows.filter(f.pred);
+  document.getElementById('fl-title').textContent = `${f.label} · ${matched.length} student${matched.length === 1 ? '' : 's'}`;
+  const body = document.getElementById('fl-body');
+  body.innerHTML = matched.length ? matched.map(r =>
+    `<button class="fl-row" data-id="${r.id}"><span class="fl-name">${esc(r.name)}</span><span class="fl-sec">${esc(r.section)}</span><span class="fl-go">View ›</span></button>`).join('')
+    : `<div class="muted">No students match this flag in scope.</div>`;
+  body.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => openStudent(b.dataset.id)));
+  open('flag-modal');
+}
+
+// A name → that student's summary in its own modal (with a button to the full report).
+function openStudent(id) {
+  const r = byId[id];
+  document.getElementById('stu-title').textContent = `${r.name} · ${r.section}`;
+  document.getElementById('stu-body').innerHTML = studentPanel(r) +
+    `<div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn btn-secondary btn-sm" id="stu-full">View full report ↗</button></div>`;
+  document.getElementById('stu-full').addEventListener('click', () => openFull(id));
+  open('stu-modal');
+}
+
+// The full Markdown report, stacked on top.
+function openFull(id) {
+  const r = byId[id];
+  document.getElementById('fr-title').textContent = `${r.name} · ${r.section}`;
+  document.getElementById('fr-body').innerHTML = mdLite(reportMd(r));
+  open('fr-modal');
+}
+
+document.getElementById('export').addEventListener('click', () => alert('Sandbox — export is disabled here (no database).'));
+document.getElementById('theme').addEventListener('click', () => {
+  const root = document.documentElement;
+  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', next);
+  try { localStorage.setItem('cp.theme', next); } catch (e) {}
+});
+
+sel.addEventListener('change', render);
+render();
+</script>
+</body>
+</html>

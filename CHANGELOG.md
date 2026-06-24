@@ -8,6 +8,31 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-06-24 — Matthew Recker
+
+### Added — `test-summary.html` rollup sandbox (synthetic data, no DB) + `test.html` is now a hub
+
+To iterate on the lesson-rollup design without a database, the old `test.html` progress-bar playground was
+renamed to [`test-progressbar.html`](test-progressbar.html) and [`test.html`](test.html) is now a small hub
+that links to the sandboxes. New [`test-summary.html`](test-summary.html) is a fully standalone preview
+(palette copied in, 24 synthetic cadets across 3 sections, no DB and no CDN) of the next rollup iteration:
+
+- **Overall-understanding gauge removed** — the radar already conveys it.
+- **Effort distribution + radar share row 2**, sized to equal height (a 2×2 grid whose row tracks stretch);
+  **below the effort chart** is an AI-aggregator **summary placeholder (TBD)** sized to match the radar's
+  objective key beneath it.
+- **Effort bars colored by points earned**: 0 = red (0 pts), 1 & 2 = the same amber (1 pt), 3/4/5 = three
+  distinct greens (2 pts). Class average drawn as a labeled line.
+- **Radar axes labeled A, B, C…** (always legible) with a **lettered objective key** listed beneath it.
+- **Understanding by objective is one objective per row**, full width, as a **5-column** fine histogram
+  labeled 1–5 (score 0 is the leftmost sub-cell of column 1; the axis ends at 5, not 6, so the colors align).
+- **Flags now drill down in stacked modals**: click a flag → a **list of student names + sections** (no
+  summaries) → click a name → that student's **summary** modal → **View full report** → the full Markdown
+  report. (Replaces the long scrolling list of all summaries.)
+
+These changes live only in the sandbox for now; porting to [`app/faculty/interactions.html`](app/faculty/interactions.html)
+comes after design sign-off. The demo seed already carries the third objective needed for the radar.
+
 ## 2026-06-23 — Matthew Recker
 
 ### Changed — restructured the interaction rollup into three rows + flag-driven student drill-down
