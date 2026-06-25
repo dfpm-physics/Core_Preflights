@@ -6,6 +6,10 @@ optional fields are allowed within v1; everything else is a breaking change.
 
 *Authored 2026-06-23 by Matthew Recker. Companion to `INTERACTION-PREFILL-LINK.md`.*
 
+*v1 clarification — 2026-06-25 (Matthew Recker): sharpened `honor.status` to judge the **appropriateness**
+of help (not mere disclosure) and `flags.notable` to mean **exemplary** work. No endpoint, hash-key, type,
+or wire-format change — `schema` stays `1`. See §5.6, §5.8, §9.*
+
 This is the contract between a **claude.ai lesson artifact** (the producer) and this
 repository's **static receiver** (the consumer). A Claude artifact runs a Just-in-Time
 Teaching (JiTT) conversation with a student, then hands the result back to the site by
@@ -192,12 +196,29 @@ Markdown. `meaningful` additionally feeds the effort cap in §5.2.
 
 ### 5.6 Academic integrity
 
-`honor`: object.
+`honor`: object. **Judge the *appropriateness* of any help, not the mere fact that help was disclosed.**
+Collaboration USAFA permits — e.g. talking through ideas with a classmate *before* starting, or using
+allowed references — is encouraged and is **not** an integrity issue: record it as `none`. Only escalate
+genuinely inappropriate assistance.
 
 | Field | Type | Req | Notes |
 |---|---|---|---|
-| `status` | `"none"`\|`"disclosed"`\|`"concern"`\|null | no | `none` = declared no improper help; `disclosed` = disclosed outside/AI help; `concern` = artifact flags a possible issue; `null` = not asked. |
+| `status` | `"none"`\|`"disclosed"`\|`"concern"`\|null | no | See the value definitions below. |
 | `note` | string \| null | no | Free text; only meaningful when `status` is `disclosed`/`concern`. (AI input when present) |
+
+**`status` values:**
+
+| Value | Meaning | Surfaced to faculty as |
+|---|---|---|
+| `none` | No improper help — **including appropriate collaboration** (peer discussion beforehand, permitted resources). The default; not flagged. | — |
+| `disclosed` | The student used or revealed **inappropriate help or resources**: another AI assistant open and helping, a solutions key, or other disallowed materials. | "Inappropriate resources" |
+| `concern` | A suspected **integrity problem in the conversation itself**: the student tried to manipulate or harass the AI into inflating the report or gaming the effort grade, or pasted content not their own. | "Integrity concern" |
+| `null` | Integrity was not asked about. | — |
+
+> **v1 clarification (2026-06-25).** Earlier wording defined `disclosed` as neutral "disclosed outside/AI
+> help." It now specifically means *inappropriate* help/resources, and appropriate collaboration is `none`.
+> This sharpens guidance on *when* to use each existing value — the enum, types, and wire format are
+> unchanged, so it remains `schema: 1`.
 
 ### 5.7 AI narrative — `DIAGNOSTIC` text
 
@@ -215,8 +236,8 @@ Short model-written prose for quick instructor scanning and the trend passes.
 
 | Field | Type | Req | Notes |
 |---|---|---|---|
-| `needs_follow_up` | bool | no | Surface this student for instructor attention. |
-| `notable` | bool | no | Worth highlighting (either direction). |
+| `needs_follow_up` | bool | no | Surface this student for instructor attention (low effort or weak understanding). |
+| `notable` | bool | no | **Exemplary** work worth showcasing — the strongest understanding or a notable extension beyond the objectives. (Positive standouts only; use `needs_follow_up` for the other direction.) |
 | `note` | string | no | One-line reason for the flag. |
 
 ### 5.9 Meta
@@ -271,7 +292,7 @@ Short model-written prose for quick instructor scanning and the trend passes.
   "key_strengths": "Strong intuition connecting conductivity to electron mobility.",
   "recommended_review": "Vector addition of Coulomb forces — why opposing forces don't cancel.",
 
-  "flags": { "needs_follow_up": true, "notable": true,
+  "flags": { "needs_follow_up": true, "notable": false,
              "note": "Full effort; revisit force superposition." }
 }
 ```
@@ -335,6 +356,12 @@ against.
   in principle, two safeguards: (a) `r` keeps the transcript for instructor verification, and
   (b) `score` is trigger-derived from `effort` server-side, so a student can't post a score
   independent of effort. Effort tampering itself is possible but auditable against `r`.
+- **Always populate the triage signals.** They drive the faculty rollup's flag pills with no AI pass, but
+  they're optional — a report only shows a flag if the artifact set it. Emit `flags.needs_follow_up` /
+  `flags.notable` (§5.8), `honor.status` (judged by the appropriateness rule in §5.6), and
+  `reading_reflection.meaningful` (§5.5) on every report. The website can fall back to deriving
+  `needs_follow_up`/`notable` from effort + understanding, but `honor` and reflection `meaningful` are the
+  artifact's call alone — there is no numeric proxy for them.
 - **Define objectives on the `interactions` row** (a small `objectives` JSONB: `[{key,label}]`)
   so objective keys are consistent across students and the website knows the full set even for
   objectives no student reached. Inline `label`s mean the system still works if you skip this.

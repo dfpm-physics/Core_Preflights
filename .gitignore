@@ -6,6 +6,12 @@ config.json
 
 # Skill config — each instructor copies config.json.template locally
 .claude/skills/preflight-analyze/config.json
+.claude/skills/interaction-analyze/config.json
+
+# Python virtualenv + caches for admin/analysis tooling (psycopg2, etc.) — keep contained, never commit
+.venv/
+__pycache__/
+*.pyc
 
 # Textbook PDFs — too large for git (~968 MB); download from Teams instead
 # See textbook-pdfs/README.md for instructions

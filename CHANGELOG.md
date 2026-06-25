@@ -8,6 +8,55 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-06-25 — Matthew Recker
+
+### Added — `interaction-analyze` skill + scoped DB role to backfill interaction structured data
+
+Stood up direct, least-privilege database access for Claude Code and used it to backfill the
+schema-1 `report_data` on interaction reports that only had `report_markdown` — those lessons
+were showing completion counts but an empty faculty rollup (no effort/understanding/misconceptions).
+
+- **Scoped DB role** — [`supabase/admin/claude_code_role.sql`](supabase/admin/claude_code_role.sql)
+  creates `claude_code_recker`: SELECT/INSERT/UPDATE/DELETE on `public`, BYPASSRLS, **no DDL** (owns
+  nothing, so ALTER/DROP/TRUNCATE are refused by Postgres itself). Strictly additive — it does not
+  touch the `service_role` key, the anon key, or any existing RLS policy, so `/preflight-analyze` is
+  unaffected. Reached over the **Session pooler** (the direct host is IPv6-only here) from a project
+  venv (`.venv/`, gitignored) via `psycopg2` ([`requirements.txt`](requirements.txt)); the credential
+  lives in a gitignored `.claude/skills/interaction-analyze/config.json`.
+- **`db_check.py`** — connectivity + permission self-test (read OK, write OK, DDL DENIED).
+- **`interaction-analyze` skill** — [`.claude/skills/interaction-analyze/SKILL.md`](.claude/skills/interaction-analyze/SKILL.md)
+  + [`supabase/admin/interaction_reports.py`](supabase/admin/interaction_reports.py) (`stats` /
+  `list-missing` / `write`). Reads each report's Markdown and reconstructs a faithful schema-1
+  `report_data` per [`INTERACTION-DATA-CONTRACT.md`](INTERACTION-DATA-CONTRACT.md): effort (with the
+  reading-reflection cap), understanding, consistent per-lesson objective keys, misconceptions with
+  evidence, reflection, honor (judged by appropriateness), and triage flags. Marks provenance with
+  `producer: "backfill-from-report@<date>"`. The writer sets `effort` + `report_data` (the
+  migration-013 trigger derives `score`), fills only NULL rows unless `--force`, re-clamps effort for
+  non-meaningful reflections, and enforces the 32 KB blob cap.
+- **Backfilled the 8 existing reports** that lacked structured data (7 in lesson-02 charge/Coulomb,
+  1 in lesson-03 vector form). Lesson-02 now rolls up to avg effort 3.43, 11/14 points, 2
+  reflection-capped, 1 honor disclosure.
+
+### Changed — integrity/notable flag semantics sharpened (rollup + data contract)
+
+Refined what the lesson rollup's flag pills mean and clarified [`INTERACTION-DATA-CONTRACT.md`](INTERACTION-DATA-CONTRACT.md)
+to match — a **v1 clarification** (no endpoint/hash/type/wire-format change; `schema` stays `1`, applied
+because only one artifact exists and is easy to update):
+
+- **`honor.status` now judges *appropriateness*, not disclosure.** Appropriate collaboration (talking with a
+  classmate beforehand, allowed resources) is `none` and unflagged. `disclosed` now means **inappropriate**
+  help/resources (another AI actively helping, disallowed materials) and surfaces as **“Inappropriate
+  resources.”** `concern` is a conversation-level integrity problem — manipulating/harassing the AI to inflate
+  the report or game the effort grade. (§5.6, with a dated clarification note.)
+- **`flags.notable` now means exemplary work** (strongest understanding or a notable extension), not “either
+  direction.” (§5.8; the §6 example was updated for consistency.)
+- Added a §9 note that artifacts should always populate `flags` / `honor` / `reading_reflection.meaningful`,
+  and that the site can derive `needs_follow_up`/`notable` from effort + understanding but never `honor`.
+- Aligned the flag pill labels/descriptions in [`app/faculty/interactions.html`](app/faculty/interactions.html)
+  to the new wording (“Disclosed help” → “Inappropriate resources”; notable → exemplary).
+
+---
+
 ## 2026-06-24 — Matthew Recker
 
 ### Changed — portal theme reskinned to GitHub Primer + a self-hosted display font
@@ -31,13 +80,15 @@ sandbox design, wired to real `report_data` via `summarizeReports` (no AI). New 
 header** (Oswald title + a stacked **“Submitted N/total” completion badge** + clickable **flag pills** + an
 **adaptive scope control** — a segmented control for few sections, a dropdown for many); **bordered effort +
 radar tiles** (vertical effort bar chart; an **interactive radar** whose vertices show the objective + mean on
-hover); **“AI effort summary” and “Misconceptions & trends” placeholders** (the AI trend passes aren't built
-and the contract has nowhere to store their output yet); a **weakest-first, one-per-row** understanding-by-
-objective breakdown; and a new **Student Responses** panel that surfaces real reading-reflection quotes
-(names hidden by default, shuffle, copy-for-slides). Flag pills now drill down in **stacked modals**: pill →
-student names list → one student's structured summary → full Markdown report. The headline overall-
-understanding gauge was dropped (the radar conveys it). “AI pick” reflection rows and the two AI panels are
-inert until the matching data exists — see the data-needs note below.
+hover); an **AI readiness summary** placeholder (replacing a bare effort summary — the effort chart already
+conveys the number); a **Misconceptions** panel with **real per-misconception prevalence bars** (share of
+submitted students, computed from `report_data`) above an AI trend-narrative placeholder; a **weakest-first,
+one-per-row** understanding-by-objective breakdown; and a new **Student Responses** panel that surfaces real
+reading-reflection quotes (names hidden by default, shuffle, copy-for-slides). Flag pills now drill down in
+**stacked modals**: pill → student names list → one student's structured summary → full Markdown report. The
+headline overall-understanding gauge was dropped (the radar conveys it). Everything numeric is live; the AI
+narrative panels (readiness, misconception trends) and the aggregator-selected showcase quotes stay inert
+until the analysis-output store exists — **no data-contract change is required** for any of it.
 
 ### Added — `app/DESIGN.md` design-system spec for the portal refactor
 

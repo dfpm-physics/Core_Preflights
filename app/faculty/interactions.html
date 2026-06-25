@@ -436,23 +436,40 @@
       </div>`;
     }
 
+    // Misconception prevalence — real bars from report_data: the share of submitted students who
+    // showed each misconception (most common first). Color intensifies with prevalence; the "major"
+    // count is noted. The AI trend narrative (clustering, spreading/fading) sits below as a TBD.
+    function mcBars(misconceptions, n) {
+      if (!misconceptions.length) return `<div class="muted" style="font-size:.85em">No misconceptions recorded in this scope.</div>`;
+      return misconceptions.slice(0, 8).map(m => {
+        const p = n ? Math.round(m.count / n * 100) : 0;
+        const col = p >= 50 ? 'var(--red)' : p >= 25 ? 'var(--gold)' : 'var(--blue-lt)';
+        const major = m.major ? ` · ${m.major} major` : '';
+        return `<div class="progress-row" style="margin-bottom:10px">
+          <span class="pr-label">${esc(m.label)}</span>
+          <span class="pr-count">${m.count}/${n} · ${p}%${major}</span>
+          <div class="pr-track"><div class="pr-fill" style="width:${Math.max(p, 3)}%;background:${col}"></div></div>
+        </div>`;
+      }).join('');
+    }
+
     // ── Student responses panel ──
     // Real reading-reflection quotes (contract §5.5), attributed via the roster (name + section).
-    // "AI pick" rows light up only when a report carries reading_reflection.notable === true — that
-    // field is not yet in the data contract, so until it is, we show a random sample of substantive
-    // reflections (names hidden by default for showing in class).
+    // The random sample is live now. "AI pick" rows are reserved for the per-section quotes the
+    // analysis aggregator will pick (stored with the other rollup AI output) — none exist until
+    // that store is built, so the panel shows a random sample (names hidden by default for class).
     let respState = null;   // { ai:[], pool:[], sample:[], namesOn }
     function buildResponses(rows, roster) {
       const who = Object.fromEntries(roster.map(st => [String(st.student_id), st]));
-      const all = [];
+      const pool = [];
       rows.forEach(r => {
         const d = (r.report_data && typeof r.report_data === 'object') ? r.report_data : {};
         const rr = d.reading_reflection;
         if (!rr || typeof rr !== 'object' || !rr.text || rr.meaningful === false) return;
         const w = who[String(r.student_id)] || {};
-        all.push({ text: String(rr.text), name: w.name || '—', section: w.section || '', ai: rr.notable === true });
+        pool.push({ text: String(rr.text), name: w.name || '—', section: w.section || '' });
       });
-      return { ai: all.filter(q => q.ai), pool: all.filter(q => !q.ai) };
+      return { ai: [], pool };   // AI picks come from the aggregator's per-section output (TBD)
     }
     function sampleN(arr, n) {
       const p = arr.slice(), out = [];
@@ -529,13 +546,17 @@
       </div>`;
 
       const aiSec = `<div class="lr-sec fw-panel">
-        <div class="lr-eyebrow">AI effort summary <span class="dim">· coming soon</span></div>
-        ${aiPlaceholder()}
+        <div class="lr-eyebrow">AI readiness summary <span class="dim">· coming soon</span></div>
+        ${aiPlaceholder('A short read on how ready the class is for this lesson — engagement, where understanding is solid vs. shaky, and what to cover in class — will be generated here once the analysis aggregator is built.')}
       </div>`;
 
       const mcSec = `<div class="lr-sec fw-panel">
-        <div class="lr-eyebrow">Misconceptions &amp; trends <span class="dim">· AI generated · coming soon</span></div>
-        ${aiPlaceholder('Recurring misconceptions across the cohort, which ones are spreading or fading, and how they cluster by section will be summarized here once the analysis aggregator is built.')}
+        <div class="lr-eyebrow">Misconceptions <span class="dim">· share of submitted students, most common first</span></div>
+        ${mcBars(s.misconceptions, s.n)}
+        <div style="margin-top:16px">
+          <div class="lr-eyebrow">Trends across the class <span class="dim">· AI generated · coming soon</span></div>
+          ${aiPlaceholder('Which misconceptions are spreading or fading and how they cluster by section will be summarized here once the analysis aggregator is built.')}
+        </div>
       </div>`;
 
       const objRows = s.objectives.map(o => `<div class="obj-row">
@@ -552,11 +573,11 @@
 
     // ── Flags: header pills → flagged-students list → one student summary → full report ──
     const FLAGS = [
-      { key: 'notable',         label: 'Notable',           cls: 'green',  icon: '★', desc: 'High understanding with extension — went beyond the core objectives.',  pred: d => d?.flags?.notable === true,           count: s => s.flags.notable },
-      { key: 'needs_follow_up', label: 'Needs follow-up',   cls: '',       icon: '⚑', desc: 'Low effort or weak understanding — a good candidate to check in with.', pred: d => d?.flags?.needs_follow_up === true,   count: s => s.flags.needs_follow_up },
-      { key: 'refl_capped',     label: 'Reflection capped', cls: 'gold',   icon: '✎', desc: 'Reading reflection was not meaningful, so effort was capped at 2.',     pred: d => !!d?.reading_reflection && d.reading_reflection.meaningful === false, count: s => s.reflection.capped },
-      { key: 'honor_disclosed', label: 'Disclosed help',    cls: 'danger', icon: '⚠', desc: 'Disclosed outside or AI help on this assignment.',                      pred: d => d?.honor?.status === 'disclosed',     count: s => s.honor.disclosed },
-      { key: 'honor_concern',   label: 'Integrity concern', cls: 'danger', icon: '⚖', desc: 'The artifact flagged a possible academic-integrity issue.',             pred: d => d?.honor?.status === 'concern',       count: s => s.honor.concern },
+      { key: 'notable',         label: 'Notable',                 cls: 'green',  icon: '★', desc: 'Exemplary work — the strongest understanding or a notable extension beyond the objectives.', pred: d => d?.flags?.notable === true,         count: s => s.flags.notable },
+      { key: 'needs_follow_up', label: 'Needs follow-up',         cls: '',       icon: '⚑', desc: 'Low effort or weak understanding — a good candidate to check in with.',                    pred: d => d?.flags?.needs_follow_up === true, count: s => s.flags.needs_follow_up },
+      { key: 'refl_capped',     label: 'Reflection capped',       cls: 'gold',   icon: '✎', desc: 'Reading reflection was not meaningful, so effort was capped at 2.',                        pred: d => !!d?.reading_reflection && d.reading_reflection.meaningful === false, count: s => s.reflection.capped },
+      { key: 'honor_disclosed', label: 'Inappropriate resources', cls: 'danger', icon: '⚠', desc: 'Used another AI or other disallowed help/resources — inappropriate for this assignment. Talking with a classmate beforehand is fine and is not flagged.', pred: d => d?.honor?.status === 'disclosed', count: s => s.honor.disclosed },
+      { key: 'honor_concern',   label: 'Integrity concern',       cls: 'danger', icon: '⚖', desc: 'Possible integrity problem in the conversation — e.g. manipulating the AI into inflating the report or gaming the effort grade.', pred: d => d?.honor?.status === 'concern',   count: s => s.honor.concern },
     ];
 
     // Header flag pills — compact icon + count, hover for detail, click to list the students.
