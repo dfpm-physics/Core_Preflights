@@ -35,10 +35,12 @@ from the cards and the dashboard; removing the two redundant nav items declutter
 
 ### Fixed — dashboard no longer shifts width when navigating lessons
 
-Added `scrollbar-gutter: stable` to `html` ([`app/css/styles.css`](app/css/styles.css)). Stepping
-through lessons on the dashboard changes page height, which toggled the scrollbar and shifted the
-centered content width; reserving the gutter keeps the width fixed. The layout still reflows at the
-responsive breakpoints when the window itself narrows.
+Set `overflow-y: scroll` (plus `scrollbar-gutter: stable`) on `html`
+([`app/css/styles.css`](app/css/styles.css)). Stepping through lessons changes page height — a lesson
+with no submissions is short enough to fit the viewport while one with data scrolls — which toggled
+the vertical scrollbar and shifted the centered content width. Keeping the scrollbar permanently
+present holds the width fixed. The layout still reflows at the responsive breakpoints when the window
+itself narrows.
 
 ### Changed — faculty dashboard rebuilt as the Just-in-Time-Teaching landing page
 

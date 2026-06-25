@@ -129,10 +129,12 @@
   --shadow-lg: 0 12px 32px rgba(0,0,0,0.6);
 }
 
-/* Always reserve the scrollbar gutter so navigating to a taller/shorter view (e.g. the dashboard
-   lesson arrows) can't toggle the scrollbar and shift the centered content width. The layout still
+/* Always keep a vertical scrollbar present so navigating to a taller/shorter view (e.g. the
+   dashboard lesson arrows, where a lesson with no submissions is short and one with data scrolls)
+   can't toggle the scrollbar and shift the centered content width. overflow-y:scroll is honored by
+   every browser; scrollbar-gutter is the modern equivalent and kept as a hint. The layout still
    reflows at the responsive breakpoints when the window itself narrows. */
-html { color-scheme: light dark; scrollbar-gutter: stable; }
+html { color-scheme: light dark; overflow-y: scroll; scrollbar-gutter: stable; }
 [data-theme="dark"] html, html[data-theme="dark"] { color-scheme: dark; }
 
 body {
