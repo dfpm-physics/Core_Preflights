@@ -300,6 +300,18 @@ the icon-attribution footer pins to the bottom. The **top nav** is a 64px sticky
 full-bleed `1fr auto 1fr` grid — brand hard-left, links truly centered in the viewport,
 controls (course switcher · theme toggle · user menu) hard-right.
 
+> **Flex-column gotcha — page containers must also set `width: 100%`.** Because `body` is a
+> flex column, the `margin: 0 auto` on `.page` / `.page-wide` is an *auto cross-axis margin*,
+> which in flexbox makes the item **shrink-wrap to its content** instead of filling the row.
+> Both containers therefore also declare `width: 100%`, so they fill the available width
+> (then `max-width` caps it and the auto margins center the capped box). Drop the `width: 100%`
+> and a page's width starts tracking its content — the dashboard regressed exactly this way,
+> rendering ~960px on a lesson with no submissions and 1180px on one with data as you arrowed
+> between lessons. **Any new direct child of `body` meant to span the column needs `width: 100%`.**
+> Relatedly, `html` keeps `overflow-y: scroll` (plus `scrollbar-gutter: stable`) so the vertical
+> scrollbar is always reserved and a short view (no scrollbar) ↔ tall view (scrollbar) swap can't
+> re-center the page by a few pixels.
+
 Spacing follows an informal **4 / 8 / 16** rhythm with a few fixed structural values: 24px
 card padding, 14–18px inner padding on list/section cards, 16px grid gaps, and ~30px between
 dashboard sections. Grids are **auto-responsive** via `repeat(auto-fit/auto-fill,
@@ -360,8 +372,9 @@ Each entry maps to a `{components.*}` token and the classes in [`css/styles.css`
 
 The faculty lesson-summary rollup was redesigned (classes in the **"Rollup v3"** block of
 `css/styles.css`; intent visible in the [`test-summary.html`](../test/test-summary.html) sandbox).
-It is built from bordered boxes inside a tinted header, with the AI-summary panels stubbed
-until the analysis aggregator ships.
+It is built from bordered boxes inside a tinted header. The AI-summary panels read the cohort
+synthesis from `interaction_analysis` (migration 014, written by `/interaction-aggregate`) and
+degrade to "coming soon" skeletons when no row exists for the scope.
 
 - **Tinted lesson header (`.lesson-head`)** — a full-bleed header that bleeds to the card/modal
   edge, tinted with `{colors.mc-sel-bg}`. Holds the Oswald `.lh-title` + `.lh-stats`
@@ -457,10 +470,15 @@ actionable. Fluid grids mean most cards resize before any breakpoint fires.
   third-party request and no flash (`font-display: swap` over a system fallback), but it is one
   more asset to ship and the only non-system type in the system — there is no broader web-font
   pipeline beyond it.
-- **AI rollup panels are stubbed.** The Rollup v3 "AI effort summary" and "Misconceptions &
-  trends" panels (`.ai-box` / `.ai-tbd` / `.sk`) render skeleton placeholders; the analysis
-  aggregator that fills them is not yet built. The student-responses copy/shuffle interactions
-  are sandbox-only until wired to real reflection data.
+- **AI rollup panels are wired with graceful degradation.** The Rollup v3 "AI readiness
+  summary" and "Misconceptions → trends" panels read `interaction_analysis` (migration 014,
+  written by `/interaction-aggregate`) and render its Markdown-light prose (sanitized via
+  `.ai-prose`); with no row for the scope they fall back to the `.ai-box` / `.ai-tbd` / `.sk`
+  skeletons. The student-responses panel is single-section only: it shows the aggregator's
+  per-section "AI pick" quotes (`selected_quotes`, resolved to live reflection text) plus a
+  random sample; the whole-course "All sections" view shows no quote panel. Scope resolution:
+  "All sections" reads the `__all__` row (directors/admins only — RLS keeps the whole-course
+  row from instructors, so their "All sections" view stays on placeholders).
 - **Icons are raster PNGs, single-source.** 256×256 Flaticon/Freepik art downscaled in CSS;
   there is no SVG icon set or independent tinting (the `.ic` helper sizes but does not
   recolor). New icons must come from the same author to keep the footer attribution accurate.

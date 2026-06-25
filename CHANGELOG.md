@@ -10,6 +10,77 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-06-25 — Matthew Recker
 
+### Added — faculty lesson rollup now reads the cohort AI analysis (interaction_analysis)
+
+Wired the AI panels in [`app/faculty/report.html`](app/faculty/report.html) to the
+`interaction_analysis` table (migration 014) the `/interaction-aggregate` skill now populates,
+replacing the "coming soon" placeholders with real content where a row exists. New
+`loadAnalysis(interactionId)` in [`app/js/faculty-interactions.js`](app/js/faculty-interactions.js)
+pulls every scope row for the lesson in one query (RLS scopes the result); the rollup picks the
+row for the current scope — the `__all__` whole-course row for "All sections", else the section's
+row. Three panels light up: **AI readiness summary** and **Misconceptions → trends across the
+class** render the stored Markdown-light prose (sanitized at render via `.ai-prose`), each with a
+"AI generated <date>" note and a quiet "may be out of date" hint when the scope's report count has
+moved since (`meta.n`). The **Student responses** panel is now single-section only: it prepends the
+aggregator's per-section "AI pick" showcase quotes (`selected_quotes`, resolved to live reflection
+text + name from the already-loaded `report_data` + roster) ahead of the random sample; the
+"All sections" view shows no quote panel. Everything degrades gracefully — no row (incl. an
+instructor's "All sections", which RLS never lets read `__all__`) → today's placeholders + random
+sample. *Why:* the aggregator and its store now exist and the table is populated (18 rows across
+the demo sandbox + lesson-02/03), so the rollup should show the synthesis instead of stubs — the
+deferred "UI wiring" task the skill and `INTERACTION-AGGREGATION.md` §7 call out.
+
+### Operations — first cohort aggregation run (+ backfill) across all interactions with submissions
+
+Ran the new `/interaction-aggregate` skill for the first time over every interaction that has reports,
+writing the per-section and whole-course (`__all__`) AI panels — readiness summary, misconception trends,
+and showcase quotes — into the `interaction_analysis` table (migration 014): **demo-rollup-sandbox**
+(10 sections + course, 206 reports), **lesson-02** (M1A, M5A, course), and **lesson-03** (M1A, M5A, course).
+First reconstructed the two reports that were missing structured `report_data` via `/interaction-backfill`
+(both Noel Garcia — lesson-02 and lesson-03; the lesson-03 effort clamped to 2 / score 1 for a
+non-meaningful reflection, with the disclosed Copilot use recorded as `honor: disclosed`). All 18 analysis
+rows verify non-`STALE`. *Why:* populate the rollup's AI layer for the demo sandbox and the two live
+lessons so the panels are no longer placeholder-only. lesson-04 has no submissions and was skipped.
+
+### Documented — interaction-aggregate scaling / scheduled-job guidance
+
+Added a "Running at scale / as a scheduled job" section to
+[`.claude/skills/interaction-aggregate/SKILL.md`](.claude/skills/interaction-aggregate/SKILL.md): the skill
+is slated to run as a **midnight cron** after a lesson's due date, scoped to one course and **one day track
+at a time** (M-run or T-run, never both). Guidance: process sections **sequentially, one scope per step —
+do not fan out subagents** (the `pull` output is per-section, so a loop bounds context and scales to 20+
+sections; parallelism only buys wall-clock speed a cron doesn't need); the `__all__` row is recomputed over
+live rows, so on split M/T due dates the earlier run's `__all__` is day-only until the later run overwrites
+it with the full course (same point-in-time merge as `assignments.analysis_report`); and `status`'s `STALE`
+flag is the post-cron health check. *Why:* the manual fan-in flow I used for the 206-report demo is the
+wrong default for the unattended cron — captured the lesson where it lives.
+
+### Fixed — lesson rollup radar chart clipped with more than 3 objectives
+
+The "Objective understanding" radar on [`app/faculty/report.html`](app/faculty/report.html) used a fixed
+SVG `viewBox` (`0 30 300 190`) that had been tuned for a 3-point triangle (wide and short). Once a lesson
+had 4+ assessed objectives the polygon filled out symmetrically and the bottom/side axis labels fell
+outside that box and were cropped. `radarSVG` now computes the `viewBox` (and `width`/`height`) from the
+actual extent of the label ring plus a small glyph margin, so the chart fits any objective count. Same fix
+mirrored into the [`test/test-summary.html`](test/test-summary.html) preview fixture. *Why:* lessons can
+define any number of objectives; the chart must size to the data, not a hard-coded count.
+
+### Added — design doc: unify preflight assignments and lesson interactions under a "lesson"
+
+Authored [`LESSON-UNIFICATION.md`](LESSON-UNIFICATION.md) — the **proposed** (not yet built) plan to
+join the two parallel worlds (`assignments`/`responses`/`scores` and
+`interactions`/`preflight_interaction_reports`) under a single **lesson** that can carry a preflight,
+an interaction, or both. Captures the planning decisions: track set per lesson
+(`preflight`/`interaction`/`choice`) to force exposure to each modality then open choice for research;
+lesson worth 2 points effort-gated on either path (correctness/understanding become diagnostic); a new
+`lesson_completions` table as the unified grade record with a **first-committed-path-wins lock**; both
+paths emit the frozen `schema: 1` `report_data` keyed to a shared per-lesson objective taxonomy so
+choice lessons roll up by objective with a modality breakdown (assignment-only stays by-question). The
+artifact↔site data contract stays **frozen** (completion rows created by DB trigger on report write).
+Includes a migration-016 schema sketch, a `/preflight-analyze` extension to emit effort + understanding,
+a phased build plan, and six open questions. *Why:* this is a large, easy-to-get-wrong join; the doc is
+the careful plan before any code.
+
 ### Changed — lesson rollup moved to its own Report page; Grade/Report dropped from the nav
 
 The lesson rollup that was a modal on [`app/faculty/interactions.html`](app/faculty/interactions.html)
@@ -33,14 +104,19 @@ Markdown report modal), which moved to the Report page with it.
 *Why:* the rollup is the report faculty actually want, and giving it a stable URL makes it linkable
 from the cards and the dashboard; removing the two redundant nav items declutters the bar.
 
-### Fixed — dashboard no longer shifts width when navigating lessons
+### Fixed — dashboard (and every page) no longer changes width with its content
 
-Set `overflow-y: scroll` (plus `scrollbar-gutter: stable`) on `html`
-([`app/css/styles.css`](app/css/styles.css)). Stepping through lessons changes page height — a lesson
-with no submissions is short enough to fit the viewport while one with data scrolls — which toggled
-the vertical scrollbar and shifted the centered content width. Keeping the scrollbar permanently
-present holds the width fixed. The layout still reflows at the responsive breakpoints when the window
-itself narrows.
+Added `width: 100%` to `.page` and `.page-wide` ([`app/css/styles.css`](app/css/styles.css)). Root
+cause: `<body>` is a flex column, so the `margin: 0 auto` on the content container was an *auto
+cross-axis margin* — which makes a flex item **shrink-wrap to its content** instead of filling the
+row. The content area's width therefore tracked each view's content: the dashboard rendered narrower
+on a lesson with no submissions and wider on one with data (measured 963px → 1180px across states).
+`width: 100%` fills the row, `max-width` caps it, and the auto margins still center it, so the width
+is now constant regardless of content. Verified by rendering both states in headless Chrome and
+measuring `.page-wide` (1180px in both). Also kept `overflow-y: scroll` (+ `scrollbar-gutter: stable`)
+on `html` so the vertical scrollbar is always reserved — that removes the residual few-pixel
+re-centering when a short view (no scrollbar) and a tall view (scrollbar) alternate. The layout still
+reflows at the responsive breakpoints when the window itself narrows.
 
 ### Changed — faculty dashboard rebuilt as the Just-in-Time-Teaching landing page
 

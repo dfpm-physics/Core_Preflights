@@ -120,6 +120,25 @@ export async function loadInteractionData(interactionId, studentIds) {
   return out;
 }
 
+/**
+ * Cohort AI analysis for one interaction (interaction_analysis, migration 014) — the free-text
+ * synthesis the rollup shows as "coming soon" placeholders: readiness summary, misconception-trend
+ * prose, and per-section showcase quotes. The numeric rollups stay computed live in the browser;
+ * this is only the AI layer, written by the /interaction-aggregate skill.
+ *
+ * RLS scopes the result: directors/admins get every section row PLUS the '__all__' whole-course
+ * row; instructors get only their own sections' rows (never '__all__' — so their "All sections"
+ * view falls back to the live placeholders rather than a cross-section summary). Returns a map
+ * keyed by section_id ('__all__' = whole-course) so the rollup can pick the row for its scope.
+ * @returns {Promise<Record<string, { section_id, readiness_summary, misconception_trends, selected_quotes, meta, generated_at }>>}
+ */
+export async function loadAnalysis(interactionId) {
+  const { data } = await db.from('interaction_analysis')
+    .select('section_id, readiness_summary, misconception_trends, selected_quotes, meta, generated_at')
+    .eq('interaction_id', interactionId);
+  return Object.fromEntries((data || []).map(r => [r.section_id, r]));
+}
+
 // Defensive coercion — report_data is LLM-produced and occasionally imperfect (contract §7):
 // keep only valid 0–5 ints / 0–2 scores; everything else becomes null and drops out of means.
 const int05  = v => (Number.isInteger(v) && v >= 0 && v <= 5) ? v : null;

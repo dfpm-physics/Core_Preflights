@@ -453,7 +453,7 @@ function effortChart(eff) {
 function radarSVG(objectives) {
   const objs = objectives.filter(o => o.understanding != null).map(o => ({ letter: o.letter, m: o.understanding, label: o.label }));
   if (objs.length < 3) return `<div class="muted" style="padding:24px;text-align:center">Radar needs ≥3 assessed objectives.</div>`;
-  const N = objs.length, cx = 150, cy = 150, R = 96;
+  const N = objs.length, cx = 150, cy = 150, R = 96, LBL = 5.42;   // LBL = label-ring radius (just outside the grid)
   const ang = i => (-Math.PI / 2) + (i * 2 * Math.PI / N);
   const pt = (i, rv) => [cx + Math.cos(ang(i)) * R * (rv / 5), cy + Math.sin(ang(i)) * R * (rv / 5)];
   let grid = '';
@@ -462,12 +462,18 @@ function radarSVG(objectives) {
   let axes = '', labels = '', hits = '';
   objs.forEach((o, i) => {
     const [x, y] = pt(i, 5); axes += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--empty-edge)" stroke-width="1"/>`;
-    const [lx, ly] = pt(i, 5.42);
+    const [lx, ly] = pt(i, LBL);
     labels += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="800" fill="var(--text)">${o.letter}</text>`;
     hits += `<circle class="radar-hit" cx="${lx}" cy="${ly}" r="18" data-l="${esc(o.label)}" data-m="${f1(o.m)}"/>`;
   });
   const avg = objs.reduce((s, o) => s + o.m, 0) / objs.length, col = zoneVar(avg);
-  return `<svg width="300" height="190" viewBox="0 30 300 190" role="img" aria-label="Understanding by objective">${grid}${axes}
+  // Fit the viewBox to the actual label ring so any objective count renders without clipping.
+  // The old fixed box (0 30 300 190) was tuned for a 3-point triangle and cropped the bottom/
+  // side labels once the polygon filled out at N≥4. M leaves room for the label glyph.
+  const lpts = objs.map((_, i) => pt(i, LBL)), xs = lpts.map(p => p[0]), ys = lpts.map(p => p[1]), M = 14;
+  const x0 = Math.min(...xs) - M, y0 = Math.min(...ys) - M;
+  const vw = Math.max(...xs) + M - x0, vh = Math.max(...ys) + M - y0;
+  return `<svg width="${vw.toFixed(1)}" height="${vh.toFixed(1)}" viewBox="${x0.toFixed(1)} ${y0.toFixed(1)} ${vw.toFixed(1)} ${vh.toFixed(1)}" role="img" aria-label="Understanding by objective">${grid}${axes}
     <polygon points="${objs.map((_, i) => pt(i, 3.5).join(',')).join(' ')}" fill="none" stroke="var(--blue-lt)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.85"/>
     <polygon points="${objs.map((o, i) => pt(i, o.m).join(',')).join(' ')}" fill="color-mix(in srgb, ${col} 26%, transparent)" stroke="${col}" stroke-width="2.5"/>
     ${objs.map((o, i) => { const [x, y] = pt(i, o.m); return `<circle cx="${x}" cy="${y}" r="3.5" fill="${col}"/>`; }).join('')}${labels}${hits}</svg>`;

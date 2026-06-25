@@ -164,6 +164,31 @@ no row → today's placeholders), honor these rules so the teaching UX stays rig
 
 ---
 
+## Running at scale / as a scheduled job
+
+This skill is intended to run **unattended as a midnight cron** after a lesson's due date, scoped to
+one course and **one day track at a time** (an M-day run *or* a T-day run — never both), so it never
+contends with interactive use. Two design rules follow:
+
+- **Process sections sequentially, one scope per step — do NOT fan out subagents.** The `pull` output
+  already carries a self-contained scope per section, so a plain loop (read one scope → write its two
+  prose fields + quotes → next) keeps each step's context small and **scales to any section count**
+  (some courses have 20+ sections). Parallel subagents only buy wall-clock speed, which a midnight cron
+  doesn't need — they cost more and bump the concurrency cap. Reserve fan-out for an *interactive*
+  "do it now" pass over a large backlog (e.g. seeding the demo sandbox's 206 reports), not the cron.
+- **Day-split runs and the `__all__` row.** Per-section rows are independent, so an M-run and a T-run
+  never collide on them. The whole-course `__all__` row, though, is recomputed over **whatever reports
+  exist at run time** (the writer re-derives `n` + `source_fingerprint` from the live rows). If M and T
+  have separate due dates, the earlier run's `__all__` describes only that day until the later run
+  overwrites it with the full course — the same point-in-time merge `assignments.analysis_report` uses.
+  The later (final) run leaves `__all__` correct.
+
+**Health check.** `status` recomputes each scope's fingerprint from the current reports and flags
+`STALE` when they've changed since the analysis was written — a good post-cron assertion, and the
+signal to re-run a scope whose reports were resubmitted after aggregation.
+
+---
+
 ## Rules
 
 1. **Grades are off-limits.** This skill writes **only** `interaction_analysis`. Never write

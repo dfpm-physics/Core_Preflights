@@ -82,6 +82,9 @@
     let vm = null, reportInteraction = null;
     // Structured report data for the open lesson: rows = null while loading, [] once loaded.
     let reportRows = null, reportByStudent = {};
+    // Cohort AI analysis (interaction_analysis) keyed by scope ('__all__' = whole-course); null
+    // while loading. Absent/empty → the rollup keeps today's "coming soon" placeholders.
+    let reportAnalysis = null;
 
     function init() {
       initTheme();
@@ -134,7 +137,7 @@
       document.getElementById('rm-title').textContent = title || it?.title || 'Lesson report';
       reportScope = (section && vm.sections.some(s => s.id === section)) ? section : 'all';
 
-      reportRows = null; reportByStudent = {};   // null → summary shows "computing…"
+      reportRows = null; reportByStudent = {}; reportAnalysis = null;   // null → summary shows "computing…"
       renderScope();
       renderAggregate();
 
@@ -147,6 +150,21 @@
         reportByStudent = Object.fromEntries(rows.map(r => [String(r.student_id), r]));
         renderAggregate();
       });
+      // Pull the cohort AI synthesis once (one row per scope). Loads independently of the numeric
+      // data — whichever resolves first renders; the AI panels degrade gracefully until this lands.
+      I.loadAnalysis(interactionId).then(map => {
+        if (reportInteraction !== interactionId) return;
+        reportAnalysis = map;
+        renderAggregate();
+      });
+    }
+
+    // The AI analysis row for the current scope: the '__all__' whole-course row for "All sections",
+    // else the chosen section's row. null until loaded or when no row exists for the scope (an
+    // instructor's "All sections" never matches '__all__' under RLS, so it stays on placeholders).
+    function currentAnalysis() {
+      if (!reportAnalysis) return null;
+      return reportAnalysis[reportScope === 'all' ? '__all__' : reportScope] || null;
     }
 
     // Adaptive section scope: a segmented control when there are few sections, a dropdown when many.
@@ -201,7 +219,7 @@
       const rows = reportRows.filter(r => ids.has(String(r.student_id)));
       const s = I.summarizeReports(rows);
       s.objectives.forEach((o, i) => o.letter = String.fromCharCode(65 + i));   // A, B, C… (weakest first)
-      el.innerHTML = aggregateHTML(s, rows, roster);
+      el.innerHTML = aggregateHTML(s, rows, roster, currentAnalysis());
       renderFlagBar(s);
       wireRollup();
     }
@@ -228,7 +246,7 @@
     function radarSVG(objectives) {
       const objs = objectives.filter(o => o.understanding != null).map(o => ({ letter: o.letter, m: o.understanding, label: o.label }));
       if (objs.length < 3) return `<div class="muted" style="padding:24px;text-align:center">Radar needs ≥3 assessed objectives.</div>`;
-      const N = objs.length, cx = 150, cy = 150, R = 96;
+      const N = objs.length, cx = 150, cy = 150, R = 96, LBL = 5.42;   // LBL = label-ring radius (just outside the grid)
       const ang = i => (-Math.PI / 2) + (i * 2 * Math.PI / N);
       const pt = (i, rv) => [cx + Math.cos(ang(i)) * R * (rv / 5), cy + Math.sin(ang(i)) * R * (rv / 5)];
       let grid = '';
@@ -237,12 +255,18 @@
       let axes = '', labels = '', hits = '';
       objs.forEach((o, i) => {
         const [x, y] = pt(i, 5); axes += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--track-edge)" stroke-width="1"/>`;
-        const [lx, ly] = pt(i, 5.42);
+        const [lx, ly] = pt(i, LBL);
         labels += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="800" fill="var(--text)">${o.letter}</text>`;
         hits += `<circle class="radar-hit" cx="${lx}" cy="${ly}" r="18" data-l="${esc(o.label)}" data-m="${f1(o.m)}"/>`;
       });
       const avg = objs.reduce((s, o) => s + o.m, 0) / objs.length, col = zoneVar(avg);
-      return `<svg width="300" height="190" viewBox="0 30 300 190" role="img" aria-label="Understanding by objective">${grid}${axes}
+      // Fit the viewBox to the actual label ring so any objective count renders without clipping.
+      // The old fixed box (0 30 300 190) was tuned for a 3-point triangle and cropped the bottom/
+      // side labels once the polygon filled out at N≥4. M leaves room for the label glyph.
+      const lpts = objs.map((_, i) => pt(i, LBL)), xs = lpts.map(p => p[0]), ys = lpts.map(p => p[1]), M = 14;
+      const x0 = Math.min(...xs) - M, y0 = Math.min(...ys) - M;
+      const vw = Math.max(...xs) + M - x0, vh = Math.max(...ys) + M - y0;
+      return `<svg width="${vw.toFixed(1)}" height="${vh.toFixed(1)}" viewBox="${x0.toFixed(1)} ${y0.toFixed(1)} ${vw.toFixed(1)} ${vh.toFixed(1)}" role="img" aria-label="Understanding by objective">${grid}${axes}
         <polygon points="${objs.map((_, i) => pt(i, 3.5).join(',')).join(' ')}" fill="none" stroke="var(--blue-lt)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.85"/>
         <polygon points="${objs.map((o, i) => pt(i, o.m).join(',')).join(' ')}" fill="color-mix(in srgb, ${col} 26%, transparent)" stroke="${col}" stroke-width="2.5"/>
         ${objs.map((o, i) => { const [x, y] = pt(i, o.m); return `<circle cx="${x}" cy="${y}" r="3.5" fill="${col}"/>`; }).join('')}${labels}${hits}</svg>`;
@@ -280,6 +304,21 @@
       </div>`;
     }
 
+    // Real AI prose (readiness summary / misconception trends), written by /interaction-aggregate.
+    // The text is AI-produced and stored as an inert blob, so sanitize at render time like the
+    // full-report Markdown does.
+    function aiProse(md) {
+      return `<div class="md-render ai-prose">${DOMPurify.sanitize(marked.parse(String(md || '')))}</div>`;
+    }
+    // Eyebrow note for a wired AI panel: when it was generated, plus a quiet staleness hint if the
+    // scope's report count has changed since (meta.n is the count the synthesis was built from).
+    function aiGenNote(analysis, scopeN) {
+      let when = '';
+      try { when = ' ' + new Date(analysis.generated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch (e) { }
+      const stale = Number.isInteger(analysis?.meta?.n) && Number.isInteger(scopeN) && analysis.meta.n !== scopeN;
+      return `· AI generated${when}${stale ? ' · may be out of date' : ''}`;
+    }
+
     // Misconception prevalence — real bars from report_data: the share of submitted students who
     // showed each misconception (most common first). Color intensifies with prevalence; the "major"
     // count is noted. The AI trend narrative (clustering, spreading/fading) sits below as a TBD.
@@ -297,23 +336,38 @@
       }).join('');
     }
 
-    // ── Student responses panel ──
+    // ── Student responses panel (single-section scope only) ──
     // Real reading-reflection quotes (contract §5.5), attributed via the roster (name + section).
-    // The random sample is live now. "AI pick" rows are reserved for the per-section quotes the
-    // analysis aggregator will pick (stored with the other rollup AI output) — none exist until
-    // that store is built, so the panel shows a random sample (names hidden by default for class).
-    let respState = null;   // { ai:[], pool:[], sample:[], namesOn }
-    function buildResponses(rows, roster) {
+    // "AI pick" rows are the aggregator's per-section showcase quotes (interaction_analysis
+    // .selected_quotes, resolved to live text here); the rest is a random sample. Names hidden by
+    // default for showing in class. The whole-course ("All sections") view shows no quote panel.
+    let respState = null;   // { ai:[], pool:[], sample:[], randN, namesOn }
+    function buildResponses(rows, roster, analysis) {
       const who = Object.fromEntries(roster.map(st => [String(st.student_id), st]));
+      const byId = Object.fromEntries(rows.map(r => [String(r.student_id), r]));
+      const reflOf = id => {
+        const d = (byId[id]?.report_data && typeof byId[id].report_data === 'object') ? byId[id].report_data : null;
+        const rr = d && d.reading_reflection;
+        return (rr && typeof rr === 'object' && rr.text && rr.meaningful !== false) ? String(rr.text) : null;
+      };
+
+      // AI-picked showcase quotes — the aggregator stores only {student_id, section_id}; resolve the
+      // verbatim text + name live from the already-loaded report_data + roster (never duplicated).
+      const ai = (analysis && Array.isArray(analysis.selected_quotes) ? analysis.selected_quotes : [])
+        .map(q => { const id = String(q?.student_id); const text = reflOf(id), w = who[id]; return (text && w) ? { id, text, name: w.name || '—', section: w.section || '' } : null; })
+        .filter(Boolean);
+
+      // Random pool = every meaningful reflection in scope, minus the ones already shown as AI picks.
+      const aiIds = new Set(ai.map(q => q.id));
       const pool = [];
       rows.forEach(r => {
-        const d = (r.report_data && typeof r.report_data === 'object') ? r.report_data : {};
-        const rr = d.reading_reflection;
-        if (!rr || typeof rr !== 'object' || !rr.text || rr.meaningful === false) return;
-        const w = who[String(r.student_id)] || {};
-        pool.push({ text: String(rr.text), name: w.name || '—', section: w.section || '' });
+        const id = String(r.student_id);
+        if (aiIds.has(id)) return;
+        const text = reflOf(id); if (!text) return;
+        const w = who[id] || {};
+        pool.push({ id, text, name: w.name || '—', section: w.section || '' });
       });
-      return { ai: [], pool };   // AI picks come from the aggregator's per-section output (TBD)
+      return { ai, pool };
     }
     function sampleN(arr, n) {
       const p = arr.slice(), out = [];
@@ -329,17 +383,23 @@
         </div>
       </div>`;
     }
-    function responsesSection(rows, roster) {
-      const { ai, pool } = buildResponses(rows, roster);
+    // The student-responses / showcase panel is a per-section teaching tool: it renders only on a
+    // single-section scope (`singleScope`). The "All sections" view shows no quote panel — AI picks
+    // are per-section and an instructor's union must never surface a cross-section quote.
+    function responsesSection(rows, roster, analysis, singleScope) {
+      if (!singleScope) { respState = null; return ''; }
+      const { ai, pool } = buildResponses(rows, roster, analysis);
       if (!ai.length && !pool.length) { respState = null; return ''; }
-      respState = { ai, pool, sample: sampleN(pool, 5), namesOn: false };
-      const aiNote = ai.length ? `${ai.length} AI-suggested + ` : '';
+      const randN = Math.max(0, 5 - ai.length);   // keep ~5 cards total once AI picks are prepended
+      respState = { ai, pool, randN, sample: sampleN(pool, randN), namesOn: false };
+      const aiNote = ai.length ? `${ai.length} AI pick${ai.length === 1 ? '' : 's'}${randN ? ' + ' : ''}` : '';
+      const randNote = randN ? `${Math.min(randN, pool.length)} random` : '';
       return `<div class="lr-sec fw-panel" id="sr-sec">
-        <div class="lr-eyebrow">Student responses <span class="dim">· ${aiNote}${Math.min(5, pool.length)} random · select to copy for slides</span></div>
+        <div class="lr-eyebrow">Student responses <span class="dim">· ${aiNote}${randNote} · select to copy for slides</span></div>
         <div class="sr-controls">
           <button class="switch" id="sr-names" type="button" aria-pressed="false"><span class="track"><span class="knob"></span></span>Show names</button>
           <span class="spacer"></span>
-          ${pool.length > 5 ? `<button class="tbtn" id="sr-shuffle" type="button">↻ Shuffle random</button>` : ''}
+          ${randN > 0 && pool.length > randN ? `<button class="tbtn" id="sr-shuffle" type="button">↻ Shuffle random</button>` : ''}
           <button class="tbtn" id="sr-copy" type="button">Copy selected</button>
         </div>
         <div class="sr-quotes" id="sr-list"></div>
@@ -363,7 +423,7 @@
         namesBtn.setAttribute('aria-pressed', respState.namesOn); namesBtn.classList.toggle('on', respState.namesOn);
         document.querySelectorAll('#sr-list .att').forEach(a => { a.hidden = !respState.namesOn; });
       });
-      document.getElementById('sr-shuffle')?.addEventListener('click', () => { respState.sample = sampleN(respState.pool, 5); drawResponses(); });
+      document.getElementById('sr-shuffle')?.addEventListener('click', () => { respState.sample = sampleN(respState.pool, respState.randN); drawResponses(); });
       document.getElementById('sr-copy')?.addEventListener('click', async () => {
         const sel = [...document.querySelectorAll('#sr-list .sr-quote.sel')]; if (!sel.length) return;
         const btn = document.getElementById('sr-copy');
@@ -373,8 +433,9 @@
       });
     }
 
-    // Rollup body — effort + radar tiles, AI placeholders, per-objective rows, student responses.
-    function aggregateHTML(s, rows, roster) {
+    // Rollup body — effort + radar tiles, AI panels, per-objective rows, student responses.
+    // `analysis` is the cohort AI row for the current scope (or null → "coming soon" placeholders).
+    function aggregateHTML(s, rows, roster, analysis) {
       if (!s.n) return `<div class="summary-placeholder">No reports submitted in this scope yet — the summary appears once students submit.</div>`;
 
       const radar = radarSVG(s.objectives);
@@ -389,17 +450,21 @@
         </div>
       </div>`;
 
+      const readiness = analysis && analysis.readiness_summary;
       const aiSec = `<div class="lr-sec fw-panel">
-        <div class="lr-eyebrow">AI readiness summary <span class="dim">· coming soon</span></div>
-        ${aiPlaceholder('A short read on how ready the class is for this lesson — engagement, where understanding is solid vs. shaky, and what to cover in class — will be generated here once the analysis aggregator is built.')}
+        <div class="lr-eyebrow">AI readiness summary <span class="dim">${readiness ? aiGenNote(analysis, s.n) : '· coming soon'}</span></div>
+        ${readiness ? aiProse(analysis.readiness_summary)
+          : aiPlaceholder('A short read on how ready the class is for this lesson — engagement, where understanding is solid vs. shaky, and what to cover in class — will be generated here once the analysis aggregator is built.')}
       </div>`;
 
+      const trends = analysis && analysis.misconception_trends;
       const mcSec = `<div class="lr-sec fw-panel">
         <div class="lr-eyebrow">Misconceptions <span class="dim">· share of submitted students, most common first</span></div>
         ${mcBars(s.misconceptions, s.n)}
         <div style="margin-top:16px">
-          <div class="lr-eyebrow">Trends across the class <span class="dim">· AI generated · coming soon</span></div>
-          ${aiPlaceholder('Which misconceptions are spreading or fading and how they cluster by section will be summarized here once the analysis aggregator is built.')}
+          <div class="lr-eyebrow">Trends across the class <span class="dim">${trends ? aiGenNote(analysis, s.n) : '· AI generated · coming soon'}</span></div>
+          ${trends ? aiProse(analysis.misconception_trends)
+            : aiPlaceholder('Which misconceptions are spreading or fading and how they cluster by section will be summarized here once the analysis aggregator is built.')}
         </div>
       </div>`;
 
@@ -412,7 +477,7 @@
       const objSec = s.objectives.length ? `<div class="lr-sec obj-box">
         <div class="lr-eyebrow">Understanding by objective <span class="dim">· weakest first</span></div>${objRows}</div>` : '';
 
-      return row2 + aiSec + mcSec + objSec + responsesSection(rows, roster);
+      return row2 + aiSec + mcSec + objSec + responsesSection(rows, roster, analysis, reportScope !== 'all');
     }
 
     // ── Flags: header pills → flagged-students list → one student summary → full report ──
