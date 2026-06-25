@@ -33,6 +33,9 @@
       <div class="field"><label for="f-url">Artifact URL</label>
         <input id="f-url" type="text" placeholder="https://claude.ai/public/artifacts/...">
         <div class="field-hint">The link students open to launch the activity.</div></div>
+      <div class="field"><label for="f-due">Due date (optional)</label>
+        <input id="f-due" type="date">
+        <div class="field-hint">Used by the dashboard to pick the “active” lesson. Leave blank to fall back to creation order.</div></div>
       <label class="check-inline"><input type="checkbox" id="f-pub"> Published (visible to students)</label>
       <div class="row" style="gap:10px;margin-top:18px">
         <button class="btn btn-primary" id="em-save">Save</button>
@@ -100,7 +103,7 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, pct } from '../js/util.js';
+    import { esc, pct, fmtDate } from '../js/util.js';
     import * as I from '../js/faculty-interactions.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
@@ -182,7 +185,7 @@
         <div class="row wrap" style="justify-content:space-between;align-items:flex-start;gap:12px">
           <div class="grow" style="min-width:220px">
             <div class="row" style="gap:8px"><div class="card-title">${esc(it.title)}</div>${status}</div>
-            <div class="muted" style="font-size:0.8em;margin-top:3px"><code>${esc(it.id)}</code></div>
+            <div class="muted" style="font-size:0.8em;margin-top:3px"><code>${esc(it.id)}</code>${it.due_date ? ` · Due ${esc(fmtDate(it.due_date))}` : ''}</div>
             ${it.description ? `<div class="muted" style="font-size:0.86em;margin-top:6px">${esc(it.description)}</div>` : ''}
             ${it.artifact_url ? `<a href="${esc(it.artifact_url)}" target="_blank" rel="noopener" style="font-size:0.82em;color:var(--blue-lt);text-decoration:none">Open artifact ↗</a>` : '<div class="muted" style="font-size:0.82em">No artifact URL set</div>'}
           </div>
@@ -221,6 +224,7 @@
       const vTitle  = prefill ? pick(prefill.title,  existing?.title)        : (existing?.title ?? '');
       const vDesc   = prefill ? pick(prefill.desc,   existing?.description)  : (existing?.description ?? '');
       const vUrl    = prefill ? pick(prefill.url,    existing?.artifact_url) : (existing?.artifact_url ?? '');
+      const vDue    = prefill ? pick(prefill.due,    existing?.due_date)     : (existing?.due_date ?? '');
       const vPub    = prefill ? (prefill.pub != null ? prefill.pub : !!existing?.is_published) : !!existing?.is_published;
 
       document.getElementById('f-course').value = ctx.courses.some(c => c.course_id === vCourse) ? vCourse : ctx.currentCourse;
@@ -230,6 +234,7 @@
       document.getElementById('f-title').value = vTitle;
       document.getElementById('f-desc').value  = vDesc;
       document.getElementById('f-url').value   = vUrl;
+      document.getElementById('f-due').value   = vDue ? String(vDue).slice(0, 10) : '';   // timestamptz → YYYY-MM-DD for <input type=date>
       document.getElementById('f-pub').checked = vPub;
       document.getElementById('em-title').textContent =
         prefill ? (id ? 'Update interaction — review & save' : 'New interaction — review & save')
@@ -241,10 +246,12 @@
       const err = document.getElementById('em-error'); err.style.display = 'none';
       const id = document.getElementById('f-id').value.trim();
       const title = document.getElementById('f-title').value.trim();
+      const due = document.getElementById('f-due').value;     // 'YYYY-MM-DD' or ''
       const fields = {
         id, course_id: document.getElementById('f-course').value, title,
         description: document.getElementById('f-desc').value.trim() || null,
         artifact_url: document.getElementById('f-url').value.trim() || null,
+        due_date: due ? `${due}T23:59:59` : null,             // end-of-day so a lesson due "today" stays current all day
         is_published: document.getElementById('f-pub').checked,
       };
       if (!editingId && !/^[a-z0-9-]+$/.test(id)) { err.textContent = 'Id must be lowercase letters, numbers, and hyphens only.'; err.style.display = ''; return; }
@@ -366,15 +373,16 @@
     // ── Rollup visual primitives (pure HTML builders; colors from CSS ramp tokens) ──
     const RAMP5 = ['--s1', '--s2', '--s3', '--s4', '--s5'];
     const zoneVar = v => `var(${RAMP5[Math.max(0, Math.min(4, Math.ceil(v) - 1))]})`;
-    // Effort bar colors follow the shared 5-zone ramp with orange doubled, so 0–5 → red, orange,
-    // orange, yellow, green, green2.
-    const EFFORT_COL = ['var(--s1)', 'var(--s2)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)'];
+    // Effort histogram colors follow the 6-step distribution ramp (DESIGN.md: --d0…--d5 for 0–5
+    // histograms) — the single, shared effort-chart style (matches the dashboard spotlight).
+    const EFFORT_COL = ['var(--d0)', 'var(--d1)', 'var(--d2)', 'var(--d3)', 'var(--d4)', 'var(--d5)'];
 
-    // Effort distribution — vertical bars filling the tile; the average is shown in the eyebrow.
+    // Effort distribution — vertical 0–5 bars with the submission count above each bar.
     function effortChart(eff) {
       const counts = eff.hist, max = Math.max(...counts, 1);
       const cols = counts.map((c, i) =>
-        `<div class="eff-col" title="Effort ${i}: ${c}"><div class="eff-bar" style="height:${c / max * 100}%;background:${EFFORT_COL[i]}"></div></div>`).join('');
+        `<div class="eff-col" title="Effort ${i}: ${c}"><span class="eff-cnt">${c}</span>` +
+        `<div class="eff-bar" style="height:${c / max * 100}%;background:${EFFORT_COL[i]}"></div></div>`).join('');
       return `<div class="eff-wrap"><div class="eff-bars">${cols}</div>
         <div class="eff-x">${counts.map((_, i) => `<span>${i}</span>`).join('')}</div></div>`;
     }
@@ -763,7 +771,7 @@
         const existing = slug ? vm.interactions.find(x => x.id === slug) : null;
         openEdit(existing ? existing.id : null, {
           id: slug, course: p.get('course'), title: p.get('title'),
-          desc: p.get('desc'), url: p.get('url'),
+          desc: p.get('desc'), url: p.get('url'), due: p.get('due'),
           pub: p.has('pub') ? ['1', 'true', 'yes'].includes((p.get('pub') || '').toLowerCase()) : null,
         });
       }

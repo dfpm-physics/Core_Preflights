@@ -1,0 +1,12 @@
+{
+  "_comment": "Copy to config.json (same folder) and fill in. config.json is gitignored; this template is committed. See supabase/admin/README.md.",
+  "_host": "Session pooler host from Supabase > Connect > Session pooler. NOT db.<ref>.supabase.co (IPv6-only).",
+  "host": "aws-<n>-<region>.pooler.supabase.com",
+  "port": 5432,
+  "dbname": "postgres",
+  "_user": "Pooler username format is <role>.<project-ref>, e.g. claude_code_recker.shzvpmlnqfmzfmuxkowi",
+  "user": "claude_code_<name>.<project-ref>",
+  "_password": "The password you set on the CREATE ROLE line in supabase/admin/claude_code_role.sql",
+  "password": "REPLACE_WITH_ROLE_PASSWORD",
+  "sslmode": "require"
+}

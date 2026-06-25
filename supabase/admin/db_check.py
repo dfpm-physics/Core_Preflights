@@ -24,16 +24,12 @@ try:
 except ImportError:
     sys.exit("psycopg2 not found — use the project .venv (pip install -r requirements.txt).")
 
-# Gitignored credential file, searched first under the repo root, then the home dir.
-CONFIG_SUBPATH = Path(".claude") / "skills" / "interaction-analyze" / "config.json"
+# Gitignored credential file, kept next to this script (supabase/admin/config.json).
+CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
 
 
 def _find_config():
-    repo_root = Path(__file__).resolve().parents[2]  # <repo>/supabase/admin/db_check.py -> <repo>
-    for cand in (repo_root / CONFIG_SUBPATH, Path.home() / CONFIG_SUBPATH):
-        if cand.is_file():
-            return cand
-    return None
+    return CONFIG_PATH if CONFIG_PATH.is_file() else None
 
 
 def resolve_params():
@@ -49,8 +45,7 @@ def resolve_params():
         }, "environment variables"
     path = _find_config()
     if path is None:
-        sys.exit(f"No PG* env vars and no config.json found (looked for {CONFIG_SUBPATH} "
-                 "under the repo root and home dir).")
+        sys.exit(f"No PG* env vars and no config.json found at {CONFIG_PATH}.")
     cfg = json.loads(path.read_text(encoding="utf-8"))
     return {
         "host": cfg["host"],

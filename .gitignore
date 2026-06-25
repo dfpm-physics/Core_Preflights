@@ -3,10 +3,11 @@ js/config.local.js
 *.env
 .env*
 config.json
+INBOX/
 
-# Skill config — each instructor copies config.json.template locally
+# Skill / tooling config — each operator copies config.json.template locally (service keys, DB creds)
 .claude/skills/preflight-analyze/config.json
-.claude/skills/interaction-analyze/config.json
+supabase/admin/config.json
 
 # Python virtualenv + caches for admin/analysis tooling (psycopg2, etc.) — keep contained, never commit
 .venv/

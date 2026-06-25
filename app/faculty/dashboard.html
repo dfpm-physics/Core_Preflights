@@ -19,122 +19,14 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { loadFacultyDashboard } from '../js/faculty-data.js';
-    import { esc, iconHTML, pct, legacyUrl } from '../js/util.js';
+    import { mountDashboard } from '../js/faculty-dashboard.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
-    if (!ctx) { /* redirected */ } else { init(); }
-
-    const firstName = (ctx?.instructorRow?.name || '').split(/\s+/)[0] || 'Instructor';
-
-    function init() {
+    if (!ctx) { /* redirected */ } else {
       initTheme();
-      renderNav(ctx, { active: 'dashboard', onCourseChange: () => main() });
-      main();
-    }
-
-    async function main() {
       const root = document.getElementById('main');
-      root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
-      const vm = await loadFacultyDashboard(ctx);
-
-      const roleLabel = ctx.instructorRow?.is_global_admin ? 'Global admin'
-        : ctx.isDirectorForCurrent() ? 'Director' : 'Instructor';
-      const head = `<div class="page-head">
-        <h1>Welcome, ${esc(firstName)}</h1>
-        <div class="sub">${esc(ctx.courseTitleOf(ctx.currentCourse))} · ${esc(roleLabel)}</div></div>`;
-
-      if (vm.noCourse) { root.innerHTML = head + `<div class="alert alert-warn">No course access found. Contact the course director.</div>`; return; }
-      if (vm.noSections) {
-        root.innerHTML = head + quickActions() + `<div class="empty-state"><div class="es-ic">🗂️</div>
-          <h3>No sections yet</h3><p>You don't have any sections in ${esc(vm.courseTitle)} yet.
-          ${ctx.isDirectorForCurrent() ? 'Create sections and upload a roster in the gradebook.' : 'Ask your course director to assign you to sections.'}</p></div>`;
-        return;
-      }
-
-      root.innerHTML = head + statTiles(vm.totals) + quickActions() + rollup(vm);
-    }
-
-    function statTiles(t) {
-      const tile = (accent, icon, emoji, num, label) => `
-        <div class="stat-tile accent-${accent}">
-          <div class="stat-ic">${iconHTML(icon, emoji, 'ic')}</div>
-          <div class="stat-body"><div class="stat-num">${num}</div><div class="stat-label">${esc(label)}</div></div>
-        </div>`;
-      return `<div class="stat-grid">
-        ${tile('blue',  'sections',     '🗂️', t.sections, t.sections === 1 ? 'Section' : 'Sections')}
-        ${tile('gold',  'students',     '👥', t.students, 'Students')}
-        ${tile('amber', 'interactions', '💡', t.lessonsPublished, t.lessonsPublished === 1 ? 'Lesson published' : 'Lessons published')}
-        ${tile('green', 'completion',   '✅', t.interactionsPct + '%', 'Avg completion')}
-      </div>`;
-    }
-
-    function quickActions() {
-      const director = ctx.isDirectorForCurrent();
-      const int = (href, icon, emoji, label) =>
-        `<a class="btn btn-ghost" href="${href}">${iconHTML(icon, emoji, 'ic')} ${esc(label)}</a>`;
-      const ext = (href, icon, emoji, label) =>
-        `<a class="btn btn-ghost" href="${href}" target="_blank" rel="noopener">${iconHTML(icon, emoji, 'ic')} ${esc(label)} ↗</a>`;
-      return `<div class="card">
-        <div class="card-meta">Quick actions <span class="muted">· ↗ opens a legacy tool in a new tab</span></div>
-        <div class="row wrap" style="gap:10px">
-          ${int('grade.html',  'pending-grade', '✍️', 'Grade submissions')}
-          ${int('report.html', 'grades',        '📊', 'View reports')}
-          ${int('interactions.html', 'interactions', '💡', 'Manage interactions')}
-          ${director ? int('roster.html', 'roster', '🧑‍🎓', 'Roster & sections') : ''}
-          ${director ? ext(legacyUrl('admin.html'), 'export', '⬇️', 'Export grades') : ''}
-        </div></div>`;
-    }
-
-    function barClass(p) { return p >= 80 ? '' : p >= 40 ? 'partial' : 'low'; }
-
-    // One section card: interaction completion only (preflight data lives on Grade/Report now).
-    function sectionCard(sec) {
-      const rows = sec.perInteraction.length ? sec.perInteraction.map(it => {
-        const p = pct(it.done, it.total);
-        return `<div class="progress-row">
-          <span class="pr-label">${esc(it.title)}</span>
-          <span class="pr-count">${it.done}/${it.total}</span>
-          <div class="pr-track"><div class="pr-fill ${barClass(p)}" style="width:${p}%"></div></div>
-        </div>`;
-      }).join('') : `<div class="muted" style="font-size:0.84em">No published interactions yet.</div>`;
-
-      return `<div class="section-card">
-        <div class="sc-head">
-          <span class="sc-tag">${esc(sec.id)}</span>
-          <div class="grow"><div class="sc-meta">${sec.studentCount} student${sec.studentCount===1?'':'s'}</div>
-            ${sec.instructorName ? `<div class="sc-instr">${esc(sec.instructorName)}</div>` : ''}</div>
-        </div>
-        <div class="sc-body">${rows}</div>
-      </div>`;
-    }
-
-    function rollupGroup(title, icon, emoji, cards, sub, emptyMsg) {
-      const body = cards.length
-        ? `<div class="rollup-grid">${cards.map(sectionCard).join('')}</div>`
-        : `<div class="muted" style="font-size:0.86em">${esc(emptyMsg)}</div>`;
-      return `<section class="dash-section">
-        <div class="section-head"><h2>${iconHTML(icon, emoji, 'ic')} ${esc(title)}</h2>
-          <span class="count-pill">${cards.length}</span>
-          <span class="grow"></span>
-          <span class="muted" style="font-size:0.82em">${esc(sub)}</span>
-        </div>
-        ${body}</section>`;
-    }
-
-    function rollup(vm) {
-      const lessons = vm.interactions.length;
-      const sub = `${lessons} lesson${lessons === 1 ? '' : 's'} published`;
-      const director = ctx.isDirectorForCurrent();
-
-      let html = rollupGroup('Your sections', 'class', '🏫', vm.mySections, sub,
-        director ? "You aren't personally assigned to any sections in this course."
-                 : "You don't have any sections yet.");
-      if (director) {
-        html += rollupGroup('All other sections', 'sections', '🗂️', vm.otherSections, sub,
-          'Every section in this course is assigned to you.');
-      }
-      return html;
+      renderNav(ctx, { active: 'dashboard', onCourseChange: () => mountDashboard(ctx, root) });
+      mountDashboard(ctx, root);
     }
   </script>
 </body>

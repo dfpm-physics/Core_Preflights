@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Faculty dashboard sandbox · iPREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <!-- Uses the LIVE design system AND the LIVE render module so this preview tracks the real app:
+       app/js/faculty-dashboard.js is rendered with a hardcoded synthetic model via its render-only
+       entry (renderModel). No DB, no CDN, no login — window.db is stubbed and never called. -->
+  <link rel="stylesheet" href="../app/css/styles.css">
+  <style>
+    .sandbox-strip { max-width: 1180px; margin: 14px auto -2px; padding: 8px 20px; display: flex;
+      align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.8em; color: var(--muted); }
+    .sandbox-strip .pill { font-weight: 700; font-size: 0.92em; color: var(--blue-lt);
+      background: var(--mc-sel-bg); border-radius: 999px; padding: 2px 10px; }
+    .sandbox-strip .spacer { flex: 1; }
+    .sandbox-strip button { font: inherit; font-size: 0.92em; font-weight: 600; cursor: pointer;
+      padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--surface-sunken); color: var(--text); }
+    .sandbox-strip button:hover { border-color: var(--blue-lt); }
+  </style>
+</head>
+<body>
+  <!-- supabase.js throws unless window.db exists; the sandbox never calls it (render-only path). -->
+  <script>window.db = {};</script>
+
+  <div class="sandbox-strip">
+    <span class="pill">Sandbox</span><span>Faculty dashboard · synthetic data · no login</span>
+    <span class="spacer"></span>
+    <button id="roleBtn">Role: Director</button>
+    <button id="lessonBtn">Active: latest</button>
+    <button id="themeBtn">◐ Theme</button>
+  </div>
+  <main class="page-wide" id="main"></main>
+
+  <script type="module">
+    import { renderModel } from '../app/js/faculty-dashboard.js';
+    import { setIconBase } from '../app/js/util.js';
+    setIconBase('../app/media/icons/');   // sandbox lives in test/, not under app/<role>/ — point icons home
+
+    /* ── deterministic synthetic data shaped exactly like loadFacultyDashboard() ── */
+    const LESSONS = [
+      ['lesson-02-charge', 'Charge & Coulomb’s Law'],
+      ['lesson-03-vector', 'Vector Form of Coulomb’s Law'],
+      ['lesson-04-fields', 'Electric Fields & Field Lines'],
+      ['lesson-05-continuous', 'Continuous Charge Distributions'],
+      ['lesson-06-flux', 'Electric Flux & Gauss’s Law'],
+      ['lesson-07-gauss', 'Applying Gauss’s Law'],
+      ['lesson-08-potential', 'Electric Potential Energy & Potential'],
+      ['lesson-09-capacitance', 'Capacitance & Dielectrics'],
+      ['lesson-10-current', 'Current, Resistance & Power'],
+    ];
+    const ACTIVE_IDX = 6;            // lesson-08 is "today"
+    const SECTIONS = [
+      { id: 'T5A', instr: 'Matthew Recker', n: 16, dil: 0.90, mine: true },
+      { id: 'M1A', instr: 'Ben Roth', n: 20, dil: 0.86 },
+      { id: 'M1B', instr: 'TJ Hardy', n: 23, dil: 0.72 },
+      { id: 'M3A', instr: 'Ben Roth', n: 19, dil: 0.88 },
+      { id: 'M5A', instr: 'Matthew Recker', n: 27, dil: 0.66, mine: true },
+      { id: 'T1A', instr: 'Tyler Jones', n: 20, dil: 0.93 },
+      { id: 'T3A', instr: 'Matthew Recker', n: 22, dil: 0.90, mine: true },
+      { id: 'T3B', instr: 'Kimberly de La Harpe', n: 25, dil: 0.78 },
+    ];
+    const MISC = {
+      'lesson-08-potential': [
+        ['v-vs-u', 'Conflates potential V with potential energy U', 'major'],
+        ['v-vector', 'Treats electric potential as a vector', 'major'],
+        ['e-zero-v-zero', 'Assumes E = 0 wherever V = 0', 'major'],
+        ['path-dependent', 'Thinks work to move a charge is path-dependent', 'minor'],
+      ],
+      'lesson-07-gauss': [['surface-symmetry', 'Picks a Gaussian surface without symmetry', 'major'],
+        ['e-constant', 'Assumes E is constant on any surface', 'major']],
+    };
+    function hash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+    function rng(seed){let a=hash(seed);return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+    const clamp=(x,lo,hi)=>Math.max(lo,Math.min(hi,x));
+
+    function buildModel(activeIdx) {
+      const lessons = LESSONS.map(([id, title], i) => ({
+        id, title, due_date: `2026-0${2 + Math.floor(i / 3)}-${String(5 + i).padStart(2, '0')}T23:59:59`,
+        num: i + 2, short: String(i + 2).padStart(2, '0'),
+      }));
+      const activeId = lessons[activeIdx].id;
+      const sectionSize = {}; SECTIONS.forEach(s => sectionSize[s.id] = s.n);
+      const rowsByLesson = {};
+      lessons.forEach((L, li) => {
+        const rows = [];
+        SECTIONS.forEach(s => {
+          const r = rng(s.id + ':' + L.id);
+          const rel = li - activeIdx;
+          let base = rel < 0 ? s.dil + 0.02 + (r() - 0.5) * 0.10
+                   : rel === 0 ? s.dil - 0.28 + r() * 0.30
+                   : rel === 1 ? 0.05 + r() * 0.11 : r() * 0.05;
+          const done = Math.round(s.n * clamp(base, 0, 1));
+          for (let k = 0; k < done; k++) {
+            const eff = clamp(Math.round(2.4 + s.dil * 2.2 + (r() - 0.5) * 2), 0, 5);
+            const und = clamp(Math.round(1.8 + s.dil * 2.0 + (r() - 0.5) * 2), 0, 5);
+            const mlist = (MISC[L.id] || []).filter(() => r() < 0.28)
+              .map(([id, label, severity]) => ({ id, label, description: label, severity }));
+            rows.push({ student_id: hash(s.id + L.id + k), sectionId: s.id, effort: eff,
+              score: eff >= 3 ? 2 : eff >= 1 ? 1 : 0,
+              report_data: { schema: 1, effort: eff, overall_understanding: und, misconceptions: mlist,
+                flags: { needs_follow_up: eff <= 2 || und <= 1 } } });
+          }
+        });
+        rowsByLesson[L.id] = rows;
+      });
+      return {
+        noCourse: false, noSections: false, isDirector: true, courseTitle: 'Physics 215', myName: 'Matthew Recker',
+        sections: SECTIONS.map(s => ({ id: s.id, instructorName: s.instr, isMine: !!s.mine, n: s.n })),
+        lessons, activeId, rowsByLesson, sectionSize,
+        counts: { sections: SECTIONS.length, students: SECTIONS.reduce((a, s) => a + s.n, 0), lessons: lessons.length },
+      };
+    }
+
+    let isDirector = true, activeIdx = ACTIVE_IDX;
+    const root = document.getElementById('main');
+    const ctxLike = () => ({
+      isDirectorForCurrent: () => isDirector,
+      instructorRow: { name: 'Matthew Recker', is_global_admin: false },
+    });
+    function draw() { renderModel(ctxLike(), root, buildModel(activeIdx)); }
+    draw();
+
+    document.getElementById('roleBtn').onclick = (e) => {
+      isDirector = !isDirector; e.target.textContent = 'Role: ' + (isDirector ? 'Director' : 'Instructor'); draw();
+    };
+    document.getElementById('lessonBtn').onclick = (e) => {
+      activeIdx = activeIdx === ACTIVE_IDX ? LESSONS.length - 1 : ACTIVE_IDX;
+      e.target.textContent = 'Active: ' + (activeIdx === ACTIVE_IDX ? 'mid' : 'latest'); draw();
+    };
+    document.getElementById('themeBtn').onclick = () => {
+      const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+      document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+      try { localStorage.setItem('cp.theme', dark ? 'light' : 'dark'); } catch (e) {}
+    };
+  </script>
+</body>
+</html>

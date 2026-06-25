@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student dashboard sandbox · iPREP</title>
+<script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+<!-- Uses the LIVE design system so this preview tracks the real app. No DB, no CDN, no JS modules:
+     a hardcoded synthetic view-model is rendered with the same component classes the real
+     dashboard (app/student/dashboard.html) uses, plus the proposed "Review before class" panel. -->
+<link rel="stylesheet" href="../app/css/styles.css">
+<style>
+  /* Sandbox-only chrome + the one NEW component this prototype introduces:
+     the "Review before class" formative panel (objective strength meters). */
+  .sandbox-strip {
+    max-width: 1180px; margin: 14px auto -6px; padding: 8px 20px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    font-size: 0.8em; color: var(--muted);
+  }
+  .sandbox-strip .pill {
+    font-weight: 700; font-size: 0.92em; color: var(--blue-lt);
+    background: var(--mc-sel-bg); border-radius: 999px; padding: 2px 10px;
+  }
+
+  /* "Review before class" — proposed surfacing of completed-interaction report_data */
+  .rb-card { border-left: 4px solid var(--gold); }
+  .rb-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .rb-head .rb-ttl { font-size: 1.05em; font-weight: 700; }
+  .rb-lead { font-size: 0.92em; color: var(--text-soft); line-height: 1.5; margin: 8px 0 16px; }
+  .rb-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 26px; }
+  @media (max-width: 620px) { .rb-cols { grid-template-columns: 1fr; } }
+  .rb-col h4 {
+    font-size: 0.72em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); margin-bottom: 9px;
+  }
+  .rb-obj { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 10px; margin-bottom: 9px; }
+  .rb-obj .nm { font-size: 0.88em; }
+  .rb-meter { width: 72px; height: 7px; border-radius: 999px; background: var(--track); overflow: hidden; }
+  .rb-meter > span { display: block; height: 100%; border-radius: 999px; }
+  .rb-meter.solid  > span { background: var(--s5); }
+  .rb-meter.ok     > span { background: var(--s3); }
+  .rb-meter.review > span { background: var(--s1); }
+
+  /* Sandbox toast — explains what an inert link would do in the real app */
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(8px);
+    width: calc(100% - 32px); max-width: 520px; z-index: 90;
+    background: var(--card); color: var(--text);
+    border: 1px solid var(--border); border-left: 4px solid var(--blue-lt);
+    border-radius: 10px; box-shadow: var(--shadow-lg);
+    padding: 12px 16px; font-size: 0.86em; line-height: 1.45;
+    opacity: 0; pointer-events: none; transition: opacity 0.18s, transform 0.18s;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast b { display: block; margin-bottom: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================= -->
+<!--  Top navigation — static mirror of nav.js (student role)      -->
+<!-- ============================================================= -->
+<header class="topnav">
+  <div class="topnav-inner">
+    <div class="nav-left">
+      <a class="brand" href="#" title="iPREP — interactive Pre-lesson Readiness Engagement Platform">
+        <span class="brand-mark"><span class="ic icon-fallback">⚛️</span></span>
+        <span>iPREP<span class="brand-sub">Physics 215</span></span>
+      </a>
+      <button class="nav-burger" data-burger><span class="ic icon-fallback">☰</span></button>
+    </div>
+    <nav class="nav-links" id="nav-links">
+      <a class="nav-link active" href="#"><span>Dashboard</span></a>
+      <a class="nav-link" href="#"><span>Assignments</span></a>
+      <a class="nav-link" href="#"><span>Interactions</span></a>
+    </nav>
+    <div class="nav-right">
+      <button class="theme-toggle" data-theme-toggle><span data-theme-icon>🌙</span></button>
+      <div class="user-menu">
+        <button class="user-chip" data-user-toggle>
+          <span class="avatar">AB</span>
+          <span class="nm">Cadet Brooks</span><span class="caret">▾</span>
+        </button>
+        <div class="menu-pop" id="user-menu-pop">
+          <div class="menu-head">
+            <span class="mh-ic"><span class="ic icon-fallback">👤</span></span>
+            <div><div class="nm">Avery Brooks</div><div class="rl">Student · Physics 215</div></div>
+          </div>
+          <button class="menu-item danger"><span class="ic icon-fallback">🚪</span><span>Sign out</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="sandbox-strip">
+  <span class="pill">SANDBOX</span>
+  <span>Synthetic data — no database. Toggle the theme (top-right) to preview light / dark.</span>
+</div>
+
+<main class="page-wide" id="main"></main>
+
+<script>
+// ───────────────────────────────────────────────────────────────────────────
+// Synthetic view-model. Mirrors the shape produced by loadStudentDashboard()
+// in app/js/student-data.js, extended with the per-interaction report_data
+// fields (effort / objectives / recommended_review …) the live loader doesn't
+// surface yet. One realistic Physics 215 cadet, mid-semester.
+// ───────────────────────────────────────────────────────────────────────────
+const vm = {
+  firstName: 'Avery',
+  courseTitle: 'Physics 215',
+  section: 'M1A',
+
+  stats: { toDo: 3, overdue: 1, interactionsToDo: 2, avgPct: 88 },
+
+  // Unified, deadline-sorted feed — preflights AND interactions together.
+  upcoming: [
+    { kind: 'interaction', title: 'Lesson 7 — Magnetic Forces', meta: 'Interactive lesson · ~10 min',
+      dueText: 'Due tomorrow, 7:00 AM', dueClass: 'soon', dot: 'amber' },
+    { kind: 'assignment', title: 'Preflight 5 — Faraday’s Law', meta: '4 questions · 20 pts',
+      dueText: 'Due Fri, Jun 27', dueClass: '', dot: 'grey' },
+    { kind: 'assignment', title: 'Preflight 6 — Inductance', meta: '3 questions · 15 pts',
+      dueText: 'Due Mon, Jun 30', dueClass: '', dot: 'grey' },
+    { kind: 'interaction', title: 'Lesson 8 — RL Circuits', meta: 'Interactive lesson · ~12 min',
+      dueText: 'Due Tue, Jul 1', dueClass: '', dot: 'amber' },
+  ],
+
+  overdue: [
+    { kind: 'assignment', title: 'Preflight 4 — Ampère’s Law', meta: '4 questions · 20 pts',
+      dueText: 'Closed yesterday — not submitted', dueClass: 'overdue', dot: 'red' },
+  ],
+
+  // NEW panel input: the most recent completed interaction's structured report_data.
+  reviewBeforeClass: {
+    title: 'Lesson 6 — Magnetic Fields',
+    points: 2, maxPoints: 2, effort: 5,
+    aiSummary: 'Fully engaged across the whole lesson and gave a substantive reading reflection. ' +
+      'Strong on field direction, but mixing up the right-hand rule for force versus field.',
+    solid: [
+      { label: 'Magnetic field of a current-carrying wire', u: 4 },
+      { label: 'Field direction (right-hand rule)', u: 4 },
+    ],
+    review: [
+      { label: 'Force on a moving charge (F = qv × B)', u: 2 },
+      { label: 'Setting up the vector cross product', u: 2 },
+    ],
+    recommended: 'Revisit the right-hand rule for F = qv × B — keep the force rule ' +
+      'distinct from the field rule, and practice one cross-product setup before class.',
+  },
+
+  interactions: {
+    doneCount: 4, total: 6,
+    todo: [
+      { title: 'Lesson 7 — Magnetic Forces', desc: 'Interactive lesson' },
+      { title: 'Lesson 8 — RL Circuits', desc: 'Interactive lesson' },
+    ],
+    done: [
+      { title: 'Lesson 6 — Magnetic Fields', when: 'Jun 23', pts: 2 },
+      { title: 'Lesson 5 — Capacitance', when: 'Jun 18', pts: 2 },
+      { title: 'Lesson 4 — Current & Resistance', when: 'Jun 13', pts: 1 },
+      { title: 'Lesson 3 — Electric Potential', when: 'Jun 9', pts: 2 },
+    ],
+  },
+
+  graded: [
+    { title: 'Preflight 3 — Gauss’s Law', score: 18, max: 20 },
+    { title: 'Preflight 2 — Electric Potential', score: 15, max: 20 },
+    { title: 'Preflight 1 — Coulomb’s Law', score: 20, max: 20 },
+  ],
+};
+
+// ── tiny helpers (stand-ins for util.js, kept inline so the page is standalone) ──
+const esc = (s) => String(s).replace(/[&<>"']/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const emoji = (e) => `<span class="ic icon-fallback">${e}</span>`;
+const pct = (a, b) => b ? Math.round((a / b) * 100) : 0;
+// Effort (0–5) is the engagement signal; the GRADE is the 0–2 points DERIVED from it
+// (contract §5.2: effort ≥3 → 2 pts, 1–2 → 1 pt, 0 → 0). Always show the points as the
+// grade and render effort as a qualitative label, so a "5" is never read as the score.
+const effortToPoints = (e) => (e >= 3 ? 2 : e >= 1 ? 1 : 0);
+const effortLabel = (e) =>
+  ['No engagement', 'Minimal effort', 'Partial effort', 'Solid effort', 'Strong effort', 'Full effort'][e] ?? '—';
+
+// ── render functions (mirror app/student/dashboard.html) ──
+function statTiles(s) {
+  const tile = (accent, e, num, label) => `
+    <div class="stat-tile accent-${accent}">
+      <div class="stat-ic">${emoji(e)}</div>
+      <div class="stat-body"><div class="stat-num">${num}</div><div class="stat-label">${esc(label)}</div></div>
+    </div>`;
+  return `<div class="stat-grid">
+    ${tile('blue',  '📝', s.toDo, 'To do')}
+    ${tile('red',   '⏰', s.overdue, 'Overdue')}
+    ${tile('gold',  '💡', s.interactionsToDo, 'Interactions to do')}
+    ${tile('green', '🏅', s.avgPct == null ? '—' : s.avgPct + '%', 'Preflight average')}
+  </div>`;
+}
+
+function feedItem(it) {
+  const isInter = it.kind === 'interaction';
+  const tag = isInter ? `<span class="tag gold">💡 Interaction</span>` : `<span class="tag blue">📋 Preflight</span>`;
+  const inner = `
+    <span class="status-dot ${it.dot}"></span>
+    <div class="li-body">
+      <div class="row wrap" style="gap:8px"><div class="li-title">${esc(it.title)}</div>${tag}</div>
+      <div class="li-meta"><span>${esc(it.meta)}</span>
+        <span class="deadline ${it.dueClass}">${esc(it.dueText)}</span></div>
+    </div>`;
+  // An interaction row carries a real Launch button, so it must be a <div> — a nested <a>
+  // inside an <a> row is invalid HTML (the browser hoists it out, breaking layout + click).
+  // Assignment rows have no button, so they stay whole-row links.
+  if (isInter) {
+    return `<div class="list-item">${inner}
+      <div class="li-right">
+        <a class="btn btn-primary btn-sm" href="#" data-sandbox="launch"
+           title="Opens the interactive Claude lesson in a new tab">Launch&nbsp;↗</a>
+      </div></div>`;
+  }
+  return `<a class="list-item" href="#" data-sandbox="open">${inner}
+    <div class="li-right"><span class="li-arrow">›</span></div></a>`;
+}
+
+function upcomingSection(items) {
+  return `<section class="dash-section">
+    <div class="section-head"><h2>${emoji('⏳')} Up next</h2>
+      <span class="count-pill">${items.length}</span><span class="grow"></span>
+      <a class="btn btn-ghost btn-sm" href="#">View all</a>
+    </div>
+    <div class="list">${items.map(feedItem).join('')}</div></section>`;
+}
+
+function overdueSection(items) {
+  if (!items.length) return '';
+  return `<section class="dash-section">
+    <div class="section-head"><h2>${emoji('⚠️')} Needs attention</h2><span class="count-pill">${items.length}</span></div>
+    <div class="list">${items.map(feedItem).join('')}</div></section>`;
+}
+
+function objRow(o, cls) {
+  return `<div class="rb-obj">
+    <span class="nm">${esc(o.label)}</span>
+    <span class="rb-meter ${cls}"><span style="width:${o.u / 5 * 100}%"></span></span>
+  </div>`;
+}
+
+function reviewBeforeClass(rb) {
+  if (!rb) return '';
+  return `<section class="dash-section">
+    <div class="section-head"><h2>${emoji('🎯')} Review before class</h2>
+      <span class="count-pill">from your last interaction</span></div>
+    <div class="card rb-card">
+      <div class="rb-head">
+        <span class="rb-ttl">${esc(rb.title)}</span>
+        <span class="tag green" title="Effort ${rb.effort} of 5 → full credit">✓ ${effortToPoints(rb.effort)} / ${rb.maxPoints} pts</span>
+      </div>
+      <div class="muted" style="font-size:0.82em;margin-top:3px">
+        ${esc(effortLabel(rb.effort))} — graded on engagement, not accuracy.
+      </div>
+      <div class="rb-lead">${esc(rb.aiSummary)}</div>
+      <div class="rb-cols">
+        <div class="rb-col"><h4>✅ You’re solid on</h4>${rb.solid.map(o => objRow(o, 'solid')).join('')}</div>
+        <div class="rb-col"><h4>🔁 Worth another look</h4>${rb.review.map(o => objRow(o, 'review')).join('')}</div>
+      </div>
+      <div class="feedback-block" style="margin-top:16px">
+        <div class="feedback-label">Recommended review</div>${esc(rb.recommended)}
+      </div>
+      <div class="row" style="margin-top:16px;gap:10px">
+        <a class="btn btn-ghost btn-sm" href="#" data-sandbox="report">View full report</a>
+        <span class="muted" style="font-size:0.8em">The objective breakdown above is diagnostic — it doesn’t change your grade.</span>
+      </div>
+    </div></section>`;
+}
+
+function interactionsSection(d) {
+  const todo = d.todo.map(i => `
+    <div class="list-item">
+      <span class="status-dot amber"></span>
+      <div class="li-body"><div class="li-title">${esc(i.title)}</div>
+        <div class="li-meta">${esc(i.desc)}</div></div>
+      <div class="li-right"><a class="btn btn-primary btn-sm" href="#" data-sandbox="launch"
+        title="Opens the interactive Claude lesson in a new tab">Launch&nbsp;↗</a></div>
+    </div>`).join('');
+  const done = d.done.map(i => `
+    <div class="list-item">
+      <span class="status-dot green"></span>
+      <div class="li-body"><div class="li-title">${esc(i.title)}</div>
+        <div class="li-meta">Completed ${esc(i.when)}</div></div>
+      <div class="li-right"><span class="tag green">${i.pts}/2 pts</span>
+        <a class="btn btn-ghost btn-sm" href="#" data-sandbox="report">View report</a></div>
+    </div>`).join('');
+  return `<section class="dash-section">
+    <div class="section-head"><h2>${emoji('💡')} Lesson interactions</h2>
+      <span class="count-pill">${d.doneCount}/${d.total} done</span><span class="grow"></span>
+      <a class="btn btn-ghost btn-sm" href="#">View all</a></div>
+    <div class="list">${todo}</div>
+    <div class="list" style="margin-top:10px">${done}</div></section>`;
+}
+
+function gradedSection(items) {
+  const badge = (a) => {
+    const p = pct(a.score, a.max);
+    const cls = p >= 90 ? 'full' : p >= 60 ? 'partial' : 'zero';
+    return `<span class="score-badge ${cls}">${a.score}/${a.max}</span>`;
+  };
+  return `<section class="dash-section">
+    <div class="section-head"><h2>${emoji('✅')} Recently graded</h2><span class="count-pill">${items.length}</span></div>
+    <div class="list">${items.map(a => `
+      <a class="list-item" href="#">
+        <span class="status-dot green"></span>
+        <div class="li-body"><div class="li-title">${esc(a.title)}</div>
+          <div class="li-meta">Graded by your instructor</div></div>
+        <div class="li-right">${badge(a)}<span class="li-arrow">›</span></div>
+      </a>`).join('')}</div></section>`;
+}
+
+document.getElementById('main').innerHTML = `
+  <div class="page-head">
+    <h1>Welcome back, ${esc(vm.firstName)}</h1>
+    <div class="sub">${esc(vm.courseTitle)} · Section ${esc(vm.section)}</div>
+  </div>
+  ${statTiles(vm.stats)}
+  ${upcomingSection(vm.upcoming)}
+  ${overdueSection(vm.overdue)}
+  ${reviewBeforeClass(vm.reviewBeforeClass)}
+  ${interactionsSection(vm.interactions)}
+  ${gradedSection(vm.graded)}`;
+
+// ── interactivity: theme toggle, user menu, mobile burger ──
+const setThemeIcon = () =>
+  document.querySelectorAll('[data-theme-icon]').forEach(el =>
+    el.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️' : '🌙');
+setThemeIcon();
+document.querySelector('[data-theme-toggle]').addEventListener('click', () => {
+  const root = document.documentElement;
+  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', next);
+  try { localStorage.setItem('cp.theme', next); } catch (e) {}
+  setThemeIcon();
+});
+const pop = document.getElementById('user-menu-pop');
+document.querySelector('[data-user-toggle]').addEventListener('click', (e) => {
+  e.stopPropagation(); pop.classList.toggle('open');
+});
+document.addEventListener('click', (e) => { if (!pop.contains(e.target)) pop.classList.remove('open'); });
+document.querySelector('[data-burger]').addEventListener('click', () =>
+  document.getElementById('nav-links').classList.toggle('open'));
+
+// Every link here is inert (href="#"). Instead of doing nothing, explain what each would
+// do in the real app — directly demonstrating the Launch / report / open behaviors.
+const SANDBOX_MSG = {
+  launch: ['Launch lesson', 'Opens the interactive Claude lesson (the artifact on claude.ai) in a new tab. ' +
+    'The student works through it there; on finish it sends their report back to iPREP and the lesson flips to “Completed.”'],
+  report: ['View report', 'Opens this lesson’s saved report — the Markdown transcript plus the student’s structured results.'],
+  open:   ['Open assignment', 'Opens the preflight to submit answers (until the deadline) or review graded feedback.'],
+};
+let toastEl, toastTimer;
+function toast(key) {
+  const [t, m] = SANDBOX_MSG[key] ||
+    ['Sandbox preview', 'This link is inert here. In the live app it navigates to the matching page.'];
+  if (!toastEl) { toastEl = document.createElement('div'); toastEl.className = 'toast'; document.body.appendChild(toastEl); }
+  toastEl.innerHTML = `<b>${t}</b>${m}`;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 4500);
+}
+document.getElementById('main').addEventListener('click', (e) => {
+  const a = e.target.closest('a[href="#"]');
+  if (!a) return;
+  e.preventDefault();
+  toast(a.dataset.sandbox);
+});
+</script>
+</body>
+</html>

@@ -21,7 +21,7 @@ export async function loadManager(ctx) {
   if (!isDirector) secQuery = secQuery.eq('instructor_id', ctx.instructorRow.id);
 
   let interQuery = db.from('interactions')
-    .select('id, course_id, title, description, artifact_url, is_published')
+    .select('id, course_id, title, description, artifact_url, is_published, due_date')
     .eq('course_id', course).order('title');
   if (!isDirector) interQuery = interQuery.eq('is_published', true);
 
@@ -70,12 +70,13 @@ export async function loadManager(ctx) {
   return { noCourse: false, interactions: items, sections };
 }
 
-/** Insert (when editingId is null) or update an interaction. */
+/** Insert (when editingId is null) or update an interaction. `due_date` is optional
+ *  (nullable timestamptz, migration 014) — it drives the dashboard's active-lesson pick. */
 export function saveInteraction(fields, editingId) {
-  const { id, course_id, title, description, artifact_url, is_published } = fields;
+  const { id, course_id, title, description, artifact_url, is_published, due_date } = fields;
   return editingId
-    ? db.from('interactions').update({ course_id, title, description, artifact_url, is_published }).eq('id', editingId)
-    : db.from('interactions').insert({ id, course_id, title, description, artifact_url, is_published });
+    ? db.from('interactions').update({ course_id, title, description, artifact_url, is_published, due_date }).eq('id', editingId)
+    : db.from('interactions').insert({ id, course_id, title, description, artifact_url, is_published, due_date });
 }
 
 export function togglePublish(id, current) {

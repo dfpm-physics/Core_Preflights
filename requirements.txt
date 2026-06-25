@@ -6,6 +6,6 @@
 #   .venv\Scripts\python -m pip install -r requirements.txt   (Windows)
 #   .venv/bin/python   -m pip install -r requirements.txt     (macOS/Linux)
 #
-# psycopg2-binary: direct PostgreSQL access for the interaction-analyze DB tooling
+# psycopg2-binary: direct PostgreSQL access for the interaction-backfill DB tooling
 # (connects to Supabase as the scoped `claude_code_recker` role — see supabase/admin/claude_code_role.sql).
 psycopg2-binary==2.9.12

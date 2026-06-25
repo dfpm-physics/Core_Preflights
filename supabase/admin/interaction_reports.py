@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""interaction_reports.py — DB I/O for the `interaction-analyze` skill.
+"""interaction_reports.py — DB I/O for the `interaction-backfill` skill.
 
 Connects to Supabase as the scoped `claude_code_recker` role (reads
-.claude/skills/interaction-analyze/config.json, or PG* env vars) and exposes three
+supabase/admin/config.json, or PG* env vars) and exposes three
 subcommands used to backfill the schema-1 structured assessment (`report_data`) onto
 interaction reports that only have the human-readable `report_markdown`:
 
@@ -47,7 +47,7 @@ try:
 except ImportError:
     sys.exit("psycopg2 not found — use the project .venv (pip install -r requirements.txt).")
 
-CONFIG_SUBPATH = Path(".claude") / "skills" / "interaction-analyze" / "config.json"
+CONFIG_PATH = Path(__file__).resolve().parent / "config.json"  # supabase/admin/config.json (gitignored)
 MAX_REPORT_DATA_BYTES = 32768  # mirrors DB constraint pir_report_data_size (contract §3)
 
 
@@ -60,12 +60,9 @@ def _connect():
             password=os.environ.get("PGPASSWORD"), sslmode=os.environ.get("PGSSLMODE", "require"),
         )
     else:
-        repo_root = Path(__file__).resolve().parents[2]
-        path = next((c for c in (repo_root / CONFIG_SUBPATH, Path.home() / CONFIG_SUBPATH)
-                     if c.is_file()), None)
-        if path is None:
-            sys.exit(f"No PG* env vars and no config.json (looked for {CONFIG_SUBPATH}).")
-        cfg = json.loads(path.read_text(encoding="utf-8"))
+        if not CONFIG_PATH.is_file():
+            sys.exit(f"No PG* env vars and no config.json at {CONFIG_PATH}.")
+        cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
         params = dict(
             host=cfg["host"], port=cfg.get("port", 5432), dbname=cfg.get("dbname", "postgres"),
             user=cfg["user"], password=cfg["password"], sslmode=cfg.get("sslmode", "require"),

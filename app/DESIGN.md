@@ -359,7 +359,7 @@ Each entry maps to a `{components.*}` token and the classes in [`css/styles.css`
 ### Rollup v3 — faculty lesson summary
 
 The faculty lesson-summary rollup was redesigned (classes in the **"Rollup v3"** block of
-`css/styles.css`; intent visible in the [`test-summary.html`](../test-summary.html) sandbox).
+`css/styles.css`; intent visible in the [`test-summary.html`](../test/test-summary.html) sandbox).
 It is built from bordered boxes inside a tinted header, with the AI-summary panels stubbed
 until the analysis aggregator ships.
 

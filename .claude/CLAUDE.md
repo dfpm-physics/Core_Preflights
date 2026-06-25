@@ -156,8 +156,12 @@ link's `id` must equal the artifact's `#i=` slug. Full spec + builder: `INTERACT
   `students.auth_user_id = auth.uid()`, so a spoofed `student_id` is rejected by the DB.
   Directors/admins read all reports; instructors read their own sections.
 
-**Deferred:** where the analysis skill's *output* (per-section summaries) gets stored — a
-new table or the `assignments.analysis_report` JSONB pattern. Not yet built.
+**Deferred (now spec'd, not built):** the **cohort aggregator** that produces the rollup's AI panels
+(per-section readiness summaries, misconception trends, AI-picked showcase quotes) and where its
+*output* is stored — designed in `INTERACTION-AGGREGATION.md` (proposes a new `interaction_analysis`
+table; mirrors the `assignments.analysis_report` pattern). All inputs are already in `report_data`, so
+no data-contract change is needed. Distinct from `/interaction-backfill`, which only fills per-student
+`report_data`.
 
 ## preflight-analyze Skill
 

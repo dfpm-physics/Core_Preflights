@@ -10,7 +10,134 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-06-25 — Matthew Recker
 
-### Added — `interaction-analyze` skill + scoped DB role to backfill interaction structured data
+### Changed — faculty dashboard rebuilt as the Just-in-Time-Teaching landing page
+
+Rolled the [`INBOX/dashboard-redesign.html`](INBOX/) exploration into the real app and wired it to
+live Supabase data, replacing the old per-assignment progress-bar roll-up
+([`app/faculty/dashboard.html`](app/faculty/dashboard.html)). The new dashboard answers the actual
+JiTT question — *what do I need to know before my next class?* — with:
+
+- **KPI tiles** tied to the lesson in view: preflight completion %, avg effort (graded), students
+  flagged for follow-up, avg understanding (diagnostic). They re-aggregate as you navigate lessons
+  or change scope.
+- **Active-lesson spotlight** — a completion ring, the 0–5 effort histogram (class mean), the top
+  misconceptions surfacing, and a flagged-students callout, for one lesson at a time (defaults to
+  the next-due preflight). Lesson navigation via proximity "wings" (pointer) / an inline stepper
+  (touch) plus a **↩ Today** shortcut, with past / today / upcoming framing.
+- **Your section(s)** cards — headline stats + an *understanding-by-lesson* strip — for the sections
+  the logged-in user personally teaches.
+- **All-sections matrix** (director-only, collapsed by default) — a section × lesson **heatmap**
+  with a Completion ↔ Avg-effort toggle and per-section effort/flags columns; the user's own
+  sections sort to the top. Columns stop at the active lesson so not-yet-due lessons don't read as
+  "behind."
+
+Role is **real** (from `ctx`, not a preview toggle): instructors get their own sections scoped, no
+scope toggle, and no matrix; directors/admins get both. New view module
+[`app/js/faculty-dashboard.js`](app/js/faculty-dashboard.js) (render + wiring + live aggregation) and
+a richer loader `loadFacultyDashboard` in [`app/js/faculty-data.js`](app/js/faculty-data.js): one
+fetch of every published lesson's per-student rows, grouped by (lesson, section), aggregated live
+with the **same `summarizeReports()`** engine the interactions rollup uses — so the two views always
+agree. The page itself is now thin (bootstrap → nav → theme → `mountDashboard`).
+
+Collision calls (per Matthew): reused the app's existing `.seg` segmented control and `.stat-tile`
+tiles; the new pieces (spotlight, ring, misconception list, your-section cards, matrix, nav wings)
+were added to [`app/css/styles.css`](app/css/styles.css) with tokens only. Dropped the old "Quick
+actions" card (the top nav already links those pages).
+
+### Added — `interactions.due_date` (drives the dashboard's "active" lesson)
+
+Migration [`015_interaction_due_date.sql`](supabase/migrations/015_interaction_due_date.sql) — one
+**nullable** `due_date timestamptz` on `interactions` (additive; director runs it). The dashboard
+picks the **active/"today"** lesson as the next one due (earliest `due_date ≥ now`), framing earlier
+ones as *past* and later ones as *upcoming*; with no due dates set it falls back to newest by
+`created_at`. Wired a **Due date** field into the app interaction manager
+([`app/faculty/interactions.html`](app/faculty/interactions.html) modal + a `due` prefill param +
+card display) and `saveInteraction` ([`app/js/faculty-interactions.js`](app/js/faculty-interactions.js)).
+**Apply migration 015 before deploying** (the manager + dashboard now select `due_date`). Single
+course-wide date, not the M/T split assignments use — the spotlight is one lesson for the whole
+director view; an M/T split could be added later without a breaking change.
+
+### Changed — one effort-chart style (the labeled histogram), shared by rollup + dashboard
+
+Per Matthew's call, unified on the redesign's effort histogram (submission count above each 0–5 bar,
+6-step distribution ramp `--d0…--d5`) as the single style and back-ported it to the interactions
+lesson rollup. Updated the shared `.eff-*` block in [`app/css/styles.css`](app/css/styles.css) and
+`effortChart()` in [`app/faculty/interactions.html`](app/faculty/interactions.html) (was the s-ramp
+with no counts).
+
+### Added — faculty-dashboard design sandbox
+
+[`test/test-faculty-dashboard.html`](test/test-faculty-dashboard.html) — like the student sandbox but
+it drives the **live render module** (`app/js/faculty-dashboard.js`) with a synthetic model via its
+render-only `renderModel` entry, so it tracks both the stylesheet *and* the render logic. Toggles for
+role / active lesson / theme; linked from the [`test/`](test/test.html) hub. Verified in headless
+Chrome across director, instructor, light, and matrix-open states.
+
+### Changed — design sandboxes moved into `test/` + new student-dashboard sandbox
+
+Moved the standalone preview pages out of the repo root into a dedicated [`test/`](test/) directory
+(`git mv`, history preserved): [`test/test.html`](test/test.html) (hub),
+[`test/test-summary.html`](test/test-summary.html), and
+[`test/test-progressbar.html`](test/test-progressbar.html). Added
+[`test/test-student-dashboard.html`](test/test-student-dashboard.html) — a synthetic-data preview of
+the **student** landing page rendered on the **live** design system (links `app/css/styles.css`,
+mirrors the real top nav). Unlike the other sandboxes it intentionally reuses the production
+stylesheet so it tracks the real app. It previews the proposed dashboard direction: a single
+deadline-sorted **Up next** feed merging preflights *and* interactions (the live loader doesn't yet
+surface `interactions.due_date`), a **"Review before class"** formative panel built from a completed
+interaction's `report_data` (effort/points, per-objective strength meters, `recommended_review`), and
+recent grades. The `../test-summary.html` link in [`app/DESIGN.md`](app/DESIGN.md) was repointed to
+`../test/`. Why: keep the repo root clean and group the no-DB design previews; give the student
+dashboard a sign-off surface like the faculty rollup already has.
+
+### Added — `interaction-aggregate` skill (builds the cohort analysis the spec designed)
+
+Built the cohort aggregator the `INTERACTION-AGGREGATION.md` spec called for — the
+interaction-path analog of `/preflight-analyze`. It reads the per-student `report_data` across an
+interaction and writes the class-level AI synthesis the faculty rollup shows as "coming soon"
+placeholders: a **readiness summary**, **misconception trends**, and **2-3 AI-picked
+reading-reflection quotes**, as **one rollup per section plus a whole-course rollup**. Files are
+created but **not yet run** (run after the due date, when submissions are frozen).
+
+- **Table** — [`supabase/migrations/014_interaction_analysis.sql`](supabase/migrations/014_interaction_analysis.sql)
+  (director runs it; Claude has no DDL). One row per `(interaction_id, section_id)` where
+  `section_id` is a real section or the `'__all__'` whole-course sentinel; columns
+  `readiness_summary` / `misconception_trends` / `selected_quotes` (`[{student_id, section_id}]`) /
+  `meta` / `generated_at`. Read-RLS mirrors `preflight_interaction_reports` (directors → all incl.
+  `'__all__'`; instructors → own sections only); writes only via the BYPASSRLS `claude_code_recker`
+  role (no write policy, no role-specific GRANT — default privileges cover it). CHECKs bound the
+  prose and enforce **no quotes on the `'__all__'` row**.
+- **Helper** — [`supabase/admin/interaction_aggregate.py`](supabase/admin/interaction_aggregate.py)
+  (`pull` / `write-analysis` / `status`). `pull` groups reports per section + `'__all__'`, emitting
+  a **precomputed numeric summary** (a focused Python port of the UI's `summarizeReports`, so the
+  prose cites the same figures the bars show) plus the per-report free-text fields the model reads;
+  no names, no `report_markdown`. `write-analysis` re-derives `meta.n` + a `source_fingerprint`
+  from live rows, validates section ids and that every quote's student is actually in that section,
+  enforces the no-`'__all__'`-quotes rule, and upserts (`--dry-run` first). `status` flags staleness.
+- **Skill** — [`.claude/skills/interaction-aggregate/SKILL.md`](.claude/skills/interaction-aggregate/SKILL.md):
+  preflight → pick lesson (nudge to `/interaction-backfill` if `report_data` is missing) → `pull` →
+  write the three panels per scope (quote-selection criteria + "ground in the numbers" rule;
+  whole-course row is prose-only) → `write-analysis` → verify via `status`. Read-only on grades.
+- **Decisions settled** (from the spec's open list): per-section **and** whole-course rollups
+  (`'__all__'` sentinel); dedicated table over JSONB; quotes stored as ids (reports are frozen at
+  run time, so they resolve to stable text); manual regeneration; **quotes only on single-section
+  views** (the "All sections" view shows prose only), which also keeps each instructor's quote pool
+  scoped to their own sections. **UI wiring is a deferred follow-up** — the skill writes the data;
+  the rollup still shows placeholders until `app/faculty/interactions.html` is wired to read the
+  table (rules for that captured in the skill's "Deferred — UI wiring" section).
+
+### Added — `INTERACTION-AGGREGATION.md` spec for the cohort analysis aggregator
+
+Wrote the design spec for the not-yet-built **cohort aggregator** that fills the rollup's three AI panels
+(readiness summary, misconception trends, AI-picked showcase quotes), to disentangle it from the
+per-student `/interaction-backfill` repair tool. [`INTERACTION-AGGREGATION.md`](INTERACTION-AGGREGATION.md)
+covers the goal, inputs (all already in `report_data` — **no data-contract change**), the output shape, a
+proposed `interaction_analysis` table (draft migration `014`, read-RLS mirroring the reports, written by the
+scoped `claude_code_recker` role), the run steps (reuse `summarizeReports` for the numbers + batched
+text-only AI passes), how the rollup consumes it with graceful degradation, and seven open design decisions
+to settle before building. Also pointed the CLAUDE.md "Deferred" note at the spec. Documentation only.
+
+### Added — `interaction-backfill` skill + scoped DB role for direct database access
 
 Stood up direct, least-privilege database access for Claude Code and used it to backfill the
 schema-1 `report_data` on interaction reports that only had `report_markdown` — those lessons
@@ -22,9 +149,10 @@ were showing completion counts but an empty faculty rollup (no effort/understand
   touch the `service_role` key, the anon key, or any existing RLS policy, so `/preflight-analyze` is
   unaffected. Reached over the **Session pooler** (the direct host is IPv6-only here) from a project
   venv (`.venv/`, gitignored) via `psycopg2` ([`requirements.txt`](requirements.txt)); the credential
-  lives in a gitignored `.claude/skills/interaction-analyze/config.json`.
+  lives in a gitignored `supabase/admin/config.json` (next to the role SQL + scripts, not owned by any skill).
 - **`db_check.py`** — connectivity + permission self-test (read OK, write OK, DDL DENIED).
-- **`interaction-analyze` skill** — [`.claude/skills/interaction-analyze/SKILL.md`](.claude/skills/interaction-analyze/SKILL.md)
+- **`interaction-backfill` skill** (named for the one-off repair it is, leaving `interaction-analyze` free
+  for the future cohort aggregator) — [`.claude/skills/interaction-backfill/SKILL.md`](.claude/skills/interaction-backfill/SKILL.md)
   + [`supabase/admin/interaction_reports.py`](supabase/admin/interaction_reports.py) (`stats` /
   `list-missing` / `write`). Reads each report's Markdown and reconstructs a faithful schema-1
   `report_data` per [`INTERACTION-DATA-CONTRACT.md`](INTERACTION-DATA-CONTRACT.md): effort (with the
@@ -36,6 +164,10 @@ were showing completion counts but an empty faculty rollup (no effort/understand
 - **Backfilled the 8 existing reports** that lacked structured data (7 in lesson-02 charge/Coulomb,
   1 in lesson-03 vector form). Lesson-02 now rolls up to avg effort 3.43, 11/14 points, 2
   reflection-capped, 1 honor disclosure.
+- **Docs:** operator runbook [`supabase/admin/README.md`](supabase/admin/README.md), a committed
+  `config.json.template`, and an agent operating guide
+  [`supabase/admin/AGENT-DB-ACCESS.md`](supabase/admin/AGENT-DB-ACCESS.md) — how Claude iterations
+  connect/operate, the rules, and how the access was established.
 
 ### Changed — integrity/notable flag semantics sharpened (rollup + data contract)
 
@@ -61,7 +193,7 @@ because only one artifact exists and is easy to update):
 
 ### Changed — portal theme reskinned to GitHub Primer + a self-hosted display font
 
-Promoted the [`test-summary.html`](test-summary.html) sandbox's new look into the live `app/` portal.
+Promoted the [`test-summary.html`](test/test-summary.html) sandbox's new look into the live `app/` portal.
 The palette in [`app/css/styles.css`](app/css/styles.css) moved off Air Force navy/gold to a
 **GitHub-Primer** system — `--blue`/`--blue-lt` are now both `#0969da` (light) / `#4493f8` (dark),
 surfaces/borders/text and all four alert families adopt Primer values, and **USAFA gold is retained only
@@ -104,8 +236,8 @@ hardcoded surface/status color). Documentation only — no code or DB changes.
 ### Added — `test-summary.html` rollup sandbox (synthetic data, no DB) + `test.html` is now a hub
 
 To iterate on the lesson-rollup design without a database, the old `test.html` progress-bar playground was
-renamed to [`test-progressbar.html`](test-progressbar.html) and [`test.html`](test.html) is now a small hub
-that links to the sandboxes. New [`test-summary.html`](test-summary.html) is a fully standalone preview
+renamed to [`test-progressbar.html`](test/test-progressbar.html) and [`test.html`](test/test.html) is now a small hub
+that links to the sandboxes. New [`test-summary.html`](test/test-summary.html) is a fully standalone preview
 (palette copied in, 24 synthetic cadets across 3 sections, no DB and no CDN) of the next rollup iteration:
 
 - **Overall-understanding gauge removed** — the radar already conveys it.
