@@ -10,6 +10,36 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-06-25 — Matthew Recker
 
+### Changed — lesson rollup moved to its own Report page; Grade/Report dropped from the nav
+
+The lesson rollup that was a modal on [`app/faculty/interactions.html`](app/faculty/interactions.html)
+is now the body of [`app/faculty/report.html`](app/faculty/report.html) (replacing the old
+per-assignment submission report). The rollup is unchanged otherwise — same live, AI-free numeric
+aggregation via `summarizeReports`, same header completion badge + flag pills + section-scope control,
+and the same drill-in cascade (flag pill → flagged-students modal → student summary modal → full
+Markdown report modal), which moved to the Report page with it.
+
+- **Reached by link only**, never the nav: the page reads the lesson key from the URL
+  (`report.html?i=<slug>`, optional `&section=` to preselect a section scope) and **redirects to
+  Interactions** if no key is present. The Interactions completion controls (the %, the per-section
+  bars, and *View completion*) now navigate to the Report page instead of opening the modal, and the
+  dashboard spotlight's **Open full rollup →** points there for the lesson in view.
+- **Grade and Report removed from the faculty top nav** ([`app/js/nav.js`](app/js/nav.js)). Grade is
+  still reachable from the Roster page; Report is reached only via the links above.
+- A `.report-rollup` wrapper in [`app/css/styles.css`](app/css/styles.css) reproduces the modal's
+  24px padding so the tinted `.lesson-head`'s negative-margin bleed still reaches the edge as a page
+  body. The old `app/js/faculty-report.js` data layer is now unused (left in place).
+
+*Why:* the rollup is the report faculty actually want, and giving it a stable URL makes it linkable
+from the cards and the dashboard; removing the two redundant nav items declutters the bar.
+
+### Fixed — dashboard no longer shifts width when navigating lessons
+
+Added `scrollbar-gutter: stable` to `html` ([`app/css/styles.css`](app/css/styles.css)). Stepping
+through lessons on the dashboard changes page height, which toggled the scrollbar and shifted the
+centered content width; reserving the gutter keeps the width fixed. The layout still reflows at the
+responsive breakpoints when the window itself narrows.
+
 ### Changed — faculty dashboard rebuilt as the Just-in-Time-Teaching landing page
 
 Rolled the [`INBOX/dashboard-redesign.html`](INBOX/) exploration into the real app and wired it to

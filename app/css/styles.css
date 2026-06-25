@@ -129,7 +129,10 @@
   --shadow-lg: 0 12px 32px rgba(0,0,0,0.6);
 }
 
-html { color-scheme: light dark; }
+/* Always reserve the scrollbar gutter so navigating to a taller/shorter view (e.g. the dashboard
+   lesson arrows) can't toggle the scrollbar and shift the centered content width. The layout still
+   reflows at the responsive breakpoints when the window itself narrows. */
+html { color-scheme: light dark; scrollbar-gutter: stable; }
 [data-theme="dark"] html, html[data-theme="dark"] { color-scheme: dark; }
 
 body {
@@ -828,6 +831,15 @@ tr:last-child td { border-bottom: none; }
   background: var(--surface-hover); color: var(--text); border: 1px solid var(--border);
   border-radius: 7px; padding: 6px 11px; }
 .tbtn:hover { border-color: var(--blue-lt); }
+
+/* report.html hosts this rollup as the page body (not a modal). This wrapper reproduces the
+   modal's container (24px padding) so .lesson-head's negative-margin bleed still reaches the
+   edge. Padding stays fixed (no mobile shrink) so the bleed never overhangs. */
+.report-rollup { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: var(--shadow-sm); padding: 24px; margin-bottom: 20px; }
+.report-back { display: inline-block; margin-bottom: 14px; color: var(--muted);
+  text-decoration: none; font-size: 0.88em; font-weight: 600; }
+.report-back:hover { color: var(--text); }
 
 /* tinted header — bleeds to the modal/card edge */
 .lesson-head { margin: -24px -24px 24px; padding: 24px 24px 16px;

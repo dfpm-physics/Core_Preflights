@@ -8,177 +8,592 @@
   <link rel="stylesheet" href="../css/styles.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../js/config.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
 </head>
 <body>
   <header id="topnav"></header>
   <main class="page-wide" id="main">
-    <div class="page-head"><h1>Report</h1><div class="sub">Submission summary, class misconceptions, and raw responses.</div></div>
+    <a class="report-back" href="interactions.html">‹ All interactions</a>
 
-    <div class="toolbar">
-      <div class="field grow"><label for="asgn">Assignment</label><select id="asgn"></select></div>
-      <div class="field"><label for="section">Section</label><select id="section"></select></div>
+    <!-- Lesson rollup as the page body: a single course-wide summary (no per-student list).
+         Drill into individual students only through the header flag pills, which open the
+         flagged-students modal below. (Ported from the interactions report modal.) -->
+    <div class="report-rollup" id="report-body">
+      <!-- Tinted header: Oswald title + completion badge, then flag pills + the scope control. -->
+      <header class="lesson-head">
+        <div class="lh-top">
+          <h2 class="lh-title grow" id="rm-title">Lesson report</h2>
+          <div id="rm-comp"></div>
+        </div>
+        <div class="lh-sub">
+          <div class="hflags grow" id="rm-flagbar"></div>
+          <div class="lh-scope" id="rm-scope"></div>
+        </div>
+      </header>
+
+      <!-- Course-wide rollup, numeric, computed live from report_data (no AI): effort + radar
+           tiles · AI placeholders · understanding by objective · student responses. -->
+      <div class="lesson-summary" id="rm-aggregate"></div>
+
+      <!-- Analysis export lives on the bottom row, below the summary. -->
+      <div class="row" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);justify-content:flex-end">
+        <button class="btn btn-secondary btn-sm" id="rm-export"
+          title="Download a combined Markdown report (all your sections for this lesson) to hand to the analysis AI">Export for analysis ⬇</button>
+      </div>
     </div>
-
-    <div id="report-container"><div class="muted">Select an assignment to view its report.</div></div>
   </main>
+
+  <!-- Flagged-students modal: opened from a header flag pill. Lists the matching students by
+       name + section; clicking one opens their structured summary (student-modal). -->
+  <div class="modal-backdrop" id="flag-modal">
+    <div class="modal" style="max-width:460px">
+      <div class="modal-head"><h2 id="fm-title">Flagged students</h2><button class="modal-close" data-close>×</button></div>
+      <div id="fm-body"></div>
+    </div>
+  </div>
+
+  <!-- One student's structured summary (stacks above the flag list); links to the full report. -->
+  <div class="modal-backdrop" id="student-modal" style="z-index:75">
+    <div class="modal" style="max-width:640px">
+      <div class="modal-head"><h2 id="sm-title">Student</h2><button class="modal-close" data-close>×</button></div>
+      <div id="sm-body"></div>
+    </div>
+  </div>
+
+  <!-- Full Markdown report for one student (inert, user-controllable blob — sanitized at render). -->
+  <div class="modal-backdrop" id="fullreport-modal">
+    <div class="modal" style="max-width:760px">
+      <div class="modal-head"><h2 id="fr-title">Report</h2><button class="modal-close" data-close>×</button></div>
+      <div class="md-render" id="fr-body"></div>
+    </div>
+  </div>
 
   <script type="module">
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, lastFirst } from '../js/util.js';
-    import { reportAssignmentList, mySectionIds, allSectionIds, loadReportData } from '../js/faculty-report.js';
+    import { esc } from '../js/util.js';
+    import * as I from '../js/faculty-interactions.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
     if (!ctx) { /* redirected */ } else { init(); }
 
-    let qs = [], reportAnswers = {}, sampleMode = {}, currentSample = {};
-    let cachedMy = [], cachedAll = [], curAsgnId = null;
+    let vm = null, reportInteraction = null;
+    // Structured report data for the open lesson: rows = null while loading, [] once loaded.
+    let reportRows = null, reportByStudent = {};
 
-    const asgnSel = () => document.getElementById('asgn');
-    const secSel  = () => document.getElementById('section');
-    const container = () => document.getElementById('report-container');
-
-    async function init() {
+    function init() {
       initTheme();
-      renderNav(ctx, { active: 'report', onCourseChange: () => populate(true) });
-      asgnSel().addEventListener('change', loadView);
-      secSel().addEventListener('change', loadView);
-      container().addEventListener('click', onClick);
-      container().addEventListener('change', onChange);
-      await populate(false);
+      // Report is not a nav destination — switching course leaves this lesson's context, so
+      // send the user back to the interactions list rather than show a stale cross-course rollup.
+      renderNav(ctx, { active: '', onCourseChange: () => { location.href = 'interactions.html'; } });
+      wireModals();
+      start();
     }
 
-    async function populate(reset) {
-      if (!ctx.currentCourse) { container().innerHTML = `<div class="alert alert-warn">No course access.</div>`; return; }
-      const [asgns, my, all] = await Promise.all([
-        reportAssignmentList(ctx), mySectionIds(ctx),
-        ctx.isDirectorForCurrent() ? allSectionIds(ctx) : Promise.resolve([]),
-      ]);
-      cachedMy = my; cachedAll = all;
-      const keepA = reset ? '' : asgnSel().value;
-      asgnSel().innerHTML = '<option value="">— select assignment —</option>' +
-        asgns.map(a => `<option value="${esc(a.id)}"${a.id === keepA ? ' selected' : ''}>${esc(a.title)}</option>`).join('');
-      const director = ctx.isDirectorForCurrent();
-      const list = director ? all : my;
-      secSel().innerHTML = '<option value="">— all my sections —</option>'
-        + (director ? '<option value="__all__">All sections (entire course)</option>' : '')
-        + list.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
-      if (reset) container().innerHTML = `<div class="muted">Select an assignment to view its report.</div>`;
-      else if (asgnSel().value) loadView();
+    function wireModals() {
+      ['flag-modal', 'student-modal', 'fullreport-modal'].forEach(id => {
+        const m = document.getElementById(id);
+        m.addEventListener('click', (e) => { if (e.target.id === id || e.target.dataset.close !== undefined) m.classList.remove('open'); });
+      });
+      document.getElementById('rm-export').addEventListener('click', exportCorpus);
     }
 
-    function resolveSectionIds() {
-      const v = secSel().value;
-      return v === '__all__' ? cachedAll : v ? [v] : cachedMy;
+    // The lesson is chosen entirely by the URL (?i=slug, optional &section=). No picker — the page
+    // is only ever reached by a link (interactions card or dashboard). No key → back to interactions.
+    async function start() {
+      const params = new URLSearchParams(location.search);
+      const interactionId = params.get('i');
+      const section = params.get('section');
+      if (!interactionId) { location.replace('interactions.html'); return; }
+      if (!ctx.currentCourse) {
+        document.getElementById('rm-title').textContent = 'Report';
+        document.getElementById('rm-aggregate').innerHTML = `<div class="alert alert-warn">No course access.</div>`;
+        return;
+      }
+      document.getElementById('rm-aggregate').innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
+      vm = await I.loadManager(ctx);
+      const it = vm.interactions.find(x => x.id === interactionId);
+      if (!it) { location.replace('interactions.html'); return; }   // not in this course / not visible
+      showReport(interactionId, it.title, section);
     }
 
-    async function loadView() {
-      const asgnId = asgnSel().value;
-      curAsgnId = asgnId;
-      if (!asgnId) { container().innerHTML = `<div class="muted">Select an assignment to view its report.</div>`; return; }
-      container().innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
-      const r = await loadReportData(ctx, asgnId, resolveSectionIds());
-      if (!r.assignment) { container().innerHTML = `<div class="alert alert-error">Assignment not found.</div>`; return; }
-      qs = r.qs; reportAnswers = r.reportAnswers; sampleMode = {}; currentSample = {};
-      render(r);
-      qs.forEach((q, idx) => renderResponses(idx));
+    // ── Lesson rollup viewer (v3 — matches the test-summary sandbox) ──────────────
+    // `section` (optional) preselects a single section. The rollup is rendered into the page body:
+    // tinted header (Oswald title + completion badge + flag pills + scope control), bordered effort +
+    // radar tiles, AI placeholders, per-objective rows, and a student-responses panel. Every numeric
+    // aggregate comes from summarizeReports — no AI.
+    const f1 = x => x == null ? '—' : (Number.isInteger(x) ? String(x) : x.toFixed(1));
+    let reportScope = 'all';
+    const SEG_MAX = 5;                       // ≤ this many scope options → segmented control, else dropdown
+
+    function showReport(interactionId, title, section) {
+      reportInteraction = interactionId;
+      const it = vm.interactions.find(x => x.id === interactionId);
+      document.getElementById('rm-title').textContent = title || it?.title || 'Lesson report';
+      reportScope = (section && vm.sections.some(s => s.id === section)) ? section : 'all';
+
+      reportRows = null; reportByStudent = {};   // null → summary shows "computing…"
+      renderScope();
+      renderAggregate();
+
+      // Pull structured data for the whole roster once; the summary, flag lists, and responses
+      // panel all read it. RLS scopes which rows actually come back.
+      const allIds = vm.sections.flatMap(s => s.students.map(st => st.student_id));
+      I.loadInteractionData(interactionId, allIds).then(rows => {
+        if (reportInteraction !== interactionId) return;   // navigated to another lesson
+        reportRows = rows;
+        reportByStudent = Object.fromEntries(rows.map(r => [String(r.student_id), r]));
+        renderAggregate();
+      });
     }
 
-    function render(r) {
-      const total = r.students.length;
-      const summary = `
-        <div class="card">
-          <div class="card-title" style="margin-bottom:14px">Submission summary — ${esc(r.assignment.title)}</div>
-          <div class="report-stats">
-            <div class="report-stat"><div class="n" style="color:var(--green)">${r.submitted.length}</div><div class="l">Submitted</div></div>
-            <div class="report-stat"><div class="n" style="color:${r.missing.length ? 'var(--red)' : 'var(--muted)'}">${r.missing.length}</div><div class="l">Missing</div></div>
-            <div class="report-stat"><div class="n">${total}</div><div class="l">Total</div></div>
-          </div>
-        </div>`;
+    // Adaptive section scope: a segmented control when there are few sections, a dropdown when many.
+    // "All sections" = the whole-scope average.
+    function renderScope() {
+      const host = document.getElementById('rm-scope');
+      const secs = vm.sections, opts = ['all', ...secs.map(s => s.id)];
+      const label = v => v === 'all' ? 'All sections' : v;
+      if (opts.length <= SEG_MAX) {
+        host.innerHTML = `<div class="seg" role="group" aria-label="Section">`
+          + opts.map(v => `<button data-scope="${esc(v)}" aria-pressed="${reportScope === v}">${esc(label(v))}</button>`).join('') + `</div>`;
+        host.querySelector('.seg').addEventListener('click', e => {
+          const b = e.target.closest('button'); if (b) { reportScope = b.dataset.scope; renderScope(); renderAggregate(); }
+        });
+      } else {
+        host.innerHTML = `<select aria-label="Section"><option value="all" ${reportScope === 'all' ? 'selected' : ''}>All sections (${secs.length})</option>`
+          + secs.map(s => `<option value="${esc(s.id)}" ${reportScope === s.id ? 'selected' : ''}>${esc(s.id)} (${s.students.length})</option>`).join('') + `</select>`;
+        host.querySelector('select').addEventListener('change', e => { reportScope = e.target.value; renderAggregate(); });
+      }
+    }
 
-      const missing = r.missing.length
-        ? `<div class="card" style="border-left:4px solid var(--red)">
-            <div class="card-title" style="color:var(--red);margin-bottom:12px">Did not submit (${r.missing.length})</div>
-            <div class="table-wrap"><table><thead><tr><th>Name</th><th>Section</th><th>Student ID</th></tr></thead>
-            <tbody>${r.missing.map(s => `<tr><td>${esc(lastFirst(s.name))}</td><td>${esc(s.section_id)}</td><td>${s.student_id}</td></tr>`).join('')}</tbody>
-            </table></div></div>`
-        : `<div class="alert alert-success">✓ All students submitted this assignment.</div>`;
+    // Roster for the chosen scope, each student tagged with its section id.
+    function rosterInScope() {
+      const src = reportScope === 'all' ? vm.sections : vm.sections.filter(s => s.id === reportScope);
+      return src.flatMap(s => s.students.map(st => ({ ...st, section: s.id })));
+    }
 
-      const cards = r.qs.map((q, idx) => {
-        const ans = reportAnswers[idx];
-        const blank = ans.filter(a => !a.answer.trim()).length;
-        const parts = r.qSummaries[q.id] || [];
-        const summaryHTML = parts.length
-          ? `<ul class="summary-bullets">${parts.join('\n').split('\n').filter(l => l.trim()).map(l => `<li>${esc(l.replace(/^[•\-]\s*/, ''))}</li>`).join('')}</ul>`
-          : `<div class="summary-placeholder">No summary yet — run <code>/preflight-analyze ${esc(curAsgnId)}</code> to generate a class-level analysis.</div>`;
-        const sampleBtn = ans.length > 10 ? `<button class="btn btn-secondary btn-sm" data-sample="${idx}">🎲 Random 10</button>` : '';
-        return `<div class="card">
-          <div class="card-title">Q${idx + 1}: ${esc(q.text)}</div>
-          <div class="card-meta">${q.points} pt${q.points !== 1 ? 's' : ''} · ${ans.length - blank} answered · ${blank} blank</div>
-          <div style="margin-top:12px"><div class="q-eyebrow">Class summary &amp; misconceptions</div>${summaryHTML}</div>
-          <div style="margin-top:18px">
-            <div class="row wrap" style="justify-content:space-between;margin-bottom:8px">
-              <div class="q-eyebrow" style="margin:0">Raw responses</div>
-              <div class="q-controls">
-                <label class="check-inline" style="font-weight:500;color:var(--muted)"><input type="checkbox" data-attrib="${idx}"> Show names</label>
-                ${sampleBtn}
-                <button class="btn btn-secondary btn-sm" data-copy="${idx}">Copy</button>
-              </div>
-            </div>
-            <div class="responses-block" id="resp-${idx}"></div>
-          </div>
+    // Completion "Submitted" badge — submitted = a report row exists for the student (doneStudentIds).
+    function renderCompBadge(done, total) {
+      const full = total > 0 && done === total, p = total ? Math.round(done / total * 100) : 0;
+      document.getElementById('rm-comp').innerHTML =
+        `<span class="comp-block emph ${full ? 'comp-ok' : 'comp-warn'}" title="${p}% submitted">`
+        + `<span class="lab">Submitted</span><span class="num">${done}<span class="den">/${total}</span></span></span>`;
+    }
+
+    // Recompute completion + the rollup for the current scope. Called on open, on a scope change,
+    // and once the structured data finishes loading.
+    function renderAggregate() {
+      const el = document.getElementById('rm-aggregate');
+      if (!el) return;
+      const it = vm.interactions.find(x => x.id === reportInteraction);
+      const done = new Set(it?.doneStudentIds || []);
+      const roster = rosterInScope();
+      renderCompBadge(roster.filter(st => done.has(st.student_id)).length, roster.length);
+
+      if (reportRows === null) {
+        document.getElementById('rm-flagbar').innerHTML = `<span class="muted" style="font-size:.82em">Computing…</span>`;
+        el.innerHTML = `<div class="summary-placeholder">Computing course-wide summary…</div>`;
+        return;
+      }
+      const ids = new Set(roster.map(st => String(st.student_id)));
+      const rows = reportRows.filter(r => ids.has(String(r.student_id)));
+      const s = I.summarizeReports(rows);
+      s.objectives.forEach((o, i) => o.letter = String.fromCharCode(65 + i));   // A, B, C… (weakest first)
+      el.innerHTML = aggregateHTML(s, rows, roster);
+      renderFlagBar(s);
+      wireRollup();
+    }
+
+    // ── Rollup visual primitives (pure HTML builders; colors from CSS ramp tokens) ──
+    const RAMP5 = ['--s1', '--s2', '--s3', '--s4', '--s5'];
+    const zoneVar = v => `var(${RAMP5[Math.max(0, Math.min(4, Math.ceil(v) - 1))]})`;
+    // Effort histogram colors follow the 6-step distribution ramp (DESIGN.md: --d0…--d5 for 0–5
+    // histograms) — the single, shared effort-chart style (matches the dashboard spotlight).
+    const EFFORT_COL = ['var(--d0)', 'var(--d1)', 'var(--d2)', 'var(--d3)', 'var(--d4)', 'var(--d5)'];
+
+    // Effort distribution — vertical 0–5 bars with the submission count above each bar.
+    function effortChart(eff) {
+      const counts = eff.hist, max = Math.max(...counts, 1);
+      const cols = counts.map((c, i) =>
+        `<div class="eff-col" title="Effort ${i}: ${c}"><span class="eff-cnt">${c}</span>` +
+        `<div class="eff-bar" style="height:${c / max * 100}%;background:${EFFORT_COL[i]}"></div></div>`).join('');
+      return `<div class="eff-wrap"><div class="eff-bars">${cols}</div>
+        <div class="eff-x">${counts.map((_, i) => `<span>${i}</span>`).join('')}</div></div>`;
+    }
+
+    // Radar of understanding across objectives — single-letter axis labels (A,B,C…). Needs ≥3.
+    // Each hit circle carries the objective label + mean for the hover tooltip.
+    function radarSVG(objectives) {
+      const objs = objectives.filter(o => o.understanding != null).map(o => ({ letter: o.letter, m: o.understanding, label: o.label }));
+      if (objs.length < 3) return `<div class="muted" style="padding:24px;text-align:center">Radar needs ≥3 assessed objectives.</div>`;
+      const N = objs.length, cx = 150, cy = 150, R = 96;
+      const ang = i => (-Math.PI / 2) + (i * 2 * Math.PI / N);
+      const pt = (i, rv) => [cx + Math.cos(ang(i)) * R * (rv / 5), cy + Math.sin(ang(i)) * R * (rv / 5)];
+      let grid = '';
+      for (let lvl = 1; lvl <= 5; lvl++)
+        grid += `<polygon points="${objs.map((_, i) => pt(i, lvl).join(',')).join(' ')}" fill="none" stroke="var(--track-edge)" stroke-width="1" opacity="${lvl === 5 ? 0.9 : 0.4}"/>`;
+      let axes = '', labels = '', hits = '';
+      objs.forEach((o, i) => {
+        const [x, y] = pt(i, 5); axes += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--track-edge)" stroke-width="1"/>`;
+        const [lx, ly] = pt(i, 5.42);
+        labels += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="800" fill="var(--text)">${o.letter}</text>`;
+        hits += `<circle class="radar-hit" cx="${lx}" cy="${ly}" r="18" data-l="${esc(o.label)}" data-m="${f1(o.m)}"/>`;
+      });
+      const avg = objs.reduce((s, o) => s + o.m, 0) / objs.length, col = zoneVar(avg);
+      return `<svg width="300" height="190" viewBox="0 30 300 190" role="img" aria-label="Understanding by objective">${grid}${axes}
+        <polygon points="${objs.map((_, i) => pt(i, 3.5).join(',')).join(' ')}" fill="none" stroke="var(--blue-lt)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.85"/>
+        <polygon points="${objs.map((o, i) => pt(i, o.m).join(',')).join(' ')}" fill="color-mix(in srgb, ${col} 26%, transparent)" stroke="${col}" stroke-width="2.5"/>
+        ${objs.map((o, i) => { const [x, y] = pt(i, o.m); return `<circle cx="${x}" cy="${y}" r="3.5" fill="${col}"/>`; }).join('')}${labels}${hits}</svg>`;
+    }
+
+    // Fine-cell histogram for a 0–5 distribution: 5 column-groups interpolate the curve across the
+    // score range; integer scores land on the group boundaries, so the axis is ticked 0–5 at the gaps.
+    function lrFine5(counts) {
+      const max = Math.max(...counts, 1), COLS = 5, CELLS = 5, GAP = 9;   // GAP must match .lr-fine gap in CSS
+      const val = x => { const i = Math.max(0, Math.min(4, Math.floor(x))), t = x - i; return counts[i] + (counts[i + 1] - counts[i]) * t; };
+      let groups = '';
+      for (let c = 0; c < COLS; c++) {
+        let bars = '';
+        for (let k = 0; k < CELLS; k++) {
+          const h = Math.max(0, val(c + (k + 0.5) / CELLS));
+          bars += `<div class="lr-fbar" style="height:${h / max * 100}%;background:var(${RAMP5[c]})"></div>`;
+        }
+        groups += `<div class="lr-fgroup">${bars}</div>`;
+      }
+      const ticks = [0, 1, 2, 3, 4, 5].map(sv => {
+        if (sv === 0)    return `<span style="left:0">0</span>`;
+        if (sv === COLS) return `<span style="right:0">${COLS}</span>`;
+        const off = GAP * (sv / COLS - 0.5);
+        return `<span style="left:calc(${sv / COLS * 100}% ${off < 0 ? '-' : '+'} ${Math.abs(off).toFixed(2)}px);transform:translateX(-50%)">${sv}</span>`;
+      }).join('');
+      return `<div><div class="lr-fine">${groups}</div><div class="lr-fx">${ticks}</div></div>`;
+    }
+
+    // AI aggregator placeholder — the AI trend passes (effort summary, misconception clustering)
+    // aren't built yet, and the contract carries no place to store their output. Shows skeletons.
+    function aiPlaceholder(msg) {
+      return `<div class="ai-box">
+        <p class="ai-tbd">${esc(msg || 'Effort and engagement trends, reflection quality, and notable outliers will be summarized here once the analysis aggregator is built.')}</p>
+        <div class="sk"></div><div class="sk" style="width:88%"></div><div class="sk" style="width:70%"></div>
+      </div>`;
+    }
+
+    // Misconception prevalence — real bars from report_data: the share of submitted students who
+    // showed each misconception (most common first). Color intensifies with prevalence; the "major"
+    // count is noted. The AI trend narrative (clustering, spreading/fading) sits below as a TBD.
+    function mcBars(misconceptions, n) {
+      if (!misconceptions.length) return `<div class="muted" style="font-size:.85em">No misconceptions recorded in this scope.</div>`;
+      return misconceptions.slice(0, 8).map(m => {
+        const p = n ? Math.round(m.count / n * 100) : 0;
+        const col = p >= 50 ? 'var(--red)' : p >= 25 ? 'var(--gold)' : 'var(--blue-lt)';
+        const major = m.major ? ` · ${m.major} major` : '';
+        return `<div class="progress-row" style="margin-bottom:10px">
+          <span class="pr-label">${esc(m.label)}</span>
+          <span class="pr-count">${m.count}/${n} · ${p}%${major}</span>
+          <div class="pr-track"><div class="pr-fill" style="width:${Math.max(p, 3)}%;background:${col}"></div></div>
         </div>`;
       }).join('');
-
-      container().innerHTML = summary + missing + cards;
     }
 
-    function renderResponses(idx) {
-      const block = document.getElementById(`resp-${idx}`);
-      if (!block) return;
-      const all = reportAnswers[idx] || [];
-      const showNames = container().querySelector(`[data-attrib="${idx}"]`)?.checked;
-      let shown = all;
-      if (sampleMode[idx] && all.length > 10) shown = [...all].sort(() => Math.random() - 0.5).slice(0, 10);
-      currentSample[idx] = shown;
-      block.innerHTML = shown.map(a => `<div class="response-bullet">
-        <span class="bullet-dot">•</span>
-        <span class="bullet-text">${a.answer.trim() ? esc(a.answer) : '<em class="muted">No answer submitted.</em>'}</span>
-        <span class="attrib-name" style="display:${showNames ? '' : 'none'}">&nbsp;(${esc(a.name)} · ${esc(a.section)})</span>
-      </div>`).join('') || `<div class="muted" style="font-size:0.86em">No submissions.</div>`;
-      const btn = container().querySelector(`[data-sample="${idx}"]`);
-      if (btn) btn.textContent = sampleMode[idx] ? `Show all (${all.length})` : '🎲 Random 10';
+    // ── Student responses panel ──
+    // Real reading-reflection quotes (contract §5.5), attributed via the roster (name + section).
+    // The random sample is live now. "AI pick" rows are reserved for the per-section quotes the
+    // analysis aggregator will pick (stored with the other rollup AI output) — none exist until
+    // that store is built, so the panel shows a random sample (names hidden by default for class).
+    let respState = null;   // { ai:[], pool:[], sample:[], namesOn }
+    function buildResponses(rows, roster) {
+      const who = Object.fromEntries(roster.map(st => [String(st.student_id), st]));
+      const pool = [];
+      rows.forEach(r => {
+        const d = (r.report_data && typeof r.report_data === 'object') ? r.report_data : {};
+        const rr = d.reading_reflection;
+        if (!rr || typeof rr !== 'object' || !rr.text || rr.meaningful === false) return;
+        const w = who[String(r.student_id)] || {};
+        pool.push({ text: String(rr.text), name: w.name || '—', section: w.section || '' });
+      });
+      return { ai: [], pool };   // AI picks come from the aggregator's per-section output (TBD)
+    }
+    function sampleN(arr, n) {
+      const p = arr.slice(), out = [];
+      while (out.length < n && p.length) out.push(p.splice(Math.floor(Math.random() * p.length), 1)[0]);
+      return out;
+    }
+    function srCard(q, isAI, namesOn) {
+      return `<div class="sr-quote${isAI ? ' ai' : ''}" data-text="${esc(q.text)}" data-name="${esc(q.name)}" data-sec="${esc(q.section)}">
+        <span class="ck" aria-hidden="true"></span>
+        <div class="body">${isAI ? '<span class="sr-badge">AI pick</span>' : ''}
+          <div class="qt">${esc(q.text)}</div>
+          <div class="att"${namesOn ? '' : ' hidden'}>— ${esc(q.name)} · ${esc(q.section)}</div>
+        </div>
+      </div>`;
+    }
+    function responsesSection(rows, roster) {
+      const { ai, pool } = buildResponses(rows, roster);
+      if (!ai.length && !pool.length) { respState = null; return ''; }
+      respState = { ai, pool, sample: sampleN(pool, 5), namesOn: false };
+      const aiNote = ai.length ? `${ai.length} AI-suggested + ` : '';
+      return `<div class="lr-sec fw-panel" id="sr-sec">
+        <div class="lr-eyebrow">Student responses <span class="dim">· ${aiNote}${Math.min(5, pool.length)} random · select to copy for slides</span></div>
+        <div class="sr-controls">
+          <button class="switch" id="sr-names" type="button" aria-pressed="false"><span class="track"><span class="knob"></span></span>Show names</button>
+          <span class="spacer"></span>
+          ${pool.length > 5 ? `<button class="tbtn" id="sr-shuffle" type="button">↻ Shuffle random</button>` : ''}
+          <button class="tbtn" id="sr-copy" type="button">Copy selected</button>
+        </div>
+        <div class="sr-quotes" id="sr-list"></div>
+      </div>`;
+    }
+    function drawResponses() {
+      const list = document.getElementById('sr-list'); if (!list || !respState) return;
+      list.innerHTML = respState.ai.map(q => srCard(q, true, respState.namesOn)).join('')
+        + respState.sample.map(q => srCard(q, false, respState.namesOn)).join('');
+      const copyBtn = document.getElementById('sr-copy');
+      const updateCopy = () => { const n = list.querySelectorAll('.sr-quote.sel').length; copyBtn.textContent = n ? `Copy selected (${n})` : 'Copy selected'; };
+      list.querySelectorAll('.sr-quote').forEach(c => c.addEventListener('click', () => { c.classList.toggle('sel'); updateCopy(); }));
+      updateCopy();
+    }
+    function wireResponses() {
+      if (!document.getElementById('sr-sec') || !respState) return;
+      drawResponses();
+      const namesBtn = document.getElementById('sr-names');
+      namesBtn?.addEventListener('click', () => {
+        respState.namesOn = !respState.namesOn;
+        namesBtn.setAttribute('aria-pressed', respState.namesOn); namesBtn.classList.toggle('on', respState.namesOn);
+        document.querySelectorAll('#sr-list .att').forEach(a => { a.hidden = !respState.namesOn; });
+      });
+      document.getElementById('sr-shuffle')?.addEventListener('click', () => { respState.sample = sampleN(respState.pool, 5); drawResponses(); });
+      document.getElementById('sr-copy')?.addEventListener('click', async () => {
+        const sel = [...document.querySelectorAll('#sr-list .sr-quote.sel')]; if (!sel.length) return;
+        const btn = document.getElementById('sr-copy');
+        const text = sel.map(c => respState.namesOn ? `"${c.dataset.text}"\n— ${c.dataset.name} (${c.dataset.sec})` : `"${c.dataset.text}"`).join('\n\n');
+        try { await navigator.clipboard.writeText(text); const old = btn.textContent; btn.textContent = '✓ Copied'; setTimeout(() => { btn.textContent = old; }, 1200); }
+        catch (e) { btn.textContent = 'Copy blocked'; setTimeout(() => { const n = document.querySelectorAll('#sr-list .sr-quote.sel').length; btn.textContent = n ? `Copy selected (${n})` : 'Copy selected'; }, 1400); }
+      });
     }
 
-    function onClick(e) {
-      const s = e.target.closest('[data-sample]');
-      if (s) { const i = +s.dataset.sample; sampleMode[i] = !sampleMode[i]; renderResponses(i); return; }
-      const c = e.target.closest('[data-copy]');
-      if (c) copyQuestion(+c.dataset.copy, c);
-    }
-    function onChange(e) {
-      const a = e.target.closest('[data-attrib]');
-      if (!a) return;
-      const idx = +a.dataset.attrib;
-      document.getElementById(`resp-${idx}`)?.querySelectorAll('.attrib-name').forEach(el => el.style.display = a.checked ? '' : 'none');
+    // Rollup body — effort + radar tiles, AI placeholders, per-objective rows, student responses.
+    function aggregateHTML(s, rows, roster) {
+      if (!s.n) return `<div class="summary-placeholder">No reports submitted in this scope yet — the summary appears once students submit.</div>`;
+
+      const radar = radarSVG(s.objectives);
+      const row2 = `<div class="lr-sec sum-row2">
+        <div class="sum-cell">
+          <div class="lr-eyebrow">Effort distribution <span class="dim">${s.effort.avg == null ? '' : '· ' + f1(s.effort.avg) + ' / 5 avg'}</span></div>
+          ${effortChart(s.effort)}
+        </div>
+        <div class="sum-cell">
+          <div class="lr-eyebrow">Objective understanding <span class="dim">· dashed line marks threshold</span></div>
+          <div class="radar-wrap">${radar}<div class="radar-tip"></div></div>
+        </div>
+      </div>`;
+
+      const aiSec = `<div class="lr-sec fw-panel">
+        <div class="lr-eyebrow">AI readiness summary <span class="dim">· coming soon</span></div>
+        ${aiPlaceholder('A short read on how ready the class is for this lesson — engagement, where understanding is solid vs. shaky, and what to cover in class — will be generated here once the analysis aggregator is built.')}
+      </div>`;
+
+      const mcSec = `<div class="lr-sec fw-panel">
+        <div class="lr-eyebrow">Misconceptions <span class="dim">· share of submitted students, most common first</span></div>
+        ${mcBars(s.misconceptions, s.n)}
+        <div style="margin-top:16px">
+          <div class="lr-eyebrow">Trends across the class <span class="dim">· AI generated · coming soon</span></div>
+          ${aiPlaceholder('Which misconceptions are spreading or fading and how they cluster by section will be summarized here once the analysis aggregator is built.')}
+        </div>
+      </div>`;
+
+      const objRows = s.objectives.map(o => `<div class="obj-row">
+        <div class="obj-row-head">
+          <span class="nm"><b class="ol-key sm">${o.letter}</b>${esc(o.label)}</span>
+          <span class="mu">${o.understanding == null ? 'n/a' : f1(o.understanding) + '/5'} · ${o.assessed} assessed</span></div>
+        ${lrFine5(o.dist)}
+      </div>`).join('');
+      const objSec = s.objectives.length ? `<div class="lr-sec obj-box">
+        <div class="lr-eyebrow">Understanding by objective <span class="dim">· weakest first</span></div>${objRows}</div>` : '';
+
+      return row2 + aiSec + mcSec + objSec + responsesSection(rows, roster);
     }
 
-    function copyQuestion(idx, btn) {
-      const showNames = container().querySelector(`[data-attrib="${idx}"]`)?.checked;
-      const q = qs[idx];
-      const answers = currentSample[idx] || reportAnswers[idx] || [];
-      const header = `Q${idx + 1}: ${q?.text || ''}\n${'─'.repeat(60)}\n\n`;
-      const body = answers.map(a => `• ${a.answer.trim() || '[No answer submitted]'}${showNames ? ` (${a.name} · ${a.section})` : ''}`).join('\n');
-      const text = header + body;
-      const flash = () => { const o = btn.textContent; btn.textContent = '✓ Copied'; setTimeout(() => btn.textContent = o, 1500); };
-      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(flash).catch(() => fallbackCopy(text, flash));
-      else fallbackCopy(text, flash);
+    // ── Flags: header pills → flagged-students list → one student summary → full report ──
+    const FLAGS = [
+      { key: 'notable',         label: 'Notable',                 cls: 'green',  icon: '★', desc: 'Exemplary work — the strongest understanding or a notable extension beyond the objectives.', pred: d => d?.flags?.notable === true,         count: s => s.flags.notable },
+      { key: 'needs_follow_up', label: 'Needs follow-up',         cls: '',       icon: '⚑', desc: 'Low effort or weak understanding — a good candidate to check in with.',                    pred: d => d?.flags?.needs_follow_up === true, count: s => s.flags.needs_follow_up },
+      { key: 'refl_capped',     label: 'Reflection capped',       cls: 'gold',   icon: '✎', desc: 'Reading reflection was not meaningful, so effort was capped at 2.',                        pred: d => !!d?.reading_reflection && d.reading_reflection.meaningful === false, count: s => s.reflection.capped },
+      { key: 'honor_disclosed', label: 'Inappropriate resources', cls: 'danger', icon: '⚠', desc: 'Used another AI or other disallowed help/resources — inappropriate for this assignment. Talking with a classmate beforehand is fine and is not flagged.', pred: d => d?.honor?.status === 'disclosed', count: s => s.honor.disclosed },
+      { key: 'honor_concern',   label: 'Integrity concern',       cls: 'danger', icon: '⚖', desc: 'Possible integrity problem in the conversation — e.g. manipulating the AI into inflating the report or gaming the effort grade.', pred: d => d?.honor?.status === 'concern',   count: s => s.honor.concern },
+    ];
+
+    // Header flag pills — compact icon + count, hover for detail, click to list the students.
+    function renderFlagBar(s) {
+      const bar = document.getElementById('rm-flagbar');
+      const pills = FLAGS.map(f => {
+        const c = f.count(s);
+        if (!c) return '';
+        return `<button class="fpill ${f.cls}" data-flag="${f.key}">
+          <span class="ic" aria-hidden="true">${f.icon}</span><span class="ct">${c}</span>
+          <span class="tip"><b>${esc(f.label)} · ${c}</b>${esc(f.desc)}<span class="go">Click to view students ›</span></span>
+        </button>`;
+      }).filter(Boolean).join('');
+      bar.innerHTML = pills || `<span class="muted" style="font-size:.82em">No flags raised in this scope.</span>`;
+      bar.querySelectorAll('[data-flag]').forEach(b => b.addEventListener('click', () => openFlagList(b.dataset.flag)));
     }
-    function fallbackCopy(text, flash) {
-      const ta = document.createElement('textarea'); ta.value = text;
-      ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
-      try { document.execCommand('copy'); flash(); } catch (_) {} document.body.removeChild(ta);
+
+    // After the rollup HTML is in the DOM: wire the radar hover tooltips + the responses panel.
+    function wireRollup() {
+      const rwrap = document.querySelector('#rm-aggregate .radar-wrap'), rtip = rwrap && rwrap.querySelector('.radar-tip');
+      if (rwrap && rtip) rwrap.querySelectorAll('.radar-hit').forEach(h => {
+        h.addEventListener('mouseenter', () => {
+          rtip.innerHTML = `<span class="rt-l"></span><span class="rt-m"></span>`;
+          rtip.querySelector('.rt-l').textContent = h.dataset.l;
+          rtip.querySelector('.rt-m').textContent = h.dataset.m + ' / 5 mean';
+          const r = h.getBoundingClientRect(), w = rwrap.getBoundingClientRect();
+          rtip.style.left = (r.left + r.width / 2 - w.left) + 'px';
+          rtip.style.top  = (r.top - w.top) + 'px';
+          rtip.style.display = 'block';
+        });
+        h.addEventListener('mouseleave', () => { rtip.style.display = 'none'; });
+      });
+      wireResponses();
+    }
+
+    // The students (in scope) whose submitted report fired a given flag.
+    function studentsForFlag(flagKey) {
+      const it = vm.interactions.find(x => x.id === reportInteraction);
+      const done = new Set(it?.doneStudentIds || []);
+      const f = FLAGS.find(x => x.key === flagKey);
+      if (!f) return [];
+      return rosterInScope().filter(st => {
+        const row = reportByStudent[String(st.student_id)];
+        return done.has(st.student_id) && row && f.pred(row.report_data);
+      });
+    }
+
+    // Flag pill → modal listing the matching students by name + section only.
+    function openFlagList(flagKey) {
+      const f = FLAGS.find(x => x.key === flagKey);
+      const matched = studentsForFlag(flagKey);
+      document.getElementById('fm-title').textContent = `${f ? f.label : flagKey} · ${matched.length} student${matched.length === 1 ? '' : 's'}`;
+      const body = document.getElementById('fm-body');
+      body.innerHTML = matched.length ? matched.map(st =>
+        `<button class="fl-row" data-id="${esc(st.student_id)}" data-name="${esc(st.name)}" data-sec="${esc(st.section)}"><span class="fl-name">${esc(st.name)}</span><span class="fl-sec">${esc(st.section)}</span><span class="fl-go">View ›</span></button>`).join('')
+        : `<div class="muted">No students match this flag in scope.</div>`;
+      body.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => openStudent(b.dataset.id, b.dataset.name, b.dataset.sec)));
+      document.getElementById('flag-modal').classList.add('open');
+    }
+
+    // A student → their structured summary panel (stacks above the flag list), with a button to the full report.
+    function openStudent(studentId, name, section) {
+      const row = reportByStudent[String(studentId)];
+      document.getElementById('sm-title').textContent = `${name}${section ? ' · ' + section : ''}`;
+      const panel = studentPanelHTML(row) || '<div class="muted" style="font-size:0.86em">No structured summary for this report.</div>';
+      document.getElementById('sm-body').innerHTML = panel
+        + `<div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn btn-secondary btn-sm" id="sm-full">View full report ↗</button></div>`;
+      document.getElementById('sm-full').addEventListener('click', () => openFullReport(studentId, name));
+      document.getElementById('student-modal').classList.add('open');
+    }
+
+    // The full Markdown report for one student, in its own modal (stacks above the student summary).
+    async function openFullReport(studentId, name) {
+      document.getElementById('fr-title').textContent = name || 'Report';
+      const body = document.getElementById('fr-body');
+      body.innerHTML = `<div class="center-load"><span class="spinner"></span></div>`;
+      document.getElementById('fullreport-modal').classList.add('open');
+      const md = await I.loadReport(reportInteraction, studentId);
+      // Report markdown is an inert, user-controllable blob — sanitize at render time.
+      body.innerHTML = md ? DOMPurify.sanitize(marked.parse(md))
+        : `<div class="alert alert-info">This student hasn't submitted a report for this interaction yet.</div>`;
+    }
+
+    // Per-student structured panel shown above the Markdown report. Built from report_data
+    // (the contract's `d`); all free-text fields are escaped (inert). Absent for legacy
+    // reports submitted before structured data existed.
+    function studentPanelHTML(row) {
+      const d = (row && row.report_data && typeof row.report_data === 'object') ? row.report_data : null;
+      const eff = (row && row.effort != null) ? row.effort : (d ? (Number.isInteger(d.effort) ? d.effort : null) : null);
+      const pts = (row && row.score != null) ? row.score : null;
+      if (d == null && eff == null) return '';   // legacy report — nothing structured to show
+
+      const effCls = eff == null ? 'pending' : eff >= 3 ? 'full' : eff >= 1 ? 'partial' : 'zero';
+      const meta = [];
+      if (d?.completed === true) meta.push('✓ completed flow');
+      else if (d?.completed === false) meta.push('did not complete');
+      if (typeof d?.duration_min === 'number') meta.push(`${d.duration_min} min`);
+      if (Number.isInteger(d?.message_count)) meta.push(`${d.message_count} msgs`);
+
+      const sect = (label, html) => html ? `<div class="sp-row"><span class="sp-k">${esc(label)}</span><span class="sp-v">${html}</span></div>` : '';
+      const num = v => Number.isInteger(v) && v >= 0 && v <= 5 ? `${v}/5` : null;
+
+      const understanding = [
+        d && num(d.overall_understanding) ? `assessed ${num(d.overall_understanding)}` : null,
+        d && num(d.self_rated_understanding) ? `self-rated ${num(d.self_rated_understanding)}` : null,
+      ].filter(Boolean).join(' · ');
+
+      const objs = (d && Array.isArray(d.objectives) ? d.objectives : [])
+        .filter(o => o && o.key).map(o => `<span class="tag">${esc(o.label || o.key)}${num(o.understanding) ? ` <b>${num(o.understanding)}</b>` : ''}</span>`).join('');
+
+      const mcs = (d && Array.isArray(d.misconceptions) ? d.misconceptions : [])
+        .filter(m => m && m.id).map(m =>
+          `<li>${esc(m.label || m.id)}${m.severity ? ` <span class="tag ${m.severity === 'major' ? 'gold' : ''}">${esc(m.severity)}</span>` : ''}${m.description ? ` — ${esc(m.description)}` : ''}</li>`).join('');
+
+      const r = d?.reading_reflection;
+      const reflBits = [];
+      if (r && typeof r.meaningful === 'boolean') reflBits.push(r.meaningful ? '<span class="tag">meaningful ✓</span>' : '<span class="tag gold">not meaningful — effort capped</span>');
+      if (r && num(r.engagement)) reflBits.push(`engagement ${num(r.engagement)}`);
+      if (r && r.sentiment) reflBits.push(esc(r.sentiment));
+      const reflText = r && r.text ? `<div class="sp-quote">${esc(r.text)}</div>` : '';
+
+      const honor = d?.honor;
+      const honorHTML = honor && (honor.status === 'disclosed' || honor.status === 'concern')
+        ? `<span class="tag ${honor.status === 'concern' ? 'danger' : 'gold'}">${esc(honor.status)}</span>${honor.note ? ` ${esc(honor.note)}` : ''}` : '';
+
+      const flags = d?.flags;
+      const flagBits = [];
+      if (flags?.needs_follow_up === true) flagBits.push('<span class="tag gold">needs follow-up</span>');
+      if (flags?.notable === true) flagBits.push('<span class="tag blue">notable</span>');
+      if (flags?.note) flagBits.push(esc(flags.note));
+
+      return `<div class="stu-panel">
+        <div class="row wrap" style="gap:10px;align-items:center">
+          <span class="score-badge ${effCls}">Effort ${eff == null ? '—' : eff}/5${pts != null ? ` · ${pts} pt${pts === 1 ? '' : 's'}` : ''}</span>
+          ${meta.length ? `<span class="muted" style="font-size:0.82em">${esc(meta.join(' · '))}</span>` : ''}
+        </div>
+        ${d?.effort_rationale ? `<div class="sp-note">${esc(d.effort_rationale)}</div>` : ''}
+        ${sect('Understanding', understanding ? esc(understanding) : '')}
+        ${sect('Objectives', objs)}
+        ${mcs ? `<div class="sp-row"><span class="sp-k">Misconceptions</span><span class="sp-v"><ul class="sp-list">${mcs}</ul></span></div>` : ''}
+        ${reflBits.length || reflText ? `<div class="sp-row"><span class="sp-k">Reflection</span><span class="sp-v">${reflBits.join(' · ')}${reflText}</span></div>` : ''}
+        ${honorHTML ? sect('Integrity', honorHTML) : ''}
+        ${flagBits.length ? sect('Flags', flagBits.join(' · ')) : ''}
+        ${d?.ai_summary ? sect('Summary', esc(d.ai_summary)) : ''}
+        ${d?.key_strengths ? sect('Strengths', esc(d.key_strengths)) : ''}
+        ${d?.recommended_review ? sect('Review', esc(d.recommended_review)) : ''}
+      </div>`;
+    }
+
+    // Build + download the combined report for this lesson (all in-scope sections),
+    // for handoff to the analysis aggregator.
+    function downloadText(filename, text) {
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    }
+    async function exportCorpus() {
+      if (!reportInteraction) return;
+      const btn = document.getElementById('rm-export');
+      const label = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Preparing…';
+      try {
+        const { text, studentCount } = await I.buildLessonCorpus(ctx, reportInteraction);
+        if (!studentCount) { alert('No reports to export for this lesson yet.'); return; }
+        downloadText(`${reportInteraction}-reports.md`, text);
+      } catch (e) {
+        alert('Could not build the export: ' + (e?.message || e));
+      } finally {
+        btn.disabled = false; btn.textContent = label;
+      }
     }
   </script>
 </body>

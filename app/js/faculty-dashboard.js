@@ -251,7 +251,7 @@ function spotlight(a, ctx) {
           <button data-nav="next" ${vIdx === last ? 'disabled' : ''} aria-label="Next lesson">▶</button>
         </div>
         ${todayBtn}
-        <a class="btn btn-ghost btn-sm" href="interactions.html" title="Open the full lesson rollup">Open full rollup →</a>
+        <a class="btn btn-ghost btn-sm" href="report.html?i=${encodeURIComponent(L.id)}" title="Open the full lesson rollup">Open full rollup →</a>
       </div>
       <div class="spot">
         <div class="spot-col ring-wrap">
