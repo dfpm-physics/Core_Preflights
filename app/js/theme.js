@@ -40,14 +40,15 @@ export function toggleTheme() {
 }
 
 /** Sync any [data-theme-toggle] button's icon/label to the active theme.
- *  Shows the icon of the theme it will switch TO (sun in dark mode, moon in light). */
+ *  Shows the icon of the ACTIVE theme (moon in dark mode, sun in light); the
+ *  aria-label/title still describe the action the click performs. */
 export function updateToggleButtons() {
   const dark = currentTheme() === 'dark';
   document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
     btn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
     btn.title = dark ? 'Light mode' : 'Dark mode';
     const span = btn.querySelector('[data-theme-icon]') || btn;
-    span.innerHTML = iconHTML(dark ? 'sun' : 'moon', dark ? '☀️' : '🌙', 'ic');
+    span.innerHTML = iconHTML(dark ? 'moon' : 'sun', dark ? '🌙' : '☀️', 'ic');
   });
 }
 

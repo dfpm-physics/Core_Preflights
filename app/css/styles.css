@@ -1161,3 +1161,42 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
   .stat-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
   .rollup-grid { grid-template-columns: 1fr; }
 }
+
+/* ============================================================= *
+ *  Lesson builder (faculty/lessons.html) — the inline preflight +
+ *  interaction authoring surface inside the New/Edit Lesson modal.
+ *  Reuses .field, .seg, .btn, .modal, .alert, .score-badge, .check-inline;
+ *  the compact pieces below are net-new to this tool. Tokens only.
+ * ============================================================= */
+
+/* a bordered sub-panel that groups one part of the editor (objectives, a component) */
+.lb-section { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px;
+  margin-top: 14px; background: var(--surface-sunken); }
+.lb-section > .lb-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.lb-section > .lb-head .lb-ttl { font-size: 0.92em; font-weight: 700; color: var(--text); }
+.lb-section > .lb-head .grow { flex: 1; }
+
+/* one objective row: key + label + remove */
+.lb-obj-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+.lb-obj-row .lb-key { flex: 0 0 38%; min-width: 120px; }
+.lb-obj-row .lb-lab { flex: 1; min-width: 140px; }
+
+/* one authored preflight question */
+.lb-q { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px;
+  margin-bottom: 10px; background: var(--card); }
+.lb-q-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.lb-q-head .lb-qn { font-weight: 700; font-size: 0.9em; }
+.lb-q-head .grow { flex: 1; }
+.lb-qbadge { font-size: 0.7em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 2px 8px; border-radius: 999px; background: var(--mc-sel-bg); color: var(--text-soft); }
+.lb-qbadge.numerical       { background: var(--alert-ok-bg);   color: var(--alert-ok-fg); }
+.lb-qbadge.multiple_choice { background: var(--alert-warn-bg); color: var(--alert-warn-fg); }
+.lb-q .lb-opt { margin-bottom: 4px; }
+.lb-q .lb-grid2 { display: flex; gap: 12px; flex-wrap: wrap; }
+.lb-q .lb-grid2 > .field { flex: 1; min-width: 130px; }
+.lb-qbadge.reflection { background: var(--mc-sel-bg); color: var(--blue-lt); }
+/* A field with helper text below sits taller than its hint-less neighbours; the default
+   .row centring then nudges the taller field's input up. Top-align items in the editor so
+   every input in a row lines up regardless of which ones carry a .field-hint. */
+#lesson-modal .row { align-items: flex-start; }
+#lesson-modal .lb-q .lb-grid2 { align-items: flex-start; }

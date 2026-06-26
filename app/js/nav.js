@@ -20,6 +20,7 @@ const STUDENT_LINKS = [
 const FACULTY_LINKS = [
   { key: 'dashboard',    label: 'Dashboard',    href: 'dashboard.html',         icon: 'dashboard',     emoji: '🏠' },
   { key: 'roster',       label: 'Roster',       href: 'roster.html',            icon: 'roster',        emoji: '🧑‍🎓', directorOnly: true },
+  { key: 'lessons',      label: 'Lessons',      href: 'lessons.html',           icon: 'assignments',   emoji: '📚', directorOnly: true },
   { key: 'interactions', label: 'Interactions', href: 'interactions.html',      icon: 'interactions',  emoji: '💡' },
   { key: 'admin',        label: 'Admin',        href: legacyUrl('admin.html'),  icon: 'settings',      emoji: '⚙️', external: true },
 ];

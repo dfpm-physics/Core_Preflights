@@ -389,6 +389,11 @@ choice lesson has both submission types, so its merge can't be routed by type �
 objective-aggregator. (Renaming it `/lesson-aggregate` would be more accurate, but is cosmetic and can
 wait.) The numeric bars stay computed live in the browser as today; only the AI prose layer is stored.
 
+The exact panel set, the shape + length + style of every AI-written field, and which skill owns which
+field for which lesson type are the **output contract** in [`ROLLUP-AGREEMENT.md`](ROLLUP-AGREEMENT.md)
+— the doc to read before editing either skill or the rollup UI. Its core rule: one rollup, one style,
+with the breakdown axis (objective vs. question) as the *only* permitted divergence by lesson type.
+
 ---
 
 ## 13. Research data & export
@@ -426,10 +431,12 @@ or a small admin script using the scoped DB role.
 
 Each phase is independently shippable and leaves the system working.
 
-0. **Confirm this doc** + resolve §16 open questions. *(no code)*
+0. **Confirm this doc** + resolve §16 open questions. *(no code)* — **done.**
 1. **Schema** — migration 016: `lessons` + `lesson_completions` + the grade/lock/finalize triggers +
    the draft `is_final` flags + RLS. Additive, reversible, nothing else changes. Verify in browser
-   against Supabase per the no-Node workflow.
+   against Supabase per the no-Node workflow. — **✅ built 2026-06-26** (`supabase/migrations/016_lessons.sql`),
+   scoped to the additive tables + the grade(`lc_score_from_effort`)/lock(`lc_lock_path`) triggers + RLS;
+   the row-*creating* finalize triggers and the `responses.is_final` draft flag are deferred to Phase 2.
 2. **Finalize triggers + guards** — create the `lesson_completions` row when a `responses` /
    `preflight_interaction_reports` draft is marked final (first-finalize-wins + path-lock); add the
    receiver/RLS draft-write + section-day due-cutoff guards (D8/D9). Contract untouched. Test with seed
@@ -438,7 +445,10 @@ Each phase is independently shippable and leaves the system working.
    row; add the question→objective and reading-reflection-role conventions; perform the due-date
    auto-promote of leftover drafts.
 4. **Faculty lesson creation tool** — author lessons, attach/build both components, set policy +
-   objectives + due dates.
+   objectives + due dates. — **✅ built 2026-06-26** (`app/faculty/lessons.html` + `app/js/faculty-lessons.js`,
+   director-gated **Lessons** nav entry). Both component types are authored **inline** (new-content-only —
+   no "attach existing assignment" path); the preflight question builder is ported into the portal with
+   the per-question objective map + the `role:"reading_reflection"` marker.
 5. **Student lesson view + Save/Submit** — draft autosave, explicit Submit (the lock), required/choice
    display, post-final / post-due lock UX, unified 2-pt grade.
 6. **Unified rollup + research export** — merged by-objective rollup for choice; extend

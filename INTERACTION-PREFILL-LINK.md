@@ -94,3 +94,50 @@ re-open or resubmit it.
   fresh `url`) cleanly refreshes the existing listing rather than creating a duplicate.
 - Keep the slug **stable**: it's the permanent id and is referenced by every student report.
   Don't change it after the first reports come in.
+
+---
+
+## Also: prefilling the unified **Lessons** tool
+
+The newer `app/faculty/lessons.html` tool groups a written **Free-Response** preflight and an **AI
+Interaction** under one *lesson* (see `LESSON-UNIFICATION.md`). It accepts the **same style** of
+prefill link, so an artifact can open the **New-Lesson** form ready to review & save. Use this when the
+interaction is part of a lesson (the usual case going forward); use the interactions-manager link above
+only for a standalone interaction.
+
+**Base:** `https://dfpm-physics.github.io/Core_Preflights/app/faculty/lessons.html`
+
+| Param | Meaning | Notes |
+|-------|---------|-------|
+| `new` | Trigger flag — `1`. | |
+| `id` | **Lesson slug** *and*, by default, the **interaction slug**. | One slug serves both unless `iid` overrides. Must equal the artifact's `#i=`. |
+| `course` | Course id. | `phys-215` / `phys-110` |
+| `title` | Lesson title. | |
+| `desc` | Lesson description. | optional |
+| `policy` | `preflight` \| `interaction` \| `choice`. | An artifact-only lesson → `interaction`; a both-paths lesson → `choice`. |
+| `url` | The artifact's public URL. | maps to the interaction's `artifact_url` |
+| `iid` | Interaction slug, **only if different** from `id`. | optional; defaults to `id` |
+| `ititle` / `idesc` | Interaction title / description. | optional; default to the lesson's |
+| `obj` | Shared objectives, `key:Label` pairs separated by `|`. | e.g. `obj=force-superposition:Force superposition\|polarization:Polarization` |
+| `num` | Lesson number (ordering). | optional |
+| `due_m` / `due_t` | M-day / T-day due dates, `YYYY-MM-DD`. | optional |
+| `pub` | `1` publish now; omit/`0` draft. | |
+
+```js
+const SLUG = 'lesson-02-charge';   // one slug → lesson id AND artifact #i=
+const base = 'https://dfpm-physics.github.io/Core_Preflights/app/faculty/lessons.html';
+const params = new URLSearchParams({
+  new: '1', id: SLUG, course: 'phys-215',
+  title: "Lesson 02 — Charge & Coulomb's Law",
+  policy: 'choice',                                  // both a free-response preflight and this artifact
+  url: artifactPublicUrl,
+  obj: 'force-superposition:Force superposition|charge-model:Charge model',
+  pub: '0',
+});
+const lessonPrefillLink = `${base}?${params.toString()}`;
+```
+
+The director reviews the auto-filled lesson (the reading-reflection Q1 is pre-seeded for the
+free-response side), then clicks **Save lesson**. Same guardrails as above: directors only, nothing
+writes until Save, re-using an existing `id` opens it for update, and the query string is cleared after
+the form opens.

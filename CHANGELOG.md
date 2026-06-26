@@ -8,7 +8,113 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-06-26 — Matthew Recker
+
+### Fixed — theme toggle icon now reflects the current theme, not the destination
+
+The light/dark toggle ([`app/js/theme.js`](app/js/theme.js), `updateToggleButtons`) showed the icon of the
+theme it would switch *to* (sun while in dark mode, moon while in light) — Matthew read this backwards and
+expected the icon to indicate the *current* state. Flipped the icon mapping so it now shows the **active**
+theme (moon in dark mode, sun in light). The `aria-label`/`title` are unchanged — they still describe the
+action the click performs ("Switch to light/dark mode"), which is the convention for a toggle button.
+
+### Changed — per-objective understanding histogram now uses an adaptive KDE (`lrFine5`)
+
+The lesson rollup's "Objective understanding" chart ([`app/faculty/report.html`](app/faculty/report.html),
+`lrFine5`) previously drew its 25-cell curve by **linearly interpolating** between the 6 integer
+score-bins. That smeared a single data point into a lopsided triangle spanning ±1 score and lit up
+more columns than there were distinct scores — Matthew noticed both a phantom spread on a 1-point
+objective and "more raised columns than there should be."
+
+Replaced the interpolation with an **adaptive (variable-bandwidth) kernel density estimate** —
+Abramson's square-root law: each occupied bin contributes one unit-area Gaussian per student,
+centered on its integer score, with bandwidth `h ∝ 1/√(count)`. Sparse bins (1–2 students) render
+a soft, *symmetric* bump (honest uncertainty); well-populated bins stay tall and sharp; area per
+student is conserved. Tuned to `H0 = 0.49, HMIN = 0.30, HMAX = 0.45` (visual only). **Purely a
+rendering change** — input is still the integer histogram from `summarizeReports`, so no
+data-contract, skill, or `int05` changes, and the AI keeps emitting integer 0–5 understanding
+scores (no false precision).
+
+Also added a **director-only floating "Histogram smoothing · KDE" tuner** on the report page:
+three live sliders (`H0/HMIN/HMAX`) that re-render the objective histograms instantly and a "Copy"
+button for the resulting const line. Gated via `ctx.isDirectorForCurrent()` (directors + global
+admins only; hidden from instructors). The `KDE` object holds the live defaults, so baking in a new
+value is a one-line edit. Self-contained for easy later removal.
+
+### Added — faculty lesson generation tool + migration 016 (`lessons` foundation)
+
+Built **Phase 1 + Phase 4** of [`LESSON-UNIFICATION.md`](LESSON-UNIFICATION.md): the schema that
+groups a written preflight and a Claude interaction under one **lesson**, and the faculty tool that
+authors them.
+
+- **Migration [`supabase/migrations/016_lessons.sql`](supabase/migrations/016_lessons.sql)** —
+  purely additive (mirrors 012/014). Creates `lessons` (slug, course, `completion_policy`
+  ∈ {preflight, interaction, choice}, shared `objectives[]`, M/T due dates, `preflight_id →
+  assignments`, `interaction_id → interactions`, the policy↔components CHECK) and
+  `lesson_completions` (the unified 2-point grade, `UNIQUE(student, lesson)`). Includes the
+  grade trigger (`lc_score_from_effort`, points-from-effort, reusing the migration-013 curve) and
+  the path-lock trigger (`lc_lock_path`, path immutable once set), plus RLS that mirrors
+  `interactions` (lessons) and `preflight_interaction_reports` (completions). **Deliberately defers**
+  the row-*creating* finalize triggers and the D8/D9 due-cutoff/Submit guards to Phase 2.
+- **[`app/faculty/lessons.html`](app/faculty/lessons.html)** + **[`app/js/faculty-lessons.js`](app/js/faculty-lessons.js)**
+  — a new director-gated **Lessons** page (added to `FACULTY_LINKS` in
+  [`app/js/nav.js`](app/js/nav.js)). One screen lists lessons and, in the New/Edit modal, **authors
+  both component types inline**: a completion-policy segmented control that shows/requires the right
+  components, a shared objectives editor, a ported preflight question builder (free-response /
+  numerical / multiple-choice, each mapped to an objective and one marked the
+  `role:"reading_reflection"` question), and the interaction fields (slug that must match the
+  artifact's `#i=`, URL, title, description). Save orchestrates the writes — upsert the underlying
+  `assignments` and/or `interactions` rows, then the `lessons` row that points at them; publish
+  cascades to the components; delete removes only the lesson grouping (component rows and student
+  work are kept). Client validation mirrors the DB policy↔components CHECK and the
+  exactly-one-reading-reflection rule. New `.lb-*` builder classes added to
+  [`app/css/styles.css`](app/css/styles.css) (tokens only, both themes).
+
+*Why:* the lesson model was approved (`LESSON-UNIFICATION.md`, decisions D1–D9) but had no table and
+no authoring surface; this lands the foundation and the director-facing creation tool so real lessons
+can be built. **Scope:** authoring only — the student lesson view, the Save/Submit lifecycle, the
+completion-creating triggers, the `/preflight-analyze` `report_data` extension, and the merged rollup
+remain Phases 2/5/6 follow-ups. Verify in a browser against Supabase (no Node), per the project workflow.
+
+### Refined — lesson tool: reflection auto-seed, clearer labels, artifact prefill, alignment fix
+
+Follow-up polish to the lesson creation modal from Matthew's review:
+
+- **Reading reflection is now a fixed, auto-filled Q1.** Selecting a free-response component seeds the
+  pinned first question with the standard prompt *"What did you find interesting or difficult in the
+  reading?"* (editable, not removable) plus AI guidance telling the grader to judge whether the
+  reflection is *meaningful* — "need not be long, just meaningful" — which is the effort gate. Replaces
+  the old "mark one question as the reading reflection" checkbox, so every lesson's reflection is
+  identical across both paths by construction (`LESSON-UNIFICATION.md` §11).
+- **Relabeled the two modalities as the director thinks of them:** the completion-policy control now
+  reads **Free-Response** vs **AI Interaction** vs **Choice** (both are "preflights"); section headers
+  and card badges match. DB enum (`preflight|interaction|choice`) is unchanged — purely presentational.
+- **Lesson id ↔ interaction id default to the same slug** (auto-mirrored while the director hasn't typed
+  an interaction id, still editable) — one slug to coordinate with the artifact's `#i=` instead of two.
+- **Artifact prefill link.** `app/faculty/lessons.html` now accepts a query string
+  (`?new=1&id=&course=&title=&desc=&policy=&url=&obj=key:Label|…&pub=`) so a Claude artifact can hand the
+  director a one-click link that opens the New-Lesson form prefilled (interaction + objectives + meta),
+  mirroring the existing interaction-manager prefill — documented in
+  [`INTERACTION-PREFILL-LINK.md`](INTERACTION-PREFILL-LINK.md).
+- **Form alignment fix:** a `.field` with helper text sat taller than its neighbours and the default
+  `.row` centring nudged its input up; editor rows now top-align so inputs line up regardless of hints
+  (`#lesson-modal .row { align-items: flex-start }`).
+
 ## 2026-06-25 — Matthew Recker
+
+### Added — design doc: rollup agreement (one faculty rollup across both modalities)
+
+Authored [`ROLLUP-AGREEMENT.md`](ROLLUP-AGREEMENT.md) — the **output contract** for the faculty lesson
+rollup, the companion to the per-student *input* contract (`INTERACTION-DATA-CONTRACT.md`). Fixes the
+canonical panel set, the shape/length/style of every AI-written field, and which skill owns which field
+for which lesson type, so `/preflight-analyze` and `/interaction-aggregate` produce **one** rollup, not
+two dialects. Core rule: one rollup, one style, with the **breakdown axis — by objective
+(interaction/choice) vs. by question (preflight-only) — as the single permitted divergence**. Documents
+the two layers (live numbers via `summarizeReports` vs. the stored AI prose layer), the section +
+`'__all__'` scope model, field limits (mirroring `interaction_analysis`), grounding/style rules, and a
+proposed convergence of today's two stores (`interaction_analysis` + `assignments.analysis_report`)
+into one `lesson_analysis` table. *Why:* a single reference so edits to one skill stay consistent with
+the other — the doc to open before touching either rollup skill or the UI.
 
 ### Added — faculty lesson rollup now reads the cohort AI analysis (interaction_analysis)
 

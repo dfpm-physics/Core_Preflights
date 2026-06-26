@@ -76,8 +76,14 @@
     import { esc } from '../js/util.js';
     import * as I from '../js/faculty-interactions.js';
 
+    // Live bandwidth knobs for the objective-understanding histogram KDE (lrFine5). These are the
+    // active defaults; the director-only floating tuner (mountKdeTuner) lets a director nudge them
+    // on the page and copy a fresh line. To bake a value in permanently, just edit it here.
+    const KDE = { H0: 0.49, HMIN: 0.30, HMAX: 0.45 };
+
     const ctx = await bootstrap({ require: 'faculty' });
-    if (!ctx) { /* redirected */ } else { init(); }
+    // Mount the live tuner for directors and global admins only (hidden from instructors).
+    if (!ctx) { /* redirected */ } else { init(); if (ctx.isDirectorForCurrent?.()) mountKdeTuner(); }
 
     let vm = null, reportInteraction = null;
     // Structured report data for the open lesson: rows = null while loading, [] once loaded.
@@ -272,18 +278,43 @@
         ${objs.map((o, i) => { const [x, y] = pt(i, o.m); return `<circle cx="${x}" cy="${y}" r="3.5" fill="${col}"/>`; }).join('')}${labels}${hits}</svg>`;
     }
 
-    // Fine-cell histogram for a 0–5 distribution: 5 column-groups interpolate the curve across the
-    // score range; integer scores land on the group boundaries, so the axis is ticked 0–5 at the gaps.
+    // Fine-cell histogram for a 0–5 distribution: 5 column-groups × 5 cells trace a smooth curve;
+    // integer scores land on the group boundaries, so the axis is ticked 0–5 at the gaps.
+    //
+    // The raw data is a 6-bin integer histogram (counts of scores 0–5). Instead of linearly
+    // interpolating between bins — which smears a lone score into a lopsided triangle spanning ±1 —
+    // we render an *adaptive* kernel-density estimate. Each occupied bin contributes one unit-area
+    // Gaussian per student, centered on its score, whose bandwidth follows Abramson's square-root
+    // law: h ∝ 1/√(local count). Sparse bins (1–2 students) → wide, soft, symmetric bump (honest
+    // uncertainty); well-populated bins → narrow, tall, confident peak. Equal area per student, so
+    // a lone point is short-and-broad while a crowded bin is tall-and-sharp. Tune H0/HMIN/HMAX (in
+    // score units) to taste — they only affect the visual smoothness, not the underlying numbers.
     function lrFine5(counts) {
-      const max = Math.max(...counts, 1), COLS = 5, CELLS = 5, GAP = 9;   // GAP must match .lr-fine gap in CSS
-      const val = x => { const i = Math.max(0, Math.min(4, Math.floor(x))), t = x - i; return counts[i] + (counts[i + 1] - counts[i]) * t; };
-      let groups = '';
+      const COLS = 5, CELLS = 5, GAP = 9;                  // GAP must match .lr-fine gap in CSS
+      const { H0, HMIN, HMAX } = KDE;                       // live-tunable via the KDE tuner panel (TEMP)
+      const SQRT2PI = Math.sqrt(2 * Math.PI);
+      // Per-bin bandwidth: wide where data is thin, narrow where it's dense (clamped both ways).
+      const band = i => Math.max(HMIN, Math.min(HMAX, H0 / Math.sqrt(counts[i])));
+      // KDE at score x: sum of unit-area Gaussians, one weighted block per occupied bin.
+      const dens = x => {
+        let s = 0;
+        for (let i = 0; i <= 5; i++) {
+          if (!counts[i]) continue;
+          const h = band(i), z = (x - i) / h;
+          s += counts[i] * Math.exp(-0.5 * z * z) / (h * SQRT2PI);
+        }
+        return s;
+      };
+      // Sample the density at every cell center first, then scale to the tallest cell.
+      const cells = [];
+      for (let c = 0; c < COLS; c++)
+        for (let k = 0; k < CELLS; k++) cells.push(dens(c + (k + 0.5) / CELLS));
+      const max = Math.max(...cells, 1e-9);
+      let groups = '', idx = 0;
       for (let c = 0; c < COLS; c++) {
         let bars = '';
-        for (let k = 0; k < CELLS; k++) {
-          const h = Math.max(0, val(c + (k + 0.5) / CELLS));
-          bars += `<div class="lr-fbar" style="height:${h / max * 100}%;background:var(${RAMP5[c]})"></div>`;
-        }
+        for (let k = 0; k < CELLS; k++)
+          bars += `<div class="lr-fbar" style="height:${cells[idx++] / max * 100}%;background:var(${RAMP5[c]})"></div>`;
         groups += `<div class="lr-fgroup">${bars}</div>`;
       }
       const ticks = [0, 1, 2, 3, 4, 5].map(sv => {
@@ -293,6 +324,53 @@
         return `<span style="left:calc(${sv / COLS * 100}% ${off < 0 ? '-' : '+'} ${Math.abs(off).toFixed(2)}px);transform:translateX(-50%)">${sv}</span>`;
       }).join('');
       return `<div><div class="lr-fine">${groups}</div><div class="lr-fx">${ticks}</div></div>`;
+    }
+
+    // Director-only floating KDE tuner. Sliders mutate the live KDE knobs and re-render the rollup
+    // so the objective histograms update instantly; "Copy" grabs the const line to paste into the
+    // KDE object above. Gated to directors/admins at the call site. Self-contained — delete this
+    // function, its call site, and the KDE object to remove the feature entirely.
+    function mountKdeTuner() {
+      const knobs = [
+        ['H0',   0.05, 1.50, 0.01, 'lone-point width'],
+        ['HMIN', 0.05, 0.60, 0.01, 'crowded-bin floor'],
+        ['HMAX', 0.20, 2.00, 0.01, 'sparse-bin ceiling'],
+      ];
+      const line = () => `const H0 = ${KDE.H0.toFixed(2)}, HMIN = ${KDE.HMIN.toFixed(2)}, HMAX = ${KDE.HMAX.toFixed(2)};`;
+      const box = document.createElement('div');
+      box.id = 'kde-tuner';
+      box.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:9999;width:236px;'
+        + 'background:var(--surface,#fff);color:var(--text,#111);border:1px solid var(--border,#ccc);'
+        + 'border-radius:10px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.28);'
+        + 'font:12px/1.4 system-ui,sans-serif';
+      box.innerHTML =
+        `<div style="font-weight:700;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">`
+        + `<span>Histogram smoothing <span style="font-weight:400;opacity:.6">· KDE</span></span>`
+        + `<button id="kde-x" title="Hide" style="border:none;background:none;cursor:pointer;font-size:15px;color:inherit;line-height:1">×</button></div>`
+        + knobs.map(([k, mn, mx, st, hint]) =>
+            `<label style="display:block;margin:8px 0">`
+            + `<span style="display:flex;justify-content:space-between"><b>${k}</b><code id="kde-${k}-v">${KDE[k].toFixed(2)}</code></span>`
+            + `<input type="range" id="kde-${k}" min="${mn}" max="${mx}" step="${st}" value="${KDE[k]}" style="width:100%;accent-color:var(--blue,#2563eb)">`
+            + `<span style="opacity:.55;font-size:11px">${hint}</span></label>`).join('')
+        + `<button id="kde-copy" style="width:100%;margin-top:6px;padding:6px;border:none;border-radius:6px;`
+        + `background:var(--blue,#2563eb);color:#fff;cursor:pointer;font-weight:600">Copy const line</button>`
+        + `<code id="kde-out" style="display:block;margin-top:7px;font-size:11px;word-break:break-all;opacity:.75"></code>`;
+      document.body.appendChild(box);
+      const out = box.querySelector('#kde-out'); out.textContent = line();
+      knobs.forEach(([k]) => {
+        const inp = box.querySelector('#kde-' + k), val = box.querySelector(`#kde-${k}-v`);
+        inp.addEventListener('input', () => {
+          KDE[k] = parseFloat(inp.value); val.textContent = KDE[k].toFixed(2);
+          out.textContent = line();
+          renderAggregate();   // re-draw the rollup (and its objective histograms) with the new knobs
+        });
+      });
+      box.querySelector('#kde-copy').addEventListener('click', async (e) => {
+        try { await navigator.clipboard.writeText(line()); } catch (_) { }
+        const b = e.currentTarget, t = b.textContent; b.textContent = 'Copied ✓';
+        setTimeout(() => { b.textContent = t; }, 1200);
+      });
+      box.querySelector('#kde-x').addEventListener('click', () => box.remove());
     }
 
     // AI aggregator placeholder — the AI trend passes (effort summary, misconception clustering)
