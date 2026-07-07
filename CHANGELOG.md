@@ -45,6 +45,29 @@ Reading links are intentionally left **blank** on all Fall preflights: the per-l
 RAG-only grading references (`reference_pdf`/`reference_pages`), not student reading assignments, so the
 student view shows no reading link.
 
+### Changed — preflight point split is now 0 / 1 / 1 (still 2 pts)
+
+All 37 Fall preflights: Q1 (reading time) → **0 pts**, Q2 (confusing/interesting) → **1 pt**,
+Q3 (JiTT concept) → **1 pt**. Total unchanged at 2. Applied to the live `assignments` rows and to
+the generator [`scripts/fall2026/build_fall_preflights.py`](scripts/fall2026/build_fall_preflights.py)
+so re-runs stay consistent.
+
+### Added — instructor-training dataset for preflight-02
+
+[`scripts/training/seed_training_preflight02.py`](scripts/training/seed_training_preflight02.py) seeds a
+small, disposable training roster so instructors can practice the admin + grading workflow before the real
+Fall roster loads: 4 sections (M1A/T1A = Casey, M3A/T3A = Tyler Jones), ~72 fake students in the dedicated
+id block `3000990000–3000990071`, and 64 `preflight-02` submissions (8 intentionally missing) with a
+realistic Q3 spread (correct / vague-but-credited / misconception). Raw submissions only — no scores.
+Idempotent; `--clean --commit` removes exactly this data. **Delete when the real roster is uploaded.**
+
+### Note — folder rename + config path
+
+The working folder was renamed `Physics_215_Fall_2026` → `PREP`. The only path that hardcodes it is the
+skill config `~/.claude/skills/preflight-analyze/config.json` (`textbook_base_path`, gitignored) — updated
+to `…/USAFA Classes/PREP/`. If the folder is renamed again, that line must be updated or `/preflight-analyze`
+loses its textbook RAG grounding.
+
 ---
 
 ## 2026-06-26 — Matthew Recker

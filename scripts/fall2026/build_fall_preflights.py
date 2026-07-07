@@ -5,8 +5,8 @@ Part C — Create the 37 Physics 215 Fall 2026 preflight assignments.
 Parses the JiTT questions from Physics215_Preflight_Questions_v11.docx, pairs each in-scope
 lesson with its M/T due dates from the Fall 2026 syllabus schedule, and upserts one written
 preflight `assignments` row per lesson (course_id='phys-215'), mirroring the 3-question
-structure of the original preflight-1 (reading-time 0.1 + confusing/interesting 0.9 +
-JiTT concept question w/ expected_response 1.0 = 2 pts).
+structure of the original preflight-1 (reading-time 0 pts + confusing/interesting 1 pt +
+JiTT concept question w/ expected_response 1 pt = 2 pts).
 
 Scope: the 31 regular (PF=Y) lessons + the 6 labs = 37. Excludes Lesson 1 and GRs (12/23/35).
 
@@ -192,9 +192,9 @@ def build_rows():
             "reading_link": None,
             "is_published": True,
             "questions": [
-                {"id": "q1", "type": "free_response", "text": Q1_TEXT, "points": 0.1},
-                {"id": "q2", "type": "free_response", "text": Q2_TEXT, "points": 0.9},
-                {"id": "q3", "type": "free_response", "text": p["jitt_question"], "points": 1.0,
+                {"id": "q1", "type": "free_response", "text": Q1_TEXT, "points": 0},
+                {"id": "q2", "type": "free_response", "text": Q2_TEXT, "points": 1},
+                {"id": "q3", "type": "free_response", "text": p["jitt_question"], "points": 1,
                  **({"expected_response": p["expected_response"]} if p["expected_response"] else {})},
             ],
         })
