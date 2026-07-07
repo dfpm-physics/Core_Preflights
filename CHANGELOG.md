@@ -8,6 +8,45 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-07 — Casey Pellizzari via Claude
+
+### Changed — Physics 215 reset from proof-of-concept to Fall 2026
+
+Cleared the phys-215 proof-of-concept data and stood up the real Fall 2026 preflights. Scripts
+live in `scripts/fall2026/`.
+
+- **Snapshotted the POC first** (`export_poc_snapshot.py`) — a full, restorable JSON archive in
+  `scripts/fall2026/poc-archive/`: all 4 interactions, every interaction report (the 8 hand-crafted
+  lesson-02 + 2 lesson-03 reports + 206 synthetic demo rows), the 206 fake students / 10 sections,
+  and the 3 test preflights' responses/scores. `MANIFEST.json` records counts + timestamp.
+- **Created 37 Fall preflights** (`build_fall_preflights.py`) as written `assignments`
+  (`preflight-02`…`preflight-41`, `course_id='phys-215'`, published). Scope = the 31 regular PF=Y
+  lessons + the 6 labs; excludes Lesson 1 and the 3 GRs. Each mirrors the original 3-question
+  structure (reading-time 0.1 + confusing/interesting 0.9 + JiTT concept w/ `expected_response`
+  1.0 = 2 pts). Questions parsed from `Preflights/Physics215_Preflight_Questions_v11.docx`; M/T due
+  dates computed as 2359 America/Denver the night before each lesson from the Fall 2026 syllabus
+  (DST-aware); RAG refs point at `Text_Book_PDFs/215 Sections/`. Idempotent (upsert on `id`).
+- **Cleaned the POC** (`clean_poc.py`, gated on the snapshot matching live counts) — deleted the fake
+  students/sections/submissions, the 3 test preflights, and the `demo-rollup-sandbox` interaction.
+  **Kept** the `lesson-02/03/04` artifacts (reusable Fall content) and all real accounts.
+
+**Deferred (with Matthew Recker):** a durable multi-term/semester model. The frozen artifact contract
+is safe under it (additive columns only; artifacts key by stable slug), and `term_id` belongs in the
+`lessons` layer + roster; the one invasive piece is making `sections.id` per-term (global PK, CHECK
+`^[MT][135][A-D]$`). Not started — revisit after Fall is live. Real Fall roster load is the next step.
+
+### Added — student preview for assignments (`admin.html`)
+
+Each assignment card in the **Assignments** tab now has a **Preview** button
+([`admin.html`](admin.html), `previewAssignment`) that renders the assignment in a modal exactly as a
+student sees it — figure, title, due dates, description, and every question (MC / numerical / free-response)
+with read-only, disabled inputs. Lets directors eyeball the final student-facing form before publishing.
+Reading links are intentionally left **blank** on all Fall preflights: the per-lesson OpenStax PDFs are
+RAG-only grading references (`reference_pdf`/`reference_pages`), not student reading assignments, so the
+student view shows no reading link.
+
+---
+
 ## 2026-06-26 — Matthew Recker
 
 ### Fixed — theme toggle icon now reflects the current theme, not the destination

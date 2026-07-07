@@ -1,0 +1,46 @@
+[
+  {
+    "id": "lesson-04-electric-fields-and-electric-field-lines",
+    "course_id": "phys-215",
+    "title": "Lesson 04 — Electric Fields & Electric Field Lines",
+    "description": "Socratic intro to the electric field and field-line diagrams",
+    "artifact_url": "https://claude.ai/public/artifacts/3033f232-7a9e-4f53-a381-03e86a93341f",
+    "is_published": true,
+    "created_at": "2026-06-12T17:33:53.545387+00:00",
+    "updated_at": "2026-06-12T17:33:53.545387+00:00",
+    "due_date": null
+  },
+  {
+    "id": "lesson-02-electric-charge-and-coulombs-law",
+    "course_id": "phys-215",
+    "title": "Lesson 02 — Charge & Coulomb's Law",
+    "description": "Interactive intro to electric charge & Coulomb's law",
+    "artifact_url": "https://claude.ai/public/artifacts/4d8c17db-3d5d-40b5-9d28-e7bd79a5a7f1",
+    "is_published": true,
+    "created_at": "2026-06-12T17:33:17.917924+00:00",
+    "updated_at": "2026-06-12T17:59:22.160402+00:00",
+    "due_date": null
+  },
+  {
+    "id": "lesson-03-vector-form-of-coulombs-law",
+    "course_id": "phys-215",
+    "title": "Lesson 03 — Vector Form of Coulomb's Law",
+    "description": "Vector Coulomb's law and the superposition principle",
+    "artifact_url": "https://claude.ai/public/artifacts/e03b42ce-0bb5-4d57-86cd-e613d2dc728b",
+    "is_published": true,
+    "created_at": "2026-06-12T17:33:42.904016+00:00",
+    "updated_at": "2026-06-23T19:37:33.72472+00:00",
+    "due_date": null
+  },
+  {
+    "id": "demo-rollup-sandbox",
+    "course_id": "phys-215",
+    "title": "DEMO — Rollup Sandbox (synthetic data)",
+    "description": "Synthetic submissions for previewing the interaction rollup. Safe to delete; teardown is at the bottom of supabase/seed_demo_interaction.sql.",
+    "artifact_url": null,
+    "is_published": false,
+    "created_at": "2026-06-23T19:49:26.908271+00:00",
+    "updated_at": "2026-06-23T22:11:32.954388+00:00",
+    "due_date": null
+  }
+]

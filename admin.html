@@ -1555,6 +1555,7 @@ async function loadAssignmentsList() {
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap">
+          <button class="btn btn-secondary btn-sm" onclick="previewAssignment('${a.id}')">Preview</button>
           <button class="btn btn-secondary btn-sm" onclick="editAssignment('${a.id}')">Edit</button>
           <button class="btn btn-secondary btn-sm" onclick="duplicateAssignment('${a.id}')">Duplicate</button>
           <button class="btn btn-secondary btn-sm" onclick="togglePublish('${a.id}',${a.is_published})">${a.is_published ? 'Unpublish' : 'Publish'}</button>
@@ -1562,6 +1563,62 @@ async function loadAssignmentsList() {
       </div>`;
     listEl.appendChild(card);
   });
+}
+
+// Render an assignment exactly as a student sees it (read-only), in a modal.
+async function previewAssignment(id) {
+  const { data: a } = await db.from('assignments').select('*').eq('id', id).single();
+  if (!a) return;
+  const body = document.getElementById('preview-modal-body');
+  const totalPts = (a.questions || []).reduce((s, q) => s + (Number(q.points) || 0), 0);
+
+  const figHTML = a.figure_url
+    ? `<div style="margin-bottom:20px;text-align:center"><img src="${esc(a.figure_url)}" alt="Assignment figure"
+        style="max-width:100%;max-height:400px;border-radius:8px;border:1px solid var(--border)"></div>` : '';
+  let descHTML = a.description ? `<span>${esc(a.description)}</span>` : '';
+  if (a.reading_link) descHTML += (descHTML ? '<br>' : '') +
+    `<a href="${esc(a.reading_link)}" target="_blank" rel="noopener"
+      style="display:inline-flex;gap:6px;margin-top:8px;font-size:0.88em;color:var(--blue);font-weight:600;text-decoration:none">📖 Read before completing ↗</a>`;
+
+  const dueM = a.due_date_m ? new Date(a.due_date_m).toLocaleString() : '—';
+  const dueT = a.due_date_t ? new Date(a.due_date_t).toLocaleString() : '—';
+
+  const questionsHTML = (a.questions || []).map((q, idx) => {
+    const pts = q.points === 1 ? '1 pt' : `${q.points} pts`;
+    let input = '';
+    if (q.type === 'multiple_choice') {
+      input = `<div style="display:flex;flex-direction:column;gap:8px">${(q.options || []).map(opt =>
+        `<label style="display:flex;gap:8px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:6px;cursor:default;color:var(--text)">
+          <input type="radio" disabled> ${esc(opt)}</label>`).join('')}</div>`;
+    } else if (q.type === 'numerical') {
+      input = `<input type="number" placeholder="Enter a number" disabled
+        style="max-width:220px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">
+        <div style="font-size:0.82em;color:var(--muted);margin-top:4px">Numerical answer — units not required here.</div>`;
+    } else {
+      input = `<textarea placeholder="Write your response here…" disabled rows="4"
+        style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);box-sizing:border-box"></textarea>`;
+    }
+    const fig = q.figure_url ? `<div style="margin:10px 0 14px;text-align:center"><img src="${esc(q.figure_url)}" alt="Question figure"
+      style="max-width:100%;max-height:320px;border-radius:6px;border:1px solid var(--border)"></div>` : '';
+    return `<div style="padding:16px 0;border-top:1px solid var(--border)">
+      <div style="font-size:0.78em;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:6px">Question ${idx + 1}</div>
+      <div style="font-size:1.02em;margin-bottom:8px;color:var(--text)">${esc(q.text)}</div>${fig}
+      <div style="font-size:0.82em;color:var(--muted);margin-bottom:10px">${pts}</div>${input}</div>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div style="font-size:0.8em;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px">Student preview — read only</div>
+    ${figHTML}
+    <div class="card-title" style="font-size:1.3em">${esc(a.title)}</div>
+    <div class="card-meta" style="margin-bottom:4px">${(a.questions || []).length} questions · ${totalPts} pts${a.is_published ? '' : ' · <span style="color:var(--muted)">Draft (not visible to students yet)</span>'}</div>
+    <div class="card-meta" style="margin-bottom:12px">Due — M: ${dueM} · T: ${dueT}</div>
+    ${descHTML ? `<div style="font-size:0.92em;color:var(--muted);margin-bottom:8px">${descHTML}</div>` : ''}
+    ${questionsHTML || '<div style="color:var(--muted);padding:16px 0">No questions on this assignment yet.</div>'}`;
+  document.getElementById('preview-modal').style.display = 'flex';
+}
+function closePreviewModal() {
+  document.getElementById('preview-modal').style.display = 'none';
+  document.getElementById('preview-modal-body').innerHTML = '';
 }
 
 function showNewAssignment() {
@@ -2422,6 +2479,17 @@ async function removeExtension(studentId, studentName) {
 </script>
 
 <!-- Edit Section modal -->
+<!-- Assignment student-preview modal -->
+<div id="preview-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:999; align-items:flex-start; justify-content:center; overflow-y:auto; padding:40px 16px">
+  <div class="card" style="width:640px; max-width:100%; padding:28px; position:relative; margin:auto">
+    <button class="btn btn-secondary btn-sm" onclick="closePreviewModal()" style="position:absolute; top:16px; right:16px">Close</button>
+    <div id="preview-modal-body"></div>
+    <div style="margin-top:20px; text-align:right">
+      <button class="btn btn-primary" onclick="closePreviewModal()">Close preview</button>
+    </div>
+  </div>
+</div>
+
 <div id="edit-section-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:999; align-items:center; justify-content:center">
   <div class="card" style="width:340px; padding:28px; position:relative">
     <h3 style="margin:0 0 4px">Edit Section</h3>

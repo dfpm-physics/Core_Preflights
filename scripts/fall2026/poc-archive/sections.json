@@ -1,0 +1,52 @@
+[
+  {
+    "id": "M1A",
+    "instructor_id": "53ba0692-6d10-4483-8f19-67ddaa842899",
+    "course_id": "phys-215"
+  },
+  {
+    "id": "T3A",
+    "instructor_id": "008a8c38-ee0f-4396-ac3a-f4fc9f1fd870",
+    "course_id": "phys-215"
+  },
+  {
+    "id": "M3A",
+    "instructor_id": "53ba0692-6d10-4483-8f19-67ddaa842899",
+    "course_id": "phys-215"
+  },
+  {
+    "id": "M1B",
+    "instructor_id": "a7b03f07-c08a-43bb-bb51-19640fc43a2f",
+    "course_id": "phys-215"
+  },
+  {
+    "id": "T1A",
+    "instructor_id": "008a8c38-ee0f-4396-ac3a-f4fc9f1fd870",
+    "course_id": "phys-215"
+  },
+  {
+    "id": "T1B",
+    "instructor_id": "8dd75443-39e8-4d81-b21c-f8a08f3b2d12",
+    "course_id": "phys-215"
+  },
+  {
+    "id": "T3B",
+    "instructor_id": "8dd75443-39e8-4d81-b21c-f8a08f3b2d12",
+    "course_id": "phys-215"
+  },
+  {
+    "id": "T5A",
+    "instructor_id": "a648bbe6-7aa0-4c41-aa51-ae6401866628",
+    "course_id": "phys-215"
+  },
+  {
+    "id": "M3B",
+    "instructor_id": "6a8a7f94-e867-4e63-8591-978e26f72f9c",
+    "course_id": "phys-215"
+  },
+  {
+    "id": "M5A",
+    "instructor_id": "6a8a7f94-e867-4e63-8591-978e26f72f9c",
+    "course_id": "phys-215"
+  }
+]

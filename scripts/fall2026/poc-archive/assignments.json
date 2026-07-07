@@ -1,0 +1,528 @@
+[
+  {
+    "id": "preflight-3",
+    "title": "Preflight 3",
+    "description": "Vector Form of Coulomb's Law",
+    "due_date": "2026-06-12T05:59:00+00:00",
+    "questions": [
+      {
+        "id": "q1",
+        "text": "How much time did you spend reading the book in preparation for this lesson?",
+        "type": "free_response",
+        "points": 0,
+        "correct_answer": "",
+        "expected_response": "Anything greater than 0"
+      },
+      {
+        "id": "q2",
+        "text": "What did you find most confusing or most interesting about the reading?  Be specific and thorough in your discussion.\n",
+        "type": "free_response",
+        "points": 1,
+        "correct_answer": "",
+        "expected_response": "Response should include something specific that the student found interesting or confusing about the reading. It should be related to the referenced material (textbook PDF)"
+      },
+      {
+        "id": "q3",
+        "text": "If three charges are placed in a line, explain in words (without performing the full calculation) how you would find the net electric force on the middle charge due to the other two. Why must you treat the force as a vector rather than simply adding magnitudes?",
+        "type": "free_response",
+        "points": 1,
+        "correct_answer": "",
+        "expected_response": "(1) Treat each outer charge independently. Compute the Coulomb force on the middle charge due to the left charge (magnitude and direction — repulsive if same sign, attractive if opposite). (2) Compute the Coulomb force on the middle charge due to the right charge similarly. (3) Vector-add the two forces: decompose into components along the line, add with appropriate signs, combine. Must use vectors because the two forces generally point in opposite directions (or at angles); adding magnitudes would overcount and give a wrong answer. Superposition principle: each force is computed independently as if the other charges are absent, then combined. Full credit: three-step procedure, correct sign-direction logic, explanation that magnitudes cannot simply be added."
+      }
+    ],
+    "reference_pdf": "university-physics-volume-2_-_WEB.pdf",
+    "reference_pages": "179-183",
+    "is_published": true,
+    "created_at": "2026-06-08T16:38:13.581694+00:00",
+    "analysis_report": {
+      "day_filter": null,
+      "generated_at": "2026-06-09T19:58:08.484852Z",
+      "by_instructor": {
+        "008a8c38-ee0f-4396-ac3a-f4fc9f1fd870": {
+          "sections": [
+            "T1A",
+            "T3A"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "38/42 submitted reading times — all full credit (0 pts participation)"
+            },
+            "q2": {
+              "summary": "38/42 submitted substantive Q2 responses — all full credit\nCommon confusions: superposition notation, continuous charge distributions, why 1/r² specifically\nInterest in: electric dipoles, field line patterns, connection to gravity analogy\nGood breadth of engagement"
+            },
+            "q3": {
+              "summary": "28/38 students gave fully correct answers: three-step Coulomb procedure, direction logic, and explained why magnitudes cannot be added (forces may cancel) — full credit\n3 students correctly described the vector procedure but did not explicitly explain why magnitude addition fails — full credit, corrective feedback written\nCommon warn pattern: 'you need vectors because direction matters' without the key insight that two forces pointing opposite ways would cancel when summed algebraically but add when summed by magnitude\n7 students added magnitudes without considering direction — zero credit; superposition is correctly applied only if the direction of each force is tracked and forces are summed algebraically\nStrongest answers gave a concrete example: 'if the middle charge is positive and both outer charges are positive, the left one pushes right and the right one pushes left — they cancel'\nRecommendation: draw the three-charge scenario on the board and ask students to predict the direction of each force before calculating — this forces them to engage with direction before magnitude"
+            }
+          },
+          "instructor_name": "Tyler Jones"
+        },
+        "53ba0692-6d10-4483-8f19-67ddaa842899": {
+          "sections": [
+            "M1A",
+            "M3A"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "36/40 submitted reading times — all full credit (0 pts participation)"
+            },
+            "q2": {
+              "summary": "36/40 submitted substantive Q2 responses — all full credit\nCommon confusions: superposition notation, continuous charge distributions, why 1/r² specifically\nInterest in: electric dipoles, field line patterns, connection to gravity analogy\nGood breadth of engagement"
+            },
+            "q3": {
+              "summary": "27/36 students gave fully correct answers: three-step Coulomb procedure, direction logic, and explained why magnitudes cannot be added (forces may cancel) — full credit\n3 students correctly described the vector procedure but did not explicitly explain why magnitude addition fails — full credit, corrective feedback written\nCommon warn pattern: 'you need vectors because direction matters' without the key insight that two forces pointing opposite ways would cancel when summed algebraically but add when summed by magnitude\n6 students added magnitudes without considering direction — zero credit; superposition is correctly applied only if the direction of each force is tracked and forces are summed algebraically\nStrongest answers gave a concrete example: 'if the middle charge is positive and both outer charges are positive, the left one pushes right and the right one pushes left — they cancel'\nRecommendation: draw the three-charge scenario on the board and ask students to predict the direction of each force before calculating — this forces them to engage with direction before magnitude"
+            }
+          },
+          "instructor_name": "Ben Roth"
+        },
+        "6a8a7f94-e867-4e63-8591-978e26f72f9c": {
+          "sections": [
+            "M3B",
+            "M5A"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "38/42 submitted reading times — all full credit (0 pts participation)"
+            },
+            "q2": {
+              "summary": "38/42 submitted substantive Q2 responses — all full credit\nCommon confusions: superposition notation, continuous charge distributions, why 1/r² specifically\nInterest in: electric dipoles, field line patterns, connection to gravity analogy\nGood breadth of engagement"
+            },
+            "q3": {
+              "summary": "30/38 students gave fully correct answers: three-step Coulomb procedure, direction logic, and explained why magnitudes cannot be added (forces may cancel) — full credit\n6 students correctly described the vector procedure but did not explicitly explain why magnitude addition fails — full credit, corrective feedback written\nCommon warn pattern: 'you need vectors because direction matters' without the key insight that two forces pointing opposite ways would cancel when summed algebraically but add when summed by magnitude\n2 students added magnitudes without considering direction — zero credit; superposition is correctly applied only if the direction of each force is tracked and forces are summed algebraically\nStrongest answers gave a concrete example: 'if the middle charge is positive and both outer charges are positive, the left one pushes right and the right one pushes left — they cancel'\nRecommendation: draw the three-charge scenario on the board and ask students to predict the direction of each force before calculating — this forces them to engage with direction before magnitude"
+            }
+          },
+          "instructor_name": "David Meier"
+        },
+        "8dd75443-39e8-4d81-b21c-f8a08f3b2d12": {
+          "sections": [
+            "T1B",
+            "T3B"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "39/43 submitted reading times — all full credit (0 pts participation)"
+            },
+            "q2": {
+              "summary": "39/43 submitted substantive Q2 responses — all full credit\nCommon confusions: superposition notation, continuous charge distributions, why 1/r² specifically\nInterest in: electric dipoles, field line patterns, connection to gravity analogy\nGood breadth of engagement"
+            },
+            "q3": {
+              "summary": "31/39 students gave fully correct answers: three-step Coulomb procedure, direction logic, and explained why magnitudes cannot be added (forces may cancel) — full credit\n6 students correctly described the vector procedure but did not explicitly explain why magnitude addition fails — full credit, corrective feedback written\nCommon warn pattern: 'you need vectors because direction matters' without the key insight that two forces pointing opposite ways would cancel when summed algebraically but add when summed by magnitude\n2 students added magnitudes without considering direction — zero credit; superposition is correctly applied only if the direction of each force is tracked and forces are summed algebraically\nStrongest answers gave a concrete example: 'if the middle charge is positive and both outer charges are positive, the left one pushes right and the right one pushes left — they cancel'\nRecommendation: draw the three-charge scenario on the board and ask students to predict the direction of each force before calculating — this forces them to engage with direction before magnitude"
+            }
+          },
+          "instructor_name": "Kimberly de La Harpe"
+        },
+        "a648bbe6-7aa0-4c41-aa51-ae6401866628": {
+          "sections": [
+            "T5A"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "14/16 submitted reading times — all full credit (0 pts participation)"
+            },
+            "q2": {
+              "summary": "14/16 submitted substantive Q2 responses — all full credit\nCommon confusions: superposition notation, continuous charge distributions, why 1/r² specifically\nInterest in: electric dipoles, field line patterns, connection to gravity analogy\nGood breadth of engagement"
+            },
+            "q3": {
+              "summary": "10/14 students gave fully correct answers: three-step Coulomb procedure, direction logic, and explained why magnitudes cannot be added (forces may cancel) — full credit\n3 students correctly described the vector procedure but did not explicitly explain why magnitude addition fails — full credit, corrective feedback written\nCommon warn pattern: 'you need vectors because direction matters' without the key insight that two forces pointing opposite ways would cancel when summed algebraically but add when summed by magnitude\n1 students added magnitudes without considering direction — zero credit; superposition is correctly applied only if the direction of each force is tracked and forces are summed algebraically\nStrongest answers gave a concrete example: 'if the middle charge is positive and both outer charges are positive, the left one pushes right and the right one pushes left — they cancel'\nRecommendation: draw the three-charge scenario on the board and ask students to predict the direction of each force before calculating — this forces them to engage with direction before magnitude"
+            }
+          },
+          "instructor_name": "Matthew Recker"
+        },
+        "a7b03f07-c08a-43bb-bb51-19640fc43a2f": {
+          "sections": [
+            "M1B"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "21/23 submitted reading times — all full credit (0 pts participation)"
+            },
+            "q2": {
+              "summary": "21/23 submitted substantive Q2 responses — all full credit\nCommon confusions: superposition notation, continuous charge distributions, why 1/r² specifically\nInterest in: electric dipoles, field line patterns, connection to gravity analogy\nGood breadth of engagement"
+            },
+            "q3": {
+              "summary": "15/21 students gave fully correct answers: three-step Coulomb procedure, direction logic, and explained why magnitudes cannot be added (forces may cancel) — full credit\n4 students correctly described the vector procedure but did not explicitly explain why magnitude addition fails — full credit, corrective feedback written\nCommon warn pattern: 'you need vectors because direction matters' without the key insight that two forces pointing opposite ways would cancel when summed algebraically but add when summed by magnitude\n2 students added magnitudes without considering direction — zero credit; superposition is correctly applied only if the direction of each force is tracked and forces are summed algebraically\nStrongest answers gave a concrete example: 'if the middle charge is positive and both outer charges are positive, the left one pushes right and the right one pushes left — they cancel'\nRecommendation: draw the three-charge scenario on the board and ask students to predict the direction of each force before calculating — this forces them to engage with direction before magnitude"
+            }
+          },
+          "instructor_name": "TJ Hardy"
+        }
+      }
+    },
+    "due_date_m": "2026-06-12T05:59:00+00:00",
+    "due_date_t": "2026-06-13T05:59:00+00:00",
+    "reading_link": "https://openstax.org/books/university-physics-volume-2/pages/5-introduction",
+    "course_id": "phys-215",
+    "figure_url": null
+  },
+  {
+    "id": "preflight-2",
+    "title": "Preflight 2",
+    "description": "Polarization",
+    "due_date": "2026-06-07T05:59:00+00:00",
+    "questions": [
+      {
+        "id": "q1",
+        "text": "How much time did you spend reading the book in preparation for this lesson?",
+        "type": "free_response",
+        "points": 0,
+        "correct_answer": "",
+        "expected_response": "Anything greater than 0"
+      },
+      {
+        "id": "q2",
+        "text": "What did you find most confusing or most interesting about the reading?  Be specific and thorough in your discussion.\n",
+        "type": "free_response",
+        "points": 1,
+        "correct_answer": "",
+        "expected_response": "Response should include something specific that the student found interesting or confusing about the reading. It should be related to the referenced material (textbook PDF)"
+      },
+      {
+        "id": "q3",
+        "text": "Unpolarized light from a source passes through two linear polarizers.  When you view the source through the polarizers, the source if very dim. Explain why this happens.  Be specific.  ",
+        "type": "free_response",
+        "points": 1,
+        "correct_answer": "",
+        "expected_response": "The students should indicate that the polarizers are rotated relative to each other and Malus's Law indicates that the passing light will be attenuated.  They don't need to say this exactly or even correctly.  As long as they provide a related response.  "
+      }
+    ],
+    "reference_pdf": "university-physics-volume-3_-_WEB.pdf",
+    "reference_pages": "30-40",
+    "is_published": true,
+    "created_at": "2026-06-01T18:01:39.315876+00:00",
+    "analysis_report": {
+      "day_filter": null,
+      "generated_at": "2026-06-09T19:56:29.345638Z",
+      "by_instructor": {
+        "008a8c38-ee0f-4396-ac3a-f4fc9f1fd870": {
+          "sections": [
+            "T1A",
+            "T3A"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "38/42 submitted reading times — all full credit (0 pts participation)"
+            },
+            "q2": {
+              "summary": "38/42 submitted substantive responses — all full credit\nCommon confusions: why cos² (not just cos), circular vs. linear polarization, LCDs, birefringence\nGood breadth of engagement with the reading"
+            },
+            "q3": {
+              "summary": "23/38 students gave fully correct answers citing Malus's Law (I = I₀cos²θ) and angular relationship — full credit\n15 students identified the angular orientation as the cause but did not cite Malus's Law or cos²θ formula — full credit, corrective feedback written\n  Of those, ~1 used 'spectrum' or 'wavelength' language — polarizers filter by polarization direction, not wavelength\n  ~14 correctly noted alignment/angle but omitted the quantitative cos²θ relationship\nStrong answers: first polarizer creates linearly polarized light → second applies Malus's Law → cos²θ near 0 at 90° → nearly no light passes\nRecommendation: ask students to predict the intensity at 0°, 45°, and 90° using I = I₀cos²θ as an opener — this forces engagement with the formula"
+            }
+          },
+          "instructor_name": "Tyler Jones"
+        },
+        "52b48755-01a5-479e-9bfa-eeeedce12742": {
+          "sections": [
+            "T3A",
+            "T3B"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "50/50 students submitted; this is a 0-point engagement check\n8/50 students did not read before class — 4 said 'Zero, I didn't have time,' 4 said 'Didn't get to it' (flagged yellow)\nTypical reported reading time among students who did read: 20–90 minutes\nNo misconceptions applicable; informational question only"
+            },
+            "q2": {
+              "summary": "42/50 received full credit; 8/50 received zero for non-specific or absent responses\nZero-credit answers: 2 wrote only '.' (no content), 2 wrote 'See above' (references Q1 time—off topic), 2 wrote 'Did not read thoroughly,' 2 wrote 'Not sure yet — didn't finish the reading'\nMost common confusion: why Malus's Law uses cos²θ rather than cosθ — several students can apply the formula but lack a physical picture (cos² arises because E-field projects as E₀cosθ and intensity ∝ E²)\nStrong responses engaged with Brewster's angle, birefringence, LCD screens, 3D movies, sky polarization, and optical activity — good coverage of Section 1.7\nPractical-application responses (sunglasses, photography filters, sugar concentration) show students connected the physics to real devices\nRecommend addressing the E-field projection geometry in class to explain cos² — it was the single most common point of confusion across both sections"
+            },
+            "q3": {
+              "summary": "36/50 full credit with no corrective feedback; 12/50 full credit with corrective feedback (yellow); 2/50 blank (zero credit — one per section)\nMost complete answers cited Malus's Law explicitly: I = I₀cos²θ, noting that large θ near 90° gives cos²θ ≈ 0 and near-total extinction\n~8 students gave additive-blocking answers ('two polarizers block more than one') without mentioning the angular relationship — corrective feedback given; the key insight is that the second polarizer's effect depends on θ, not just on having two filters\n~4 students gave circular answers: 'the polarizers are oriented to reduce intensity' — this restates the observation rather than explaining the mechanism; corrective feedback given\n~4 students gave a physically incorrect bouncing mechanism: 'light bounces between the polarizers and loses energy' — light transmits through polarizers, it does not bounce; corrective feedback given\nRecommend using a demonstration with two physical polarizers to show the cos²θ dependence and the complete extinction at 90°"
+            }
+          },
+          "instructor_name": "Tyler Jones"
+        },
+        "53ba0692-6d10-4483-8f19-67ddaa842899": {
+          "sections": [
+            "M1A",
+            "M3A"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "36/40 submitted reading times — all full credit (0 pts participation)"
+            },
+            "q2": {
+              "summary": "36/40 submitted substantive responses — all full credit\nCommon confusions: why cos² (not just cos), circular vs. linear polarization, LCDs, birefringence\nGood breadth of engagement with the reading"
+            },
+            "q3": {
+              "summary": "22/36 students gave fully correct answers citing Malus's Law (I = I₀cos²θ) and angular relationship — full credit\n14 students identified the angular orientation as the cause but did not cite Malus's Law or cos²θ formula — full credit, corrective feedback written\n  Of those, ~1 used 'spectrum' or 'wavelength' language — polarizers filter by polarization direction, not wavelength\n  ~13 correctly noted alignment/angle but omitted the quantitative cos²θ relationship\nStrong answers: first polarizer creates linearly polarized light → second applies Malus's Law → cos²θ near 0 at 90° → nearly no light passes\nRecommendation: ask students to predict the intensity at 0°, 45°, and 90° using I = I₀cos²θ as an opener — this forces engagement with the formula"
+            }
+          },
+          "instructor_name": "Ben Roth"
+        },
+        "6a8a7f94-e867-4e63-8591-978e26f72f9c": {
+          "sections": [
+            "M3B",
+            "M5A"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "38/42 submitted reading times — all full credit (0 pts participation)"
+            },
+            "q2": {
+              "summary": "38/42 submitted substantive responses — all full credit\nCommon confusions: why cos² (not just cos), circular vs. linear polarization, LCDs, birefringence\nGood breadth of engagement with the reading"
+            },
+            "q3": {
+              "summary": "27/38 students gave fully correct answers citing Malus's Law (I = I₀cos²θ) and angular relationship — full credit\n10 students identified the angular orientation as the cause but did not cite Malus's Law or cos²θ formula — full credit, corrective feedback written\n  ~10 correctly noted alignment/angle but omitted the quantitative cos²θ relationship\n1 students gave wrong physics (absorption-only or scatter) — zero credit\nStrong answers: first polarizer creates linearly polarized light → second applies Malus's Law → cos²θ near 0 at 90° → nearly no light passes\nRecommendation: ask students to predict the intensity at 0°, 45°, and 90° using I = I₀cos²θ as an opener — this forces engagement with the formula"
+            }
+          },
+          "instructor_name": "David Meier"
+        },
+        "6ad3ad7e-0a5b-4512-b9be-24673cbb0160": {
+          "sections": [
+            "M1A",
+            "M1B"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "50/50 students submitted; this is a 0-point engagement check\n8/50 students did not read before class — 4 said 'Zero, I didn't have time,' 4 said 'Didn't get to it' (flagged yellow)\nTypical reported reading time among students who did read: 20–90 minutes\nNo misconceptions applicable; informational question only"
+            },
+            "q2": {
+              "summary": "42/50 received full credit; 8/50 received zero for non-specific or absent responses\nZero-credit answers: 2 wrote only '.' (no content), 2 wrote 'See above' (references Q1 time—off topic), 2 wrote 'Did not read thoroughly,' 2 wrote 'Not sure yet — didn't finish the reading'\nMost common confusion: why Malus's Law uses cos²θ rather than cosθ — several students can apply the formula but lack a physical picture (cos² arises because E-field projects as E₀cosθ and intensity ∝ E²)\nStrong responses engaged with Brewster's angle, birefringence, LCD screens, 3D movies, sky polarization, and optical activity — good coverage of Section 1.7\nPractical-application responses (sunglasses, photography filters, sugar concentration) show students connected the physics to real devices\nRecommend addressing the E-field projection geometry in class to explain cos² — it was the single most common point of confusion across both sections"
+            },
+            "q3": {
+              "summary": "36/50 full credit with no corrective feedback; 12/50 full credit with corrective feedback (yellow); 2/50 blank (zero credit — one per section)\nMost complete answers cited Malus's Law explicitly: I = I₀cos²θ, noting that large θ near 90° gives cos²θ ≈ 0 and near-total extinction\n~8 students gave additive-blocking answers ('two polarizers block more than one') without mentioning the angular relationship — corrective feedback given; the key insight is that the second polarizer's effect depends on θ, not just on having two filters\n~4 students gave circular answers: 'the polarizers are oriented to reduce intensity' — this restates the observation rather than explaining the mechanism; corrective feedback given\n~4 students gave a physically incorrect bouncing mechanism: 'light bounces between the polarizers and loses energy' — light transmits through polarizers, it does not bounce; corrective feedback given\nRecommend using a demonstration with two physical polarizers to show the cos²θ dependence and the complete extinction at 90°"
+            }
+          },
+          "instructor_name": "Casey Pellizzari"
+        },
+        "8dd75443-39e8-4d81-b21c-f8a08f3b2d12": {
+          "sections": [
+            "T1B",
+            "T3B"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "39/43 submitted reading times — all full credit (0 pts participation)"
+            },
+            "q2": {
+              "summary": "39/43 submitted substantive responses — all full credit\nCommon confusions: why cos² (not just cos), circular vs. linear polarization, LCDs, birefringence\nGood breadth of engagement with the reading"
+            },
+            "q3": {
+              "summary": "27/39 students gave fully correct answers citing Malus's Law (I = I₀cos²θ) and angular relationship — full credit\n12 students identified the angular orientation as the cause but did not cite Malus's Law or cos²θ formula — full credit, corrective feedback written\n  ~12 correctly noted alignment/angle but omitted the quantitative cos²θ relationship\nStrong answers: first polarizer creates linearly polarized light → second applies Malus's Law → cos²θ near 0 at 90° → nearly no light passes\nRecommendation: ask students to predict the intensity at 0°, 45°, and 90° using I = I₀cos²θ as an opener — this forces engagement with the formula"
+            }
+          },
+          "instructor_name": "Kimberly de La Harpe"
+        },
+        "a648bbe6-7aa0-4c41-aa51-ae6401866628": {
+          "sections": [
+            "T5A"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "14/16 submitted reading times — all full credit (0 pts participation)"
+            },
+            "q2": {
+              "summary": "14/16 submitted substantive responses — all full credit\nCommon confusions: why cos² (not just cos), circular vs. linear polarization, LCDs, birefringence\nGood breadth of engagement with the reading"
+            },
+            "q3": {
+              "summary": "9/14 students gave fully correct answers citing Malus's Law (I = I₀cos²θ) and angular relationship — full credit\n4 students identified the angular orientation as the cause but did not cite Malus's Law or cos²θ formula — full credit, corrective feedback written\n  Of those, ~1 used 'spectrum' or 'wavelength' language — polarizers filter by polarization direction, not wavelength\n  ~3 correctly noted alignment/angle but omitted the quantitative cos²θ relationship\n1 students gave wrong physics (absorption-only or scatter) — zero credit\nStrong answers: first polarizer creates linearly polarized light → second applies Malus's Law → cos²θ near 0 at 90° → nearly no light passes\nRecommendation: ask students to predict the intensity at 0°, 45°, and 90° using I = I₀cos²θ as an opener — this forces engagement with the formula"
+            }
+          },
+          "instructor_name": "Matthew Recker"
+        },
+        "a7b03f07-c08a-43bb-bb51-19640fc43a2f": {
+          "sections": [
+            "M1B"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "21/23 submitted reading times — all full credit (0 pts participation)"
+            },
+            "q2": {
+              "summary": "21/23 submitted substantive responses — all full credit\nCommon confusions: why cos² (not just cos), circular vs. linear polarization, LCDs, birefringence\nGood breadth of engagement with the reading"
+            },
+            "q3": {
+              "summary": "14/21 students gave fully correct answers citing Malus's Law (I = I₀cos²θ) and angular relationship — full credit\n7 students identified the angular orientation as the cause but did not cite Malus's Law or cos²θ formula — full credit, corrective feedback written\n  ~7 correctly noted alignment/angle but omitted the quantitative cos²θ relationship\nStrong answers: first polarizer creates linearly polarized light → second applies Malus's Law → cos²θ near 0 at 90° → nearly no light passes\nRecommendation: ask students to predict the intensity at 0°, 45°, and 90° using I = I₀cos²θ as an opener — this forces engagement with the formula"
+            }
+          },
+          "instructor_name": "TJ Hardy"
+        }
+      }
+    },
+    "due_date_m": "2026-06-07T05:59:00+00:00",
+    "due_date_t": "2026-06-08T05:59:00+00:00",
+    "reading_link": "https://openstax.org/books/university-physics-volume-2/pages/5-introduction",
+    "course_id": "phys-215",
+    "figure_url": null
+  },
+  {
+    "id": "preflight-1",
+    "title": "Preflight 1",
+    "description": "Complete before the first lesson. Answer honestly — this is for your benefit.",
+    "due_date": "2026-06-05T05:59:00+00:00",
+    "questions": [
+      {
+        "id": "q1",
+        "text": "How much time did you spend reading the book in preparation for this lesson?",
+        "type": "free_response",
+        "points": 0
+      },
+      {
+        "id": "q2",
+        "text": "What did you find most confusing or most interesting about the reading? Be specific and thorough in your discussion.",
+        "type": "free_response",
+        "points": 1
+      },
+      {
+        "id": "q3",
+        "text": "What happens when a charged insulator is placed near an uncharged metallic object? Specifically, do they attract or repel and why?",
+        "type": "free_response",
+        "points": 1,
+        "expected_response": "They attract. The charged insulator induces polarization in the metal: free electrons in the conductor redistribute in response to the external charge, creating an opposite charge on the near side. This induced dipole results in a net attractive force even though the metal has zero net charge overall."
+      }
+    ],
+    "reference_pdf": "university-physics-volume-2_-_WEB.pdf",
+    "reference_pages": "169-185",
+    "is_published": true,
+    "created_at": "2026-05-28T19:18:10.112888+00:00",
+    "analysis_report": {
+      "day_filter": "T",
+      "generated_at": "2026-06-09T19:54:41.987840Z",
+      "by_instructor": {
+        "008a8c38-ee0f-4396-ac3a-f4fc9f1fd870": {
+          "sections": [
+            "T1A",
+            "T3A"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "38/42 submitted reading times; all received full credit (0 pts — participation)\nTypical spread: 15 min to 2 hours\nNo engagement concerns"
+            },
+            "q2": {
+              "summary": "38/42 submitted substantive Q2 responses; all received full credit\nAnswers showed varied confusions about conductors, insulators, and field concepts\nGood engagement with the reading material across sections"
+            },
+            "q3": {
+              "summary": "25/38 students gave fully correct answers with sound induction mechanism — full credit, no feedback\n6 students answered 'they attract' with vague or incomplete mechanism — full credit, corrective feedback written\n3 students answered 'they repel' — zero credit; recognizes charge redistribution but reverses direction\n4 students indicated no force or ambiguous answer — zero credit; treats zero net charge as immunity to electric forces\nStrong answers cited free electron redistribution, induced dipole, and 1/r² distance asymmetry\nRecommendation: brief charged-rod demo before class to make the attraction-despite-neutral result concrete"
+            }
+          },
+          "instructor_name": "Tyler Jones"
+        },
+        "52b48755-01a5-479e-9bfa-eeeedce12742": {
+          "sections": [
+            "T3A",
+            "T3B"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "50/50 students responded — all received full credit.\nReading times ranged from 15 minutes to 2+ hours — typical pre-class preparation distribution.\nNo engagement concerns on this participation question."
+            },
+            "q2": {
+              "summary": "50/50 students gave substantive responses; 0 did not engage meaningfully.\nMost common confusions: superposition with multiple charges, Gauss's law vs. Coulomb's law, electric field direction with negative charges.\nNotable strength: several students asked about test-charge definition perturbing the field — good conceptual question.\nStudent interest: applications like Faraday cages and historical experiments (Coulomb, Millikan)."
+            },
+            "q3": {
+              "summary": "42/50 students correctly identified attraction; 4 answered 'repel'.\nMisconception (~4 students): 'both have charges → repel' — fails to account for induced polarization in the neutral conductor.\n~2 gave correct answer (attract) with vague mechanisms like 'static electricity' — corrective feedback provided.\nStrongest responses: described force asymmetry (1/r² means near-face attraction dominates), used term 'induction,' or mentioned zero net charge.\nRecommendation: open with a live demo (charged rod near neutral conductor) to make the induction-attraction phenomenon visceral before formal treatment."
+            }
+          },
+          "instructor_name": "Tyler Jones"
+        },
+        "53ba0692-6d10-4483-8f19-67ddaa842899": {
+          "sections": [
+            "M1A",
+            "M3A"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "36/40 students logged a reading time (0 pts — participation only)\nAll submitted students received full credit on Q1\nReading times ranged from ~15 minutes to 2 hours — typical pre-lesson spread"
+            },
+            "q2": {
+              "summary": "36/40 submitted substantive Q2 responses; all received full credit\nAnswers showed varied confusions: ε₀ physical meaning, why metals have free electrons, field line conventions, Faraday cages, induction vs. conduction distinction\nMost interesting topics cited: action-at-a-distance, charge quantization, triboelectric effect, Coulomb's historical torsion balance experiment\nVariety in responses is good — indicates students read broadly rather than focusing on a single passage"
+            },
+            "q3": {
+              "summary": "23/36 students gave fully correct answers with sound induction mechanism — full credit, no feedback\n6 students answered 'they attract' with vague or incomplete mechanism — full credit awarded, corrective feedback written (warn status)\nWarn pattern: correct conclusion (attraction) but missing the key mechanistic details — no explicit mention of free electron redistribution, induced dipole, or the 1/r² distance asymmetry that explains why attraction dominates\n4 students answered 'they repel' — zero credit; misconception: students recognize charges can redistribute but reverse the direction, believing same-sign charge accumulates on the near face\n3 students said no force or 'depends on charge type' — zero credit; misconception: treating zero net charge as immunity to electric forces, missing the induction mechanism entirely\nStrong answers explicitly cited: free electron redistribution, induced dipole, 1/r² asymmetry (near-face attraction stronger than far-face repulsion), and that the metal remains charge-neutral overall\nRecommendation: open the lesson with a brief charged-rod-near-paper-scraps demo to make the 'attraction despite no net charge' result visceral before formal treatment"
+            }
+          },
+          "instructor_name": "Ben Roth"
+        },
+        "6a8a7f94-e867-4e63-8591-978e26f72f9c": {
+          "sections": [
+            "M3B",
+            "M5A"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "38/42 students logged a reading time (0 pts — participation only)\nAll submitted students received full credit on Q1\nReading times ranged from ~15 minutes to 2 hours — typical pre-lesson spread"
+            },
+            "q2": {
+              "summary": "38/42 submitted substantive Q2 responses; all received full credit\nAnswers showed varied confusions: ε₀ physical meaning, why metals have free electrons, field line conventions, Faraday cages, induction vs. conduction distinction\nMost interesting topics cited: action-at-a-distance, charge quantization, triboelectric effect, Coulomb's historical torsion balance experiment\nVariety in responses is good — indicates students read broadly rather than focusing on a single passage"
+            },
+            "q3": {
+              "summary": "31/38 students gave fully correct answers with sound induction mechanism — full credit, no feedback\n3 students answered 'they attract' with vague or incomplete mechanism — full credit awarded, corrective feedback written (warn status)\nWarn pattern: correct conclusion (attraction) but missing the key mechanistic details — no explicit mention of free electron redistribution, induced dipole, or the 1/r² distance asymmetry that explains why attraction dominates\n2 students answered 'they repel' — zero credit; misconception: students recognize charges can redistribute but reverse the direction, believing same-sign charge accumulates on the near face\n2 students said no force or 'depends on charge type' — zero credit; misconception: treating zero net charge as immunity to electric forces, missing the induction mechanism entirely\nStrong answers explicitly cited: free electron redistribution, induced dipole, 1/r² asymmetry (near-face attraction stronger than far-face repulsion), and that the metal remains charge-neutral overall\nRecommendation: open the lesson with a brief charged-rod-near-paper-scraps demo to make the 'attraction despite no net charge' result visceral before formal treatment"
+            }
+          },
+          "instructor_name": "David Meier"
+        },
+        "6ad3ad7e-0a5b-4512-b9be-24673cbb0160": {
+          "sections": [
+            "M1A",
+            "M1B"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "50/50 students responded — all received full credit.\nReading times ranged from 15 minutes to 2+ hours — typical pre-class preparation distribution.\nNo engagement concerns on this participation question."
+            },
+            "q2": {
+              "summary": "50/50 students gave substantive responses; 0 did not engage meaningfully.\nMost common confusions: superposition with multiple charges, Gauss's law vs. Coulomb's law, electric field direction with negative charges.\nNotable strength: several students asked about test-charge definition perturbing the field — good conceptual question.\nStudent interest: applications like Faraday cages and historical experiments (Coulomb, Millikan)."
+            },
+            "q3": {
+              "summary": "42/50 students correctly identified attraction; 4 answered 'repel'.\nMisconception (~4 students): 'both have charges → repel' — fails to account for induced polarization in the neutral conductor.\n~2 gave correct answer (attract) with vague mechanisms like 'static electricity' — corrective feedback provided.\nStrongest responses: described force asymmetry (1/r² means near-face attraction dominates), used term 'induction,' or mentioned zero net charge.\nRecommendation: open with a live demo (charged rod near neutral conductor) to make the induction-attraction phenomenon visceral before formal treatment."
+            }
+          },
+          "instructor_name": "Casey Pellizzari"
+        },
+        "8dd75443-39e8-4d81-b21c-f8a08f3b2d12": {
+          "sections": [
+            "T1B",
+            "T3B"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "39/43 submitted reading times; all received full credit (0 pts — participation)\nTypical spread: 15 min to 2 hours\nNo engagement concerns"
+            },
+            "q2": {
+              "summary": "39/43 submitted substantive Q2 responses; all received full credit\nAnswers showed varied confusions about conductors, insulators, and field concepts\nGood engagement with the reading material across sections"
+            },
+            "q3": {
+              "summary": "29/39 students gave fully correct answers with sound induction mechanism — full credit, no feedback\n3 students answered 'they attract' with vague or incomplete mechanism — full credit, corrective feedback written\n4 students answered 'they repel' — zero credit; recognizes charge redistribution but reverses direction\n3 students indicated no force or ambiguous answer — zero credit; treats zero net charge as immunity to electric forces\nStrong answers cited free electron redistribution, induced dipole, and 1/r² distance asymmetry\nRecommendation: brief charged-rod demo before class to make the attraction-despite-neutral result concrete"
+            }
+          },
+          "instructor_name": "Kimberly de La Harpe"
+        },
+        "a648bbe6-7aa0-4c41-aa51-ae6401866628": {
+          "sections": [
+            "T5A"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "14/16 submitted reading times; all received full credit (0 pts — participation)\nTypical spread: 15 min to 2 hours\nNo engagement concerns"
+            },
+            "q2": {
+              "summary": "14/16 submitted substantive Q2 responses; all received full credit\nAnswers showed varied confusions about conductors, insulators, and field concepts\nGood engagement with the reading material across sections"
+            },
+            "q3": {
+              "summary": "12/14 students gave fully correct answers with sound induction mechanism — full credit, no feedback\n1 students answered 'they attract' with vague or incomplete mechanism — full credit, corrective feedback written\n1 students answered 'they repel' — zero credit; recognizes charge redistribution but reverses direction\nStrong answers cited free electron redistribution, induced dipole, and 1/r² distance asymmetry\nRecommendation: brief charged-rod demo before class to make the attraction-despite-neutral result concrete"
+            }
+          },
+          "instructor_name": "Matthew Recker"
+        },
+        "a7b03f07-c08a-43bb-bb51-19640fc43a2f": {
+          "sections": [
+            "M1B"
+          ],
+          "questions": {
+            "q1": {
+              "summary": "21/23 students logged a reading time (0 pts — participation only)\nAll submitted students received full credit on Q1\nReading times ranged from ~15 minutes to 2 hours — typical pre-lesson spread"
+            },
+            "q2": {
+              "summary": "21/23 submitted substantive Q2 responses; all received full credit\nAnswers showed varied confusions: ε₀ physical meaning, why metals have free electrons, field line conventions, Faraday cages, induction vs. conduction distinction\nMost interesting topics cited: action-at-a-distance, charge quantization, triboelectric effect, Coulomb's historical torsion balance experiment\nVariety in responses is good — indicates students read broadly rather than focusing on a single passage"
+            },
+            "q3": {
+              "summary": "16/21 students gave fully correct answers with sound induction mechanism — full credit, no feedback\n1 students answered 'they attract' with vague or incomplete mechanism — full credit awarded, corrective feedback written (warn status)\nWarn pattern: correct conclusion (attraction) but missing the key mechanistic details — no explicit mention of free electron redistribution, induced dipole, or the 1/r² distance asymmetry that explains why attraction dominates\n2 students answered 'they repel' — zero credit; misconception: students recognize charges can redistribute but reverse the direction, believing same-sign charge accumulates on the near face\n2 students said no force or 'depends on charge type' — zero credit; misconception: treating zero net charge as immunity to electric forces, missing the induction mechanism entirely\nStrong answers explicitly cited: free electron redistribution, induced dipole, 1/r² asymmetry (near-face attraction stronger than far-face repulsion), and that the metal remains charge-neutral overall\nRecommendation: open the lesson with a brief charged-rod-near-paper-scraps demo to make the 'attraction despite no net charge' result visceral before formal treatment"
+            }
+          },
+          "instructor_name": "TJ Hardy"
+        }
+      }
+    },
+    "due_date_m": "2026-06-05T05:59:00+00:00",
+    "due_date_t": "2026-06-06T05:59:00+00:00",
+    "reading_link": null,
+    "course_id": "phys-215",
+    "figure_url": null
+  }
+]

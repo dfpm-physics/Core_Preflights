@@ -1,0 +1,585 @@
+[
+  {
+    "id": "50446e5d-b26c-4348-a046-0913df44325c",
+    "interaction_id": "lesson-02-electric-charge-and-coulombs-law",
+    "student_id": 3000100001,
+    "report_markdown": "# JiTT Conversation Report\n\n## Cadet Information\n- **Name / Cadet Identifier:** Carter\n- **Lesson:** Physics 215, Fall 2026, Lesson 2 — Electric Charge and Coulomb's Law\n- **Date / Time of Conversation:** 6/12/2026, 1:27:30 PM\n- **Approximate Duration:** 10 minutes\n\n## Cadet's Reading Reflection (verbatim)\n\n> The idea of charge creating a new force that I haven't studied today\n\n## Academic Integrity Self-Report (verbatim)\n\n> I used a copy of my equation sheet and my friend and I were working on this preflight at the same time\n\n## Concept-by-Concept Assessment\n\n| Concept | Assessment | Evidence |\n|---------|------------|----------|\n| Coulomb's law — equation, inverse-square dependence, and absolute-value convention | Partial | Cadet stated the correct form but initially omitted $k_e$; correctly explained inverse-square scaling after one correction on the \"halving\" slip. Did not independently articulate why absolute values are used before being led through it; accepted the reasoning when walked through it but the initial explanation (\"different charges feel different forces\") was imprecise. |\n| Direction of the force & Newton's third law | Partial | Correctly identified that unlike charges attract and that the force on $q_2$ points toward $q_1$. Newton's third law as an explicit equal-and-opposite pair was not probed due to time. |\n| Properties of charge — quantization, conservation, magnitude independence | Understood | Correctly stated quantization as integer multiples of the elementary charge; correctly rejected the \"charges cancel and disappear\" claim, explaining net charge is conserved and redistributes. |\n| Conductors, insulators & charging by induction | Understood | Correctly distinguished conductors by free electron mobility; correctly described polarization mechanism and explained net attraction via the distance-dependent strength of the Coulomb force. Charging by induction (grounded sequence) was not explicitly reached. |\n\n## Misconceptions Surfaced\n\n- **Predicted misconceptions that appeared:** Inverse-square slip — cadet initially said doubling the distance reduces the force \"by the same amount\" (i.e., halves it) before self-correcting when prompted to work through $r^2$. Signed-charge direction reasoning — cadet's initial explanation for the absolute-value convention (\"the negative means it is a force in the opposite direction\") reflects the exact sign-plugging trap the textbook warns against.\n- **Unexpected misconceptions:** None observed beyond the predicted set.\n\n## Cadet's Open Questions\n\n- Cadet did not raise unresolved questions.\n\n## Lateral Connections Raised\n\n- No unprompted lateral connections raised.\n\n## Overall Readiness Flag\n\n🟡 **Yellow — Soft on specific topics.**\n\n**Specifics:** Two areas to watch: (1) Cadet does not yet have a crisp, independent explanation of *why* the absolute-value convention is used in Coulomb's law — they accepted the reasoning when walked through it but the initial response reflected the sign-plugging misconception. (2) Newton's third law applied to the Coulomb force pair was not reached. Charging by induction (grounded sequence) also not covered. Additionally, the academic integrity self-report indicates the cadet used an equation sheet and worked alongside a peer during the session, which the instructor should factor into the readiness assessment.\n\n## Tutor's Honest Notes\n\nCarter engaged cooperatively and showed genuine understanding of the inverse-square relationship and charge conservation once pushed past initial imprecision. The most notable gap is the absolute-value convention in Coulomb's law — the cadet's first instinct was the sign-plugging approach the textbook explicitly warns against, and while they followed the corrected reasoning, they didn't arrive at it independently. The academic integrity disclosure at the close — that the cadet used an equation sheet and worked in parallel with a friend — is worth the instructor's attention, as it limits confidence in how much of the demonstrated understanding was independently developed. The cadet was direct and candid in reporting it.",
+    "report_data": {
+      "flags": {
+        "note": "Yellow readiness; disclosed concurrent equation-sheet/peer help — worth a look.",
+        "notable": false,
+        "needs_follow_up": true
+      },
+      "honor": {
+        "note": "Used an equation sheet and worked alongside a peer at the same time during the preflight — concurrent help, not collaboration beforehand.",
+        "status": "disclosed"
+      },
+      "effort": 4,
+      "schema": 1,
+      "producer": "backfill-from-report@2026-06-25",
+      "completed": true,
+      "ai_summary": "Cooperative ~10-min session with solid grasp of charge properties and conductors; Coulomb's-law sign convention and inverse-square scaling needed correction, and the cadet disclosed concurrent equation-sheet/peer help.",
+      "objectives": [
+        {
+          "key": "coulombs-law",
+          "label": "Coulomb's law — magnitude, inverse-square dependence & sign convention",
+          "understanding": 3
+        },
+        {
+          "key": "force-direction-newtons-third",
+          "label": "Direction of the force & Newton's third law",
+          "understanding": 3
+        },
+        {
+          "key": "charge-properties",
+          "label": "Properties of charge — quantization, conservation, magnitude symmetry",
+          "understanding": 4
+        },
+        {
+          "key": "conductors-insulators-induction",
+          "label": "Conductors, insulators & charging by induction",
+          "understanding": 4
+        }
+      ],
+      "duration_min": 10,
+      "key_strengths": "Genuine understanding of the inverse-square relationship and charge conservation once past initial imprecision.",
+      "misconceptions": [
+        {
+          "id": "inverse-square-slip",
+          "label": "Inverse-square scaling error",
+          "evidence": "doubling the distance reduces the force 'by the same amount' before self-correcting",
+          "severity": "minor",
+          "description": "Initially said doubling the distance reduces the force by the same amount (halving) rather than to one quarter.",
+          "objective_key": "coulombs-law"
+        },
+        {
+          "id": "sign-plugging-direction",
+          "label": "Sign-plugging for force direction",
+          "evidence": "'the negative means it is a force in the opposite direction'",
+          "severity": "minor",
+          "description": "Treated plugging signed charges into Coulomb's law as giving direction, rather than using magnitudes and reasoning direction separately.",
+          "objective_key": "coulombs-law"
+        }
+      ],
+      "effort_rationale": "Engaged cooperatively for ~10 min, answered prompts and followed corrective reasoning, and was candid; brief reading reflection and some concepts needed leading.",
+      "reading_reflection": {
+        "text": "The idea of charge creating a new force that I haven't studied today",
+        "topics": [
+          "coulombs-law",
+          "new-force"
+        ],
+        "sentiment": "neutral",
+        "engagement": 3,
+        "meaningful": true
+      },
+      "recommended_review": "The absolute-value/sign convention in Coulomb's law and the Newton's-third-law force pair.",
+      "overall_understanding": 3
+    },
+    "payload_bytes": 4115,
+    "created_at": "2026-06-12T19:38:55.043207+00:00",
+    "updated_at": "2026-06-25T18:48:35.510401+00:00",
+    "effort": 4,
+    "score": 2
+  },
+  {
+    "id": "884556bd-5e30-4547-ae35-7bfde909068f",
+    "interaction_id": "lesson-02-electric-charge-and-coulombs-law",
+    "student_id": 3000100003,
+    "report_markdown": "# JiTT Conversation Report\n\n## Cadet Information\n- **Name / Cadet Identifier:** Ellis\n- **Lesson:** Physics 215, Fall 2026, Lesson 2 — Electric Charge and Coulomb's Law\n- **Date / Time of Conversation:** 6/13/2026, 12:25 PM (cadet local time)\n- **Approximate Duration:** 19 minutes\n\n## Cadet's Reading Reflection (verbatim)\n\n> \"I never thought about charge before. I'm still confused about what exactly electric charge is.\"\n\n## Academic Integrity Self-Report (verbatim)\n\n> \"I did not have outside help. I didn't even use the book after reading. Just this discussion. I understand the force between charged objects, but what IS charge? I see why atoms are charged, but the book didn't explain why electrons or protons, or even neutrons have the charge that they do.\"\n\n## Concept-by-Concept Assessment\n\n| Concept | Assessment | Evidence |\n|---------|------------|----------|\n| Coulomb's law — formula, inverse-square dependence, and magnitude-from-absolute-values convention | Understood | Correctly stated the formula, explained why absolute values are used (\"The direction will depend on the signs of q1 and q2, since everything else must be positive\"), and correctly computed that doubling the distance reduces the force to one-quarter. |\n| Direction of the force & Newton's third law | Understood | Correctly identified that the forces on each charge are equal in magnitude and opposite in direction (\"they will always point in opposite directions\"), connecting this to Newton's third law. |\n| Properties of charge — quantization, conservation, magnitude symmetry | Understood | Correctly identified quantization (\"charges are discrete... integer numbers of charges\"), conservation (\"I don't think they can be destroyed\"), and that the magnitudes of positive and negative elementary charge are equal. |\n| Conductors, insulators & charging by induction | Partial | Gave a good intuitive explanation of polarization and why neutral objects are attracted to charged ones, but did not explicitly distinguish conductors from insulators in terms of free conduction electrons, and charging by induction was not reached. |\n\n## Misconceptions Surfaced\n\n- **Predicted misconceptions that appeared:** None observed.\n- **Unexpected misconceptions:** None observed.\n- **None observed:** The cadet did not exhibit any of the predicted misconceptions during the conversation.\n\n## Cadet's Open Questions\n\n- What *is* electric charge at a fundamental level? The cadet understands how atoms become charged and how the force behaves, but wants to know why electrons, protons, and neutrons have the intrinsic charges they do. This is a genuine and sophisticated question — it goes beyond the scope of the reading and into particle physics.\n\n## Lateral Connections Raised\n\n- No unprompted lateral connections raised.\n\n## Overall Readiness Flag\n\n🟡 **Yellow — Soft on specific topics.**\n\n**Specifics for Yellow:** The cadet has a solid grasp of Coulomb's law, charge properties, and polarization, but the conductor/insulator distinction (free conduction electrons vs. bound electrons) and charging by induction were not fully covered. The cadet understands *that* polarization causes attraction of neutral objects to charged ones, but did not explicitly articulate *why conductors behave differently from insulators* in holding static charge. Worth a brief touch in class.\n\n## Tutor's Honest Notes\n\nEllis came in well-prepared and engaged thoughtfully throughout. The cadet's core question — what charge *fundamentally is* — is a genuinely deep one that the reading does not answer, and reflects real intellectual curiosity rather than a gap in the assigned material. The conversation ran long due to the natural flow of discussion, which left charging by induction uncovered; the instructor may want to give that topic brief attention. No misconceptions were observed and the cadet's reasoning was generally sound and self-correcting.",
+    "report_data": {
+      "flags": {
+        "note": "Exemplary engagement; asked a sophisticated question extending beyond the reading.",
+        "notable": true,
+        "needs_follow_up": false
+      },
+      "honor": {
+        "note": null,
+        "status": "none"
+      },
+      "effort": 5,
+      "schema": 1,
+      "producer": "backfill-from-report@2026-06-25",
+      "completed": true,
+      "ai_summary": "Well-prepared, highly engaged 19-min session; solid on Coulomb's law, charge properties, and Newton's third law, with a sophisticated open question about what charge fundamentally is. Conductor/insulator distinction and induction were not fully reached.",
+      "objectives": [
+        {
+          "key": "coulombs-law",
+          "label": "Coulomb's law — magnitude, inverse-square dependence & sign convention",
+          "understanding": 5
+        },
+        {
+          "key": "force-direction-newtons-third",
+          "label": "Direction of the force & Newton's third law",
+          "understanding": 5
+        },
+        {
+          "key": "charge-properties",
+          "label": "Properties of charge — quantization, conservation, magnitude symmetry",
+          "understanding": 5
+        },
+        {
+          "key": "conductors-insulators-induction",
+          "label": "Conductors, insulators & charging by induction",
+          "understanding": 3
+        }
+      ],
+      "duration_min": 19,
+      "key_strengths": "Sound, self-correcting reasoning and genuine intellectual curiosity (asked why elementary particles carry the charges they do).",
+      "misconceptions": [],
+      "effort_rationale": "Well-prepared and engaged thoughtfully across a long (19-min) conversation, with a sophisticated unprompted question about the fundamental nature of charge.",
+      "reading_reflection": {
+        "text": "I never thought about charge before. I'm still confused about what exactly electric charge is.",
+        "topics": [
+          "nature-of-charge",
+          "fundamental-charge"
+        ],
+        "sentiment": "mixed",
+        "engagement": 5,
+        "meaningful": true
+      },
+      "recommended_review": "Conductor vs. insulator distinction (free conduction electrons) and charging by induction.",
+      "overall_understanding": 4
+    },
+    "payload_bytes": 3915,
+    "created_at": "2026-06-13T18:46:43.443025+00:00",
+    "updated_at": "2026-06-25T18:48:35.510401+00:00",
+    "effort": 5,
+    "score": 2
+  },
+  {
+    "id": "5efbd633-c923-4c6e-ad58-ee2da4e2692c",
+    "interaction_id": "lesson-02-electric-charge-and-coulombs-law",
+    "student_id": 3000100006,
+    "report_markdown": "# JiTT Conversation Report\n\n## Cadet Information\n- **Name / Cadet Identifier:** Brooks\n- **Lesson:** Physics 215, Fall 2026, Lesson 2 — Electric Charge and Coulomb's Law\n- **Date / Time of Conversation:** 6/12/2026, 1:29:32 PM\n- **Approximate Duration:** 10 minutes\n\n## Cadet's Reading Reflection (verbatim)\n\n> \"Nothing in particular.\"\n>\n> (after re-prompt:) \"Opposite charges attracting and like charges repelling\"\n\n## Academic Integrity Self-Report (verbatim)\n\n> \"nope\"\n\n## Concept-by-Concept Assessment\n\n| Concept | Assessment | Evidence |\n|---------|------------|----------|\n| Coulomb's law — magnitude formula, inverse-square dependence, absolute-value convention | Partial | Cadet initially said doubling the distance \"doubles\" the force, then \"halves\" it; arrived at one-quarter only after guided scaffolding. Did not know the absolute-value convention initially and defaulted to the Physics 110 signed-axis intuition; followed the corrective reasoning but did not articulate it independently. |\n| Direction of force & Newton's third law | Partial | Cadet correctly identified that like charges repel and unlike attract when prompted, but did not spontaneously articulate direction or the Newton's-third-law pair; Newton's third law was not explicitly probed due to time. |\n| Properties of charge — quantization, conservation, equal magnitudes | Partial | Quantization clicked quickly once the \"discrete chunks\" analogy was offered (\"like you can have 1 or 2 electrons but not 1.7?\"). Conservation was shakier — cadet said charges \"combine to make 0\" without initially articulating that the charges themselves persist; accepted the correction without pushback. Equal magnitudes of $+e$ and $-e$ was not explicitly probed. |\n| Conductors, insulators & charging by induction | Not Demonstrated | Cadet could not explain the atomic-level distinction (free conduction electrons vs. tightly bound electrons). Polarization and the reason a neutral object is attracted to a charged one were explained by the tutor rather than elicited from the cadet; induction was not reached. |\n\n## Misconceptions Surfaced\n\n- **Predicted misconceptions that appeared:**\n  - *Inverse-square slip:* Cadet initially said doubling the distance \"doubles\" the force, then corrected to \"halves\" — both wrong. Required two scaffolding steps to arrive at one-quarter.\n  - *Signed-charge direction error:* Cadet assumed plugging signed values into Coulomb's law would yield a meaningful direction (\"I assume direction\"), echoing the Physics 110 sign-convention intuition the reading explicitly warns against.\n\n- **Unexpected misconceptions:** None beyond the above.\n\n- **None observed:** N/A — two predicted misconceptions did surface.\n\n## Cadet's Open Questions\n\n- Cadet expressed implicit uncertainty about why the Physics 110 sign convention doesn't carry over to Coulomb's law — this was addressed in conversation but may benefit from reinforcement in class.\n- Cadet did not raise additional unresolved questions.\n\n## Lateral Connections Raised\n\n- Cadet asked whether conservation of charge is analogous to conservation of energy from Physics 110 — an unprompted and apt connection. Confirmed and briefly validated before moving on.\n\n## Overall Readiness Flag\n\n🟡 **Yellow — Soft on specific topics.**\n\n**Specifics:** The atomic-level distinction between conductors and insulators, polarization, and charging by induction were not demonstrated — the cadet could not engage with these without significant scaffolding or direct explanation. The inverse-square scaling and the absolute-value convention in Coulomb's law required guided scaffolding rather than independent recall. Newton's third law as applied to the force pair was not reached. The cadet is tracking the basic concepts but will need class to solidify the mechanics of Coulomb's law and the conductor/insulator material.\n\n## Tutor's Honest Notes\n\nBrooks engaged cooperatively and followed corrective reasoning without resistance, which is a good sign. The opening reflection was minimal and required re-prompting. The strongest moment was an unprompted analogy between conservation of charge and conservation of energy — a genuine lateral connection showing some physical intuition. The weakest areas were the conductor/insulator distinction and anything requiring independent recall rather than guided scaffolding; several key ideas had to be explained outright rather than elicited. The Newton's-third-law force pair and the equal-magnitude property of $+e$ and $-e$ were not reached due to pacing.",
+    "report_data": {
+      "flags": {
+        "note": "Yellow; low independent recall and a non-meaningful reflection (effort capped at 2).",
+        "notable": false,
+        "needs_follow_up": true
+      },
+      "honor": {
+        "note": null,
+        "status": "none"
+      },
+      "effort": 2,
+      "schema": 1,
+      "producer": "backfill-from-report@2026-06-25",
+      "completed": true,
+      "ai_summary": "Cooperative but heavily scaffolded ~10-min session; basic ideas tracking but the conductor/insulator distinction was not demonstrated and several concepts needed direct explanation. Reading reflection was minimal.",
+      "objectives": [
+        {
+          "key": "coulombs-law",
+          "label": "Coulomb's law — magnitude, inverse-square dependence & sign convention",
+          "understanding": 2
+        },
+        {
+          "key": "force-direction-newtons-third",
+          "label": "Direction of the force & Newton's third law",
+          "understanding": 3
+        },
+        {
+          "key": "charge-properties",
+          "label": "Properties of charge — quantization, conservation, magnitude symmetry",
+          "understanding": 2
+        },
+        {
+          "key": "conductors-insulators-induction",
+          "label": "Conductors, insulators & charging by induction",
+          "understanding": 1
+        }
+      ],
+      "duration_min": 10,
+      "key_strengths": "Unprompted analogy between conservation of charge and conservation of energy; followed corrective reasoning without resistance.",
+      "misconceptions": [
+        {
+          "id": "inverse-square-slip",
+          "label": "Inverse-square scaling error",
+          "evidence": "'doubles' then 'halves' before guided to one-quarter",
+          "severity": "minor",
+          "description": "Said doubling the distance 'doubles' then 'halves' the force; reached one-quarter only after two scaffolding steps.",
+          "objective_key": "coulombs-law"
+        },
+        {
+          "id": "sign-plugging-direction",
+          "label": "Sign-plugging for force direction",
+          "evidence": "'I assume direction' from signed values",
+          "severity": "minor",
+          "description": "Assumed plugging signed values into Coulomb's law yields a meaningful direction (Physics-110 signed-axis intuition).",
+          "objective_key": "coulombs-law"
+        },
+        {
+          "id": "charges-cancel-disappear",
+          "label": "Charges cancel and disappear",
+          "evidence": "charges 'combine to make 0'",
+          "severity": "minor",
+          "description": "Said opposite charges 'combine to make 0' without recognizing the charges persist and are conserved.",
+          "objective_key": "charge-properties"
+        }
+      ],
+      "effort_rationale": "Cooperative for ~10 min with a genuine unprompted charge-vs-energy conservation connection, but the opening reading reflection was minimal and required re-prompting, capping effort at 2.",
+      "reading_reflection": {
+        "text": "Nothing in particular. (after re-prompt:) Opposite charges attracting and like charges repelling",
+        "topics": [],
+        "sentiment": "neutral",
+        "engagement": 1,
+        "meaningful": false
+      },
+      "recommended_review": "Conductor/insulator distinction and induction, plus independent recall of Coulomb's-law scaling and the sign convention.",
+      "overall_understanding": 2
+    },
+    "payload_bytes": 4542,
+    "created_at": "2026-06-12T19:43:51.825774+00:00",
+    "updated_at": "2026-06-25T18:48:35.510401+00:00",
+    "effort": 2,
+    "score": 1
+  },
+  {
+    "id": "2b804827-2d74-4449-ba71-74f48899f652",
+    "interaction_id": "lesson-02-electric-charge-and-coulombs-law",
+    "student_id": 3000100012,
+    "report_markdown": "# JiTT Conversation Report\n\n## Cadet Information\n- **Name / Cadet Identifier:** Chen\n- **Lesson:** Physics 215, Fall 2026, Lesson 2 — Electric Charge and Coulomb's Law\n- **Date / Time of Conversation:** 6/15/2026, 2:53:34 PM\n- **Approximate Duration:** 9 minutes\n\n## Cadet's Reading Reflection (verbatim)\n\n> \"I found it interesting that whether a material conducts or insulates is related to how free its electrons are. I'm also really interested in chemistry, so that was kind of a cool connection\"\n\n## Academic Integrity Self-Report (verbatim)\n\n> \"I did not\"\n\n## Concept-by-Concept Assessment\n\n| Concept | Assessment | Evidence |\n|---------|------------|----------|\n| Coulomb's law — magnitude formula, inverse-square dependence, and sign-handling convention | Partial | Correctly stated $F = k_e q_1 q_2 / r^2$ and knew the ingredients; understood after explanation why signed values shouldn't be trusted for direction, but did not articulate the sign-handling issue independently before being prompted. |\n| Direction of force & Newton's third law | Understood | Correctly identified that like charges repel and unlike attract; independently stated the Newton's third law pair as \"same magnitude, opposite direction.\" |\n| Properties of charge — quantization, conservation, magnitude independence | Understood | Correctly explained quantization as discrete \"packets\" with smallest charge $e = 1.602 \\times 10^{-19}$ C; correctly identified that rubbing transfers electrons, not positive charge, demonstrating conservation. |\n| Conductors, insulators & charging by induction — polarization and attraction of neutral objects | Partial | Good grasp of the conductor/insulator distinction. Initially stated electrons move *toward* a negative rod (reversed direction), self-corrected when prompted. Initially said there was no net force between the rod and polarized sphere; required a full explanation before understanding the inverse-square asymmetry argument. |\n\n## Misconceptions Surfaced\n\n- **Predicted misconceptions that appeared:**\n  - *Neutral objects cannot be attracted to charged ones (missing polarization asymmetry):* Cadet stated \"I would say no\" when asked if there is a net force between a charged rod and a polarized neutral sphere. Required a direct explanation of the distance-dependent asymmetry before understanding.\n\n- **Unexpected misconceptions:**\n  - Cadet initially stated that electrons in a metal sphere would move *toward* a nearby negative rod (attraction rather than repulsion). Self-corrected immediately when redirected, attributing it to a chemistry cross-association (\"like dissolves like\"). Likely a momentary confusion rather than a deep misconception.\n\n- **None observed:** N/A — two misconceptions surfaced, both resolved within the session.\n\n## Cadet's Open Questions\n\n- Cadet did not raise unresolved questions.\n\n## Lateral Connections Raised\n\n- Cadet connected the conductor/insulator distinction to chemistry background, noting that electron mobility in materials relates to concepts familiar from chemistry. This is a meaningful and accurate connection to bonding and electron affinity.\n- Cadet made a self-aware meta-connection when correcting the polarization direction error, noting the interference from the chemistry heuristic \"like dissolves like\" — showing good metacognitive awareness.\n\n## Overall Readiness Flag\n\n🟡 **Yellow — Soft on specific topics.**\n\n**Specifics for Yellow:** Two areas to watch: (1) The sign-handling convention in Coulomb's law — cadet did not independently flag the issue with plugging signed charges into the formula and needed it explained rather than deriving it themselves. (2) The net-force-on-a-neutral-object argument — cadet did not see intuitively that the inverse-square asymmetry produces a net attraction and required a full explanation. Both concepts resolved in conversation, but may not be fully consolidated yet.\n\n## Tutor's Honest Notes\n\nCadet Chen engaged actively and in good faith throughout. The chemistry background was a genuine asset for the conductor/insulator material and showed up as a meaningful lateral connection, though it also caused a momentary reversal on the polarization direction question. The two softnesses — sign handling in Coulomb's law and the polarization-produces-net-attraction argument — are both grounded in incomplete internalization of the inverse-square distance dependence, suggesting that's the thread worth pulling in class. Overall the cadet tracked the material well and self-corrected quickly when redirected.",
+    "report_data": {
+      "flags": {
+        "note": "Yellow; two self-corrected softnesses to consolidate (rooted in the inverse-square distance dependence).",
+        "notable": false,
+        "needs_follow_up": true
+      },
+      "honor": {
+        "note": null,
+        "status": "none"
+      },
+      "effort": 5,
+      "schema": 1,
+      "producer": "backfill-from-report@2026-06-25",
+      "completed": true,
+      "ai_summary": "Actively engaged 9-min session; strong on force direction/Newton's third and charge properties, with two self-corrected softnesses around sign handling and polarization-produced net attraction (inverse-square asymmetry).",
+      "objectives": [
+        {
+          "key": "coulombs-law",
+          "label": "Coulomb's law — magnitude, inverse-square dependence & sign convention",
+          "understanding": 3
+        },
+        {
+          "key": "force-direction-newtons-third",
+          "label": "Direction of the force & Newton's third law",
+          "understanding": 5
+        },
+        {
+          "key": "charge-properties",
+          "label": "Properties of charge — quantization, conservation, magnitude symmetry",
+          "understanding": 4
+        },
+        {
+          "key": "conductors-insulators-induction",
+          "label": "Conductors, insulators & charging by induction",
+          "understanding": 3
+        }
+      ],
+      "duration_min": 9,
+      "key_strengths": "Metacognitive self-correction and an apt chemistry-to-conductivity lateral connection.",
+      "misconceptions": [
+        {
+          "id": "neutral-no-force",
+          "label": "Neutral object feels no net force",
+          "evidence": "'I would say no' (net force on a polarized sphere)",
+          "severity": "major",
+          "description": "Said there is no net force between a charged rod and a polarized neutral sphere, missing the inverse-square asymmetry; resolved after explanation.",
+          "objective_key": "conductors-insulators-induction"
+        },
+        {
+          "id": "polarization-direction",
+          "label": "Polarization direction reversed",
+          "evidence": "attributed the slip to the chemistry heuristic 'like dissolves like'",
+          "severity": "minor",
+          "description": "Initially said electrons in a metal sphere move toward a nearby negative rod (attraction); self-corrected immediately.",
+          "objective_key": "conductors-insulators-induction"
+        }
+      ],
+      "effort_rationale": "Active, good-faith engagement for ~9 min with metacognitive self-correction and a meaningful chemistry-linked reading reflection.",
+      "reading_reflection": {
+        "text": "I found it interesting that whether a material conducts or insulates is related to how free its electrons are. I'm also really interested in chemistry, so that was kind of a cool connection",
+        "topics": [
+          "conductors",
+          "chemistry-connection"
+        ],
+        "sentiment": "positive",
+        "engagement": 5,
+        "meaningful": true
+      },
+      "recommended_review": "Why the inverse-square asymmetry produces net attraction on a neutral object; sign handling in Coulomb's law.",
+      "overall_understanding": 3
+    },
+    "payload_bytes": 4542,
+    "created_at": "2026-06-15T21:04:06.243769+00:00",
+    "updated_at": "2026-06-25T18:48:35.510401+00:00",
+    "effort": 5,
+    "score": 2
+  },
+  {
+    "id": "363e4809-3052-4059-9bc0-c343abda39b6",
+    "interaction_id": "lesson-02-electric-charge-and-coulombs-law",
+    "student_id": 3000100016,
+    "report_markdown": "# JiTT Conversation Report\n\n## Cadet Information\n- **Name / Cadet Identifier:** Carmona\n- **Lesson:** Physics 215, Fall 2026, Lesson 2 — Electric Charge and Coulomb's Law\n- **Date / Time of Conversation:** 6/22/2026, 2:07 PM (local)\n- **Approximate Duration:** 10 minutes\n\n## Cadet's Reading Reflection (verbatim)\n\nThe cadet stated they had not done the reading. No substantive reflection was possible.\n\n> \"I didnt read\"\n\n*(Cadet did not provide a substantive reflection.)*\n\n## Academic Integrity Self-Report (verbatim)\n\n> \"no\"\n\n## Concept-by-Concept Assessment\n\n| Concept | Assessment | Evidence |\n|---------|------------|----------|\n| Coulomb's law — magnitude, inverse-square dependence, absolute-value convention | Partial | Cadet correctly identified that doubling distance reduces force by one-fourth when prompted, but had no prior knowledge of the equation and could not explain the absolute-value convention without being told. |\n| Direction of force & Newton's third law | Partial | Cadet correctly stated that like charges repel without prompting, and accepted the unlike-attracts rule, but Newton's third law pairing was never reached. |\n| Properties of charge — quantization, conservation, magnitude symmetry | Not Demonstrated | Cadet identified protons and electrons as charge carriers and correctly said electrons transfer, but quantization and conservation were delivered as tutor explanations, not demonstrated by the cadet. |\n| Conductors, insulators & charging by induction | Not Reached | Topic was not reached. Polarization was briefly explained by the tutor, but the cadet did not engage with it substantively. |\n\n## Misconceptions Surfaced\n\n- **Predicted misconceptions that appeared:** None were directly surfaced — the cadet lacked enough familiarity with the material to exhibit specific misconceptions.\n- **Unexpected misconceptions:** None identified.\n- **None observed:** The cadet's limited engagement meant misconceptions could not be reliably probed.\n\n## Cadet's Open Questions\n\n- Cadet asked about the Pauli exclusion principle (out of scope for this lesson; redirected).\n- Cadet did not raise any unresolved questions about today's material.\n\n## Lateral Connections Raised\n\n- No unprompted lateral connections raised.\n\n## Overall Readiness Flag\n\n- **🔴 Red — Fundamental gaps.** Cadet self-reported not having done the reading and could not engage with any of the priority topics without tutor scaffolding.\n\n**Specifics for Red:** Cadet has no working knowledge of Coulomb's law, charge quantization, conservation of charge, or conductors/insulators going into class. The only prior knowledge demonstrated was the basic like-repels/unlike-attracts rule and that electrons are the mobile charge carriers. All priority topics require instructor attention in class.\n\n## Tutor's Honest Notes\n\nCadet Carmona self-reported not having completed the reading at the outset, which shaped the entire conversation. Rather than a check-in, this became a brief introduction to the material. The cadet showed some willingness to engage on direct questions (correctly getting the inverse-square scaling when walked through it) but repeatedly tried to redirect the conversation — asking about an English class, requesting a reset, asking about the AI's version, and raising an out-of-scope physics topic. Substantive conceptual engagement was minimal. The instructor should not assume any familiarity with today's material and may want to address the reading expectation directly.",
+    "report_data": {
+      "flags": {
+        "note": "Red — did not read; address the reading expectation and assume no familiarity in class.",
+        "notable": false,
+        "needs_follow_up": true
+      },
+      "honor": {
+        "note": null,
+        "status": "none"
+      },
+      "effort": 1,
+      "schema": 1,
+      "producer": "backfill-from-report@2026-06-25",
+      "completed": true,
+      "ai_summary": "Self-reported not having read; the session became a brief intro with minimal substantive engagement and frequent off-task redirects. No working knowledge of the priority topics was demonstrated.",
+      "objectives": [
+        {
+          "key": "coulombs-law",
+          "label": "Coulomb's law — magnitude, inverse-square dependence & sign convention",
+          "understanding": 2
+        },
+        {
+          "key": "force-direction-newtons-third",
+          "label": "Direction of the force & Newton's third law",
+          "understanding": 2
+        },
+        {
+          "key": "charge-properties",
+          "label": "Properties of charge — quantization, conservation, magnitude symmetry",
+          "understanding": 1
+        },
+        {
+          "key": "conductors-insulators-induction",
+          "label": "Conductors, insulators & charging by induction",
+          "understanding": null
+        }
+      ],
+      "duration_min": 10,
+      "key_strengths": "Engaged on direct questions when walked through it (got the inverse-square scaling).",
+      "misconceptions": [],
+      "effort_rationale": "Self-reported not having read and repeatedly redirected off-task (English class, resets, out-of-scope topics); only minimal prompted engagement. Non-meaningful reflection also caps effort.",
+      "reading_reflection": {
+        "text": "I didnt read",
+        "topics": [],
+        "sentiment": "negative",
+        "engagement": 0,
+        "meaningful": false
+      },
+      "recommended_review": "All priority topics — Coulomb's law, charge quantization/conservation, conductors vs. insulators — and the reading expectation itself.",
+      "overall_understanding": 1
+    },
+    "payload_bytes": 3498,
+    "created_at": "2026-06-22T20:21:05.086861+00:00",
+    "updated_at": "2026-06-25T18:48:35.510401+00:00",
+    "effort": 1,
+    "score": 1
+  },
+  {
+    "id": "92300e49-8fea-48fc-b578-e44db92eaabc",
+    "interaction_id": "lesson-02-electric-charge-and-coulombs-law",
+    "student_id": 3000100020,
+    "report_markdown": "# JiTT Conversation Report\n\n## Cadet Information\n- **Name / Cadet Identifier:** Carmona\n- **Lesson:** Physics 215, Fall 2026, Lesson 2 — Electric Charge and Coulomb's Law\n- **Date / Time of Conversation:** 6/23/2026, 9:38:53 PM (cadet local time)\n- **Approximate Duration:** ~2 minutes (session ended at hard stop with minimal exchange)\n\n## Cadet's Reading Reflection (verbatim)\n\n> It was difficult that it expected me to know what symbols are used for. The images are good references.\n\n## Academic Integrity Self-Report (verbatim)\n\n> (The integrity self-report question was not asked — the session reached a hard stop before the closing phase was reached.)\n\n## Concept-by-Concept Assessment\n\n| Concept | Assessment | Evidence |\n|---------|------------|----------|\n| Coulomb's Law — formula, inverse-square dependence, sign-handling convention | Not Reached | Session ended before this topic was probed. |\n| Direction of the electric force & Newton's third law | Not Reached | Session ended before this topic was probed. |\n| Properties of charge — quantization, conservation, magnitude symmetry | Not Reached | Session ended before this topic was probed. |\n| Conductors, insulators & charging by induction | Not Reached | Session ended before this topic was probed. |\n\n## Misconceptions Surfaced\n\n- **Predicted misconceptions that appeared:** None observed — no content probing occurred.\n- **Unexpected misconceptions:** None observed.\n- **None observed:** The session did not progress to content discussion, so no misconceptions could be surfaced or ruled out.\n\n## Cadet's Open Questions\n\n- Cadet indicated difficulty with symbolic notation in the reading (unfamiliar with what symbols represent), which may reflect a gap in prerequisite mathematical or physics notation. This was not explored further before the hard stop.\n\n## Lateral Connections Raised\n\n- No unprompted lateral connections raised.\n\n## Overall Readiness Flag\n\n- **🔴 Red — Fundamental gaps.** The session ended immediately after the opening reflection. No content probing was completed. Readiness cannot be assessed from the available evidence.\n\n**Specifics for Red:** The cadet's only substantive comment was that the reading assumed prior familiarity with symbol conventions, which may indicate gaps in physics notation literacy (e.g., $k_e$, $\\varepsilon_0$, $r_{12}$, $\\hat{r}$). Whether this is a surface-level concern or reflects deeper preparation gaps is unknown — no probing occurred to find out.\n\n## Tutor's Honest Notes\n\nThe session reached a hard stop almost immediately after the cadet gave their opening reflection. The cadet acknowledged readiness to begin and offered a brief but genuine observation — that the reading assumed familiarity with notation that wasn't explained — but the session ended before any conceptual probing could take place. The readiness flag is Red by default because no evidence of understanding exists, not because the cadet demonstrated gaps. The instructor should treat this as an incomplete session rather than a demonstration of poor preparation.",
+    "report_data": {
+      "flags": {
+        "note": "Incomplete session (hard stop ~2 min); re-run to assess. Possible notation-literacy gap.",
+        "notable": false,
+        "needs_follow_up": true
+      },
+      "honor": {
+        "note": null,
+        "status": null
+      },
+      "effort": 2,
+      "schema": 1,
+      "producer": "backfill-from-report@2026-06-25",
+      "completed": false,
+      "ai_summary": "Incomplete ~2-min session that ended at a hard stop right after the opening reflection; no content was probed, so readiness is unassessed. Cadet noted the reading assumed unfamiliar symbol notation.",
+      "objectives": [
+        {
+          "key": "coulombs-law",
+          "label": "Coulomb's law — magnitude, inverse-square dependence & sign convention",
+          "understanding": null
+        },
+        {
+          "key": "force-direction-newtons-third",
+          "label": "Direction of the force & Newton's third law",
+          "understanding": null
+        },
+        {
+          "key": "charge-properties",
+          "label": "Properties of charge — quantization, conservation, magnitude symmetry",
+          "understanding": null
+        },
+        {
+          "key": "conductors-insulators-induction",
+          "label": "Conductors, insulators & charging by induction",
+          "understanding": null
+        }
+      ],
+      "duration_min": 2,
+      "key_strengths": "Gave a genuine reflection flagging that the reading assumed unexplained symbol notation.",
+      "misconceptions": [],
+      "effort_rationale": "Session hit a hard stop after ~2 min with only the opening reflection given; minimal engagement was observed. Treat as an incomplete session rather than poor preparation.",
+      "reading_reflection": {
+        "text": "It was difficult that it expected me to know what symbols are used for. The images are good references.",
+        "topics": [
+          "notation",
+          "symbols"
+        ],
+        "sentiment": "mixed",
+        "engagement": 3,
+        "meaningful": true
+      },
+      "recommended_review": "Re-run the interaction to completion; check physics notation literacy (k_e, epsilon-0, r-hat).",
+      "overall_understanding": null
+    },
+    "payload_bytes": 3061,
+    "created_at": "2026-06-24T04:08:41.243141+00:00",
+    "updated_at": "2026-06-25T18:48:35.510401+00:00",
+    "effort": 2,
+    "score": 1
+  },
+  {
+    "id": "1f1a94c7-9a2a-497c-9205-197d238fd902",
+    "interaction_id": "lesson-02-electric-charge-and-coulombs-law",
+    "student_id": 3000100014,
+    "report_markdown": "# JiTT Conversation Report\n\n## Cadet Information\n- **Name / Cadet Identifier:** Garcia\n- **Lesson:** Physics 215, Fall 2026, Lesson 2 — Electric Charge and Coulomb's Law\n- **Date / Time of Conversation:** 6/24/2026, 11:28 PM (cadet local time)\n- **Approximate Duration:** 16 minutes\n\n## Cadet's Reading Reflection (verbatim)\n\n> \"With two charges, one larger and one smaller, why doesn't the larger charge feel a larger force?\"\n\n## Academic Integrity Self-Report (verbatim)\n\n> \"No help with this assignment.\"\n\n## Concept-by-Concept Assessment\n\n| Concept | Assessment | Evidence |\n|---------|------------|----------|\n| Coulomb's law — magnitude, inverse-square dependence, and absolute-value sign convention | Partial | Correctly stated that doubling distance cuts force to one-quarter. Understood that charge signs tell you attract vs. repel, but did not independently articulate the absolute-value convention; needed it explained to him. Did not spontaneously reproduce the formula. |\n| Direction of force & Newton's third law | Partial | Opened with the correct intuition that the force pair must be equal — but initially in the wrong direction (\"the larger charge should feel a larger force\"). Accepted the correction and correctly followed the Newton's third law reasoning. Did not independently state the repel/attract direction rule. |\n| Properties of charge — quantization, conservation, magnitude symmetry | Partial | Correctly identified quantization as discrete packets and, when pressed, named the electron charge $e = 1.602 \\times 10^{-19}$ C and the integer-multiple rule $q = \\pm Ne$. Conservation of charge and the equal magnitude of positive and negative elementary charge were not reached. |\n| Conductors, insulators & charging by induction | Partial | Gave a solid functional description of conductors vs. insulators, including why static charge stays on insulators and redistributes on conductors. Polarization and why a neutral object is attracted to a charged one were not reached due to time. |\n\n## Misconceptions Surfaced\n\n- **Predicted misconceptions that appeared:** Initial claim that \"the larger charge should feel a larger force\" reflects a violation of Newton's third law — a predicted misconception. Cadet accepted the correction readily once the Coulomb's law formula and $F = ma$ reasoning were applied.\n- **Unexpected misconceptions:** None observed beyond the above.\n- **None observed:** Cadet did not exhibit the inverse-square slip (correctly stated one-quarter), did not conflate electric force with gravity, and did not claim charge disappears when it cancels.\n\n## Cadet's Open Questions\n\n- \"When do I use the signs and not use the signs in Coulomb's Law? How do I know when the signs are important?\" — Cadet explicitly flagged this as unresolved and asked it to be passed to the instructor. This is a high-value question: it gets at the boundary between scalar magnitude calculation and vector direction assignment in Coulomb's law.\n\n## Lateral Connections Raised\n\n- No unprompted lateral connections raised.\n\n## Overall Readiness Flag\n\n🟡 **Yellow — Soft on specific topics.** Generally tracking but with gaps.\n\n**Specifics:** The sign-handling convention in Coulomb's law (absolute values for magnitude, physical reasoning for direction) was not internalized — cadet needed it explained and left with an explicit unresolved question about it. Polarization and charging by induction (the \"why\" of neutral-object attraction) were not reached at all. Conservation of charge and the equal magnitude of $+e$ and $-e$ were also not covered. Core formula and inverse-square behavior are present but were not reproduced spontaneously.\n\n## Tutor's Honest Notes\n\nGarcia engaged earnestly and asked a genuinely good opening question that drove straight into Newton's third law — an indicator of active reading rather than passive skimming. Responses were concise and sometimes needed prompting to reach the next level of precision, but the cadet did not resist probing and accepted corrections without pushback. The conversation ran long (16 minutes) due to a clarifying exchange early on, which left polarization and conservation of charge unaddressed; the instructor should expect those to be cold topics in class. The unresolved sign-convention question is specific and substantive — worth a direct answer at the board.",
+    "report_data": {
+      "flags": {
+        "note": "Yellow readiness; left with an explicit unresolved question about Coulomb's-law sign conventions, and polarization/induction and conservation of charge were not reached.",
+        "notable": false,
+        "needs_follow_up": true
+      },
+      "honor": {
+        "note": null,
+        "status": "none"
+      },
+      "effort": 4,
+      "schema": 1,
+      "producer": "backfill-from-report@2026-06-25",
+      "completed": false,
+      "ai_summary": "Earnest ~16-min session opened by a genuine Newton's-third-law question; correct inverse-square intuition but the Coulomb's-law sign convention was not internalized, and polarization/induction and conservation of charge were never reached.",
+      "objectives": [
+        {
+          "key": "coulombs-law",
+          "label": "Coulomb's law — magnitude, inverse-square dependence & sign convention",
+          "understanding": 3
+        },
+        {
+          "key": "force-direction-newtons-third",
+          "label": "Direction of the force & Newton's third law",
+          "understanding": 3
+        },
+        {
+          "key": "charge-properties",
+          "label": "Properties of charge — quantization, conservation, magnitude symmetry",
+          "understanding": 3
+        },
+        {
+          "key": "conductors-insulators-induction",
+          "label": "Conductors, insulators & charging by induction",
+          "understanding": 3
+        }
+      ],
+      "duration_min": 16,
+      "key_strengths": "Active reading — drove straight into Newton's third law with a real question; correct inverse-square reasoning (doubling distance cuts the force to one quarter) and a solid functional grasp of conductors vs. insulators.",
+      "misconceptions": [
+        {
+          "id": "newtons-third-bigger-charge",
+          "label": "Bigger charge feels a bigger force (Newton's third law)",
+          "evidence": "\"the larger charge should feel a larger force\" — accepted the correction once F = ma and Coulomb's law were applied.",
+          "severity": "minor",
+          "description": "Believed the larger of two interacting charges experiences the larger force, violating Newton's third law.",
+          "objective_key": "force-direction-newtons-third"
+        }
+      ],
+      "effort_rationale": "Engaged earnestly for ~16 min, opened with a genuine Newton's-third-law question, and accepted corrections without pushback; answers were concise and sometimes needed prompting, and the long clarifying exchange left two topics unreached.",
+      "reading_reflection": {
+        "text": "With two charges, one larger and one smaller, why doesn't the larger charge feel a larger force?",
+        "topics": [
+          "newtons-third-law",
+          "coulombs-law",
+          "force-pairs"
+        ],
+        "sentiment": "neutral",
+        "engagement": 3,
+        "meaningful": true
+      },
+      "recommended_review": "When the signs matter vs. when to use magnitudes in Coulomb's law; plus polarization/charging by induction and conservation of charge, which time did not allow.",
+      "overall_understanding": 3
+    },
+    "payload_bytes": 4351,
+    "created_at": "2026-06-25T19:05:28.531266+00:00",
+    "updated_at": "2026-06-25T21:22:11.149203+00:00",
+    "effort": 4,
+    "score": 2
+  },
+  {
+    "id": "7a8c0fa0-ef4b-478a-8f1f-84e2571f8cd3",
+    "interaction_id": "lesson-02-electric-charge-and-coulombs-law",
+    "student_id": 3000100018,
+    "report_markdown": "# JiTT Conversation Report\n\n## Cadet Information\n- **Name / Cadet Identifier:** DEMONSTRATION\n- **Lesson:** DEMONSTRATION\n- **Date / Time of Conversation:** DEMONSTRATION\n- **Approximate Duration:** DEMONSTRATION\n\n## Cadet's Reading Reflection (verbatim)\n\n> DEMONSTRATION\n\n## Academic Integrity Self-Report (verbatim)\n\n> DEMONSTRATION\n\n## Concept-by-Concept Assessment\n\n| Concept | Assessment | Evidence |\n|---------|------------|----------|\n| DEMONSTRATION | DEMONSTRATION | DEMONSTRATION |\n| DEMONSTRATION | DEMONSTRATION | DEMONSTRATION |\n| DEMONSTRATION | DEMONSTRATION | DEMONSTRATION |\n| DEMONSTRATION | DEMONSTRATION | DEMONSTRATION |\n\n## Misconceptions Surfaced\n\n- DEMONSTRATION\n\n## Cadet's Open Questions\n\n- DEMONSTRATION\n\n## Lateral Connections Raised\n\n- DEMONSTRATION\n\n## Overall Readiness Flag\n\n🟢 DEMONSTRATION\n\n## Tutor's Honest Notes\n\nDEMONSTRATION",
+    "report_data": {
+      "flags": {
+        "note": "Exemplary: ready for class, first-principles reasoning, insightful reflection on quantization.",
+        "notable": true,
+        "needs_follow_up": false
+      },
+      "honor": {
+        "note": null,
+        "status": "none"
+      },
+      "effort": 5,
+      "schema": 1,
+      "producer": "backfill-from-report@2026-06-25",
+      "completed": true,
+      "ai_summary": "Well-prepared, ready-for-class session; solid first-principles command of all four priority concepts with no misconceptions. Only the sign-handling answer was brief and worth confirming numerically.",
+      "objectives": [
+        {
+          "key": "coulombs-law",
+          "label": "Coulomb's law — magnitude, inverse-square dependence & sign convention",
+          "understanding": 5
+        },
+        {
+          "key": "force-direction-newtons-third",
+          "label": "Direction of the force & Newton's third law",
+          "understanding": 5
+        },
+        {
+          "key": "charge-properties",
+          "label": "Properties of charge — quantization, conservation, magnitude symmetry",
+          "understanding": 5
+        },
+        {
+          "key": "conductors-insulators-induction",
+          "label": "Conductors, insulators & charging by induction",
+          "understanding": 5
+        }
+      ],
+      "duration_min": 11,
+      "key_strengths": "First-principles reasoning across all concepts and a genuine reflection probing the discrete-vs-continuous nature of charge.",
+      "misconceptions": [],
+      "effort_rationale": "Well-prepared and engaged throughout 11 min, reasoning from first principles rather than recitation, with a genuine reflection on quantization.",
+      "reading_reflection": {
+        "text": "That charge is quantized and there is a limit to how small it can be. I would think you could keep breaking it apart into smaller and smaller pieces",
+        "topics": [
+          "quantization",
+          "charge"
+        ],
+        "sentiment": "positive",
+        "engagement": 5,
+        "meaningful": true
+      },
+      "recommended_review": "Confirm the sign-handling convention in a numerical Coulomb's-law context (correct but brief).",
+      "overall_understanding": 5
+    },
+    "payload_bytes": 863,
+    "created_at": "2026-06-12T17:57:45.992917+00:00",
+    "updated_at": "2026-06-26T22:04:14.93452+00:00",
+    "effort": 5,
+    "score": 2
+  }
+]
