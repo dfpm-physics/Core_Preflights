@@ -5,13 +5,11 @@ description: Physics 215 preflight assignment analysis skill for USAFA. Use when
   apply auto-grading, write suggested scores to Supabase, or says /preflight-analyze.
   Also triggers for: "analyze preflight", "grade submissions", "check who hasn't submitted",
   "run analysis on assignment", "preflight analyze". This skill is run by a Course Director
-  or System Admin — not individual instructors. Run once for M-day sections, once for T-day.
-  Optional filter argument: "M" to analyze only M-day sections, "T" to analyze only T-day sections.
+  or System Admin — not individual instructors. Optional filter argument: "M" to
+  analyze only M-day sections, "T" to analyze only T-day sections.
 ---
 
 # Physics 215 Preflight Analyzer
-
-This skill is run by a **Course Director or System Admin** — not individual instructors. A single run covers all sections for a given day (M-day or T-day). Results are stored per-instructor and are visible to each instructor in the Report tab.
 
 You are analyzing student submissions for a Physics 215 preflight assignment at USAFA. Your job is to:
 1. Fetch all student responses from Supabase (filtered by M-day or T-day sections if requested)
@@ -19,6 +17,8 @@ You are analyzing student submissions for a Physics 215 preflight assignment at 
 3. Analyze responses question by question for physics misconceptions
 4. Write suggested scores back to Supabase (`is_finalized = false`)
 5. Print a structured per-instructor report in the conversation
+
+This skill is run by a **Course Director or System Admin** — not individual instructors. A single run covers all sections for a given day (M-day or T-day). Results are stored per-instructor and are visible to each instructor in the Report tab.
 
 ---
 
@@ -102,7 +102,7 @@ If either field is null, skip this step (proceed without RAG context).
 ## Step 4 — Fetch the Roster
 
 ```
-GET {SUPA_URL}/rest/v1/students?select=student_id,name,section_id&order=name.asc
+GET {SUPA_URL}/rest/v1/students?select=student_id,name,section_id&order=student_id.asc
 Headers: apikey + Authorization
 ```
 
@@ -163,32 +163,50 @@ Store auto-graded results in a per-student score object. These do NOT need instr
 
 For each free-response question (`type: "free_response"`), collect all student answers (within filtered set).
 
-### Grading Standard (LIBERAL)
-- **Full credit** by default for any answer showing genuine engagement — even partially correct, informal, or incomplete explanations
-- **Deduct only** when: (a) blank/empty, (b) completely off-topic/gibberish/nonsense with no physics reasoning, or (c) a single word with no reasoning
-- **Wrong but relevant answers get `warn` (full credit + yellow flag), NOT `zero`** — if a student is clearly trying to engage with the right physics concept but reaches the wrong conclusion, they receive full credit with corrective feedback
-- Every deduction MUST have a written `feedback` string that explains what was missing and could serve as instructor feedback to the student
+### Grading Decision — THREE STATES ONLY
 
-### Feedback Rules — MANDATORY
+For each free-response answer, assign exactly one of:
 
-**Feedback is required in ALL of the following cases, regardless of credit awarded:**
-
-| Situation | Score | Status | Feedback required |
+| State | Status | Score | When to use |
 |---|---|---|---|
-| Blank / empty | 0 | `zero` | "No answer provided." |
-| Completely off-topic or gibberish (no physics engagement) | 0 | `zero` | Explain what was expected |
-| **Wrong but relevant** — clearly engaging with the right physics topic but incorrect | q.points | `warn` | Corrective feedback (template below) |
-| Correct answer, wrong or circular mechanism | q.points | `warn` | Corrective feedback (template below) |
-| Vague correct answer (no mechanism, e.g. "static electricity", "something with charges") | q.points | `warn` | Corrective feedback (template below) |
-| Low-confidence hedge ("I think...", "Maybe...") with no explanation | q.points | `warn` | Corrective feedback (template below) |
-| Fully correct with sound mechanism | q.points | `full` | `""` (empty — no feedback needed) |
+| 🟢 Green | `full` | q.points | Answer is correct, or essentially correct with only minor wording/phrasing issues |
+| 🟡 Yellow | `warn` | q.points | Answer is on-topic and shows genuine effort, but has flawed or incomplete reasoning — student attempted the right physics even if the explanation is wrong |
+| 🔴 Red | `zero` | 0 | Blank, completely off-topic, gibberish, or clearly not a good-faith attempt (e.g., "I don't know", "N/A", a random unrelated sentence, a single word) |
 
-**Corrective feedback template** (use exactly):
-> "While we gave you credit for your response, it may be incorrect. Here is the instructor answer: {expected_response}"
+**Default rule: if a student wrote something relevant to the question, it is at minimum yellow.**
 
-If `expected_response` is not set on the question, substitute a concise correct explanation in its place.
+The bar for red is HIGH. Only award zero when the response is:
+- Completely blank or whitespace-only
+- Explicitly "I don't know" / "didn't do the reading" / "N/A"
+- Entirely off-topic or gibberish with no connection to the question
+- A single isolated word with no reasoning whatsoever
 
-**You must read each answer and evaluate its correctness** — do not leave feedback blank simply because an answer is non-empty. Any answer that is wrong, vague, or mechanistically unsound must receive corrective feedback even when full credit is awarded.
+**Never give zero for imperfect physics.** A student who names the wrong force, reverses a sign, misidentifies which charges move, or describes the mechanism incorrectly but is clearly reasoning about the right phenomenon gets yellow (full credit + feedback), not red (zero). Hedging language ("I think...", "maybe...") does NOT make an answer red — if there's a genuine attempt underneath the hedge, it's at least yellow.
+
+### Feedback Rules
+
+- **Green** (`full`): `feedback = ""` — empty string, no message needed.
+
+- **Yellow** (`warn`): Write a **tailored 2–3 sentence corrective response** specific to what *this student* actually wrote. Do NOT use a generic template — every yellow answer should get a response that could only have been written for that particular answer.
+
+  Follow this process for each yellow answer:
+  1. **Read the student's answer carefully.** Identify the specific flaw: wrong mechanism, reversed direction, missing concept, circular reasoning, etc.
+  2. **Acknowledge anything correct** in the answer (if present) in one short clause — e.g., "You're right that the charges redistribute…"
+  3. **Name and correct the specific error** using the question's `expected_response` field (if set) and `REFERENCE_TEXT` (if loaded) as your physics source of truth — but rephrase it to address the student's actual mistake, not just restate the model answer.
+  4. If `REFERENCE_TEXT` is available, anchor the correction in the textbook language where possible (e.g., "As the text notes on p. 47…" or simply by using the same terminology the book uses).
+
+  **Format guide:**
+  - Open by naming what the student got right or what they were attempting, if applicable.
+  - State the specific error concisely.
+  - Close with the correct 1–2 sentence explanation drawn from `expected_response` / `REFERENCE_TEXT`.
+  - Tone: instructional and supportive. Never punitive.
+  - Do NOT copy `expected_response` verbatim — synthesize a targeted correction.
+  - Length: 2–3 sentences max. Concise beats comprehensive.
+
+  Example (for a student who wrote "the charges repel because the rod has the same charge as the conductor"):
+  > "You're on the right track that charge is involved — but the key is that the conductor starts neutral, not charged. When the rod approaches, free electrons in the conductor redistribute toward or away from the rod, creating an induced dipole. Because the attracting face is closer than the repelling face, the net force is attractive, not repulsive."
+
+- **Red** (`zero`): `feedback = "No answer provided."` (if blank) or a brief note on what was expected (if off-topic/gibberish).
 
 ### Physics 215 Misconception Taxonomy
 Look for these patterns in free-response answers:
@@ -306,11 +324,9 @@ For each student who submitted (within filtered set), build a `question_scores` 
 ```
 
 **`status` rules:**
-- `"zero"` — score is 0; only for blank, completely off-topic, or gibberish answers
-- `"warn"` — score is full credit **and** feedback is non-empty; use for: wrong-but-relevant answers, correct conclusion with wrong mechanism, vague answers, hedging — displays as yellow in admin UI
-- `"full"` — score is full credit **and** feedback is empty; only for fully correct answers with sound reasoning — displays as green in admin UI
-
-**Key rule**: A student who is clearly trying to engage with the right physics concept — even if their answer is factually wrong — gets `warn`, NOT `zero`. Reserve `zero` for blank responses and answers that show no engagement with the topic at all.
+- `"zero"` — score is 0 (no credit)
+- `"warn"` — score is full credit **and** feedback is non-empty (answer is wrong or vague; flagged for instructor review; displays as yellow in admin UI)
+- `"full"` — score is full credit **and** feedback is empty (answer is correct; displays as green in admin UI)
 
 Always include `status` — the admin UI relies on it to show the three-state color toggle.
 
@@ -415,9 +431,10 @@ After all instructors, print:
 ## Important Rules
 
 1. **Never finalize scores** — always write `is_finalized: false`. Instructors confirm in the admin panel.
-2. **Never deduct without feedback** — every score below full credit must have a non-empty `feedback` string.
-3. **Wrong or vague answer = mandatory feedback** — if a student's answer is factually incorrect, uses a vague mechanism, or hedges without explanation, you MUST write corrective feedback even when awarding full credit. An empty `feedback` field is only acceptable when the answer is fully correct with sound reasoning.
-4. **Be liberal** — a student who shows any physics reasoning gets near-full credit on free-response.
-5. **Protect the service key** — never print `SUPA_KEY` in the output. Reference it as `[service_key]` if you need to show a sample request.
-6. **Re-running is safe** — the upsert with `merge-duplicates` updates existing suggestions without touching finalized scores.
-7. **Merge analysis reports** — when `DAY_FILTER` is set, always fetch the existing `analysis_report` and merge, so M and T runs don't overwrite each other.
+2. **Never deduct without feedback** — every score of zero must have a non-empty `feedback` string explaining why.
+3. **Three states, simple rule** — Green = correct. Yellow = genuine on-topic attempt with flawed reasoning (full credit + tailored corrective feedback). Red = blank, off-topic, or not a good-faith attempt (zero credit). When in doubt between yellow and red, choose yellow.
+4. **Yellow gets full credit** — `warn` status always has `score = q.points`. Never assign partial credit on free-response; it's either full points (green or yellow) or zero (red).
+5. **Yellow feedback must be tailored** — never use the same feedback string for two different students' yellow answers on the same question. Each `warn` feedback must name the specific flaw in that student's response and correct it using `expected_response` and/or `REFERENCE_TEXT`. A generic "the reasoning may be incorrect" paste is not acceptable.
+6. **Protect the service key** — never print `SUPA_KEY` in the output. Reference it as `[service_key]` if you need to show a sample request.
+7. **Re-running is safe** — the upsert with `merge-duplicates` updates existing suggestions without touching finalized scores.
+8. **Merge analysis reports** — when `DAY_FILTER` is set, always fetch the existing `analysis_report` and merge, so M and T runs don't overwrite each other.

@@ -29,6 +29,18 @@ is installed on an operator's machine.
 
 ## 2026-07-08 — Casey Pellizzari via Claude
 
+### Fixed — resolved `preflight-analyze` SKILL.md drift between agents
+
+The committed repo runbook (`.claude/skills/preflight-analyze/SKILL.md`) had drifted behind the copy
+Claude runs from `~/.claude/skills/`. The repo version — the only one Codex can read — still
+*prescribed* a single generic corrective-feedback template and thinner grading guidance, which is why
+the Codex `preflight-02` run pasted the same feedback string onto all 20 `warn` answers instead of
+tailoring each. Consolidated both copies to one canonical file: the newer three-state grading rubric
+with **per-student tailored corrective feedback** (generic template now explicitly banned), while
+preserving the repo-only "Course Director/System Admin" role note and "per-instructor report" wording.
+Both copies are now byte-identical. Durable fix (symlink repo↔global, or repo-as-source-of-truth) is a
+follow-up.
+
 ### Added — shared multi-agent operating guide (`AGENTS.md`)
 
 Development is now done jointly by different people running **different AI agents** (Claude Code today,
