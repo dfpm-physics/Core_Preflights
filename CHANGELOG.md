@@ -10,6 +10,15 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-08 — Casey Pellizzari via Codex
 
+### Data — graded the `preflight-02` training submissions
+
+Ran the shared `preflight-analyze` procedure against all four Physics 215 training sections after
+grounding the review in the assigned textbook pages. Wrote and read-back verified **64 suggested
+score rows**, all with `is_finalized=false`, plus the per-instructor `assignments.analysis_report`.
+Of 72 rostered training students, 64 submitted and 8 were missing. Q3 produced 42 `full`, 20 `warn`
+(full credit with corrective feedback), and 2 `zero` blank responses; Q1 and Q2 received full credit
+under the liberal engagement rubric. No grades were finalized or published to students.
+
 ### Fixed — Codex quickstart environment wording
 
 Corrected the `AGENTS.md` quickstart so it no longer says Node is absent. It now matches the
