@@ -8,6 +8,33 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-08 — Casey Pellizzari via Claude
+
+### Added — shared multi-agent operating guide (`AGENTS.md`)
+
+Development is now done jointly by different people running **different AI agents** (Claude Code today,
+**Codex being introduced**) against **one shared live Supabase DB and one live GitHub Pages site**. The
+real risk is drift and uncoordinated changes to that shared state, so we added a single agent-neutral
+source of truth.
+
+- **New root [`AGENTS.md`](AGENTS.md)** — authoritative operating rules for every agent and human:
+  shared-state hazards, a **coordination gate** (one operator; no competing run; `git fetch`/verify no
+  divergence; separate worktrees for concurrent work; never force-push), environment, secrets/config
+  locations, runbooks (skills are readable procedures), git/publish/CHANGELOG rules, data-model quick
+  reference, and a Codex quickstart.
+- **[`.claude/CLAUDE.md`](.claude/CLAUDE.md)** now defers to `AGENTS.md` for shared rules (pointer at
+  top) and keeps its Claude-specific deep context.
+- **Corrected a stale environment claim** in both files: the old "no Node, cannot be installed" was
+  wrong (Node/npm are present). Reframed to the accurate rule — *the project has no Node dependency or
+  build step; don't introduce one; verify the frontend in a browser.*
+
+Decisions (reviewed with **Codex**): keep `CHANGELOG.md` as the shared history; skills' `SKILL.md` stay
+readable runbooks any agent can follow; **no `.codex/` documentation mirror** (a `.codex/config.toml`
+for settings is fine later if needed); config-path generalization and the broader private-memory→repo
+migration are **deferred** (the high-stakes memory is already captured in `AGENTS.md`).
+
+---
+
 ## 2026-07-07 — Casey Pellizzari via Claude
 
 ### Changed — Physics 215 reset from proof-of-concept to Fall 2026
