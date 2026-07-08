@@ -170,8 +170,8 @@ Core tables: `courses`, `students` (`auth_user_id` → Supabase Auth; `student_i
 1. Clone the repo; confirm you're on `main`. Read this file, `.claude/CLAUDE.md`, and `SYSTEM_GUIDE.md`.
 2. Create the two config files from their `.template`s (§3). Get the service key / DB creds from the
    course director out-of-band — never from the repo.
-3. Confirm the environment: Python available, **no Node**, textbook PDFs present at `textbook_base_path`
-   if you'll grade.
+3. Confirm the environment: Python available, no Node dependency or build step, and textbook PDFs
+   present at `textbook_base_path` if you'll grade.
 4. Before any DB mutation, re-read §0. For destructive ops, snapshot first.
 5. Do the work using the runbooks in §4 and the scripts in `scripts/`. Keep scripts idempotent + dry-run-by-default.
 6. Update `CHANGELOG.md` (`via Codex`) and, if you changed how the system is operated, this file.

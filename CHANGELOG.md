@@ -8,6 +8,16 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-08 — Casey Pellizzari via Codex
+
+### Fixed — Codex quickstart environment wording
+
+Corrected the `AGENTS.md` quickstart so it no longer says Node is absent. It now matches the
+authoritative environment rule: the project has no Node dependency or build step, even when Node
+is installed on an operator's machine.
+
+---
+
 ## 2026-07-08 — Casey Pellizzari via Claude
 
 ### Added — shared multi-agent operating guide (`AGENTS.md`)
