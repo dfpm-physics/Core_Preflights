@@ -138,6 +138,9 @@ the steps, and — if it's now a shared operation — consider promoting the pro
   production site. Editing a local file does **not** affect the site until committed *and* pushed.
 - **Commit/push only when the human asks.** Don't auto-push. When you do commit, keep unrelated changes
   in separate commits and never sweep in gitignored/local junk (`supabase/.temp/`, `.venv/`, configs).
+- **Standing authorization for live preflight analysis:** after a successful `preflight-analyze`
+  run and exact read-back verification, update `CHANGELOG.md`, commit the run record, and push
+  `main` unless the human explicitly opts out. The coordination gate in §0 still applies.
 - **Always update `CHANGELOG.md`** for any shipped feature, fix, schema/data change, or doc edit.
   Newest first. Attribute to the requesting human **and the agent**:
   `## YYYY-MM-DD — <Human> via <Agent>` (e.g. `via Claude`, `via Codex`). State **what** and **why**.

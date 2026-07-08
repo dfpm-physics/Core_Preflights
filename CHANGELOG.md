@@ -10,6 +10,21 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-08 — Casey Pellizzari via Codex
 
+### Changed — successful preflight-analysis runs now publish their audit record
+
+Added standing authorization to `AGENTS.md`: after a successful live `preflight-analyze` run and
+exact read-back verification, the agent updates the CHANGELOG, commits the run record, and pushes
+`main` unless the human explicitly opts out. The shared-state coordination gate still applies.
+
+### Data — reran `preflight-02` with tailored feedback and specific summaries
+
+Re-ran all four training sections after pulling the consolidated `preflight-analyze` runbook.
+Replaced the 64 unfinalized suggestions and the per-instructor `analysis_report`, then read-back
+verified every stored score and report field. All 20 Q3 `warn` responses now have distinct,
+2-sentence corrections tied to the student's actual reasoning; the instructor summaries now name
+each misconception type with a count and representative quote. The grading distribution remains
+42 `full`, 20 `warn`, and 2 blank `zero`; no grades were finalized or published.
+
 ### Data — graded the `preflight-02` training submissions
 
 Ran the shared `preflight-analyze` procedure against all four Physics 215 training sections after
