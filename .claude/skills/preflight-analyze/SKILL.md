@@ -1,7 +1,7 @@
 ---
 name: preflight-analyze
 description: Physics 215 preflight assignment analysis skill for USAFA. Use when the
-  user wants to analyze student submissions, generate per-section misconception reports,
+  user wants to analyze student submissions, generate per-instructor misconception reports,
   apply auto-grading, write suggested scores to Supabase, or says /preflight-analyze.
   Also triggers for: "analyze preflight", "grade submissions", "check who hasn't submitted",
   "run analysis on assignment", "preflight analyze". This skill is run by a Course Director
@@ -249,6 +249,8 @@ For each free-response question, produce:
 ## Step 8 — Generate Per-Instructor Bulleted Summaries
 
 Group students and responses by instructor (using `sectionMap` → `instructor_id`). For each instructor (within filtered set), generate a summary covering **all their sections combined**.
+
+**Aggregate per instructor, never per section.** Pool every response from all of an instructor's sections into one set before computing counts and identifying misconceptions. Do not produce separate summaries, counts, or misconception lists for each section, and do not label bullets by section (e.g., no "M1A: 3 students, M1B: 2 students"). One combined summary per instructor per question is the only output.
 
 ### Format per question
 

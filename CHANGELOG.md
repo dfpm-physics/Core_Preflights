@@ -29,6 +29,13 @@ is installed on an operator's machine.
 
 ## 2026-07-08 — Casey Pellizzari via Claude
 
+### Changed — `preflight-analyze` summaries are explicitly per-instructor, never per-section
+
+Clarified the runbook so the stored `analysis_report` summary and misconception counts pool all of an
+instructor's sections into one combined set (they already keyed by instructor, but the skill description
+still said "per-section" and Step 8 didn't forbid section-level breakouts). Fixed the description wording
+and added an explicit "aggregate per instructor, never per section" rule to Step 8.
+
 ### Fixed — resolved `preflight-analyze` SKILL.md drift between agents
 
 The committed repo runbook (`.claude/skills/preflight-analyze/SKILL.md`) had drifted behind the copy
