@@ -7,7 +7,8 @@ lesson with its M/T due dates from the Fall 2026 syllabus schedule, and upserts 
 preflight `assignments` row per lesson (course_id='phys-215'), mirroring the 3-question
 structure of the original preflight-1 (reading-time 0 pts + confusing/interesting 1 pt +
 JiTT concept question w/ expected_response 1 pt = 2 pts). Lab lessons use lab-instruction
-wording for the first two reflection questions.
+wording for the first two reflection questions. Embedded DOCX figures are exported separately
+to `img/assignments/` and attached to the matching Q3 as public GitHub Pages URLs.
 
 Scope: the 31 regular (PF=Y) lessons + the 6 labs = 37. Excludes Lesson 1 and GRs (12/23/35).
 
@@ -35,6 +36,7 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 COURSE_ROOT = os.path.abspath(os.path.join(REPO_ROOT, ".."))  # Physics_215_Fall_2026/
 DOCX_PATH = os.path.join(COURSE_ROOT, "Preflights", "Physics215_Preflight_Questions_v11.docx")
 RAG_DIR_REL = "Text_Book_PDFs/215 Sections"  # relative to textbook_base_path (the course root)
+FIGURE_BASE_URL = "https://dfpm-physics.github.io/Core_Preflights/img/assignments"
 
 CONFIG_PATH = os.path.expanduser("~/.claude/skills/preflight-analyze/config.json")
 DENVER = ZoneInfo("America/Denver")
@@ -128,6 +130,15 @@ def parse_rag(rag_line):
     return ref_pdf, pages
 
 
+def embedded_image_ids(paragraph):
+    return paragraph._p.xpath(".//a:blip/@r:embed")
+
+
+def figure_url_for(lesson_num, figure_index=1):
+    suffix = "" if figure_index == 1 else f"-{figure_index}"
+    return f"{FIGURE_BASE_URL}/preflight-{lesson_num:02d}-q3{suffix}.png"
+
+
 def parse_docx():
     """Return {lesson_num: {jitt_question, expected_response, ref_pdf, ref_pages}}."""
     doc = Document(DOCX_PATH)
@@ -139,11 +150,12 @@ def parse_docx():
             m = re.match(r"Lesson\s+(\d+)", text)
             cur = int(m.group(1)) if m else None
             if cur is not None:
-                lessons[cur] = {"rag_line": None, "q_parts": [], "expected": None}
+                lessons[cur] = {"rag_line": None, "q_parts": [], "expected": None, "figure_count": 0}
             continue
         if cur is None or cur not in lessons:
             continue
         L = lessons[cur]
+        L["figure_count"] += len(embedded_image_ids(p))
         if style == "Normal" and text.startswith("RAG Source:"):
             L["rag_line"] = text
         elif style == "JiTT Question Block":
@@ -170,6 +182,7 @@ def parse_docx():
             "expected_response": L["expected"],
             "ref_pdf": ref_pdf,
             "ref_pages": ref_pages,
+            "figure_url": figure_url_for(n) if L["figure_count"] else None,
         }
     return out
 
@@ -185,6 +198,12 @@ def build_rows():
             continue
         q1_text = LAB_Q1_TEXT if is_lab else Q1_TEXT
         q2_text = LAB_Q2_TEXT if is_lab else Q2_TEXT
+        q3 = {"id": "q3", "type": "free_response", "text": p["jitt_question"], "points": 1}
+        if p["expected_response"]:
+            q3["expected_response"] = p["expected_response"]
+        if p.get("figure_url"):
+            q3["figure_url"] = p["figure_url"]
+
         rows.append({
             "id": f"preflight-{n:02d}",
             "course_id": "phys-215",
@@ -200,8 +219,7 @@ def build_rows():
             "questions": [
                 {"id": "q1", "type": "free_response", "text": q1_text, "points": 0},
                 {"id": "q2", "type": "free_response", "text": q2_text, "points": 1},
-                {"id": "q3", "type": "free_response", "text": p["jitt_question"], "points": 1,
-                 **({"expected_response": p["expected_response"]} if p["expected_response"] else {})},
+                q3,
             ],
         })
     return rows
@@ -234,7 +252,8 @@ def main():
         pts = sum(q["points"] for q in r["questions"])
         print(f"  {r['id']}  due_m={r['due_date_m'][:10]} due_t={r['due_date_t'][:10]} "
               f"pts={pts:.1f} pdf={'Y' if r['reference_pdf'] else '-'} "
-              f"pp={r['reference_pages'] or '-':<9} exp={'Y' if has_exp else '-'}")
+              f"pp={r['reference_pages'] or '-':<9} exp={'Y' if has_exp else '-'} "
+              f"fig={'Y' if q3.get('figure_url') else '-'}")
         print(f"        Q3: {q3['text'][:96]}")
 
     if not args.commit:

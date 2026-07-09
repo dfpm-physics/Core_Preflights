@@ -83,6 +83,11 @@ data-model reference — agent-neutral despite the name).
 - **Fall 2026 lab preflights:** the six Physics 215 lab lessons (`preflight-06`, `preflight-11`,
   `preflight-17`, `preflight-27`, `preflight-34`, `preflight-38`) intentionally use lab-instruction
   wording for Q1/Q2. Regular lesson preflights keep the book/reading wording.
+- **Fall 2026 preflight figures:** the source DOCX contains embedded JiTT figures for
+  `preflight-03`, `preflight-04`, `preflight-24`, and `preflight-28`. Assets live in
+  `img/assignments/preflight-XX-q3.png`; regenerate them with
+  `scripts/fall2026/extract_preflight_figures.py`. The Fall builder attaches the matching public
+  GitHub Pages URL to Q3 as `figure_url`.
 - **Grade/Report privacy for Q1:** zero-point reflection questions such as Q1 should not render on
   per-student Grade-tab cards. Written-preflight reports may show Q1 raw responses, but must not offer
   a "Show names" control or copy names for Q1; other questions keep the names toggle.

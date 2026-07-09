@@ -10,6 +10,16 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-09 — Casey Pellizzari via Codex
 
+### Fixed — restored missing Fall 2026 preflight question figures
+
+Extracted the embedded JiTT figures from `Physics215_Preflight_Questions_v11.docx` into
+`img/assignments/` and updated the Fall preflight builder to attach deterministic public
+`figure_url` values to Q3. The affected assignments are `preflight-03`, `preflight-04`,
+`preflight-24`, and `preflight-28` (the displacement-current capacitor figure Casey noticed).
+Added `scripts/fall2026/extract_preflight_figures.py` so future DOCX refreshes can regenerate the
+assets. Patched the live Supabase `assignments.questions` JSON for those four rows and read-back
+verified each stored Q3 figure URL.
+
 ### Changed — Grade and Report views keep zero-point Q1 private
 
 Updated the written-preflight grading/report UI so zero-point questions such as Q1 no longer appear
