@@ -81,8 +81,9 @@ data-model reference — agent-neutral despite the name).
 - **Timezone:** due dates are computed as 2359 **America/Denver** the night before a lesson and
   stored as UTC (DST-aware). Reuse the `zoneinfo` helpers in `scripts/fall2026/build_fall_preflights.py`.
 - **Current Physics 215 preflight source DOCX:** `../Preflights/Physics215_Preflight_Questions_v12.docx`.
-  v12 was generated from v11 after pulling live webpage/Supabase Q3 wording for lessons 2, 6, 9,
-  19, 24, 26, 28, and 30; lessons 2 and 6 already matched v11, while the others changed.
+  v12 was generated from v11 after pulling live webpage/Supabase Q3 wording for lessons 3, 9,
+  19, 24, 26, 28, and 30. Lessons 2 and 6 remain unchanged from v11 and matched the live Q3
+  wording when the lesson-list correction was verified.
 - **Fall 2026 lab preflights:** the six Physics 215 lab lessons (`preflight-06`, `preflight-11`,
   `preflight-17`, `preflight-27`, `preflight-34`, `preflight-38`) intentionally use lab-instruction
   wording for Q1/Q2. Regular lesson preflights keep the book/reading wording.

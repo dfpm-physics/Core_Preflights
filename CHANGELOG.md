@@ -10,13 +10,20 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-09 — Casey Pellizzari via Codex
 
+### Fixed — corrected Physics 215 v12 source lesson list
+
+Regenerated `Physics215_Preflight_Questions_v12.docx` after Casey clarified that lesson 3, not
+lessons 2 and 6, was part of the modified Q3 set. The corrected v12 now pulls live
+webpage/Supabase Q3 wording for lessons 3, 9, 19, 24, 26, 28, and 30. Verification confirmed
+lessons 2 and 6 remain unchanged from v11 and still match the live Q3 wording.
+
 ### Changed — generated Physics 215 preflight source DOCX v12
 
 Generated `Physics215_Preflight_Questions_v12.docx` beside v11 in the OneDrive `Preflights/`
-folder by pulling current live webpage/Supabase Q3 wording for lessons 2, 6, 9, 19, 24, 26, 28,
-and 30 into the Word source document. Lessons 2 and 6 already matched v11; lessons 9, 19, 24,
-26, 28, and 30 were updated. The Fall preflight builder and figure extractor now read v12 so
-future rebuilds preserve the webpage wording.
+folder by pulling current live webpage/Supabase Q3 wording into the Word source document. After the
+lesson-list correction above, v12 matches live Q3 wording for lessons 3, 9, 19, 24, 26, 28, and
+30. The Fall preflight builder and figure extractor now read v12 so future rebuilds preserve the
+webpage wording.
 
 ### Fixed — restored missing Fall 2026 preflight question figures
 
