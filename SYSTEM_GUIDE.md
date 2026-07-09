@@ -237,6 +237,8 @@ Each run:
 
 The AI run **does not publish grades to students**. It only writes unfinalized suggestions. After the run, instructors log into the admin panel, go to the **Grade** tab, review green/yellow/red suggestions, edit feedback if needed, click **Save**, then click **Finalize & Publish** to make grades visible to students.
 
+Zero-point reflection questions such as Q1 are intentionally hidden on each student's Grade-tab card; instructors review and toggle only the scored questions. In the Report tab, Q1 raw responses remain anonymous: the **Show names** toggle is removed for Q1 only, while it remains available for other questions.
+
 **Grading policy**: wrong answers that show genuine engagement with the topic are marked yellow (full credit, flagged for review) — not zero. Only blank or completely off-topic responses receive zero credit. Instructors should review all yellow items and decide whether to confirm full credit, downgrade to no credit, or adjust feedback.
 
 ---

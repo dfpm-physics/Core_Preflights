@@ -521,9 +521,9 @@
             </tr>
             <tr>
               <td style="padding:8px 10px;font-weight:600">Raw Responses</td>
-              <td style="padding:8px 10px">All student answers for that question. Three controls:
+              <td style="padding:8px 10px">All student answers for that question. Controls include:
                 <ul style="margin:6px 0 0 16px">
-                  <li><strong>Show names</strong> — toggle to reveal which student wrote each response (hidden by default for unbiased review).</li>
+                  <li><strong>Show names</strong> — toggle to reveal which student wrote each response (hidden by default for unbiased review). This toggle is intentionally unavailable for Q1 so reading-time responses stay anonymous.</li>
                   <li><strong>🎲 Random 10</strong> — appears when there are more than 10 responses; samples 10 at random for a quick spot-check. Click again to resample.</li>
                   <li><strong>Copy</strong> — copies all responses for that question to the clipboard, ready to paste into Claude or another tool for manual analysis.</li>
                 </ul>
@@ -555,7 +555,7 @@
             </tr>
             <tr style="border-bottom:1px solid var(--border)">
               <td style="padding:8px 10px;font-weight:600">2. Review scores</td>
-              <td style="padding:8px 10px">Each student card shows suggested scores from the AI preflight analysis run, if it has been run. Toggle each question: <span style="color:var(--green)">green = full credit</span>, <span style="color:#eab308">yellow = full credit with a concern flagged</span>, <span style="color:var(--red)">red = no credit</span>. Add feedback in the text field.</td>
+              <td style="padding:8px 10px">Each student card shows suggested scores from the AI preflight analysis run, if it has been run. Zero-point reflection questions such as Q1 are hidden on the grading card; review and toggle the scored questions only. Toggle each shown question: <span style="color:var(--green)">green = full credit</span>, <span style="color:#eab308">yellow = full credit with a concern flagged</span>, <span style="color:var(--red)">red = no credit</span>. Add feedback in the text field.</td>
             </tr>
             <tr style="border-bottom:1px solid var(--border)">
               <td style="padding:8px 10px;font-weight:600">3. Save</td>
@@ -769,6 +769,14 @@ let reportAnswers        = {};   // { qIdx: [{name, section, answer}] }
 let reportQuestions      = [];   // question objects for the currently loaded report
 let reportSampleMode     = {};   // { qIdx: bool } — true = show random 10
 let reportCurrentSample  = {};   // { qIdx: [{name, section, answer}] } — what's currently displayed
+
+function isZeroPointQuestion(q) {
+  return Number(q?.points) === 0;
+}
+
+function isAnonymousReportQuestion(q, idx) {
+  return idx === 0 || q?.id === 'q1';
+}
 
 // ── Auth ──
 document.getElementById('login-password').addEventListener('keydown', e => {
@@ -1055,6 +1063,7 @@ async function loadGradingView() {
 function renderGradeCards(asgn, students, responseMap, scoreMap) {
   const container = document.getElementById('grade-container');
   const qs = asgn.questions || [];
+  const displayQs = qs.filter(q => !isZeroPointQuestion(q));
   const maxTotal = qs.reduce((s, q) => s + (isNaN(Number(q.points)) ? 0 : Number(q.points)), 0);
   container.innerHTML = '';
 
@@ -1094,7 +1103,8 @@ function renderGradeCards(asgn, students, responseMap, scoreMap) {
         <span class="grade-student-total" id="stotal-${st.student_id}">${total.toFixed(2)} / ${maxTotal.toFixed(2)} pts</span>
       </div>`;
 
-    qs.forEach((q, idx) => {
+    displayQs.forEach(q => {
+      const idx = qs.indexOf(q);
       const answerText = answers[q.id] ?? '';
       const hasAnswer  = String(answerText).trim().length > 0;
       const gd         = gradeData[st.student_id][q.id];
@@ -1387,6 +1397,7 @@ async function loadReport() {
     const blankCount = qAnswers.filter(a => !a.answer.trim()).length;
     const summaryParts = relevantQSummaries[q.id] || [];
     const summary    = summaryParts.length ? summaryParts.join('\n') : null;
+    const anonymousQuestion = isAnonymousReportQuestion(q, idx);
 
     html += `
       <div class="card" style="margin-bottom:20px">
@@ -1406,11 +1417,13 @@ async function loadReport() {
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px">
             <div style="font-size:0.75em; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--blue)">Raw Responses</div>
             <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap">
-              <label class="toggle-label">
-                <input type="checkbox" id="attrib-${idx}" onchange="toggleAttribution(${idx})">
-                <span class="toggle-track"></span>
-                <span style="font-size:0.82em; color:var(--muted)">Show names</span>
-              </label>
+              ${anonymousQuestion
+                ? `<span style="font-size:0.82em; color:var(--muted)">Names hidden for Q1 privacy</span>`
+                : `<label class="toggle-label">
+                    <input type="checkbox" id="attrib-${idx}" onchange="toggleAttribution(${idx})">
+                    <span class="toggle-track"></span>
+                    <span style="font-size:0.82em; color:var(--muted)">Show names</span>
+                  </label>`}
               ${qAnswers.length > 10
                 ? `<button class="btn btn-secondary btn-sm" id="samplebtn-${idx}" onclick="toggleSample(${idx})">🎲 Random 10</button>`
                 : ''}
@@ -1434,7 +1447,8 @@ function renderResponsesBlock(idx) {
   if (!block) return;
   const allAnswers = reportAnswers[idx] || [];
   const inSample   = reportSampleMode[idx];
-  const showAttrib = document.getElementById(`attrib-${idx}`)?.checked;
+  const showAttrib = !isAnonymousReportQuestion(reportQuestions[idx], idx)
+    && document.getElementById(`attrib-${idx}`)?.checked;
 
   let displayed;
   if (inSample && allAnswers.length > 10) {
@@ -1482,8 +1496,9 @@ function toggleAttribution(idx) {
 }
 
 function copyQuestion(idx) {
-  const showAttrib = document.getElementById(`attrib-${idx}`)?.checked;
   const q          = reportQuestions[idx];
+  const showAttrib = !isAnonymousReportQuestion(q, idx)
+    && document.getElementById(`attrib-${idx}`)?.checked;
   // Copy whatever is currently displayed (respects random sample mode)
   const answers    = reportCurrentSample[idx] || reportAnswers[idx] || [];
 

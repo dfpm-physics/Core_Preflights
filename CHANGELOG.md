@@ -10,6 +10,15 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-09 — Casey Pellizzari via Codex
 
+### Changed — Grade and Report views keep zero-point Q1 private
+
+Updated the written-preflight grading/report UI so zero-point questions such as Q1 no longer appear
+on each student's Grade-tab card; instructors now review only the scored questions there. In the
+Report tab, Q1 raw responses still appear for class-level review, but the **Show names** control is
+removed for Q1 and copy logic keeps those responses anonymous. Other questions keep the
+Show names toggle. Updated the webpage help text, `SYSTEM_GUIDE.md`, and `AGENTS.md` to preserve
+the privacy rule across future agent work.
+
 ### Changed — lab preflights now ask about lab instructions
 
 Updated the Fall 2026 Physics 215 preflight builder and the live Supabase `assignments` rows for
