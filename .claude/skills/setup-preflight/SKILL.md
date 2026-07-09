@@ -90,8 +90,9 @@ Store as `SUPA_KEY`.
 
 ### 3c. Textbook PDF Path
 
-The PDF path is derived automatically from the repo location — no need to ask the user
-for it. Run:
+The textbook base path is usually the parent folder of the repo in the shared OneDrive
+course folder — the folder that contains `Text_Book_PDFs/215 Sections/`. Derive a
+best guess from the repo location first:
 
 ```bash
 git rev-parse --show-toplevel
@@ -100,33 +101,34 @@ git rev-parse --show-toplevel
 Store the result as `REPO_ROOT`. Then construct:
 
 ```
-PDF_PATH = {REPO_ROOT}/textbook-pdfs/{COURSE_ID}/
+PDF_BASE = parent directory of REPO_ROOT
 ```
 
-Check whether PDFs are already in place:
+Check whether PDFs are already in place. For Physics 215:
 
 ```bash
-ls "{PDF_PATH}"*.pdf 2>/dev/null | head -5
+ls "{PDF_BASE}/Text_Book_PDFs/215 Sections/"*.pdf 2>/dev/null | head -5
 ```
 
 **If PDFs are found:** show the first few filenames. Tell the user:
-> ✓ Found your textbook PDFs at `{PDF_PATH}`
+> ✓ Found your textbook PDFs under `{PDF_BASE}/Text_Book_PDFs/`
 
-**If the folder exists but no PDFs are present:** tell the user:
-> The textbook PDF folder is at `{PDF_PATH}` but it's empty. You'll need to download
-> the PDFs from the shared Teams channel before the analysis skill can read reference
-> material. Here's how:
+**If the folder is missing or no PDFs are present:** tell the user:
+> The textbook PDF folder was not found under `{PDF_BASE}/Text_Book_PDFs/`. You'll need
+> to download the PDFs from the shared Teams channel or point `textbook_base_path` at
+> the local folder that contains `Text_Book_PDFs/`. Here's how:
 >
 > 1. Open the **Physics department Teams channel**
 > 2. Go to **Files** → `Core_Preflights_PDFs`
-> 3. Download the `{COURSE_ID}` subfolder
-> 4. Copy the PDF files into: `{PDF_PATH}`
+> 3. Download the textbook PDF folder
+> 4. Put it where the config's `textbook_base_path` can see `Text_Book_PDFs/215 Sections/`
 >
 > You can finish setup now and add the PDFs later — the skill will still run without
 > them, just without textbook context. Re-run `/setup-preflight` after adding the
 > files to verify.
 
-Store as `PDF_PATH` regardless (the folder exists even if empty).
+Store `PDF_BASE` as `textbook_base_path`. If the derived path is wrong, ask the user for
+the correct base folder and use that instead.
 
 ### 3d. Default Course
 
@@ -152,7 +154,7 @@ cat > ~/.claude/skills/preflight-analyze/config.json << 'ENDOFCONFIG'
 {
   "supabase_url": "SUPA_URL_PLACEHOLDER",
   "supabase_service_key": "SUPA_KEY_PLACEHOLDER",
-  "textbook_base_path": "PDF_PATH_PLACEHOLDER",
+  "textbook_base_path": "PDF_BASE_PLACEHOLDER",
   "default_course_id": "COURSE_ID_PLACEHOLDER"
 }
 ENDOFCONFIG
@@ -171,20 +173,30 @@ Substitute the actual values for each placeholder before running. Then confirm:
 Run a quick connection test:
 
 ```bash
-node -e "
-const fs = require('fs'), path = require('path');
-const cfg = JSON.parse(fs.readFileSync(path.join(process.env.HOME, '.claude/skills/preflight-analyze/config.json'), 'utf8'));
-fetch(cfg.supabase_url + '/rest/v1/courses?select=id,title', {
-  headers: { apikey: cfg.supabase_service_key, Authorization: 'Bearer ' + cfg.supabase_service_key }
-}).then(r => r.json()).then(d => {
-  if (Array.isArray(d) && d.length > 0) {
-    console.log('OK');
-    d.forEach(c => console.log(c.id + ' | ' + c.title));
-  } else {
-    console.log('FAIL: ' + JSON.stringify(d));
-  }
-}).catch(e => console.log('FAIL: ' + e.message));
-"
+python3 - <<'PY'
+import json
+import pathlib
+import urllib.error
+import urllib.request
+
+cfg = json.loads(pathlib.Path("~/.claude/skills/preflight-analyze/config.json").expanduser().read_text())
+url = cfg["supabase_url"].rstrip("/") + "/rest/v1/courses?select=id,title"
+req = urllib.request.Request(url, headers={
+    "apikey": cfg["supabase_service_key"],
+    "Authorization": "Bearer " + cfg["supabase_service_key"],
+})
+try:
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = json.loads(resp.read() or b"[]")
+except urllib.error.HTTPError as e:
+    print(f"FAIL: HTTP {e.code} " + e.read().decode(errors="replace"))
+except Exception as e:
+    print("FAIL: " + str(e))
+else:
+    print("OK")
+    for c in data:
+        print(c.get("id", "") + " | " + c.get("title", ""))
+PY
 ```
 
 **If `OK`:** Show the list of courses returned. Tell the user they're connected.
@@ -204,11 +216,11 @@ fetch(cfg.supabase_url + '/rest/v1/courses?select=id,title', {
 
 If PDFs were found in Step 3c, skip this step entirely.
 
-If the folder was empty, print a one-line reminder at the end of the summary:
+If the textbook PDFs were not found, print a one-line reminder at the end of the summary:
 
 > ⚠️ **PDFs not yet downloaded.** The skill will run but won't have textbook context.
-> Download the `{COURSE_ID}` folder from Teams → Files → `Core_Preflights_PDFs` and
-> copy the files into `{PDF_PATH}`.
+> Download the textbook PDFs from Teams → Files → `Core_Preflights_PDFs` and make sure
+> `textbook_base_path` contains `Text_Book_PDFs/215 Sections/`.
 
 ---
 

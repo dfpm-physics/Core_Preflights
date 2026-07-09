@@ -8,6 +8,25 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-09 — Casey Pellizzari via Codex
+
+### Changed — clarified Course Director preflight-analysis instructions
+
+Updated the webpage System Guide in `admin.html` and the fuller `SYSTEM_GUIDE.md` so Course
+Directors know how to initiate grading with either Claude Code or Codex. The guide now describes
+the coordination checklist, the current `/preflight-analyze preflight-02 M|T` command shape, the
+Codex plain-language equivalent, the local `~/.claude/skills/preflight-analyze/config.json` path,
+and the distinction between unfinalized AI suggestions and human finalization in the Grade tab.
+Also refreshed related instructor/director/admin help text, removed Claude-only wording from the
+web guide, corrected the stale Node wording in `app/README.md`, and aligned the setup/training
+runbooks with the current config and command conventions.
+
+### Changed — Codex-requested changes now carry standing publish authorization
+
+Recorded Casey's standing instruction in `AGENTS.md`: when Casey asks Codex to make changes, Codex
+should update durable memory, update `CHANGELOG.md`, commit, and push `main` after verification
+unless Casey explicitly opts out. Read-only exploration/questions still do not trigger a commit or push.
+
 ## 2026-07-08 — Casey Pellizzari via Codex
 
 ### Changed — successful preflight-analysis runs now publish their audit record

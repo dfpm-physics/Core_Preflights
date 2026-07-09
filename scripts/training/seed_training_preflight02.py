@@ -200,7 +200,7 @@ def seed(commit):
     req("responses?on_conflict=student_id,assignment_id", "POST", responses,
         {"Prefer": "resolution=merge-duplicates,return=minimal"})
     print(f"\nSeeded: {len(students)} training students, {len(responses)} responses for {ASSIGNMENT_ID}.")
-    print("Raw submissions only — run /preflight-analyze phys-215 preflight-02 to grade.")
+    print("Raw submissions only — run /preflight-analyze preflight-02 to grade.")
 
 
 def clean(commit):

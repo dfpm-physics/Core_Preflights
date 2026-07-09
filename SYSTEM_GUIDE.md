@@ -158,16 +158,17 @@ then sign in on the submit page to save their report. They can re-submit to over
 
 ---
 
-## Running the Claude Analysis Skill (`/preflight-analyze`)
+## Running Preflight Analysis (`/preflight-analyze`)
 
-The skill reads student submissions, checks them for physics misconceptions, writes suggested scores to Supabase, and prints a per-instructor report. **Only Course Directors and System Admins run this skill** — not individual instructors. A CD runs it once for all M-day sections and once for all T-day sections. Each instructor then sees their own section's results in the Report tab.
+The preflight analysis run reads student submissions, checks them for physics misconceptions, writes suggested scores to Supabase, and stores a per-instructor report. **Only Course Directors and System Admins initiate this run** — not individual instructors. A Course Director normally runs it once for all M-day sections and once for all T-day sections after each deadline; instructors then review and finalize their own sections in the Grade tab.
+
+The runbook lives in `.claude/skills/preflight-analyze/SKILL.md`. Claude Code can run it as a slash command, and Codex can follow the same runbook when asked in plain language.
 
 ### One-time setup
 
-**1. Install Claude Code**
+**1. Install an agent that can run the workflow**
 
-Download and install from https://claude.ai/code (available for Mac and Windows).
-You will need an Anthropic account — sign up at https://anthropic.com if you don't have one.
+Use Claude Code, Codex, or another trusted operator that can read the repo runbook and write to Supabase with the service key. The operator should read `AGENTS.md` before making any live database changes.
 
 **2. Clone the repo**
 
@@ -179,33 +180,48 @@ cd Core_Preflights
 **3. Create your config file**
 
 ```bash
+mkdir -p ~/.claude/skills/preflight-analyze
 cp .claude/skills/preflight-analyze/config.json.template \
-   .claude/skills/preflight-analyze/config.json
+   ~/.claude/skills/preflight-analyze/config.json
 ```
 
-Open `config.json` and fill in the values:
+Open `~/.claude/skills/preflight-analyze/config.json` and fill in the values:
 
 ```json
 {
   "supabase_url": "https://shzvpmlnqfmzfmuxkowi.supabase.co",
   "supabase_service_key": "GET THIS FROM THE COURSE DIRECTOR",
-  "textbook_base_path": "/path/to/your/local/textbooks/",
+  "textbook_base_path": "/path/to/folder/containing/Text_Book_PDFs/",
   "default_course_id": "phys-215"
 }
 ```
 
 - `supabase_service_key`: a secret key that bypasses Supabase security — get it from the course director, never share it or commit it to GitHub
-- `textbook_base_path`: the folder on your computer where the textbook PDFs live (the OpenStax University Physics volumes)
+- `textbook_base_path`: the base folder that contains `Text_Book_PDFs/215 Sections/` and any other textbook PDF folders
 
-**The `config.json` file is gitignored and will never be committed to the repo.**
+The config path is Claude-branded for historical reasons, but Codex uses the same local file. **Never create or commit a real `config.json` inside the repo.**
 
 ### Running the skill (Course Director / System Admin only)
 
-Open Claude Code in your terminal from the repo folder and run it twice — once per day group:
+Before each live run:
+
+1. Wait until the relevant M-day or T-day deadline has passed.
+2. Designate one operator; do not let Claude, Codex, or another teammate grade the same assignment at the same time.
+3. From the repo, pull the latest `main` and confirm the working tree is clean.
+4. Confirm the assignment ID, reference PDF, and reference pages are set correctly in the Assignments tab.
+
+To initiate grading in Claude Code, open it from the repo folder and run one day group at a time:
 
 ```
-/preflight-analyze phys-215 preflight-2 M    ← all M-day sections
-/preflight-analyze phys-215 preflight-2 T    ← all T-day sections
+/preflight-analyze preflight-02 M    ← all M-day sections
+/preflight-analyze preflight-02 T    ← all T-day sections
+```
+
+To initiate the same grading run in Codex, ask in plain language, for example:
+
+```
+Run preflight-analyze for preflight-02 M and write the grades.
+Run preflight-analyze for preflight-02 T and write the grades.
 ```
 
 Each run:
@@ -213,10 +229,11 @@ Each run:
 2. Reads the relevant textbook pages (if configured on the assignment)
 3. Grades numerical and multiple choice questions automatically
 4. Analyzes free-response answers for physics misconceptions
-5. Writes suggested scores to Supabase (`is_finalized = false`) for every student
-6. Prints a per-instructor breakdown in the terminal
+5. Writes suggested scores to Supabase (`is_finalized = false`) for every submitted student
+6. Stores the Class Summary & Misconceptions report by instructor
+7. Prints a per-instructor breakdown in the terminal or chat
 
-Results are stored by instructor in the database. After the skill runs, each instructor logs into the admin panel, goes to the **Grade** tab, and reviews the suggested scores for their own sections. They click **Finalize & Publish** to make grades visible to students.
+The AI run **does not publish grades to students**. It only writes unfinalized suggestions. After the run, instructors log into the admin panel, go to the **Grade** tab, review green/yellow/red suggestions, edit feedback if needed, click **Save**, then click **Finalize & Publish** to make grades visible to students.
 
 **Grading policy**: wrong answers that show genuine engagement with the topic are marked yellow (full credit, flagged for review) — not zero. Only blank or completely off-topic responses receive zero credit. Instructors should review all yellow items and decide whether to confirm full credit, downgrade to no credit, or adjust feedback.
 
@@ -397,7 +414,7 @@ CREATE POLICY "course_access_read_authenticated" ON instructor_course_access
 
 ## Course Director Service Key
 
-The Supabase service role key is required for the Claude skill and bypasses all database security. It is stored at:
+The Supabase service role key is required for preflight analysis and bypasses all database security. It is stored locally at:
 
 ```
 ~/.claude/skills/preflight-analyze/config.json
@@ -405,4 +422,4 @@ The Supabase service role key is required for the Claude skill and bypasses all 
 
 To find it: Supabase dashboard → **Project Settings → API → service_role key** (click to reveal).
 
-**Never commit this key to GitHub.** Share it with instructors only via a secure channel (e.g., a password manager or encrypted message).
+**Never commit this key to GitHub.** Share it only with authorized analysis operators, normally Course Directors or System Admins, via a secure channel such as a password manager or encrypted message.

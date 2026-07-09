@@ -136,8 +136,11 @@ the steps, and — if it's now a shared operation — consider promoting the pro
 
 - **`main` is live.** Pushing to `main` triggers a GitHub Pages rebuild (~1–2 min) that changes the
   production site. Editing a local file does **not** affect the site until committed *and* pushed.
-- **Commit/push only when the human asks.** Don't auto-push. When you do commit, keep unrelated changes
-  in separate commits and never sweep in gitignored/local junk (`supabase/.temp/`, `.venv/`, configs).
+- **Standing authorization for Codex-requested changes:** when Casey asks Codex to make changes,
+  Codex should update the durable memory (`AGENTS.md` or another appropriate repo doc), update
+  `CHANGELOG.md`, commit, and push `main` after verification unless Casey explicitly opts out.
+  Read-only exploration/questions do not trigger a commit or push. Keep unrelated changes in separate
+  commits and never sweep in gitignored/local junk (`supabase/.temp/`, `.venv/`, configs).
 - **Standing authorization for live preflight analysis:** after a successful `preflight-analyze`
   run and exact read-back verification, update `CHANGELOG.md`, commit the run record, and push
   `main` unless the human explicitly opts out. The coordination gate in §0 still applies.

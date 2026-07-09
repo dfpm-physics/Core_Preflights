@@ -42,10 +42,10 @@ Then open <http://localhost:8000/app/>. Log in as a student (cadet ID + last-6 p
 or an instructor (email + password). The session persists across reloads and navigation;
 sign out from the user menu.
 
-> **No Node here — and it can't be installed.** There is no build step, and no `node`/`npm`/`npx`,
-> `node --check`, eslint, or jest is available on this machine (nor can they be added). These are
-> plain ES modules + CSS the browser runs as-is. **Verify by loading the page in a browser** (the
-> Python server above) against Supabase — there is no JS lint/test/typecheck pass to run.
+> **No Node dependency here.** There is no build step, bundler, transpiler, eslint, or jest for this
+> project. Node/npm may exist on a given machine, but the portal is plain ES modules + CSS the browser
+> runs as-is. **Verify by loading the page in a browser** (the Python server above) against Supabase —
+> there is no JS lint/test/typecheck pass to run.
 
 ## Going live (promote to root)
 
