@@ -89,6 +89,8 @@ student_id,name,section
 
 The page will preview the data and report any invalid student IDs or unknown section codes before committing.
 
+After uploading, the Roster tab shows how many students lack login accounts. Click **Provision Accounts** to create those accounts in bulk. Each student's email is `studentID@usafa.edu`, and the default password is the last 6 digits of their student ID number.
+
 ---
 
 ## Editing or Removing a Student
@@ -160,7 +162,7 @@ then sign in on the submit page to save their report. They can re-submit to over
 
 ## Running Preflight Analysis (`/preflight-analyze`)
 
-The preflight analysis run reads student submissions, checks them for physics misconceptions, writes suggested scores to Supabase, and stores a per-instructor report. **Only Course Directors and System Admins initiate this run** — not individual instructors. A Course Director normally runs it once for all M-day sections and once for all T-day sections after each deadline; instructors then review and finalize their own sections in the Grade tab.
+The preflight analysis run reads student submissions, checks them for physics misconceptions, writes suggested scores to Supabase, and stores a per-instructor report. Summary and misconception bullets are aggregated at the instructor level, so each instructor sees one combined summary across all of their sections. **Only Course Directors and System Admins initiate this run** — not individual instructors. A Course Director normally runs it once for all M-day sections and once for all T-day sections after each deadline; instructors then review and finalize their own sections in the Grade tab.
 
 The runbook lives in `.claude/skills/preflight-analyze/SKILL.md`. Claude Code can run it as a slash command, and Codex can follow the same runbook when asked in plain language.
 
@@ -230,7 +232,7 @@ Each run:
 3. Grades numerical and multiple choice questions automatically
 4. Analyzes free-response answers for physics misconceptions
 5. Writes suggested scores to Supabase (`is_finalized = false`) for every submitted student
-6. Stores the Class Summary & Misconceptions report by instructor
+6. Stores the Class Summary & Misconceptions report by instructor, combining all sections assigned to that instructor
 7. Prints a per-instructor breakdown in the terminal or chat
 
 The AI run **does not publish grades to students**. It only writes unfinalized suggestions. After the run, instructors log into the admin panel, go to the **Grade** tab, review green/yellow/red suggestions, edit feedback if needed, click **Save**, then click **Finalize & Publish** to make grades visible to students.

@@ -116,7 +116,7 @@ Claude's skill runner. Treat them as the shared procedure library:
 
 | Runbook (`.claude/skills/<name>/SKILL.md`) | What it does |
 |---|---|
-| `preflight-analyze` | Fetch responses for an assignment, grade free-response (3-state full/warn/zero, liberal), read reference PDFs for RAG, write suggested `scores` (`is_finalized=false`) + per-instructor `analysis_report`. |
+| `preflight-analyze` | Fetch responses for an assignment, grade free-response (3-state full/warn/zero, liberal), read reference PDFs for RAG, write suggested `scores` (`is_finalized=false`) + per-instructor `analysis_report` aggregated across all sections assigned to each instructor. |
 | `interaction-aggregate` | Cohort AI panels (readiness summary, misconception trends, showcase quotes) → `interaction_analysis`. Run after due date. |
 | `interaction-backfill` | Repair reports missing `report_data` by reconstructing schema-1 from `report_markdown`. |
 | `setup-preflight` | First-time machine setup — writes the config file above. |

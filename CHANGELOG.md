@@ -27,6 +27,13 @@ Recorded Casey's standing instruction in `AGENTS.md`: when Casey asks Codex to m
 should update durable memory, update `CHANGELOG.md`, commit, and push `main` after verification
 unless Casey explicitly opts out. Read-only exploration/questions still do not trigger a commit or push.
 
+### Changed — clarified instructor summaries and student account provisioning
+
+Updated the System Guide and faculty roster wording to make two operating details explicit:
+`preflight-analyze` Class Summary & Misconceptions are aggregated per instructor across all of that
+instructor's sections, and provisioned student accounts use `studentID@usafa.edu` with the default
+password set to the last 6 digits of the student's ID number.
+
 ## 2026-07-08 — Casey Pellizzari via Codex
 
 ### Changed — successful preflight-analysis runs now publish their audit record
