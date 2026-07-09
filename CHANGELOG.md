@@ -10,6 +10,14 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-09 — Casey Pellizzari via Codex
 
+### Changed — generated Physics 215 preflight source DOCX v12
+
+Generated `Physics215_Preflight_Questions_v12.docx` beside v11 in the OneDrive `Preflights/`
+folder by pulling current live webpage/Supabase Q3 wording for lessons 2, 6, 9, 19, 24, 26, 28,
+and 30 into the Word source document. Lessons 2 and 6 already matched v11; lessons 9, 19, 24,
+26, 28, and 30 were updated. The Fall preflight builder and figure extractor now read v12 so
+future rebuilds preserve the webpage wording.
+
 ### Fixed — restored missing Fall 2026 preflight question figures
 
 Extracted the embedded JiTT figures from `Physics215_Preflight_Questions_v11.docx` into
