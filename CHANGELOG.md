@@ -10,6 +10,15 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-09 — Casey Pellizzari via Codex
 
+### Changed — lab preflights now ask about lab instructions
+
+Updated the Fall 2026 Physics 215 preflight builder and the live Supabase `assignments` rows for
+the six lab lessons (`preflight-06`, `preflight-11`, `preflight-17`, `preflight-27`, `preflight-34`,
+`preflight-38`) so Q1 asks how much time students spent reading the lab instructions and Q2 asks
+what they found confusing or interesting about the lab instructions. Regular lesson preflights keep
+the original book/reading wording. The live DB patch read-back verified all six lab rows and sampled
+regular preflights to confirm they were unchanged.
+
 ### Changed — clarified Course Director preflight-analysis instructions
 
 Updated the webpage System Guide in `admin.html` and the fuller `SYSTEM_GUIDE.md` so Course

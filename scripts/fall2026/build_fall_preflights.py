@@ -6,7 +6,8 @@ Parses the JiTT questions from Physics215_Preflight_Questions_v11.docx, pairs ea
 lesson with its M/T due dates from the Fall 2026 syllabus schedule, and upserts one written
 preflight `assignments` row per lesson (course_id='phys-215'), mirroring the 3-question
 structure of the original preflight-1 (reading-time 0 pts + confusing/interesting 1 pt +
-JiTT concept question w/ expected_response 1 pt = 2 pts).
+JiTT concept question w/ expected_response 1 pt = 2 pts). Lab lessons use lab-instruction
+wording for the first two reflection questions.
 
 Scope: the 31 regular (PF=Y) lessons + the 6 labs = 37. Excludes Lesson 1 and GRs (12/23/35).
 
@@ -88,6 +89,9 @@ YEAR = 2026
 Q1_TEXT = "How much time did you spend reading the book in preparation for this lesson?"
 Q2_TEXT = ("What did you find most confusing or most interesting about the reading? "
            "Be specific and thorough in your discussion.")
+LAB_Q1_TEXT = "How much time did you spend reading the lab instructions in preparation for this lesson?"
+LAB_Q2_TEXT = ("What did you find most confusing or most interesting about the lab instructions? "
+               "Be specific and thorough in your discussion.")
 
 
 # ----------------------------------------------------------------------------
@@ -179,6 +183,8 @@ def build_rows():
         if not p or not p["jitt_question"]:
             print(f"  !! Lesson {n}: no JiTT question parsed from docx", file=sys.stderr)
             continue
+        q1_text = LAB_Q1_TEXT if is_lab else Q1_TEXT
+        q2_text = LAB_Q2_TEXT if is_lab else Q2_TEXT
         rows.append({
             "id": f"preflight-{n:02d}",
             "course_id": "phys-215",
@@ -192,8 +198,8 @@ def build_rows():
             "reading_link": None,
             "is_published": True,
             "questions": [
-                {"id": "q1", "type": "free_response", "text": Q1_TEXT, "points": 0},
-                {"id": "q2", "type": "free_response", "text": Q2_TEXT, "points": 1},
+                {"id": "q1", "type": "free_response", "text": q1_text, "points": 0},
+                {"id": "q2", "type": "free_response", "text": q2_text, "points": 1},
                 {"id": "q3", "type": "free_response", "text": p["jitt_question"], "points": 1,
                  **({"expected_response": p["expected_response"]} if p["expected_response"] else {})},
             ],

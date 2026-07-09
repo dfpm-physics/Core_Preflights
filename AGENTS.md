@@ -80,6 +80,9 @@ data-model reference — agent-neutral despite the name).
   (see `supabase/admin/`).
 - **Timezone:** due dates are computed as 2359 **America/Denver** the night before a lesson and
   stored as UTC (DST-aware). Reuse the `zoneinfo` helpers in `scripts/fall2026/build_fall_preflights.py`.
+- **Fall 2026 lab preflights:** the six Physics 215 lab lessons (`preflight-06`, `preflight-11`,
+  `preflight-17`, `preflight-27`, `preflight-34`, `preflight-38`) intentionally use lab-instruction
+  wording for Q1/Q2. Regular lesson preflights keep the book/reading wording.
 
 ---
 
