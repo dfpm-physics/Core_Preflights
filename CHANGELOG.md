@@ -8,6 +8,217 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-09 — Casey Pellizzari via Codex
+
+### Fixed — corrected Physics 215 v12 source lesson list
+
+Regenerated `Physics215_Preflight_Questions_v12.docx` after Casey clarified that lesson 3, not
+lessons 2 and 6, was part of the modified Q3 set. The corrected v12 now pulls live
+webpage/Supabase Q3 wording for lessons 3, 9, 19, 24, 26, 28, and 30. Verification confirmed
+lessons 2 and 6 remain unchanged from v11 and still match the live Q3 wording.
+
+### Changed — generated Physics 215 preflight source DOCX v12
+
+Generated `Physics215_Preflight_Questions_v12.docx` beside v11 in the OneDrive `Preflights/`
+folder by pulling current live webpage/Supabase Q3 wording into the Word source document. After the
+lesson-list correction above, v12 matches live Q3 wording for lessons 3, 9, 19, 24, 26, 28, and
+30. The Fall preflight builder and figure extractor now read v12 so future rebuilds preserve the
+webpage wording.
+
+### Fixed — restored missing Fall 2026 preflight question figures
+
+Extracted the embedded JiTT figures from `Physics215_Preflight_Questions_v11.docx` into
+`img/assignments/` and updated the Fall preflight builder to attach deterministic public
+`figure_url` values to Q3. The affected assignments are `preflight-03`, `preflight-04`,
+`preflight-24`, and `preflight-28` (the displacement-current capacitor figure Casey noticed).
+Added `scripts/fall2026/extract_preflight_figures.py` so future DOCX refreshes can regenerate the
+assets. Patched the live Supabase `assignments.questions` JSON for those four rows and read-back
+verified each stored Q3 figure URL.
+
+### Changed — Grade and Report views keep zero-point Q1 private
+
+Updated the written-preflight grading/report UI so zero-point questions such as Q1 no longer appear
+on each student's Grade-tab card; instructors now review only the scored questions there. In the
+Report tab, Q1 raw responses still appear for class-level review, but the **Show names** control is
+removed for Q1 and copy logic keeps those responses anonymous. Other questions keep the
+Show names toggle. Updated the webpage help text, `SYSTEM_GUIDE.md`, and `AGENTS.md` to preserve
+the privacy rule across future agent work.
+
+### Changed — lab preflights now ask about lab instructions
+
+Updated the Fall 2026 Physics 215 preflight builder and the live Supabase `assignments` rows for
+the six lab lessons (`preflight-06`, `preflight-11`, `preflight-17`, `preflight-27`, `preflight-34`,
+`preflight-38`) so Q1 asks how much time students spent reading the lab instructions and Q2 asks
+what they found confusing or interesting about the lab instructions. Regular lesson preflights keep
+the original book/reading wording. The live DB patch read-back verified all six lab rows and sampled
+regular preflights to confirm they were unchanged.
+
+### Changed — clarified Course Director preflight-analysis instructions
+
+Updated the webpage System Guide in `admin.html` and the fuller `SYSTEM_GUIDE.md` so Course
+Directors know how to initiate grading with either Claude Code or Codex. The guide now describes
+the coordination checklist, the current `/preflight-analyze preflight-02 M|T` command shape, the
+Codex plain-language equivalent, the local `~/.claude/skills/preflight-analyze/config.json` path,
+and the distinction between unfinalized AI suggestions and human finalization in the Grade tab.
+Also refreshed related instructor/director/admin help text, removed Claude-only wording from the
+web guide, corrected the stale Node wording in `app/README.md`, and aligned the setup/training
+runbooks with the current config and command conventions.
+
+### Changed — Codex-requested changes now carry standing publish authorization
+
+Recorded Casey's standing instruction in `AGENTS.md`: when Casey asks Codex to make changes, Codex
+should update durable memory, update `CHANGELOG.md`, commit, and push `main` after verification
+unless Casey explicitly opts out. Read-only exploration/questions still do not trigger a commit or push.
+
+### Changed — clarified instructor summaries and student account provisioning
+
+Updated the System Guide and faculty roster wording to make two operating details explicit:
+`preflight-analyze` Class Summary & Misconceptions are aggregated per instructor across all of that
+instructor's sections, and provisioned student accounts use `studentID@usafa.edu` with the default
+password set to the last 6 digits of the student's ID number.
+
+## 2026-07-08 — Casey Pellizzari via Codex
+
+### Changed — successful preflight-analysis runs now publish their audit record
+
+Added standing authorization to `AGENTS.md`: after a successful live `preflight-analyze` run and
+exact read-back verification, the agent updates the CHANGELOG, commits the run record, and pushes
+`main` unless the human explicitly opts out. The shared-state coordination gate still applies.
+
+### Data — reran `preflight-02` with tailored feedback and specific summaries
+
+Re-ran all four training sections after pulling the consolidated `preflight-analyze` runbook.
+Replaced the 64 unfinalized suggestions and the per-instructor `analysis_report`, then read-back
+verified every stored score and report field. All 20 Q3 `warn` responses now have distinct,
+2-sentence corrections tied to the student's actual reasoning; the instructor summaries now name
+each misconception type with a count and representative quote. The grading distribution remains
+42 `full`, 20 `warn`, and 2 blank `zero`; no grades were finalized or published.
+
+### Data — graded the `preflight-02` training submissions
+
+Ran the shared `preflight-analyze` procedure against all four Physics 215 training sections after
+grounding the review in the assigned textbook pages. Wrote and read-back verified **64 suggested
+score rows**, all with `is_finalized=false`, plus the per-instructor `assignments.analysis_report`.
+Of 72 rostered training students, 64 submitted and 8 were missing. Q3 produced 42 `full`, 20 `warn`
+(full credit with corrective feedback), and 2 `zero` blank responses; Q1 and Q2 received full credit
+under the liberal engagement rubric. No grades were finalized or published to students.
+
+### Fixed — Codex quickstart environment wording
+
+Corrected the `AGENTS.md` quickstart so it no longer says Node is absent. It now matches the
+authoritative environment rule: the project has no Node dependency or build step, even when Node
+is installed on an operator's machine.
+
+---
+
+## 2026-07-08 — Casey Pellizzari via Claude
+
+### Changed — `preflight-analyze` summaries are explicitly per-instructor, never per-section
+
+Clarified the runbook so the stored `analysis_report` summary and misconception counts pool all of an
+instructor's sections into one combined set (they already keyed by instructor, but the skill description
+still said "per-section" and Step 8 didn't forbid section-level breakouts). Fixed the description wording
+and added an explicit "aggregate per instructor, never per section" rule to Step 8.
+
+### Fixed — resolved `preflight-analyze` SKILL.md drift between agents
+
+The committed repo runbook (`.claude/skills/preflight-analyze/SKILL.md`) had drifted behind the copy
+Claude runs from `~/.claude/skills/`. The repo version — the only one Codex can read — still
+*prescribed* a single generic corrective-feedback template and thinner grading guidance, which is why
+the Codex `preflight-02` run pasted the same feedback string onto all 20 `warn` answers instead of
+tailoring each. Consolidated both copies to one canonical file: the newer three-state grading rubric
+with **per-student tailored corrective feedback** (generic template now explicitly banned), while
+preserving the repo-only "Course Director/System Admin" role note and "per-instructor report" wording.
+Both copies are now byte-identical. Durable fix (symlink repo↔global, or repo-as-source-of-truth) is a
+follow-up.
+
+### Added — shared multi-agent operating guide (`AGENTS.md`)
+
+Development is now done jointly by different people running **different AI agents** (Claude Code today,
+**Codex being introduced**) against **one shared live Supabase DB and one live GitHub Pages site**. The
+real risk is drift and uncoordinated changes to that shared state, so we added a single agent-neutral
+source of truth.
+
+- **New root [`AGENTS.md`](AGENTS.md)** — authoritative operating rules for every agent and human:
+  shared-state hazards, a **coordination gate** (one operator; no competing run; `git fetch`/verify no
+  divergence; separate worktrees for concurrent work; never force-push), environment, secrets/config
+  locations, runbooks (skills are readable procedures), git/publish/CHANGELOG rules, data-model quick
+  reference, and a Codex quickstart.
+- **[`.claude/CLAUDE.md`](.claude/CLAUDE.md)** now defers to `AGENTS.md` for shared rules (pointer at
+  top) and keeps its Claude-specific deep context.
+- **Corrected a stale environment claim** in both files: the old "no Node, cannot be installed" was
+  wrong (Node/npm are present). Reframed to the accurate rule — *the project has no Node dependency or
+  build step; don't introduce one; verify the frontend in a browser.*
+
+Decisions (reviewed with **Codex**): keep `CHANGELOG.md` as the shared history; skills' `SKILL.md` stay
+readable runbooks any agent can follow; **no `.codex/` documentation mirror** (a `.codex/config.toml`
+for settings is fine later if needed); config-path generalization and the broader private-memory→repo
+migration are **deferred** (the high-stakes memory is already captured in `AGENTS.md`).
+
+---
+
+## 2026-07-07 — Casey Pellizzari via Claude
+
+### Changed — Physics 215 reset from proof-of-concept to Fall 2026
+
+Cleared the phys-215 proof-of-concept data and stood up the real Fall 2026 preflights. Scripts
+live in `scripts/fall2026/`.
+
+- **Snapshotted the POC first** (`export_poc_snapshot.py`) — a full, restorable JSON archive in
+  `scripts/fall2026/poc-archive/`: all 4 interactions, every interaction report (the 8 hand-crafted
+  lesson-02 + 2 lesson-03 reports + 206 synthetic demo rows), the 206 fake students / 10 sections,
+  and the 3 test preflights' responses/scores. `MANIFEST.json` records counts + timestamp.
+- **Created 37 Fall preflights** (`build_fall_preflights.py`) as written `assignments`
+  (`preflight-02`…`preflight-41`, `course_id='phys-215'`, published). Scope = the 31 regular PF=Y
+  lessons + the 6 labs; excludes Lesson 1 and the 3 GRs. Each mirrors the original 3-question
+  structure (reading-time 0.1 + confusing/interesting 0.9 + JiTT concept w/ `expected_response`
+  1.0 = 2 pts). Questions parsed from `Preflights/Physics215_Preflight_Questions_v11.docx`; M/T due
+  dates computed as 2359 America/Denver the night before each lesson from the Fall 2026 syllabus
+  (DST-aware); RAG refs point at `Text_Book_PDFs/215 Sections/`. Idempotent (upsert on `id`).
+- **Cleaned the POC** (`clean_poc.py`, gated on the snapshot matching live counts) — deleted the fake
+  students/sections/submissions, the 3 test preflights, and the `demo-rollup-sandbox` interaction.
+  **Kept** the `lesson-02/03/04` artifacts (reusable Fall content) and all real accounts.
+
+**Deferred (with Matthew Recker):** a durable multi-term/semester model. The frozen artifact contract
+is safe under it (additive columns only; artifacts key by stable slug), and `term_id` belongs in the
+`lessons` layer + roster; the one invasive piece is making `sections.id` per-term (global PK, CHECK
+`^[MT][135][A-D]$`). Not started — revisit after Fall is live. Real Fall roster load is the next step.
+
+### Added — student preview for assignments (`admin.html`)
+
+Each assignment card in the **Assignments** tab now has a **Preview** button
+([`admin.html`](admin.html), `previewAssignment`) that renders the assignment in a modal exactly as a
+student sees it — figure, title, due dates, description, and every question (MC / numerical / free-response)
+with read-only, disabled inputs. Lets directors eyeball the final student-facing form before publishing.
+Reading links are intentionally left **blank** on all Fall preflights: the per-lesson OpenStax PDFs are
+RAG-only grading references (`reference_pdf`/`reference_pages`), not student reading assignments, so the
+student view shows no reading link.
+
+### Changed — preflight point split is now 0 / 1 / 1 (still 2 pts)
+
+All 37 Fall preflights: Q1 (reading time) → **0 pts**, Q2 (confusing/interesting) → **1 pt**,
+Q3 (JiTT concept) → **1 pt**. Total unchanged at 2. Applied to the live `assignments` rows and to
+the generator [`scripts/fall2026/build_fall_preflights.py`](scripts/fall2026/build_fall_preflights.py)
+so re-runs stay consistent.
+
+### Added — instructor-training dataset for preflight-02
+
+[`scripts/training/seed_training_preflight02.py`](scripts/training/seed_training_preflight02.py) seeds a
+small, disposable training roster so instructors can practice the admin + grading workflow before the real
+Fall roster loads: 4 sections (M1A/T1A = Casey, M3A/T3A = Tyler Jones), ~72 fake students in the dedicated
+id block `3000990000–3000990071`, and 64 `preflight-02` submissions (8 intentionally missing) with a
+realistic Q3 spread (correct / vague-but-credited / misconception). Raw submissions only — no scores.
+Idempotent; `--clean --commit` removes exactly this data. **Delete when the real roster is uploaded.**
+
+### Note — folder rename + config path
+
+The working folder was renamed `Physics_215_Fall_2026` → `PREP`. The only path that hardcodes it is the
+skill config `~/.claude/skills/preflight-analyze/config.json` (`textbook_base_path`, gitignored) — updated
+to `…/USAFA Classes/PREP/`. If the folder is renamed again, that line must be updated or `/preflight-analyze`
+loses its textbook RAG grounding.
+
+---
+
 ## 2026-06-26 — Matthew Recker
 
 ### Fixed — theme toggle icon now reflects the current theme, not the destination

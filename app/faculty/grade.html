@@ -128,6 +128,7 @@
     }
 
     const LABEL = { full: '✓ Full credit', warn: '⚠ Full credit — review', zero: '✗ No credit' };
+    const isZeroPointQuestion = q => Number(q?.points) === 0;
 
     function studentTotal(sid) {
       return (current.questions || []).reduce((s, q) => s + (Number(gradeData[sid][q.id]?.score) || 0), 0);
@@ -135,6 +136,7 @@
 
     function render(students) {
       const qs = current.questions || [];
+      const displayQs = qs.filter(q => !isZeroPointQuestion(q));
       container().innerHTML = students.map(st => {
         const sid = st.student_id;
         const finalized = scoreMap[sid]?.finalized;
@@ -150,7 +152,8 @@
             <button class="btn btn-ghost btn-sm" data-act="ext-remove" data-sid="${sid}" data-name="${nm}">Remove</button>`
             : `<button class="btn btn-ghost btn-sm" data-act="ext" data-sid="${sid}" data-name="${nm}">Grant extension</button>`}`;
 
-        const rows = qs.map((q, idx) => {
+        const rows = displayQs.map(q => {
+          const idx = qs.indexOf(q);
           const ans = responseMap[sid]?.[q.id] ?? '';
           const hasAns = String(ans).trim().length > 0;
           const gd = gradeData[sid][q.id];

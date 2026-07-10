@@ -1,0 +1,1238 @@
+[
+  {
+    "student_id": 3000100002,
+    "name": "Jordan Blake",
+    "section_id": "M1A",
+    "auth_user_id": "f64b0d1c-1267-4efa-b028-2a851a1b1dac"
+  },
+  {
+    "student_id": 3000100004,
+    "name": "Riley Nguyen",
+    "section_id": "M1A",
+    "auth_user_id": "baa4ee95-6c38-4600-9e42-dfaa16a15a08"
+  },
+  {
+    "student_id": 3000100005,
+    "name": "Quinn Foster",
+    "section_id": "M1A",
+    "auth_user_id": "6d21ad98-e097-40f7-b095-b07b1e09e119"
+  },
+  {
+    "student_id": 3000100007,
+    "name": "Taylor Kim",
+    "section_id": "M1A",
+    "auth_user_id": "501e4aee-e865-4671-a330-99b6edaf3aea"
+  },
+  {
+    "student_id": 3000100008,
+    "name": "Drew Castillo",
+    "section_id": "M1A",
+    "auth_user_id": "52dc21b3-4616-4a78-91e5-d7c383a42868"
+  },
+  {
+    "student_id": 3000100009,
+    "name": "Jesse Morgan",
+    "section_id": "M1A",
+    "auth_user_id": "42e892f8-dd4a-46af-9c6d-989988de6992"
+  },
+  {
+    "student_id": 3000100010,
+    "name": "Lane Cooper",
+    "section_id": "M1A",
+    "auth_user_id": "4170c5b7-0974-4c01-a76c-229644308293"
+  },
+  {
+    "student_id": 3000100012,
+    "name": "River Chen",
+    "section_id": "M1A",
+    "auth_user_id": "ce9ccaac-233c-450e-a7c6-fa2694b934d9"
+  },
+  {
+    "student_id": 3000100013,
+    "name": "Phoenix Davis",
+    "section_id": "M1A",
+    "auth_user_id": "9b388191-a491-47e6-be4b-c438dac75e8f"
+  },
+  {
+    "student_id": 3000100015,
+    "name": "Reese Thompson",
+    "section_id": "M1A",
+    "auth_user_id": "3b153d02-5444-4b80-b7fd-115c72dc4523"
+  },
+  {
+    "student_id": 3000100016,
+    "name": "Blair Hernandez",
+    "section_id": "M1A",
+    "auth_user_id": "682d19e0-6791-47bb-9f0c-442bba1939a3"
+  },
+  {
+    "student_id": 3000100019,
+    "name": "Jamie Wilson",
+    "section_id": "M1A",
+    "auth_user_id": "ef862fa7-e118-4b0a-9484-cc2f92005270"
+  },
+  {
+    "student_id": 3000100020,
+    "name": "Bailey Jackson",
+    "section_id": "M1A",
+    "auth_user_id": "aa04615a-249b-4c38-bd9a-ec4b041669f6"
+  },
+  {
+    "student_id": 3000100022,
+    "name": "Logan Thomas",
+    "section_id": "M3A",
+    "auth_user_id": "438746b6-fbbb-4948-8e51-c8d9af3edf39"
+  },
+  {
+    "student_id": 3000100023,
+    "name": "Dakota Lee",
+    "section_id": "M3A",
+    "auth_user_id": "8d44209c-27b4-4451-972b-c9e8e5e38229"
+  },
+  {
+    "student_id": 3000100024,
+    "name": "Skyler Harris",
+    "section_id": "M3A",
+    "auth_user_id": "de848595-683b-495a-bb42-520d4188fc49"
+  },
+  {
+    "student_id": 3000100026,
+    "name": "Sam Mitchell",
+    "section_id": "M3A",
+    "auth_user_id": "4a76d01a-b65b-4057-b353-eb25617d7b3b"
+  },
+  {
+    "student_id": 3000100027,
+    "name": "Casey Torres",
+    "section_id": "M3A",
+    "auth_user_id": "047b4109-9667-4203-a25e-7b92bf9938a6"
+  },
+  {
+    "student_id": 3000100028,
+    "name": "Hayden Walker",
+    "section_id": "M3A",
+    "auth_user_id": "406baf9e-4797-4a68-8fd8-434914b92ea7"
+  },
+  {
+    "student_id": 3000100030,
+    "name": "Evan Hayes",
+    "section_id": "M3A",
+    "auth_user_id": "a1a3e921-eead-4ef4-bd3b-6f1d2e69f5f4"
+  },
+  {
+    "student_id": 3000100031,
+    "name": "Robin Adams",
+    "section_id": "M3A",
+    "auth_user_id": "2dbce3a3-fe60-4bbe-b3b3-4647afa75132"
+  },
+  {
+    "student_id": 3000100032,
+    "name": "Blake West",
+    "section_id": "M3A",
+    "auth_user_id": "d0ca2024-b664-4b2a-9d2d-96f360133d39"
+  },
+  {
+    "student_id": 3000100034,
+    "name": "Addison Hall",
+    "section_id": "M3A",
+    "auth_user_id": "f6ac4586-a7f6-492c-980a-6a839927de4f"
+  },
+  {
+    "student_id": 3000100035,
+    "name": "Kennedy King",
+    "section_id": "M3A",
+    "auth_user_id": "b631320a-47c7-4862-b712-36ba218d4920"
+  },
+  {
+    "student_id": 3000100037,
+    "name": "Jordan Scott",
+    "section_id": "M3A",
+    "auth_user_id": "2643ec1f-5965-465b-b108-c774eee82f5b"
+  },
+  {
+    "student_id": 3000100038,
+    "name": "Taylor Green",
+    "section_id": "M3A",
+    "auth_user_id": "1a510a81-adec-4439-9dc9-4a4ea284a1e6"
+  },
+  {
+    "student_id": 3000100039,
+    "name": "Remy Baker",
+    "section_id": "M3A",
+    "auth_user_id": "4050fc7f-042a-4498-bad4-53d20c03fc44"
+  },
+  {
+    "student_id": 3000100041,
+    "name": "Riley Nelson",
+    "section_id": "M1B",
+    "auth_user_id": "d9149f28-6682-4cef-b9aa-4e9c905371e6"
+  },
+  {
+    "student_id": 3000100042,
+    "name": "Quinn Carter",
+    "section_id": "M1B",
+    "auth_user_id": "cce9b513-e9ae-48a5-aa3e-b48e150ad281"
+  },
+  {
+    "student_id": 3000100043,
+    "name": "Avery James",
+    "section_id": "M1B",
+    "auth_user_id": "b9c307e3-ea4e-45c7-a313-e5457a1128e8"
+  },
+  {
+    "student_id": 3000100045,
+    "name": "Drew Rivera",
+    "section_id": "M1B",
+    "auth_user_id": "0a428e57-493b-47cb-95f1-b7048d672699"
+  },
+  {
+    "student_id": 3000100046,
+    "name": "Alex Flores",
+    "section_id": "M1B",
+    "auth_user_id": "dab4c3d4-e786-4509-a769-1fd6da7dcbbf"
+  },
+  {
+    "student_id": 3000100048,
+    "name": "Morgan Garcia",
+    "section_id": "M1B",
+    "auth_user_id": "a2ce1e1d-3064-4afb-bdc1-f1b38364233d"
+  },
+  {
+    "student_id": 3000100049,
+    "name": "Casey Lewis",
+    "section_id": "M1B",
+    "auth_user_id": "bc752bb1-f5e9-4561-85b7-bbfc82b7bcc2"
+  },
+  {
+    "student_id": 3000100050,
+    "name": "Reese Robinson",
+    "section_id": "M1B",
+    "auth_user_id": "31cc8671-216e-4b34-9671-267eed00a0f8"
+  },
+  {
+    "student_id": 3000100051,
+    "name": "Blake Clark",
+    "section_id": "M1B",
+    "auth_user_id": "27b7de36-e89e-4166-a01e-9d72938f44b3"
+  },
+  {
+    "student_id": 3000100053,
+    "name": "Mason Walker",
+    "section_id": "M1B",
+    "auth_user_id": "c2f1ca48-fbe4-44bf-a249-da5878ca95ab"
+  },
+  {
+    "student_id": 3000100054,
+    "name": "Evan Hall",
+    "section_id": "M1B",
+    "auth_user_id": "948009bf-b577-4692-97f5-d3310a33ce4a"
+  },
+  {
+    "student_id": 3000100056,
+    "name": "Robin Davis",
+    "section_id": "M1B",
+    "auth_user_id": "755465e3-02e7-4106-ac3e-b746c55c68ba"
+  },
+  {
+    "student_id": 3000100057,
+    "name": "Logan Martinez",
+    "section_id": "M1B",
+    "auth_user_id": "11e3a21f-04c8-4255-9929-5546fc9c7221"
+  },
+  {
+    "student_id": 3000100059,
+    "name": "Skyler Johnson",
+    "section_id": "M1B",
+    "auth_user_id": "68cf151c-7a56-4759-9906-d9edda61375c"
+  },
+  {
+    "student_id": 3000100060,
+    "name": "Elliot Taylor",
+    "section_id": "M1B",
+    "auth_user_id": "60f4e372-db06-4996-ac21-ee341d578145"
+  },
+  {
+    "student_id": 3000100061,
+    "name": "Sam Brown",
+    "section_id": "M1B",
+    "auth_user_id": "7aa86498-88cd-406a-8b09-94df510e43f0"
+  },
+  {
+    "student_id": 3000100063,
+    "name": "Parker Wilson",
+    "section_id": "M1B",
+    "auth_user_id": "55182ec3-4183-4613-afc5-55355893bcec"
+  },
+  {
+    "student_id": 3000100064,
+    "name": "Jordan Lee",
+    "section_id": "M3B",
+    "auth_user_id": "6af9c452-916d-44ed-9185-d90541a90839"
+  },
+  {
+    "student_id": 3000100065,
+    "name": "Morgan Chen",
+    "section_id": "M3B",
+    "auth_user_id": "b6b8cc5a-5891-4bb4-ab0d-328716246c55"
+  },
+  {
+    "student_id": 3000100067,
+    "name": "Quinn Zhao",
+    "section_id": "M3B",
+    "auth_user_id": "9e9cef95-7c4d-442c-b192-f7c249195a67"
+  },
+  {
+    "student_id": 3000100068,
+    "name": "Avery Liu",
+    "section_id": "M3B",
+    "auth_user_id": "43dc6f73-1fb2-46f5-94fb-df6f08cdb145"
+  },
+  {
+    "student_id": 3000100069,
+    "name": "Taylor Wang",
+    "section_id": "M3B",
+    "auth_user_id": "cdc70f4a-aeb8-496d-ac07-13742a0b0628"
+  },
+  {
+    "student_id": 3000100071,
+    "name": "Jesse Li",
+    "section_id": "M3B",
+    "auth_user_id": "bc36a565-4735-4e40-88bb-75b8ca8e4d2c"
+  },
+  {
+    "student_id": 3000100072,
+    "name": "Lane Wu",
+    "section_id": "M3B",
+    "auth_user_id": "33a45a1b-1337-43bd-88c2-e40b9e6cab11"
+  },
+  {
+    "student_id": 3000100074,
+    "name": "River Ma",
+    "section_id": "M3B",
+    "auth_user_id": "bdc70756-fccd-497c-9452-0dac75f81bc8"
+  },
+  {
+    "student_id": 3000100075,
+    "name": "Phoenix Liang",
+    "section_id": "M3B",
+    "auth_user_id": "080add6c-e635-4fd3-be3d-76b8cf352b07"
+  },
+  {
+    "student_id": 3000100076,
+    "name": "Noel Sun",
+    "section_id": "M3B",
+    "auth_user_id": "133e2d30-bf4d-409c-8fa5-7c3c2cf4f123"
+  },
+  {
+    "student_id": 3000100078,
+    "name": "Blair Xu",
+    "section_id": "M3B",
+    "auth_user_id": "0ea29c68-aec1-4d57-bf2f-d4e7b75712d2"
+  },
+  {
+    "student_id": 3000100079,
+    "name": "Cameron Pan",
+    "section_id": "M3B",
+    "auth_user_id": "0881d3f7-687f-42c4-9c69-d6ae598d8550"
+  },
+  {
+    "student_id": 3000100081,
+    "name": "Bailey Rodriguez",
+    "section_id": "M5A",
+    "auth_user_id": "763be841-8007-40db-90c9-b8e2511de5f0"
+  },
+  {
+    "student_id": 3000100082,
+    "name": "Parker Martinez",
+    "section_id": "M5A",
+    "auth_user_id": "3300c9f0-7106-46d7-8d28-aacadbdebcb5"
+  },
+  {
+    "student_id": 3000100084,
+    "name": "Dakota Gonzalez",
+    "section_id": "M5A",
+    "auth_user_id": "cfe6fee5-d458-4839-bc9a-b1daa00e4e29"
+  },
+  {
+    "student_id": 3000100085,
+    "name": "Skyler Perez",
+    "section_id": "M5A",
+    "auth_user_id": "28b08ddb-1f81-4217-98d1-d63c7b4a6f32"
+  },
+  {
+    "student_id": 3000100086,
+    "name": "Elliot Torres",
+    "section_id": "M5A",
+    "auth_user_id": "e17dd3f1-2762-461c-ba44-1ffd6808effd"
+  },
+  {
+    "student_id": 3000100088,
+    "name": "Casey Ramirez",
+    "section_id": "M5A",
+    "auth_user_id": "b3e93d60-7579-4679-b2c2-89e1b247db82"
+  },
+  {
+    "student_id": 3000100089,
+    "name": "Hayden Flores",
+    "section_id": "M5A",
+    "auth_user_id": "271ae6dd-6ed7-4ce9-a364-7bc9dd252adb"
+  },
+  {
+    "student_id": 3000100091,
+    "name": "Evan Diaz",
+    "section_id": "M5A",
+    "auth_user_id": "13fc46eb-22de-47d0-8979-beda95c7cb43"
+  },
+  {
+    "student_id": 3000100092,
+    "name": "Robin Lopez",
+    "section_id": "M5A",
+    "auth_user_id": "f18e646c-21b4-460c-b430-3d5cf09eea49"
+  },
+  {
+    "student_id": 3000100093,
+    "name": "Blake Sanchez",
+    "section_id": "M5A",
+    "auth_user_id": "03817fcd-6595-4bb3-a79c-7af68f23f470"
+  },
+  {
+    "student_id": 3000100095,
+    "name": "Addison Rodriguez",
+    "section_id": "M5A",
+    "auth_user_id": "34130029-a932-4b9d-a66d-256caec50e6e"
+  },
+  {
+    "student_id": 3000100096,
+    "name": "Kennedy Hernandez",
+    "section_id": "M5A",
+    "auth_user_id": "3c9f94a8-85c2-47da-9128-dbe997eb09f1"
+  },
+  {
+    "student_id": 3000100097,
+    "name": "Peyton Gonzalez",
+    "section_id": "M5A",
+    "auth_user_id": "61310995-f9d8-43c5-ba1d-051750e79f7e"
+  },
+  {
+    "student_id": 3000100099,
+    "name": "Taylor Torres",
+    "section_id": "M5A",
+    "auth_user_id": "9ecad63c-32ba-40de-bf42-0bcc5a82c4aa"
+  },
+  {
+    "student_id": 3000100100,
+    "name": "Remy Rivera",
+    "section_id": "M5A",
+    "auth_user_id": "18dd4b9f-c59f-447b-a816-37c1d29dcb29"
+  },
+  {
+    "student_id": 3000100101,
+    "name": "Morgan Ramirez",
+    "section_id": "M5A",
+    "auth_user_id": "dc85ad2b-a445-4924-9e88-bbd24712070f"
+  },
+  {
+    "student_id": 3000100103,
+    "name": "Quinn Garcia",
+    "section_id": "M5A",
+    "auth_user_id": "53db1ee4-b12c-46f3-b8ea-dc2d33b17fc2"
+  },
+  {
+    "student_id": 3000100104,
+    "name": "Avery Diaz",
+    "section_id": "M5A",
+    "auth_user_id": "a930fec1-7281-4560-87d0-42ac6a81ff9d"
+  },
+  {
+    "student_id": 3000100105,
+    "name": "Drew Lopez",
+    "section_id": "M5A",
+    "auth_user_id": "b9925cbf-d9ba-45ee-bdbd-87d20d46155c"
+  },
+  {
+    "student_id": 3000100107,
+    "name": "Jordan Williams",
+    "section_id": "T1A",
+    "auth_user_id": "4fddf425-b7f8-4d74-add7-c04b650d15b9"
+  },
+  {
+    "student_id": 3000100108,
+    "name": "Morgan Brown",
+    "section_id": "T1A",
+    "auth_user_id": "55c9393b-adfc-4340-a4f3-b85bbed3481d"
+  },
+  {
+    "student_id": 3000100109,
+    "name": "Riley Jones",
+    "section_id": "T1A",
+    "auth_user_id": "0870fe21-39f5-4823-bfec-09db297c07c2"
+  },
+  {
+    "student_id": 3000100111,
+    "name": "Avery Miller",
+    "section_id": "T1A",
+    "auth_user_id": "9c844575-21ca-4c4f-b7dd-747dc48d508a"
+  },
+  {
+    "student_id": 3000100112,
+    "name": "Taylor Moore",
+    "section_id": "T1A",
+    "auth_user_id": "93196139-4c90-4861-b670-1d63f2af1176"
+  },
+  {
+    "student_id": 3000100114,
+    "name": "Jesse Anderson",
+    "section_id": "T1A",
+    "auth_user_id": "a368c1fd-54be-4a6e-97ad-fbf8b6545852"
+  },
+  {
+    "student_id": 3000100115,
+    "name": "Lane Thomas",
+    "section_id": "T1A",
+    "auth_user_id": "6f91883a-f886-4a4e-8752-ba2bc4e53f22"
+  },
+  {
+    "student_id": 3000100117,
+    "name": "River White",
+    "section_id": "T1A",
+    "auth_user_id": "0fd83001-7dbf-4292-a44c-d9b072afd3be"
+  },
+  {
+    "student_id": 3000100118,
+    "name": "Phoenix Harris",
+    "section_id": "T1A",
+    "auth_user_id": "8c609d51-6df8-4d00-b8b3-91a5d47ade53"
+  },
+  {
+    "student_id": 3000100119,
+    "name": "Noel Martin",
+    "section_id": "T1A",
+    "auth_user_id": "8b6470d7-73c4-4317-b85a-e7f7a2b39f89"
+  },
+  {
+    "student_id": 3000100121,
+    "name": "Blair Garcia",
+    "section_id": "T1A",
+    "auth_user_id": "7e727331-cb74-4d07-8793-4d4df4f706a1"
+  },
+  {
+    "student_id": 3000100122,
+    "name": "Cameron Martinez",
+    "section_id": "T1A",
+    "auth_user_id": "eb588b93-d945-4432-a61d-dd21b9bbfa13"
+  },
+  {
+    "student_id": 3000100123,
+    "name": "Finley Robinson",
+    "section_id": "T1A",
+    "auth_user_id": "78baf2ae-955b-4fd6-81c5-6c86ef021c30"
+  },
+  {
+    "student_id": 3000100125,
+    "name": "Bailey Lewis",
+    "section_id": "T1A",
+    "auth_user_id": "2c47c4e9-33c6-49ab-a99f-9b487c478d4b"
+  },
+  {
+    "student_id": 3000100126,
+    "name": "Parker Lee",
+    "section_id": "T3A",
+    "auth_user_id": "15d1b9d1-3bf4-4c54-aa85-52933ea8b5f1"
+  },
+  {
+    "student_id": 3000100128,
+    "name": "Dakota Hall",
+    "section_id": "T3A",
+    "auth_user_id": "6a56dfe0-c980-4eff-8c9f-814cbcaacf47"
+  },
+  {
+    "student_id": 3000100129,
+    "name": "Skyler Allen",
+    "section_id": "T3A",
+    "auth_user_id": "ff2d9721-637d-44f7-8349-642c33b944e4"
+  },
+  {
+    "student_id": 3000100130,
+    "name": "Elliot Young",
+    "section_id": "T3A",
+    "auth_user_id": "c72eb6b4-71cf-4fa7-8bd1-de6954545544"
+  },
+  {
+    "student_id": 3000100132,
+    "name": "Casey King",
+    "section_id": "T3A",
+    "auth_user_id": "d7454af5-2e4d-4d2f-9dff-628b71bbef5a"
+  },
+  {
+    "student_id": 3000100133,
+    "name": "Hayden Wright",
+    "section_id": "T3A",
+    "auth_user_id": "93a2e912-4dc5-4a77-bea6-b7c9acaafdea"
+  },
+  {
+    "student_id": 3000100134,
+    "name": "Mason Scott",
+    "section_id": "T3A",
+    "auth_user_id": "a4287100-8f9b-47de-b575-d671f294d747"
+  },
+  {
+    "student_id": 3000100136,
+    "name": "Robin Baker",
+    "section_id": "T3A",
+    "auth_user_id": "bf35e215-4471-4d47-997e-a8adac55f6e1"
+  },
+  {
+    "student_id": 3000100137,
+    "name": "Blake Gonzalez",
+    "section_id": "T3A",
+    "auth_user_id": "eed54859-9013-4133-b7be-c6117b680c1c"
+  },
+  {
+    "student_id": 3000100139,
+    "name": "Addison Carter",
+    "section_id": "T3A",
+    "auth_user_id": "78064d8e-bf9a-4b2f-a39b-d2000f6d0040"
+  },
+  {
+    "student_id": 3000100140,
+    "name": "Kennedy Mitchell",
+    "section_id": "T3A",
+    "auth_user_id": "6c41ce1b-3df0-4883-8cf4-eb3b1f003dd3"
+  },
+  {
+    "student_id": 3000100141,
+    "name": "Peyton Roberts",
+    "section_id": "T3A",
+    "auth_user_id": "28a3f507-df1b-4f36-9349-0112d1edcf57"
+  },
+  {
+    "student_id": 3000100143,
+    "name": "Taylor Phillips",
+    "section_id": "T3A",
+    "auth_user_id": "cf1dc6b9-3634-4aeb-b7b0-8c0b9f237499"
+  },
+  {
+    "student_id": 3000100018,
+    "name": "Finley Anderson",
+    "section_id": "M5A",
+    "auth_user_id": "997ba2a5-0d97-45c3-973b-f6e6c6283580"
+  },
+  {
+    "student_id": 3000100001,
+    "name": "Alex Carter",
+    "section_id": "M1A",
+    "auth_user_id": "1403646c-e799-4705-895d-88a995c938e3"
+  },
+  {
+    "student_id": 3000100003,
+    "name": "Morgan Ellis",
+    "section_id": "M1A",
+    "auth_user_id": "dca78f75-6dfa-41a4-8f4e-1a77adffc523"
+  },
+  {
+    "student_id": 3000100006,
+    "name": "Avery Brooks",
+    "section_id": "M1A",
+    "auth_user_id": "981b8337-eb0f-49e5-886f-a078b6d5e77a"
+  },
+  {
+    "student_id": 3000100011,
+    "name": "Sage Williams",
+    "section_id": "M1A",
+    "auth_user_id": "aa0b527b-f267-40cd-91cc-f1073b784015"
+  },
+  {
+    "student_id": 3000100014,
+    "name": "Noel Garcia",
+    "section_id": "M1A",
+    "auth_user_id": "51b463b2-f7ff-44ae-8950-0621f1999f24"
+  },
+  {
+    "student_id": 3000100017,
+    "name": "Cameron Martin",
+    "section_id": "M1A",
+    "auth_user_id": "b504ce47-295b-424a-99df-de6c64a17335"
+  },
+  {
+    "student_id": 3000100021,
+    "name": "Parker White",
+    "section_id": "M1A",
+    "auth_user_id": "5330e09a-2e7d-4d05-a9d2-975bed364745"
+  },
+  {
+    "student_id": 3000100025,
+    "name": "Elliot Clark",
+    "section_id": "M3A",
+    "auth_user_id": "4af94b14-acbe-431e-86d1-474d3d7bd05c"
+  },
+  {
+    "student_id": 3000100029,
+    "name": "Mason Owens",
+    "section_id": "M3A",
+    "auth_user_id": "59c4fc54-6d07-4aa8-9c69-c77fae7442b7"
+  },
+  {
+    "student_id": 3000100033,
+    "name": "Cameron Young",
+    "section_id": "M3A",
+    "auth_user_id": "12398fb3-9616-4b49-a548-793fd1419a9e"
+  },
+  {
+    "student_id": 3000100036,
+    "name": "Peyton Moore",
+    "section_id": "M3A",
+    "auth_user_id": "ab7e8fb7-dddb-4f9e-95a7-4dbf4f5526d1"
+  },
+  {
+    "student_id": 3000100040,
+    "name": "Morgan Simmons",
+    "section_id": "M3A",
+    "auth_user_id": "c15351e3-2a92-4a7c-bbb1-21d54891d113"
+  },
+  {
+    "student_id": 3000100044,
+    "name": "Niko Patterson",
+    "section_id": "M1B",
+    "auth_user_id": "488d785f-c508-41cd-9a11-76ab7c528f6f"
+  },
+  {
+    "student_id": 3000100047,
+    "name": "Jordan Torres",
+    "section_id": "M1B",
+    "auth_user_id": "447277be-00b8-4aec-9608-f53a1e27ae06"
+  },
+  {
+    "student_id": 3000100052,
+    "name": "Hayden Lewis",
+    "section_id": "M1B",
+    "auth_user_id": "1556ff79-d59a-4d55-a1ed-79642d0512bb"
+  },
+  {
+    "student_id": 3000100055,
+    "name": "Drew King",
+    "section_id": "M1B",
+    "auth_user_id": "ea35d92e-2b5e-4f26-b308-27a5237e5848"
+  },
+  {
+    "student_id": 3000100058,
+    "name": "Dakota Anderson",
+    "section_id": "M1B",
+    "auth_user_id": "c06fb175-155b-4fee-b6a1-efe5f3f488e9"
+  },
+  {
+    "student_id": 3000100062,
+    "name": "Casey Phillips",
+    "section_id": "M1B",
+    "auth_user_id": "0a73cf08-e861-4ecb-bfd2-7c35cb25ad35"
+  },
+  {
+    "student_id": 3000100066,
+    "name": "Riley Huang",
+    "section_id": "M3B",
+    "auth_user_id": "6034fe1a-9630-49e0-b951-9e58dd945133"
+  },
+  {
+    "student_id": 3000100073,
+    "name": "Sage Gao",
+    "section_id": "M3B",
+    "auth_user_id": "f0ab5173-d279-4aa6-b9d0-78b6b35624b3"
+  },
+  {
+    "student_id": 3000100077,
+    "name": "Reese Tan",
+    "section_id": "M3B",
+    "auth_user_id": "ee755532-85a7-493e-af11-a5b8b6092362"
+  },
+  {
+    "student_id": 3000100080,
+    "name": "Finley Song",
+    "section_id": "M3B",
+    "auth_user_id": "9c1ffec2-d896-4a4a-9947-59df8e1c8c45"
+  },
+  {
+    "student_id": 3000100083,
+    "name": "Logan Hernandez",
+    "section_id": "M5A",
+    "auth_user_id": "5444e68a-28c4-4079-9c5b-2a3ff77a2ea6"
+  },
+  {
+    "student_id": 3000100087,
+    "name": "Sam Rivera",
+    "section_id": "M5A",
+    "auth_user_id": "0e31c5b3-91c8-44c3-8e9e-2f74fad01e49"
+  },
+  {
+    "student_id": 3000100090,
+    "name": "Mason Garcia",
+    "section_id": "M5A",
+    "auth_user_id": "e9196515-0983-485a-b928-fa1c0e2788e8"
+  },
+  {
+    "student_id": 3000100094,
+    "name": "Cameron Martinez",
+    "section_id": "M5A",
+    "auth_user_id": "2cd7fdda-7b89-4fd8-9dd4-aff5f0026ac3"
+  },
+  {
+    "student_id": 3000100098,
+    "name": "Jordan Perez",
+    "section_id": "M5A",
+    "auth_user_id": "93f13d3c-0231-4a2f-81ae-45ade87daa9c"
+  },
+  {
+    "student_id": 3000100102,
+    "name": "Riley Flores",
+    "section_id": "M5A",
+    "auth_user_id": "ae4f3cca-f290-4817-8c5e-ecf55e6df622"
+  },
+  {
+    "student_id": 3000100106,
+    "name": "Alex Johnson",
+    "section_id": "T1A",
+    "auth_user_id": "b99b5010-e608-4751-87a4-f2ac6666111a"
+  },
+  {
+    "student_id": 3000100110,
+    "name": "Quinn Davis",
+    "section_id": "T1A",
+    "auth_user_id": "47f931b8-da25-4c95-babe-ee2c30770198"
+  },
+  {
+    "student_id": 3000100113,
+    "name": "Drew Taylor",
+    "section_id": "T1A",
+    "auth_user_id": "584b3635-e702-46cd-853e-d5b5f266a860"
+  },
+  {
+    "student_id": 3000100116,
+    "name": "Sage Jackson",
+    "section_id": "T1A",
+    "auth_user_id": "bf4967ed-efff-4fd4-84a8-101609af9ea1"
+  },
+  {
+    "student_id": 3000100120,
+    "name": "Reese Thompson",
+    "section_id": "T1A",
+    "auth_user_id": "c78b8223-afb0-4c32-be68-63748816e26e"
+  },
+  {
+    "student_id": 3000100124,
+    "name": "Jamie Clark",
+    "section_id": "T1A",
+    "auth_user_id": "683ce776-d62c-4b4a-a338-5cb91101f5fa"
+  },
+  {
+    "student_id": 3000100127,
+    "name": "Logan Walker",
+    "section_id": "T3A",
+    "auth_user_id": "c63f3c4a-4143-4c28-b881-94af738e7aaf"
+  },
+  {
+    "student_id": 3000100131,
+    "name": "Sam Hernandez",
+    "section_id": "T3A",
+    "auth_user_id": "aea63fa4-03cc-4e2c-86aa-969fe5b62f59"
+  },
+  {
+    "student_id": 3000100135,
+    "name": "Evan Green",
+    "section_id": "T3A",
+    "auth_user_id": "c70fd8c6-1d46-4dab-9b16-65a1be850c8d"
+  },
+  {
+    "student_id": 3000100138,
+    "name": "Cameron Nelson",
+    "section_id": "T3A",
+    "auth_user_id": "c296aaab-2a0d-4cb6-a2b9-094656376bd6"
+  },
+  {
+    "student_id": 3000100142,
+    "name": "Jordan Turner",
+    "section_id": "T3A",
+    "auth_user_id": "520e4af4-7f40-4dd8-80f1-c574869421e4"
+  },
+  {
+    "student_id": 3000100144,
+    "name": "Remy Campbell",
+    "section_id": "T3A",
+    "auth_user_id": "e58ceca2-7168-434e-be33-21610643d5d6"
+  },
+  {
+    "student_id": 3000100145,
+    "name": "Morgan Parker",
+    "section_id": "T3A",
+    "auth_user_id": "f9e380c8-9510-4165-bd75-61e52762c3ba"
+  },
+  {
+    "student_id": 3000100146,
+    "name": "Riley Evans",
+    "section_id": "T3A",
+    "auth_user_id": "7817d23e-8e59-464f-b615-fd52b1caaa30"
+  },
+  {
+    "student_id": 3000100147,
+    "name": "Quinn Edwards",
+    "section_id": "T3A",
+    "auth_user_id": "ccd59173-736f-424a-906f-38578075cdc2"
+  },
+  {
+    "student_id": 3000100148,
+    "name": "Avery Collins",
+    "section_id": "T1B",
+    "auth_user_id": "a84b2052-aafd-4b8e-9ab8-54096f30bd49"
+  },
+  {
+    "student_id": 3000100149,
+    "name": "Drew Stewart",
+    "section_id": "T1B",
+    "auth_user_id": "499601ae-5407-4273-ae7c-6fdc10778745"
+  },
+  {
+    "student_id": 3000100150,
+    "name": "Alex Sanchez",
+    "section_id": "T1B",
+    "auth_user_id": "37d9ac2e-fa71-4544-8860-ab32c4734210"
+  },
+  {
+    "student_id": 3000100151,
+    "name": "Jordan Morris",
+    "section_id": "T1B",
+    "auth_user_id": "3ae2bd37-f701-4826-8a8d-fe515f3a6c26"
+  },
+  {
+    "student_id": 3000100152,
+    "name": "Morgan Rogers",
+    "section_id": "T1B",
+    "auth_user_id": "3f4863fa-3250-44ef-a47f-316befb9610e"
+  },
+  {
+    "student_id": 3000100153,
+    "name": "Riley Reed",
+    "section_id": "T1B",
+    "auth_user_id": "7d345e82-abc6-4c57-a7b5-8e147f42f699"
+  },
+  {
+    "student_id": 3000100154,
+    "name": "Quinn Cook",
+    "section_id": "T1B",
+    "auth_user_id": "569e9188-c365-4d70-8289-4d5291ceb40b"
+  },
+  {
+    "student_id": 3000100155,
+    "name": "Avery Bell",
+    "section_id": "T1B",
+    "auth_user_id": "0fd369b0-0170-4338-a70f-52cf9359272c"
+  },
+  {
+    "student_id": 3000100156,
+    "name": "Taylor Murphy",
+    "section_id": "T1B",
+    "auth_user_id": "c395fa1b-8c59-4cac-a1da-5438fee67ba5"
+  },
+  {
+    "student_id": 3000100157,
+    "name": "Drew Bailey",
+    "section_id": "T1B",
+    "auth_user_id": "d768614d-f0a4-45b3-a4d9-c3b0bef30518"
+  },
+  {
+    "student_id": 3000100158,
+    "name": "Jesse Cooper",
+    "section_id": "T1B",
+    "auth_user_id": "5b8be3e9-3cf0-43b6-a86c-7e01d4034e55"
+  },
+  {
+    "student_id": 3000100159,
+    "name": "Lane Richardson",
+    "section_id": "T1B",
+    "auth_user_id": "e1f72764-b370-4607-9240-24abf8f89418"
+  },
+  {
+    "student_id": 3000100160,
+    "name": "Sage Cox",
+    "section_id": "T1B",
+    "auth_user_id": "3a8f55f8-e42e-4fdf-bcbd-5507165ec9c6"
+  },
+  {
+    "student_id": 3000100161,
+    "name": "River Howard",
+    "section_id": "T1B",
+    "auth_user_id": "282e927d-764e-4678-9b68-ef3d34bdef57"
+  },
+  {
+    "student_id": 3000100162,
+    "name": "Phoenix Ward",
+    "section_id": "T1B",
+    "auth_user_id": "65713e33-b33a-4090-a2cb-0bf90a97469f"
+  },
+  {
+    "student_id": 3000100163,
+    "name": "Noel Peterson",
+    "section_id": "T1B",
+    "auth_user_id": "7ead35d6-6387-4f6a-a4cd-2508833a538a"
+  },
+  {
+    "student_id": 3000100164,
+    "name": "Reese Gray",
+    "section_id": "T1B",
+    "auth_user_id": "fe0a533e-1d6e-45f4-b5bf-6824a6699e6d"
+  },
+  {
+    "student_id": 3000100165,
+    "name": "Blair James",
+    "section_id": "T1B",
+    "auth_user_id": "455f3bd3-4bb4-489c-bc4c-841cd189bd55"
+  },
+  {
+    "student_id": 3000100166,
+    "name": "Cameron Watson",
+    "section_id": "T3B",
+    "auth_user_id": "ebebb089-8685-455b-9aae-76420acbf1d5"
+  },
+  {
+    "student_id": 3000100167,
+    "name": "Finley Brooks",
+    "section_id": "T3B",
+    "auth_user_id": "a37736e9-5bcb-496b-a591-bcd8ceeba1d5"
+  },
+  {
+    "student_id": 3000100168,
+    "name": "Jamie Kelly",
+    "section_id": "T3B",
+    "auth_user_id": "c72c2492-9d67-43f5-8769-344e35bfafed"
+  },
+  {
+    "student_id": 3000100169,
+    "name": "Bailey Sanders",
+    "section_id": "T3B",
+    "auth_user_id": "c513b9ea-eff3-4286-902f-6bb691e715fe"
+  },
+  {
+    "student_id": 3000100170,
+    "name": "Parker Price",
+    "section_id": "T3B",
+    "auth_user_id": "5ee7e2c9-816c-416b-a449-065a2763337f"
+  },
+  {
+    "student_id": 3000100171,
+    "name": "Logan Bennett",
+    "section_id": "T3B",
+    "auth_user_id": "96c7c2be-37be-4129-940d-dad735773ec4"
+  },
+  {
+    "student_id": 3000100172,
+    "name": "Dakota Wood",
+    "section_id": "T3B",
+    "auth_user_id": "fc29df2c-9a19-4abb-abed-23e379a1891b"
+  },
+  {
+    "student_id": 3000100173,
+    "name": "Skyler Barnes",
+    "section_id": "T3B",
+    "auth_user_id": "1bf5a4db-c14e-431d-b9c0-613df84f121e"
+  },
+  {
+    "student_id": 3000100174,
+    "name": "Elliot Ross",
+    "section_id": "T3B",
+    "auth_user_id": "90153f88-a273-4f0d-a6c7-277759078d2c"
+  },
+  {
+    "student_id": 3000100175,
+    "name": "Sam Henderson",
+    "section_id": "T3B",
+    "auth_user_id": "e0647171-9992-4a1c-92a0-9facfac5b716"
+  },
+  {
+    "student_id": 3000100176,
+    "name": "Casey Coleman",
+    "section_id": "T3B",
+    "auth_user_id": "fa97d82f-8f33-42eb-8181-0be16317e1ad"
+  },
+  {
+    "student_id": 3000100177,
+    "name": "Hayden Jenkins",
+    "section_id": "T3B",
+    "auth_user_id": "bdef39e4-dafd-40db-9cbb-f3e275f3f098"
+  },
+  {
+    "student_id": 3000100178,
+    "name": "Mason Perry",
+    "section_id": "T3B",
+    "auth_user_id": "9519b941-0017-4474-a4ad-09d1f2a349ef"
+  },
+  {
+    "student_id": 3000100179,
+    "name": "Evan Powell",
+    "section_id": "T3B",
+    "auth_user_id": "5d4c2e91-18ed-4411-91ae-7d3a8a3f2ba3"
+  },
+  {
+    "student_id": 3000100180,
+    "name": "Robin Long",
+    "section_id": "T3B",
+    "auth_user_id": "67910987-1025-4a28-91f9-9a039a055f3b"
+  },
+  {
+    "student_id": 3000100181,
+    "name": "Blake Patterson",
+    "section_id": "T3B",
+    "auth_user_id": "98c15ea2-6a97-44d9-8d2d-6e6dd097be70"
+  },
+  {
+    "student_id": 3000100182,
+    "name": "Cameron Hughes",
+    "section_id": "T3B",
+    "auth_user_id": "fd9dcfcc-d962-422a-a3fe-dc758f9ed399"
+  },
+  {
+    "student_id": 3000100183,
+    "name": "Addison Flores",
+    "section_id": "T3B",
+    "auth_user_id": "1736c6e2-7013-436c-805b-a4d1062afaef"
+  },
+  {
+    "student_id": 3000100184,
+    "name": "Kennedy Washington",
+    "section_id": "T3B",
+    "auth_user_id": "8dde6b64-e866-4351-a51f-2bbe8eaba645"
+  },
+  {
+    "student_id": 3000100185,
+    "name": "Peyton Butler",
+    "section_id": "T3B",
+    "auth_user_id": "ff1c4aa3-7b62-4cc2-859c-b6496eff5077"
+  },
+  {
+    "student_id": 3000100186,
+    "name": "Jordan Simmons",
+    "section_id": "T3B",
+    "auth_user_id": "f5391d75-ffa5-4b6d-bf86-448869d5ced9"
+  },
+  {
+    "student_id": 3000100187,
+    "name": "Taylor Foster",
+    "section_id": "T3B",
+    "auth_user_id": "d4d4182d-dc30-40ff-b970-d6a95b15b7b5"
+  },
+  {
+    "student_id": 3000100188,
+    "name": "Remy Bryant",
+    "section_id": "T3B",
+    "auth_user_id": "3b04befd-4776-4bca-b890-73a7d1c70aea"
+  },
+  {
+    "student_id": 3000100189,
+    "name": "Morgan Alexander",
+    "section_id": "T3B",
+    "auth_user_id": "d3067ee2-35ee-4e02-94b1-84eb2b04e9a1"
+  },
+  {
+    "student_id": 3000100190,
+    "name": "Riley Russell",
+    "section_id": "T5A",
+    "auth_user_id": "ee409782-9efb-41dd-af6d-b458b7476ca5"
+  },
+  {
+    "student_id": 3000100191,
+    "name": "Quinn Griffin",
+    "section_id": "T5A",
+    "auth_user_id": "26c28c27-8b8b-40aa-b9fc-657371cc3402"
+  },
+  {
+    "student_id": 3000100192,
+    "name": "Avery Hayes",
+    "section_id": "T5A",
+    "auth_user_id": "851bc486-abc1-4c12-872d-4dddbc6fde98"
+  },
+  {
+    "student_id": 3000100193,
+    "name": "Drew Myers",
+    "section_id": "T5A",
+    "auth_user_id": "55ab3424-f7bd-454a-abff-c6de0d443fe8"
+  },
+  {
+    "student_id": 3000100194,
+    "name": "Alex Ford",
+    "section_id": "T5A",
+    "auth_user_id": "5d463536-f127-41f6-89ac-9c18b9dcf1af"
+  },
+  {
+    "student_id": 3000100195,
+    "name": "Jordan Hamilton",
+    "section_id": "T5A",
+    "auth_user_id": "80f24ee4-88ab-454b-b203-41e60353e647"
+  },
+  {
+    "student_id": 3000100196,
+    "name": "Morgan Graham",
+    "section_id": "T5A",
+    "auth_user_id": "fde05b03-8d73-403b-b390-a166a7b619d1"
+  },
+  {
+    "student_id": 3000100197,
+    "name": "Riley Sullivan",
+    "section_id": "T5A",
+    "auth_user_id": "ae7cdd29-2313-4df5-8267-c7debf7eae46"
+  },
+  {
+    "student_id": 3000100198,
+    "name": "Quinn Wallace",
+    "section_id": "T5A",
+    "auth_user_id": "6db15847-ab1e-46c9-b97a-e41a60f3c7be"
+  },
+  {
+    "student_id": 3000100199,
+    "name": "Avery Hudson",
+    "section_id": "T5A",
+    "auth_user_id": "d35f576c-2ad3-47de-ad26-1ee795a81895"
+  },
+  {
+    "student_id": 3000100200,
+    "name": "Taylor Ferguson",
+    "section_id": "T5A",
+    "auth_user_id": "15026c89-b6a8-4caa-b417-b10518a8808a"
+  },
+  {
+    "student_id": 3000100201,
+    "name": "Drew Barrett",
+    "section_id": "T5A",
+    "auth_user_id": "9e081c95-b27b-4a93-9c2a-c2bdb7e60459"
+  },
+  {
+    "student_id": 3000100202,
+    "name": "Jesse Webb",
+    "section_id": "T5A",
+    "auth_user_id": "17d732d3-32b8-4c02-b064-52051c4a98d9"
+  },
+  {
+    "student_id": 3000100204,
+    "name": "Sage Dixon",
+    "section_id": "T5A",
+    "auth_user_id": "3c5ccdd7-6168-401d-8f18-a3efa82643b0"
+  },
+  {
+    "student_id": 3000100205,
+    "name": "River Munoz",
+    "section_id": "T5A",
+    "auth_user_id": "d44be331-015b-43a9-af4b-69a1c6900ba6"
+  },
+  {
+    "student_id": 3000100206,
+    "name": "Phoenix Gardner",
+    "section_id": "T5A",
+    "auth_user_id": "d310d420-2269-4230-9509-6b68977d97d9"
+  },
+  {
+    "student_id": 3000100070,
+    "name": "Drew Zhang",
+    "section_id": "M5A",
+    "auth_user_id": "d297e22c-d5c3-4a7a-a38d-587f727c4517"
+  },
+  {
+    "student_id": 3000100203,
+    "name": "Lane Burns",
+    "section_id": "T3B",
+    "auth_user_id": "34cd0600-cf97-49e9-8466-c0b953984b3a"
+  }
+]

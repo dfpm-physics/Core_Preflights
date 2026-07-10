@@ -1,0 +1,34 @@
+[
+  {
+    "id": "9250d17a-e6c4-428f-9683-13beee95ab4e",
+    "student_id": 3000100046,
+    "assignment_id": "preflight-3",
+    "extended_due_date": "2026-06-20T05:59:00+00:00",
+    "granted_by": "a7b03f07-c08a-43bb-bb51-19640fc43a2f",
+    "created_at": "2026-06-08T19:32:29.374932+00:00"
+  },
+  {
+    "id": "7a423101-9e80-4eb9-b23e-f57a95c54e8b",
+    "student_id": 3000100095,
+    "assignment_id": "preflight-3",
+    "extended_due_date": "2026-06-13T05:59:00+00:00",
+    "granted_by": "6ad3ad7e-0a5b-4512-b9be-24673cbb0160",
+    "created_at": "2026-06-08T20:48:34.001019+00:00"
+  },
+  {
+    "id": "5274872f-5af5-48ae-a6b8-0de118f08bb8",
+    "student_id": 3000100139,
+    "assignment_id": "preflight-3",
+    "extended_due_date": "2026-06-13T05:59:00+00:00",
+    "granted_by": "6ad3ad7e-0a5b-4512-b9be-24673cbb0160",
+    "created_at": "2026-06-08T20:53:02.487233+00:00"
+  },
+  {
+    "id": "315b1196-cb7c-4ce3-8df9-54b8d79b4c61",
+    "student_id": 3000100043,
+    "assignment_id": "preflight-3",
+    "extended_due_date": "2026-06-26T05:59:00+00:00",
+    "granted_by": "a7b03f07-c08a-43bb-bb51-19640fc43a2f",
+    "created_at": "2026-06-09T13:59:06.900341+00:00"
+  }
+]

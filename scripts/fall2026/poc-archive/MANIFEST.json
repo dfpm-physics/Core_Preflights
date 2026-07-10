@@ -1,0 +1,18 @@
+{
+  "exported_at": "2026-07-07T20:41:29.102569+00:00",
+  "source": "https://shzvpmlnqfmzfmuxkowi.supabase.co",
+  "course": "phys-215",
+  "files": {
+    "interactions.json": 4,
+    "reports_lesson-04-electric-fields-and-electric-field-lines.json": 0,
+    "reports_lesson-02-electric-charge-and-coulombs-law.json": 8,
+    "reports_lesson-03-vector-form-of-coulombs-law.json": 2,
+    "reports_demo-rollup-sandbox.json": 206,
+    "students.json": 206,
+    "sections.json": 10,
+    "assignments.json": 3,
+    "responses.json": 558,
+    "scores.json": 600,
+    "extensions.json": 4
+  }
+}
