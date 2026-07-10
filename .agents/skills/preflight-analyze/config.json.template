@@ -1,0 +1,6 @@
+{
+  "supabase_url": "https://YOUR_PROJECT_ID.supabase.co",
+  "supabase_service_key": "sb_secret_REPLACE_ME",
+  "textbook_base_path": "/path/to/your/local/textbooks/",
+  "default_course_id": "phys-215"
+}
