@@ -1,0 +1,228 @@
+REFERENCE ONLY - NOT A COMPLETE OR DIRECTLY APPLICABLE PATCH.
+diff --git a/app/faculty/lessons.html b/app/faculty/lessons.html
+--- a/app/faculty/lessons.html
++++ b/app/faculty/lessons.html
+@@ -7,6 +7,7 @@
+   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+   <link rel="stylesheet" href="../css/styles.css">
+   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
++  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+   <script src="../js/config.js"></script>
+ </head>
+ <body>
+@@ -21,6 +22,23 @@
+     <div class="modal" style="max-width:760px">
+       <div class="modal-head"><h2 id="lm-title">New lesson</h2><button class="modal-close" data-close>×</button></div>
+       <div class="alert alert-error" id="lm-error" style="display:none"></div>
++      <div class="alert alert-info" id="destination-panel" style="display:none">
++        <div class="row wrap" style="gap:10px;align-items:flex-start">
++          <div class="grow">
++            <strong id="destination-title">Destination: Create a new lesson</strong>
++            <div id="destination-summary" style="font-size:0.86em;margin-top:4px"></div>
++          </div>
++          <button type="button" class="btn btn-secondary btn-sm" id="destination-change">Assign to existing lesson&hellip;</button>
++          <button type="button" class="btn btn-ghost btn-sm" id="destination-new" style="display:none">Return to new lesson</button>
++        </div>
++        <div id="replacement-confirm" style="display:none;margin-top:12px;padding-top:10px;border-top:1px solid currentColor">
++          <label for="f-replace-confirm"><strong>Confirm interaction replacement</strong></label>
++          <div style="font-size:0.84em;margin:4px 0 8px">
++            Current: <code id="replacement-current"></code> &rarr; Incoming: <code id="replacement-incoming"></code>
++          </div>
++          <input id="f-replace-confirm" type="text" autocomplete="off" placeholder="Type the incoming interaction id exactly">
++        </div>
++      </div>
+ 
+       <div class="row wrap" style="gap:14px">
+         <div class="field grow" style="min-width:160px"><label for="f-course">Course</label><select id="f-course"></select></div>
+@@ -76,6 +94,23 @@
+           <input id="f-i-url" type="text" data-i="artifact_url" placeholder="https://claude.ai/public/artifacts/…"></div>
+         <div class="field"><label for="f-i-desc">Interaction description (optional)</label>
+           <textarea id="f-i-desc" data-i="description" placeholder="Short description shown to students"></textarea></div>
++        <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
++          <div class="row wrap" style="gap:12px;align-items:flex-end">
++            <div class="field grow" style="min-width:220px;margin-bottom:0"><label for="f-chat-name">Chat input filename (optional)</label>
++              <input id="f-chat-name" type="text" data-chat="source_filename" placeholder="lesson-input.md"></div>
++            <div class="field" style="margin-bottom:0"><label for="f-chat-file">Load Markdown or text</label>
++              <input id="f-chat-file" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain"></div>
++          </div>
++          <div class="field" style="margin-top:12px"><label for="f-chat-md">Chat input</label>
++            <textarea id="f-chat-md" rows="10" data-chat="markdown" placeholder="Markdown instructions and lesson-specific context for the Custom GPT"></textarea>
++            <div class="row wrap field-hint" style="gap:10px;justify-content:space-between">
++              <span id="f-chat-bytes">0 / 100,000 UTF-8 bytes</span>
++              <button type="button" class="btn btn-ghost btn-sm" id="f-chat-preview-btn">Show plain-text preview</button>
++            </div>
++          </div>
++          <pre id="f-chat-preview" tabindex="0" style="display:none;max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);font:0.82rem/1.45 ui-monospace,SFMono-Regular,Consolas,monospace"></pre>
++          <div class="alert alert-info" id="f-chat-stage-note" style="margin-bottom:12px">Chat input is stored privately for the selected lesson and is not shown on published lesson rows.</div>
++        </div>
+         <div class="alert alert-info" style="margin-bottom:0">The artifact must ask the <strong>identical reading-reflection question</strong> as the preflight, so the reflection is comparable across paths.</div>
+       </div>
+@@ -96,6 +131,21 @@
+     </div>
+   </div>
+ 
++  <!-- Generated-link destination picker. A row click only highlights; applying
++       the selection is a separate, still-unsaved action. -->
++  <div class="modal-backdrop" id="destination-modal" style="z-index:1100">
++    <div class="modal" style="max-width:880px">
++      <div class="modal-head"><h2>Assign interaction to an existing lesson</h2><button class="modal-close" data-destination-close>&times;</button></div>
++      <div class="field-hint" style="margin-bottom:12px">Choose a lesson in the generated package's course. Selecting or changing a destination does not write anything.</div>
++      <div class="alert alert-error" id="destination-error" style="display:none"></div>
++      <div id="destination-list"></div>
++      <div class="row wrap" style="gap:10px;margin-top:16px">
++        <button type="button" class="btn btn-primary" id="destination-use" disabled>Use selected lesson</button>
++        <button type="button" class="btn btn-secondary" data-destination-close>Cancel</button>
++      </div>
++    </div>
++  </div>
++
+   <script type="module">
+     import { bootstrap } from '../js/auth.js';
+     import { renderNav } from '../js/nav.js';
+@@ -103,12 +153,61 @@
+     import { esc, fmtDate } from '../js/util.js';
+     import * as L from '../js/faculty-lessons.js';
+ 
++    const PREFILL_STORAGE_KEY = 'cp.lessonPrefill.v2';
++    const PREFILL_TTL_MS = 2 * 60 * 60 * 1000;
++    const MAX_PACKED_LENGTH = 24000;
++    const MAX_INPUT_BYTES = 100000;
++    const pendingPackedPrefill = capturePackedPrefill();
++
+     const ctx = await bootstrap({ require: 'faculty' });
+     if (!ctx) { /* redirected */ } else { init(); }
+ 
+     let vm = null, editingId = null, model = null, interactionIdTouched = false;
++    let incomingPrefill = null;
++    let destination = null, destinationCatalog = null, pickerSelectedId = null;
++    let editorDirty = false;
+     const isDirector = () => ctx.isDirectorForCurrent();
+ 
++    // Capture before bootstrap: an unauthenticated redirect preserves the packed
++    // payload in sessionStorage even though auth.js intentionally drops fragments.
++    function capturePackedPrefill() {
++      const packedFromHash = location.hash.startsWith('#lp=') ? location.hash.slice(4) : null;
++      if (packedFromHash != null) {
++        try {
++          if (packedFromHash.length <= MAX_PACKED_LENGTH) {
++            sessionStorage.setItem(PREFILL_STORAGE_KEY, JSON.stringify({
++              schema: 1, path: location.pathname, packed: packedFromHash, captured_at: Date.now(),
++            }));
++          }
++        } catch (_) { /* The in-memory value still works when storage is unavailable. */ }
++        return { packed: packedFromHash, recovered: false };
++      }
++
++      try {
++        const record = JSON.parse(sessionStorage.getItem(PREFILL_STORAGE_KEY) || 'null');
++        const valid = record
++          && record.schema === 1
++          && record.path === location.pathname
++          && typeof record.packed === 'string'
++          && record.packed.length <= MAX_PACKED_LENGTH
++          && Number.isFinite(record.captured_at)
++          && Date.now() >= record.captured_at
++          && Date.now() - record.captured_at <= PREFILL_TTL_MS;
++        if (valid) return { packed: record.packed, recovered: true };
++        if (record) sessionStorage.removeItem(PREFILL_STORAGE_KEY);
++      } catch (_) {
++        try { sessionStorage.removeItem(PREFILL_STORAGE_KEY); } catch (_) {}
++      }
++      return null;
++    }
++
++    function clearPackedPrefill() {
++      try { sessionStorage.removeItem(PREFILL_STORAGE_KEY); } catch (_) {}
++      if (location.hash.startsWith('#lp=')) {
++        history.replaceState(null, '', location.pathname + location.search);
++      }
++    }
++
+     // The reading-reflection prompt is the SAME across every lesson and both paths, so it's
+     // auto-filled as Q1 (editable) and the artifact must ask the identical question (§11).
+     const READING_REFLECTION_TEXT = 'What did you find interesting or difficult in the reading?';
+@@ -130,7 +229,10 @@
+       initTheme();
+       renderNav(ctx, { active: 'lessons', onCourseChange: () => load() });
+       wireModal();
+-      load().then(prefillFromQuery);
++      load().then(() => {
++        if (pendingPackedPrefill) prefillFromPackedLink(pendingPackedPrefill);
++        else prefillFromQuery();
++      });
+     }
+ 
+     async function load() {
+@@ -199,7 +301,13 @@
+ 
+     // ── Editor model ──────────────────────────────────────────────────────
+     function blankModel() {
+-      return { policy: 'choice', objectives: [], questions: [], interaction: { id: '', title: '', artifact_url: '', description: '' } };
++      return {
++        policy: 'choice',
++        objectives: [],
++        questions: [],
++        interaction: { id: '', title: '', artifact_url: '', description: '' },
++        chatInput: { markdown: '', source_filename: '' },
++      };
+     }
+     function modelFromLesson(l) {
+       return {
+@@ -212,6 +320,10 @@
+           artifact_url: l.interaction?.artifact_url || '',
+           description: l.interaction?.description || '',
+         },
++        chatInput: {
++          markdown: l.chat_input?.markdown || '',
++          source_filename: l.chat_input?.source_filename || '',
++        },
+       };
+     }
+@@ -233,19 +345,31 @@
+ 
+     // id null → new; id set → edit. prefill (from an artifact link) overlays the base model
+     // and, for any field it omits, falls back to the existing row so a re-posted link never wipes data.
+-    function openEdit(id, prefill) {
++    function openEdit(id, prefill, generatedWorkflow = false) {
++      if (!generatedWorkflow) {
++        incomingPrefill = null;
++        destination = null;
++        destinationCatalog = null;
++      }
++      editorDirty = false;
+       editingId = id;
+-      const existing = id ? vm.lessons.find(x => x.id === id) : null;
++      const existing = id
++        ? (destination?.baseline?.id === id ? destination.baseline : vm.lessons.find(x => x.id === id))
++        : null;
+       model = existing ? modelFromLesson(existing) : blankModel();
+ 
+       if (prefill) {
+         if (['preflight', 'interaction', 'choice'].includes(prefill.policy)) model.policy = prefill.policy;
+-        if (prefill.objectives) model.objectives = prefill.objectives;
++        if (prefill.objectives) model.objectives = prefill.objectives.map(o => ({ key: o.key, label: o.label }));
+         if (prefill.iid != null)    model.interaction.id = prefill.iid;
+         else if (prefill.id)        model.interaction.id = prefill.id;   // one slug serves both by default
+         if (prefill.iurl != null)   model.interaction.artifact_url = prefill.iurl;
+         if (prefill.ititle != null) model.interaction.title = prefill.ititle;
+         if (prefill.idesc != null)  model.interaction.description = prefill.idesc;
++        if (prefill.chatInput) {
++          model.chatInput.markdown = prefill.chatInput.markdown || '';
++          model.chatInput.source_filename = prefill.chatInput.source_filename || '';
++        }
+       }
+       // Auto-mirror lesson id → interaction id only until the director types an interaction id
+       // (or for an existing lesson / a link that named one explicitly).
+@@ -254,8 +378,11 @@
+ 
+       const pick = (pv, ev) => (pv != null && pv !== '' ? pv : (ev ?? ''));
+       document.getElementById('lm-error').style.display = 'none';
++      document.getElementById('f-replace-confirm').value = '';
+       document.getElementById('lm-title').textContent =
+-        id ? 'Edit lesson' : (prefill ? 'New lesson — review & save' : 'New lesson');
++        id ? 'Edit lesson' : (prefill?.schema === 2
++          ? 'Review generated lesson input'
++          : (prefill ? 'New lesson — review & save' : 'New lesson'));
+       document.getElementById('f-course').innerHTML = ctx.courses
+         .map(c => `<option value="${esc(c.course_id)}">${esc(c.course_title || c.course_id)}</option>`).join('');
+       const vCourse = pick(prefill?.course, existing?.course_id ?? ctx.currentCourse);

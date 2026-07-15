@@ -1,0 +1,11 @@
+# Archived July 15, 2026; retained for exact redeployment settings.
+# Custom GPT Actions use their own long random bearer secret, not a Supabase JWT.
+# Each function still performs its own constant-time GPT_ACTION_SECRET check.
+[functions.gpt-create-lesson-link]
+verify_jwt = false
+
+[functions.gpt-list-lessons]
+verify_jwt = false
+
+[functions.gpt-lesson-input]
+verify_jwt = false

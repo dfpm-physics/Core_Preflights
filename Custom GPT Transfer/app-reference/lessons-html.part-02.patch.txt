@@ -1,0 +1,251 @@
+REFERENCE ONLY - CONTAINS A TRUNCATION MARKER AND IS NOT DIRECTLY APPLICABLE.
+diff --git a/app/faculty/lessons.html b/app/faculty/lessons.html
+--- a/app/faculty/lessons.html
++++ b/app/faculty/lessons.html
+@@ -277,15 +404,237 @@
+       document.getElementById('f-i-title').value = model.interaction.title;
+       document.getElementById('f-i-url').value   = model.interaction.artifact_url;
+       document.getElementById('f-i-desc').value  = model.interaction.description;
++      document.getElementById('f-chat-file').value = '';
++      updateChatInputUi();
+ 
+       updatePolicySeg();
+       applyPolicyVisibility();
+       renderObjectives();
+       renderQuestions();
++      renderDestinationPanel(generatedWorkflow);
++      applyDestinationFieldLocks(generatedWorkflow);
+       document.getElementById('lesson-modal').classList.add('open');
+     }
+ 
+-    function closeModal() { document.getElementById('lesson-modal').classList.remove('open'); }
++    function closeModal() {
++      document.getElementById('destination-modal').classList.remove('open');
++      document.getElementById('lesson-modal').classList.remove('open');
++    }
++
++    function utf8Bytes(value) { return new TextEncoder().encode(value || '').length; }
++
++    function updateChatInputUi() {
++      document.getElementById('f-chat-md').value = model.chatInput.markdown;
++      document.getElementById('f-chat-name').value = model.chatInput.source_filename;
++      refreshChatInputDisplay();
++      const preview = document.getElementById('f-chat-preview');
++      preview.style.display = 'none';
++      document.getElementById('f-chat-preview-btn').textContent = 'Show plain-text preview';
++    }
++
++    function refreshChatInputDisplay() {
++      const bytes = utf8Bytes(model.chatInput.markdown);
++      const counter = document.getElementById('f-chat-bytes');
++      counter.textContent = bytes.toLocaleString() + ' / ' + MAX_INPUT_BYTES.toLocaleString() + ' UTF-8 bytes';
++      counter.style.color = bytes > MAX_INPUT_BYTES ? 'var(--red)' : '';
++      document.getElementById('f-chat-preview').textContent = model.chatInput.markdown;
++    }
++
++    function lessonDestinationLabel(lesson) {
++      return lesson.lesson_number != null ? 'Lesson ' + lesson.lesson_number : lesson.title;
++    }
++
++    function destinationEffect(lesson) {
++      const incomingId = incomingPrefill.iid;
++      if (destinationCatalog.incomingInteraction
++          && destinationCatalog.incomingInteraction.course_id !== incomingPrefill.course) {
++        return { key: 'unavailable', label: 'Unavailable', allowed: false,
++          reason: 'The incoming interaction id belongs to a different course.' };
++      }
++      if (destinationCatalog.incomingOwner && destinationCatalog.incomingOwner.id !== lesson.id) {
++        return { key: 'unavailable', label: 'Unavailable', allowed: false,
++          reason: 'The incoming interaction is already attached to ' + destinationCatalog.incomingOwner.title + '.' };
++      }
++      if (!lesson.interaction_id) {
++        return { key: 'add', label: 'Add interaction', allowed: true };
++      }
++      if (lesson.interaction_id === incomingId) {
++        return { key: 'update', label: 'Update same interaction', allowed: true };
++      }
++      if (lesson.interaction_report_count > 0) {
++        return { key: 'unavailable', label: 'Unavailable', allowed: false,
++          reason: 'The current interaction has student reports and cannot be replaced.' };
++      }
++      return { key: 'replace', label: 'Replacement requires confirmation', allowed: true };
++    }
++
++    function destinationEffectSummary(lesson, effect) {
++      const questionCount = lesson.preflight?.questions?.length || 0;
++      if (effect.key === 'add') {
++        return lesson.preflight_id
++          ? 'Add ' + incomingPrefill.iid + ', preserve all ' + questionCount + ' preflight question'
++              + (questionCount === 1 ? '' : 's') + ', and change the policy to Choice.'
++          : 'Add ' + incomingPrefill.iid + ' and use the AI Interaction policy.';
++      }
++      if (effect.key === 'update') {
++        const historyNote = lesson.interaction_report_count > 0
++          ? ' Prior reports remain historical; the new artifact and input affect future conversations.'
++          : '';
++        return 'Update artifact details and chat input for ' + incomingPrefill.iid
++          + '; preserve all lesson fields' + (lesson.preflight_id ? ' and preflight questions' : '') + '.' + historyNote;
++      }
++      if (effect.key === 'replace') {
++        return 'Replace ' + lesson.interaction_id + ' with ' + incomingPrefill.iid
++          + '; preserve all lesson fields' + (lesson.preflight_id ? ' and preflight questions' : '')
++          + '. Explicit replacement confirmation will be required before saving.';
++      }
++      return effect.reason;
++    }
++
++    function renderDestinationPanel(generatedWorkflow) {
++      const panel = document.getElementById('destination-panel');
++      const save = document.getElementById('lm-save');
++      const replacement = document.getElementById('replacement-confirm');
++      if (!generatedWorkflow || !incomingPrefill || !destination) {
++        panel.style.display = 'none';
++        replacement.style.display = 'none';
++        save.disabled = false;
++        save.textContent = 'Save lesson';
++        return;
++      }
++
++      panel.style.display = '';
++      const title = document.getElementById('destination-title');
++      const summary = document.getElementById('destination-summary');
++      const change = document.getElementById('destination-change');
++      const returnNew = document.getElementById('destination-new');
++      panel.className = 'alert alert-info';
++
++      if (destination.mode === 'new') {
++        replacement.style.display = 'none';
++        const candidateId = document.getElementById('f-id').value.trim();
++        const duplicate = destinationCatalog.lessons.some(l => l.id === candidateId);
++        title.textContent = 'Destination: Create a new lesson';
++        summary.textContent = duplicate
++          ? 'That lesson id already exists. Assign this interaction to that lesson or choose a new id.'
++          : 'Create a new draft from the generated lesson, interaction, objectives, and chat input.';
++        panel.className = duplicate ? 'alert alert-warn' : 'alert alert-info';
++        change.textContent = 'Assign to existing lesson...';
++        returnNew.style.display = 'none';
++        save.textContent = 'Create new lesson';
++        save.disabled = duplicate;
++        return;
++      }
++
++      const lesson = destination.baseline;
++      const effect = destination.effect;
++      const label = lessonDestinationLabel(lesson);
++      const replacementConfirmed = effect.key === 'replace'
++        && document.getElementById('f-replace-confirm').value.trim() === incomingPrefill.iid;
++      replacement.style.display = effect.key === 'replace' ? '' : 'none';
++      document.getElementById('replacement-current').textContent = lesson.interaction_id || '';
++      document.getElementById('replacement-incoming').textContent = incomingPrefill.iid;
++      title.textContent = 'Destination: ' + label + ' - ' + lesson.title;
++      summary.textContent = destinationEffectSummary(lesson, …2306 tokens truncated…stions();
+           return;
+         }
+-        const qadd = e.target.closest('[data-qadd]'); if (qadd) { addQuestion(qadd.dataset.qadd); return; }
+-        const qrm = e.target.closest('[data-qrm]');   if (qrm)  { model.questions.splice(+qrm.dataset.qrm, 1); renderQuestions(); return; }
+-        if (e.target.closest('[data-oadd]'))          { model.objectives.push({ key: '', label: '' }); renderObjectives(); renderQuestions(); return; }
+-        const orm = e.target.closest('[data-orm]');   if (orm)  { model.objectives.splice(+orm.dataset.orm, 1); renderObjectives(); renderQuestions(); return; }
++        const qadd = e.target.closest('[data-qadd]'); if (qadd) { editorDirty = true; addQuestion(qadd.dataset.qadd); return; }
++        const qrm = e.target.closest('[data-qrm]');   if (qrm)  { editorDirty = true; model.questions.splice(+qrm.dataset.qrm, 1); renderQuestions(); return; }
++        if (e.target.closest('[data-oadd]'))          { editorDirty = true; model.objectives.push({ key: '', label: '' }); renderObjectives(); renderQuestions(); return; }
++        const orm = e.target.closest('[data-orm]');   if (orm)  { editorDirty = true; model.objectives.splice(+orm.dataset.orm, 1); renderObjectives(); renderQuestions(); return; }
+       });
+ 
+       document.getElementById('lm-save').addEventListener('click', saveLesson);
++      document.getElementById('destination-change').addEventListener('click', openDestinationPicker);
++      document.getElementById('destination-new').addEventListener('click', returnToNewDestination);
++
++      const destinationModal = document.getElementById('destination-modal');
++      destinationModal.addEventListener('click', (e) => {
++        if (e.target === destinationModal || e.target.closest('[data-destination-close]')) {
++          closeDestinationPicker();
++          return;
++        }
++        const row = e.target.closest('[data-destination-id]');
++        if (row) {
++          pickerSelectedId = row.dataset.destinationId;
++          renderDestinationPicker();
++        }
++      });
++      document.getElementById('destination-use').addEventListener('click', applySelectedDestination);
+     }
+ 
+     // ── Validate + save ───────────────────────────────────────────────────
+@@ -453,6 +861,7 @@
+ 
+     async function saveLesson() {
+       const err = document.getElementById('lm-error'); err.style.display = 'none';
++      const generatedWorkflow = !!(incomingPrefill && destination);
+       const id = document.getElementById('f-id').value.trim();
+       const title = document.getElementById('f-title').value.trim();
+       const numRaw = document.getElementById('f-num').value.trim();
+@@ -461,10 +870,18 @@
+ 
+       if (!editingId && !/^[a-z0-9-]+$/.test(id)) return fail('Lesson id must be lowercase letters, numbers, and hyphens only.');
+       if (!title) return fail('Enter a lesson title.');
++      if (title.length > 300) return fail('Lesson title exceeds 300 characters.');
++      if (numRaw !== '' && (!/^\d+$/.test(numRaw) || parseInt(numRaw, 10) < 0))
++        return fail('Lesson number must be a nonnegative integer.');
+ 
+       const objectives = model.objectives
+         .map(o => ({ key: (o.key || '').trim(), label: (o.label || '').trim() }))
+         .filter(o => o.key);
++      if (objectives.length > 20) return fail('A lesson can contain at most 20 objectives.');
++      if (objectives.some(o => !/^[a-z0-9-]{1,100}$/.test(o.key) || o.label.length > 300))
++        return fail('Objective keys must be lowercase slugs and labels must be at most 300 characters.');
++      if (new Set(objectives.map(o => o.key)).size !== objectives.length)
++        return fail('Objective keys must be unique.');
+ 
+       // Component validation mirrors the DB CHECK + the reading-reflection rule.
+       const wantPf = needsPreflight(model.policy), wantInt = needsInteraction(model.policy);
+@@ -476,7 +893,28 @@
+       if (wantInt) {
+         if (!/^[a-z0-9-]+$/.test((inter.id || '').trim())) return fail('Interaction id must be lowercase letters, numbers, and hyphens only.');
+         if (!(inter.artifact_url || '').trim()) return fail('Enter the interaction artifact URL.');
++        let artifactUrl;
++        try { artifactUrl = new URL(inter.artifact_url.trim()); } catch (_) {}
++        if (artifactUrl?.protocol !== 'https:') return fail('Interaction artifact URL must be an absolute HTTPS URL.');
++        if ((inter.title || '').trim().length > 300) return fail('Interaction title exceeds 300 characters.');
++        if ((inter.description || '').trim().length > 2000) return fail('Interaction description exceeds 2,000 characters.');
+       }
++      const chatInput = model.chatInput;
++      const chatFilename = (chatInput.source_filename || '').trim();
++      if (chatFilename && (chatFilename.length > 255 || /[\/\\]/.test(chatFilename)))
++        return fail('Chat input filename must be a basename of at most 255 characters.');
++      if (utf8Bytes(chatInput.markdown) > MAX_INPUT_BYTES)
++        return fail('Chat input exceeds 100,000 UTF-8 bytes.');
++      if (generatedWorkflow && !(chatInput.markdown || '').trim())
++        return fail('Chat input Markdown is required.');
++      if (!generatedWorkflow && ((chatInput.markdown || '').trim() || chatFilename))
++        return fail('Private chat input is saved through the generated-link workflow. Clear these fields or reopen the generated link.');
++      const confirmReplace = destination?.mode === 'existing'
++        && destination.effect.key === 'replace'
++        && document.getElementById('f-replace-confirm').value.trim() === inter.id.trim();
++      if (generatedWorkflow && destination.mode === 'existing'
++          && destination.effect.key === 'replace' && !confirmReplace)
++        return fail('Type the incoming interaction id exactly to confirm replacement.');
+ 
+       const payload = {
+         id: editingId || id,
+@@ -486,6 +924,7 @@
+         lesson_number: numRaw === '' ? null : parseInt(numRaw, 10),
+         completion_policy: model.policy,
+         objectives,
++        points: 2,
+         due_date_m: dueM ? `${dueM}T23:59:59` : null,
+         due_date_t: dueT ? `${dueT}T23:59:59` : null,
+         is_published: document.getElementById('f-pub').checked,
+@@ -499,6 +938,13 @@
+         } : null,
+       };
+ 
++      if (generatedWorkflow) {
++        return saveGeneratedWorkflow(payload, {
++          markdown: chatInput.markdown,
++          source_filename: chatFilename || null,
++        }, confirmReplace);
++      }
++
+       const btn = document.getElementById('lm-save');
+       btn.disabled = true; btn.innerHTML = '<span class="spinner on-dark"></span> Saving…';
+       const { error } = await L.saveLesson(payload, editingId);

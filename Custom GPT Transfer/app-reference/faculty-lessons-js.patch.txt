@@ -1,0 +1,129 @@
+REFERENCE ONLY - ARCHIVED SOURCE HUNKS, NOT A SUPPORTED RESTORE COMMAND.
+diff --git a/app/js/faculty-lessons.js b/app/js/faculty-lessons.js
+--- a/app/js/faculty-lessons.js
++++ b/app/js/faculty-lessons.js
+@@ -14,7 +14,7 @@ import { db } from './supabase.js';
+ 
+ const LESSON_COLS =
+   'id, course_id, title, description, lesson_number, preflight_id, interaction_id, ' +
+-  'completion_policy, objectives, points, due_date_m, due_date_t, is_published';
++  'completion_policy, objectives, points, due_date_m, due_date_t, is_published, updated_at';
+ 
+ // The preflight assignment a lesson owns is keyed off the lesson slug — there is no external
+ // contract on an assignments.id, so the director never manages a second id. (The interaction
+@@ -62,6 +62,115 @@ export async function loadManager(ctx) {
+   return { noCourse: false, lessons: items };
+ }
+ 
++/**
++ * Read-only catalog used by the generated-link destination picker.
++ * Includes only the metadata needed to classify an attachment and capture
++ * compare-and-swap baselines; existing private Markdown is never loaded here.
++ */
++export async function loadDestinationLessons(courseId, incomingInteractionId) {
++  const { data: lessonRows, error: lessonError } = await db.from('lessons')
++    .select(LESSON_COLS).eq('course_id', courseId)
++    .order('lesson_number', { nullsFirst: false }).order('title');
++  if (lessonError) return { lessons: [], error: lessonError };
++
++  const lessons = lessonRows || [];
++  const lessonIds = lessons.map(l => l.id);
++  const preflightIds = [...new Set(lessons.map(l => l.preflight_id).filter(Boolean))];
++  const interactionIds = [...new Set(lessons.map(l => l.interaction_id).filter(Boolean))];
++  const reportChecks = interactionIds.map(async interactionId => {
++    const { count, error } = await db.from('preflight_interaction_reports')
++      .select('interaction_id', { count: 'exact', head: true }).eq('interaction_id', interactionId);
++    return { interactionId, count: count || 0, error };
++  });
++
++  const [assignmentResult, interactionResult, inputResult, reportResult, ownerResult, incomingResult] =
++    await Promise.all([
++      preflightIds.length
++        ? db.from('assignments').select('id, title, description, questions, is_published').in('id', preflightIds)
++        : Promise.resolve({ data: [], error: null }),
++      interactionIds.length
++        ? db.from('interactions').select('id, course_id, title, description, artifact_url, is_published').in('id', interactionIds)
++        : Promise.resolve({ data: [], error: null }),
++      lessonIds.length
++        ? db.from('lesson_chat_inputs').select('lesson_id, version, source_filename, updated_at').in('lesson_id', lessonIds)
++        : Promise.resolve({ data: [], error: null }),
++      Promise.all(reportChecks),
++      db.from('lessons').select('id, course_id, title, interaction_id')
++        .eq('interaction_id', incomingInteractionId).maybeSingle(),
++      db.from('interactions').select('id, course_id').eq('id', incomingInteractionId).maybeSingle(),
++    ]);
++
++  const firstError = [
++    assignmentResult.error, interactionResult.error, inputResult.error,
++    ...reportResult.map(r => r.error),
++    ownerResult.error, incomingResult.error,
++  ].find(Boolean);
++  if (firstError) return { lessons: [], error: firstError };
++
++  const assignmentsById = Object.fromEntries((assignmentResult.data || []).map(a => [a.id, a]));
++  const interactionsById = Object.fromEntries((interactionResult.data || []).map(i => [i.id, i]));
++  const inputsByLesson = Object.fromEntries((inputResult.data || []).map(i => [i.lesson_id, i]));
++  const reportCounts = {};
++  reportResult.forEach(r => { reportCounts[r.interactionId] = r.count; });
++
++  return {
++    error: null,
++    incomingOwner: ownerResult.data || null,
++    incomingInteraction: incomingResult.data || null,
++    lessons: lessons.map(l => ({
++      ...l,
++      objectives: Array.isArray(l.objectives) ? l.objectives : [],
++      preflight: l.preflight_id ? (assignmentsById[l.preflight_id] || null) : null,
++      interaction: l.interaction_id ? (interactionsById[l.interaction_id] || null) : null,
++      chat_input: inputsByLesson[l.id] || null,
++      interaction_report_count: l.interaction_id ? (reportCounts[l.interaction_id] || 0) : 0,
++    })),
++  };
++}
++
++/** Atomic create path for a generated schema-2 link (migration 018). */
++export function createGeneratedLesson(model, chatInput) {
++  return db.rpc('create_lesson_with_interaction', {
++    p_lesson_id: model.id,
++    p_course_id: model.course_id,
++    p_lesson_title: model.title,
++    p_lesson_description: model.description,
++    p_lesson_number: model.lesson_number,
++    p_completion_policy: model.completion_policy,
++    p_objectives: model.objectives || [],
++    p_points: model.points ?? 2,
++    p_due_date_m: model.due_date_m,
++    p_due_date_t: model.due_date_t,
++    p_is_published: model.is_published,
++    p_preflight_questions: model.preflight?.questions || [],
++    p_interaction_id: model.interaction.id,
++    p_interaction_title: model.interaction.title,
++    p_interaction_description: model.interaction.description,
++    p_artifact_url: model.interaction.artifact_url,
++    p_markdown: chatInput.markdown,
++    p_source_filename: chatInput.source_filename || null,
++  });
++}
++
++/** Atomic add/update/replace path for an existing destination (migration 017). */
++export function attachGeneratedInteraction(destination, interaction, chatInput, confirmReplace) {
++  const lesson = destination.baseline;
++  return db.rpc('attach_interaction_to_lesson', {
++    p_lesson_id: lesson.id,
++    p_course_id: lesson.course_id,
++    p_interaction_id: interaction.id,
++    p_interaction_title: interaction.title,
++    p_interaction_description: interaction.description,
++    p_artifact_url: interaction.artifact_url,
++    p_markdown: chatInput.markdown,
++    p_source_filename: chatInput.source_filename || null,
++    p_expected_lesson_updated_at: lesson.updated_at,
++    p_expected_interaction_id: lesson.interaction_id,
++    p_expected_input_version: lesson.chat_input?.version ?? null,
++    p_confirm_replace: !!confirmReplace,
++  });
++}
++
+ /**
+  * Create (editingId null) or update a lesson and its inline-authored components.
+  * Order matters: components are upserted first so the lesson's FKs resolve.

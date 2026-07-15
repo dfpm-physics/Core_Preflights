@@ -1,0 +1,236 @@
+# Archived July 15, 2026; the Custom GPT transfer path is paused.
+openapi: 3.1.0
+info:
+  title: Core Preflights Student Lesson Context API
+  description: >
+    Retrieves the published lesson catalog and lesson-specific Markdown used by
+    the student-facing physics tutor. Draft lessons are never exposed.
+  version: 1.0.0
+servers:
+  - url: https://shzvpmlnqfmzfmuxkowi.supabase.co
+    description: Core Preflights Supabase Edge Functions
+security:
+  - bearerAuth: []
+paths:
+  /functions/v1/gpt-list-lessons:
+    get:
+      operationId: listCourseLessons
+      summary: List published lessons for a course
+      description: >
+        Call this first to resolve a host-provided lesson id. It returns published
+        lessons, input availability, and exact getLessonChatInput arguments.
+      parameters:
+        - name: course_id
+          in: query
+          required: true
+          description: Lowercase course slug, for example phys-215.
+          schema:
+            type: string
+            pattern: "^[a-z0-9-]{1,100}$"
+            example: phys-215
+      responses:
+        "200":
+          description: Published lesson catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /functions/v1/gpt-lesson-input:
+    get:
+      operationId: getLessonChatInput
+      summary: Get the current tutor input for one published lesson
+      description: >
+        Retrieve lesson-specific tutor context only after listCourseLessons returns
+        input_available true and provides the exact arguments.
+      parameters:
+        - name: course_id
+          in: query
+          required: true
+          description: Lowercase course slug, for example phys-215.
+          schema:
+            type: string
+            pattern: "^[a-z0-9-]{1,100}$"
+            example: phys-215
+        - name: lesson_id
+          in: query
+          required: true
+          description: Exact lesson slug returned by listCourseLessons.
+          schema:
+            type: string
+            pattern: "^[a-z0-9-]{1,100}$"
+            example: lesson-02-charge
+      responses:
+        "200":
+          description: Current published lesson tutor input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonInputResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Long random API key configured as Bearer authentication.
+  responses:
+    BadRequest:
+      description: Missing or malformed request data
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Missing or incorrect Action bearer token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: The requested published resource is unavailable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Unexpected server failure
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    LessonListResponse:
+      type: object
+      required: [schema, course, lessons]
+      properties:
+        schema:
+          type: integer
+          const: 1
+        course:
+          type: object
+          required: [id, title]
+          properties:
+            id:
+              type: string
+            title:
+              type: string
+        lessons:
+          type: array
+          items:
+            $ref: "#/components/schemas/LessonSummary"
+    LessonSummary:
+      type: object
+      required:
+        - lesson_id
+        - lesson_number
+        - title
+        - description
+        - completion_policy
+        - input_available
+        - input_version
+        - next_action
+      properties:
+        lesson_id:
+          type: string
+        lesson_number:
+          type: [integer, "null"]
+        title:
+          type: string
+        description:
+          type: [string, "null"]
+        completion_policy:
+          type: string
+          enum: [preflight, interaction, choice]
+        input_available:
+          type: boolean
+        input_version:
+          type: [integer, "null"]
+          minimum: 1
+        next_action:
+          oneOf:
+            - $ref: "#/components/schemas/NextAction"
+            - type: "null"
+    NextAction:
+      type: object
+      required: [operation_id, arguments]
+      properties:
+        operation_id:
+          type: string
+          const: getLessonChatInput
+        arguments:
+          type: object
+          required: [course_id, lesson_id]
+          properties:
+            course_id:
+              type: string
+            lesson_id:
+              type: string
+    LessonInputResponse:
+      type: object
+      required:
+        - schema
+        - course_id
+        - lesson_id
+        - lesson_number
+        - title
+        - content_type
+        - source_filename
+        - version
+        - content_sha256
+        - updated_at
+        - markdown
+      properties:
+        schema:
+          type: integer
+          const: 1
+        course_id:
+          type: string
+        lesson_id:
+          type: string
+        lesson_number:
+          type: [integer, "null"]
+        title:
+          type: string
+        content_type:
+          type: string
+          const: text/markdown
+        source_filename:
+          type: [string, "null"]
+        version:
+          type: integer
+          minimum: 1
+        content_sha256:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        updated_at:
+          type: string
+          format: date-time
+        markdown:
+          type: string
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string

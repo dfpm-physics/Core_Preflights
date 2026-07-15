@@ -1,0 +1,402 @@
+# LEGACY COMBINED SCHEMA - do not import into a student-facing GPT.
+# Archived July 15, 2026; retained only as a record.
+# Use GPT-ACTIONS-STUDENT-OPENAPI.yaml for the student tutor and
+# GPT-ACTIONS-FACULTY-OPENAPI.yaml for the separate faculty lesson builder.
+openapi: 3.1.0
+info:
+  title: Core Preflights Lesson Authoring and Input API
+  description: >
+    Builds review-only faculty lesson links and retrieves the published lesson catalog
+    and lesson-specific Markdown used to guide course interactions. Link creation does
+    not save or publish a lesson. Retrieval never exposes draft lessons.
+  version: 1.0.0
+servers:
+  - url: https://shzvpmlnqfmzfmuxkowi.supabase.co
+    description: Core Preflights Supabase Edge Functions
+security:
+  - bearerAuth: []
+paths:
+  /functions/v1/gpt-create-lesson-link:
+    post:
+      operationId: createLessonPrefillLink
+      summary: Create a faculty review link for a generated lesson interaction
+      description: >
+        Validate and compress a generated lesson package into a clickable faculty link.
+        This operation is stateless and does not write, attach, update, or publish course data.
+      x-openai-isConsequential: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LessonPrefill"
+      responses:
+        "200":
+          description: Faculty review link created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrefillLinkResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "413":
+          description: Markdown or request exceeds the supported size
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The generated package is invalid or its compressed URL is too long
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /functions/v1/gpt-list-lessons:
+    get:
+      operationId: listCourseLessons
+      summary: List published lessons for a course
+      description: >
+        Call this first when lesson-specific context is needed. It returns all published
+        lessons in the requested course, identifies which lessons have chat input, and gives
+        the exact getLessonChatInput arguments for each available input.
+      parameters:
+        - name: course_id
+          in: query
+          required: true
+          description: Lowercase course slug, for example phys-215.
+          schema:
+            type: string
+            pattern: "^[a-z0-9-]{1,100}$"
+            example: phys-215
+      responses:
+        "200":
+          description: Published lesson catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /functions/v1/gpt-lesson-input:
+    get:
+      operationId: getLessonChatInput
+      summary: Get the current Markdown input for one published lesson
+      description: >
+        Retrieve lesson-specific interaction context only after listCourseLessons identifies
+        an input as available. Draft, unknown, course-mismatched, and missing-input lessons all
+        return the same non-revealing not-found response.
+      parameters:
+        - name: course_id
+          in: query
+          required: true
+          description: Lowercase course slug, for example phys-215.
+          schema:
+            type: string
+            pattern: "^[a-z0-9-]{1,100}$"
+            example: phys-215
+        - name: lesson_id
+          in: query
+          required: true
+          description: Lowercase lesson slug returned by listCourseLessons.
+          schema:
+            type: string
+            pattern: "^[a-z0-9-]{1,100}$"
+            example: lesson-02-charge
+      responses:
+        "200":
+          description: Current published lesson input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonInputResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Long random API key configured as Bearer authentication in the Custom GPT Action.
+  responses:
+    BadRequest:
+      description: Missing or malformed request data
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Missing or incorrect Action bearer token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: The requested published resource is unavailable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Unexpected server failure
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    LessonPrefill:
+      type: object
+      additionalProperties: true
+      required: [schema, kind, lesson, interaction, chat_input]
+      properties:
+        schema:
+          type: integer
+          const: 2
+          description: Authoring payload schema version. Always use 2.
+        kind:
+          type: string
+          const: lesson_interaction_prefill
+        lesson:
+          type: object
+          additionalProperties: true
+          required: [id, course_id, title, completion_policy, objectives]
+          properties:
+            id:
+              type: string
+              pattern: "^[a-z0-9-]{1,100}$"
+              description: Proposed new lesson slug. A faculty member may choose a different existing lesson after opening the link.
+            course_id:
+              type: string
+              pattern: "^[a-z0-9-]{1,100}$"
+            title:
+              type: string
+              minLength: 1
+              maxLength: 300
+            description:
+              type: [string, "null"]
+              maxLength: 2000
+            lesson_number:
+              type: [integer, "null"]
+              minimum: 0
+            completion_policy:
+              type: string
+              enum: [interaction, choice]
+            due_date_m:
+              type: [string, "null"]
+              format: date
+            due_date_t:
+              type: [string, "null"]
+              format: date
+            objectives:
+              type: array
+              maxItems: 20
+              items:
+                $ref: "#/components/schemas/Objective"
+        interaction:
+          type: object
+          additionalProperties: true
+          required: [id, artifact_url]
+          properties:
+            id:
+              type: string
+              pattern: "^[a-z0-9-]{1,100}$"
+            title:
+              type: [string, "null"]
+              maxLength: 300
+              description: Defaults to the lesson title when omitted or null.
+            description:
+              type: [string, "null"]
+              maxLength: 2000
+            artifact_url:
+              type: string
+              format: uri
+              pattern: "^https://"
+              maxLength: 2000
+        chat_input:
+          type: object
+          additionalProperties: true
+          required: [format, markdown]
+          properties:
+            format:
+              type: string
+              const: markdown
+            source_filename:
+              type: [string, "null"]
+              maxLength: 255
+              description: Optional basename metadata such as lesson-02-input.md. Do not include a path.
+            markdown:
+              type: string
+              minLength: 1
+              description: >
+                Complete UTF-8 Markdown context for the lesson interaction. Maximum 100000 UTF-8 bytes.
+                Send file contents here rather than a binary file object.
+    Objective:
+      type: object
+      additionalProperties: true
+      required: [key, label]
+      properties:
+        key:
+          type: string
+          pattern: "^[a-z0-9-]{1,100}$"
+        label:
+          type: string
+          maxLength: 300
+    PrefillLinkResponse:
+      type: object
+      required: [schema, url, raw_bytes, packed_characters, expires_at]
+      properties:
+        schema:
+          type: integer
+          const: 1
+        url:
+          type: string
+          format: uri
+          description: Clickable faculty review link. Opening it does not save anything.
+        raw_bytes:
+          type: integer
+          minimum: 1
+        packed_characters:
+          type: integer
+          minimum: 1
+        expires_at:
+          type: "null"
+          description: Version 1 links are stateless and do not expire server-side.
+    LessonListResponse:
+      type: object
+      required: [schema, course, lessons]
+      properties:
+        schema:
+          type: integer
+          const: 1
+        course:
+          type: object
+          required: [id, title]
+          properties:
+            id:
+              type: string
+            title:
+              type: string
+        lessons:
+          type: array
+          items:
+            $ref: "#/components/schemas/LessonSummary"
+    LessonSummary:
+      type: object
+      required:
+        - lesson_id
+        - lesson_number
+        - title
+        - description
+        - completion_policy
+        - input_available
+        - input_version
+        - next_action
+      properties:
+        lesson_id:
+          type: string
+        lesson_number:
+          type: [integer, "null"]
+        title:
+          type: string
+        description:
+          type: [string, "null"]
+        completion_policy:
+          type: string
+          enum: [preflight, interaction, choice]
+        input_available:
+          type: boolean
+        input_version:
+          type: [integer, "null"]
+          minimum: 1
+        next_action:
+          oneOf:
+            - $ref: "#/components/schemas/NextAction"
+            - type: "null"
+    NextAction:
+      type: object
+      required: [operation_id, arguments]
+      properties:
+        operation_id:
+          type: string
+          const: getLessonChatInput
+        arguments:
+          type: object
+          required: [course_id, lesson_id]
+          properties:
+            course_id:
+              type: string
+            lesson_id:
+              type: string
+    LessonInputResponse:
+      type: object
+      required:
+        - schema
+        - course_id
+        - lesson_id
+        - lesson_number
+        - title
+        - content_type
+        - source_filename
+        - version
+        - content_sha256
+        - updated_at
+        - markdown
+      properties:
+        schema:
+          type: integer
+          const: 1
+        course_id:
+          type: string
+        lesson_id:
+          type: string
+        lesson_number:
+          type: [integer, "null"]
+        title:
+          type: string
+        content_type:
+          type: string
+          const: text/markdown
+        source_filename:
+          type: [string, "null"]
+        version:
+          type: integer
+          minimum: 1
+        content_sha256:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        updated_at:
+          type: string
+          format: date-time
+        markdown:
+          type: string
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+        measurements:
+          type: object
+          additionalProperties:
+            type: integer

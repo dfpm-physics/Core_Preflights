@@ -27,3 +27,4 @@ supabase/.temp/
 
 # Supabase service key files (kept in ~/.claude/skills/ only)
 *.service_key
+Custom GPT Transfer/privacy.html

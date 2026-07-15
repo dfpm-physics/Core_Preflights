@@ -1,0 +1,256 @@
+REFERENCE ONLY - NOT A COMPLETE OR DIRECTLY APPLICABLE PATCH.
+diff --git a/app/faculty/lessons.html b/app/faculty/lessons.html
+--- a/app/faculty/lessons.html
++++ b/app/faculty/lessons.html
+@@ -511,6 +957,87 @@
+     }
+ 
+     // ── Publish / delete ──────────────────────────────────────────────────
++    function generatedSaveError(error) {
++      const combined = [error?.message, error?.details, error?.hint].filter(Boolean).join(' ');
++      if (/PGRST202|create_lesson_with_interaction/i.test(combined))
++        return 'The atomic create function is not installed yet. Apply migration 018 and retry.';
++      if (combined.includes('lesson_changed'))
++        return 'This lesson changed after you selected it. Reopen the destination picker and review the latest version before retrying.';
++      if (combined.includes('lesson_exists'))
++        return 'That lesson id already exists. Assign the interaction to that lesson or choose a different id.';
++      if (combined.includes('interaction_owned_elsewhere'))
++        return 'That interaction id is now attached to another lesson. Choose its owning lesson or change the interaction id.';
++      if (combined.includes('replacement_has_reports'))
++        return 'The current interaction now has student reports and can no longer be replaced.';
++      if (combined.includes('replacement_confirmation_required'))
++        return 'Replacement confirmation was not accepted. Review both interaction ids and confirm again.';
++      if (combined.includes('interaction_course_mismatch'))
++        return 'The interaction id belongs to a different course.';
++      if (combined.includes('lesson_component_id_conflict'))
++        return 'An existing preflight assignment already uses that lesson id. Choose a different lesson id.';
++      if (combined.includes('input_too_large'))
++        return 'Chat input exceeds 100,000 UTF-8 bytes.';
++      if (combined.includes('unauthorized'))
++        return 'You no longer have director access to save this lesson.';
++      if (combined.includes('invalid_request'))
++        return 'The server rejected one or more generated lesson fields. Review the form and retry.';
++      return 'The generated lesson could not be saved. No atomic database changes were committed.';
++    }
++
++    function showPageStatus(message) {
++      document.getElementById('lesson-save-status')?.remove();
++      const alert = document.createElement('div');
++      alert.id = 'lesson-save-status';
++      alert.className = 'alert alert-success';
++      alert.textContent = message;
++      document.getElementById('main').prepend(alert);
++    }
++
++    async function saveGeneratedWorkflow(payload, chatInput, confirmReplace) {
++      const btn = document.getElementById('lm-save');
++      const idleLabel = btn.textContent;
++      btn.disabled = true;
++      btn.innerHTML = '<span class="spinner on-dark"></span> Saving...';
++
++      const result = destination.mode === 'new'
++        ? await L.createGeneratedLesson(payload, chatInput)
++        : await L.attachGeneratedInteraction(destination, payload.interaction, chatInput, confirmReplace);
++
++      if (result.error) {
++        btn.disabled = false;
++        btn.textContent = idleLabel;
++        renderDestinationPanel(true);
++        return fail(generatedSaveError(result.error));
++      }
++
++      const committed = Array.isArray(result.data) ? result.data[0] : result.data;
++      const operation = committed?.operation
++        || (destination.mode === 'new' ? 'create_lesson' : destination.effect.key + '_interaction');
++      const targetCourse = payload.course_id;
++      const targetLabel = payload.lesson_number != null ? 'Lesson ' + payload.lesson_number : payload.title;
++      const message = operation === 'create_lesson'
++        ? 'Created ' + targetLabel + ' with private chat input version ' + (committed?.input_version || 1) + '.'
++        : operation === 'add_interaction'
++          ? 'Added the interaction to ' + targetLabel + ' and saved its private chat input.'
++          : operation === 'update_interaction'
++            ? 'Updated the interaction and private chat input for ' + targetLabel + '.'
++            : 'Replaced the interaction for ' + targetLabel + ' and retained the previous interaction record.';
++
++      incomingPrefill = null;
++      destination = null;
++      destinationCatalog = null;
++      editorDirty = false;
++      closeModal();
++
++      if (targetCourse !== ctx.currentCourse) {
++        ctx.setCurrentCourse(targetCourse);
++        renderNav(ctx, { active: 'lessons', onCourseChange: () => load() });
++      }
++      await load();
++      showPageStatus(message);
++      return true;
++    }
++
+     async function doTogglePublish(id) {
+       const l = vm.lessons.find(x => x.id === id);
+       const { error } = await L.togglePublish(l);
+@@ -529,6 +1056,163 @@
+     //   &url=<artifact url>&iid=<interaction slug, defaults to id>&ititle=&idesc=
+     //   &obj=key:Label|key2:Label2&pub=0
+     // One slug (id) serves both the lesson and the interaction unless iid overrides it.
++    function showPrefillError(message) {
++      document.getElementById('prefill-error')?.remove();
++      const alert = document.createElement('div');
++      alert.id = 'prefill-error';
++      alert.className = 'alert alert-error';
++      alert.textContent = 'Could not open the generated lesson input: ' + message;
++      document.getElementById('main').prepend(alert);
++    }
++
++    function prefillAssert(condition, message) {
++      if (!condition) throw new Error(message);
++    }
++
++    function prefillText(value, label, max, required = false, preserve = false) {
++      if (value == null) {
++        if (required) throw new Error(label + ' is required.');
++        return '';
++      }
++      prefillAssert(typeof value === 'string', label + ' must be text.');
++      const result = preserve ? value : value.trim();
++      if (required) prefillAssert(result.trim() !== '', label + ' is required.');
++      prefillAssert(result.length <= max, label + ' exceeds ' + max.toLocaleString() + ' characters.');
++      return result;
++    }
++
++    function prefillSlug(value, label) {
++      const slug = prefillText(value, label, 100, true);
++      prefillAssert(/^[a-z0-9-]{1,100}$/.test(slug),
++        label + ' must contain only lowercase letters, numbers, and hyphens.');
++      return slug;
++    }
++
++    function prefillDate(value, label) {
++      if (value == null || value === '') return '';
++      prefillAssert(typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value),
++        label + ' must use YYYY-MM-DD.');
++      const parsed = new Date(value + 'T00:00:00Z');
++      prefillAssert(!Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value,
++        label + ' is not a valid calendar date.');
++      return value;
++    }
++
++    function validatePackedPrefill(packed) {
++      prefillAssert(typeof packed === 'string' && packed.length > 0, 'The link payload is empty.');
++      const generatedUrlLength = (location.origin || '').length + location.pathname.length + 4 + packed.length;
++      prefillAssert(generatedUrlLength <= MAX_PACKED_LENGTH, 'The generated link exceeds 24,000 characters.');
++      prefillAssert(window.LZString?.decompressFromEncodedURIComponent,
++        'The link decoder did not load. Check the network connection and try again.');
++
++      const json = window.LZString.decompressFromEncodedURIComponent(packed);
++      prefillAssert(typeof json === 'string' && json.length > 0, 'The compressed payload is invalid.');
++      prefillAssert(utf8Bytes(json) <= 140000, 'The decoded payload is too large.');
++
++      let payload;
++      try { payload = JSON.parse(json); }
++      catch (_) { throw new Error('The decoded payload is not valid JSON.'); }
++
++      prefillAssert(payload && typeof payload === 'object' && !Array.isArray(payload),
++        'The payload must be an object.');
++      prefillAssert(payload.schema === 2, 'Unsupported payload schema; expected schema 2.');
++      prefillAssert(payload.kind === 'lesson_interaction_prefill', 'Unsupported payload kind.');
++      const lesson = payload.lesson;
++      const interaction = payload.interaction;
++      const chat = payload.chat_input;
++      prefillAssert(lesson && typeof lesson === 'object' && !Array.isArray(lesson),
++        'lesson must be an object.');
++      prefillAssert(interaction && typeof interaction === 'object' && !Array.isArray(interaction),
++        'interaction must be an object.');
++      prefillAssert(chat && typeof chat === 'object' && !Array.isArray(chat),
++        'chat_input must be an object.');
++
++      const policy = prefillText(lesson.completion_policy, 'lesson.completion_policy', 20, true);
++      prefillAssert(policy === 'interaction' || policy === 'choice',
++        'lesson.completion_policy must be interaction or choice.');
++
++      let lessonNumber = null;
++      if (lesson.lesson_number != null && lesson.lesson_number !== '') {
++        prefillAssert(Number.isInteger(lesson.lesson_number) && lesson.lesson_number >= 0,
++          'lesson.lesson_number must be a nonnegative integer.');
++        lessonNumber = lesson.lesson_number;
++      }
++
++      const rawObjectives = lesson.objectives == null ? [] : lesson.objectives;
++      prefillAssert(Array.isArray(rawObjectives) && rawObjectives.length <= 20,
++        'lesson.objectives must contain at most 20 items.');
++      const objectiveKeys = new Set();
++      const objectives = rawObjectives.map((objective, index) => {
++        prefillAssert(objective && typeof objective === 'object' && !Array.isArray(objective),
++          'lesson.objectives[' + index + '] must be an object.');
++        const key = prefillSlug(objective.key, 'lesson.objectives[' + index + '].key');
++        prefillAssert(!objectiveKeys.has(key), 'Objective keys must be unique.');
++        objectiveKeys.add(key);
++        return {
++          key,
++          label: prefillText(objective.label, 'lesson.objectives[' + index + '].label', 300),
++        };
++      });
++
++      const artifactUrl = prefillText(interaction.artifact_url, 'interaction.artifact_url', 2000, true);
++      let parsedUrl;
++      try { parsedUrl = new URL(artifactUrl); } catch (_) {}
++      prefillAssert(parsedUrl?.protocol === 'https:', 'interaction.artifact_url must be an absolute HTTPS URL.');
++
++      prefillAssert(chat.format === 'markdown', 'chat_input.format must be markdown.');
++      const filename = prefillText(chat.source_filename, 'chat_input.source_filename', 255);
++      prefillAssert(!filename || !/[\\/]/.test(filename),
++        'chat_input.source_filename must be a filename without a path.');
++      const markdown = prefillText(chat.markdown, 'chat_input.markdown', 100000, true, true);
++      prefillAssert(utf8Bytes(markdown) <= MAX_INPUT_BYTES,
++        'chat_input.markdown exceeds 100,000 UTF-8 bytes.');
++
++      return {
++        schema: 2,
++        id: prefillSlug(lesson.id, 'lesson.id'),
++        course: prefillText(lesson.course_id, 'lesson.course_id', 100, true),
++        title: prefillText(lesson.title, 'lesson.title', 300, true),
++        desc: prefillText(lesson.description, 'lesson.description', 2000),
++        policy,
++        num: lessonNumber,
++        due_m: prefillDate(lesson.due_date_m, 'lesson.due_date_m'),
++        due_t: prefillDate(lesson.due_date_t, 'lesson.due_date_t'),
++        objectives,
++        iid: prefillSlug(interaction.id, 'interaction.id'),
++        ititle: prefillText(interaction.title, 'interaction.title', 300),
++        idesc: prefillText(interaction.description, 'interaction.description', 2000),
++        iurl: artifactUrl,
++        chatInput: { markdown, source_filename: filename },
++      };
++    }
++
++    function deepFreeze(value) {
++      if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
++      Object.values(value).forEach(deepFreeze);
++      return Object.freeze(value);
++    }
++
++    async function prefillFromPackedLink(record) {
++      try {
++        const normalized = validatePackedPrefill(record.packed);
++        const courseAccess = ctx.courses.find(c => c.course_id === normalized.course);
++        const canManageTarget = ctx.instructorRow?.is_global_admin || courseAccess?.role === 'director';
++        prefillAssert(canManageTarget, 'You do not have director access to the payload course.');
++        incomingPrefill = deepFreeze(normalized);
++        destinationCatalog = await L.loadDestinationLessons(normalized.course, normalized.iid);
++        prefillAssert(!destinationCatalog.error,
++          'The lesson destination list could not be loaded: ' + destinationCatalog.error?.message);
++        destination = { mode: 'new' };
++        clearPackedPrefill();
++        // Generated schema-2 links always start as new lessons. Stage 5 adds the
++        // explicit, reversible picker for attaching the interaction elsewhere.
++        openEdit(null, incomingPrefill, true);
++      } catch (error) {
++        clearPackedPrefill();
++        showPrefillError(error?.message || 'The payload could not be validated.');
++      }
++    }
++
+     function prefillFromQuery() {
+       const p = new URLSearchParams(location.search);
+       if (!p.has('new') && !p.has('id') && !p.has('iid') && !p.has('title')) return;

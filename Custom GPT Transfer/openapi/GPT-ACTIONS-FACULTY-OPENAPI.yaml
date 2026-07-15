@@ -1,0 +1,207 @@
+# Archived July 15, 2026; the Custom GPT transfer path is paused.
+openapi: 3.1.0
+info:
+  title: Core Preflights Faculty Lesson Authoring API
+  description: >
+    Builds a review-only faculty link for a generated lesson interaction and its
+    Markdown context. Link creation does not save, attach, update, or publish data.
+  version: 1.0.0
+servers:
+  - url: https://shzvpmlnqfmzfmuxkowi.supabase.co
+    description: Core Preflights Supabase Edge Functions
+security:
+  - bearerAuth: []
+paths:
+  /functions/v1/gpt-create-lesson-link:
+    post:
+      operationId: createLessonPrefillLink
+      summary: Create a faculty review link for a generated lesson interaction
+      description: >
+        Validate and compress a generated lesson package into a clickable faculty
+        review link. This operation is stateless and writes no course data.
+      x-openai-isConsequential: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LessonPrefill"
+      responses:
+        "200":
+          description: Faculty review link created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrefillLinkResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "413":
+          description: Markdown or request exceeds the supported size
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Generated package is invalid or its compressed URL is too long
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Long random API key configured as Bearer authentication.
+  responses:
+    BadRequest:
+      description: Missing or malformed request data
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Missing or incorrect Action bearer token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Unexpected server failure
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    LessonPrefill:
+      type: object
+      additionalProperties: true
+      required: [schema, kind, lesson, interaction, chat_input]
+      properties:
+        schema:
+          type: integer
+          const: 2
+          description: Always use 2.
+        kind:
+          type: string
+          const: lesson_interaction_prefill
+        lesson:
+          type: object
+          additionalProperties: true
+          required: [id, course_id, title, completion_policy, objectives]
+          properties:
+            id:
+              type: string
+              pattern: "^[a-z0-9-]{1,100}$"
+            course_id:
+              type: string
+              pattern: "^[a-z0-9-]{1,100}$"
+            title:
+              type: string
+              minLength: 1
+              maxLength: 300
+            description:
+              type: [string, "null"]
+              maxLength: 2000
+            lesson_number:
+              type: [integer, "null"]
+              minimum: 0
+            completion_policy:
+              type: string
+              enum: [interaction, choice]
+            due_date_m:
+              type: [string, "null"]
+              format: date
+            due_date_t:
+              type: [string, "null"]
+              format: date
+            objectives:
+              type: array
+              maxItems: 20
+              items:
+                $ref: "#/components/schemas/Objective"
+        interaction:
+          type: object
+          additionalProperties: true
+          required: [id, artifact_url]
+          properties:
+            id:
+              type: string
+              pattern: "^[a-z0-9-]{1,100}$"
+            title:
+              type: [string, "null"]
+              maxLength: 300
+            description:
+              type: [string, "null"]
+              maxLength: 2000
+            artifact_url:
+              type: string
+              format: uri
+              pattern: "^https://"
+              maxLength: 2000
+        chat_input:
+          type: object
+          additionalProperties: true
+          required: [format, markdown]
+          properties:
+            format:
+              type: string
+              const: markdown
+            source_filename:
+              type: [string, "null"]
+              maxLength: 255
+              description: Optional basename metadata only; never include a path.
+            markdown:
+              type: string
+              minLength: 1
+              description: Complete UTF-8 Markdown, at most 100000 UTF-8 bytes.
+    Objective:
+      type: object
+      additionalProperties: true
+      required: [key, label]
+      properties:
+        key:
+          type: string
+          pattern: "^[a-z0-9-]{1,100}$"
+        label:
+          type: string
+          maxLength: 300
+    PrefillLinkResponse:
+      type: object
+      required: [schema, url, raw_bytes, packed_characters, expires_at]
+      properties:
+        schema:
+          type: integer
+          const: 1
+        url:
+          type: string
+          format: uri
+          description: Faculty review link. Opening it does not save anything.
+        raw_bytes:
+          type: integer
+          minimum: 1
+        packed_characters:
+          type: integer
+          minimum: 1
+        expires_at:
+          type: "null"
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+        measurements:
+          type: object
+          additionalProperties:
+            type: integer
