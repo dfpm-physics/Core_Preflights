@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>iPREP — Lesson Interactions</title>
+<title>PREP — Lesson Interactions</title>
 <link rel="stylesheet" href="css/styles.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.js"></script>
@@ -11,7 +11,7 @@
 <body>
 
 <header class="site-header">
-  <span class="logo">iPREP</span>
+  <span class="logo">PREP</span>
   <span class="subtitle" id="course-sub">USAFA</span>
   <span class="spacer"></span>
 </header>
@@ -41,7 +41,7 @@ function esc(str) {
 async function load() {
   document.getElementById('course-sub').textContent = courseTitle;
   document.getElementById('heading').textContent = `${courseTitle} — Lesson Interactions`;
-  document.title = `iPREP — ${courseTitle} Lesson Interactions`;
+  document.title = `PREP — ${courseTitle} Lesson Interactions`;
 
   const listEl = document.getElementById('list');
   listEl.innerHTML = '<div style="color:var(--muted);font-size:0.9em">Loading…</div>';

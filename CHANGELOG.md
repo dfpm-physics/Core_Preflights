@@ -10,6 +10,102 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-15 — Matthew Recker via Claude
 
+### Added — drag-and-drop lesson composer + orphan content on the Lessons page
+
+The faculty **Lessons** page ([`site/app/faculty/lessons.html`](site/app/faculty/lessons.html) +
+[`site/app/js/faculty-lessons.js`](site/app/js/faculty-lessons.js)) now surfaces **unassigned
+("orphan") content** — assignments/interactions not yet owned by any lesson — as draggable thumbnail
+cards at the top (directors only, shown only when orphans exist). Drag a preflight and/or an
+interaction into the two drop boxes (or click a card), then **Create lesson** opens the editor
+prefilled with those references, a suggested slug/number/title, and the matching allowed mode. Uses
+native HTML5 drag-and-drop (no library); `loadManager` already annotates each row's `ownedBy`, so
+orphans are just the un-owned rows.
+
+### Changed — attached existing preflights are now editable in the lesson creator
+
+Pulling an existing/orphan assignment into a lesson (via the "Use existing" picker or the composer)
+now **loads its questions into the editable builder** instead of referencing it read-only; saving
+writes the revised `questions` + reference fields back onto that same assignment with a plain
+`UPDATE` that preserves its title, publish state, and due dates (`getAssignment` fetches the full
+editable row). This is a step toward making the lesson creator the single preflight-authoring
+surface — the legacy `admin.html` Assignments authoring path is intended to be retired next (kept for
+now because that page also hosts grading/roster/sections).
+
+### Added — drag-and-drop figure uploads via Supabase Storage
+
+Each question's figure field is now a **drop zone**: drag an image (or "choose file") and it uploads
+to a new public `lesson-figures` Storage bucket, storing the returned public URL in
+`figure_url` (`uploadFigure` in [`faculty-lessons.js`](site/app/js/faculty-lessons.js); ≤5 MB,
+image MIME types). This is how a static GitHub Pages site accepts uploads — **GitHub cannot** receive
+browser file writes, so the image goes to Supabase, not the repo. Pasting an external image URL still
+works. Requires applying **`supabase/migrations/019_lesson_figures_storage.sql`** (creates the bucket
++ faculty-upload / public-read RLS) with the service role / Supabase dashboard — the scoped DB role
+can't touch the `storage` schema. Until it's applied, uploads fail with a clear "bucket missing"
+message and the URL field still works.
+
+### Added — "Preview (student view)" for a lesson's questions
+
+The lesson editor gained a **Preview (student view)** button that renders the free-response
+questions exactly as a student sees them — read-only inputs by type (textarea / number / radio
+options), the reading-time note, and any question figures — for either an inline-authored preflight
+or a referenced existing one (`getAssignmentQuestions` fetches the latter). It never renders the AI
+Interaction, per request. Fully static (no backend).
+
+### Changed — lesson delete is now container-safe with a guarded "all contents" path
+
+Delete (director-only) opens a 3-way dialog instead of a blind `confirm()`:
+**Delete container only** (default) removes just the `lessons` row so the preflight and interaction
+survive as reusable orphans (cascades only `lesson_chat_inputs` + `lesson_completions`); **Delete all
+contents** also deletes the attached assignment and interaction — which CASCADEs their `responses`,
+`scores`, `preflight_interaction_reports`, `interaction_analysis` — and therefore requires a
+deliberate **5-second mouse hold** with a progress fill. The dialog fetches and states the exact
+counts of student work that would be destroyed. New data-layer helpers `countLessonWork` and
+`deleteLessonAndContents` (the plain `deleteLesson` stays container-only).
+
+### Added — approved-RAG-file manifest + reference dropdown
+
+New committed manifest [`textbook-pdfs/rag-manifest.txt`](textbook-pdfs/rag-manifest.txt) (seeded
+from the 29 distinct live `reference_pdf` values) lists the approved textbook references. The PDFs
+stay gitignored (`textbook-pdfs/**/*.pdf`); the manifest is committed so the reference **names match
+across every operator's local repo**. The lesson creator's **Reference PDF** field is now a dropdown
+fed by the manifest (fetched at runtime) with an **"+ Add new…"** free-text fallback. Documented the
+manifest as the source of truth for valid `reference_pdf` values in
+[`.ai/skills/preflight-analyze/SKILL.md`](.ai/skills/preflight-analyze/SKILL.md) §Step 3 and
+[`textbook-pdfs/README.md`](textbook-pdfs/README.md).
+
+### Changed — lesson modal: removed Objectives, added preflight reference/reading inputs
+
+Removed the **Objectives** section and the per-question objective dropdown from the lesson editor —
+nothing consumed `lessons.objectives` (the by-objective rollup is still unbuilt), and it added noise;
+the DB column is left untouched (defaults to `[]`). In its place the inline "Create new" preflight
+now captures the fields that actually matter for grading and students: **reference PDF** (the manifest
+dropdown), **reference pages**, and a **reading link** — threaded through `saveLesson` into the
+`assignments` row (`loadManager` now also selects them for edit repopulation). Interaction URL
+placeholder updated to reflect that live interactions are ChatGPT Custom GPTs, not only claude.ai
+artifacts.
+
+### Changed — renamed the platform brand from **iPREP** to **PREP**
+
+The user-facing platform brand is now **PREP** (*Pre-lesson Readiness Engagement Platform* — the
+acronym drops the leading "interactive"). Going forward, **iPREP** (*interactive PREP*) is reserved
+specifically for the **interactive lesson-interaction component** (the Claude-artifact lessons); the
+rest of the site is **PREP**. This does **not** touch the repo, GitHub Pages path, or export
+filenames, which stay `Core_Preflights`.
+
+Replaced the `iPREP` brand token with `PREP` across 36 files (64 occurrences) — site header logos,
+page `<title>`s, the `app/` portal nav wordmark + footer ([`app/js/nav.js`](site/app/js/nav.js)),
+login heading/subtitle, README/docs headings, the design system ([`app/DESIGN.md`](site/app/DESIGN.md)),
+the browser test sandboxes, and the contract docs (`CORE.md`, `PROJECT.md`, `AGENTS.md`, `.ai/README.md`).
+Collapsed the acronym *interactive Pre-lesson Readiness Engagement Platform* → *Pre-lesson Readiness
+Engagement Platform* in the 5 places it spelled out in full. Also renamed the **not-yet-executed**
+config-neutralization proposal `$IPREP_CONFIG` / `~/.config/iprep/` → `$PREP_CONFIG` / `~/.config/prep/`
+in `CORE.md` §3 and `AGENTS.md` for brand consistency (nothing depends on it yet).
+
+Recorded the naming convention (PREP = platform, iPREP = interactive component) in `CORE.md` §1 and
+`PROJECT.md` so future agents don't re-purge the retained `iPREP` term. Prior CHANGELOG history — the
+original "rebranded the platform to **iPREP**" entry and the `$IPREP_CONFIG` decision note — is left
+intact as a historical record.
+
 ### Added — combine existing preflights + interactions into lessons (faculty tool)
 
 Extended the faculty **Lessons** tool (`site/app/faculty/lessons.html` +

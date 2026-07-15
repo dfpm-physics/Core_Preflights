@@ -1,0 +1,41 @@
+# iPREP — approved RAG reference files (manifest)
+# ------------------------------------------------------------------------------
+# Canonical names of the textbook PDFs used to ground /preflight-analyze grading.
+# The PDF files themselves are gitignored (textbook-pdfs/**/*.pdf) and fetched from
+# Teams into each operator's local repo; THIS manifest is committed so the names are
+# identical across every clone. The lesson creator's "Reference PDF" dropdown reads
+# this list, and the grading skill resolves each entry under `textbook_base_path`.
+#
+# One reference per line. Blank lines and #-comments are ignored. Keep it sorted.
+# To add a new approved reference: add the exact path here and commit — do NOT rely on
+# a browser one-off, which only stores the string on a single assignment.
+# ------------------------------------------------------------------------------
+Text_Book_PDFs/215 Sections/Ampere's Law, Gauss's Law in Magnetism.pdf
+Text_Book_PDFs/215 Sections/Capacitance, Energy, and Dielectrics.pdf
+Text_Book_PDFs/215 Sections/Charge Distributions, Electric Flux.pdf
+Text_Book_PDFs/215 Sections/Charged Particles in Uniform Electric Fields.pdf
+Text_Book_PDFs/215 Sections/Current, Resistance, and Electrical Power.pdf
+Text_Book_PDFs/215 Sections/DC Circuit Analysis, Kirchhoff's Rules.pdf
+Text_Book_PDFs/215 Sections/Diffraction, Resolution.pdf
+Text_Book_PDFs/215 Sections/Displacement Current.pdf
+Text_Book_PDFs/215 Sections/Double-Slit Interference.pdf
+Text_Book_PDFs/215 Sections/Electric Charge, Coulomb's Law.pdf
+Text_Book_PDFs/215 Sections/Electric Fields, Electric Field Lines.pdf
+Text_Book_PDFs/215 Sections/Electric Potential Difference.pdf
+Text_Book_PDFs/215 Sections/Electric Potential, Potential Energy.pdf
+Text_Book_PDFs/215 Sections/Electromagnetic Waves, EM Spectrum.pdf
+Text_Book_PDFs/215 Sections/Faraday's Law of Induction, Motional EMF.pdf
+Text_Book_PDFs/215 Sections/Gauss's Law and Its Applications.pdf
+Text_Book_PDFs/215 Sections/Generators and Motors, AC, Transformers.pdf
+Text_Book_PDFs/215 Sections/Image Formation from Lenses.pdf
+Text_Book_PDFs/215 Sections/Image Formation from Mirrors.pdf
+Text_Book_PDFs/215 Sections/Intro to Nuclear.pdf
+Text_Book_PDFs/215 Sections/Lenz's Law, Induced Electric Field.pdf
+Text_Book_PDFs/215 Sections/Light, Reflection, Refraction.pdf
+Text_Book_PDFs/215 Sections/Magnetic Force on Current-carrying Wires.pdf
+Text_Book_PDFs/215 Sections/Maxwell's Equations.pdf
+Text_Book_PDFs/215 Sections/Moving Charged Particle in a Magnetic Field.pdf
+Text_Book_PDFs/215 Sections/Photoelectric Effect.pdf + Wave-Particle, Uncertainty.pdf
+Text_Book_PDFs/215 Sections/Sources of Magnetic Fields.pdf
+Text_Book_PDFs/215 Sections/Torque on a Current Loop.pdf
+Text_Book_PDFs/215 Sections/Vector Form of Coulomb's Law.pdf

@@ -1,4 +1,4 @@
-# iPREP documentation
+# PREP documentation
 
 - `operations/` — course-director and system operating guides.
 - `architecture/` — platform and data-model design.

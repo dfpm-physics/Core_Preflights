@@ -1,6 +1,6 @@
 # AI workspace
 
-This directory is the canonical, agent-neutral home for iPREP AI context, reusable skills,
+This directory is the canonical, agent-neutral home for PREP AI context, reusable skills,
 integration packages, and artifact examples.
 
 - `instructions/` contains `CORE.md` (the authoritative agent-neutral operating contract) and

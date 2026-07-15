@@ -55,7 +55,7 @@ export async function loadManager(ctx) {
   const [{ data: lessonRows }, { data: allAsgn }, { data: allInter }] = await Promise.all([
     q,
     db.from('assignments')
-      .select('id, title, description, questions, is_published, due_date_m, due_date_t')
+      .select('id, title, description, questions, is_published, due_date_m, due_date_t, reference_pdf, reference_pages, reading_link')
       .eq('course_id', course)
       .order('due_date_m', { ascending: true, nullsFirst: false }).order('title'),
     db.from('interactions')
@@ -131,13 +131,28 @@ export async function saveLesson(model, editingId) {
       due_date:   seed,
       due_date_m: model.due_date_m,
       due_date_t: model.due_date_t,
+      reference_pdf:   pf.reference_pdf   || null,   // grading RAG grounding for /preflight-analyze
+      reference_pages: pf.reference_pages || null,
+      reading_link:    pf.reading_link    || null,   // reading link shown to students
       is_published,
     }, { onConflict: 'id' });
     if (error) return { error };
     preflight_id = asgnId;
   } else if (pf.source === 'existing') {
     if (!pf.existingId) return { error: { message: 'Select an existing preflight assignment.' } };
-    preflight_id = pf.existingId;                    // reference only — never modified here
+    preflight_id = pf.existingId;
+    // Attached existing preflights are EDITABLE: write the revised questions + reference fields back
+    // onto that same assignment, preserving its own title / publish state / due dates (a plain
+    // UPDATE touches only these columns). Skip if no questions were loaded (avoids wiping the row).
+    if (Array.isArray(pf.questions) && pf.questions.length) {
+      const { error } = await db.from('assignments').update({
+        questions:       pf.questions,
+        reference_pdf:   pf.reference_pdf   ?? null,
+        reference_pages: pf.reference_pages ?? null,
+        reading_link:    pf.reading_link    ?? null,
+      }).eq('id', pf.existingId);
+      if (error) return { error };
+    }
   }
 
   // 2) Interaction component.
@@ -190,8 +205,71 @@ export async function togglePublish(lesson) {
   return { error: null };
 }
 
-/** Delete the lesson row only. Its component assignment/interaction rows are left intact
- *  (the FK is ON DELETE SET NULL); deleting student work is never implicit here. */
+/** Delete the lesson CONTAINER only. Its component assignment/interaction rows are left intact
+ *  (the FK is ON DELETE SET NULL), so they become reusable orphans; the lesson's own children
+ *  (lesson_chat_inputs, lesson_completions) cascade away. Deleting student work is never implicit. */
 export function deleteLesson(id) {
   return db.from('lessons').delete().eq('id', id);
+}
+
+/** Upload a figure image to the PUBLIC `lesson-figures` Storage bucket and return its public URL.
+ *  Static-site friendly: the browser posts straight to Supabase Storage (never to GitHub Pages),
+ *  and figure_url then stores the returned public URL. Requires the bucket + faculty-insert policy
+ *  from migration 019. Returns { url } on success or { error }. */
+const FIGURE_BUCKET = 'lesson-figures';
+export async function uploadFigure(file) {
+  if (!file || !(file.type || '').startsWith('image/')) return { error: { message: 'Choose an image file.' } };
+  if (file.size > 5 * 1024 * 1024) return { error: { message: 'Image must be under 5 MB.' } };
+  const ext  = ((file.name || '').split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+  const path = `q/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error } = await db.storage.from(FIGURE_BUCKET).upload(path, file, { contentType: file.type, upsert: false });
+  if (error) return { error };
+  const { data } = db.storage.from(FIGURE_BUCKET).getPublicUrl(path);
+  return { url: data?.publicUrl || null };
+}
+
+/** Fetch an existing assignment's editable content (title, questions, reference fields) so the
+ *  lesson editor can load it into the builder (attached existing preflights are editable) and the
+ *  student-view Preview can render it. The picker list omits the heavy questions blob. */
+export async function getAssignment(id) {
+  const { data } = await db.from('assignments')
+    .select('title, questions, reference_pdf, reference_pages, reading_link')
+    .eq('id', id).maybeSingle();
+  return data || null;
+}
+
+/** Count the student work that a "delete all contents" would destroy, so the confirm dialog can
+ *  state it exactly: preflight responses (assignment → responses CASCADE) + interaction reports
+ *  (interaction → preflight_interaction_reports CASCADE). */
+export async function countLessonWork(lesson) {
+  let responses = 0, reports = 0;
+  if (lesson.preflight_id) {
+    const { count } = await db.from('responses')
+      .select('*', { count: 'exact', head: true }).eq('assignment_id', lesson.preflight_id);
+    responses = count || 0;
+  }
+  if (lesson.interaction_id) {
+    const { count } = await db.from('preflight_interaction_reports')
+      .select('*', { count: 'exact', head: true }).eq('interaction_id', lesson.interaction_id);
+    reports = count || 0;
+  }
+  return { responses, reports };
+}
+
+/** Delete the lesson AND its attached component rows (the nuclear "delete all contents").
+ *  Deleting the assignment CASCADEs its responses/scores/extensions; deleting the interaction
+ *  CASCADEs its reports/analysis. Gated in the UI behind a 5-second hold. Order: the lesson first
+ *  (its SET NULL FKs release), then each component. Stops and returns the first error. */
+export async function deleteLessonAndContents(lesson) {
+  let { error } = await db.from('lessons').delete().eq('id', lesson.id);
+  if (error) return { error };
+  if (lesson.preflight_id) {
+    ({ error } = await db.from('assignments').delete().eq('id', lesson.preflight_id));
+    if (error) return { error };
+  }
+  if (lesson.interaction_id) {
+    ({ error } = await db.from('interactions').delete().eq('id', lesson.interaction_id));
+    if (error) return { error };
+  }
+  return { error: null };
 }

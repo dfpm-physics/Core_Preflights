@@ -1200,3 +1200,64 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
    every input in a row lines up regardless of which ones carry a .field-hint. */
 #lesson-modal .row { align-items: flex-start; }
 #lesson-modal .lb-q .lb-grid2 { align-items: flex-start; }
+
+
+/* =============================================================
+ *  Lesson composer + delete dialog
+ *  Orphan (unassigned) content renders as draggable thumbnail cards that drop into two boxes;
+ *  the delete dialog offers container-only (a click) or all-contents (a 5-second hold).
+ *  Tokens only; theme-aware via the same custom properties as the rest of the app.
+ * ============================================================= */
+.lb-compose { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px;
+  margin-bottom: 20px; background: var(--surface-sunken); }
+.lb-compose-head { margin-bottom: 12px; }
+
+.lb-orphans { display: flex; flex-wrap: wrap; gap: 8px; max-height: 220px; overflow-y: auto;
+  padding: 2px; margin-bottom: 14px; }
+.lb-orphan { display: flex; flex-direction: column; gap: 2px; min-width: 150px; max-width: 240px;
+  border: 1px solid var(--border); border-left: 3px solid var(--blue); border-radius: var(--radius-sm);
+  background: var(--card); padding: 8px 10px; cursor: grab; user-select: none;
+  transition: box-shadow .12s, opacity .12s, transform .06s; }
+.lb-orphan:hover { box-shadow: var(--shadow-sm); }
+.lb-orphan:active { cursor: grabbing; transform: scale(0.98); }
+.lb-orphan.int { border-left-color: var(--green); }
+.lb-orphan.selected { opacity: 0.4; }
+.lb-orphan-badge { font-size: 0.66em; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--blue-lt); }
+.lb-orphan.int .lb-orphan-badge { color: var(--green); }
+.lb-orphan-title { font-size: 0.84em; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-orphan-meta { font-size: 0.72em; color: var(--muted); }
+
+.lb-drops { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .lb-drops { grid-template-columns: 1fr; } }
+.lb-drop { border: 2px dashed var(--border); border-radius: var(--radius); padding: 12px 14px;
+  transition: border-color .12s, background .12s; }
+.lb-drop.over { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 8%, transparent); }
+.lb-drop.reject { border-color: var(--red); animation: lb-shake .4s; }
+@keyframes lb-shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
+.lb-drop-label { font-size: 0.74em; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); margin-bottom: 8px; }
+.lb-drop-slot { display: flex; align-items: center; gap: 8px; min-height: 34px; font-size: 0.86em; }
+.lb-drop-slot.empty { color: var(--muted); font-style: italic; }
+.lb-drop-slot.filled { color: var(--text); font-weight: 600; }
+.lb-slot-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-slot-x { margin-left: auto; border: none; background: transparent; color: var(--muted);
+  cursor: pointer; font-size: 1.1em; line-height: 1; padding: 2px 6px; border-radius: 6px; }
+.lb-slot-x:hover { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+
+/* delete dialog: container-only click vs. hold-to-delete-all */
+.lb-del-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.hold-btn { position: relative; overflow: hidden; color: #fff; background: var(--red); border-color: var(--red); }
+.hold-btn:hover { color: #fff; }
+.hold-btn .hold-fill { position: absolute; top: 0; bottom: 0; left: 0; width: 0; background: rgba(0,0,0,0.30); }
+.hold-btn.holding .hold-fill { width: 100%; transition: width 5s linear; }
+.hold-btn .hold-label { position: relative; z-index: 1; }
+
+/* per-question figure drop zone (drag an image → uploads to the lesson-figures Storage bucket) */
+.lb-figdrop { border: 2px dashed var(--border); border-radius: var(--radius-sm); padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+  transition: border-color .12s, background .12s; }
+.lb-figdrop.over { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 8%, transparent); }
+.lb-figdrop.uploading { opacity: .5; pointer-events: none; }
+.lb-figthumb { max-height: 130px; max-width: 100%; border-radius: 6px; display: block; }
+.lb-fighint { font-size: .8em; color: var(--muted); }

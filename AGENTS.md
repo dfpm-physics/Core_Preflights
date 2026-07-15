@@ -1,4 +1,4 @@
-# AGENTS.md — Codex entry point (iPREP / Core_Preflights)
+# AGENTS.md — Codex entry point (PREP / Core_Preflights)
 
 Codex auto-loads this file at the repo root. It is **thin wiring**: it points Codex at the
 project's authoritative, agent-neutral contract and adds a few Codex-specific notes. It does **not**
@@ -56,7 +56,7 @@ push to `main`:
   a `.codex/config.toml` for Codex *settings* is a separate, legitimate thing if ever needed.
 - **Config file.** Create `~/.claude/skills/preflight-analyze/config.json` from
   `.ai/skills/preflight-analyze/config.json.template` (see CORE.md §3 — the path is Claude-branded
-  but agent-neutral in practice; a neutral `$IPREP_CONFIG` is decided but not yet executed).
+  but agent-neutral in practice; a neutral `$PREP_CONFIG` is decided but not yet executed).
 - **Standing authorization for Codex-requested changes:** when Casey asks Codex to make changes,
   Codex should update the durable memory (CORE.md, `AGENTS.md`, or another appropriate repo doc),
   update `CHANGELOG.md`, commit, and push `main` after verification unless Casey explicitly opts out.

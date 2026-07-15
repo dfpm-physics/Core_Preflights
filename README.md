@@ -1,6 +1,6 @@
-# iPREP (Core_Preflights)
+# PREP (Core_Preflights)
 
-iPREP is a static GitHub Pages and Supabase platform for USAFA Physics 110 and Physics 215
+PREP is a static GitHub Pages and Supabase platform for USAFA Physics 110 and Physics 215
 preflight assignments and lesson interactions.
 
 - `site/` — deployed HTML, CSS, JavaScript, images, and the role-aware portal.

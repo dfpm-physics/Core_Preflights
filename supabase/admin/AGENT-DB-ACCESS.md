@@ -1,7 +1,7 @@
 # Claude Code — Database Access: establishment, rules & operating guide
 
 **Audience:** future iterations of Claude Code operating in this repo. This is the authoritative
-guide for *how Claude connects to and operates the iPREP Supabase database directly*. If you are a
+guide for *how Claude connects to and operates the PREP Supabase database directly*. If you are a
 human setting this up on a new machine, read [`README.md`](README.md) instead (the step-by-step
 runbook); this doc is the operating manual + the provenance.
 

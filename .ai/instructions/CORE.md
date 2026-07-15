@@ -1,6 +1,6 @@
-# CORE.md — Central Operating Contract for AI Agents (iPREP / Core_Preflights)
+# CORE.md — Central Operating Contract for AI Agents (PREP / Core_Preflights)
 
-This repo (`Core_Preflights`, brand **iPREP**) is developed jointly by several people running
+This repo (`Core_Preflights`, brand **PREP**) is developed jointly by several people running
 **different AI agents** (Claude Code, Codex, …) against **one shared live system**. This file is the
 **single, agent-neutral source of truth** for how the system is operated. Every agent and human
 follows the same rules here.
@@ -60,9 +60,11 @@ push to `main`:
 Static **HTML/CSS/JS** frontend on **GitHub Pages** + **Supabase** (Postgres + Auth + REST).
 Replaces GradeScope for **Physics 110** and **Physics 215** at USAFA: students submit preflight
 assignments and complete lesson interactions; instructors grade in an admin panel; an AI agent
-analyzes free-response answers and writes suggested scores. The brand is *iPREP*, but the repo,
-GitHub Pages path, and export filenames stay `Core_Preflights` — renaming breaks deployed artifact
-links, bookmarks, and Blackboard imports.
+analyzes free-response answers and writes suggested scores. The platform brand is *PREP*
+(*Pre-lesson Readiness Engagement Platform*); *iPREP* (*interactive PREP*) now refers specifically
+to the interactive lesson-interaction component, not the site as a whole. The repo, GitHub Pages
+path, and export filenames stay `Core_Preflights` — renaming breaks deployed artifact links,
+bookmarks, and Blackboard imports.
 
 - **Repo / Pages:** `github.com/dfpm-physics/Core_Preflights` → `https://dfpm-physics.github.io/Core_Preflights/site/`
 - **Supabase:** project `shzvpmlnqfmzfmuxkowi`. **Free tier pauses after ~1 week idle** — unpause in
@@ -119,8 +121,8 @@ from the committed `.template`:
 Notes:
 - The first path is **Claude-branded but agent-neutral in practice** — the Python scripts read it via
   `~/.claude/skills/preflight-analyze/config.json`, and a Codex operator creates the same file.
-  **Decided (not yet executed):** neutralize this to a `$IPREP_CONFIG` env var (or
-  `~/.config/iprep/config.json`) with fallback to the existing path, in one coordinated PR that
+  **Decided (not yet executed):** neutralize this to a `$PREP_CONFIG` env var (or
+  `~/.config/prep/config.json`) with fallback to the existing path, in one coordinated PR that
   updates every script + skill + doc + this table. Until that lands, the `~/.claude/...` path is
   authoritative.
 - `textbook_base_path` is an **absolute path into the OneDrive folder**. It is the *one* place the

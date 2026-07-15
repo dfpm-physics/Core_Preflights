@@ -1,6 +1,6 @@
 ---
 version: alpha
-name: iPREP Portal
+name: PREP Portal
 description: >
   A calm, institutional academic tool for USAFA Physics — clean GitHub-Primer blue on a
   near-white canvas (near-black slate in dark), fully dark-mode aware, with USAFA gold
@@ -151,10 +151,10 @@ components:
     fill: "{colors.green}; .partial → {colors.gold}; .low → {colors.red}"
 ---
 
-# iPREP Portal — Design System
+# PREP Portal — Design System
 
 This is the design language for the **`site/app/`** portal: the role-aware rewrite of the
-iPREP front end (student + faculty dashboards, grading, reports, roster, and AI lesson
+PREP front end (student + faculty dashboards, grading, reports, roster, and AI lesson
 interactions). It is a static HTML/CSS/JS system with **no build step** — plain ES
 modules and one hand-authored stylesheet the browser runs as-is. This document explains
 the *intent* behind the tokens in [`css/styles.css`](css/styles.css) so a human or an
@@ -167,7 +167,7 @@ a bug.
 
 ## Overview
 
-iPREP (interactive Pre-lesson Readiness Engagement Platform) is institutional academic
+PREP (Pre-lesson Readiness Engagement Platform) is institutional academic
 software for the U.S. Air Force Academy physics department. The visual language is
 deliberately **quiet and trustworthy** — it should feel like a well-kept government
 gradebook, not a marketing site. Content (cadet work, scores, misconception trends) is
@@ -182,7 +182,7 @@ login screen — nodding to the subject without becoming decorative noise. Every
 **fully dual-theme**: a near-black slate dark mode is a first-class peer of light mode,
 applied before first paint so there is no flash.
 
-The brand is **iPREP**, shown with the atom mark; the repo, Pages path, and export
+The brand is **PREP**, shown with the atom mark; the repo, Pages path, and export
 filenames stay `Core_Preflights`. The login crest is `⚛️`; the product subtitle spells out
 the acronym in muted small caps beneath the wordmark.
 
@@ -258,7 +258,7 @@ Two faces. The **system-native** stack (`-apple-system, BlinkMacSystemFont, 'Seg
 Roboto, sans-serif`) carries all body, UI, and numeric text — it renders instantly with
 nothing to wait on. A single self-hosted **condensed display face, Oswald**
 (`{typography.fontDisplay}` → the `--font-display` token), dresses **hero titles only**:
-`.page-head h1`, the `.topnav .brand` iPREP wordmark, the `.id-card h1` login heading, and
+`.page-head h1`, the `.topnav .brand` PREP wordmark, the `.id-card h1` login heading, and
 the lesson-rollup title `.lh-title`. Oswald ships as a self-hosted woff2 in two weights
 (500 and 600, `site/app/media/fonts/oswald-500.woff2` / `oswald-600.woff2`) with
 `font-display: swap` over the system stack, so there is no third-party request and no flash.
@@ -344,7 +344,7 @@ deeper shadow.
 Each entry maps to a `{components.*}` token and the classes in [`css/styles.css`](css/styles.css).
 
 - **Top nav (`.topnav`)** — `{components.topnav}`. A translucent, backdrop-blurred sticky bar.
-  Three zones: brand (atom mark + iPREP wordmark + muted subtitle), centered nav links
+  Three zones: brand (atom mark + PREP wordmark + muted subtitle), centered nav links
   (text-only, with an `active` pill), and right-side controls. Collapses to a hamburger
   drawer below 860px. Built by [`js/nav.js`](js/nav.js) from the resolved role.
 - **Card (`.card`)** — `{components.card}`. The base surface: white, hairline border, 10px

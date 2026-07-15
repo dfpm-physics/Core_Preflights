@@ -1,4 +1,4 @@
-# Python dependencies for iPREP admin / analysis tooling.
+# Python dependencies for PREP admin / analysis tooling.
 # These run ONLY inside the project-local virtualenv (.venv/, gitignored) — never globally.
 #
 # First-time setup (from the repo root):

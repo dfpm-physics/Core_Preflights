@@ -35,3 +35,18 @@ reading. File names match the `reference_pdf` field on each assignment in the da
 The `/setup-preflight` skill sets your `textbook_base_path` config value automatically
 once the files are in place. If you add the files after running setup, re-run
 `/setup-preflight` to update and verify the path.
+
+## Approved-reference manifest (`rag-manifest.txt`)
+
+`rag-manifest.txt` (in this folder) is the **committed** list of approved `reference_pdf`
+paths — one per line, `#`-comments ignored. The PDFs are gitignored, so this manifest is the
+shared contract that keeps the reference **names identical across every clone**; anyone running
+`/preflight-analyze` resolves each entry under their `textbook_base_path`.
+
+- The faculty **Lessons** creator populates its "Reference PDF" dropdown from this file, so authored
+  preflights only reference approved names.
+- Each line is a path **relative to `textbook_base_path`** exactly as stored in
+  `assignments.reference_pdf` (e.g. `Text_Book_PDFs/215 Sections/Electric Charge, Coulomb's Law.pdf`).
+- **To add a new reference:** add the exact path here and commit. A browser "Add new…" entry only
+  stores the string on one assignment — it does not update this shared list.
+- Regenerate from the live DB if it drifts: `select distinct reference_pdf from assignments …`.

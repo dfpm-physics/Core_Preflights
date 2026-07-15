@@ -97,6 +97,15 @@ If `reference_pdf` is set AND `reference_pages` is set:
 
 If either field is null, skip this step (proceed without RAG context).
 
+> **Approved-reference manifest.** The set of valid `reference_pdf` values is the committed manifest
+> `textbook-pdfs/rag-manifest.txt` (one path per line; `#` comments ignored). The PDFs themselves are
+> gitignored and fetched from Teams, so the manifest is the shared contract that keeps the names
+> **identical across every operator's local repo** — the faculty lesson creator populates its
+> "Reference PDF" dropdown from it. If a lesson's `reference_pdf` is **not** in the manifest, treat it
+> as unverified: resolve `{PDF_BASE}/{reference_pdf}` as usual, but if the file is missing, warn and
+> proceed without RAG (Error Handling), and flag that the reference should be added to the manifest
+> and committed so it is shared.
+
 ---
 
 ## Step 4 — Fetch the Roster

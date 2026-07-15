@@ -60,9 +60,9 @@ export function renderNav(ctx, opts = {}) {
   mount.innerHTML = `
     <div class="topnav-inner">
       <div class="nav-left">
-        <a class="brand" href="dashboard.html" title="iPREP — interactive Pre-lesson Readiness Engagement Platform">
+        <a class="brand" href="dashboard.html" title="PREP — Pre-lesson Readiness Engagement Platform">
           <span class="brand-mark">${iconHTML('atom', '⚛️', 'ic')}</span>
-          <span>iPREP${courseTitle ? `<span class="brand-sub">${esc(courseTitle)}</span>` : ''}</span>
+          <span>PREP${courseTitle ? `<span class="brand-sub">${esc(courseTitle)}</span>` : ''}</span>
         </a>
         <button class="nav-burger" aria-label="Menu" data-burger>${iconHTML('menu', '☰', 'ic')}</button>
       </div>
@@ -102,7 +102,7 @@ export function renderFooter() {
   f.className = 'site-footer';
   f.innerHTML = `
     <div class="footer-inner">
-      <span>iPREP · USAFA Physics</span>
+      <span>PREP · USAFA Physics</span>
       <span class="grow"></span>
       <span>Icons by
         <a href="https://www.flaticon.com/authors/freepik" target="_blank" rel="noopener">Freepik</a>

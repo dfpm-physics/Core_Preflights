@@ -1,4 +1,4 @@
-# iPREP — Project Overview
+# PREP — Project Overview
 
 > **Multi-agent note:** Shared operating *rules* for all agents (Claude, Codex, humans) live in
 > [`CORE.md`](CORE.md) — live-system safety and the coordination gate, secrets/config, git/publish,
@@ -6,12 +6,15 @@
 > *reference* (architecture and data model). If the two ever conflict, CORE.md wins. The root
 > auto-loading files (`AGENTS.md` for Codex, `CLAUDE.md` for Claude) wire each agent into both.
 
-**iPREP** — *interactive Pre-lesson Readiness Engagement Platform* — is the user-facing brand
+**PREP** — *Pre-lesson Readiness Engagement Platform* — is the user-facing brand
 of this system. A GitHub Pages + Supabase system for managing physics preflight assignments and
 lesson interactions at USAFA. Replaces GradeScope for two courses: Physics 110 and Physics 215.
 
-> The brand name is **iPREP**; the repo, GitHub Pages path, and download/export filenames remain
+> The brand name is **PREP**; the repo, GitHub Pages path, and download/export filenames remain
 > `Core_Preflights` (changing those would break links, the artifact data contract, and Blackboard imports).
+>
+> **iPREP** (*interactive PREP*) is reserved for the interactive lesson-interaction component
+> (the Claude-artifact lessons — see "Lesson Interactions" below); the rest of the site is **PREP**.
 
 ## Tech Stack
 

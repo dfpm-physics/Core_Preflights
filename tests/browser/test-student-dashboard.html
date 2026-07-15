@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Student dashboard sandbox · iPREP</title>
+<title>Student dashboard sandbox · PREP</title>
 <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
 <!-- Uses the LIVE design system so this preview tracks the real app. No DB, no CDN, no JS modules:
      a hardcoded synthetic view-model is rendered with the same component classes the real
@@ -63,9 +63,9 @@
 <header class="topnav">
   <div class="topnav-inner">
     <div class="nav-left">
-      <a class="brand" href="#" title="iPREP — interactive Pre-lesson Readiness Engagement Platform">
+      <a class="brand" href="#" title="PREP — Pre-lesson Readiness Engagement Platform">
         <span class="brand-mark"><span class="ic icon-fallback">⚛️</span></span>
-        <span>iPREP<span class="brand-sub">Physics 215</span></span>
+        <span>PREP<span class="brand-sub">Physics 215</span></span>
       </a>
       <button class="nav-burger" data-burger><span class="ic icon-fallback">☰</span></button>
     </div>
@@ -350,7 +350,7 @@ document.querySelector('[data-burger]').addEventListener('click', () =>
 // do in the real app — directly demonstrating the Launch / report / open behaviors.
 const SANDBOX_MSG = {
   launch: ['Launch lesson', 'Opens the interactive Claude lesson (the artifact on claude.ai) in a new tab. ' +
-    'The student works through it there; on finish it sends their report back to iPREP and the lesson flips to “Completed.”'],
+    'The student works through it there; on finish it sends their report back to PREP and the lesson flips to “Completed.”'],
   report: ['View report', 'Opens this lesson’s saved report — the Markdown transcript plus the student’s structured results.'],
   open:   ['Open assignment', 'Opens the preflight to submit answers (until the deadline) or review graded feedback.'],
 };
