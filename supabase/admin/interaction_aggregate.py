@@ -91,7 +91,7 @@ def _connect():
     return psycopg2.connect(connect_timeout=int(os.environ.get("PGCONNECT_TIMEOUT", "15")), **params)
 
 
-# ── Coercion, mirroring app/js/faculty-interactions.js (contract §7) ─────────────────
+# ── Coercion, mirroring site/app/js/faculty-interactions.js (contract §7) ─────────────────
 # report_data is LLM-produced and occasionally imperfect: keep only valid 0–5 ints / 0–2
 # scores; everything else becomes None and drops out of means (null ≠ 0, contract §5.1).
 def _int05(v):

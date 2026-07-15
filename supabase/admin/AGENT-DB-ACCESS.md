@@ -125,7 +125,7 @@ Supabase SQL Editor (the same pattern as `claude_code_role.sql` and the numbered
 10. **Don't disturb the neighbours.** Do not modify RLS policies, the `service_role`/`anon` keys, or
     anything `/preflight-analyze` depends on. The role is sandboxed; keep your actions sandboxed too.
 11. **Honor the contract.** All `report_data` you write must conform to
-    [`INTERACTION-DATA-CONTRACT.md`](../../INTERACTION-DATA-CONTRACT.md) (schema 1). The canonical
+    [`INTERACTION-DATA-CONTRACT.md`](../../docs/contracts/INTERACTION-DATA-CONTRACT.md) (schema 1). The canonical
     *shape* to emit is the object built in [`../seed_demo_interaction.sql`](../seed_demo_interaction.sql).
 
 ---
@@ -146,7 +146,7 @@ Supabase SQL Editor (the same pattern as `claude_code_role.sql` and the numbered
 ```
 
 The full backfill workflow + grading rubric is in the skill:
-[`../../.claude/skills/interaction-backfill/SKILL.md`](../../.claude/skills/interaction-backfill/SKILL.md).
+[`../../.ai/skills/interaction-backfill/SKILL.md`](../../.ai/skills/interaction-backfill/SKILL.md).
 
 ---
 

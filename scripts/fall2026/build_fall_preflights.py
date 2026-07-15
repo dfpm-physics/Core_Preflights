@@ -8,7 +8,7 @@ preflight `assignments` row per lesson (course_id='phys-215'), mirroring the 3-q
 structure of the original preflight-1 (reading-time 0 pts + confusing/interesting 1 pt +
 JiTT concept question w/ expected_response 1 pt = 2 pts). Lab lessons use lab-instruction
 wording for the first two reflection questions. Embedded DOCX figures are exported separately
-to `img/assignments/` and attached to the matching Q3 as public GitHub Pages URLs.
+to `site/img/assignments/` and attached to the matching Q3 as public GitHub Pages URLs.
 
 Scope: the 31 regular (PF=Y) lessons + the 6 labs = 37. Excludes Lesson 1 and GRs (12/23/35).
 
@@ -36,7 +36,7 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 COURSE_ROOT = os.path.abspath(os.path.join(REPO_ROOT, ".."))  # Physics_215_Fall_2026/
 DOCX_PATH = os.path.join(COURSE_ROOT, "Preflights", "Physics215_Preflight_Questions_v12.docx")
 RAG_DIR_REL = "Text_Book_PDFs/215 Sections"  # relative to textbook_base_path (the course root)
-FIGURE_BASE_URL = "https://dfpm-physics.github.io/Core_Preflights/img/assignments"
+FIGURE_BASE_URL = "https://dfpm-physics.github.io/Core_Preflights/site/img/assignments"
 
 CONFIG_PATH = os.path.expanduser("~/.claude/skills/preflight-analyze/config.json")
 DENVER = ZoneInfo("America/Denver")

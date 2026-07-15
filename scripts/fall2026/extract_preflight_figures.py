@@ -3,7 +3,7 @@
 Extract embedded JiTT question figures from Physics215_Preflight_Questions_v12.docx.
 
 The Fall 2026 preflight builder assigns deterministic public URLs under
-img/assignments/preflight-XX-q3.png. Run this whenever the source DOCX is refreshed:
+site/img/assignments/preflight-XX-q3.png. Run this whenever the source DOCX is refreshed:
 
     python3 scripts/fall2026/extract_preflight_figures.py
 """
@@ -16,7 +16,7 @@ from docx import Document
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COURSE_ROOT = REPO_ROOT.parent
 DOCX_PATH = COURSE_ROOT / "Preflights" / "Physics215_Preflight_Questions_v12.docx"
-OUT_DIR = REPO_ROOT / "img" / "assignments"
+OUT_DIR = REPO_ROOT / "site" / "img" / "assignments"
 
 
 def embedded_image_ids(paragraph):

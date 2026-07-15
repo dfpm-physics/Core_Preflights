@@ -8,7 +8,7 @@
 -- PURELY ADDITIVE. One nullable column on an existing table; no data is
 -- altered and nothing depends on it being set. Interactions with a NULL
 -- due_date are simply ordered by created_at as a fallback (see the
--- dashboard loader in app/js/faculty-data.js → loadFacultyDashboard).
+-- dashboard loader in site/app/js/faculty-data.js → loadFacultyDashboard).
 -- Idempotent: safe to run more than once.
 --
 -- Single course-wide date (not the M-day/T-day split assignments use):

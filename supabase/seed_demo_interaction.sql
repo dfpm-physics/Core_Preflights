@@ -3,7 +3,7 @@
 -- ------------------------------------------------------------
 -- Populates a clearly-fake "demo" lesson interaction with one synthetic
 -- report per REAL student in a course, so you can preview the faculty
--- rollup (app/faculty/interactions.html -> summarizeReports()) with a
+-- rollup (site/app/faculty/interactions.html -> summarizeReports()) with a
 -- realistic spread of effort, understanding, misconceptions, reflections,
 -- honor statuses, and triage flags.
 --

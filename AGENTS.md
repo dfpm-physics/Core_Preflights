@@ -5,15 +5,21 @@ This repo (`Core_Preflights`, brand **iPREP**) is developed jointly by several p
 contract every agent follows. It is committed to the repo so *every* agent and human sees the
 same rules.
 
-> **Single source of truth.** This file is authoritative. Claude Code's `.claude/CLAUDE.md` and
+> **Single source of truth.** This file is authoritative. Root `CLAUDE.md` and
 > any future `~/.codex/AGENTS.md` should defer to it, not duplicate it. If you change how the
 > system is operated, edit **this file** (and `CHANGELOG.md`), not a per-agent copy.
 >
 > Codex loads the **root** `AGENTS.md`; nested `AGENTS.md` files may add local context but **must not
 > weaken the root safety rules** here. A personal global `~/.codex/AGENTS.md` is fine. A repo `.codex/`
 > **documentation mirror** is not (it would drift) — a `.codex/config.toml` for Codex *settings* is a
-> separate, legitimate thing if ever needed. Codex discovery files under `.agents/skills/` are thin
-> entry points to the canonical runbooks, not independent copies.
+> separate, legitimate thing if ever needed.
+
+Shared project context lives in `.ai/instructions/PROJECT.md`. Reusable workflows live once under
+`.ai/skills/<skill-name>/SKILL.md`; there are no per-agent copies or pointer skills. At the start of a
+task, inspect the frontmatter of immediate `.ai/skills/*/SKILL.md` files for a matching description.
+When a skill applies, read its complete `SKILL.md`, then read `SKILL-codex.md`, `SKILL-claude.md`, or
+the matching vendor addendum if one exists. Addenda may adapt tools and invocation syntax but must
+not weaken the shared workflow or the safety rules in this file.
 
 ---
 
@@ -55,17 +61,17 @@ Replaces GradeScope for **Physics 110** and **Physics 215** at USAFA: students s
 assignments and complete lesson interactions; instructors grade in an admin panel; an AI agent
 analyzes free-response answers and writes suggested scores.
 
-- **Repo / Pages:** `github.com/dfpm-physics/Core_Preflights` → `https://dfpm-physics.github.io/Core_Preflights/`
+- **Repo / Pages:** `github.com/dfpm-physics/Core_Preflights` → `https://dfpm-physics.github.io/Core_Preflights/site/`
   (brand is *iPREP*, but repo/Pages/export names stay `Core_Preflights` — renaming breaks deployed
   artifact links, bookmarks, and Blackboard imports).
 - **Supabase:** project `shzvpmlnqfmzfmuxkowi`. **Free tier pauses after ~1 week idle** — unpause in
   the dashboard at the start of each semester.
-- **Local path:** the repo currently sits under `…/USAFA Classes/PREP/physics215/` inside OneDrive
+- **Local path:** the repo currently sits under `…/00 -- Preflights/Core_Preflights/` inside OneDrive
   (synced + versioned; edits sync on save).
 
-Read these repo docs before deep work: `SYSTEM_GUIDE.md`, `INTERACTION-DATA-CONTRACT.md`,
-`LESSON-UNIFICATION.md`, `INTERACTION-AGGREGATION.md`, and `.claude/CLAUDE.md` (the fullest
-data-model reference — agent-neutral despite the name).
+Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
+`docs/contracts/INTERACTION-DATA-CONTRACT.md`, `docs/architecture/LESSON-UNIFICATION.md`,
+`docs/decisions/INTERACTION-AGGREGATION.md`, and `.ai/instructions/PROJECT.md`.
 
 ---
 
@@ -75,7 +81,7 @@ data-model reference — agent-neutral despite the name).
   installed on a given machine, but nothing here uses them — no bundler, transpiler, `node --check`,
   eslint, or jest.) The frontend is hand-authored ES modules + plain CSS the browser runs directly.
   **Verify UI changes in a browser:** `python -m http.server 8000` from the repo root, open
-  `http://localhost:8000/app/`. Do not add a build step.
+  `http://localhost:8000/site/` and `http://localhost:8000/site/app/`. Do not add a build step.
 - **Tooling is Python** using only the **standard library** (`urllib`, `json`, `zoneinfo`) against
   the Supabase REST API — see `scripts/`. Heavier DB work uses `psycopg2` in a gitignored `.venv/`
   (see `supabase/admin/`).
@@ -90,7 +96,7 @@ data-model reference — agent-neutral despite the name).
   wording for Q1/Q2. Regular lesson preflights keep the book/reading wording.
 - **Fall 2026 preflight figures:** the source DOCX contains embedded JiTT figures for
   `preflight-03`, `preflight-04`, `preflight-24`, and `preflight-28`. Assets live in
-  `img/assignments/preflight-XX-q3.png`; regenerate them with
+  `site/img/assignments/preflight-XX-q3.png`; regenerate them with
   `scripts/fall2026/extract_preflight_figures.py`. The Fall builder attaches the matching public
   GitHub Pages URL to Q3 as `figure_url`.
 - **Grade/Report privacy for Q1:** zero-point reflection questions such as Q1 should not render on
@@ -106,7 +112,7 @@ from the committed `.template`:
 
 | File | Holds | Template |
 |---|---|---|
-| `~/.claude/skills/preflight-analyze/config.json` | `supabase_url`, `supabase_service_key` (service_role — bypasses RLS), `textbook_base_path`, `default_course_id` | `.claude/skills/preflight-analyze/config.json.template` |
+| `~/.claude/skills/preflight-analyze/config.json` | `supabase_url`, `supabase_service_key` (service_role — bypasses RLS), `textbook_base_path`, `default_course_id` | `.ai/skills/preflight-analyze/config.json.template` |
 | `supabase/admin/config.json` | `claude_code_recker` DB role creds (Session pooler host) | `supabase/admin/config.json.template` |
 
 Notes:
@@ -119,19 +125,19 @@ Notes:
   its textbook RAG grounding. The textbook PDFs themselves are **not in the repo** (~968 MB; gitignored;
   fetched from Teams — see `textbook-pdfs/README.md`).
 - **Never** put a service key, DB password, or student PII in a committed file (this one included),
-  in a URL/query string, or in the CHANGELOG. The anon key in `js/config.js` is intentionally public
+  in a URL/query string, or in the CHANGELOG. The anon key in `site/js/config.js` is intentionally public
   (protected by RLS).
 
 ---
 
 ## 4. Operating procedures (runbooks)
 
-The canonical domain procedures are under `.claude/skills/`, but each is just a Markdown runbook —
-**any agent can read the `SKILL.md` and follow it step by step**, even without Claude's skill runner.
-Codex discovers matching entries under `.agents/skills/`; those files must remain thin pointers to
-the canonical runbooks below so grading, config, and database rules cannot drift between agents.
+The canonical domain procedures are agent-neutral Markdown runbooks under `.ai/skills/`.
+**Every agent reads the same `SKILL.md` and follows it step by step.** Root auto-loading instruction
+files direct each supported agent to this one skill tree; do not recreate `.agents/skills/` or
+`.claude/skills/` mirrors.
 
-| Runbook (`.claude/skills/<name>/SKILL.md`) | What it does |
+| Runbook (`.ai/skills/<name>/SKILL.md`) | What it does |
 |---|---|
 | `preflight-analyze` | Fetch responses for an assignment, grade free-response (3-state full/warn/zero, liberal), read reference PDFs for RAG, write suggested `scores` (`is_finalized=false`) + per-instructor `analysis_report` aggregated across all sections assigned to each instructor. |
 | `interaction-aggregate` | Cohort AI panels (readiness summary, misconception trends, showcase quotes) → `interaction_analysis`. Run after due date. |
@@ -143,9 +149,9 @@ One-off/maintenance scripts live in `scripts/` (e.g. `scripts/fall2026/` Fall bu
 dry-run by default** — print the plan and require an explicit `--commit` to write. Prefer extending
 these over ad-hoc queries.
 
-**If you (Codex) need a capability that only exists as a Claude skill:** read its `SKILL.md`, follow
-the steps, and — if it's now a shared operation — add a thin `.agents/skills/` discovery entry or
-promote the procedure into `scripts/` or `docs/runbooks/`. Don't silently reimplement it differently.
+If a workflow needs agent-specific tooling, add a narrowly scoped `SKILL-<agent>.md` beside the
+canonical `SKILL.md`. Keep grading rules, database safeguards, and domain logic in `SKILL.md` so
+agents cannot drift.
 
 ---
 
@@ -182,15 +188,17 @@ Core tables: `courses`, `students` (`auth_user_id` → Supabase Auth; `student_i
 - **Grading is 3-state:** `full` (green), `warn` (yellow = full credit but flagged wrong/vague),
   `zero` (red). Suggested scores are always `is_finalized=false`; the human finalizes in the admin UI.
 - **Interaction grade = effort** (0–5 → 0/1/2 via DB trigger); a non-meaningful reading reflection
-  caps effort at 2. Full transport spec (frozen v1): `INTERACTION-DATA-CONTRACT.md`.
-- **The artifact↔site contract is frozen:** artifacts post by stable slug to `artifact-submit.html`.
+  caps effort at 2. Full transport spec (frozen v1): `docs/contracts/INTERACTION-DATA-CONTRACT.md`.
+- **The artifact↔site contract is frozen:** artifacts post by stable slug to root
+  `artifact-submit.html`, which preserves the query/hash while forwarding to the receiver under `site/`.
   Any multi-term work must be additive (new columns) and must not change that wire format.
 
 ---
 
 ## 7. Codex quickstart
 
-1. Clone the repo; confirm you're on `main`. Read this file, `.claude/CLAUDE.md`, and `SYSTEM_GUIDE.md`.
+1. Clone the repo; confirm you're on `main`. Read this file, `.ai/instructions/PROJECT.md`, and
+   `docs/operations/SYSTEM_GUIDE.md`.
 2. Create the two config files from their `.template`s (§3). Get the service key / DB creds from the
    course director out-of-band — never from the repo.
 3. Confirm the environment: Python available, no Node dependency or build step, and textbook PDFs

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Redirecting to iPREP…</title>
+  <script>
+    (() => {
+      const productionBase = '/Core_Preflights/';
+      const base = location.pathname.startsWith(productionBase) ? productionBase : '/';
+      const path = location.pathname.slice(base.length);
+
+      // A second miss under /site/ is a real missing page. Send it to the site home
+      // instead of repeatedly adding another /site/ prefix.
+      const destination = path.startsWith('site/')
+        ? base + 'site/'
+        : base + 'site/' + path;
+
+      location.replace(destination + location.search + location.hash);
+    })();
+  </script>
+</head>
+<body>
+  <p><a href="./site/">Continue to iPREP</a></p>
+</body>
+</html>

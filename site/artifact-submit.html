@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iPREP — Submit Report</title>
+<!-- Permanent receiver for Claude artifact submissions. Contract: INTERACTION-DATA-CONTRACT.md (v1).
+     This URL is frozen — do not move or rename it. interaction-submit.html redirects here. -->
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<!-- Decompress the payload, render Markdown, sanitize before inserting to the DOM -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
+<style>
+  /* Rendered report */
+  #report-preview { line-height: 1.55; }
+  #report-preview h1 { font-size: 1.5rem; margin: 0.6em 0 0.4em; }
+  #report-preview h2 { font-size: 1.25rem; margin: 1em 0 0.4em; }
+  #report-preview h3 { font-size: 1.08rem; margin: 1em 0 0.4em; }
+  #report-preview blockquote {
+    margin: 1em 0; padding: 0.4em 1em;
+    border-left: 4px solid var(--blue-lt); background: #f5f8ff; color: #334;
+  }
+  #report-preview table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.92em; }
+  #report-preview th, #report-preview td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; vertical-align: top; }
+  #report-preview th { background: #f1f5f9; }
+  #report-preview code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <span class="logo">iPREP</span>
+  <span class="subtitle">Interaction Report</span>
+  <span class="spacer"></span>
+  <span class="user-chip" id="header-name" style="display:none"></span>
+</header>
+
+<!-- ── Login screen ── -->
+<div id="screen-login" class="id-screen" style="display:none">
+  <div class="id-card">
+    <div class="crest">⚡</div>
+    <h1>Sign in to submit</h1>
+    <p>Log in with your student ID to save this report to your record.</p>
+    <div id="login-error" class="alert alert-error" style="display:none"></div>
+    <div style="text-align:left;margin-bottom:12px">
+      <label>Student ID</label>
+      <input type="text" id="id-input" placeholder="3000000000" maxlength="10"
+             inputmode="numeric" pattern="[0-9]*" autocomplete="username">
+    </div>
+    <div style="text-align:left;margin-bottom:18px">
+      <label>Password</label>
+      <input type="password" id="pw-input" placeholder="Last 6 digits of your ID" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary" id="login-btn" onclick="login()" style="width:100%;justify-content:center;padding:12px">Sign In</button>
+    <p style="font-size:0.75em;color:var(--muted);margin-top:12px;margin-bottom:0">
+      Default password: last 6 digits of your student ID.
+    </p>
+  </div>
+</div>
+
+<!-- ── Main screen ── -->
+<div id="screen-main" class="page" style="display:none">
+
+  <!-- Status / edge-case message -->
+  <div id="message" class="alert" style="display:none"></div>
+
+  <!-- Interaction header -->
+  <div class="card" id="interaction-card" style="display:none">
+    <div class="card-title" id="interaction-title">Interaction Report</div>
+    <div class="card-meta" id="interaction-meta"></div>
+    <div id="submit-row" style="display:none; align-items:center; gap:12px; flex-wrap:wrap">
+      <button class="btn btn-primary" id="submit-btn" onclick="submitReport()">Submit this report</button>
+      <span id="submit-status" style="font-size:0.85em"></span>
+    </div>
+  </div>
+
+  <!-- Report preview -->
+  <div class="card">
+    <div class="card-meta">Report preview</div>
+    <div id="report-preview"></div>
+  </div>
+</div>
+
+<script>
+// ── State ──
+let artifactType  = 'interaction'; // from URL hash #t= (reserved; only "interaction" in v1)
+let interactionId = null;          // from URL hash #i=
+let reportMarkdown = null;         // decompressed from URL hash #r=
+let reportData = null;             // parsed structured JSON from #d= (or {_unparsed}, or null)
+let effort = null;                 // validated integer 0–5, else null (the grade-bearing field)
+let student = null;                // { student_id, name, section_id }
+let interaction = null;            // row from interactions table
+
+// ── Helpers ──
+function showScreen(id) {
+  ['screen-login','screen-main'].forEach(s =>
+    document.getElementById(s).style.display = s === id ? '' : 'none');
+}
+function msg(text, kind) {
+  const el = document.getElementById('message');
+  el.textContent = text;
+  el.className = 'alert ' + (kind || 'alert-info');
+  el.style.display = '';
+}
+
+// Effort is the only grade-bearing field. Accept it only as an integer 0–5 (the DB CHECK
+// enforces the same); anything else → null, which the score trigger maps to 0 points.
+function readEffort(d) {
+  const e = (d && typeof d === 'object') ? d.effort : null;
+  return (Number.isInteger(e) && e >= 0 && e <= 5) ? e : null;
+}
+function effortPoints(e) {
+  return e >= 3 ? 2 : e >= 1 ? 1 : 0; // mirrors migration 013; null/0 → 0
+}
+
+// ── 1. Decode the payload from the URL hash (#t=&i=<slug>&r=<lz markdown>&d=<lz json>) ──
+function decodeReport() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  artifactType  = (p.get('t') || 'interaction').toLowerCase();
+  interactionId = p.get('i');
+  const packed     = p.get('r');
+  const packedData = p.get('d');
+
+  if (artifactType !== 'interaction') {
+    msg(`This submission type (“${artifactType}”) isn’t supported yet.`, 'alert-warn');
+    return false;
+  }
+  if (!packed) { msg('No report data in the URL.', 'alert-warn'); return false; }
+
+  try { reportMarkdown = LZString.decompressFromEncodedURIComponent(packed); }
+  catch (e) { reportMarkdown = null; }
+  if (!reportMarkdown) {
+    msg('Could not decode the report — the link may be incomplete.', 'alert-error');
+    return false;
+  }
+
+  // Optional structured data (#d=). Never block submission on a problem here: store what we
+  // can, fall back to a raw wrapper so nothing is lost, and continue (contract §7).
+  if (packedData) {
+    let decoded = null;
+    try { decoded = LZString.decompressFromEncodedURIComponent(packedData); } catch (e) { decoded = null; }
+    if (decoded) {
+      try { reportData = JSON.parse(decoded); }
+      catch (e) { reportData = { _unparsed: decoded }; } // valid JSONB; preserves the payload
+    }
+  }
+  effort = readEffort(reportData);
+
+  if (!interactionId) {
+    msg('This link is missing its interaction id, so the report can’t be linked to a lesson.', 'alert-warn');
+    // still render the preview, but submitting won't be possible
+  }
+  // Render the preview (sanitized — payload is from a user-controllable URL)
+  document.getElementById('report-preview').innerHTML =
+    DOMPurify.sanitize(marked.parse(reportMarkdown));
+  return true;
+}
+
+// ── 2. Look up the interaction so we can show its title and confirm it exists ──
+async function loadInteraction() {
+  if (!interactionId) return;
+  const { data } = await db.from('interactions')
+    .select('id, title, course_id, is_published')
+    .eq('id', interactionId).single();
+  interaction = data || null;
+
+  const card = document.getElementById('interaction-card');
+  const titleEl = document.getElementById('interaction-title');
+  const metaEl  = document.getElementById('interaction-meta');
+  card.style.display = '';
+
+  if (!interaction) {
+    titleEl.textContent = 'Unknown interaction';
+    metaEl.textContent  = `No lesson found for id “${interactionId}”. Ask your instructor to add it before submitting.`;
+    return;
+  }
+  titleEl.textContent = interaction.title;
+  metaEl.textContent  = `Lesson id: ${interaction.id}`;
+}
+
+// ── 3. Resolve the logged-in student from their auth session ──
+async function loadStudentFromSession() {
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) return null;
+  const { data } = await db.from('students')
+    .select('student_id, name, section_id')
+    .eq('auth_user_id', user.id).single();
+  return data || null;
+}
+
+// ── 4. Login ──
+document.getElementById('pw-input').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+async function login() {
+  const raw = document.getElementById('id-input').value.trim();
+  const pw  = document.getElementById('pw-input').value;
+  const err = document.getElementById('login-error');
+  err.style.display = 'none';
+
+  if (!/^\d{10}$/.test(raw) || !raw.startsWith('3000')) {
+    err.textContent = 'Enter a valid 10-digit student ID starting with 3000.'; err.style.display = ''; return;
+  }
+  if (!pw) { err.textContent = 'Enter your password.'; err.style.display = ''; return; }
+
+  const btn = document.getElementById('login-btn');
+  btn.innerHTML = '<span class="spinner"></span>'; btn.disabled = true;
+
+  const { error: authErr } = await db.auth.signInWithPassword({ email: raw + '@usafa.edu', password: pw });
+  btn.innerHTML = 'Sign In'; btn.disabled = false;
+
+  if (authErr) {
+    err.textContent = 'Sign-in failed. Check your ID and password, or contact your instructor.';
+    err.style.display = ''; return;
+  }
+  student = await loadStudentFromSession();
+  if (!student) {
+    err.textContent = 'Account verified but no student record found. Contact your instructor.';
+    err.style.display = '';
+    await db.auth.signOut(); return;
+  }
+  enterMainAsStudent();
+}
+
+// ── 5. Show the main screen with the student signed in ──
+function enterMainAsStudent() {
+  document.getElementById('header-name').textContent  = student.name;
+  document.getElementById('header-name').style.display = '';
+  showScreen('screen-main');
+
+  // Enable submit only if we have a valid, known interaction to attach to.
+  if (interactionId && interaction) {
+    document.getElementById('submit-row').style.display = 'flex';
+    const extra = effort !== null ? ` Effort assessed ${effort}/5 (→ ${effortPoints(effort)} pt${effortPoints(effort) === 1 ? '' : 's'}).` : '';
+    msg(`Signed in as ${student.name}. Review the report below, then submit.${extra}`, 'alert-info');
+  } else if (interactionId && !interaction) {
+    msg(`Signed in as ${student.name}, but this lesson isn’t set up yet — ask your instructor to add interaction “${interactionId}”.`, 'alert-warn');
+  }
+}
+
+// ── 6. Submit the report ──
+async function submitReport() {
+  if (!student || !interactionId || !reportMarkdown) return;
+  const btn = document.getElementById('submit-btn');
+  const status = document.getElementById('submit-status');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
+
+  const row = {
+    interaction_id:  interactionId,
+    student_id:      student.student_id,
+    report_markdown: reportMarkdown,
+    payload_bytes:   reportMarkdown.length,
+  };
+  // Only write structured fields when we actually have them, so an older artifact (no #d=)
+  // re-submitting can't wipe a previous submission's effort/report_data. `score` is omitted
+  // entirely — the DB trigger derives it from effort.
+  if (reportData !== null) {
+    row.report_data = reportData;
+    row.effort = effort; // 0–5 or null
+  }
+
+  const { error } = await db.from('preflight_interaction_reports')
+    .upsert(row, { onConflict: 'student_id,interaction_id' });
+
+  if (error) {
+    status.textContent = '⚠ Submission failed — ' + (error.message || 'please try again.');
+    status.style.color = 'var(--red)';
+    btn.disabled = false; btn.textContent = 'Submit this report';
+    return;
+  }
+  btn.textContent = '✓ Submitted';
+  const pts = effort !== null ? ` (effort ${effort}/5 → ${effortPoints(effort)} pt${effortPoints(effort) === 1 ? '' : 's'})` : '';
+  status.textContent = `Saved to your record${pts}. Re-submitting will overwrite it.`;
+  status.style.color = 'var(--green)';
+}
+
+// ── Init ──
+(async function init() {
+  decodeReport();          // render preview + set type/interactionId/reportMarkdown/reportData/effort
+  await loadInteraction(); // resolve title / existence
+
+  student = await loadStudentFromSession();
+  if (student) {
+    enterMainAsStudent();
+  } else {
+    showScreen('screen-login');
+  }
+})();
+</script>
+</body>
+</html>

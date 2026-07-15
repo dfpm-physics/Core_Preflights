@@ -1,17 +1,14 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Redirecting…</title>
-<!-- Permanent alias. The receiver was generalized and moved to artifact-submit.html
-     (see INTERACTION-DATA-CONTRACT.md). Artifacts deployed before the rename open this
-     page; we forward to the real receiver, preserving the URL hash where the report
-     payload lives (#i=&r=&d=). Keep this file at the repo root forever. -->
-<script>location.replace('artifact-submit.html' + location.search + location.hash);</script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Opening iPREP submission…</title>
+  <script>
+    location.replace('./site/artifact-submit.html' + location.search + location.hash);
+  </script>
 </head>
 <body>
-<p>Redirecting to the submission page… If nothing happens,
-   <a href="artifact-submit.html">continue here</a>.</p>
+  <p><a href="./site/artifact-submit.html">Continue to the submission page</a></p>
 </body>
 </html>

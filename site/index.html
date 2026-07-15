@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iPREP — Physics Assignments</title>
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<style>
+/* ── Graded review styles ── */
+.review-answer-box {
+  background:#f8fafc; border:1px solid var(--border); border-radius:6px;
+  padding:12px 14px; font-size:0.92em; line-height:1.55;
+  white-space:pre-wrap; margin-bottom:10px;
+}
+.review-score-badge {
+  display:inline-block; padding:6px 16px; border-radius:6px;
+  font-size:0.88em; font-weight:700; border:2px solid transparent;
+}
+.review-score-badge.full { background:#dcfce7; border-color:#86efac; color:#166534; }
+.review-score-badge.warn { background:#fef9c3; border-color:#fde047; color:#854d0e; }
+.review-score-badge.zero { background:#fee2e2; border-color:#fca5a5; color:#991b1b; }
+.review-feedback {
+  margin-top:8px; padding:10px 14px; background:#fffbeb;
+  border-left:3px solid #f59e0b; border-radius:0 6px 6px 0;
+  font-size:0.88em; color:#78350f; line-height:1.5;
+}
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <span class="logo">iPREP</span>
+  <span class="subtitle">USAFA Physics</span>
+  <span class="spacer"></span>
+  <span class="user-chip" id="header-name" style="display:none"></span>
+</header>
+
+<!-- ── SCREEN 1: Login ── -->
+<div id="screen-id" class="id-screen">
+  <div class="id-card">
+    <div class="crest">⚡</div>
+    <h1>iPREP</h1>
+    <p>Enter your student ID and password to sign in.</p>
+    <div id="id-error" class="alert alert-error" style="display:none"></div>
+    <div style="text-align:left;margin-bottom:12px">
+      <label style="display:block;font-size:0.82em;font-weight:600;margin-bottom:4px;color:var(--text)">Student ID</label>
+      <input type="text" id="id-input" placeholder="3000000000" maxlength="10"
+             inputmode="numeric" pattern="[0-9]*" autocomplete="username"
+             style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:1em;box-sizing:border-box">
+    </div>
+    <div style="text-align:left;margin-bottom:18px">
+      <label style="display:block;font-size:0.82em;font-weight:600;margin-bottom:4px;color:var(--text)">Password</label>
+      <input type="password" id="pw-input" placeholder="Last 6 digits of your ID"
+             autocomplete="current-password"
+             style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:1em;box-sizing:border-box">
+    </div>
+    <button class="btn btn-primary" id="id-btn" onclick="loginStudent()"
+            style="width:100%;padding:12px">Sign In</button>
+    <p style="font-size:0.75em;color:var(--muted);margin-top:12px;margin-bottom:0">
+      Default password: last 6 digits of your student ID.<br>
+      Contact your instructor if you need a reset.
+    </p>
+  </div>
+</div>
+
+<!-- ── SCREEN 2: All Assignments ── -->
+<div id="screen-assignments" style="display:none">
+  <div class="page">
+    <div id="welcome-banner" style="margin-bottom:28px; padding:20px 24px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; text-align:center">
+      <div style="font-size:0.85em; color:#3b82f6; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:4px">Logged in as</div>
+      <div id="welcome-name" style="font-size:2.4em; font-weight:800; color:#1e3a5f; line-height:1.15"></div>
+      <div id="welcome-section" style="font-size:0.95em; color:#64748b; margin-top:4px"></div>
+    </div>
+    <h2 style="margin-bottom:4px" id="assignments-heading">My Assignments</h2>
+    <p style="color:var(--muted); font-size:0.88em; margin-bottom:20px">Open assignments can be edited until the deadline. Click any assignment to submit or view your grade.</p>
+    <div id="assignment-list"></div>
+    <div id="no-assignments" style="display:none; color:var(--muted); font-size:0.9em; padding:20px 0">
+      No assignments yet. Check back later.
+    </div>
+  </div>
+</div>
+
+<!-- ── SCREEN 3: Assignment Detail (submit mode OR review mode) ── -->
+<div id="screen-assignment" style="display:none">
+  <div class="page">
+    <button class="btn btn-secondary btn-sm" onclick="showAssignments()" style="margin-bottom:20px">
+      ← Back to assignments
+    </button>
+
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-title" id="asgn-title"></div>
+      <div class="card-meta" id="asgn-meta"></div>
+      <div id="asgn-desc" style="font-size:0.9em; color:var(--muted)"></div>
+    </div>
+
+    <!-- Optional assignment-level figure (shown above questions in both submit and review modes) -->
+    <div id="asgn-figure-block" style="display:none; margin-bottom:20px; text-align:center"></div>
+
+    <!-- ── SUBMIT MODE (open assignments) ── -->
+    <div id="submit-mode">
+      <div id="asgn-closed-banner" class="alert alert-warn" style="display:none">
+        This assignment is past due. Your submitted answers are shown below (read-only).
+      </div>
+      <div id="progress-wrap" style="margin-bottom:8px">
+        <div style="display:flex; justify-content:space-between; font-size:0.78em; color:var(--muted); margin-bottom:4px">
+          <span id="progress-label">0 of 0 answered</span>
+          <span id="save-status" style="color:var(--green)"></span>
+        </div>
+        <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+      </div>
+      <div id="questions-container"></div>
+      <div id="submit-section" style="margin-top:24px; display:flex; gap:12px; align-items:center; flex-wrap:wrap">
+        <button class="btn btn-primary" id="submit-btn" onclick="submitAssignment()">Submit Assignment</button>
+        <span id="submit-status" style="font-size:0.85em"></span>
+      </div>
+    </div>
+
+    <!-- ── REVIEW MODE (graded assignments) ── -->
+    <div id="review-mode" style="display:none">
+      <!-- Score summary card -->
+      <div id="review-score-card" style="margin-bottom:20px">
+        <div class="card" style="background:linear-gradient(135deg,#1e3a5f,#2a5298); color:#fff; border:none">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px">
+            <div>
+              <div style="font-size:0.78em; opacity:0.75; text-transform:uppercase; letter-spacing:0.05em">Total Score</div>
+              <div style="font-size:2em; font-weight:800" id="review-total">—</div>
+            </div>
+            <div style="font-size:0.85em; opacity:0.8">Graded by your instructor</div>
+          </div>
+        </div>
+      </div>
+      <!-- Pending (submitted, not yet graded) -->
+      <div id="review-pending" class="alert alert-info" style="display:none">
+        Grading in progress — check back later for your scores and feedback.
+      </div>
+      <div id="review-questions"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── State ──
+let student        = null;
+let assignments    = [];
+let currentAssignment = null;
+let answers        = {};
+let saveTimer      = null;
+const urlCourse    = new URLSearchParams(window.location.search).get('course') || 'phys-215';
+const courseTitles = { 'phys-215': 'Physics 215', 'phys-110': 'Physics 110' };
+const courseTitle  = courseTitles[urlCourse] || urlCourse;
+
+// ── Screen helpers ──
+function show(id) {
+  ['screen-id','screen-assignments','screen-assignment'].forEach(s => {
+    document.getElementById(s).style.display = s === id ? '' : 'none';
+  });
+}
+
+// ── Login ──
+document.getElementById('id-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('pw-input').focus();
+});
+document.getElementById('pw-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') loginStudent();
+});
+
+async function loginStudent() {
+  const raw   = document.getElementById('id-input').value.trim();
+  const pw    = document.getElementById('pw-input').value;
+  const errEl = document.getElementById('id-error');
+  errEl.style.display = 'none';
+
+  if (!/^\d{10}$/.test(raw) || !raw.startsWith('3000')) {
+    errEl.textContent = 'Please enter a valid 10-digit student ID starting with 3000.';
+    errEl.style.display = '';
+    return;
+  }
+  if (!pw) {
+    errEl.textContent = 'Please enter your password.';
+    errEl.style.display = '';
+    return;
+  }
+
+  const btn = document.getElementById('id-btn');
+  btn.innerHTML = '<span class="spinner"></span>';
+  btn.disabled  = true;
+
+  // Sign in with Supabase Auth (email = studentId@usafa.edu)
+  const { error: authErr } = await db.auth.signInWithPassword({
+    email: raw + '@usafa.edu',
+    password: pw
+  });
+
+  if (authErr) {
+    // Give a helpful message: distinguish "wrong password" from "ID not found"
+    const { data: stuCheck } = await db
+      .from('students')
+      .select('student_id')
+      .eq('student_id', parseInt(raw))
+      .single();
+
+    btn.innerHTML = 'Sign In';
+    btn.disabled  = false;
+    errEl.textContent = stuCheck
+      ? 'Incorrect password. Default password is the last 6 digits of your student ID. Contact your instructor if you need a reset.'
+      : 'Student ID not found. Please check your ID or contact your instructor.';
+    errEl.style.display = '';
+    return;
+  }
+
+  // Auth succeeded — fetch student record
+  const { data, error } = await db
+    .from('students')
+    .select('student_id, name, section_id')
+    .eq('student_id', parseInt(raw))
+    .single();
+
+  btn.innerHTML = 'Sign In';
+  btn.disabled  = false;
+
+  if (error || !data) {
+    errEl.textContent = 'Account verified but student record not found. Contact your instructor.';
+    errEl.style.display = '';
+    await db.auth.signOut();
+    return;
+  }
+
+  student = data;
+  document.getElementById('header-name').textContent  = student.name;
+  document.getElementById('header-name').style.display = '';
+  document.getElementById('welcome-name').textContent    = student.name;
+  document.getElementById('welcome-section').textContent = `${courseTitle} · Section ${student.section_id}`;
+  show('screen-assignments');
+  loadAssignments();
+}
+
+// ── Assignment List ──
+async function loadAssignments() {
+  document.title = `${courseTitle} — Assignments`;
+  document.querySelector('h1') && (document.querySelector('h1').textContent = `${courseTitle} Assignments`);
+  const heading = document.getElementById('assignments-heading');
+  if (heading) heading.textContent = `My ${courseTitle} Assignments`;
+  const listEl = document.getElementById('assignment-list');
+  listEl.innerHTML = '<div style="color:var(--muted); font-size:0.9em">Loading…</div>';
+
+  // All published assignments for this course
+  const { data: asgns, error } = await db
+    .from('assignments')
+    .select('id, title, description, due_date_m, due_date_t, reading_link, figure_url, questions')
+    .eq('is_published', true)
+    .eq('course_id', urlCourse)
+    .order('due_date_m', { ascending: true, nullsFirst: false });
+
+  if (error || !asgns?.length) {
+    listEl.innerHTML = '';
+    document.getElementById('no-assignments').style.display = '';
+    return;
+  }
+
+  const asgnIds = asgns.map(a => a.id);
+
+  // Student's responses + finalized scores + extensions in parallel
+  const [{ data: responses }, { data: scores }, { data: extRows }] = await Promise.all([
+    db.from('responses').select('assignment_id, updated_at').eq('student_id', student.student_id),
+    db.from('scores').select('assignment_id, total_score, max_total, is_finalized, question_scores')
+       .eq('student_id', student.student_id).eq('is_finalized', true).in('assignment_id', asgnIds),
+    db.from('extensions').select('assignment_id, extended_due_date')
+       .eq('student_id', student.student_id).in('assignment_id', asgnIds),
+  ]);
+
+  const submittedMap = {};
+  (responses || []).forEach(r => submittedMap[r.assignment_id] = r.updated_at);
+  const scoreMap = {};
+  (scores || []).forEach(s => scoreMap[s.assignment_id] = s);
+  const extensionMap = {};
+  (extRows || []).forEach(e => extensionMap[e.assignment_id] = e.extended_due_date);
+
+  assignments = asgns;
+  listEl.innerHTML = '';
+  document.getElementById('no-assignments').style.display = 'none';
+
+  asgns.forEach(a => {
+    // Pick due date based on student's section (M-day or T-day); honour extension if later
+    const isMDay  = student.section_id.startsWith('M');
+    const dueRaw  = isMDay ? (a.due_date_m || a.due_date_t) : (a.due_date_t || a.due_date_m);
+    const extRaw  = extensionMap[a.id];
+    const due     = extRaw ? new Date(extRaw) : (dueRaw ? new Date(dueRaw) : null);
+    const isPast  = due ? due < new Date() : false;
+    const submitted  = submittedMap[a.id];
+    const score      = scoreMap[a.id];
+    const qCount     = a.questions?.length ?? 0;
+    const totalPts   = (a.questions || []).reduce((s, q) => s + (q.points || 0), 0);
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.cssText = 'cursor:pointer; transition:box-shadow 0.15s';
+    card.onmouseenter = () => card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+    card.onmouseleave = () => card.style.boxShadow = '';
+    card.onclick = () => openAssignment(a);
+
+    const deadlineClass = !due ? '' : isPast ? 'overdue' : (due - new Date() < 86400000 ? 'soon' : '');
+    const deadlineText  = !due ? 'No due date'
+      : isPast ? `Closed ${due.toLocaleDateString()}`
+      : `Due ${due.toLocaleDateString()} ${due.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
+
+    // Right-side status
+    let statusHtml = '';
+    if (score) {
+      // Graded — show score + colored dots
+      const qs   = score.question_scores || {};
+      const dots = (a.questions || []).map(q => {
+        const st  = qs[q.id]?.status || (qs[q.id]?.score > 0 ? 'full' : 'zero');
+        const clr = { full:'#22c55e', warn:'#eab308', zero:'#ef4444' }[st] || '#94a3b8';
+        return `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${clr}"></span>`;
+      }).join('');
+      statusHtml = `
+        <div style="font-size:0.92em; font-weight:700; color:var(--text)">${score.total_score} / ${score.max_total} pts</div>
+        <div style="margin-top:4px; display:flex; gap:4px; justify-content:flex-end">${dots}</div>`;
+    } else if (submitted && isPast) {
+      statusHtml = `<div style="font-size:0.78em; color:var(--muted); margin-top:4px">⏳ Pending grading</div>`;
+    } else if (submitted) {
+      statusHtml = `<div style="font-size:0.78em; color:var(--green); margin-top:4px">✓ Submitted</div>`;
+    } else if (isPast) {
+      statusHtml = `<div style="font-size:0.78em; color:var(--red); margin-top:4px">Not submitted</div>`;
+    } else {
+      statusHtml = `<div style="font-size:0.78em; color:var(--muted); margin-top:4px">Not started</div>`;
+    }
+
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px">
+        <div>
+          <div class="card-title">${esc(a.title)}</div>
+          <div class="card-meta">${qCount} question${qCount !== 1 ? 's' : ''} · ${totalPts} pts</div>
+          ${a.description ? `<div style="font-size:0.85em;color:var(--muted)">${esc(a.description)}</div>` : ''}
+        </div>
+        <div style="text-align:right; flex-shrink:0">
+          <div class="deadline ${deadlineClass}">${deadlineText}</div>
+          ${statusHtml}
+        </div>
+      </div>`;
+    listEl.appendChild(card);
+  });
+}
+
+function showAssignments() {
+  show('screen-assignments');
+  currentAssignment = null;
+  loadAssignments();
+}
+
+// ── Open Assignment ── routes to submit or review mode
+async function openAssignment(a) {
+  currentAssignment = a;
+  answers = {};
+
+  document.getElementById('asgn-title').textContent = a.title;
+  const isMDay = student.section_id.startsWith('M');
+  const dueRaw = isMDay ? (a.due_date_m || a.due_date_t) : (a.due_date_t || a.due_date_m);
+  // due and isPast are set after the extension fetch below
+  let due, isPast;
+  document.getElementById('asgn-meta').textContent = due
+    ? `Due: ${due.toLocaleDateString()} ${due.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`
+    : '';
+
+  // Show description + optional reading link
+  const descEl = document.getElementById('asgn-desc');
+  let descHtml = a.description ? `<span>${esc(a.description)}</span>` : '';
+  if (a.reading_link) {
+    descHtml += (descHtml ? '<br>' : '') +
+      `<a href="${esc(a.reading_link)}" target="_blank" rel="noopener"
+          style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-size:0.88em;color:var(--blue);font-weight:600;text-decoration:none">
+         📖 Read before completing this assignment ↗
+       </a>`;
+  }
+  descEl.innerHTML = descHtml;
+
+  // Show assignment-level figure (if set) above the questions
+  const figEl = document.getElementById('asgn-figure-block');
+  if (a.figure_url) {
+    figEl.innerHTML = `<img src="${esc(a.figure_url)}" alt="Assignment figure"
+      style="max-width:100%; max-height:400px; border-radius:8px; border:1px solid var(--border); display:block; margin:0 auto">`;
+    figEl.style.display = '';
+  } else {
+    figEl.innerHTML = '';
+    figEl.style.display = 'none';
+  }
+
+  // Fetch response + finalized score + extension in parallel
+  const [{ data: existing }, { data: scoreRow }, { data: extRow }] = await Promise.all([
+    db.from('responses').select('answers').eq('student_id', student.student_id).eq('assignment_id', a.id).single(),
+    db.from('scores').select('total_score, max_total, question_scores, is_finalized')
+       .eq('student_id', student.student_id).eq('assignment_id', a.id).single(),
+    db.from('extensions').select('extended_due_date')
+       .eq('student_id', student.student_id).eq('assignment_id', a.id).single(),
+  ]);
+
+  const extRaw = extRow?.extended_due_date;
+  due    = extRaw ? new Date(extRaw) : (dueRaw ? new Date(dueRaw) : null);
+  isPast = due ? due < new Date() : false;
+
+  const isGraded = !!scoreRow?.is_finalized;
+
+  if (isGraded) {
+    // ── Review mode ──
+    document.getElementById('submit-mode').style.display = 'none';
+    document.getElementById('review-mode').style.display = '';
+    document.getElementById('review-pending').style.display = 'none';
+    document.getElementById('review-score-card').style.display = '';
+    document.getElementById('review-total').textContent =
+      `${scoreRow.total_score} / ${scoreRow.max_total} pts`;
+    renderReviewQuestions(a.questions, existing?.answers || {}, scoreRow.question_scores || {});
+  } else {
+    // ── Submit mode ──
+    document.getElementById('submit-mode').style.display = '';
+    document.getElementById('review-mode').style.display = 'none';
+    document.getElementById('asgn-closed-banner').style.display = isPast ? '' : 'none';
+    document.getElementById('submit-section').style.display     = isPast ? 'none' : '';
+
+    if (existing?.answers) answers = existing.answers;
+
+    // If submitted but not yet graded, show pending notice above questions
+    if (isPast && existing?.answers && !isGraded) {
+      // Prepend a subtle pending notice (only if past due)
+      const pend = document.getElementById('asgn-closed-banner');
+      pend.textContent = 'This assignment is past due. Your submitted answers are shown below. Grading is in progress.';
+      pend.style.display = '';
+    }
+
+    renderQuestions(a.questions, isPast);
+    updateProgress();
+  }
+
+  show('screen-assignment');
+}
+
+// ── Render: submit mode questions ──
+function renderQuestions(questions, readOnly) {
+  const container = document.getElementById('questions-container');
+  container.innerHTML = '';
+
+  questions.forEach((q, idx) => {
+    const block = document.createElement('div');
+    block.className = 'question-block';
+    block.id = `qblock-${q.id}`;
+
+    const pts = q.points === 1 ? '1 pt' : `${q.points} pts`;
+    const val = answers[q.id] ?? '';
+    let inputHtml = '';
+
+    if (q.type === 'multiple_choice') {
+      const opts = (q.options || []).map((opt, i) => {
+        const checked = val === opt ? 'checked' : '';
+        const sel     = val === opt ? 'selected' : '';
+        return `
+          <label class="mc-option ${sel}" id="mc-${q.id}-${i}">
+            <input type="radio" name="mc-${q.id}" value="${esc(opt)}"
+              ${checked} ${readOnly ? 'disabled' : ''}
+              onchange="recordAnswer('${q.id}', this.value)">
+            ${esc(opt)}
+          </label>`;
+      }).join('');
+      inputHtml = `<div class="mc-options">${opts}</div>`;
+    } else if (q.type === 'numerical') {
+      inputHtml = `
+        <input type="number" step="any" value="${esc(String(val))}"
+          placeholder="Enter a number" ${readOnly ? 'readonly' : ''}
+          oninput="recordAnswer('${q.id}', this.value)"
+          style="max-width:220px">
+        <div class="field-hint">Numerical answer — units not required here.</div>`;
+    } else {
+      inputHtml = `
+        <textarea placeholder="Write your response here…" ${readOnly ? 'readonly' : ''}
+          oninput="recordAnswer('${q.id}', this.value)"
+          id="ta-${q.id}">${esc(val)}</textarea>`;
+    }
+
+    const qFigHtml = q.figure_url
+      ? `<div style="margin:10px 0 14px; text-align:center">
+           <img src="${esc(q.figure_url)}" alt="Question figure"
+             style="max-width:100%; max-height:320px; border-radius:6px; border:1px solid var(--border); display:block; margin:0 auto">
+         </div>`
+      : '';
+    block.innerHTML = `
+      <div class="question-number">Question ${idx + 1}</div>
+      <div class="question-text">${esc(q.text)}</div>
+      ${qFigHtml}
+      <div class="question-pts">${pts}</div>
+      ${inputHtml}`;
+    container.appendChild(block);
+    if (val && String(val).trim()) block.classList.add('answered');
+  });
+}
+
+// ── Render: review mode questions ──
+function renderReviewQuestions(questions, studentAnswers, questionScores) {
+  const container = document.getElementById('review-questions');
+  container.innerHTML = '';
+
+  questions.forEach((q, idx) => {
+    const answer = studentAnswers[q.id] ?? '';
+    const qs     = questionScores[q.id] || {};
+    const pts    = q.points === 1 ? '1 pt' : `${q.points} pts`;
+    const status = qs.status || (qs.score >= q.points ? 'full' : 'zero');
+    const labels = { full:'✓ Full Credit', warn:'⚠ Full Credit', zero:'✗ No Credit' };
+
+    const answerHtml = !String(answer).trim()
+      ? `<div style="color:var(--muted); font-style:italic; font-size:0.88em">No answer submitted.</div>`
+      : `<div class="review-answer-box">${esc(String(answer))}</div>`;
+
+    const feedbackHtml = qs.feedback
+      ? `<div class="review-feedback"><strong>Instructor feedback:</strong> ${esc(qs.feedback)}</div>`
+      : '';
+
+    const revFigHtml = q.figure_url
+      ? `<div style="margin:10px 0 14px; text-align:center">
+           <img src="${esc(q.figure_url)}" alt="Question figure"
+             style="max-width:100%; max-height:320px; border-radius:6px; border:1px solid var(--border); display:block; margin:0 auto">
+         </div>`
+      : '';
+    const block = document.createElement('div');
+    block.className = 'question-block';
+    block.innerHTML = `
+      <div class="question-number">Question ${idx + 1}</div>
+      <div class="question-text">${esc(q.text)}</div>
+      ${revFigHtml}
+      <div class="question-pts">${pts}</div>
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px">
+        <span class="review-score-badge ${status}">${labels[status] || labels.full}</span>
+        <span style="font-size:0.9em; color:var(--muted)">${qs.score ?? '—'} / ${q.points} pts</span>
+      </div>
+      ${answerHtml}
+      ${feedbackHtml}`;
+    container.appendChild(block);
+  });
+}
+
+// ── Record Answer & Auto-save ──
+function recordAnswer(qId, value) {
+  answers[qId] = value;
+  updateProgress();
+  const block = document.getElementById(`qblock-${qId}`);
+  if (block) block.classList.toggle('answered', String(value).trim().length > 0);
+  clearTimeout(saveTimer);
+  document.getElementById('save-status').textContent = 'Saving…';
+  saveTimer = setTimeout(autoSave, 1200);
+}
+
+async function autoSave() {
+  if (!student || !currentAssignment) return;
+  const { error } = await db.from('responses').upsert({
+    student_id: student.student_id,
+    assignment_id: currentAssignment.id,
+    answers,
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'student_id,assignment_id' });
+  const statusEl = document.getElementById('save-status');
+  statusEl.textContent = error ? '⚠ Save failed' : '✓ Saved';
+  setTimeout(() => { statusEl.textContent = ''; }, 2000);
+}
+
+// ── Progress ──
+function updateProgress() {
+  if (!currentAssignment) return;
+  const qs = currentAssignment.questions || [];
+  const answered = qs.filter(q => answers[q.id] && String(answers[q.id]).trim()).length;
+  document.getElementById('progress-label').textContent = `${answered} of ${qs.length} answered`;
+  document.getElementById('progress-bar').style.width =
+    qs.length ? `${Math.round(answered / qs.length * 100)}%` : '0%';
+}
+
+// ── Submit ──
+async function submitAssignment() {
+  const btn    = document.getElementById('submit-btn');
+  const status = document.getElementById('submit-status');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Submitting…';
+
+  const { error } = await db.from('responses').upsert({
+    student_id: student.student_id,
+    assignment_id: currentAssignment.id,
+    answers,
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'student_id,assignment_id' });
+
+  if (error) {
+    status.textContent  = '⚠ Submission failed — please try again.';
+    status.style.color  = 'var(--red)';
+    btn.disabled        = false;
+    btn.textContent     = 'Submit Assignment';
+    return;
+  }
+  btn.textContent     = '✓ Submitted';
+  status.textContent  = 'Your answers have been saved. You can edit them until the deadline.';
+  status.style.color  = 'var(--green)';
+}
+
+// ── Utility ──
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

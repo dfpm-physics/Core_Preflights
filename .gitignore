@@ -1,12 +1,12 @@
 # Never commit these
-js/config.local.js
+site/js/config.local.js
 *.env
 .env*
 config.json
 INBOX/
 
 # Skill / tooling config — each operator copies config.json.template locally (service keys, DB creds)
-.claude/skills/preflight-analyze/config.json
+.ai/skills/preflight-analyze/config.json
 supabase/admin/config.json
 
 # Python virtualenv + caches for admin/analysis tooling (psycopg2, etc.) — keep contained, never commit
@@ -27,4 +27,4 @@ supabase/.temp/
 
 # Supabase service key files (kept in ~/.claude/skills/ only)
 *.service_key
-Custom GPT Transfer/privacy.html
+.ai/integrations/custom-gpt/privacy.html

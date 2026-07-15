@@ -10,6 +10,28 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-15 — Casey Pellizzari via Codex
 
+### Changed — reorganized the repository around `site/`, `.ai/`, and `docs/`
+
+Moved all deployed website source into `site/` while keeping GitHub Pages on the repository root.
+Root `index.html` now forwards to `/site/`; root `404.html` recovers old page routes; and the root
+`artifact-submit.html` plus `interaction-submit.html` compatibility endpoints preserve query strings
+and URL hashes before forwarding to the full receiver under `site/`. Relative site paths remain
+unchanged inside the moved tree. Updated the Fall figure builder and extractor for `site/img/`.
+
+Created one agent-neutral AI tree under `.ai/`: shared project context lives in `instructions/`, and
+all four canonical workflows now live in `skills/<name>/SKILL.md` with optional vendor addenda.
+Removed the duplicated `.agents/skills/` discovery pointers and `.claude/skills/` runbooks. Added root
+`CLAUDE.md` as Claude Code's auto-loaded import/bootstrap while root `AGENTS.md` remains the shared
+operating authority pending a later instruction-content consolidation.
+
+Moved system documentation into categorized `docs/` folders, the Custom GPT transfer package into
+`.ai/integrations/custom-gpt/`, the artifact example into `.ai/artifacts/examples/`, and browser
+sandboxes into `tests/browser/`. Updated active source paths, repository links, local-server guidance,
+and public `/site/` URLs. This was a filesystem/deployment-source reorganization only: no Supabase
+schema or live database data changed.
+
+## 2026-07-15 — Casey Pellizzari via Codex
+
 ### Fixed — restored the shared operating brief and removed agent runbook drift
 
 Restored the authoritative root `AGENTS.md` after merge commit `26591e3` resolved two independently
@@ -159,7 +181,7 @@ source of truth.
   divergence; separate worktrees for concurrent work; never force-push), environment, secrets/config
   locations, runbooks (skills are readable procedures), git/publish/CHANGELOG rules, data-model quick
   reference, and a Codex quickstart.
-- **[`.claude/CLAUDE.md`](.claude/CLAUDE.md)** now defers to `AGENTS.md` for shared rules (pointer at
+- **[`.claude/CLAUDE.md`](.ai/instructions/PROJECT.md)** now defers to `AGENTS.md` for shared rules (pointer at
   top) and keeps its Claude-specific deep context.
 - **Corrected a stale environment claim** in both files: the old "no Node, cannot be installed" was
   wrong (Node/npm are present). Reframed to the accurate rule — *the project has no Node dependency or
@@ -202,7 +224,7 @@ is safe under it (additive columns only; artifacts key by stable slug), and `ter
 ### Added — student preview for assignments (`admin.html`)
 
 Each assignment card in the **Assignments** tab now has a **Preview** button
-([`admin.html`](admin.html), `previewAssignment`) that renders the assignment in a modal exactly as a
+([`admin.html`](site/admin.html), `previewAssignment`) that renders the assignment in a modal exactly as a
 student sees it — figure, title, due dates, description, and every question (MC / numerical / free-response)
 with read-only, disabled inputs. Lets directors eyeball the final student-facing form before publishing.
 Reading links are intentionally left **blank** on all Fall preflights: the per-lesson OpenStax PDFs are
@@ -238,7 +260,7 @@ loses its textbook RAG grounding.
 
 ### Fixed — theme toggle icon now reflects the current theme, not the destination
 
-The light/dark toggle ([`app/js/theme.js`](app/js/theme.js), `updateToggleButtons`) showed the icon of the
+The light/dark toggle ([`app/js/theme.js`](site/app/js/theme.js), `updateToggleButtons`) showed the icon of the
 theme it would switch *to* (sun while in dark mode, moon while in light) — Matthew read this backwards and
 expected the icon to indicate the *current* state. Flipped the icon mapping so it now shows the **active**
 theme (moon in dark mode, sun in light). The `aria-label`/`title` are unchanged — they still describe the
@@ -246,7 +268,7 @@ action the click performs ("Switch to light/dark mode"), which is the convention
 
 ### Changed — per-objective understanding histogram now uses an adaptive KDE (`lrFine5`)
 
-The lesson rollup's "Objective understanding" chart ([`app/faculty/report.html`](app/faculty/report.html),
+The lesson rollup's "Objective understanding" chart ([`app/faculty/report.html`](site/app/faculty/report.html),
 `lrFine5`) previously drew its 25-cell curve by **linearly interpolating** between the 6 integer
 score-bins. That smeared a single data point into a lopsided triangle spanning ±1 score and lit up
 more columns than there were distinct scores — Matthew noticed both a phantom spread on a 1-point
@@ -269,7 +291,7 @@ value is a one-line edit. Self-contained for easy later removal.
 
 ### Added — faculty lesson generation tool + migration 016 (`lessons` foundation)
 
-Built **Phase 1 + Phase 4** of [`LESSON-UNIFICATION.md`](LESSON-UNIFICATION.md): the schema that
+Built **Phase 1 + Phase 4** of [`LESSON-UNIFICATION.md`](docs/architecture/LESSON-UNIFICATION.md): the schema that
 groups a written preflight and a Claude interaction under one **lesson**, and the faculty tool that
 authors them.
 
@@ -282,9 +304,9 @@ authors them.
   the path-lock trigger (`lc_lock_path`, path immutable once set), plus RLS that mirrors
   `interactions` (lessons) and `preflight_interaction_reports` (completions). **Deliberately defers**
   the row-*creating* finalize triggers and the D8/D9 due-cutoff/Submit guards to Phase 2.
-- **[`app/faculty/lessons.html`](app/faculty/lessons.html)** + **[`app/js/faculty-lessons.js`](app/js/faculty-lessons.js)**
+- **[`app/faculty/lessons.html`](site/app/faculty/lessons.html)** + **[`app/js/faculty-lessons.js`](site/app/js/faculty-lessons.js)**
   — a new director-gated **Lessons** page (added to `FACULTY_LINKS` in
-  [`app/js/nav.js`](app/js/nav.js)). One screen lists lessons and, in the New/Edit modal, **authors
+  [`app/js/nav.js`](site/app/js/nav.js)). One screen lists lessons and, in the New/Edit modal, **authors
   both component types inline**: a completion-policy segmented control that shows/requires the right
   components, a shared objectives editor, a ported preflight question builder (free-response /
   numerical / multiple-choice, each mapped to an objective and one marked the
@@ -294,7 +316,7 @@ authors them.
   cascades to the components; delete removes only the lesson grouping (component rows and student
   work are kept). Client validation mirrors the DB policy↔components CHECK and the
   exactly-one-reading-reflection rule. New `.lb-*` builder classes added to
-  [`app/css/styles.css`](app/css/styles.css) (tokens only, both themes).
+  [`app/css/styles.css`](site/app/css/styles.css) (tokens only, both themes).
 
 *Why:* the lesson model was approved (`LESSON-UNIFICATION.md`, decisions D1–D9) but had no table and
 no authoring surface; this lands the foundation and the director-facing creation tool so real lessons
@@ -321,7 +343,7 @@ Follow-up polish to the lesson creation modal from Matthew's review:
   (`?new=1&id=&course=&title=&desc=&policy=&url=&obj=key:Label|…&pub=`) so a Claude artifact can hand the
   director a one-click link that opens the New-Lesson form prefilled (interaction + objectives + meta),
   mirroring the existing interaction-manager prefill — documented in
-  [`INTERACTION-PREFILL-LINK.md`](INTERACTION-PREFILL-LINK.md).
+  [`INTERACTION-PREFILL-LINK.md`](docs/contracts/INTERACTION-PREFILL-LINK.md).
 - **Form alignment fix:** a `.field` with helper text sat taller than its neighbours and the default
   `.row` centring nudged its input up; editor rows now top-align so inputs line up regardless of hints
   (`#lesson-modal .row { align-items: flex-start }`).
@@ -330,7 +352,7 @@ Follow-up polish to the lesson creation modal from Matthew's review:
 
 ### Added — design doc: rollup agreement (one faculty rollup across both modalities)
 
-Authored [`ROLLUP-AGREEMENT.md`](ROLLUP-AGREEMENT.md) — the **output contract** for the faculty lesson
+Authored [`ROLLUP-AGREEMENT.md`](docs/decisions/ROLLUP-AGREEMENT.md) — the **output contract** for the faculty lesson
 rollup, the companion to the per-student *input* contract (`INTERACTION-DATA-CONTRACT.md`). Fixes the
 canonical panel set, the shape/length/style of every AI-written field, and which skill owns which field
 for which lesson type, so `/preflight-analyze` and `/interaction-aggregate` produce **one** rollup, not
@@ -344,10 +366,10 @@ the other — the doc to open before touching either rollup skill or the UI.
 
 ### Added — faculty lesson rollup now reads the cohort AI analysis (interaction_analysis)
 
-Wired the AI panels in [`app/faculty/report.html`](app/faculty/report.html) to the
+Wired the AI panels in [`app/faculty/report.html`](site/app/faculty/report.html) to the
 `interaction_analysis` table (migration 014) the `/interaction-aggregate` skill now populates,
 replacing the "coming soon" placeholders with real content where a row exists. New
-`loadAnalysis(interactionId)` in [`app/js/faculty-interactions.js`](app/js/faculty-interactions.js)
+`loadAnalysis(interactionId)` in [`app/js/faculty-interactions.js`](site/app/js/faculty-interactions.js)
 pulls every scope row for the lesson in one query (RLS scopes the result); the rollup picks the
 row for the current scope — the `__all__` whole-course row for "All sections", else the section's
 row. Three panels light up: **AI readiness summary** and **Misconceptions → trends across the
@@ -377,7 +399,7 @@ lessons so the panels are no longer placeholder-only. lesson-04 has no submissio
 ### Documented — interaction-aggregate scaling / scheduled-job guidance
 
 Added a "Running at scale / as a scheduled job" section to
-[`.claude/skills/interaction-aggregate/SKILL.md`](.claude/skills/interaction-aggregate/SKILL.md): the skill
+[`.claude/skills/interaction-aggregate/SKILL.md`](.ai/skills/interaction-aggregate/SKILL.md): the skill
 is slated to run as a **midnight cron** after a lesson's due date, scoped to one course and **one day track
 at a time** (M-run or T-run, never both). Guidance: process sections **sequentially, one scope per step —
 do not fan out subagents** (the `pull` output is per-section, so a loop bounds context and scales to 20+
@@ -389,17 +411,17 @@ wrong default for the unattended cron — captured the lesson where it lives.
 
 ### Fixed — lesson rollup radar chart clipped with more than 3 objectives
 
-The "Objective understanding" radar on [`app/faculty/report.html`](app/faculty/report.html) used a fixed
+The "Objective understanding" radar on [`app/faculty/report.html`](site/app/faculty/report.html) used a fixed
 SVG `viewBox` (`0 30 300 190`) that had been tuned for a 3-point triangle (wide and short). Once a lesson
 had 4+ assessed objectives the polygon filled out symmetrically and the bottom/side axis labels fell
 outside that box and were cropped. `radarSVG` now computes the `viewBox` (and `width`/`height`) from the
 actual extent of the label ring plus a small glyph margin, so the chart fits any objective count. Same fix
-mirrored into the [`test/test-summary.html`](test/test-summary.html) preview fixture. *Why:* lessons can
+mirrored into the [`test/test-summary.html`](tests/browser/test-summary.html) preview fixture. *Why:* lessons can
 define any number of objectives; the chart must size to the data, not a hard-coded count.
 
 ### Added — design doc: unify preflight assignments and lesson interactions under a "lesson"
 
-Authored [`LESSON-UNIFICATION.md`](LESSON-UNIFICATION.md) — the **proposed** (not yet built) plan to
+Authored [`LESSON-UNIFICATION.md`](docs/architecture/LESSON-UNIFICATION.md) — the **proposed** (not yet built) plan to
 join the two parallel worlds (`assignments`/`responses`/`scores` and
 `interactions`/`preflight_interaction_reports`) under a single **lesson** that can carry a preflight,
 an interaction, or both. Captures the planning decisions: track set per lesson
@@ -415,8 +437,8 @@ the careful plan before any code.
 
 ### Changed — lesson rollup moved to its own Report page; Grade/Report dropped from the nav
 
-The lesson rollup that was a modal on [`app/faculty/interactions.html`](app/faculty/interactions.html)
-is now the body of [`app/faculty/report.html`](app/faculty/report.html) (replacing the old
+The lesson rollup that was a modal on [`app/faculty/interactions.html`](site/app/faculty/interactions.html)
+is now the body of [`app/faculty/report.html`](site/app/faculty/report.html) (replacing the old
 per-assignment submission report). The rollup is unchanged otherwise — same live, AI-free numeric
 aggregation via `summarizeReports`, same header completion badge + flag pills + section-scope control,
 and the same drill-in cascade (flag pill → flagged-students modal → student summary modal → full
@@ -427,9 +449,9 @@ Markdown report modal), which moved to the Report page with it.
   Interactions** if no key is present. The Interactions completion controls (the %, the per-section
   bars, and *View completion*) now navigate to the Report page instead of opening the modal, and the
   dashboard spotlight's **Open full rollup →** points there for the lesson in view.
-- **Grade and Report removed from the faculty top nav** ([`app/js/nav.js`](app/js/nav.js)). Grade is
+- **Grade and Report removed from the faculty top nav** ([`app/js/nav.js`](site/app/js/nav.js)). Grade is
   still reachable from the Roster page; Report is reached only via the links above.
-- A `.report-rollup` wrapper in [`app/css/styles.css`](app/css/styles.css) reproduces the modal's
+- A `.report-rollup` wrapper in [`app/css/styles.css`](site/app/css/styles.css) reproduces the modal's
   24px padding so the tinted `.lesson-head`'s negative-margin bleed still reaches the edge as a page
   body. The old `app/js/faculty-report.js` data layer is now unused (left in place).
 
@@ -438,7 +460,7 @@ from the cards and the dashboard; removing the two redundant nav items declutter
 
 ### Fixed — dashboard (and every page) no longer changes width with its content
 
-Added `width: 100%` to `.page` and `.page-wide` ([`app/css/styles.css`](app/css/styles.css)). Root
+Added `width: 100%` to `.page` and `.page-wide` ([`app/css/styles.css`](site/app/css/styles.css)). Root
 cause: `<body>` is a flex column, so the `margin: 0 auto` on the content container was an *auto
 cross-axis margin* — which makes a flex item **shrink-wrap to its content** instead of filling the
 row. The content area's width therefore tracked each view's content: the dashboard rendered narrower
@@ -454,7 +476,7 @@ reflows at the responsive breakpoints when the window itself narrows.
 
 Rolled the [`INBOX/dashboard-redesign.html`](INBOX/) exploration into the real app and wired it to
 live Supabase data, replacing the old per-assignment progress-bar roll-up
-([`app/faculty/dashboard.html`](app/faculty/dashboard.html)). The new dashboard answers the actual
+([`app/faculty/dashboard.html`](site/app/faculty/dashboard.html)). The new dashboard answers the actual
 JiTT question — *what do I need to know before my next class?* — with:
 
 - **KPI tiles** tied to the lesson in view: preflight completion %, avg effort (graded), students
@@ -473,15 +495,15 @@ JiTT question — *what do I need to know before my next class?* — with:
 
 Role is **real** (from `ctx`, not a preview toggle): instructors get their own sections scoped, no
 scope toggle, and no matrix; directors/admins get both. New view module
-[`app/js/faculty-dashboard.js`](app/js/faculty-dashboard.js) (render + wiring + live aggregation) and
-a richer loader `loadFacultyDashboard` in [`app/js/faculty-data.js`](app/js/faculty-data.js): one
+[`app/js/faculty-dashboard.js`](site/app/js/faculty-dashboard.js) (render + wiring + live aggregation) and
+a richer loader `loadFacultyDashboard` in [`app/js/faculty-data.js`](site/app/js/faculty-data.js): one
 fetch of every published lesson's per-student rows, grouped by (lesson, section), aggregated live
 with the **same `summarizeReports()`** engine the interactions rollup uses — so the two views always
 agree. The page itself is now thin (bootstrap → nav → theme → `mountDashboard`).
 
 Collision calls (per Matthew): reused the app's existing `.seg` segmented control and `.stat-tile`
 tiles; the new pieces (spotlight, ring, misconception list, your-section cards, matrix, nav wings)
-were added to [`app/css/styles.css`](app/css/styles.css) with tokens only. Dropped the old "Quick
+were added to [`app/css/styles.css`](site/app/css/styles.css) with tokens only. Dropped the old "Quick
 actions" card (the top nav already links those pages).
 
 ### Added — `interactions.due_date` (drives the dashboard's "active" lesson)
@@ -491,8 +513,8 @@ Migration [`015_interaction_due_date.sql`](supabase/migrations/015_interaction_d
 picks the **active/"today"** lesson as the next one due (earliest `due_date ≥ now`), framing earlier
 ones as *past* and later ones as *upcoming*; with no due dates set it falls back to newest by
 `created_at`. Wired a **Due date** field into the app interaction manager
-([`app/faculty/interactions.html`](app/faculty/interactions.html) modal + a `due` prefill param +
-card display) and `saveInteraction` ([`app/js/faculty-interactions.js`](app/js/faculty-interactions.js)).
+([`app/faculty/interactions.html`](site/app/faculty/interactions.html) modal + a `due` prefill param +
+card display) and `saveInteraction` ([`app/js/faculty-interactions.js`](site/app/js/faculty-interactions.js)).
 **Apply migration 015 before deploying** (the manager + dashboard now select `due_date`). Single
 course-wide date, not the M/T split assignments use — the spotlight is one lesson for the whole
 director view; an M/T split could be added later without a breaking change.
@@ -501,32 +523,32 @@ director view; an M/T split could be added later without a breaking change.
 
 Per Matthew's call, unified on the redesign's effort histogram (submission count above each 0–5 bar,
 6-step distribution ramp `--d0…--d5`) as the single style and back-ported it to the interactions
-lesson rollup. Updated the shared `.eff-*` block in [`app/css/styles.css`](app/css/styles.css) and
-`effortChart()` in [`app/faculty/interactions.html`](app/faculty/interactions.html) (was the s-ramp
+lesson rollup. Updated the shared `.eff-*` block in [`app/css/styles.css`](site/app/css/styles.css) and
+`effortChart()` in [`app/faculty/interactions.html`](site/app/faculty/interactions.html) (was the s-ramp
 with no counts).
 
 ### Added — faculty-dashboard design sandbox
 
-[`test/test-faculty-dashboard.html`](test/test-faculty-dashboard.html) — like the student sandbox but
+[`test/test-faculty-dashboard.html`](tests/browser/test-faculty-dashboard.html) — like the student sandbox but
 it drives the **live render module** (`app/js/faculty-dashboard.js`) with a synthetic model via its
 render-only `renderModel` entry, so it tracks both the stylesheet *and* the render logic. Toggles for
-role / active lesson / theme; linked from the [`test/`](test/test.html) hub. Verified in headless
+role / active lesson / theme; linked from the [`test/`](tests/browser/test.html) hub. Verified in headless
 Chrome across director, instructor, light, and matrix-open states.
 
 ### Changed — design sandboxes moved into `test/` + new student-dashboard sandbox
 
-Moved the standalone preview pages out of the repo root into a dedicated [`test/`](test/) directory
-(`git mv`, history preserved): [`test/test.html`](test/test.html) (hub),
-[`test/test-summary.html`](test/test-summary.html), and
-[`test/test-progressbar.html`](test/test-progressbar.html). Added
-[`test/test-student-dashboard.html`](test/test-student-dashboard.html) — a synthetic-data preview of
+Moved the standalone preview pages out of the repo root into a dedicated [`test/`](tests/browser/) directory
+(`git mv`, history preserved): [`test/test.html`](tests/browser/test.html) (hub),
+[`test/test-summary.html`](tests/browser/test-summary.html), and
+[`test/test-progressbar.html`](tests/browser/test-progressbar.html). Added
+[`test/test-student-dashboard.html`](tests/browser/test-student-dashboard.html) — a synthetic-data preview of
 the **student** landing page rendered on the **live** design system (links `app/css/styles.css`,
 mirrors the real top nav). Unlike the other sandboxes it intentionally reuses the production
 stylesheet so it tracks the real app. It previews the proposed dashboard direction: a single
 deadline-sorted **Up next** feed merging preflights *and* interactions (the live loader doesn't yet
 surface `interactions.due_date`), a **"Review before class"** formative panel built from a completed
 interaction's `report_data` (effort/points, per-objective strength meters, `recommended_review`), and
-recent grades. The `../test-summary.html` link in [`app/DESIGN.md`](app/DESIGN.md) was repointed to
+recent grades. The `../test-summary.html` link in [`app/DESIGN.md`](site/app/DESIGN.md) was repointed to
 `../test/`. Why: keep the repo root clean and group the no-DB design previews; give the student
 dashboard a sign-off surface like the faculty rollup already has.
 
@@ -554,7 +576,7 @@ created but **not yet run** (run after the due date, when submissions are frozen
   no names, no `report_markdown`. `write-analysis` re-derives `meta.n` + a `source_fingerprint`
   from live rows, validates section ids and that every quote's student is actually in that section,
   enforces the no-`'__all__'`-quotes rule, and upserts (`--dry-run` first). `status` flags staleness.
-- **Skill** — [`.claude/skills/interaction-aggregate/SKILL.md`](.claude/skills/interaction-aggregate/SKILL.md):
+- **Skill** — [`.claude/skills/interaction-aggregate/SKILL.md`](.ai/skills/interaction-aggregate/SKILL.md):
   preflight → pick lesson (nudge to `/interaction-backfill` if `report_data` is missing) → `pull` →
   write the three panels per scope (quote-selection criteria + "ground in the numbers" rule;
   whole-course row is prose-only) → `write-analysis` → verify via `status`. Read-only on grades.
@@ -570,7 +592,7 @@ created but **not yet run** (run after the due date, when submissions are frozen
 
 Wrote the design spec for the not-yet-built **cohort aggregator** that fills the rollup's three AI panels
 (readiness summary, misconception trends, AI-picked showcase quotes), to disentangle it from the
-per-student `/interaction-backfill` repair tool. [`INTERACTION-AGGREGATION.md`](INTERACTION-AGGREGATION.md)
+per-student `/interaction-backfill` repair tool. [`INTERACTION-AGGREGATION.md`](docs/decisions/INTERACTION-AGGREGATION.md)
 covers the goal, inputs (all already in `report_data` — **no data-contract change**), the output shape, a
 proposed `interaction_analysis` table (draft migration `014`, read-RLS mirroring the reports, written by the
 scoped `claude_code_recker` role), the run steps (reuse `summarizeReports` for the numbers + batched
@@ -592,10 +614,10 @@ were showing completion counts but an empty faculty rollup (no effort/understand
   lives in a gitignored `supabase/admin/config.json` (next to the role SQL + scripts, not owned by any skill).
 - **`db_check.py`** — connectivity + permission self-test (read OK, write OK, DDL DENIED).
 - **`interaction-backfill` skill** (named for the one-off repair it is, leaving `interaction-analyze` free
-  for the future cohort aggregator) — [`.claude/skills/interaction-backfill/SKILL.md`](.claude/skills/interaction-backfill/SKILL.md)
+  for the future cohort aggregator) — [`.claude/skills/interaction-backfill/SKILL.md`](.ai/skills/interaction-backfill/SKILL.md)
   + [`supabase/admin/interaction_reports.py`](supabase/admin/interaction_reports.py) (`stats` /
   `list-missing` / `write`). Reads each report's Markdown and reconstructs a faithful schema-1
-  `report_data` per [`INTERACTION-DATA-CONTRACT.md`](INTERACTION-DATA-CONTRACT.md): effort (with the
+  `report_data` per [`INTERACTION-DATA-CONTRACT.md`](docs/contracts/INTERACTION-DATA-CONTRACT.md): effort (with the
   reading-reflection cap), understanding, consistent per-lesson objective keys, misconceptions with
   evidence, reflection, honor (judged by appropriateness), and triage flags. Marks provenance with
   `producer: "backfill-from-report@<date>"`. The writer sets `effort` + `report_data` (the
@@ -611,7 +633,7 @@ were showing completion counts but an empty faculty rollup (no effort/understand
 
 ### Changed — integrity/notable flag semantics sharpened (rollup + data contract)
 
-Refined what the lesson rollup's flag pills mean and clarified [`INTERACTION-DATA-CONTRACT.md`](INTERACTION-DATA-CONTRACT.md)
+Refined what the lesson rollup's flag pills mean and clarified [`INTERACTION-DATA-CONTRACT.md`](docs/contracts/INTERACTION-DATA-CONTRACT.md)
 to match — a **v1 clarification** (no endpoint/hash/type/wire-format change; `schema` stays `1`, applied
 because only one artifact exists and is easy to update):
 
@@ -624,7 +646,7 @@ because only one artifact exists and is easy to update):
   direction.” (§5.8; the §6 example was updated for consistency.)
 - Added a §9 note that artifacts should always populate `flags` / `honor` / `reading_reflection.meaningful`,
   and that the site can derive `needs_follow_up`/`notable` from effort + understanding but never `honor`.
-- Aligned the flag pill labels/descriptions in [`app/faculty/interactions.html`](app/faculty/interactions.html)
+- Aligned the flag pill labels/descriptions in [`app/faculty/interactions.html`](site/app/faculty/interactions.html)
   to the new wording (“Disclosed help” → “Inappropriate resources”; notable → exemplary).
 
 ---
@@ -633,21 +655,21 @@ because only one artifact exists and is easy to update):
 
 ### Changed — portal theme reskinned to GitHub Primer + a self-hosted display font
 
-Promoted the [`test-summary.html`](test/test-summary.html) sandbox's new look into the live `app/` portal.
-The palette in [`app/css/styles.css`](app/css/styles.css) moved off Air Force navy/gold to a
+Promoted the [`test-summary.html`](tests/browser/test-summary.html) sandbox's new look into the live `app/` portal.
+The palette in [`app/css/styles.css`](site/app/css/styles.css) moved off Air Force navy/gold to a
 **GitHub-Primer** system — `--blue`/`--blue-lt` are now both `#0969da` (light) / `#4493f8` (dark),
 surfaces/borders/text and all four alert families adopt Primer values, and **USAFA gold is retained only
 as a restrained accent** (feedback rail). Both `:root` and `[data-theme="dark"]` were rewritten; a new
 `--text-soft` ink tone was added. Hero titles now use a **self-hosted Oswald** condensed display face —
-two woff2 subsets decoded into [`app/media/fonts/`](app/media/fonts/) and wired via `@font-face` + the
+two woff2 subsets decoded into [`app/media/fonts/`](site/app/media/fonts/) and wired via `@font-face` + the
 new `--font-display` token (applied to `.page-head h1`, the nav brand, the login title, and the lesson
 rollup title; body/UI stay on the system stack, so there's no build step and no third-party network call).
-Every `app/` page inherits this through the shared stylesheet. [`app/DESIGN.md`](app/DESIGN.md) was updated
+Every `app/` page inherits this through the shared stylesheet. [`app/DESIGN.md`](site/app/DESIGN.md) was updated
 to document the new palette, the display face, and the v3 rollup components.
 
 ### Changed — faculty lesson-summary rollup rebuilt to match the sandbox (live data)
 
-Rebuilt the lesson report rollup in [`app/faculty/interactions.html`](app/faculty/interactions.html) to the
+Rebuilt the lesson report rollup in [`app/faculty/interactions.html`](site/app/faculty/interactions.html) to the
 sandbox design, wired to real `report_data` via `summarizeReports` (no AI). New layout: a **tinted full-bleed
 header** (Oswald title + a stacked **“Submitted N/total” completion badge** + clickable **flag pills** + an
 **adaptive scope control** — a segmented control for few sections, a dropdown for many); **bordered effort +
@@ -664,9 +686,9 @@ until the analysis-output store exists — **no data-contract change is required
 
 ### Added — `app/DESIGN.md` design-system spec for the portal refactor
 
-Authored [`app/DESIGN.md`](app/DESIGN.md), a tokenized design-language document for the `app/` portal,
+Authored [`app/DESIGN.md`](site/app/DESIGN.md), a tokenized design-language document for the `app/` portal,
 following the DESIGN.md format (Google Stitch / getdesign.md): YAML front matter capturing the live
-tokens from [`app/css/styles.css`](app/css/styles.css) — the two-palette light/dark color roles, the
+tokens from [`app/css/styles.css`](site/app/css/styles.css) — the two-palette light/dark color roles, the
 em-based type scale, spacing/radius/elevation, and component compositions — followed by prose sections
 (Overview, Colors, Typography, Layout, Elevation, Components, Responsive Behavior, Known Gaps) that
 explain the *intent* behind each rule. Purpose: let a human or agent extend the UI on-brand without
@@ -676,8 +698,8 @@ hardcoded surface/status color). Documentation only — no code or DB changes.
 ### Added — `test-summary.html` rollup sandbox (synthetic data, no DB) + `test.html` is now a hub
 
 To iterate on the lesson-rollup design without a database, the old `test.html` progress-bar playground was
-renamed to [`test-progressbar.html`](test/test-progressbar.html) and [`test.html`](test/test.html) is now a small hub
-that links to the sandboxes. New [`test-summary.html`](test/test-summary.html) is a fully standalone preview
+renamed to [`test-progressbar.html`](tests/browser/test-progressbar.html) and [`test.html`](tests/browser/test.html) is now a small hub
+that links to the sandboxes. New [`test-summary.html`](tests/browser/test-summary.html) is a fully standalone preview
 (palette copied in, 24 synthetic cadets across 3 sections, no DB and no CDN) of the next rollup iteration:
 
 - **Overall-understanding gauge removed** — the radar already conveys it.
@@ -693,14 +715,14 @@ that links to the sandboxes. New [`test-summary.html`](test/test-summary.html) i
   summaries) → click a name → that student's **summary** modal → **View full report** → the full Markdown
   report. (Replaces the long scrolling list of all summaries.)
 
-These changes live only in the sandbox for now; porting to [`app/faculty/interactions.html`](app/faculty/interactions.html)
+These changes live only in the sandbox for now; porting to [`app/faculty/interactions.html`](site/app/faculty/interactions.html)
 comes after design sign-off. The demo seed already carries the third objective needed for the radar.
 
 ## 2026-06-23 — Matthew Recker
 
 ### Changed — restructured the interaction rollup into three rows + flag-driven student drill-down
 
-Reworked the faculty lesson rollup ([`app/faculty/interactions.html`](app/faculty/interactions.html)) into a
+Reworked the faculty lesson rollup ([`app/faculty/interactions.html`](site/app/faculty/interactions.html)) into a
 fixed top-to-bottom layout and removed the all-students list:
 
 - **Row 1 — Overall understanding** (all topics) as the headline gauge. The value tag is now a neutral
@@ -725,7 +747,7 @@ exercises the radar (and the odd-tile centering in row 3). Re-run the seed to re
 
 ### Docs — recorded that Node is unavailable (and uninstallable) on the dev machine
 
-Noted in `.claude/CLAUDE.md` (Tech Stack + Important Notes) and [`app/README.md`](app/README.md) that this
+Noted in `.claude/CLAUDE.md` (Tech Stack + Important Notes) and [`app/README.md`](site/app/README.md) that this
 machine has **no Node and cannot install it** — there is no `node`/`npm`/`npx`, `node --check`, eslint, or
 jest, and no build step. The frontend is hand-authored ES modules + plain CSS the browser runs directly, so
 changes are verified by **opening the pages in a browser** (`python -m http.server 8000` from the repo root),
@@ -733,7 +755,7 @@ never with a JS linter/test runner/typecheck. This is a hard environment constra
 
 ### Changed — redesigned the interaction rollup (gauges, histograms, radar, clickable flags)
 
-Rebuilt the faculty lesson-rollup ([`app/faculty/interactions.html`](app/faculty/interactions.html)) to be
+Rebuilt the faculty lesson-rollup ([`app/faculty/interactions.html`](site/app/faculty/interactions.html)) to be
 far less busy and to surface the **spread**, not just the average — a class mean of 2.5 can be "everyone
 mediocre" or "half aced it, half lost," and those need different responses. The new rollup is:
 
@@ -749,16 +771,16 @@ mediocre" or "half aced it, half lost," and those need different responses. The 
 Removed for clarity: points-awarded, self-rated understanding (we never collect it — it only appeared
 because the demo seed invents it), confidence gap, the separate "completed flow" tile (the
 submissions/`28/33 · 85%` line already shows completion), the misconception pills, and the `[placeholder]`
-AI-narrative boxes. `summarizeReports()` ([`app/js/faculty-interactions.js`](app/js/faculty-interactions.js))
+AI-narrative boxes. `summarizeReports()` ([`app/js/faculty-interactions.js`](site/app/js/faculty-interactions.js))
 now also returns a 0–5 distribution for overall understanding and per objective; new ramp tokens + `.lr-*`
-component styles live in [`app/css/styles.css`](app/css/styles.css). Styles were prototyped in `test.html`.
+component styles live in [`app/css/styles.css`](site/app/css/styles.css). Styles were prototyped in `test.html`.
 
 ### Added — synthetic seed for previewing the interaction rollup
 
 New [`supabase/seed_demo_interaction.sql`](supabase/seed_demo_interaction.sql) populates a clearly-fake
 demo interaction (`demo-rollup-sandbox`, an unpublished draft) with one synthetic `schema:1` report per
 real student in a course, so the faculty rollup (`summarizeReports()` in
-[`app/js/faculty-interactions.js`](app/js/faculty-interactions.js)) can be previewed with realistic data
+[`app/js/faculty-interactions.js`](site/app/js/faculty-interactions.js)) can be previewed with realistic data
 before any real artifact submissions exist. Run it in the Supabase SQL Editor (runs as `postgres`, so it
 bypasses the RLS rule that otherwise only lets a student write their own report). Variety (effort 0–5,
 decorrelated understanding, misconceptions from the Preflight-1 taxonomy, reading-reflection gate, honor
@@ -771,8 +793,8 @@ a one-line cascade teardown. Conforms to `INTERACTION-DATA-CONTRACT.md` (schema 
 ### Changed — rebranded the platform to **iPREP**
 
 Renamed the website's user-facing brand to **iPREP** (*interactive Pre-lesson Readiness Engagement
-Platform*). Updated the `app/` portal nav brand + footer ([`app/js/nav.js`](app/js/nav.js)), the
-login screen (now shows the full name as a tagline, [`app/login.html`](app/login.html)), every
+Platform*). Updated the `app/` portal nav brand + footer ([`app/js/nav.js`](site/app/js/nav.js)), the
+login screen (now shows the full name as a tagline, [`app/login.html`](site/app/login.html)), every
 `app/` page `<title>`, and the legacy page headers/titles (`index.html`, `admin.html`,
 `review.html`, `interactions.html`, `interactions-admin.html`, `artifact-submit.html`). The
 repository, GitHub Pages path, and CSV/JSON export filenames stay `Core_Preflights` on purpose —
@@ -783,20 +805,20 @@ existing Blackboard grade imports. Documented the brand-vs-repo distinction at t
 ### Added — interaction summaries (numeric rollups from `report_data`)
 
 Built the per-lesson **summary** that the data contract said the site computes without AI. The
-faculty report modal ([`app/faculty/interactions.html`](app/faculty/interactions.html)) now shows a
+faculty report modal ([`app/faculty/interactions.html`](site/app/faculty/interactions.html)) now shows a
 live, section-scoped rollup over every in-scope report: effort average + points + an effort 0–5
 distribution, completion, assessed-vs-self-rated understanding with the confidence gap, per-objective
 understanding bars, misconception counts, reading-reflection meaningful-rate / effort-capped count /
 sentiment / topic tags, and integrity + triage-flag tallies. All numbers are folded from
 `report_data` (schema 1) by a new pure aggregator `summarizeReports()` + fetcher `loadInteractionData()`
-in [`app/js/faculty-interactions.js`](app/js/faculty-interactions.js), coercing out-of-range/wrong-typed
+in [`app/js/faculty-interactions.js`](site/app/js/faculty-interactions.js), coercing out-of-range/wrong-typed
 LLM output defensively. Each individual report also gets a structured panel above the Markdown (effort,
 understanding, objectives, misconceptions, reflection, honor, flags, and the artifact's per-student AI
 narrative). Students now see their own effort/points on the interactions page
-([`app/js/student-data.js`](app/js/student-data.js), [`app/student/interactions.html`](app/student/interactions.html)).
+([`app/js/student-data.js`](site/app/js/student-data.js), [`app/student/interactions.html`](site/app/student/interactions.html)).
 The **free-text trend prose** that genuinely needs the AI aggregation pass — the cohort narrative,
 clustering of novel/free-text misconceptions, and reflection-theme synthesis — is rendered as labeled
-`[placeholder]` blocks pending that pipeline. Styles added to [`app/css/styles.css`](app/css/styles.css).
+`[placeholder]` blocks pending that pipeline. Styles added to [`app/css/styles.css`](site/app/css/styles.css).
 
 ### Added — generalized artifact receiver (`artifact-submit.html`)
 
@@ -816,7 +838,7 @@ receiver, so artifacts deployed before the rename keep working. Updated the refe
 
 ### Added — locked v1 data contract for lesson-artifact submissions
 
-Wrote [`INTERACTION-DATA-CONTRACT.md`](INTERACTION-DATA-CONTRACT.md): the frozen contract
+Wrote [`INTERACTION-DATA-CONTRACT.md`](docs/contracts/INTERACTION-DATA-CONTRACT.md): the frozen contract
 between a claude.ai lesson artifact and the site's static receiver. Pins a generalized
 permanent endpoint (`artifact-submit.html` at the repo root, excluded from the `app/` refactor;
 legacy `interaction-submit.html` stays as a hash-preserving redirect so deployed artifacts
@@ -853,14 +875,14 @@ index for rollups. Apply via the Supabase SQL editor / migration runner.
 Settled the interaction-analysis data contract: the aggregator is fed the plain `report_markdown`
 (no structured `report_data`/view route for now). Name + student ID + score is **not treated as
 PII**, so reports are exported as-is — protection is the existing faculty auth + RLS, not content
-redaction. New function in [`app/js/faculty-interactions.js`](app/js/faculty-interactions.js):
+redaction. New function in [`app/js/faculty-interactions.js`](site/app/js/faculty-interactions.js):
 
 - `buildLessonCorpus(ctx, interactionId)` — concatenates every report for one lesson (directors:
   all sections; instructors: their own; RLS independently gates reads) into one Markdown document,
   one block per student labeled with name · student ID · section, ordered by section then ID.
 
 A new **Export for analysis ⬇** button in the lesson-report modal
-([`app/faculty/interactions.html`](app/faculty/interactions.html)) downloads
+([`app/faculty/interactions.html`](site/app/faculty/interactions.html)) downloads
 `<interaction-id>-reports.md` for handoff to the aggregator.
 
 (An earlier name-redacting `redactReport()` step was built and then removed once the PII
@@ -868,8 +890,8 @@ determination made it unnecessary — keeping the export simple.)
 
 ### Added — clickable interaction completion with a per-student report viewer
 
-On the faculty interactions page ([`app/faculty/interactions.html`](app/faculty/interactions.html) +
-[`app/js/faculty-interactions.js`](app/js/faculty-interactions.js)), the completion percentage and
+On the faculty interactions page ([`app/faculty/interactions.html`](site/app/faculty/interactions.html) +
+[`app/js/faculty-interactions.js`](site/app/js/faculty-interactions.js)), the completion percentage and
 each per-section progress chip are now **clickable** (keyboard-accessible too) and open a redesigned
 **lesson report** modal:
 
@@ -884,12 +906,12 @@ The data layer now returns `doneStudentIds` per interaction (the set of students
 report), replacing the old dropdown-driven viewer that could only page through students one at a
 time. Implements item C of the day's plan; the report viewing/completion half is fully functional
 now, while the aggregate-summary body stays stubbed pending D. A small `.clickable` affordance was
-added to [`app/css/styles.css`](app/css/styles.css).
+added to [`app/css/styles.css`](site/app/css/styles.css).
 
 ### Changed — faculty dashboard roll-up is now interactions-only, split by ownership
 
-Reworked the faculty dashboard ([`app/faculty/dashboard.html`](app/faculty/dashboard.html) +
-[`app/js/faculty-data.js`](app/js/faculty-data.js)) toward the interactions-first test:
+Reworked the faculty dashboard ([`app/faculty/dashboard.html`](site/app/faculty/dashboard.html) +
+[`app/js/faculty-data.js`](site/app/js/faculty-data.js)) toward the interactions-first test:
 
 - The section roll-up no longer shows preflight assignment progress. Each section card now lists
   **per-published-interaction completion** (`done/total` per lesson) instead. Preflight grading is
@@ -904,7 +926,7 @@ Reworked the faculty dashboard ([`app/faculty/dashboard.html`](app/faculty/dashb
 
 ### Added — work plan for the next portal iteration
 
-Wrote [`app/PLAN-2026-06-22.md`](app/PLAN-2026-06-22.md): a dependency-ordered plan to push the
+Wrote [`app/PLAN-2026-06-22.md`](site/app/PLAN-2026-06-22.md): a dependency-ordered plan to push the
 faculty portal toward a lesson-interactions-first experience. Covers (A/B) splitting the section
 roll-up into "your sections" vs. "all other sections" and stripping preflight data from it in
 favor of interactions only, (C) a clickable interaction completion list with per-student report
@@ -927,8 +949,8 @@ fill the viewport and the footer sits at the bottom — while still flowing belo
 ### Added — native in-app interaction manager
 
 Ported the interaction CRUD off the legacy `interactions-admin.html` into the portal:
-[`app/faculty/interactions.html`](app/faculty/interactions.html) +
-[`app/js/faculty-interactions.js`](app/js/faculty-interactions.js) now do add / edit /
+[`app/faculty/interactions.html`](site/app/faculty/interactions.html) +
+[`app/js/faculty-interactions.js`](site/app/js/faculty-interactions.js) now do add / edit /
 publish / unpublish / delete, per-section completion, and the per-student report viewer —
 all inside the app shell (nav, theme, course switcher). Directors manage (incl. drafts);
 instructors get a read-only published view scoped to their sections. It also honors the
@@ -953,7 +975,7 @@ the director a one-click link that lands on the manager with everything filled i
 just review and Save. Director-gated (instructors see a notice), values are only prefilled
 (never auto-written), and the query is stripped from the URL after opening so a refresh
 won't re-trigger. Full spec + a copy-paste builder for the artifact skill is in
-[`INTERACTION-PREFILL-LINK.md`](INTERACTION-PREFILL-LINK.md), including the load-bearing rule
+[`INTERACTION-PREFILL-LINK.md`](docs/contracts/INTERACTION-PREFILL-LINK.md), including the load-bearing rule
 that the link's `id` slug must match the artifact's `#i=<slug>` report callback.
 **Re-using an existing slug** opens the listing in *Update — review & save* mode and patches
 it (no duplicate-id error); omitted params keep their current values — so regenerating an
@@ -977,7 +999,7 @@ account dropdown header, **course** → the course switcher, **success/warning/e
 any page depth), **submissions/grades/class/completion** → faculty dashboard, **due-soon/
 done/progress/rocket** → student dashboard, and the physics set **atom/bolt/wave/magnet** →
 a decorative motif under the login card. Inventory tracked in
-[`app/media/icons/ICONS.md`](app/media/icons/ICONS.md) (name · description · search terms ·
+[`app/media/icons/ICONS.md`](site/app/media/icons/ICONS.md) (name · description · search terms ·
 status · where-used) — the source of truth for adding/retiring icons. The old AI
 search-prompt file was removed.
 
@@ -988,7 +1010,7 @@ toggle and user chip pinned right (backgrounds/borders removed, subtle hover onl
 
 The portal icons are all from **Freepik on Flaticon**, whose free license requires a visible
 credit. Added a shared site footer (rendered by `renderNav` → `renderFooter` in
-[`app/js/nav.js`](app/js/nav.js), styled in [`app/css/styles.css`](app/css/styles.css)) that
+[`app/js/nav.js`](site/app/js/nav.js), styled in [`app/css/styles.css`](site/app/css/styles.css)) that
 appears on every page displaying the icons, linking to
 <https://www.flaticon.com/authors/freepik>. Login/router pages use only emoji, so they carry
 no footer.
@@ -1000,12 +1022,12 @@ Restyled the `app/` top navigation after Featurebase's clean aesthetic: a light,
 or drop shadow), muted medium-weight links that darken into a soft pill on hover/active, a
 subtle bordered brand mark, gradient-avatar user chip, and rounded controls. Added
 `--nav-*` theme tokens with a dark-translucent variant so it reads well in both modes.
-Pure CSS in [`app/css/styles.css`](app/css/styles.css) — no markup changes.
+Pure CSS in [`app/css/styles.css`](site/app/css/styles.css) — no markup changes.
 
 ### Added — Roster & Sections ported into the `app/` portal
 
-Director tooling now lives natively in the portal. New [`app/faculty/roster.html`](app/faculty/roster.html)
-+ [`app/js/faculty-roster.js`](app/js/faculty-roster.js) combine the legacy Roster and
+Director tooling now lives natively in the portal. New [`app/faculty/roster.html`](site/app/faculty/roster.html)
++ [`app/js/faculty-roster.js`](site/app/js/faculty-roster.js) combine the legacy Roster and
 Sections tabs into one page with **Students / Sections** sub-tabs:
 
 - **Students:** drag-&-drop CSV upload (validates `student_id` 3000xxxxxx + `[MT][135][A-D]`
@@ -1028,13 +1050,13 @@ Still legacy (next): Assignments builder, Instructor management, Export.
 Second refactor pass: the two daily-use faculty tools now live natively in the portal
 shell (top nav, theme, course switcher), no longer requiring the legacy `admin.html`.
 
-- [`app/faculty/grade.html`](app/faculty/grade.html) + [`app/js/faculty-grade.js`](app/js/faculty-grade.js)
+- [`app/faculty/grade.html`](site/app/faculty/grade.html) + [`app/js/faculty-grade.js`](site/app/js/faculty-grade.js)
   — the full grading workflow: assignment + section pickers, the 3-state credit toggle
   (full → warn → zero), per-question feedback, "only flagged" filter, per-student totals,
   save-draft / finalize-&-publish, reopen, and grant/edit/remove extensions. Same
   `scores.question_scores` shape, `is_finalized` semantics, and `extensions` writes as the
   legacy tab — a faithful port, restyled with theme tokens and delegated events.
-- [`app/faculty/report.html`](app/faculty/report.html) + [`app/js/faculty-report.js`](app/js/faculty-report.js)
+- [`app/faculty/report.html`](site/app/faculty/report.html) + [`app/js/faculty-report.js`](site/app/js/faculty-report.js)
   — submission summary, "did not submit" list, and per-question cards showing the
   `analysis_report` class summaries (from `/preflight-analyze`) plus raw responses with
   show-names, random-10 sampling, and copy-to-clipboard.
@@ -1046,7 +1068,7 @@ Still legacy (next passes): Assignments builder, Roster, Sections, Instructors, 
 
 ### Added — `app/` role-based portal (foundation pass)
 
-A coherent, role-aware rewrite of the front end living in a new [`app/`](app/) subfolder,
+A coherent, role-aware rewrite of the front end living in a new [`app/`](site/app/) subfolder,
 built to be promoted to the repo root later. **No database or RLS changes.** This first
 ("foundation") pass ships the shell, theming, navigation, both dashboards, and the
 interaction views; the heavy grading / roster / sections / assignment-builder / export
@@ -1056,7 +1078,7 @@ tools stay on the legacy pages and are reached via out-links until ported in a l
 `esc()` helper, had no shared module, no dashboard landing, and a single light-only theme.
 The portal unifies all of that behind one auth bootstrap and a top nav with light/dark mode.
 
-**Shared shell ([`app/js/`](app/js/)):**
+**Shared shell ([`app/js/`](site/app/js/)):**
 - `config.js` — copy of the root client (sets `window.db`); kept identical so paths don't
   change after promotion. `supabase.js` re-exports it as an ES module.
 - `auth.js` — one `bootstrap({ require })` every page calls: restores the persisted session
@@ -1073,21 +1095,20 @@ The portal unifies all of that behind one auth bootstrap and a top nav with ligh
 - `student-data.js` / `faculty-data.js` — batched, no-N+1 dashboard queries over existing
   tables only.
 
-**Pages:** [`app/login.html`](app/login.html) (unified cadet-ID-or-email login),
-[`app/index.html`](app/index.html) (role router), student
-[dashboard](app/student/dashboard.html) / [assignments](app/student/assignments.html)
-(ported submit+review engine) / [interactions](app/student/interactions.html), and faculty
-[dashboard](app/faculty/dashboard.html) (per-section submission/grading roll-up) /
-[interactions](app/faculty/interactions.html) (completion roll-up + per-student report viewer).
+**Pages:** [`app/login.html`](site/app/login.html) (unified cadet-ID-or-email login),
+[`app/index.html`](site/app/index.html) (role router), student
+[dashboard](site/app/student/dashboard.html) / [assignments](site/app/student/assignments.html)
+(ported submit+review engine) / [interactions](site/app/student/interactions.html), and faculty
+[dashboard](site/app/faculty/dashboard.html) (per-section submission/grading roll-up) /
+[interactions](site/app/faculty/interactions.html) (completion roll-up + per-student report viewer).
 
-**Design system:** [`app/css/styles.css`](app/css/styles.css) is the legacy sheet with its
+**Design system:** [`app/css/styles.css`](site/app/css/styles.css) is the legacy sheet with its
 ~14 hardcoded surface/alert colors tokenized into CSS variables plus a `[data-theme="dark"]`
 set, extended with top-nav, stat-tile, and roll-up components.
 
-**Icons:** [`app/media/icons/ICON-SEARCH-PROMPT.md`](app/media/icons/ICON-SEARCH-PROMPT.md)
-is a ready-to-run prompt to source ~35 cohesive **Lineal Color** icons; the UI references
-their filenames and falls back to emoji until they're dropped in. See
-[`app/README.md`](app/README.md) for the structure and go-live steps.
+**Icons:** [`app/media/icons/ICONS.md`](site/app/media/icons/ICONS.md) documents the
+cohesive icon set; the UI references those filenames and falls back to emoji when needed. See
+[`app/README.md`](site/app/README.md) for the structure and go-live steps.
 
 ### Added — Lesson Interactions feature
 
@@ -1110,11 +1131,11 @@ and manage these lessons; an AI skill will later summarize trends by section.
   read all; instructors read their own sections.
 
 **New pages:**
-- [`interactions-admin.html`](interactions-admin.html) — director/admin page to add/edit
+- [`interactions-admin.html`](site/interactions-admin.html) — director/admin page to add/edit
   (modal), publish, delete lessons, and view submissions. Submissions are picked by
   section → student dropdown (scales to ~1000 students; fetches one report at a time) and
   rendered as sanitized Markdown.
-- [`interactions.html`](interactions.html) — student-facing list of published lessons with
+- [`interactions.html`](site/interactions.html) — student-facing list of published lessons with
   **Launch** links to the artifacts.
 - [`interaction-submit.html`](interaction-submit.html) — receives the artifact's
   `#i=<slug>&r=<lz-string payload>` URL, requires student login, and upserts the report.

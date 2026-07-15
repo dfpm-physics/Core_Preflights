@@ -68,7 +68,7 @@ broad `service_role` key that `/preflight-analyze` uses, so the two never interf
 
 ## Using it
 
-- The **`interaction-backfill`** skill ([`../../.claude/skills/interaction-backfill/SKILL.md`](../../.claude/skills/interaction-backfill/SKILL.md))
+- The **`interaction-backfill`** skill ([`../../.ai/skills/interaction-backfill/SKILL.md`](../../.ai/skills/interaction-backfill/SKILL.md))
   drives `interaction_reports.py` to backfill structured `report_data` onto interaction reports that
   only have `report_markdown`. See that skill for the full workflow; quick commands:
   ```
