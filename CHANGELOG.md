@@ -8,6 +8,21 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-15 — Casey Pellizzari via Codex
+
+### Fixed — restored the shared operating brief and removed agent runbook drift
+
+Restored the authoritative root `AGENTS.md` after merge commit `26591e3` resolved two independently
+added versions of that file as an empty deletion. The collaborator branch had added Codex discovery
+skills under `.agents/skills/`, but their duplicated preflight runbook still prescribed a
+Codex-specific config path and generic yellow feedback that conflicted with the current canonical
+grading rules.
+
+Kept all four Codex skill entry points, converted them to thin pointers to the canonical
+`.claude/skills/` runbooks, and removed the redundant `.agents` config template. This preserves
+native Codex discovery while ensuring Claude and Codex use the same tailored-feedback,
+per-instructor aggregation, credential, database-safety, and verification rules.
+
 ## 2026-07-09 — Casey Pellizzari via Codex
 
 ### Fixed — corrected Physics 215 v12 source lesson list
