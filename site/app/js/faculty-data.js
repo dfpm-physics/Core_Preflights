@@ -62,7 +62,7 @@ export async function loadFacultyDashboard(ctx) {
   // 2) Roster + published interactions (with due dates) + instructor names, in parallel.
   const [{ data: studentsRaw }, { data: interRaw }] = await Promise.all([
     db.from('students').select('student_id, section_id').in('section_id', sectionIds),
-    db.from('interactions').select('id, title, due_date, created_at')
+    db.from('interactions').select('id, title, due_date_m, due_date_t, created_at')
       .eq('course_id', course).eq('is_published', true),
   ]);
   const students = studentsRaw || [];
@@ -85,10 +85,11 @@ export async function loadFacultyDashboard(ctx) {
   //    "active"/today lesson is the next one due; if all are past, the most recent; if no due
   //    dates are set at all, the newest by creation (migration 015 / the open due-date question
   //    in INTERACTION-AGGREGATION.md / the redesign summary).
-  const effDate = it => +new Date(it.due_date || it.created_at || 0);
+  const effDue  = it => it.due_date_m || it.due_date_t || null;   // M/T-aware effective due date
+  const effDate = it => +new Date(effDue(it) || it.created_at || 0);
   const lessons = (interRaw || []).slice().sort((a, b) => effDate(a) - effDate(b)).map(it => {
     const num = lessonNumber(it.id, it.title);
-    return { id: it.id, title: it.title, due_date: it.due_date,
+    return { id: it.id, title: it.title, due_date: effDue(it),
       num, short: num != null ? String(num).padStart(2, '0') : null };
   });
   // Fill a short label for un-numbered lessons from their position so chips never read blank.

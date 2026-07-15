@@ -151,6 +151,18 @@
     </div>
   </div>
 
+  <!-- Due-date reconciliation: shown only when both attached components already carry dates. -->
+  <div class="modal-backdrop" id="due-modal">
+    <div class="modal" style="max-width:470px">
+      <div class="modal-head"><h2>Which due dates?</h2></div>
+      <p style="margin:0 0 12px">Both attached components already have due dates. Which set should this lesson — and all of its parts — use?</p>
+      <div class="lb-del-actions" style="flex-direction:column;align-items:stretch;gap:8px">
+        <button class="btn btn-secondary" id="due-pick-pf"></button>
+        <button class="btn btn-secondary" id="due-pick-i"></button>
+      </div>
+    </div>
+  </div>
+
   <!-- Student preview (questions only — never the interactive piece). -->
   <div class="modal-backdrop" id="preview-modal">
     <div class="modal" style="max-width:680px">
@@ -496,6 +508,7 @@
       document.getElementById('f-pf-refpages').value = model.preflight.reference_pages;
       document.getElementById('f-pf-readlink').value = model.preflight.reading_link;
       document.getElementById('f-i-id').value    = model.interaction.id;
+      document.getElementById('f-i-id').disabled = model.interaction.source === 'existing';
       document.getElementById('f-i-title').value = model.interaction.title;
       document.getElementById('f-i-url').value   = model.interaction.artifact_url;
       document.getElementById('f-i-desc').value  = model.interaction.description;
@@ -505,12 +518,16 @@
       applyComponentVisibility();
       updatePolicyAvailability();     // also refreshes the policy segmented control + hint
       renderQuestions();
-      // Compose/attach of an existing preflight with no questions loaded yet → fetch them so the
-      // director can edit (edit-mode already hydrated model.questions from the lesson's assignment).
+      // Compose/attach of an existing component with nothing loaded yet → fetch it so the director
+      // can edit (edit-mode already hydrated these from the lesson's rows).
       if (model.preflight.source === 'existing' && model.preflight.existingId && !model.questions.length) {
         loadExistingPreflight(model.preflight.existingId);
       }
+      if (model.interaction.source === 'existing' && model.interaction.existingId && !model.interaction.artifact_url) {
+        loadExistingInteraction(model.interaction.existingId);
+      }
       document.getElementById('lesson-modal').classList.add('open');
+      ensureLessonDueDates();          // adopt component due dates when the lesson has none (may prompt)
     }
 
     function closeModal() { document.getElementById('lesson-modal').classList.remove('open'); }
@@ -529,13 +546,14 @@
     }
     function applyComponentVisibility() {
       const ps = model.preflight.source, is = model.interaction.source;
-      // The question editor (lb-pf-new) shows for a new preflight OR an existing one that's been
-      // chosen — an attached existing assignment is editable, not just referenced.
+      // Both editors show for a new component OR an existing one that's been chosen — attached
+      // existing assignments/interactions are editable, not just referenced.
       const pfEditor = ps === 'new' || (ps === 'existing' && !!model.preflight.existingId);
+      const iEditor  = is === 'new' || (is === 'existing' && !!model.interaction.existingId);
       document.getElementById('lb-pf-existing').style.display = ps === 'existing' ? '' : 'none';
       document.getElementById('lb-pf-new').style.display      = pfEditor ? '' : 'none';
       document.getElementById('lb-i-existing').style.display  = is === 'existing' ? '' : 'none';
-      document.getElementById('lb-i-new').style.display       = is === 'new'      ? '' : 'none';
+      document.getElementById('lb-i-new').style.display       = iEditor ? '' : 'none';
     }
     function availablePolicies() {
       const pf = model.preflight.source !== 'none', it = model.interaction.source !== 'none';
@@ -563,6 +581,9 @@
     }
     function setInteractionSource(src) {
       model.interaction.source = src;
+      // The interaction id (artifact `#i=` slug) is editable for a new interaction, fixed for an
+      // attached existing one.
+      document.getElementById('f-i-id').disabled = (src === 'existing' && !!model.interaction.existingId);
       updateSourceSegs(); applyComponentVisibility(); updatePolicyAvailability();
     }
     // The two "use existing" dropdowns, filled from the full course lists loaded by loadManager.
@@ -588,11 +609,14 @@
 
     // Reference-PDF dropdown, fed by the committed RAG manifest. "+ Add new…" reveals a free-text
     // field for a one-off path (stored only on this assignment until it's added to the manifest).
+    // Dropdown shows just the base filename (no directory, no extension); the stored value stays the
+    // full path the grader resolves under textbook_base_path.
+    const ragLabel = (p) => (p.split('/').pop() || p).replace(/\.[^.]+$/, '');
     function renderRefPdfSelect() {
       const cur = model.preflight.reference_pdf || '';
       const inManifest = ragManifest.includes(cur);
       const opts = ['<option value="">— none —</option>']
-        .concat(ragManifest.map(p => `<option value="${esc(p)}">${esc(p)}</option>`));
+        .concat(ragManifest.map(p => `<option value="${esc(p)}">${esc(ragLabel(p))}</option>`));
       opts.push('<option value="__add__">+ Add new reference…</option>');
       const sel = document.getElementById('f-pf-refpdf-sel');
       sel.innerHTML = opts.join('');
@@ -635,6 +659,68 @@
       document.getElementById('f-pf-readlink').value = model.preflight.reading_link;
       renderRefPdfSelect();
       renderQuestions();
+      applyComponentVisibility();
+    }
+
+    // When a lesson has no due dates but its attached components do, adopt them: use whichever
+    // source has dates; if BOTH do, prompt for which set. Runs on compose and on opening an
+    // already-combined lesson that still lacks dates. Never overrides dates the director set.
+    const dstr = (v) => v ? String(v).slice(0, 10) : '';
+    async function ensureLessonDueDates() {
+      const mEl = document.getElementById('f-due-m'), tEl = document.getElementById('f-due-t');
+      if (mEl.value || tEl.value) return;
+      const pfId = model.preflight.source   === 'existing' ? model.preflight.existingId   : null;
+      const iId  = model.interaction.source === 'existing' ? model.interaction.existingId : null;
+      if (!pfId && !iId) return;
+      const [pf, it] = await Promise.all([
+        pfId ? L.getAssignment(pfId)  : Promise.resolve(null),
+        iId  ? L.getInteraction(iId)  : Promise.resolve(null),
+      ]);
+      const pfM = dstr(pf?.due_date_m), pfT = dstr(pf?.due_date_t);
+      const itM = dstr(it?.due_date_m), itT = dstr(it?.due_date_t);
+      const pfHas = pfM || pfT, itHas = itM || itT;
+      let m = '', t = '';
+      if (pfHas && itHas) {
+        const pick = await promptDueDateChoice({ pfM, pfT, itM, itT });
+        if (pick === 'preflight')        { m = pfM; t = pfT; }
+        else if (pick === 'interaction') { m = itM; t = itT; }
+        else return;
+      } else if (pfHas) { m = pfM; t = pfT; }
+      else if (itHas)   { m = itM; t = itT; }
+      else return;
+      if (mEl.value || tEl.value) return;   // re-check after the await (director may have typed)
+      mEl.value = m; tEl.value = t;
+    }
+    function promptDueDateChoice({ pfM, pfT, itM, itT }) {
+      return new Promise(resolve => {
+        const modal = document.getElementById('due-modal');
+        const pfBtn = document.getElementById('due-pick-pf');
+        const iBtn  = document.getElementById('due-pick-i');
+        const fmt = (m, t) => `M ${m || '—'} · T ${t || '—'}`;
+        pfBtn.textContent = `Use preflight dates · ${fmt(pfM, pfT)}`;
+        iBtn.textContent  = `Use interaction dates · ${fmt(itM, itT)}`;
+        const done = (val) => { modal.classList.remove('open'); pfBtn.onclick = null; iBtn.onclick = null; resolve(val); };
+        pfBtn.onclick = () => done('preflight');
+        iBtn.onclick  = () => done('interaction');
+        modal.classList.add('open');
+      });
+    }
+
+    // Attaching an existing interaction loads its title/URL/description into the EDITABLE fields;
+    // saving updates that same interaction row (its id — the artifact `#i=` slug — stays fixed).
+    async function loadExistingInteraction(id) {
+      model.interaction.existingId = id;
+      const idEl = document.getElementById('f-i-id');
+      if (!id) { idEl.disabled = false; applyComponentVisibility(); return; }
+      const it = await L.getInteraction(id);
+      model.interaction.id = id;
+      model.interaction.title = it?.title || '';
+      model.interaction.artifact_url = it?.artifact_url || '';
+      model.interaction.description = it?.description || '';
+      idEl.value = id; idEl.disabled = true;          // existing PK — not editable
+      document.getElementById('f-i-title').value = model.interaction.title;
+      document.getElementById('f-i-url').value   = model.interaction.artifact_url;
+      document.getElementById('f-i-desc').value  = model.interaction.description;
       applyComponentVisibility();
     }
 
@@ -722,12 +808,19 @@
             <input type="number" min="0" step="0.1" data-q="${i}" data-f="points" value="${q.points ?? 1}"></div>
           ${extra}
           <div class="field" style="margin-bottom:0"><label>Question figure (optional)</label>
-            <div class="lb-figdrop" data-figdrop="${i}">
-              ${q.figure_url ? `<img src="${esc(q.figure_url)}" alt="figure for question ${i + 1}" class="lb-figthumb">` : ''}
-              <div class="lb-fighint">${q.figure_url ? 'Drop a new image to replace it' : 'Drag &amp; drop an image here'} · <button type="button" class="btn btn-ghost btn-sm" data-figpick="${i}">choose file</button></div>
+            <div class="lb-figdrop ${q.figure_url ? 'has-img' : ''}" data-figdrop="${i}">
+              ${q.figure_url ? `
+                <img src="${esc(q.figure_url)}" alt="figure for question ${i + 1}" class="lb-figthumb">
+                <button type="button" class="lb-figx" data-figremove="${i}" title="Remove image">×</button>
+                <div class="lb-figreplace">Drop a new image to replace</div>` : `
+                <div class="lb-figcta">
+                  <span class="lb-figicon" aria-hidden="true">🖼️</span>
+                  <span>Drag &amp; drop an image here, or <button type="button" class="lb-figbrowse" data-figpick="${i}">browse</button></span>
+                  <span class="lb-fighint">PNG · JPG · GIF · WEBP · SVG, up to 5&nbsp;MB</span>
+                </div>`}
               <input type="file" accept="image/*" data-figfile="${i}" hidden>
             </div>
-            <input type="url" data-q="${i}" data-f="figure_url" value="${esc(q.figure_url || '')}" placeholder="https://…  (auto-filled after an upload, or paste a link)" style="margin-top:6px"></div>
+            <input type="url" data-q="${i}" data-f="figure_url" value="${esc(q.figure_url || '')}" placeholder="…or paste an image URL" style="margin-top:6px"></div>
         </div>`;
       }).join('');
     }
@@ -761,7 +854,7 @@
       backdrop.addEventListener('change', (e) => {
         const t = e.target;
         if (t.id === 'f-pf-pick')       { loadExistingPreflight(t.value); return; }
-        if (t.id === 'f-i-pick')        { model.interaction.existingId = t.value; return; }
+        if (t.id === 'f-i-pick')        { loadExistingInteraction(t.value); return; }
         if (t.id === 'f-pf-refpdf-sel') { handleRefSelect(t.value); return; }
         if (t.dataset.figfile != null)  { const f = t.files?.[0]; if (f) handleFigureFile(+t.dataset.figfile, f); return; }
       });
@@ -781,6 +874,8 @@
         const qrm  = e.target.closest('[data-qrm]');  if (qrm)  { model.questions.splice(+qrm.dataset.qrm, 1); renderQuestions(); return; }
         const figpick = e.target.closest('[data-figpick]');
         if (figpick) { backdrop.querySelector(`[data-figfile="${figpick.dataset.figpick}"]`)?.click(); return; }
+        const figrm = e.target.closest('[data-figremove]');
+        if (figrm) { model.questions[+figrm.dataset.figremove].figure_url = ''; renderQuestions(); return; }
       });
 
       // Native drag-and-drop image upload onto a question's figure box → Supabase Storage.
@@ -873,8 +968,9 @@
       if (iSrc === 'new') {
         if (!/^[a-z0-9-]+$/.test((inter.id || '').trim())) return fail('Interaction id must be lowercase letters, numbers, and hyphens only.');
         if (!(inter.artifact_url || '').trim()) return fail('Enter the interaction URL.');
-      } else if (iSrc === 'existing' && !inter.existingId) {
-        return fail('Select an existing interaction, or set the interaction to None.');
+      } else if (iSrc === 'existing') {
+        if (!inter.existingId) return fail('Select an existing interaction, or set the interaction to None.');
+        if (!(inter.artifact_url || '').trim()) return fail('Enter the interaction URL.');
       }
 
       const pf = model.preflight;
@@ -899,7 +995,10 @@
               reference_pages: (pf.reference_pages || '').trim() || null,
               reading_link:    (pf.reading_link    || '').trim() || null },
         interaction: iSrc === 'none' ? { source: 'none' }
-          : iSrc === 'existing' ? { source: 'existing', existingId: inter.existingId }
+          : iSrc === 'existing' ? { source: 'existing', existingId: inter.existingId,
+              title: (inter.title || '').trim() || null,
+              artifact_url: (inter.artifact_url || '').trim() || null,
+              description: (inter.description || '').trim() || null }
           : { source: 'new', id: inter.id.trim(), title: (inter.title || '').trim() || null,
               artifact_url: inter.artifact_url.trim(), description: (inter.description || '').trim() || null },
       };

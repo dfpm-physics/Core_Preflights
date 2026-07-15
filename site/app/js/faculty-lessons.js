@@ -117,6 +117,15 @@ export async function saveLesson(model, editingId) {
   const it = model.interaction || { source: 'none' };
   let preflight_id = null, interaction_id = null;
 
+  // Due dates flow from the lesson onto every component so they all share one deadline. Interactions
+  // use M/T only (migration 020); assignments additionally keep the legacy NOT-NULL `due_date`.
+  const lessonM = model.due_date_m || null, lessonT = model.due_date_t || null;
+  const hasDates = !!(lessonM || lessonT);
+  const interactionDates = hasDates ? { due_date_m: lessonM, due_date_t: lessonT } : {};
+  const assignmentDates  = hasDates
+    ? { due_date_m: lessonM, due_date_t: lessonT, due_date: lessonM || lessonT }
+    : {};
+
   // 1) Preflight component.
   if (pf.source === 'new') {
     const asgnId = preflightIdFor(id);
@@ -144,18 +153,20 @@ export async function saveLesson(model, editingId) {
     // Attached existing preflights are EDITABLE: write the revised questions + reference fields back
     // onto that same assignment, preserving its own title / publish state / due dates (a plain
     // UPDATE touches only these columns). Skip if no questions were loaded (avoids wiping the row).
+    const upd = { ...assignmentDates };                // sync the shared due dates onto the assignment
     if (Array.isArray(pf.questions) && pf.questions.length) {
-      const { error } = await db.from('assignments').update({
-        questions:       pf.questions,
-        reference_pdf:   pf.reference_pdf   ?? null,
-        reference_pages: pf.reference_pages ?? null,
-        reading_link:    pf.reading_link    ?? null,
-      }).eq('id', pf.existingId);
+      upd.questions       = pf.questions;
+      upd.reference_pdf   = pf.reference_pdf   ?? null;
+      upd.reference_pages = pf.reference_pages ?? null;
+      upd.reading_link    = pf.reading_link    ?? null;
+    }
+    if (Object.keys(upd).length) {
+      const { error } = await db.from('assignments').update(upd).eq('id', pf.existingId);
       if (error) return { error };
     }
   }
 
-  // 2) Interaction component.
+  // 2) Interaction component (M/T due dates only — migration 020).
   if (it.source === 'new') {
     const { error } = await db.from('interactions').upsert({
       id: it.id,
@@ -164,12 +175,24 @@ export async function saveLesson(model, editingId) {
       description: it.description,
       artifact_url: it.artifact_url,
       is_published,
+      ...interactionDates,
     }, { onConflict: 'id' });
     if (error) return { error };
     interaction_id = it.id;
   } else if (it.source === 'existing') {
     if (!it.existingId) return { error: { message: 'Select an existing interaction.' } };
-    interaction_id = it.existingId;                  // reference only — never modified here
+    interaction_id = it.existingId;
+    // Attached existing interactions are EDITABLE: update title/url/description + the shared due
+    // dates on that same row, preserving its id (the artifact `#i=` slug), course, and publish
+    // state. title is NOT NULL, so only overwrite it when a non-empty value is provided.
+    const upd = { ...interactionDates };
+    if (it.title && it.title.trim()) upd.title = it.title.trim();
+    if (it.artifact_url !== undefined) upd.artifact_url = it.artifact_url || null;
+    if (it.description !== undefined) upd.description = it.description || null;
+    if (Object.keys(upd).length) {
+      const { error } = await db.from('interactions').update(upd).eq('id', it.existingId);
+      if (error) return { error };
+    }
   }
 
   // 3) The lesson row itself. Insert on create (surfaces a duplicate-slug 23505); update on edit.
@@ -233,7 +256,17 @@ export async function uploadFigure(file) {
  *  student-view Preview can render it. The picker list omits the heavy questions blob. */
 export async function getAssignment(id) {
   const { data } = await db.from('assignments')
-    .select('title, questions, reference_pdf, reference_pages, reading_link')
+    .select('title, questions, reference_pdf, reference_pages, reading_link, due_date_m, due_date_t')
+    .eq('id', id).maybeSingle();
+  return data || null;
+}
+
+/** Fetch an existing interaction's editable fields so the lesson editor can load and revise it
+ *  (attached existing interactions are editable, like preflights). Tolerates a pre-migration-020
+ *  schema (no due_date_m/t columns) by falling back to the legacy single due_date. */
+export async function getInteraction(id) {
+  const { data } = await db.from('interactions')
+    .select('title, artifact_url, description, due_date_m, due_date_t')
     .eq('id', id).maybeSingle();
   return data || null;
 }

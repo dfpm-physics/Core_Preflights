@@ -10,6 +10,31 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-15 — Matthew Recker via Claude
 
+### Changed — interactions get M/T due dates; lesson syncs one deadline across components
+
+**Migration `020_interaction_mt_due_dates.sql`** replaces the single `interactions.due_date`
+(migration 015) with `due_date_m` / `due_date_t` (backfilled from the old value, then dropped) so an
+interaction carries the same M-day/T-day shape as assignments and lessons. **Applied to the live DB.**
+
+The lesson creator now **reconciles due dates when combining sources**: if only one attached
+component has dates, the lesson adopts them; if **both** do, a small dialog asks which set to use;
+opening an already-combined lesson that still lacks dates runs the same resolution. On save, the
+chosen dates are **synced onto every component** — the lesson, its preflight assignment
+(`due_date_m/t` + the legacy NOT-NULL `due_date`), and its interaction (`due_date_m/t`) — so they
+always share one deadline. Updated all `interactions.due_date` readers/writers to M/T: the faculty
+dashboard spotlight ([`faculty-data.js`](site/app/js/faculty-data.js), a minimal swap to
+`due_date_m || due_date_t`) and the standalone interactions tool
+([`faculty-interactions.js`](site/app/js/faculty-interactions.js) +
+[`interactions.html`](site/app/faculty/interactions.html), whose single date field now sets both M
+and T until that tool is retired in favour of the lesson creator).
+
+### Changed — design sandboxes (`tests/browser/`) are director-gated + load via `index.html`
+
+Added `tests/browser/guard.js`, a client-side gate included by every sandbox page: anonymous users
+are redirected to the app login, signed-in non-directors get an "access denied" message, and the
+page is hidden until the check passes (no content flash). Renamed the sandbox menu to
+`index.html` (so the directory loads without typing a filename); `test.html` now redirects to it.
+
 ### Added — drag-and-drop lesson composer + orphan content on the Lessons page
 
 The faculty **Lessons** page ([`site/app/faculty/lessons.html`](site/app/faculty/lessons.html) +
@@ -20,6 +45,18 @@ interaction into the two drop boxes (or click a card), then **Create lesson** op
 prefilled with those references, a suggested slug/number/title, and the matching allowed mode. Uses
 native HTML5 drag-and-drop (no library); `loadManager` already annotates each row's `ownedBy`, so
 orphans are just the un-owned rows.
+
+### Changed — lesson-creator polish (figures, interaction editing, RAG labels)
+
+Follow-up refinements to the lesson creator:
+- **Figures:** the drop zone was restyled (clear empty/hover/drag/uploading states, larger preview)
+  and gained a **remove (×)** control over an uploaded image; the URL field is now the "or paste a
+  link" fallback.
+- **Editable interaction:** attaching an existing interaction now loads its title / URL / description
+  into editable fields and writes edits back to that same interaction on save (its id — the artifact
+  `#i=` slug — stays fixed), matching the editable-preflight behavior. `getInteraction` added.
+- **RAG dropdown labels:** the Reference-PDF dropdown now shows just the base filename (no directory,
+  no `.pdf`) while still storing the full path the grader resolves.
 
 ### Changed — attached existing preflights are now editable in the lesson creator
 

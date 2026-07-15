@@ -133,7 +133,7 @@
         <div class="row wrap" style="justify-content:space-between;align-items:flex-start;gap:12px">
           <div class="grow" style="min-width:220px">
             <div class="row" style="gap:8px"><div class="card-title">${esc(it.title)}</div>${status}</div>
-            <div class="muted" style="font-size:0.8em;margin-top:3px"><code>${esc(it.id)}</code>${it.due_date ? ` · Due ${esc(fmtDate(it.due_date))}` : ''}</div>
+            <div class="muted" style="font-size:0.8em;margin-top:3px"><code>${esc(it.id)}</code>${it.due_date_m ? ` · Due ${esc(fmtDate(it.due_date_m))}` : ''}</div>
             ${it.description ? `<div class="muted" style="font-size:0.86em;margin-top:6px">${esc(it.description)}</div>` : ''}
             ${it.artifact_url ? `<a href="${esc(it.artifact_url)}" target="_blank" rel="noopener" style="font-size:0.82em;color:var(--blue-lt);text-decoration:none">Open artifact ↗</a>` : '<div class="muted" style="font-size:0.82em">No artifact URL set</div>'}
           </div>
@@ -169,7 +169,7 @@
       const vTitle  = prefill ? pick(prefill.title,  existing?.title)        : (existing?.title ?? '');
       const vDesc   = prefill ? pick(prefill.desc,   existing?.description)  : (existing?.description ?? '');
       const vUrl    = prefill ? pick(prefill.url,    existing?.artifact_url) : (existing?.artifact_url ?? '');
-      const vDue    = prefill ? pick(prefill.due,    existing?.due_date)     : (existing?.due_date ?? '');
+      const vDue    = prefill ? pick(prefill.due,    existing?.due_date_m)   : (existing?.due_date_m ?? '');
       const vPub    = prefill ? (prefill.pub != null ? prefill.pub : !!existing?.is_published) : !!existing?.is_published;
 
       document.getElementById('f-course').value = ctx.courses.some(c => c.course_id === vCourse) ? vCourse : ctx.currentCourse;
@@ -196,7 +196,8 @@
         id, course_id: document.getElementById('f-course').value, title,
         description: document.getElementById('f-desc').value.trim() || null,
         artifact_url: document.getElementById('f-url').value.trim() || null,
-        due_date: due ? `${due}T23:59:59` : null,             // end-of-day so a lesson due "today" stays current all day
+        due_date_m: due ? `${due}T23:59:59` : null,           // retiring tool: one field sets both M and T
+        due_date_t: due ? `${due}T23:59:59` : null,
         is_published: document.getElementById('f-pub').checked,
       };
       if (!editingId && !/^[a-z0-9-]+$/.test(id)) { err.textContent = 'Id must be lowercase letters, numbers, and hyphens only.'; err.style.display = ''; return; }

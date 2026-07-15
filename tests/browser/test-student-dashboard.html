@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Student dashboard sandbox · PREP</title>
 <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+<!-- Director-only gate (internal design sandboxes). -->
+<script>document.documentElement.style.opacity='0'</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../../site/app/js/config.js"></script>
+<script type="module" src="./guard.js"></script>
 <!-- Uses the LIVE design system so this preview tracks the real app. No DB, no CDN, no JS modules:
      a hardcoded synthetic view-model is rendered with the same component classes the real
      dashboard (site/app/student/dashboard.html) uses, plus the proposed "Review before class" panel. -->

@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Progress bar sandbox · PREP</title>
+<!-- Director-only gate (internal design sandboxes). -->
+<script>document.documentElement.style.opacity='0'</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../../site/app/js/config.js"></script>
+<script type="module" src="./guard.js"></script>
 <style>
   /* ── App palette (copied from site/app/css/styles.css so this page stands alone) ── */
   :root{

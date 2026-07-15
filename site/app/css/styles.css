@@ -1254,10 +1254,26 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 .hold-btn .hold-label { position: relative; z-index: 1; }
 
 /* per-question figure drop zone (drag an image → uploads to the lesson-figures Storage bucket) */
-.lb-figdrop { border: 2px dashed var(--border); border-radius: var(--radius-sm); padding: 10px 12px;
-  display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+.lb-figdrop { position: relative; border: 2px dashed var(--border); border-radius: var(--radius);
+  min-height: 92px; display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 14px; background: var(--surface-sunken);
   transition: border-color .12s, background .12s; }
-.lb-figdrop.over { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 8%, transparent); }
-.lb-figdrop.uploading { opacity: .5; pointer-events: none; }
-.lb-figthumb { max-height: 130px; max-width: 100%; border-radius: 6px; display: block; }
+.lb-figdrop.over { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, transparent); }
+.lb-figdrop.uploading { opacity: .55; pointer-events: none; }
+.lb-figdrop.uploading::after { content: "Uploading…"; position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center; font-size: .85em; font-weight: 600; color: var(--text); }
+.lb-figdrop.has-img { border-style: solid; padding: 8px; background: var(--card); }
+.lb-figcta { display: flex; flex-direction: column; gap: 4px; align-items: center; color: var(--muted); font-size: .86em; }
+.lb-figicon { font-size: 1.7em; line-height: 1; opacity: .85; }
+.lb-figcta .lb-fighint { font-size: .78em; opacity: .8; }
+.lb-figbrowse { border: none; background: none; color: var(--blue); cursor: pointer; font: inherit;
+  text-decoration: underline; padding: 0; }
+.lb-figthumb { max-height: 160px; max-width: 100%; border-radius: 6px; display: block; }
+.lb-figx { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 50%;
+  border: none; background: rgba(0,0,0,.62); color: #fff; cursor: pointer; font-size: 1.15em; line-height: 1;
+  display: flex; align-items: center; justify-content: center; transition: background .12s; }
+.lb-figx:hover { background: var(--red); }
+.lb-figreplace { position: absolute; left: 0; right: 0; bottom: 6px; font-size: .72em; color: var(--muted);
+  opacity: 0; transition: opacity .12s; pointer-events: none; }
+.lb-figdrop.has-img:hover .lb-figreplace { opacity: 1; }
 .lb-fighint { font-size: .8em; color: var(--muted); }

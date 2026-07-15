@@ -2,84 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="refresh" content="0; url=./index.html">
 <title>Design sandboxes · PREP</title>
-<script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
-<style>
-  :root{
-    --bg:#f4f5f7; --card:#fff; --border:#e2e4e8; --text:#1a1a2e; --muted:#6b7280;
-    --surface-hover:#f8fafc; --blue-lt:#2a5298;
-    --shadow-sm:0 1px 4px rgba(0,0,0,.06); --shadow-md:0 6px 18px rgba(0,0,0,.10); --radius:12px;
-  }
-  [data-theme="dark"]{
-    --bg:#0f172a; --card:#1e293b; --border:#334155; --text:#e2e8f0; --muted:#94a3b8;
-    --surface-hover:#243044; --blue-lt:#3b6fc4;
-    --shadow-sm:0 1px 4px rgba(0,0,0,.4); --shadow-md:0 6px 18px rgba(0,0,0,.5);
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-    background:var(--bg);color:var(--text);line-height:1.5;padding:48px 24px}
-  .wrap{max-width:680px;margin:0 auto}
-  h1{font-size:1.6em;letter-spacing:-.02em;margin-bottom:4px}
-  .lede{color:var(--muted);font-size:.95em;margin-bottom:28px}
-  .links{display:grid;gap:14px}
-  .linkcard{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;align-items:center;text-decoration:none;color:inherit;
-    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);
-    padding:20px 22px;transition:transform .12s, box-shadow .12s, border-color .12s}
-  .linkcard:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);border-color:var(--blue-lt)}
-  .linkcard .ic{grid-row:1/3;font-size:2em;width:54px;height:54px;border-radius:14px;display:grid;place-items:center;
-    background:var(--surface-hover)}
-  .linkcard .t{font-size:1.12em;font-weight:700}
-  .linkcard .d{color:var(--muted);font-size:.9em}
-  .tbtn{font:inherit;font-size:.82em;font-weight:600;cursor:pointer;background:var(--surface-hover);color:var(--text);
-    border:1px solid var(--border);border-radius:7px;padding:6px 11px;margin-top:24px}
-  .tbtn:hover{border-color:var(--blue-lt)}
-</style>
+<link rel="canonical" href="./index.html">
 </head>
 <body>
-<div class="wrap">
-  <h1>PREP — design sandboxes</h1>
-  <p class="lede">Standalone preview pages driven by <b>synthetic data</b> — no database connection, safe to open
-    offline before pushing. Pick one:</p>
-
-  <div class="links">
-    <a class="linkcard" href="test-faculty-dashboard.html">
-      <span class="ic">🏫</span>
-      <span class="t">Faculty dashboard</span>
-      <span class="d">The instructor/director landing page on the live design system <b>and live render
-        module</b> — KPI tiles, the active-lesson spotlight (completion ring · effort histogram ·
-        misconceptions), your-section cards, and the director-only section×lesson heatmap. Toggle
-        role / active lesson / theme. Synthetic Physics 215.</span>
-    </a>
-    <a class="linkcard" href="test-student-dashboard.html">
-      <span class="ic">🎓</span>
-      <span class="t">Student dashboard</span>
-      <span class="d">The student landing page on the live design system — a unified deadline feed
-        (preflights + interactions), a "Review before class" formative panel from interaction
-        <code>report_data</code>, and recent grades. Synthetic Physics 215 cadet.</span>
-    </a>
-    <a class="linkcard" href="test-summary.html">
-      <span class="ic">📊</span>
-      <span class="t">Summary rollup</span>
-      <span class="d">The faculty lesson-interaction rollup — effort distribution, understanding radar,
-        per-objective histograms, and flag → student drill-down.</span>
-    </a>
-    <a class="linkcard" href="test-progressbar.html">
-      <span class="ic">📶</span>
-      <span class="t">Progress-bar styles</span>
-      <span class="d">Gauge / bar style explorations (wild → tame) and "beyond the bar" spread views.</span>
-    </a>
-  </div>
-
-  <button class="tbtn" id="theme">◐ Theme</button>
-</div>
-<script>
-  document.getElementById('theme').addEventListener('click', () => {
-    const root = document.documentElement;
-    const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    root.setAttribute('data-theme', next);
-    try { localStorage.setItem('cp.theme', next); } catch (e) {}
-  });
-</script>
+<p>Moved to <a href="./index.html">index.html</a>.</p>
 </body>
 </html>
