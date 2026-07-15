@@ -63,17 +63,19 @@ Replace `YOUR-UUID-FROM-STEP-4` with the UUID from Step 4.
 
 ---
 
-## Step 7 — Create the Claude Skill Config
+## Step 7 — Create the preflight-analyze Config
 
-Create this file locally (it is never uploaded to GitHub):
+Create this file locally (it is never uploaded to GitHub). The template lives at
+`.ai/skills/preflight-analyze/config.json.template`:
 
-**File**: `~/.claude/skills/physics215-analyze/config.json`
+**File**: `~/.claude/skills/preflight-analyze/config.json`
 
 ```json
 {
-  "supabase_url": "https://YOUR-PROJECT.supabase.co",
-  "supabase_service_key": "eyJ... (service_role key)",
-  "textbook_base_path": "/path/to/your/textbook/pdfs/"
+  "supabase_url": "https://YOUR_PROJECT_ID.supabase.co",
+  "supabase_service_key": "sb_secret_REPLACE_ME",
+  "textbook_base_path": "/path/to/your/local/textbooks/",
+  "default_course_id": "phys-215"
 }
 ```
 

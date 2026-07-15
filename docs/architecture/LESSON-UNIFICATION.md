@@ -446,15 +446,24 @@ Each phase is independently shippable and leaves the system working.
    auto-promote of leftover drafts.
 4. **Faculty lesson creation tool** — author lessons, attach/build both components, set policy +
    objectives + due dates. — **✅ built 2026-06-26** (`site/app/faculty/lessons.html` + `site/app/js/faculty-lessons.js`,
-   director-gated **Lessons** nav entry). Both component types are authored **inline** (new-content-only —
-   no "attach existing assignment" path); the preflight question builder is ported into the portal with
-   the per-question objective map + the `role:"reading_reflection"` marker.
+   director-gated **Lessons** nav entry). Originally new-content-only. **Updated 2026-07-15:** each
+   component now has a `None · Use existing · Create new` source toggle, so a lesson can **reference an
+   existing** assignment/interaction (see Phase 7) or be authored inline; a lesson may carry one or both
+   components, and the policy control enables only the modes whose component is attached. The inline
+   preflight builder pins **Q1** (reading-time diagnostic, 0 pts, names hidden from students) and **Q2**
+   (`role:"reading_reflection"`, the meaningful-gate), matching the live Fall preflights; the per-question
+   objective map is unchanged.
 5. **Student lesson view + Save/Submit** — draft autosave, explicit Submit (the lock), required/choice
    display, post-final / post-due lock UX, unified 2-pt grade.
 6. **Unified rollup + research export** — merged by-objective rollup for choice; extend
    `/interaction-aggregate`; ship the export.
-7. **(Dropped for now — new content only, confirmed)** existing standalone interactions/assignments are
-   *not* retrofitted into lessons this semester; they keep working untouched. Revisit later if needed.
+7. **Partially un-deferred 2026-07-15** — the faculty Lessons tool can now **reference existing**
+   standalone assignments/interactions into a lesson (a `None · Use existing · Create new` source
+   toggle per component; the lesson points at the chosen row by id and never mutates its content or
+   publish state). A component is lesson-owned iff its id equals the lesson id, and publish mirroring
+   only touches owned components. This lets `lessons` be populated from the pre-built Fall preflights
+   and standalone interactions without duplicating them. What remains dropped: any *bulk/automatic*
+   retrofit — lessons are still formed only by explicit director action, one at a time.
 
 ---
 

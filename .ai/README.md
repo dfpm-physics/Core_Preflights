@@ -3,8 +3,9 @@
 This directory is the canonical, agent-neutral home for iPREP AI context, reusable skills,
 integration packages, and artifact examples.
 
-- `instructions/` contains shared project context and explains the transition from the current
-  root auto-loading files.
+- `instructions/` contains `CORE.md` (the authoritative agent-neutral operating contract) and
+  `PROJECT.md` (the deep architecture/data-model reference). The root auto-loading files wire each
+  agent into both.
 - `skills/<skill-name>/SKILL.md` contains the canonical workflow for every AI. The directory
   and the required frontmatter `name` must match.
 - A skill may include `SKILL-codex.md`, `SKILL-claude.md`, or another vendor addendum only when
@@ -12,6 +13,7 @@ integration packages, and artifact examples.
 - `integrations/` contains maintained AI-facing integration packages.
 - `artifacts/` contains source examples, not deployed website files.
 
-Agent-specific auto-loading files remain at their required locations, currently `AGENTS.md` and
-`CLAUDE.md` in the repository root. They wire agents into this directory without maintaining
-parallel copies of each skill.
+Agent-specific auto-loading files remain at their required locations, currently `AGENTS.md` (Codex)
+and `CLAUDE.md` (Claude Code) in the repository root. They wire agents into `instructions/CORE.md`
+and this directory without maintaining parallel copies of the contract or the skills. A new agent
+gets its own thin root entry file pointing at `CORE.md`; it never forks the rules.

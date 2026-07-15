@@ -1,9 +1,10 @@
 # iPREP — Project Overview
 
-> **Multi-agent note:** Shared operating rules for *all* agents (Claude, Codex, humans) live in
-> [`AGENTS.md`](../../AGENTS.md) at the repo root — live-system safety and the coordination gate,
-> secrets/config, git/publish, and CHANGELOG conventions. **`AGENTS.md` is authoritative**; this file
-> adds agent-neutral deep context. If the two ever conflict, `AGENTS.md` wins.
+> **Multi-agent note:** Shared operating *rules* for all agents (Claude, Codex, humans) live in
+> [`CORE.md`](CORE.md) — live-system safety and the coordination gate, secrets/config, git/publish,
+> and CHANGELOG conventions. **CORE.md is authoritative**; this file is the agent-neutral deep
+> *reference* (architecture and data model). If the two ever conflict, CORE.md wins. The root
+> auto-loading files (`AGENTS.md` for Codex, `CLAUDE.md` for Claude) wire each agent into both.
 
 **iPREP** — *interactive Pre-lesson Readiness Engagement Platform* — is the user-facing brand
 of this system. A GitHub Pages + Supabase system for managing physics preflight assignments and
@@ -19,12 +20,9 @@ lesson interactions at USAFA. Replaces GradeScope for two courses: Physics 110 a
 - **Auth**: Supabase Auth for both instructors (email/password) and students (cadetID@usafa.edu / last-6-digits default password)
 - **Analysis**: `preflight-analyze` shared AI skill (see `.ai/skills/preflight-analyze/`)
 
-> **The project has no Node dependency or build step — do not introduce one.** There is no bundler or
-> transpiler, and nothing here needs `node`, `npm`, `npx`, eslint, or jest (Node/npm may happen to be
-> installed on a given machine, but the project does not use them). The frontend is hand-authored ES
-> modules + plain CSS the browser runs directly. **Verify changes by opening the pages in a browser**
-> (serve the repo root with `python -m http.server 8000`, then open `http://localhost:8000/site/app/`)
-> against Supabase — not with a JS test runner or linter.
+> **No Node dependency or build step — do not introduce one** (full rule in [`CORE.md`](CORE.md) §2,
+> including how to verify changes in a browser with `python -m http.server 8000`). The frontend is
+> hand-authored ES modules + plain CSS the browser runs directly.
 
 ## Hosting & Infrastructure
 
@@ -234,12 +232,9 @@ Use these when writing tailored yellow (`warn`) feedback. Each pattern includes 
 | `ambiguous-direction` | Mentions two forces but doesn't say which direction each acts | Force from left charge points right (+x), force from right charge points left (−x); net = algebraic sum |
 | *(upgrade to green)* | Explicitly says "as vectors" or "vector sum" AND gives direction reasoning | Promote to `full` credit with empty feedback |
 
-## Important Notes
+## Operating rules & safety → CORE.md
 
-- The anon key in `site/js/config.js` is protected by Supabase RLS — safe in a public repo
-- The service key in `config.json` bypasses RLS — never commit it
-- Scores are always written with `is_finalized: false`; instructors finalize in the Grade tab
-- 3-state scoring: `full` (green), `warn` (yellow = full credit but wrong/vague), `zero` (red)
-- **Always update `CHANGELOG.md`** when shipping any feature, fix, or documentation change — include date (YYYY-MM-DD), your name, and what/why. Attribute changes to the requesting human and agent (for example, "Casey Pellizzari via Codex").
-- **Supabase free tier pauses after 1 week of inactivity** — unpause at the start of each semester via the Supabase dashboard (Project Settings → General → Restore project)
-- **No Node dependency or build step — do not introduce one.** No bundler, no `node --check` in the workflow; nothing here uses `node`/`npm`/`npx`/eslint/jest even if they're installed. Verify frontend changes by opening the pages in a browser (`python -m http.server 8000` from the repo root), not with a JS linter/test runner. See the note under **Tech Stack**.
+The non-negotiable rules that used to be restated here live once in [`CORE.md`](CORE.md), not in this
+reference: 3-state scoring and `is_finalized=false` (§6), the public anon key vs. never-commit service
+key (§3), the always-update-`CHANGELOG.md` requirement (§5), the no-Node/build-step rule (§2), and the
+Supabase free-tier unpause (§1). This file stays the *reference*; CORE.md is the *law*.

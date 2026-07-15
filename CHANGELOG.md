@@ -8,6 +8,94 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-15 — Matthew Recker via Claude
+
+### Added — combine existing preflights + interactions into lessons (faculty tool)
+
+Extended the faculty **Lessons** tool (`site/app/faculty/lessons.html` +
+`site/app/js/faculty-lessons.js`) so a lesson can be **assembled from content that already
+exists**, not only authored new. Each component (Free-Response preflight, AI interaction) now has a
+`None · Use existing · Create new` source toggle:
+
+- **Use existing** — a dropdown of the course's real `assignments` / `interactions` (loaded by
+  `loadManager`, annotated with which lesson already owns each so nothing is double-attached). The
+  lesson *references* the chosen row by id; its content and publish state are left untouched. This
+  is how the pre-built Fall preflights (`preflight-01…NN`) and standalone interactions get combined
+  into lessons without duplicating them.
+- **Create new** — the previous inline builder, unchanged except for the Q1/Q2 defaults below.
+
+A lesson may carry **just a preflight, just an interaction, or both** ("1 or both"). The
+`completion_policy` control (which modes students may use) enables only the modes whose component is
+attached and mirrors the DB CHECK `lessons_policy_components`; you can attach both components yet
+still restrict the allowed mode to one. **No schema migration** — migration `016` already lets
+`preflight_id`/`interaction_id` reference any row id.
+
+Ownership rule added: a component is lesson-owned iff its id equals the lesson id. `togglePublish`
+now mirrors the lesson's published state **only onto owned (inline-created) components**, so
+publishing/unpublishing a lesson can no longer flip the publish flag of a shared standalone
+assignment/interaction it merely references.
+
+*Why:* the tool was new-content-only; there was no way to populate `lessons` from the preflight
+assignments and interactions that already exist. Partially un-defers LESSON-UNIFICATION §15 Phase 7
+(legacy adoption) — existing content can now be referenced into lessons. Student-facing gating
+(students seeing only the allowed mode / picking) remains the next phase, unbuilt.
+
+### Changed — inline preflight now seeds Q1 reading-time + Q2 reflection
+
+The inline preflight builder previously pinned a single reading-reflection question as Q1. It now
+pins **two** questions matching the live Fall preflights (`scripts/fall2026/build_fall_preflights.py`):
+**Q1** a reading-time diagnostic ("How much time did you spend reading…", 0 pts) carrying a
+student-facing note that the response is visible to the instructor but the name is not shown (class
+diagnostic, per the AGENTS.md Q1 privacy rule), and **Q2** the standard reading reflection (1 pt,
+the meaningful-gate that must match the interaction). Both are auto-filled, editable, pinned first,
+and non-removable. Only affects newly authored inline preflights; attached existing preflights keep
+their own questions. Also marked the lesson **Objectives** section explicitly *optional* in its hint
+(nothing consumes it until the by-objective rollup, Phase 6).
+
+## 2026-07-15 — Matthew Recker via Claude
+
+### Changed — extracted a central agent-neutral contract (`CORE.md`); made the root files thin wiring
+
+Completed the consolidation that the `.ai/` reorg had deferred. The authoritative operating rules
+that lived in root `AGENTS.md` — which is really Codex's auto-load file — now live in a single
+agent-neutral `.ai/instructions/CORE.md` (safety, coordination gate, secrets/config, git/publish,
+CHANGELOG conventions, runbook index). The two root entry files are now thin wiring that must not
+restate or weaken it:
+
+- **`AGENTS.md` (Codex):** points to `CORE.md` + `PROJECT.md` as authoritative, then inlines a
+  labeled mirror of CORE.md §0 (shared-state safety + coordination gate) as a belt-and-suspenders
+  floor, since Codex has no `@import` and only the pointer would otherwise carry the safety rules.
+  Keeps Codex-only items (the `.codex/` note, the Codex-requested-change standing authorization, the
+  Codex quickstart).
+- **`CLAUDE.md` (Claude Code):** now `@`-imports `CORE.md` + `PROJECT.md` (was importing `AGENTS.md`),
+  plus the Claude-only addendum.
+
+Sorting rule established: **CORE.md holds what's true for every agent; each root entry file holds the
+wiring plus only-that-agent items.** Deduped `CORE.md` against `PROJECT.md` — the data-model catalog,
+JSONB shapes, roles, and edge functions stay canonical in `PROJECT.md` and CORE links to them;
+`PROJECT.md`'s triplicated "no Node/build step" note and its wholesale-duplicated "Important Notes"
+section were collapsed to cross-links into CORE. Repointed `PROJECT.md`'s multi-agent note and both
+`.ai` READMEs (dropped the "consolidation deferred — don't create a core file" note) at the new
+layout. No behavior, schema, or site change — documentation/instruction wiring only.
+
+## 2026-07-15 — Matthew Recker via Claude
+
+### Fixed — post-reorg Claude-facing cleanup for the `.ai/` skill tree
+
+Follow-up to the `.ai/` reorganization below. Fixed a stale reference in `supabase/SETUP.md` Step 7
+that pointed at `~/.claude/skills/physics215-analyze/config.json` (dead skill name) with an outdated
+JSON schema; it now matches the current `preflight-analyze` path and
+`.ai/skills/preflight-analyze/config.json.template` (adds `default_course_id`, `sb_secret_`
+placeholder) and the heading is agent-neutral. Added `.ai/skills/setup-preflight/SKILL-claude.md`
+so the setup wizard has a Claude Code addendum matching the existing `SKILL-codex.md` (use the Bash
+tool cross-platform, never echo the service key, no Node tooling).
+
+Decided but not yet executed: neutralize the `~/.claude/skills/preflight-analyze/config.json` runtime
+path to a neutral `$IPREP_CONFIG` (or `~/.config/iprep/config.json`) with fallback to the existing
+path, across all scripts/skills/docs — deferred to its own coordinated PR per AGENTS.md §3. Note also
+that `supabase/SETUP.md` still contains other pre-reorg paths (e.g. `physics215/js/config.js`) not
+touched here.
+
 ## 2026-07-15 — Casey Pellizzari via Codex
 
 ### Changed — reorganized the repository around `site/`, `.ai/`, and `docs/`
