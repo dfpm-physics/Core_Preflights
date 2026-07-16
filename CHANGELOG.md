@@ -8,6 +8,25 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-16 — Casey via Codex
+
+### Added — hidden Q2-effort and Q3-understanding diagnostics for written preflights
+
+Added draft migration [`022_preflight_question_diagnostics.sql`](supabase/migrations/022_preflight_question_diagnostics.sql)
+with nullable, range-checked `scores.q2_effort` and `scores.q3_understanding` columns. **Not applied
+to the live DB** — migration 021 is also still recorded as drafted/not applied, and shared production
+DDL must follow the coordination gate in `.ai/instructions/CORE.md` §0. Migration 022 has no dependency
+on 021 and may be applied independently while the larger lesson-finalization migration remains deferred.
+
+Extended the canonical [`preflight-analyze` skill](.ai/skills/preflight-analyze/SKILL.md) to score
+Q2 engagement and Q3 demonstrated physics understanding from 0–5 for every submitted student, write
+both values in the existing score upsert, and verify them by exact read-back. The detailed reusable
+rubrics live in `references/QUESTION-DIAGNOSTICS.md`. Blank Q2/Q3 answers within a submission score 0;
+students with no submission receive no score row. These values are diagnostics only: they never
+change points, three-state status, feedback, totals, or finalization, and student pages do not request
+or render the new columns. Direct retrieval under the existing score RLS remains possible by design;
+faculty-facing retrieval is deferred.
+
 ## 2026-07-16 — Matthew Recker via Claude
 
 ### Found — the `responses` / `extensions` RLS predates student auth and is wide open

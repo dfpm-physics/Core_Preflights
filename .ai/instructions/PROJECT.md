@@ -61,7 +61,7 @@ lesson interactions at USAFA. Replaces GradeScope for two courses: Physics 110 a
 | `instructor_course_access` | Per-course roles: `instructor` or `director` |
 | `assignments` | Assignment definitions with JSONB `questions`; scoped to `course_id` |
 | `responses` | Student JSONB answers; unique on `(student_id, assignment_id)` |
-| `scores` | Graded scores with `question_scores` JSONB and `is_finalized` flag |
+| `scores` | Graded scores with `question_scores` JSONB and `is_finalized`; also holds hidden 0–5 Q2-effort/Q3-understanding diagnostics (migration 022) |
 | `interactions` | Lesson interactions (Claude artifacts); `id` is a slug like `lesson-02-charge`; has `artifact_url`, `is_published` |
 | `preflight_interaction_reports` | Student reports from interactions; Markdown blob, unique on `(student_id, interaction_id)` |
 
@@ -89,6 +89,13 @@ Three tiers, enforced in `site/admin.html` via `isDirectorForCurrent()`:
 }
 ```
 `status` drives the 3-state color toggle: `"full"` = green, `"warn"` = yellow (full credit but flagged), `"zero"` = red.
+
+**`scores.q2_effort` / `scores.q3_understanding`** — hidden integer diagnostics written by
+`/preflight-analyze`. Q2 measures engagement with the reading reflection; Q3 measures demonstrated
+physics understanding. Blank answers inside a submission score 0; students with no response have no
+score row. These columns do not contribute to grade points or feedback, and student pages omit them
+from their explicit Supabase selects and rendering. They remain retrievable through direct database/API
+access allowed by the existing `scores` RLS; faculty retrieval and visualization are deferred.
 
 **`assignments.analysis_report`** — written by `/preflight-analyze`, read by Report tab:
 ```json
@@ -177,7 +184,8 @@ no data-contract change is needed. Distinct from `/interaction-backfill`, which 
 
 ## preflight-analyze Skill
 
-Analyzes student submissions for a given assignment, writes suggested scores to Supabase, and generates per-instructor misconception reports.
+Analyzes student submissions for a given assignment, writes suggested scores plus hidden Q2-effort
+and Q3-understanding diagnostics to Supabase, and generates per-instructor misconception reports.
 
 **First time on a new machine? Run the setup wizard:**
 ```

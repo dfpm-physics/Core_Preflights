@@ -1,12 +1,13 @@
 ---
 name: preflight-analyze
-description: Physics 215 preflight assignment analysis skill for USAFA. Use when the
-  user wants to analyze student submissions, generate per-instructor misconception reports,
-  apply auto-grading, write suggested scores to Supabase, or says /preflight-analyze.
-  Also triggers for: "analyze preflight", "grade submissions", "check who hasn't submitted",
-  "run analysis on assignment", "preflight analyze". This skill is run by a Course Director
-  or System Admin — not individual instructors. Optional filter argument: "M" to
-  analyze only M-day sections, "T" to analyze only T-day sections.
+description: >
+  Physics 215 preflight assignment analysis skill for USAFA. Use when the user wants to analyze
+  student submissions, generate per-instructor misconception reports, apply auto-grading, write
+  suggested scores and hidden Q2-effort/Q3-understanding diagnostics to Supabase, or says
+  /preflight-analyze. Also triggers for "analyze preflight", "grade submissions", "check who hasn't
+  submitted", "run analysis on assignment", or "preflight analyze". This skill is run by a Course
+  Director or System Admin, not individual instructors. Optional filter argument: "M" for M-day
+  sections or "T" for T-day sections.
 ---
 
 # Physics 215 Preflight Analyzer
@@ -15,8 +16,9 @@ You are analyzing student submissions for a Physics 215 preflight assignment at 
 1. Fetch all student responses from Supabase (filtered by M-day or T-day sections if requested)
 2. Optionally read referenced textbook pages for grounding (RAG)
 3. Analyze responses question by question for physics misconceptions
-4. Write suggested scores back to Supabase (`is_finalized = false`)
-5. Print a structured per-instructor report in the conversation
+4. Generate hidden 0–5 diagnostics for Q2 effort and Q3 understanding
+5. Write suggested scores back to Supabase (`is_finalized = false`)
+6. Print a structured per-instructor report in the conversation
 
 This skill is run by a **Course Director or System Admin** — not individual instructors. A single run covers all sections for a given day (M-day or T-day). Results are stored per-instructor and are visible to each instructor in the Report tab.
 
@@ -83,6 +85,14 @@ Parse response into:
 - `assignment.id`, `assignment.title`, `assignment.questions` (JSON array)
 - `assignment.reference_pdf` (may be null)
 - `assignment.reference_pages` (may be null, e.g., "45-52, 60")
+
+Before analyzing responses, verify migration 022 is available:
+```
+GET {SUPA_URL}/rest/v1/scores?select=q2_effort,q3_understanding&limit=0
+Headers: apikey + Authorization as above
+```
+If either column is missing, stop before any write and tell the operator to apply
+`supabase/migrations/022_preflight_question_diagnostics.sql` through the coordinated DDL workflow.
 
 ---
 
@@ -171,6 +181,14 @@ Store auto-graded results in a per-student score object. These do NOT need instr
 ## Step 7 — Analyze Free-Response Questions
 
 For each free-response question (`type: "free_response"`), collect all student answers (within filtered set).
+
+Read `references/QUESTION-DIAGNOSTICS.md` in full. For every submitted student, independently assign:
+- `q2_effort`: integer 0–5 using the per-answer engagement rubric; correctness is irrelevant.
+- `q3_understanding`: integer 0–5 using the demonstrated-physics-understanding rubric.
+
+These are diagnostics, not grade points. Do not put either value into student feedback,
+`question_scores`, grade totals, `analysis_report`, or the printed per-student report. A Q3 answer may
+receive yellow/full credit for genuine effort while its hidden understanding diagnostic is 1 or 2.
 
 ### Grading Decision — THREE STATES ONLY
 
@@ -358,6 +376,8 @@ Body: (array of score objects)
   "student_id": {student_id},
   "assignment_id": "{ASSIGNMENT_ID}",
   "question_scores": { ... },
+  "q2_effort": {integer 0-5 or null if q2 is absent},
+  "q3_understanding": {integer 0-5 or null if q3 is absent},
   "total_score": {N},
   "max_total": {N},
   "is_finalized": false,
@@ -367,7 +387,18 @@ Body: (array of score objects)
 
 Send all students in a single batch upsert. The `UNIQUE(student_id, assignment_id)` constraint means re-running the skill updates suggestions without creating duplicates.
 
-After writing all scores, report: "Wrote suggested scores for {N} students ({day_filter} sections). Scores are marked is_finalized=false — instructors must review and finalize in the admin panel."
+Read the written rows back for the exact submitted student ids:
+```
+GET {SUPA_URL}/rest/v1/scores?select=student_id,q2_effort,q3_understanding&assignment_id=eq.{ASSIGNMENT_ID}&student_id=in.({IDS})
+Headers: apikey + Authorization as above
+```
+Require exactly one row per submitted student. Where `q2`/`q3` exists on the assignment, require an
+integer in `[0,5]`; where it is absent, require `null`. Compare every returned value to the run's
+in-memory diagnostic before reporting success.
+
+After exact read-back verification, report: "Wrote suggested scores plus hidden Q2-effort and
+Q3-understanding diagnostics for {N} students ({day_filter} sections). Scores are marked
+is_finalized=false — instructors must review and finalize in the admin panel."
 
 ---
 
@@ -436,6 +467,8 @@ After all instructors, print:
 - **PDF not found**: Warn "Reference PDF not found at {path} — proceeding without textbook context." Continue without RAG.
 - **Partial config**: If any required config key is missing, list which keys are missing and stop.
 - **Empty filtered set**: If `DAY_FILTER` is set but no students match, print "No {M-day / T-day} students found in the roster."
+- **Diagnostic schema missing**: Stop before writing anything and direct the operator to migration 022.
+- **Diagnostic read-back mismatch**: Treat the run as failed; report the mismatched student ids and do not claim success.
 
 ---
 
@@ -449,3 +482,4 @@ After all instructors, print:
 6. **Protect the service key** — never print `SUPA_KEY` in the output. Reference it as `[service_key]` if you need to show a sample request.
 7. **Re-running is safe** — the upsert with `merge-duplicates` updates existing suggestions without touching finalized scores.
 8. **Merge analysis reports** — when `DAY_FILTER` is set, always fetch the existing `analysis_report` and merge, so M and T runs don't overwrite each other.
+9. **Diagnostics never affect grades** — `q2_effort` and `q3_understanding` are 0–5 research/teaching diagnostics only. Never use them in `question_scores`, `total_score`, `max_total`, status, feedback, or finalization, and never render or print individual values.

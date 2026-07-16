@@ -162,7 +162,7 @@ then sign in on the submit page to save their report. They can re-submit to over
 
 ## Running Preflight Analysis (`/preflight-analyze`)
 
-The preflight analysis run reads student submissions, checks them for physics misconceptions, writes suggested scores to Supabase, and stores a per-instructor report. Summary and misconception bullets are aggregated at the instructor level, so each instructor sees one combined summary across all of their sections. **Only Course Directors and System Admins initiate this run** — not individual instructors. A Course Director normally runs it once for all M-day sections and once for all T-day sections after each deadline; instructors then review and finalize their own sections in the Grade tab.
+The preflight analysis run reads student submissions, checks them for physics misconceptions, writes suggested scores to Supabase, and stores a per-instructor report. It also records two hidden 0–5 diagnostics on each submitted student's score row: Q2 effort and Q3 physics understanding. Those diagnostics do not affect grades and are not requested or displayed by student pages. Summary and misconception bullets are aggregated at the instructor level, so each instructor sees one combined summary across all of their sections. **Only Course Directors and System Admins initiate this run** — not individual instructors. A Course Director normally runs it once for all M-day sections and once for all T-day sections after each deadline; instructors then review and finalize their own sections in the Grade tab.
 
 The runbook lives in `.ai/skills/preflight-analyze/SKILL.md`. Every supported AI follows this same agent-neutral runbook; vendor addenda only adapt tooling.
 
@@ -231,9 +231,10 @@ Each run:
 2. Reads the relevant textbook pages (if configured on the assignment)
 3. Grades numerical and multiple choice questions automatically
 4. Analyzes free-response answers for physics misconceptions
-5. Writes suggested scores to Supabase (`is_finalized = false`) for every submitted student
-6. Stores the Class Summary & Misconceptions report by instructor, combining all sections assigned to that instructor
-7. Prints a per-instructor breakdown in the terminal or chat
+5. Assigns hidden Q2-effort and Q3-understanding diagnostics on a 0–5 scale
+6. Writes suggested scores and diagnostics to Supabase (`is_finalized = false`) for every submitted student
+7. Stores the Class Summary & Misconceptions report by instructor, combining all sections assigned to that instructor
+8. Prints a per-instructor breakdown in the terminal or chat
 
 The AI run **does not publish grades to students**. It only writes unfinalized suggestions. After the run, instructors log into the admin panel, go to the **Grade** tab, review green/yellow/red suggestions, edit feedback if needed, click **Save**, then click **Finalize & Publish** to make grades visible to students.
 

@@ -185,6 +185,9 @@ The full table catalog, JSONB shapes, roles, and edge functions are in
 
 - **Grading is 3-state:** `full` (green), `warn` (yellow = full credit but flagged wrong/vague),
   `zero` (red). Suggested scores are always `is_finalized=false`; the human finalizes in the admin UI.
+- **Written-preflight diagnostics are not grades:** `/preflight-analyze` writes `scores.q2_effort`
+  and `scores.q3_understanding` as 0–5 integers after migration 022. They never affect points,
+  feedback, status, totals, or finalization, and no student page requests or renders them.
 - **Interaction grade = effort** (0–5 → 0/1/2 via DB trigger); a non-meaningful reading reflection
   caps effort at 2. Full transport spec (frozen v1): `docs/contracts/INTERACTION-DATA-CONTRACT.md`.
 - **The artifact↔site contract is frozen:** artifacts post by stable slug to
