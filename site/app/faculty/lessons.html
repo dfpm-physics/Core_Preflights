@@ -21,6 +21,7 @@
     <div class="modal" style="max-width:760px">
       <div class="modal-head"><h2 id="lm-title">New lesson</h2><button class="modal-close" data-close>×</button></div>
       <div class="alert alert-error" id="lm-error" style="display:none"></div>
+      <div class="alert alert-warn" id="lm-notice" style="display:none"></div>
 
       <div class="row wrap" style="gap:14px">
         <div class="field grow" style="min-width:160px"><label for="f-course">Course</label><select id="f-course"></select></div>
@@ -151,6 +152,47 @@
     </div>
   </div>
 
+  <!-- Prefill destination (directors). An AI-generated link carries an artifact but cannot know
+       whether it is a brand-new lesson or a replacement for one that already exists — and guessing
+       is destructive either way: guess "new" and a live lesson is silently duplicated; guess
+       "existing" and one is silently rewritten. So ask. Nothing is written until Save. -->
+  <div class="modal-backdrop" id="dest-modal">
+    <div class="modal" style="max-width:640px">
+      <div class="modal-head"><h2>Where should this interaction go?</h2><button class="modal-close" data-destclose>×</button></div>
+      <p class="muted" style="margin:0 0 14px;font-size:.88em" id="dest-sub"></p>
+      <div class="dest-boxes">
+        <button class="dest-box" data-dest="new">
+          <span class="dest-box-ic">✚</span>
+          <span class="dest-box-t">Create new lesson</span>
+          <span class="dest-box-d">Start a new lesson built around this artifact.</span>
+        </button>
+        <button class="dest-box" data-dest="existing">
+          <span class="dest-box-ic">📚</span>
+          <span class="dest-box-t">Modify or add to lesson</span>
+          <span class="dest-box-d">Attach it to a lesson you already have.</span>
+        </button>
+      </div>
+      <div class="dest-pick" id="dest-pick" style="display:none">
+        <div class="muted" style="font-size:.82em;margin-bottom:8px">Pick the lesson to add it to. Red cards already have an interaction — it would be replaced.</div>
+        <div class="lb-orphans" id="dest-lessons"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Swap confirmation: replacing a lesson's interaction displaces the old one (it is orphaned,
+       never deleted) and strands any student reports already attached to it. -->
+  <div class="modal-backdrop" id="swap-modal">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head"><h2>Replace this lesson's interaction?</h2><button class="modal-close" data-swapclose>×</button></div>
+      <p id="swap-msg" style="margin:0 0 12px"></p>
+      <div class="alert" id="swap-info" style="margin-bottom:16px"></div>
+      <div class="lb-del-actions">
+        <button class="btn btn-primary" id="swap-ok">Replace interaction</button>
+        <button class="btn btn-ghost" data-swapclose>Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Due-date reconciliation: shown only when both attached components already carry dates. -->
   <div class="modal-backdrop" id="due-modal">
     <div class="modal" style="max-width:470px">
@@ -184,6 +226,8 @@
     if (!ctx) { /* redirected */ } else { init(); }
 
     let vm = null, editingId = null, model = null, interactionIdTouched = false;
+    // Set only when a prefill link is about to displace a lesson's existing interaction.
+    let pendingSwap = null;   // { fromId, fromTitle, reports }
     let compose = { preflight: null, interaction: null };   // the drag-drop composer selection
     let ragManifest = [];                                   // approved RAG reference paths (shared manifest)
     const isDirector = () => ctx.isDirectorForCurrent();
@@ -459,6 +503,7 @@
     // artifact link); for any field it omits, it falls back to the existing row.
     function openEdit(id, prefill) {
       editingId = id;
+      pendingSwap = null;              // the destination chooser re-arms this after openEdit returns
       const existing = id ? vm.lessons.find(x => x.id === id) : null;
       model = existing ? modelFromLesson(existing) : blankModel();
 
@@ -485,6 +530,7 @@
 
       const pick = (pv, ev) => (pv != null && pv !== '' ? pv : (ev ?? ''));
       document.getElementById('lm-error').style.display = 'none';
+      document.getElementById('lm-notice').style.display = 'none';
       document.getElementById('lm-title').textContent =
         id ? 'Edit lesson' : (prefill ? 'New lesson — review & save' : 'New lesson');
       document.getElementById('f-course').innerHTML = ctx.courses
@@ -893,6 +939,12 @@
       document.getElementById('lm-preview').addEventListener('click', openPreview);
       const pm = document.getElementById('preview-modal');
       pm.addEventListener('click', (e) => { if (e.target === pm || e.target.closest('[data-prevclose]')) pm.classList.remove('open'); });
+
+      // Destination chooser: dismissing it discards the prefill without writing anything.
+      const dm = document.getElementById('dest-modal');
+      dm.addEventListener('click', (e) => {
+        if (e.target === dm || e.target.closest('[data-destclose]')) closeDest();
+      });
     }
 
     // ── Student preview (questions only) ──────────────────────────────────
@@ -1003,6 +1055,13 @@
               artifact_url: inter.artifact_url.trim(), description: (inter.description || '').trim() || null },
       };
 
+      // Last gate before the write: swapping a lesson's interaction displaces the old one and
+      // strands any reports already attached to it. Confirm with the real count, never silently.
+      if (pendingSwap && payload.interaction?.id !== pendingSwap.fromId) {
+        if (pendingSwap.reports === null) pendingSwap.reports = await L.countInteractionReports(pendingSwap.fromId);
+        if (!(await promptSwapConfirm(pendingSwap))) return;
+      }
+
       const btn = document.getElementById('lm-save');
       btn.disabled = true; btn.innerHTML = '<span class="spinner on-dark"></span> Saving…';
       const { error } = await L.saveLesson(payload, editingId);
@@ -1010,6 +1069,7 @@
       if (error) {
         return fail(error.code === '23505' ? `A lesson with id “${id}” already exists.` : 'Could not save: ' + (error.message || 'unknown error'));
       }
+      pendingSwap = null;
       closeModal();
       load();
     }
@@ -1079,14 +1139,13 @@
     // ── Prefill from a query link (e.g. generated by an AI tool) ──
     // ?new=1&id=<lesson slug>&course=&title=&desc=&policy=&num=&due_m=&due_t=
     //   &url=<interaction url>&iid=<interaction slug, defaults to id>&ititle=&idesc=&pub=0
+    // Contract: docs/contracts/INTERACTION-PREFILL-LINK.md
     function prefillFromQuery() {
       const p = new URLSearchParams(location.search);
       if (!p.has('new') && !p.has('id') && !p.has('iid') && !p.has('title')) return;
       if (isDirector()) {
-        const slug = p.get('id');
-        const existing = slug ? vm.lessons.find(x => x.id === slug) : null;
-        openEdit(existing ? existing.id : null, {
-          id: slug, course: p.get('course'), title: p.get('title'), desc: p.get('desc'),
+        openDestChooser({
+          id: p.get('id'), course: p.get('course'), title: p.get('title'), desc: p.get('desc'),
           policy: p.get('policy'), num: p.get('num'), due_m: p.get('due_m'), due_t: p.get('due_t'),
           iid: p.get('iid'), iurl: p.get('url') ?? p.get('iurl'),
           ititle: p.get('ititle'), idesc: p.get('idesc'),
@@ -1094,6 +1153,125 @@
         });
       }
       history.replaceState(null, '', location.pathname);   // clean URL so refresh won't re-open
+    }
+
+    // ── Destination chooser ───────────────────────────────────────────────
+    // A prefill link knows its artifact but not its destination. It used to guess: a slug that
+    // matched an existing lesson silently rewrote it, and a slug that didn't silently created a
+    // second lesson beside the live one. Both are destructive in opposite directions, so ask.
+    function openDestChooser(prefill) {
+      const modal = document.getElementById('dest-modal');
+      const pick  = document.getElementById('dest-pick');
+      const known = prefill.id ? vm.lessons.find(x => x.id === prefill.id) : null;
+
+      pick.style.display = 'none';
+      modal.querySelectorAll('.dest-box').forEach(b => b.classList.remove('active'));
+      document.getElementById('dest-sub').textContent = prefill.ititle || prefill.title
+        ? `“${prefill.ititle || prefill.title}”${known ? ` · a lesson already uses the id “${prefill.id}”` : ''}`
+        : 'Choose where this artifact should land.';
+
+      modal.querySelector('[data-dest="new"]').onclick = () => {
+        closeDest();
+        openEdit(null, prefill);        // unchanged behavior: the full prefill authors a new lesson
+      };
+      modal.querySelector('[data-dest="existing"]').onclick = () => {
+        modal.querySelector('[data-dest="existing"]').classList.add('active');
+        renderDestLessons(prefill);
+        pick.style.display = '';
+      };
+      modal.classList.add('open');
+    }
+    function closeDest() { document.getElementById('dest-modal').classList.remove('open'); }
+
+    function renderDestLessons(prefill) {
+      const wrap = document.getElementById('dest-lessons');
+      const lessons = (vm.lessons || []).slice()
+        .sort((a, b) => (a.lesson_number ?? 1e9) - (b.lesson_number ?? 1e9));
+      if (!lessons.length) {
+        wrap.innerHTML = `<div class="muted" style="font-size:.85em">No lessons yet — choose <strong>Create new lesson</strong>.</div>`;
+        return;
+      }
+      wrap.innerHTML = lessons.map(l => {
+        const swap = !!l.interaction;
+        const meta = [
+          l.lesson_number != null ? 'L' + l.lesson_number : null,
+          l.is_published ? 'published' : 'draft',
+          swap ? `replaces “${l.interaction.title || l.interaction.id}”` : 'no interaction yet',
+        ].filter(Boolean).join(' · ');
+        return `<div class="lb-orphan les${swap ? ' swap' : ''}" data-lid="${esc(l.id)}" title="${esc(l.title || l.id)}">
+          <span class="lb-orphan-badge">${swap ? 'Will replace' : 'Add to'}</span>
+          <span class="lb-orphan-title">${esc(l.title || l.id)}</span>
+          <span class="lb-orphan-meta">${esc(meta)}</span>
+        </div>`;
+      }).join('');
+      wrap.querySelectorAll('[data-lid]').forEach(c =>
+        c.addEventListener('click', () => chooseDestLesson(c.dataset.lid, prefill)));
+    }
+
+    async function chooseDestLesson(lessonId, prefill) {
+      const lesson = vm.lessons.find(x => x.id === lessonId);
+      if (!lesson) return;
+      closeDest();
+
+      // Only the INTERACTION travels. The lesson keeps its own id, title, dates, and publish
+      // state — openEdit's pick() falls back to the existing row for every field omitted here,
+      // so passing the artifact's lesson-level values would quietly rewrite the target lesson.
+      const iid = prefill.iid || prefill.id;
+      openEdit(lesson.id, {
+        iid,
+        iurl:   prefill.iurl,
+        ititle: prefill.ititle || prefill.title,
+        idesc:  prefill.idesc  || prefill.desc,
+      });
+
+      if (lesson.interaction && lesson.interaction.id !== iid) {
+        pendingSwap = {
+          fromId: lesson.interaction.id,
+          fromTitle: lesson.interaction.title || lesson.interaction.id,
+          reports: null,
+        };
+        await renderSwapNotice();
+      }
+    }
+
+    async function renderSwapNotice() {
+      const el = document.getElementById('lm-notice');
+      if (!pendingSwap) { el.style.display = 'none'; return; }
+      el.textContent = `Saving replaces this lesson's interaction “${pendingSwap.fromTitle}”. The old one is kept and becomes unassigned — it is never deleted.`;
+      el.style.display = '';
+      const n = await L.countInteractionReports(pendingSwap.fromId);
+      if (!pendingSwap) return;                  // director closed/changed the form during the await
+      pendingSwap.reports = n;
+      if (n > 0) {
+        el.textContent = `Saving replaces this lesson's interaction “${pendingSwap.fromTitle}”, which already holds ${n} student report${n === 1 ? '' : 's'}. Those reports stay attached to the old interaction and will no longer be reachable from this lesson.`;
+      }
+    }
+
+    function promptSwapConfirm(swap) {
+      return new Promise(resolve => {
+        const modal = document.getElementById('swap-modal');
+        const ok = document.getElementById('swap-ok');
+        const info = document.getElementById('swap-info');
+        document.getElementById('swap-msg').textContent =
+          `“${swap.fromTitle}” is currently attached to this lesson. Saving swaps in the new artifact and leaves the old interaction unassigned.`;
+        const n = swap.reports || 0;
+        info.className = 'alert ' + (n > 0 ? 'alert-warn' : 'alert-info');
+        info.textContent = n > 0
+          ? `${n} student report${n === 1 ? '' : 's'} already submitted against “${swap.fromTitle}”. They are NOT deleted, but they stay with the old interaction and drop out of this lesson's view. Grades already recorded are unaffected.`
+          : 'No student reports are attached to it yet, so nothing is stranded.';
+        const done = (val) => {
+          modal.classList.remove('open');
+          ok.onclick = null;
+          modal.querySelectorAll('[data-swapclose]').forEach(b => (b.onclick = null));
+          resolve(val);
+        };
+        ok.onclick = () => done(true);
+        modal.querySelectorAll('[data-swapclose]').forEach(b => (b.onclick = () => done(false)));
+        modal.addEventListener('click', function bg(e) {
+          if (e.target === modal) { modal.removeEventListener('click', bg); done(false); }
+        });
+        modal.classList.add('open');
+      });
     }
   </script>
 </body>

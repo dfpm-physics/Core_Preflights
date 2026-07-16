@@ -1240,6 +1240,26 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 .lb-drop-slot { display: flex; align-items: center; gap: 8px; min-height: 34px; font-size: 0.86em; }
 .lb-drop-slot.empty { color: var(--muted); font-style: italic; }
 .lb-drop-slot.filled { color: var(--text); font-weight: 600; }
+
+/* Prefill destination chooser — two large boxes, then a lesson picker in the orphan-card style. */
+.dest-boxes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .dest-boxes { grid-template-columns: 1fr; } }
+.dest-box { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left;
+  border: 2px solid var(--border); border-radius: var(--radius); background: var(--card);
+  padding: 16px 16px 14px; cursor: pointer; transition: border-color .12s, box-shadow .12s; }
+.dest-box:hover { border-color: var(--blue); box-shadow: var(--shadow-sm); }
+.dest-box.active { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 7%, transparent); }
+.dest-box-ic { font-size: 1.5em; line-height: 1; margin-bottom: 2px; }
+.dest-box-t { font-size: 0.95em; font-weight: 700; color: var(--text); }
+.dest-box-d { font-size: 0.78em; color: var(--muted); }
+.dest-pick { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
+
+/* Lesson cards reuse .lb-orphan, but they are click-to-pick rather than draggable. */
+.lb-orphan.les { cursor: pointer; border-left-color: var(--gold); }
+.lb-orphan.les:active { transform: none; cursor: pointer; }
+.lb-orphan.les .lb-orphan-badge { color: var(--gold); }
+.lb-orphan.les.swap { border-left-color: var(--red); }
+.lb-orphan.les.swap .lb-orphan-badge { color: var(--red); }
 .lb-slot-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-slot-x { margin-left: auto; border: none; background: transparent; color: var(--muted);
   cursor: pointer; font-size: 1.1em; line-height: 1; padding: 2px 6px; border-radius: 6px; }

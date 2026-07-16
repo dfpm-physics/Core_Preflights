@@ -271,6 +271,17 @@ export async function getInteraction(id) {
   return data || null;
 }
 
+/** Count the student reports attached to ONE interaction. Used before swapping a lesson's
+ *  interaction: reports are keyed by `interaction_id`, so they follow the OLD interaction when it
+ *  is displaced and stop being reachable from the lesson. The director should see that number
+ *  before saving, not discover it afterward. */
+export async function countInteractionReports(interactionId) {
+  if (!interactionId) return 0;
+  const { count } = await db.from('preflight_interaction_reports')
+    .select('*', { count: 'exact', head: true }).eq('interaction_id', interactionId);
+  return count || 0;
+}
+
 /** Count the student work that a "delete all contents" would destroy, so the confirm dialog can
  *  state it exactly: preflight responses (assignment → responses CASCADE) + interaction reports
  *  (interaction → preflight_interaction_reports CASCADE). */
