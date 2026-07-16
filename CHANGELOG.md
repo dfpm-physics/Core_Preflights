@@ -12,11 +12,11 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ### Added — hidden Q2-effort and Q3-understanding diagnostics for written preflights
 
-Added draft migration [`022_preflight_question_diagnostics.sql`](supabase/migrations/022_preflight_question_diagnostics.sql)
-with nullable, range-checked `scores.q2_effort` and `scores.q3_understanding` columns. **Not applied
-to the live DB** — migration 021 is also still recorded as drafted/not applied, and shared production
-DDL must follow the coordination gate in `.ai/instructions/CORE.md` §0. Migration 022 has no dependency
-on 021 and may be applied independently while the larger lesson-finalization migration remains deferred.
+Added migration [`022_preflight_question_diagnostics.sql`](supabase/migrations/022_preflight_question_diagnostics.sql)
+with nullable, range-checked `scores.q2_effort` and `scores.q3_understanding` columns. **Applied to
+the live DB by Casey and verified by Codex** with a zero-row REST schema probe selecting both columns
+(HTTP 200, empty result). Migration 021 remains drafted/not applied; 022 has no dependency on it and
+was applied independently while the larger lesson-finalization migration remains deferred.
 
 Extended the canonical [`preflight-analyze` skill](.ai/skills/preflight-analyze/SKILL.md) to score
 Q2 engagement and Q3 demonstrated physics understanding from 0–5 for every submitted student, write
