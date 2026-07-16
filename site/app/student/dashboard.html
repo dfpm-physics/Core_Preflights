@@ -19,8 +19,8 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { loadStudentDashboard } from '../js/student-data.js';
-    import { esc, iconHTML, relativeDue, deadlineClass, fmtDate, pct } from '../js/util.js';
+    import { loadStudentLessonDashboard, STATE } from '../js/student-lessons.js';
+    import { esc, iconHTML, relativeDue, deadlineClass, fmtDateTime } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
     if (!ctx) { /* redirected */ } else { initTheme(); renderNav(ctx, { active: 'dashboard' }); main(); }
@@ -29,7 +29,7 @@
 
     async function main() {
       const root = document.getElementById('main');
-      const vm = await loadStudentDashboard(ctx);
+      const vm = await loadStudentLessonDashboard(ctx);
 
       if (vm.noCourse) {
         root.innerHTML = `
@@ -45,9 +45,8 @@
           <div class="sub">${esc(ctx.courseTitleOf(ctx.currentCourse))} · Section ${esc(ctx.studentRow.section_id || '—')}</div>
         </div>
         ${statTiles(vm.stats)}
-        ${upcomingSection(vm.upcoming)}
-        ${vm.overdue.length ? overdueSection(vm.overdue) : ''}
-        ${interactionsSection(vm.interactionsTodo, vm.interactions)}
+        ${upNextSection(vm.upNext)}
+        ${vm.missed.length ? missedSection(vm.missed) : ''}
         ${gradedSection(vm.graded)}`;
     }
 
@@ -57,109 +56,82 @@
           <div class="stat-ic">${iconHTML(icon, emoji, 'ic')}</div>
           <div class="stat-body"><div class="stat-num">${num}</div><div class="stat-label">${esc(label)}</div></div>
         </div>`;
+      // Points earned, not an average percentage. A lesson is 2 points of EFFORT
+      // (LESSON-UNIFICATION D3) — a correctness percentage here would tell cadets they're graded
+      // on getting it right, which is exactly what the choice UI must not imply.
+      const points = s.available ? `${s.earned}/${s.available}` : '—';
       return `<div class="stat-grid">
-        ${tile('blue',  'todo',         '📝', s.toDo, 'To do')}
-        ${tile('red',   'overdue',      '⏰', s.overdue, 'Overdue')}
-        ${tile('gold',  'interactions', '💡', s.interactionsToDo, 'Interactions to do')}
-        ${tile('green', 'award',        '🏅', s.avgPct == null ? '—' : s.avgPct + '%', 'Average grade')}
+        ${tile('blue',  'todo',    '📝', s.toDo, 'To do')}
+        ${tile('red',   'overdue', '⏰', s.missed, 'Missed')}
+        ${tile('green', 'award',   '🏅', points, 'Points earned')}
+        ${tile('gold',  'done',    '✅', s.graded, 'Graded')}
       </div>`;
     }
 
-    function statusDot(st) {
-      return { 'not-started':'grey', 'submitted':'green', 'overdue':'red', 'pending':'blue', 'graded':'green' }[st] || 'grey';
-    }
-    function statusText(item) {
-      switch (item.status) {
-        case 'submitted': return 'Submitted · editable until due';
-        case 'not-started': return relativeDue(item.due);
-        case 'overdue': return relativeDue(item.due);
-        case 'pending': return 'Submitted · grading in progress';
-        case 'graded': return `Graded ${item.score.total_score}/${item.score.max_total}`;
-        default: return '';
+    function statusText(l) {
+      switch (l.state) {
+        case STATE.DRAFT:     return 'Draft saved · ' + relativeDue(l.due);
+        case STATE.SUBMITTED: return 'Submitted · editable until due';
+        case STATE.COMPLETE:  return 'Complete · interactive';
+        case STATE.GRADING:   return 'Submitted · grading in progress';
+        case STATE.GRADED:    return `Graded ${l.completion.points}/${l.points ?? 2} pts`;
+        default:              return relativeDue(l.due);
       }
     }
 
-    function assignmentItem(a) {
-      const dueCls = deadlineClass(a.due, a.isPast);
-      return `<a class="list-item" href="assignments.html?a=${encodeURIComponent(a.id)}">
-        <span class="status-dot ${statusDot(a.status)}"></span>
+    function modeLabel(l) {
+      if (l.completion_policy === 'choice' && l.preflight && l.interaction) return 'Your choice of format';
+      if (l.completion_policy === 'interaction') return 'Interactive lesson';
+      const n = l.preflight?.questions?.length ?? 0;
+      return `${n} question${n === 1 ? '' : 's'}`;
+    }
+
+    function lessonItem(l) {
+      return `<a class="list-item" href="lessons.html?l=${encodeURIComponent(l.id)}">
+        <span class="status-dot ${l.dot}"></span>
         <div class="li-body">
-          <div class="li-title">${esc(a.title)}</div>
-          <div class="li-meta"><span>${a.qCount} question${a.qCount===1?'':'s'} · ${a.totalPts} pts</span>
-            <span class="deadline ${dueCls}">${esc(statusText(a))}</span></div>
+          <div class="li-title">${l.lesson_number != null ? esc(l.lesson_number) + '. ' : ''}${esc(l.title)}</div>
+          <div class="li-meta"><span>${esc(modeLabel(l))} · ${l.points ?? 2} pts</span>
+            <span class="deadline ${deadlineClass(l.due, l.isPast)}">${esc(statusText(l))}</span></div>
         </div>
         <span class="li-arrow">›</span>
       </a>`;
     }
 
-    function upcomingSection(items) {
+    function upNextSection(items) {
       const body = items.length
-        ? `<div class="list">${items.slice(0, 6).map(assignmentItem).join('')}</div>`
+        ? `<div class="list">${items.map(lessonItem).join('')}</div>`
         : `<div class="empty-state"><div class="es-ic">${iconHTML('rocket', '🚀', 'ic')}</div><h3>All caught up</h3>
-             <p>You have no open assignments right now. Nice work.</p></div>`;
+             <p>You have no open lessons right now. Nice work.</p></div>`;
       return `<section class="dash-section">
         <div class="section-head"><h2>${iconHTML('due-soon', '⏳', 'ic')} Up next</h2>
           ${items.length ? `<span class="count-pill">${items.length}</span>` : ''}
           <span class="grow"></span>
-          <a class="btn btn-ghost btn-sm" href="assignments.html">View all</a>
+          <a class="btn btn-ghost btn-sm" href="lessons.html">View all</a>
         </div>${body}</section>`;
     }
 
-    function overdueSection(items) {
+    function missedSection(items) {
       return `<section class="dash-section">
         <div class="section-head"><h2>Needs attention</h2><span class="count-pill">${items.length}</span></div>
-        <div class="list">${items.map(assignmentItem).join('')}</div></section>`;
-    }
-
-    function interactionsSection(todo, all) {
-      const done = all.filter(i => i.done);
-      let body;
-      if (!all.length) {
-        body = `<div class="empty-state"><div class="es-ic">💡</div><h3>No interactions yet</h3>
-          <p>Lesson interactions will appear here when your instructor publishes them.</p></div>`;
-      } else {
-        const todoHTML = todo.map(i => `
-          <div class="list-item">
-            <span class="status-dot amber"></span>
-            <div class="li-body"><div class="li-title">${esc(i.title)}</div>
-              <div class="li-meta">${esc(i.description || 'Interactive lesson')}</div></div>
-            <div class="li-right">
-              <a class="btn btn-primary btn-sm" href="${esc(i.artifact_url || '#')}" target="_blank" rel="noopener">Launch ↗</a>
-            </div>
-          </div>`).join('');
-        const doneHTML = done.length ? `<div class="list" style="margin-top:10px">${
-          done.map(i => `<div class="list-item">
-            <span class="status-dot green"></span>
-            <div class="li-body"><div class="li-title">${esc(i.title)}</div>
-              <div class="li-meta">Completed ${fmtDate(i.submittedAt)}</div></div>
-            <span class="tag gold">Done</span></div>`).join('')}</div>` : '';
-        body = (todo.length ? `<div class="list">${todoHTML}</div>` : `
-          <div class="empty-state" style="padding:24px"><div class="es-ic">🎉</div>
-          <h3>All interactions complete</h3><p>You've finished every published interaction.</p></div>`) + doneHTML;
-      }
-      return `<section class="dash-section">
-        <div class="section-head"><h2>${iconHTML('progress', '📈', 'ic')} Lesson interactions</h2>
-          ${todo.length ? `<span class="count-pill">${todo.length} to do</span>` : ''}
-          <span class="grow"></span>
-          <a class="btn btn-ghost btn-sm" href="interactions.html">View all</a>
-        </div>${body}</section>`;
+        <div class="list">${items.map(lessonItem).join('')}</div></section>`;
     }
 
     function gradedSection(items) {
       if (!items.length) return '';
-      const badge = (a) => {
-        const p = pct(a.score.total_score, a.score.max_total);
-        const cls = p >= 90 ? 'full' : p >= 60 ? 'partial' : 'zero';
-        return `<span class="score-badge ${cls}">${a.score.total_score}/${a.score.max_total}</span>`;
+      const badge = (l) => {
+        const pts = l.completion.points ?? 0, max = l.points ?? 2;
+        const cls = pts >= max ? 'full' : pts > 0 ? 'partial' : 'zero';
+        return `<span class="score-badge ${cls}">${pts}/${max}</span>`;
       };
       return `<section class="dash-section">
         <div class="section-head"><h2>${iconHTML('done', '✅', 'ic')} Recently graded</h2><span class="count-pill">${items.length}</span></div>
-        <div class="list">${items.slice(0, 5).map(a => `
-          <a class="list-item" href="assignments.html?a=${encodeURIComponent(a.id)}">
+        <div class="list">${items.slice(0, 5).map(l => `
+          <a class="list-item" href="lessons.html?l=${encodeURIComponent(l.id)}">
             <span class="status-dot green"></span>
-            <div class="li-body"><div class="li-title">${esc(a.title)}</div>
-              <div class="li-meta">Graded by your instructor</div></div>
-            <div class="li-right">${badge(a)}<span class="li-arrow">›</span></div>
+            <div class="li-body"><div class="li-title">${esc(l.title)}</div>
+              <div class="li-meta">Graded on effort · ${l.completion.path === 'interaction' ? 'interactive' : 'written'}</div></div>
+            <div class="li-right">${badge(l)}<span class="li-arrow">›</span></div>
           </a>`).join('')}</div></section>`;
     }
   </script>

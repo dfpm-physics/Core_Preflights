@@ -124,13 +124,15 @@
       // a.due / a.isPast already account for the per-student extension (computed in the
       // list load), so we only need the saved answers + any finalized score here.
       const [{ data: existing }, { data: scoreRow }] = await Promise.all([
-        db.from('responses').select('answers').eq('student_id', sid).eq('assignment_id', a.id).maybeSingle(),
+        db.from('responses').select('answers, is_final').eq('student_id', sid).eq('assignment_id', a.id).maybeSingle(),
         db.from('scores').select('total_score, max_total, question_scores, is_finalized')
           .eq('student_id', sid).eq('assignment_id', a.id).maybeSingle(),
       ]);
 
       const isGraded = !!scoreRow?.is_finalized;
       const isPast = a.isPast;
+      const isFinal = !!existing?.is_final;   // submitted, but still editable until the deadline
+      const locked = isPast;
       const due = a.due;
 
       const figHTML = a.figure_url
@@ -162,22 +164,24 @@
         renderReviewQuestions(a.questions || [], existing?.answers || {}, scoreRow.question_scores || {});
       } else {
         if (existing?.answers) answers = existing.answers;
-        const closed = isPast
+        const closed = isFinal && !isPast
+          ? `<div class="alert alert-ok">Submitted${due ? ' — you can still edit your answers until ' + fmtDateTime(due) : ''}.</div>`
+          : isPast
           ? `<div class="alert alert-warn">This assignment is past due. Your submitted answers are shown below${existing?.answers ? ' (grading in progress)' : ''}.</div>` : '';
         root.innerHTML = header + `
           ${closed}
-          <div id="progress-wrap" style="margin-bottom:8px;${isPast?'display:none':''}">
+          <div id="progress-wrap" style="margin-bottom:8px;${locked?'display:none':''}">
             <div class="row" style="justify-content:space-between;font-size:0.78em;color:var(--muted);margin-bottom:4px">
               <span id="progress-label">0 of 0 answered</span><span id="save-status" style="color:var(--green)"></span>
             </div>
             <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
           </div>
           <div id="questions"></div>
-          <div id="submit-section" style="margin-top:24px;display:${isPast?'none':'flex'};gap:12px;align-items:center;flex-wrap:wrap">
+          <div id="submit-section" style="margin-top:24px;display:${locked?'none':'flex'};gap:12px;align-items:center;flex-wrap:wrap">
             <button class="btn btn-primary" id="submit-btn">Submit assignment</button>
             <span id="submit-status" style="font-size:0.85em"></span>
           </div>`;
-        renderQuestions(a.questions || [], isPast);
+        renderQuestions(a.questions || [], locked);
         updateProgress();
         document.getElementById('submit-btn')?.addEventListener('click', submitAssignment);
         wireInputs();
@@ -241,11 +245,19 @@
 
     async function autoSave() {
       if (!current) return;
-      const { error } = await db.from('responses').upsert({
+      const { data, error } = await db.from('responses').upsert({
         student_id: sid, assignment_id: current.id, answers, updated_at: new Date().toISOString(),
-      }, { onConflict: 'student_id,assignment_id' });
+      }, { onConflict: 'student_id,assignment_id' }).select('is_final').maybeSingle();
       const st = document.getElementById('save-status');
-      if (st) { st.textContent = error ? '⚠ Save failed' : '✓ Saved'; setTimeout(() => { st.textContent = ''; }, 2000); }
+      if (error) {
+        if (st) { st.textContent = '⚠ Save failed'; setTimeout(() => { st.textContent = ''; }, 2000); }
+        return;
+      }
+      // Past the deadline the database keeps the draft as it stood at the cutoff and drops the
+      // late edit, so the write succeeds without storing what's on screen. Re-open rather than
+      // report a save that didn't happen.
+      if (data?.is_final) { openAssignment(current); return; }
+      if (st) { st.textContent = '✓ Saved'; setTimeout(() => { st.textContent = ''; }, 2000); }
     }
 
     function updateProgress() {
@@ -261,17 +273,23 @@
     async function submitAssignment() {
       const btn = document.getElementById('submit-btn');
       const status = document.getElementById('submit-status');
+      const qs = current.questions || [];
+      const answered = qs.filter(q => answers[q.id] && String(answers[q.id]).trim()).length;
+      if (answered < qs.length &&
+          !confirm(`Submit with ${answered} of ${qs.length} questions answered?\n\n` +
+                   `You can keep editing until the deadline.`)) return;
+
+      clearTimeout(saveTimer);   // don't let a queued autosave race the submit
       btn.disabled = true; btn.innerHTML = '<span class="spinner on-dark"></span> Submitting…';
       const { error } = await db.from('responses').upsert({
-        student_id: sid, assignment_id: current.id, answers, updated_at: new Date().toISOString(),
+        student_id: sid, assignment_id: current.id, answers, is_final: true,
+        updated_at: new Date().toISOString(),
       }, { onConflict: 'student_id,assignment_id' });
       if (error) {
         status.textContent = '⚠ Submission failed — please try again.'; status.style.color = 'var(--red)';
         btn.disabled = false; btn.textContent = 'Submit assignment'; return;
       }
-      btn.textContent = '✓ Submitted';
-      status.textContent = 'Your answers are saved. You can edit them until the deadline.';
-      status.style.color = 'var(--green)';
+      openAssignment(current);   // re-render in the locked, submitted state
     }
 
     function renderReviewQuestions(questions, studentAnswers, questionScores) {

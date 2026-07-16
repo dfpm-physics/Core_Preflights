@@ -131,6 +131,21 @@ the named path grades. Most required-phase lessons will just build the one.)
 
 ## 6. Unified credit & the path-lock (the critical rule)
 
+> **⚠ Amended 2026-07-16 — the lock model below is superseded. D4 and D9 no longer describe the
+> system.** The rules as built (migration `021_lesson_finalize_and_extensions.sql`):
+>
+> | Was (D4/D9) | Is (2026-07-16) |
+> |---|---|
+> | First *finalized* path wins; Submit is the lock, symmetric across both paths | **The interaction is the only lock.** The written preflight stays **editable until the deadline** — its Submit marks the lesson complete but closes nothing |
+> | Path immutable once set | **Directional:** `preflight → interaction` is allowed (the student's one-way switch; submitting the report *is* the switch). `interaction → preflight` is blocked |
+> | *(unspecified)* | Choosing the interaction **supersedes** the written answers: the `responses` row is kept (D5/§13 did-both detection survives) but frozen and locked out of grading. Supersession is **derived** — non-grading iff a completion row has `path='interaction'` — so it cannot drift |
+> | *(unspecified)* | **An instructor's extension overrides everything**, including the interaction lock. It only re-opens the door: the existing completion is never deleted, so a grant can never *lower* a grade |
+> | Auto-promote is the `/preflight-analyze` due-date sweep | Unchanged — **plus** a DB-level lazy promotion for the window before the sweep runs (a late write finalizes the pre-deadline draft and discards the late edit) |
+>
+> Everything else in this section still holds: 2 points from effort, one completion row per
+> (student, lesson) via `UNIQUE`, and the frozen artifact contract untouched. The student-facing
+> consequences are specified in [`STUDENT-LESSON-VIEW.md`](STUDENT-LESSON-VIEW.md).
+
 A lesson is worth **2 points**, derived from **effort** exactly as interactions are today
 (effort 3–5 → 2, 1–2 → 1, 0/NULL → 0; migration 013). `lesson_completions` carries the grade.
 
@@ -438,9 +453,16 @@ Each phase is independently shippable and leaves the system working.
    scoped to the additive tables + the grade(`lc_score_from_effort`)/lock(`lc_lock_path`) triggers + RLS;
    the row-*creating* finalize triggers and the `responses.is_final` draft flag are deferred to Phase 2.
 2. **Finalize triggers + guards** — create the `lesson_completions` row when a `responses` /
-   `preflight_interaction_reports` draft is marked final (first-finalize-wins + path-lock); add the
-   receiver/RLS draft-write + section-day due-cutoff guards (D8/D9). Contract untouched. Test with seed
-   data.
+   `preflight_interaction_reports` draft is marked final; add the receiver/RLS draft-write +
+   section-day due-cutoff guards (D8/D9). Contract untouched. — **⏳ drafted 2026-07-16,
+   NOT APPLIED** (`supabase/migrations/021_lesson_finalize_and_extensions.sql`). Adds
+   `responses.is_final`, both mint triggers, the extension-aware cutoff + lazy promotion, the
+   directional path lock (§6 amendment), `extensions.lesson_id`, and an **RLS repair** — the
+   `responses`/`extensions` policies predate student auth (migration 004) and are wide open; see
+   the migration header. Paired client changes are in `student/assignments.html` +
+   `student/interaction-submit.html`. **Before applying:** provision student accounts and confirm
+   no NULL `students.auth_user_id`, and check `count(*) FROM responses` for the `is_final`
+   backfill. Untested — needs a browser pass.
 3. **`/preflight-analyze` extension** — emit `report_data` + write the preflight `lesson_completions`
    row; add the question→objective and reading-reflection-role conventions; perform the due-date
    auto-promote of leftover drafts.
@@ -453,8 +475,11 @@ Each phase is independently shippable and leaves the system working.
    preflight builder pins **Q1** (reading-time diagnostic, 0 pts, names hidden from students) and **Q2**
    (`role:"reading_reflection"`, the meaningful-gate), matching the live Fall preflights; the per-question
    objective map is unchanged.
-5. **Student lesson view + Save/Submit** — draft autosave, explicit Submit (the lock), required/choice
-   display, post-final / post-due lock UX, unified 2-pt grade.
+5. **Student lesson view + Save/Submit** — draft autosave, explicit Submit, required/choice
+   display, post-due lock UX, unified 2-pt grade. — **📐 designed 2026-07-16:
+   [`STUDENT-LESSON-VIEW.md`](STUDENT-LESSON-VIEW.md)** (8-state machine, choice modal, the three
+   switch warnings, study-mode copy per state, dashboard rework). Not built. Blocked on Phase 2
+   being applied — without `lesson_completions` rows every lesson renders as "not started".
 6. **Unified rollup + research export** — merged by-objective rollup for choice; extend
    `/interaction-aggregate`; ship the export.
 7. **Partially un-deferred 2026-07-15** — the faculty Lessons tool can now **reference existing**

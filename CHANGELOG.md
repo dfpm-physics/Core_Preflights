@@ -10,6 +10,126 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-16 — Matthew Recker via Claude
 
+### Found — the `responses` / `extensions` RLS predates student auth and is wide open
+
+**Not yet fixed on the live DB** — the repair ships with migration 021 below, which is drafted but
+**not applied**. Read `supabase/rls.sql` §RESPONSES: its own header says *"No auth JWT on student
+side — application enforces student_id ownership."* That was true until migration 004 gave students
+real Supabase Auth accounts; the policies were never revisited. As they stand:
+
+| Policy | Allows |
+|---|---|
+| `responses: anon reads` — `USING (TRUE)` | Anyone with the **public** anon key reads every cadet's answers, unauthenticated |
+| `responses: anyone inserts` | Anyone inserts a response for **any** `student_id`; no deadline check (it exists only on UPDATE) |
+| `responses: anon updates own` | Deadline checked against legacy `assignments.due_date`, **ignoring `extensions`** |
+| `extensions: manage_extensions` — `FOR ALL TO authenticated USING (true)` | Students **are** `authenticated` — a cadet can grant themselves an extension to any date |
+| `lc: student inserts own` (migration 016) | A cadet can insert their own `lesson_completions` with `effort=5` → `points=2` and lock it in |
+
+**Consequence worth knowing now: extensions do not work today.** The UPDATE policy refuses any edit
+past `assignments.due_date` regardless of any grant, and autosave creates the row on the first
+keystroke — so for practically every student, a granted extension silently does nothing. The UI
+shows the assignment as open, then every save fails.
+
+Verified against the committed `rls.sql`; no later migration touches these policies. **Confirm
+against the live DB before acting.**
+
+### Added — migration 021: finalize lifecycle, extension-aware due cutoff, RLS repair (drafted, NOT applied)
+
+Phase 2 of [`LESSON-UNIFICATION.md`](docs/architecture/LESSON-UNIFICATION.md), continuing from 016.
+[`supabase/migrations/021_lesson_finalize_and_extensions.sql`](supabase/migrations/021_lesson_finalize_and_extensions.sql):
+`responses.is_final`; the two mint triggers that create a `lesson_completions` row when either path
+finalizes (leaving the frozen artifact receiver untouched); a server-side, extension-aware due
+cutoff; lazy promotion; `extensions.lesson_id`; and the RLS repair above.
+
+**The lock model changed** — D4/D9 of the parent doc are superseded (see its §6 amendment). The
+interaction is now the only lock; the written preflight stays editable until the deadline;
+`preflight → interaction` is a one-way switch; an instructor's extension overrides everything.
+Choosing the interaction **supersedes** the written answers rather than deleting them — the
+`responses` row survives so D5/§13 did-both detection keeps working, and supersession is *derived*
+(non-grading iff a completion has `path='interaction'`) so it can't drift.
+
+Three corrections to the doc's spec, folded in: the preflight trigger must fire on **INSERT or
+UPDATE** (§7 says UPDATE only — but the client upserts, so a first-time submit would silently mint
+nothing); the mint must gate on `completion_policy` (§5 allows a component attached as optional
+practice, which must not grade); and the guard must permit writes that don't touch `answers`, or
+the `/preflight-analyze` sweep aborts the first time it meets a student who switched paths.
+
+**Before applying:** provision student accounts and confirm `students.auth_user_id` has no NULLs
+(all 73 are NULL today — the new RLS ties every student read/write to it, so a partial provisioning
+failure becomes a silent lockout); and check `count(*) FROM responses` for the `is_final` backfill
+(the old model can't distinguish an abandoned autosave from a deliberate submit). **Untested** —
+needs a browser pass. DDL on the shared live DB → CORE.md §0.
+
+### Changed — student pages: Submit means something, and switching paths is warned
+
+[`student/assignments.html`](site/app/student/assignments.html): Submit now sets `is_final` (it was
+byte-identical to autosave, so it did nothing); autosave detects a server-side lazy promotion and
+re-renders rather than reporting a save that didn't happen; a submitted-but-editable state.
+[`student/interaction-submit.html`](site/app/student/interaction-submit.html): counts the student's
+saved written answers on load and warns twice — a banner and a confirm — that submitting the report
+locks those answers out of grading. Both are inert until 021 is applied.
+
+### Added — student lesson view: cadets now navigate by lesson, not by modality
+
+Phase 5 steps 1–4 of [`LESSON-UNIFICATION.md`](docs/architecture/LESSON-UNIFICATION.md), built to
+the design below. **Inert until migration 021 is applied** — without `lesson_completions` rows every
+lesson resolves to "not started".
+
+- **[`js/student-lessons.js`](site/app/js/student-lessons.js)** (new) — the lesson data layer and the
+  7-state machine, batched, no N+1. `state` is computed **once, here**, so the list and the dashboard
+  cannot disagree (the pattern `student-data.js` already used for assignments).
+- **[`student/lessons.html`](site/app/student/lessons.html)** (new) — lesson list + detail, the choice
+  modal, and the launch warning. `assignments.html` is **kept** as the written-preflight surface,
+  reached from a lesson instead of the nav, so orphan assignments still resolve and nothing built
+  there is thrown away.
+- **[`student/dashboard.html`](site/app/student/dashboard.html)** — lesson-centric. The standalone
+  "Lesson interactions" section is gone; it was the double-count made visible.
+- **[`js/nav.js`](site/app/js/nav.js)** — student nav is now `Dashboard · Lessons`.
+
+**Why:** the student side still rendered `assignments` and `interactions` as two parallel lists with
+two separate to-do counts, so a `choice` lesson — one piece of work, two ways to do it — appeared as
+**two mandatory assignments**, with nothing on screen saying they were alternatives or that doing one
+closed the other.
+
+**Two deliberate calls, both about not biasing the experiment.** The choice modal styles *neither*
+option as primary, and status dots stay modality-neutral (a `.tag` says which path was taken) — a
+default or a colour-coded dot would put a thumb on the scale of the revealed-preference signal the
+phase sequence exists to measure. And the dashboard's grade tile now shows **points earned, not an
+average percentage**: a lesson is 2 points of *effort* (D3), so a correctness percentage would tell
+cadets they're graded on getting it right.
+
+**Verified** in headless Chrome against the local server: both pages parse, the full import graph
+resolves, `bootstrap()` runs and redirects an unauthenticated visitor to login, and a temporary
+harness confirmed the export contract plus that every state maps to a dot class the stylesheet
+defines. **Not verified:** anything requiring a login — no student accounts are provisioned yet.
+
+### Added — `STUDENT-LESSON-VIEW.md`, the Phase 5 design
+
+[`docs/architecture/STUDENT-LESSON-VIEW.md`](docs/architecture/STUDENT-LESSON-VIEW.md) — the first
+doc specifying what a cadet actually sees. An 8-state machine, the choice modal, the three
+escalating switch warnings, per-state study-mode copy, and a dashboard rework. Composition only —
+no new CSS. **Why it was needed:** the student side still renders assignments and interactions as
+two parallel lists with two to-do counts, so a `choice` lesson looks like two mandatory
+assignments. Also resolves a tension in the original framing — *"only the first submission is
+graded"* holds only after the interaction path is taken or after the deadline; before then, a
+report **replaces** a written submission.
+
+### Added — `ZZ Test Cadet` (3009999999) smoke-test roster row
+
+Added one student row to exercise the student view: `student_id 3009999999`, section `M1A`
+(phys-215), `auth_user_id` NULL pending provisioning. The ID sits at the **top of the**
+`students_student_id_check` **range** (3000000000–3009999999), well clear of the current roster
+block (3000990000–3000990071), so it is easy to spot and delete. Its last 6 digits (`999999`) are
+its default password, per the provisioning convention.
+
+**Why this ID shape:** a `99…`/`X…` prefix was requested to mark the row as non-real, but the
+database forbids it — `student_id` is a `bigint` with a CHECK pinning it to 3000000000–3009999999.
+Marking test rows by ID prefix would require a migration; the `ZZ` name prefix does that job instead.
+
+**Note for whoever provisions next:** student logins do not exist yet — all 73 rows have
+`auth_user_id IS NULL`, so *every* cadet login currently fails with "Incorrect ID/email or
+password". Roster tab → **Provision Accounts** creates them (`email_confirm: true`).
+
 ### Changed — retired the artifact-submit endpoint; contract URLs now survive the app promotion
 
 **Breaking, deliberate, and done in the gap before Fall 2026.** The submission endpoint moved and

@@ -91,6 +91,7 @@
     /* ── Init ────────────────────────────────────────────────────────────── */
     const payload = readPayload();
     const ctx = await bootstrap();
+    let writtenAnswers = 0;   // answers on this lesson's written path that submitting would erase
     if (ctx) init();
 
     async function init() {
@@ -130,6 +131,23 @@
         interaction = data || null;
       }
 
+      // If this interaction's lesson also has a written preflight and the student has answered
+      // any of it, submitting here erases that work (the DB deletes the row). Warn before, not
+      // after — this is the student's last chance to back out.
+      writtenAnswers = 0;
+      if (payload.id) {
+        const { data: lesson } = await db.from('lessons')
+          .select('preflight_id').eq('interaction_id', payload.id).maybeSingle();
+        if (lesson?.preflight_id) {
+          const { data: resp } = await db.from('responses')
+            .select('answers')
+            .eq('student_id', ctx.studentRow.student_id)
+            .eq('assignment_id', lesson.preflight_id).maybeSingle();
+          writtenAnswers = Object.values(resp?.answers || {})
+            .filter(v => String(v ?? '').trim().length > 0).length;
+        }
+      }
+
       // Stored markdown is a user-controllable blob — sanitize at render time, never execute.
       const preview = DOMPurify.sanitize(marked.parse(payload.markdown));
       const canSubmit = !!(payload.id && interaction);
@@ -141,6 +159,11 @@
       } else if (!interaction) {
         banner = `<div class="alert alert-warn">This lesson isn’t set up yet — ask your instructor to add
           interaction “${esc(payload.id)}” before you submit.</div>`;
+      } else if (writtenAnswers > 0) {
+        banner = `<div class="alert alert-warn">You have ${writtenAnswers} answer${writtenAnswers === 1 ? '' : 's'}
+          saved on the written version of this lesson. <strong>Submitting this report locks those answers out
+          of grading</strong> — this interaction becomes your grade for the lesson, and you won’t be able to
+          switch back.</div>`;
       }
 
       const effortTag = payload.effort !== null
@@ -179,6 +202,13 @@
     async function submitReport() {
       const btn = document.getElementById('submit-btn');
       const status = document.getElementById('submit-status');
+
+      if (writtenAnswers > 0 &&
+          !confirm(`Submit the interactive report?\n\n` +
+                   `The ${writtenAnswers} answer${writtenAnswers === 1 ? '' : 's'} you saved on the written ` +
+                   `version will no longer count — this report becomes your grade for the lesson, and you ` +
+                   `can't switch back.`)) return;
+
       btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
 
       const row = {

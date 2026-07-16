@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lessons · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <style>
+    /* Choice modal: two equal-weight option cards. NEITHER is styled as primary — a default
+       would put a thumb on the scale of the exact preference this design exists to measure
+       (STUDENT-LESSON-VIEW.md §2, §5). */
+    .choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 18px 0; }
+    .choice-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 18px;
+      background: var(--card); display: flex; flex-direction: column; gap: 8px; transition: box-shadow .15s, border-color .15s; }
+    .choice-card:hover { box-shadow: var(--shadow-md); border-color: var(--blue-lt); }
+    .choice-ic { font-size: 1.6em; line-height: 1; }
+    .choice-title { font-weight: 700; font-size: 1.02em; }
+    .choice-meta { font-size: 0.8em; color: var(--muted); font-weight: 600; }
+    .choice-body { font-size: 0.88em; color: var(--text-soft); line-height: 1.5; flex-grow: 1; }
+    .choice-card .btn { margin-top: 4px; }
+    .lesson-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+    .study-note { font-size: 0.85em; color: var(--muted); line-height: 1.5; margin-top: 10px; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+</head>
+<body>
+  <header id="topnav"></header>
+  <main class="page" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Loading lessons…</span></div>
+  </main>
+
+  <script type="module">
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { loadLessonStatuses, STATE } from '../js/student-lessons.js';
+    import { esc, deadlineClass, relativeDue, fmtDateTime, iconHTML } from '../js/util.js';
+
+    const ctx = await bootstrap({ require: 'student' });
+    if (!ctx) { /* redirected */ } else { init(); }
+
+    let list = [];
+    let current = null;
+
+    async function init() {
+      initTheme();
+      renderNav(ctx, { active: 'lessons', onCourseChange: () => loadList() });
+      await loadList();
+    }
+
+    async function loadList() {
+      const root = document.getElementById('main');
+      if (!ctx.currentCourse) {
+        root.innerHTML = `<div class="alert alert-warn">Your section isn't assigned to a course yet.</div>`;
+        return;
+      }
+      root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
+      list = await loadLessonStatuses(ctx);
+
+      const wanted = new URLSearchParams(location.search).get('l');
+      const hit = wanted && list.find(l => l.id === wanted);
+      if (hit) openLesson(hit); else renderList();
+    }
+
+    /* ── List ─────────────────────────────────────────────────────────────── */
+
+    function statusText(l) {
+      switch (l.state) {
+        case STATE.DRAFT:     return 'Draft saved · ' + relativeDue(l.due);
+        case STATE.SUBMITTED: return l.due ? 'Submitted · editable until ' + fmtDateTime(l.due) : 'Submitted';
+        case STATE.COMPLETE:  return 'Complete · interactive';
+        case STATE.GRADING:   return 'Submitted · grading in progress';
+        case STATE.GRADED:    return `Graded ${l.completion.points}/${l.points ?? 2} pts`;
+        case STATE.MISSED:    return relativeDue(l.due);
+        default:              return relativeDue(l.due);
+      }
+    }
+
+    function pathTag(l) {
+      if (!l.completion) return '';
+      return l.completion.path === 'interaction'
+        ? `<span class="tag gold">Interactive</span>`
+        : `<span class="tag blue">Written</span>`;
+    }
+
+    function modeLabel(l) {
+      if (l.completion_policy === 'choice' && l.preflight && l.interaction) return 'Your choice of format';
+      if (l.completion_policy === 'interaction') return 'Interactive lesson';
+      return `${l.preflight?.questions?.length ?? 0} question${(l.preflight?.questions?.length ?? 0) === 1 ? '' : 's'}`;
+    }
+
+    function lessonItem(l) {
+      return `<a class="list-item" href="?l=${encodeURIComponent(l.id)}" data-id="${esc(l.id)}">
+        <span class="status-dot ${l.dot}"></span>
+        <div class="li-body">
+          <div class="li-title">${l.lesson_number != null ? esc(l.lesson_number) + '. ' : ''}${esc(l.title)}</div>
+          <div class="li-meta"><span>${esc(modeLabel(l))} · ${l.points ?? 2} pts</span>
+            <span class="deadline ${deadlineClass(l.due, l.isPast)}">${esc(statusText(l))}</span></div>
+        </div>
+        <div class="li-right">${pathTag(l)}<span class="li-arrow">›</span></div>
+      </a>`;
+    }
+
+    function renderList() {
+      current = null;
+      history.replaceState(null, '', location.pathname);
+      const root = document.getElementById('main');
+
+      if (!list.length) {
+        root.innerHTML = `
+          <div class="page-head"><h1>Lessons</h1></div>
+          <div class="empty-state"><div class="es-ic">${iconHTML('rocket', '🚀', 'ic')}</div>
+            <h3>No lessons yet</h3><p>Lessons appear here once your instructor publishes them.</p></div>`;
+        return;
+      }
+
+      const open = list.filter(l => !l.isPast && !l.completion);
+      const rest = list.filter(l => l.isPast || l.completion);
+
+      root.innerHTML = `
+        <div class="page-head"><h1>Lessons</h1>
+          <div class="sub">${esc(ctx.courseTitleOf(ctx.currentCourse))} · Section ${esc(ctx.studentRow.section_id || '—')}</div>
+        </div>
+        ${open.length ? `<section class="dash-section">
+          <div class="section-head"><h2>To do</h2><span class="count-pill">${open.length}</span></div>
+          <div class="list">${open.map(lessonItem).join('')}</div></section>` : ''}
+        ${rest.length ? `<section class="dash-section">
+          <div class="section-head"><h2>Past lessons</h2></div>
+          <div class="list">${rest.map(lessonItem).join('')}</div></section>` : ''}`;
+
+      root.querySelectorAll('.list-item').forEach(el =>
+        el.addEventListener('click', e => {
+          e.preventDefault();
+          openLesson(list.find(l => l.id === el.dataset.id));
+        }));
+    }
+
+    /* ── Detail ───────────────────────────────────────────────────────────── */
+
+    function writtenHref(l) {
+      return `assignments.html?a=${encodeURIComponent(l.preflight.id)}`;
+    }
+
+    /** Warning 2 of 3 (STUDENT-LESSON-VIEW §6): fires on LAUNCH, not on submit — by the time a
+     *  cadet reaches the receiver they've already done the work, so warning them there and having
+     *  them back out wastes it. A confirm, never a refusal: launching to study is always
+     *  legitimate (D8), so the artifact link must stay usable either way. */
+    function launchInteraction(l) {
+      if (l.writtenAnswerCount > 0 && !l.completion) {
+        const n = l.writtenAnswerCount;
+        const ok = confirm(
+          `Launch the interactive version?\n\n` +
+          `You have ${n} answer${n === 1 ? '' : 's'} saved on the written version. If you submit ` +
+          `an interactive report, those answers stop counting and the interactive version ` +
+          `becomes your grade for this lesson.\n\n` +
+          `You can still launch it to study without submitting anything.`);
+        if (!ok) return;
+      }
+      window.open(l.interaction.artifact_url || '#', '_blank', 'noopener');
+    }
+
+    function gradeCard(l) {
+      const pts = l.completion.points ?? 0;
+      const max = l.points ?? 2;
+      return `<div class="card score-hero">
+        <div class="row wrap" style="justify-content:space-between;align-items:center">
+          <div><div style="font-size:0.78em;opacity:0.8;text-transform:uppercase;letter-spacing:0.05em">Lesson grade</div>
+            <div style="font-size:2em;font-weight:800">${pts} / ${max} pts</div></div>
+          <div style="font-size:0.85em;opacity:0.85;text-align:right">
+            Graded on effort<br>via the ${l.completion.path === 'interaction' ? 'interactive' : 'written'} version</div>
+        </div>
+      </div>`;
+    }
+
+    /** The launch CTA is present in EVERY state with an interaction — it's just a link to the
+     *  artifact, so running it is never restricted. The database is the only limit: one accepted
+     *  submission per lesson (pir_due_guard, migration 021). */
+    function studyBlock(l) {
+      if (!l.hasInteraction) return '';
+      return `<div class="card">
+        <div class="card-title">Interactive lesson</div>
+        <div class="lesson-actions" style="margin-top:10px">
+          <button class="btn btn-secondary" id="study-btn">Launch ↗</button>
+        </div>
+        <div class="study-note">Launch this any time — to work through it, or to review later.
+          You can run it as many times as you like; only your first submitted report counts
+          toward your grade.</div>
+      </div>`;
+    }
+
+    function bannerFor(l) {
+      switch (l.state) {
+        case STATE.COMPLETE:
+          return `<div class="alert alert-ok">Complete — graded from your interactive report.${
+            l.writtenAnswerCount > 0
+              ? ` Your written answers are no longer counted for this lesson.` : ''}</div>`;
+        case STATE.SUBMITTED:
+          return `<div class="alert alert-ok">Submitted${l.due ? ` — you can still edit your answers until ${fmtDateTime(l.due)}.` : '.'}</div>`;
+        case STATE.GRADING:
+          return `<div class="alert alert-info">Submitted. Your instructor is grading this lesson.</div>`;
+        case STATE.MISSED:
+          return `<div class="alert alert-warn">The deadline has passed and nothing was submitted, so this lesson scores 0.
+            You can still launch the interactive version below to study.</div>`;
+        default:
+          return '';
+      }
+    }
+
+    function openLesson(l) {
+      if (!l) return renderList();
+      current = l;
+      history.replaceState(null, '', `?l=${encodeURIComponent(l.id)}`);
+      const root = document.getElementById('main');
+
+      const header = `
+        <button class="btn btn-secondary btn-sm" id="back-btn" style="margin-bottom:20px">← Back to lessons</button>
+        <div class="card">
+          <div class="card-title">${l.lesson_number != null ? esc(l.lesson_number) + '. ' : ''}${esc(l.title)}</div>
+          <div class="card-meta">${l.due ? 'Due ' + fmtDateTime(l.due) : 'No due date'} · ${l.points ?? 2} pts · graded on effort</div>
+          ${l.description ? `<div style="font-size:0.9em;color:var(--muted);margin-top:6px">${esc(l.description)}</div>` : ''}
+        </div>`;
+
+      // A still-open choice: let them pick. Neither option is primary.
+      if (l.canChoose) {
+        root.innerHTML = header + choiceBlock(l);
+        wire(l);
+        window.scrollTo(0, 0);
+        return;
+      }
+
+      const graded = l.state === STATE.GRADED ? gradeCard(l) : '';
+      const written = l.preflight && l.state !== STATE.COMPLETE ? writtenBlock(l) : '';
+
+      root.innerHTML = header + bannerFor(l) + graded + written + studyBlock(l);
+      wire(l);
+      window.scrollTo(0, 0);
+    }
+
+    function choiceBlock(l) {
+      const qn = l.preflight?.questions?.length ?? 0;
+      return `<div class="card">
+        <div class="card-title">Choose how to complete this lesson</div>
+        <div style="font-size:0.9em;color:var(--text-soft);margin-top:6px">
+          Both are worth the same ${l.points ?? 2} points, and both are graded on effort — not on
+          getting the physics right. Pick whichever suits you.</div>
+        <div class="choice-grid">
+          <div class="choice-card">
+            <div class="choice-ic">✎</div>
+            <div class="choice-title">Written preflight</div>
+            <div class="choice-meta">${qn} question${qn === 1 ? '' : 's'}</div>
+            <div class="choice-body">Answer in your own words. Your work saves as you type, and you
+              can come back and change it any time before the deadline.</div>
+            <a class="btn btn-secondary" href="${esc(writtenHref(l))}">Start writing</a>
+          </div>
+          <div class="choice-card">
+            <div class="choice-ic">⚡</div>
+            <div class="choice-title">Interactive lesson</div>
+            <div class="choice-meta">Guided conversation</div>
+            <div class="choice-body">Work through the material with an AI tutor that asks you
+              questions and responds as you go, then sends a report back here.</div>
+            <button class="btn btn-secondary" id="choice-launch">Launch ↗</button>
+          </div>
+        </div>
+        <div class="study-note">You can switch later — but once you submit an interactive report it
+          becomes your grade for this lesson, your written answers stop counting, and you can't
+          switch back.</div>
+      </div>`;
+    }
+
+    function writtenBlock(l) {
+      const label = l.state === STATE.DRAFT ? 'Resume writing'
+                  : l.state === STATE.NOT_STARTED ? 'Start writing'
+                  : l.isPast ? 'View your answers' : 'Edit your answers';
+      return `<div class="card">
+        <div class="card-title">Written preflight</div>
+        <div class="card-meta">${l.preflight.questions?.length ?? 0} questions${
+          l.writtenAnswerCount ? ` · ${l.writtenAnswerCount} answered` : ''}</div>
+        <div class="lesson-actions" style="margin-top:12px">
+          <a class="btn btn-primary" href="${esc(writtenHref(l))}">${esc(label)}</a>
+        </div>
+      </div>`;
+    }
+
+    function wire(l) {
+      document.getElementById('back-btn')?.addEventListener('click', renderList);
+      document.getElementById('study-btn')?.addEventListener('click', () => launchInteraction(l));
+      document.getElementById('choice-launch')?.addEventListener('click', () => launchInteraction(l));
+    }
+  </script>
+</body>
+</html>

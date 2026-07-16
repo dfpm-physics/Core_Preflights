@@ -9,10 +9,13 @@ import { updateToggleButtons } from './theme.js';
 
 // All nav-rendering pages live one level deep (student/ , faculty/), so same-role links
 // are bare filenames; legacy out-links use legacyUrl() so they resolve in both phases.
+// Students navigate by LESSON, not by modality. Listing "Assignments" and "Interactions"
+// side by side showed a choice lesson twice — as two separate mandatory items — with nothing
+// saying they were alternatives (STUDENT-LESSON-VIEW.md §1). assignments.html still exists as
+// the written-preflight surface, reached from a lesson; interactions.html is superseded.
 const STUDENT_LINKS = [
-  { key: 'dashboard',    label: 'Dashboard',    href: 'dashboard.html',    icon: 'dashboard',    emoji: '🏠' },
-  { key: 'assignments',  label: 'Assignments',  href: 'assignments.html',  icon: 'assignments',  emoji: '📋' },
-  { key: 'interactions', label: 'Interactions', href: 'interactions.html', icon: 'interactions', emoji: '💡' },
+  { key: 'dashboard', label: 'Dashboard', href: 'dashboard.html', icon: 'dashboard',   emoji: '🏠' },
+  { key: 'lessons',   label: 'Lessons',   href: 'lessons.html',   icon: 'assignments', emoji: '📚' },
 ];
 // Grade and Report are intentionally absent: Grade is reached from Roster, and Report (the lesson
 // rollup) is reached only via a link carrying its lesson key (?i=) — from an Interactions card or
