@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Opening your report… · PREP</title>
+<!-- Contract endpoint for artifact report submissions (docs/contracts/INTERACTION-DATA-CONTRACT.md).
+     Artifacts hardcode this URL, so the PATH is frozen even though this file is temporary.
+
+     During the app refactor the implementation lives at site/app/student/; this stub forwards
+     there, preserving the query and hash where the report payload rides. At promotion the app
+     tree moves up and app/student/interaction-submit.html lands on exactly this path, silently
+     replacing this stub — the forwarding disappears and the public URL never changes. Nothing
+     here needs editing at go-live; just don't move it. -->
+<script>location.replace('../app/student/interaction-submit.html' + location.search + location.hash);</script>
+</head>
+<body>
+<p>Opening your report… If nothing happens,
+   <a href="../app/student/interaction-submit.html">continue here</a>.</p>
+</body>
+</html>

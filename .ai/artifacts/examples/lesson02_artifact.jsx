@@ -1059,7 +1059,7 @@ export default function Lesson02Preflight() {
     ? reportText.slice(reportText.indexOf("# JiTT Conversation Report"))
     : "";
   const submitUrl = (hasReport && lzReady)
-    ? "https://dfpm-physics.github.io/Core_Preflights/artifact-submit.html"
+    ? "https://dfpm-physics.github.io/Core_Preflights/site/student/interaction-submit.html"
         + "#t=interaction"
         + "&i=" + INTERACTION_ID
         + "&r=" + window.LZString.compressToEncodedURIComponent(reportMarkdown)

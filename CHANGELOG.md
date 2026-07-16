@@ -8,6 +8,70 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-16 — Matthew Recker via Claude
+
+### Changed — retired the artifact-submit endpoint; contract URLs now survive the app promotion
+
+**Breaking, deliberate, and done in the gap before Fall 2026.** The submission endpoint moved and
+the old one was **retired without a redirect**. This was safe only because there were three live
+artifacts and three weeks; all were rebuilt against the new URL. Do not attempt this mid-semester —
+a stale artifact now fails *silently* (the student finishes the lesson, clicks Submit, and the
+report is discarded).
+
+**New contract URLs** (both frozen — see `docs/contracts/`):
+
+| Purpose | URL |
+|---|---|
+| Student report submission | `…/Core_Preflights/site/student/interaction-submit.html` |
+| AI-generated lesson prefill links | `…/Core_Preflights/site/faculty/lessons.html` |
+
+**Why these paths.** Each is a stub that forwards into `site/app/…` today. At promotion the app
+tree moves up and the real page lands on *exactly* that path, overwriting the stub — so the
+forwarding deletes itself and **no URL changes at go-live**. The stub paths therefore mirror the
+app's own `student/` / `faculty/` naming exactly; `students/` (plural) would break the endpoint at
+the moment it is supposed to keep working. Don't rename or move them.
+
+**Receiver rewritten** as `site/app/student/interaction-submit.html`, now a normal portal page:
+shared `auth.js` / `nav.js` / `theme.js`, the app stylesheet, and `.md-render` for the report. The
+old page hardcoded light-mode colors (`#f5f8ff`, `#cbd5e1`) and shipped its own login screen, so it
+never matched the site and broke in dark mode. The transport contract (`#t=`/`#i=`/`#r=`/`#d=`,
+`schema: 1`) is **unchanged** — only the URL and the chrome moved.
+
+**One non-obvious fix.** The old page's private login screen was load-bearing: the report lives
+entirely in the URL hash, and `auth.js` redirects to login with `pathname + search` only — no hash.
+Naively adopting the shared login would have destroyed every report from a signed-out student (the
+common case, arriving from claude.ai). The new page stashes the payload in `sessionStorage` before
+any module can navigate, then restores it on return. Verified in headless Chrome: with a real
+LZString payload, the stub forwards → `bootstrap` redirects to `login.html` → the payload survives
+and still decodes (`effort: 4`, markdown intact).
+
+**Retired** (now 404): `artifact-submit.html` and `interaction-submit.html`, at both the repo root
+and under `site/`. Source kept for reference in `_archive/artifact-receiver-v1/` — that directory
+starts with `_` so Jekyll (GitHub Pages' default build, which this repo uses) leaves it out of the
+published site while it stays in the repo. Root now holds only `index.html` and `404.html`, which
+Pages requires.
+
+### Fixed — three documentation defects found while tracing the endpoints
+
+- **`PROJECT.md` named the wrong receiver.** The Key Files table still pointed at
+  `interaction-submit.html` — stale since the `artifact-submit.html` rename, and the July reorg
+  copied the error forward with a `site/` prefix. It contradicted the prose in the same file.
+- **`INTERACTION-PREFILL-LINK.md` documented an `obj` parameter that does not exist.**
+  `lessons.html` reads exactly 14 query keys and `obj` is not among them, so an artifact sending
+  lesson objectives had them silently dropped. Removed from the contract; objectives are set by
+  hand after Save. (Wiring `obj` through is a reasonable follow-up — not done here.)
+- **The prefill doc described two competing bases.** Consolidated onto `lessons.html` (the sole
+  target now that all artifacts are rebuilt); the `interactions-admin.html` and
+  `app/faculty/interactions.html` bases are retired from the contract.
+
+The paused **Custom GPT** integration under `.ai/integrations/custom-gpt/` was left untouched: it
+is archived pending possible future work, its migrations (`017`/`018`) are parked outside the live
+sequence, and its `lessons.html#lp=` links predate this change. **Reconcile its URLs before
+reviving it** — and note its contract claims `lessons.html` "restores the payload across login",
+which the page has never implemented.
+
+---
+
 ## 2026-07-15 — Matthew Recker via Claude
 
 ### Changed — interactions get M/T due dates; lesson syncs one deadline across components

@@ -187,9 +187,13 @@ The full table catalog, JSONB shapes, roles, and edge functions are in
   `zero` (red). Suggested scores are always `is_finalized=false`; the human finalizes in the admin UI.
 - **Interaction grade = effort** (0–5 → 0/1/2 via DB trigger); a non-meaningful reading reflection
   caps effort at 2. Full transport spec (frozen v1): `docs/contracts/INTERACTION-DATA-CONTRACT.md`.
-- **The artifact↔site contract is frozen:** artifacts post by stable slug to root
-  `artifact-submit.html`, which preserves the query/hash while forwarding to the receiver under `site/`.
+- **The artifact↔site contract is frozen:** artifacts post by stable slug to
+  `site/student/interaction-submit.html`, and AI-generated prefill links target
+  `site/faculty/lessons.html`. Both paths are stubs forwarding into `site/app/` today and become
+  the real pages at promotion, so **neither URL changes at go-live and neither may be moved**.
   Any multi-term work must be additive (new columns) and must not change that wire format.
+  Changing a contract URL means rebuilding every deployed artifact by hand — only ever done
+  between semesters (last: 2026-07-16), never mid-term.
 
 ---
 

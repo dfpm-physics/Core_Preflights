@@ -154,7 +154,7 @@ other editable) — fairness was the goal.
 
 - **Editable until Submit — but persisted differently per path.** The **preflight autosaves a draft
   row** (`responses`, `is_final=false`) so a student can revise written work across sittings. The
-  **interaction persists nothing until Submit**: each artifact run just loads `artifact-submit.html`
+  **interaction persists nothing until Submit**: each artifact run just loads the receiver
   with the report in the URL hash; re-running gives a fresh landing page, and nothing reaches the DB
   until the student clicks Submit. Both are freely re-doable before Submit; only the storage differs.
 - **Submit (final) is the commit and the lock.** Submit finalizes one path: it creates the
@@ -177,7 +177,7 @@ other editable) — fairness was the goal.
   their own finalized report. Only *finalizing* writes are gated — reads and launch links are not.
 
 > **Frozen-contract note:** the artifact has no concept of Submit — it just posts a report into the
-> URL hash. So `artifact-submit.html` loads with the report **in memory** and **writes nothing** until
+> URL hash. So the receiver loads with the report **in memory** and **writes nothing** until
 > the student clicks **Submit**; that click is the single, already-final DB write. Re-running the
 > artifact just reloads the page with a fresh report. The artifact itself is unchanged, so the contract
 > stays frozen.
@@ -237,7 +237,7 @@ unified read surface so the rollup never has to UNION two differently-shaped tab
 ## 9. Frozen contract preserved
 
 No change to [`INTERACTION-DATA-CONTRACT.md`](../contracts/INTERACTION-DATA-CONTRACT.md): the artifact still posts
-to `artifact-submit.html#t=interaction&i=<slug>&r=…&d=…`, and `<slug>` is still an `interactions.id`.
+to `site/student/interaction-submit.html#t=interaction&i=<slug>&r=…&d=…`, and `<slug>` is still an `interactions.id`.
 The lesson *points at* that interaction by id; the completion row is created by a **DB trigger** on
 `preflight_interaction_reports`, so the receiver page and every deployed artifact are unaffected.
 This is the safest possible integration point — the part we most need not to break.
@@ -508,7 +508,7 @@ and the M-and-T-instructor dashboard presentation (§17).
   must be covered by seed-data tests before any real lesson uses `choice`.
 - **A never-Submitted interaction is lost** (D9): since nothing persists until Submit, a student who
   runs the artifact but never clicks Submit gets no row and can't be auto-promoted. Mitigation: a
-  prominent, explicit **Submit** call-to-action on `artifact-submit.html`, and a "not yet submitted"
+  prominent, explicit **Submit** call-to-action on the receiver, and a "not yet submitted"
   state surfaced in the student lesson view.
 - **Section-day deadline + study mode** (D8) adds branching: the cutoff is per-student (M vs. T), and
   the artifact must stay launchable while its submit is refused post-due. Get the "reject the write,
@@ -517,7 +517,7 @@ and the M-and-T-instructor dashboard presentation (§17).
   teaching both M and T sections may see an ambiguous "today" (one lesson can be past for M but
   upcoming for T). Decide whether to split their view by day or pick the nearer deadline. *(UI, not a
   data problem — flagged for Phase 1 dashboard work.)*
-- **Non-goal:** changing the frozen data contract, the artifact, or the `artifact-submit.html`
-  endpoint. **Non-goal:** removing standalone assignments/interactions — they remain valid.
+- **Non-goal:** changing the frozen data contract, the artifact, or the submission
+  endpoint (`site/student/interaction-submit.html` since 2026-07-16). **Non-goal:** removing standalone assignments/interactions — they remain valid.
 - **Free-tier pause** and **no-Node** constraints are unchanged; verify everything in a browser
   against Supabase.

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Submit report · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <!-- Stash the payload before ANY module can navigate. The report lives entirely in the URL
+       hash, and auth.js sends a signed-out student to login with pathname+search only — so
+       without this, a sign-in round trip silently discards a completed lesson. -->
+  <script>(function(){try{var h=location.hash.slice(1);if(h)sessionStorage.setItem('cp.pendingReport',h);}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <!-- Decompress the payload, render Markdown, sanitize before inserting to the DOM -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
+</head>
+<body>
+  <header id="topnav"></header>
+  <main class="page" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Loading your report…</span></div>
+  </main>
+
+  <script type="module">
+    // Receiver for lesson-interaction reports. Transport spec: docs/contracts/INTERACTION-DATA-CONTRACT.md.
+    // The artifact has no concept of Submit — it just posts a report into the URL hash. Nothing
+    // reaches the database until the student clicks Submit below.
+    import { db } from '../js/supabase.js';
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { esc } from '../js/util.js';
+
+    const PENDING_KEY = 'cp.pendingReport';
+
+    /* ── Payload ─────────────────────────────────────────────────────────────
+     * #t=interaction&i=<slug>&r=<lz markdown>&d=<lz json>
+     * The hash wins when present; sessionStorage is the fallback after a login round trip.
+     */
+    function unpack(packed) {
+      if (!packed) return null;
+      try { return LZString.decompressFromEncodedURIComponent(packed) || null; } catch (_) { return null; }
+    }
+
+    // Effort is the only grade-bearing field. Accept it only as an integer 0–5 (the DB CHECK
+    // enforces the same); anything else → null, which the score trigger maps to 0 points.
+    function readEffort(d) {
+      const e = (d && typeof d === 'object') ? d.effort : null;
+      return (Number.isInteger(e) && e >= 0 && e <= 5) ? e : null;
+    }
+    function effortPoints(e) { return e >= 3 ? 2 : e >= 1 ? 1 : 0; } // mirrors migration 013
+
+    function readPayload() {
+      let raw = location.hash.slice(1);
+      if (!raw) { try { raw = sessionStorage.getItem(PENDING_KEY) || ''; } catch (_) {} }
+      if (!raw) return null;
+
+      const p = new URLSearchParams(raw);
+      const markdown = unpack(p.get('r'));
+      let data = null;
+      // Optional structured data (#d=). Never block submission on a problem here: store what we
+      // can, fall back to a raw wrapper so nothing is lost, and continue (contract §7).
+      const decoded = unpack(p.get('d'));
+      if (decoded) {
+        try { data = JSON.parse(decoded); }
+        catch (_) { data = { _unparsed: decoded }; } // valid JSONB; preserves the payload
+      }
+      return {
+        type: (p.get('t') || 'interaction').toLowerCase(),
+        id: p.get('i'),
+        markdown,
+        data,
+        effort: readEffort(data),
+      };
+    }
+
+    /* ── Render helpers ──────────────────────────────────────────────────── */
+    const main = document.getElementById('main');
+
+    function notice(kind, title, body) {
+      main.innerHTML = `<div class="page-head"><h1>Submit report</h1></div>
+        <div class="alert alert-${kind}"><strong>${esc(title)}</strong>${body ? `<div style="margin-top:4px">${esc(body)}</div>` : ''}</div>`;
+    }
+    function emptyState(icon, title, body) {
+      main.innerHTML = `<div class="empty-state"><div class="es-ic">${icon}</div>
+        <h3>${esc(title)}</h3><p>${esc(body)}</p></div>`;
+    }
+
+    /* ── Init ────────────────────────────────────────────────────────────── */
+    const payload = readPayload();
+    const ctx = await bootstrap();
+    if (ctx) init();
+
+    async function init() {
+      initTheme();
+      renderNav(ctx, { active: 'interactions' });
+
+      if (ctx.role !== 'student') {
+        notice('warn', 'Only students can submit reports.',
+          `You're signed in as ${ctx.instructorRow?.name || 'faculty'}. Interaction reports save against a student record, so there's nothing to submit from this account.`);
+        return;
+      }
+      if (!payload) {
+        emptyState('💡', 'Nothing to submit',
+          'Open a lesson interaction and finish it — it will send your report here automatically.');
+        return;
+      }
+      if (payload.type !== 'interaction') {
+        notice('warn', `This submission type (“${payload.type}”) isn’t supported yet.`,
+          'Your report was not saved. Let your instructor know which lesson produced this link.');
+        return;
+      }
+      if (!payload.markdown) {
+        notice('error', 'Could not read the report.',
+          'The link may have been truncated or copied incompletely. Re-open the lesson and submit again from the finish screen.');
+        return;
+      }
+      await render();
+    }
+
+    async function render() {
+      // Resolve the interaction so we can show its title and confirm it exists.
+      let interaction = null;
+      if (payload.id) {
+        const { data } = await db.from('interactions')
+          .select('id, title, course_id, is_published')
+          .eq('id', payload.id).maybeSingle();
+        interaction = data || null;
+      }
+
+      // Stored markdown is a user-controllable blob — sanitize at render time, never execute.
+      const preview = DOMPurify.sanitize(marked.parse(payload.markdown));
+      const canSubmit = !!(payload.id && interaction);
+
+      let banner = '';
+      if (!payload.id) {
+        banner = `<div class="alert alert-warn">This link is missing its lesson id, so the report can’t be
+          attached to a lesson. You can read it below, but it can’t be saved.</div>`;
+      } else if (!interaction) {
+        banner = `<div class="alert alert-warn">This lesson isn’t set up yet — ask your instructor to add
+          interaction “${esc(payload.id)}” before you submit.</div>`;
+      }
+
+      const effortTag = payload.effort !== null
+        ? `<span class="tag blue" title="Effort ${payload.effort} of 5">${effortPoints(payload.effort)}/2 pts</span>`
+        : '';
+
+      main.innerHTML = `
+        <div class="page-head">
+          <h1>Submit report</h1>
+          <div class="sub">Review your report below, then submit it to your record.</div>
+        </div>
+        ${banner}
+        <div class="card">
+          <div class="row wrap" style="justify-content:space-between;align-items:flex-start;gap:16px">
+            <div class="grow" style="min-width:220px">
+              <div class="row wrap" style="gap:8px">
+                <div class="card-title">${esc(interaction?.title || 'Interaction report')}</div>
+                ${effortTag}
+              </div>
+              ${payload.id ? `<div class="muted" style="font-size:0.88em;margin-top:6px">Lesson id: ${esc(payload.id)}</div>` : ''}
+            </div>
+            ${canSubmit ? `<div class="row" style="gap:10px;flex-shrink:0">
+              <button class="btn btn-primary" id="submit-btn">Submit this report</button>
+            </div>` : ''}
+          </div>
+          <div id="submit-status" class="muted" style="font-size:0.85em;margin-top:10px;display:none"></div>
+        </div>
+        <div class="card">
+          <div class="card-meta">Report preview</div>
+          <div class="md-render" id="report-preview">${preview}</div>
+        </div>`;
+
+      document.getElementById('submit-btn')?.addEventListener('click', submitReport);
+    }
+
+    async function submitReport() {
+      const btn = document.getElementById('submit-btn');
+      const status = document.getElementById('submit-status');
+      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
+
+      const row = {
+        interaction_id:  payload.id,
+        student_id:      ctx.studentRow.student_id,
+        report_markdown: payload.markdown,
+        payload_bytes:   payload.markdown.length,
+      };
+      // Only write structured fields when we actually have them, so an older artifact (no #d=)
+      // re-submitting can't wipe a previous submission's effort/report_data. `score` is omitted
+      // entirely — the DB trigger derives it from effort.
+      if (payload.data !== null) {
+        row.report_data = payload.data;
+        row.effort = payload.effort; // 0–5 or null
+      }
+
+      const { error } = await db.from('preflight_interaction_reports')
+        .upsert(row, { onConflict: 'student_id,interaction_id' });
+
+      status.style.display = '';
+      if (error) {
+        btn.disabled = false; btn.textContent = 'Submit this report';
+        status.textContent = '⚠ Submission failed — ' + (error.message || 'please try again.');
+        status.style.color = 'var(--red)';
+        return;
+      }
+      // Saved — drop the stash so a later visit without a payload can't re-offer a stale report.
+      try { sessionStorage.removeItem(PENDING_KEY); } catch (_) {}
+      btn.textContent = '✓ Submitted';
+      const pts = payload.effort !== null
+        ? ` (effort ${payload.effort}/5 → ${effortPoints(payload.effort)} pt${effortPoints(payload.effort) === 1 ? '' : 's'})`
+        : '';
+      status.textContent = `Saved to your record${pts}. Re-submitting will overwrite it.`;
+      status.style.color = 'var(--green)';
+    }
+  </script>
+</body>
+</html>

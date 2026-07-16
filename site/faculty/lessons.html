@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Opening the lesson manager… · PREP</title>
+<!-- Contract endpoint for lesson prefill links (docs/contracts/INTERACTION-PREFILL-LINK.md).
+     AI tools generate one-click links against this URL, so the PATH is frozen even though this
+     file is temporary.
+
+     During the app refactor the implementation lives at site/app/faculty/; this stub forwards
+     there, preserving the query (?new=1&…) and hash. At promotion the app tree moves up and
+     app/faculty/lessons.html lands on exactly this path, silently replacing this stub — the
+     forwarding disappears and the public URL never changes. Nothing here needs editing at
+     go-live; just don't move it. -->
+<script>location.replace('../app/faculty/lessons.html' + location.search + location.hash);</script>
+</head>
+<body>
+<p>Opening the lesson manager… If nothing happens,
+   <a href="../app/faculty/lessons.html">continue here</a>.</p>
+</body>
+</html>

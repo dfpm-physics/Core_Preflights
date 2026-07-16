@@ -38,17 +38,26 @@ feeds the trend rollups, but it does **not** affect the grade. The contract mark
 ## 2. The static endpoint (permanent)
 
 ```
-https://dfpm-physics.github.io/Core_Preflights/artifact-submit.html
+https://dfpm-physics.github.io/Core_Preflights/site/student/interaction-submit.html
 ```
 
-This URL is **part of the contract and never changes.** Root `artifact-submit.html` is a
-hash-preserving compatibility endpoint that forwards to the implementation at
-`site/artifact-submit.html`. Artifacts hardcode the root URL; the receiver's source location
-and internals may evolve, but the public URL and payload format below are frozen.
+This URL is **part of the contract and does not change.** Artifacts hardcode it; the receiver's
+source location and internals may evolve, but the public URL and payload format below are frozen.
 
-> **Legacy alias:** the original receiver `interaction-submit.html` remains at the root as a
-> permanent hash-preserving compatibility alias for `artifact-submit.html`, so any artifact deployed
-> before the rename keeps working. New artifacts target `artifact-submit.html`.
+Note the path is `student` — **singular**. It matches the app tree exactly, and that is the whole
+point: during the refactor `site/student/interaction-submit.html` is a stub that forwards into
+`site/app/student/interaction-submit.html`, and at promotion the app tree moves up so the real
+page lands on exactly this path, overwriting the stub. **Nothing needs editing at go-live** —
+the URL is the same before and after. A one-character drift here (`students/`) would break the
+endpoint at precisely the moment it is supposed to keep working.
+
+> **No legacy redirect.** The original endpoints — root `artifact-submit.html` and
+> `interaction-submit.html`, plus their `site/` counterparts — were **retired, not aliased**, in a
+> deliberate clean break on 2026-07-16 (all live artifacts were rebuilt against this URL before
+> Fall 2026). Those URLs now 404. Source is kept for reference in
+> `_archive/artifact-receiver-v1/`. **Any artifact still pointing at the old URL silently loses
+> the student's report** — it is not redirected. If you are reviving an old artifact, update its
+> submit URL first.
 
 Why a static page and not an API: GitHub Pages is static and cannot accept a POST. The page
 receives the payload in the **URL hash**, decodes it client-side, and writes to Supabase
@@ -63,7 +72,7 @@ The artifact navigates the browser to the receiver with a hash payload built fro
 `&`-joined, `key=value` pairs (parsed receiver-side with `URLSearchParams`):
 
 ```
-artifact-submit.html#t=interaction&i=<slug>&r=<lz>&d=<lz>
+site/student/interaction-submit.html#t=interaction&i=<slug>&r=<lz>&d=<lz>
 ```
 
 | Key | Required | Contents |
@@ -347,9 +356,14 @@ against.
 
 ## 9. Design notes & recommendations
 
-- **The URL is as un-revisable as the schema** — it's hardcoded in every deployed artifact.
-  Treat `artifact-submit.html` as frozen; keep `interaction-submit.html` as a redirect alias
-  for anything already deployed.
+- **The URL is as un-revisable as the schema** — it's hardcoded in every deployed artifact, and a
+  wrong one fails *silently* (the student does the work, then loses it). Treat
+  `site/student/interaction-submit.html` as frozen. It survives the app promotion by construction
+  (§2), so there is no reason to move it again.
+  - The one escape hatch is the one used on 2026-07-16: rebuild **every** live artifact against a
+    new URL during a gap between semesters, then retire the old one. That only worked because
+    there were three artifacts and three weeks. It is not available mid-semester, and it scales
+    with the number of deployed artifacts — assume you get to do it approximately never.
 - **Reserved `t=` key** lets this single endpoint serve future artifact types (a different
   lesson format, a survey, a lab) without minting a new URL or breaking old artifacts.
 - **Effort integrity.** Because `effort` *is* the grade and the payload is student-controllable

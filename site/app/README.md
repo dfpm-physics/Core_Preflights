@@ -53,9 +53,18 @@ The repository root is the GitHub Pages publishing source. Website source lives 
 its public URLs include `/Core_Preflights/site/`. Paths inside `site/` remain relative, and
 `legacyUrl()` resolves portal links to the legacy pages beside `site/app/`.
 
-Small compatibility pages at the repository root preserve the permanent artifact endpoint, its
-legacy alias, root entry navigation, and missing-page forwarding. The complete receiver stays at
-`site/artifact-submit.html`.
+Two small stubs hold the frozen contract URLs open while the app tree still lives under
+`site/app/`: `site/student/interaction-submit.html` (artifact report submissions) and
+`site/faculty/lessons.html` (AI-generated prefill links). Each forwards into `site/app/`,
+preserving the query and hash where the payloads ride.
+
+They are **self-eliminating**: at promotion the app tree moves up and the real pages land on
+exactly those paths, overwriting the stubs. So the public URLs are identical before and after
+go-live and need no edit — which is the whole reason the stub paths mirror the app's own
+`student/` and `faculty/` naming. Don't "tidy" them into `students/`/`faculties/` or move them.
+
+At the repository root, only `index.html` (entry navigation) and `404.html` (missing-page
+forwarding) remain — GitHub Pages publishes from the root, so those two cannot move.
 
 ## Not yet ported
 

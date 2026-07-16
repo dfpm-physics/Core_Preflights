@@ -43,7 +43,8 @@ lesson interactions at USAFA. Replaces GradeScope for two courses: Physics 110 a
 | `site/admin.html` | Instructor grading panel (Grade, Report, Assignments, Roster, Sections, Export tabs) |
 | `site/interactions-admin.html` | Director/admin: add/edit/publish lesson interactions, view per-student reports |
 | `site/interactions.html` | Student-facing list of published lesson interactions (Launch links) |
-| `site/interaction-submit.html` | Receives a Claude artifact's compressed report and saves it per student |
+| `site/app/student/interaction-submit.html` | Receives a Claude artifact's compressed report and saves it per student. Reached via the frozen contract URL `site/student/interaction-submit.html` (a stub the promotion overwrites) |
+| `site/app/faculty/lessons.html` | Director lesson authoring; accepts AI-generated prefill links via the frozen URL `site/faculty/lessons.html` (same stub pattern) |
 | `site/js/config.js` | Supabase URL + anon key (safe to commit) |
 | `site/css/styles.css` | Shared styles |
 | `supabase/seed_full.sql` | Test data for local development |
@@ -130,24 +131,29 @@ artifact sends a compressed Markdown **report** back to the site to be saved per
 An AI skill will later summarize trends by section.
 
 **Flow:**
-1. A director adds an interaction in `site/interactions-admin.html` — gives it a slug
-   (`lesson-02-charge`), title, course, and `artifact_url`, then publishes it.
+1. A director adds a lesson in `site/faculty/lessons.html` — gives it a slug
+   (`lesson-02-charge`), title, course, and `artifact_url`, then publishes it. (Claude can hand
+   the director a prefilled one-click link — see `docs/contracts/INTERACTION-PREFILL-LINK.md`.)
 2. A student opens `site/interactions.html`, clicks **Launch**, and the artifact opens on claude.ai.
 3. On finish, the artifact opens
-   `artifact-submit.html#i=<slug>&r=<lz-string payload>` — data rides in the **URL hash**
-   (GitHub Pages is static and can't accept a POST; the hash also keeps payloads out of logs).
-4. `site/artifact-submit.html` decompresses the report, requires student login, and upserts
-   into `preflight_interaction_reports`.
+   `site/student/interaction-submit.html#i=<slug>&r=<lz-string payload>` — data rides in the
+   **URL hash** (GitHub Pages is static and can't accept a POST; the hash also keeps payloads
+   out of logs).
+4. The receiver decompresses the report, requires student login, and upserts into
+   `preflight_interaction_reports` — but only when the student clicks **Submit**.
 
 **The artifact↔site contract:** the artifact's `#i=` slug **must match** an `interactions.id`
 the director created — otherwise the foreign key rejects the write. This is the one manual
 coordination point between the claude.ai artifact and this repo. The **full, frozen contract**
 for what the artifact sends (permanent endpoint URL, `#t=`/`#i=`/`#r=`/`#d=` hash payload, and
 the `schema: 1` structured-data spec — effort-graded, understanding diagnostic) is
-`docs/contracts/INTERACTION-DATA-CONTRACT.md`. The permanent public endpoint is root `artifact-submit.html`, which preserves query/hash data while forwarding to
-`site/artifact-submit.html`; root `interaction-submit.html` remains the legacy alias
-so deployed artifacts never need revising. Effort (0–5) auto-derives a 0–2 `score` via DB
-trigger (migration `013`); a non-meaningful reading reflection caps effort at 2.
+`docs/contracts/INTERACTION-DATA-CONTRACT.md`. The permanent public endpoint is
+`site/student/interaction-submit.html` — during the app refactor a stub that forwards into
+`site/app/student/`, and after promotion the real page at the same path, so the URL never
+changes. The pre-2026-07-16 endpoints (`artifact-submit.html` and `interaction-submit.html`, at
+root and under `site/`) were **retired without a redirect** and now 404; source is kept in
+`_archive/artifact-receiver-v1/`. Effort (0–5) auto-derives a 0–2 `score` via DB trigger
+(migration `013`); a non-meaningful reading reflection caps effort at 2.
 
 **Prefill links:** a Claude artifact can hand the director a one-click link that opens
 `site/interactions-admin.html` with the New Interaction form already filled in
