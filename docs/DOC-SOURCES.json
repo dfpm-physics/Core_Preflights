@@ -103,6 +103,20 @@
       "note": "Course-director and system operating guide. Roles, edge functions, and admin procedures are defined in PROJECT.md and must agree."
     },
     {
+      "doc": "docs/operations/PREP-V2-CUTOVER.md",
+      "kind": "operations",
+      "tier": null,
+      "reviewed": "2026-07-20",
+      "sources": [
+        "supabase/admin/app_schema_bootstrap.sql",
+        "scripts/app_migration/migrate_public_to_app.py",
+        "supabase/migrations/app/001_core_model.sql",
+        "supabase/migrations/app/002_rls.sql",
+        ".ai/instructions/CORE.md"
+      ],
+      "note": "The ordered PREP v2 cutover procedure. Derived step-for-step from the bootstrap SQL (roles, auth-FK, read window, seal) and the migration script (what moves, what is left behind, the frozen-slug check). If either changes, the runbook is wrong before anything else."
+    },
+    {
       "doc": ".ai/skills/docs-author/SKILL.md",
       "kind": "skill",
       "tier": null,

@@ -1,5 +1,3 @@
-> **Starter stub.** Fill in the walkthrough with screenshots before the semester opens.
-
 ## Scope: what you can see
 
 You grade the sections assigned to you. The **— all my sections —** filter on the Grade and Report
@@ -8,7 +6,7 @@ sections of your own personally assigned, that filter looks empty — switch to 
 
 ## The 3-state toggle
 
-Each question carries one of three states, and clicking cycles them:
+Each question carries one of three states. Select a question's state to cycle through them:
 
 | State | Color | Points | Use it when |
 |---|---|---|---|

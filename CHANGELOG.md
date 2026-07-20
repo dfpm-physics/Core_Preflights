@@ -8,6 +8,50 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-20 — Casey via Claude
+
+### Added — PREP v2 design record and cutover runbook
+
+**Docs only. No frontend, database, migration, or build-step change.** Uses the `docs-author` skill
+(added earlier today) to close the gap it names: the entire PREP v2 build — the parallel `app` schema
+and the migration path — had zero discoverable design record in `docs/`, with all reasoning living in
+SQL comments, `site/app/README.md`, and two point-in-time `PLAN-*.md` files.
+
+**Why.** The v2 schema is a one-way door (a new schema replacing `public`, with an eventual cutover of
+what becomes live student data), aligned across two operators, and it rewrites the authorization
+surface a July 2026 audit found porous. The `docs-author` design-doc gate requires a record for
+exactly those conditions, and none existed. These docs capture the *reasoning* — why a parallel schema
+over an in-place migration, why two RLS predicates over 62 bespoke policies — so the next operator
+inherits the decision rather than re-deriving it from DDL.
+
+**What was added:**
+- **[`docs/decisions/PREP-V2-SCHEMA.md`](docs/decisions/PREP-V2-SCHEMA.md)** — the load-bearing
+  decision: build `app` alongside `public`, prove it, migrate, cut over; `public` stays untouched as
+  the rollback. Names the rejected in-place-migration and RLS-only options and its own downsides.
+- **[`docs/decisions/PREP-V2-AUTHORIZATION.md`](docs/decisions/PREP-V2-AUTHORIZATION.md)** — the
+  two-predicate RLS model over the enrolment/staffing graph, why it reads the JWT through
+  `app.current_uid()` rather than `auth.uid()`, and how each of the four audit findings maps to a
+  policy. Security/FERPA-relevant; written for a reviewer.
+- **[`docs/architecture/PREP-V2-DATA-MODEL.md`](docs/architecture/PREP-V2-DATA-MODEL.md)** — the
+  container / offering / activity shape and the four layers, as a map into `app/001_core_model.sql`
+  rather than a restatement of it.
+- **[`docs/operations/PREP-V2-CUTOVER.md`](docs/operations/PREP-V2-CUTOVER.md)** — the ordered
+  bootstrap → prove → migrate → promote runbook, with the reversible/one-way line drawn at front-end
+  promotion. Registered in `DOC-SOURCES.json` as a must-stay-current operations doc.
+
+**Also:** de-stubbed and style-corrected the two help docs the refactor makes current now —
+`student-getting-started.md` (student tier) and `instructor-grading.md` (instructor tier): removed the
+"starter stub" callouts and fixed input-neutral-verb violations per `HELP-STYLE.md`. Director-tool
+help is deliberately **not** written yet — instructor management, export, and the by-question report
+are still mid-port, and a help doc must be current or it is a bug.
+
+Decision docs and the architecture doc are intentionally **not** indexed in `DOC-SOURCES.json` —
+`docs/decisions/` and `docs/contracts/` are point-in-time records, and architecture docs follow the
+same precedent (`LESSON-UNIFICATION.md` is not indexed either). Only the cutover runbook is tracked
+for staleness. Migrations remain **written but not applied**; no live database or site change here.
+
+---
+
 ## 2026-07-20 — Matthew via Claude
 
 ### Added — `docs-author` skill: route a concept to the right doc, or to none

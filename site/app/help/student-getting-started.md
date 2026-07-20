@@ -1,5 +1,3 @@
-> **Starter stub.** The outline below is correct but thin — expand it before the semester opens.
-
 ## Signing in
 
 Your account is your Air Force Academy address — `yourCadetID@usafa.edu`. Your starting password is
@@ -15,8 +13,8 @@ lesson, and some offer a choice between the two — the card tells you which.
 
 ## Submitting a preflight
 
-Answer every question and press submit. You can reopen and change your answers until the deadline;
-after the deadline the form locks.
+Answer every question and select **Submit**. You can reopen and change your answers until the
+deadline; after the deadline the form locks.
 
 Preflights are due at **2359 the night before the lesson**.
 
