@@ -58,6 +58,62 @@ export function iconHTML(name, emoji = '•', cls = 'ic') {
   return `<img class="${cl}" alt="" src="${esc(src)}" onerror="${onerr}">`;
 }
 
+/* ── Failure surfacing ────────────────────────────────────────────────────────
+ * Every portal page opens with a `.center-load` spinner and replaces it once its data
+ * arrives. That means ANY thrown error — a bad query, a renamed export, a bootstrap that
+ * returns nothing — leaves the spinner turning forever, with the real cause visible only in
+ * a console nobody has open. A page that fails should say so.
+ *
+ * Wrap a page's entry point:
+ *     try { await init(); } catch (e) { showFatal(e); }
+ *
+ * Errors are shown verbatim. These are authenticated staff/student pages, not a public
+ * surface, and a director who can read the message can tell us what broke — which is worth
+ * far more than the vague apology a "friendly" message would give them.
+ */
+export function showFatal(err, mountId = 'main') {
+  const mount = document.getElementById(mountId) || document.body;
+  const msg = err?.message || String(err ?? 'Unknown error');
+  console.error('[PREP] page failed to load:', err);
+  mount.innerHTML = `
+    <div class="page-head"><h1>This page didn’t load</h1></div>
+    <div class="alert alert-error">
+      <strong>${esc(msg)}</strong>
+      <div style="margin-top:6px;font-size:0.9em">
+        Try reloading. If it keeps happening, send this message to whoever maintains PREP —
+        it names the actual failure.
+      </div>
+    </div>
+    <details style="margin-top:14px">
+      <summary class="muted" style="cursor:pointer;font-size:0.85em">Technical detail</summary>
+      <pre style="white-space:pre-wrap;font-size:0.78em;color:var(--muted);margin-top:8px">${esc(err?.stack || msg)}</pre>
+    </details>`;
+}
+
+/**
+ * Guard a page entry point. Also catches the case that produced a silent spinner most often:
+ * `bootstrap()` returning undefined because it fired a redirect that never completed, which
+ * left the page sitting on its loading state with no error anywhere.
+ */
+export function runPage(ctx, init, mountId = 'main') {
+  if (!ctx) {
+    // A redirect was issued. If it lands, this never renders; if it did NOT land, the user
+    // gets an explanation instead of a spinner.
+    setTimeout(() => {
+      const mount = document.getElementById(mountId);
+      if (mount && mount.querySelector('.center-load')) {
+        showFatal(new Error(
+          'Your session could not be resolved, and the redirect to sign-in did not complete. ' +
+          'Open the sign-in page directly.'), mountId);
+      }
+    }, 2500);
+    return;
+  }
+  Promise.resolve()
+    .then(init)
+    .catch(e => showFatal(e, mountId));
+}
+
 /* ── People / formatting ────────────────────────────────────────────────────── */
 export function initials(name) {
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean);

@@ -33,26 +33,30 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, lastFirst } from '../js/util.js';
+    import { esc, lastFirst, runPage, showFatal } from '../js/util.js';
     import { allSectionIds } from '../js/faculty-grade.js';
     import * as A from '../js/faculty-admin.js';
 
-    const ctx = await bootstrap({ require: 'faculty' });
-    if (ctx) init();
-
     let tab = 'staff';
     let cache = null;                       // last loadStaff() result, for the modals
+    let onConfirm = null;                   // active modal's confirm handler
+
+    const ctx = await bootstrap({ require: 'faculty' });
+    const isAdmin = () => !!ctx?.instructorRow?.is_global_admin;
+
+    // runPage defers init through a microtask, so the whole module body — including the state
+    // above — is initialized before anything reads it, and any throw lands in showFatal instead
+    // of leaving the spinner up forever. Do not call init() directly here.
+    runPage(ctx, init);
 
     function init() {
       initTheme();
-      renderNav(ctx, { active: 'admin', onCourseChange: () => { cache = null; render(); } });
+      renderNav(ctx, { active: 'admin', onCourseChange: () => { cache = null; render().catch(showFatal); } });
       wireModal();
-      render();
+      return render();
     }
 
-    const isAdmin = () => !!ctx.instructorRow?.is_global_admin;
-
-    function render() {
+    async function render() {
       const root = document.getElementById('main');
 
       // The nav already hides this page from instructors; this is the direct-URL case. It is a
@@ -75,9 +79,9 @@
         <div id="panel"><div class="center-load"><span class="spinner"></span><span>Loading…</span></div></div>`;
 
       root.querySelectorAll('[data-tab]').forEach(b =>
-        b.addEventListener('click', () => { tab = b.dataset.tab; render(); }));
+        b.addEventListener('click', () => { tab = b.dataset.tab; render().catch(showFatal); }));
 
-      if (tab === 'staff') renderStaff(); else renderExport();
+      if (tab === 'staff') await renderStaff(); else await renderExport();
     }
 
     /* ───────────────────────────── Staff ───────────────────────────── */
@@ -229,7 +233,7 @@
             const { error } = await A.setStaffSections(ctx, who.instructorId, who.role, ids);
             if (error) return error.message;
             status('✓ Sections updated', 'var(--green)');
-            renderStaff();
+            await renderStaff();
             return null;
           });
       }));
@@ -263,7 +267,7 @@
             const msg = data?.error || error?.message;
             if (msg) return msg;
             status(`✓ ${name} added`, 'var(--green)');
-            renderStaff();
+            await renderStaff();
             return null;
           });
       });
@@ -334,7 +338,6 @@
     }
 
     /* ───────────────────────────── Modal ───────────────────────────── */
-    let onConfirm = null;
     function openModal(title, body, okLabel, handler) {
       document.getElementById('mk-title').textContent = title;
       document.getElementById('mk-body').innerHTML = body;

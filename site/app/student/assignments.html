@@ -40,10 +40,10 @@
       loadAssignmentStatuses, saveWrittenAnswers, commitSubmission,
     } from '../js/student-data.js';
     import { questionsOf, readingLinkOf, displayPoints } from '../js/schema.js';
-    import { esc, deadlineClass, fmtDateTime } from '../js/util.js';
+    import { esc, deadlineClass, fmtDateTime, runPage } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
-    if (!ctx) { /* redirected */ } else { init(); }
+    runPage(ctx, init);
 
     let list = [];
     let current = null;       // the current item from loadAssignmentStatuses()

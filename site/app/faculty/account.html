@@ -21,14 +21,20 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
+    import { runPage, showFatal } from '../js/util.js';
     import { renderAccount } from '../js/account.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
-    if (ctx) {
+    const main = () => document.getElementById('main');
+
+    // runPage, not a bare call: it routes any throw to showFatal instead of leaving the
+    // loading spinner up, which is the only symptom an unguarded failure produces here.
+    runPage(ctx, () => {
       initTheme();
-      renderNav(ctx, { active: 'account', onCourseChange: () => renderAccount(ctx, document.getElementById('main')) });
-      renderAccount(ctx, document.getElementById('main'));
-    }
+      renderNav(ctx, { active: 'account',
+        onCourseChange: () => renderAccount(ctx, main()).catch(showFatal) });
+      return renderAccount(ctx, main());
+    });
   </script>
 </body>
 </html>

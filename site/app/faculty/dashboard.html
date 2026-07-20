@@ -20,14 +20,15 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { mountDashboard } from '../js/faculty-dashboard.js';
+    import { runPage } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
-    if (!ctx) { /* redirected */ } else {
+    runPage(ctx, () => {
       initTheme();
       const root = document.getElementById('main');
       renderNav(ctx, { active: 'dashboard', onCourseChange: () => mountDashboard(ctx, root) });
-      mountDashboard(ctx, root);
-    }
+      return mountDashboard(ctx, root);
+    });
   </script>
 </body>
 </html>

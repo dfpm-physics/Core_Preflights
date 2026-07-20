@@ -51,13 +51,13 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, lastFirst, fmtDate } from '../js/util.js';
+    import { esc, lastFirst, fmtDate, runPage } from '../js/util.js';
     // Questions now live in the written activity's content, not on the assignment row.
     import { questionsOf } from '../js/schema.js';
     import * as G from '../js/faculty-grade.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
-    if (!ctx) { /* redirected */ } else { init(); }
+    runPage(ctx, init);
 
     // ── State ──
     let gradeData = {}, current = null, extensionMap = {}, scoreMap = {}, responseMap = {};

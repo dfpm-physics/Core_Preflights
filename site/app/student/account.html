@@ -21,14 +21,18 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
+    import { runPage } from '../js/util.js';
     import { renderAccount } from '../js/account.js';
 
     const ctx = await bootstrap({ require: 'student' });
-    if (ctx) {
+
+    // runPage, not a bare call: it routes any throw to showFatal instead of leaving the
+    // loading spinner up, which is the only symptom an unguarded failure produces here.
+    runPage(ctx, () => {
       initTheme();
       renderNav(ctx, { active: 'account' });
-      renderAccount(ctx, document.getElementById('main'));
-    }
+      return renderAccount(ctx, document.getElementById('main'));
+    });
   </script>
 </body>
 </html>

@@ -35,11 +35,11 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, lastFirst } from '../js/util.js';
+    import { esc, lastFirst, runPage } from '../js/util.js';
     import * as R from '../js/faculty-roster.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
-    if (!ctx) { /* redirected */ } else { init(); }
+    runPage(ctx, init);
 
     let tab = 'students';
     let pendingRoster = [];
@@ -183,7 +183,7 @@
 
     async function doRemove(enrollmentId, name) {
       if (!confirm(`Remove ${name} (${sid})?\n\nThis permanently deletes their record, all submissions, and all scores.`)) return;
-      const { error } = await R.removeStudent(sid);
+      const { error } = await R.removeEnrollment(enrollmentId);
       if (error) { alert('Error removing student: ' + error.message); return; }
       renderStudents();
     }

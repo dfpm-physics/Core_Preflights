@@ -45,10 +45,10 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { loadLessonStatuses, STATE } from '../js/student-lessons.js';
-    import { esc, deadlineClass, relativeDue, fmtDateTime, iconHTML } from '../js/util.js';
+    import { esc, deadlineClass, relativeDue, fmtDateTime, iconHTML, runPage } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
-    if (!ctx) { /* redirected */ } else { init(); }
+    runPage(ctx, init);
 
     let list = [];
     let current = null;

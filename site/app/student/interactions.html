@@ -30,10 +30,10 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { loadInteractionStatuses } from '../js/student-data.js';
-    import { esc, fmtDate, iconHTML } from '../js/util.js';
+    import { esc, fmtDate, iconHTML, runPage } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
-    if (!ctx) { /* redirected */ } else { init(); }
+    runPage(ctx, init);
 
     async function init() {
       initTheme();

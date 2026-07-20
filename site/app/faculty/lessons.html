@@ -223,12 +223,12 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, fmtDate } from '../js/util.js';
+    import { esc, fmtDate, runPage } from '../js/util.js';
     import { questionsOf } from '../js/schema.js';
     import * as L from '../js/faculty-lessons.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
-    if (!ctx) { /* redirected */ } else { init(); }
+    runPage(ctx, init);
 
     let vm = null, editingId = null, model = null, interactionSlugTouched = false;
     // Set only when saving would REPLACE an existing interactive activity with a different slug.

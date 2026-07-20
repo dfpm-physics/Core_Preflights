@@ -20,10 +20,10 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { loadStudentLessonDashboard, STATE } from '../js/student-lessons.js';
-    import { esc, iconHTML, relativeDue, deadlineClass, fmtDateTime } from '../js/util.js';
+    import { esc, iconHTML, relativeDue, deadlineClass, fmtDateTime, runPage } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
-    if (!ctx) { /* redirected */ } else { initTheme(); renderNav(ctx, { active: 'dashboard' }); main(); }
+    runPage(ctx, () => { initTheme(); renderNav(ctx, { active: 'dashboard' }); return main(); });
 
     const firstName = (ctx?.studentRow?.name || '').split(/\s+/)[0] || 'Cadet';
 
