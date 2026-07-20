@@ -55,7 +55,17 @@ The course's preflight content. Full CRUD.
 Editor fields: title, description, `due_date_m` (M-day), `due_date_t` (T-day), `reading_link`,
 `reference_pdf`, `reference_pages`, `figure_url`, plus the question array.
 
-**Port status:** ❌ still legacy-only (per `site/app/README.md` "Not yet ported").
+**Port status (corrected 2026-07-16):** ⚠️ **mostly ported — not legacy-only.** Assignment authoring
+lives inside the **lesson creator** (`site/app/faculty/lessons.html` + `js/faculty-lessons.js`), not a
+standalone Assignments tab; a preflight is a *component* of a lesson (migration 016). The question
+builder there is a **superset** of legacy: it adds figure upload to Supabase Storage, a RAG
+reference-PDF picker, and two pinned role questions (reading-time diagnostic, reading reflection).
+Publish/unpublish mirrors onto lesson-**owned** components only.
+
+Still missing: **Duplicate**, and standalone (non-lesson) authoring — a pre-built assignment can only
+be *attached* to a lesson to be edited. **Retroactive rescore was ported 2026-07-16** (`saveLesson` →
+`retroactivelyUpdateScores`); it had been dropped, silently corrupting totals whenever a point value
+changed on a graded lesson.
 
 ### B. Roster management  *(legacy: Roster tab — `admin.html:358-399`)*
 
@@ -67,8 +77,14 @@ Editor fields: title, description, `due_date_m` (M-day), `due_date_t` (T-day), `
 | Remove a student | **Remove** (cascade) | deletes from `scores`, `responses`, `extensions`, then `students` — permanent | `removeStudent` :2007 |
 | View provisioning status | status card (counts unprovisioned) | — (read) | `loadRosterTable` :1910 |
 
-**Port status:** ✅ Roster (+Sections) ported to `site/app/faculty/roster.html` — but confirm bulk
-CSV import + provisioning made it across.
+**Port status (verified 2026-07-16):** ✅ **Fully ported** to `site/app/faculty/roster.html` +
+`js/faculty-roster.js` — bulk CSV import **and** provisioning both made it across, with identical
+validation (id range, `^[MT][135][A-D]$`). Provisioning is *cleaner* than legacy: it uses
+`db.functions.invoke('provision-students')` rather than a raw `fetch` against a hardcoded URL.
+Cascade delete matches legacy (`scores` → `responses` → `extensions` → `students`).
+
+⚠️ One latent issue, not a port gap: `loadRoster` fetches **every student in the database** and
+filters by section client-side. Legacy did the same; it will not scale.
 
 ### C. Section → instructor assignment  *(legacy: Sections tab — `admin.html:404-414`)*
 
@@ -108,8 +124,20 @@ Catalog of Claude-artifact lessons (iPREP).
 | Accept prefill link | `?new=1&id=&course=&title=&desc=&url=&pub=` → routes to New vs. Update, review, save manually | `interactions` (on Save) | `prefillFromQuery` :355 |
 | Restrict to managed courses | Course dropdown lists only `manageableCourses` | — | :321, :375 |
 
-**Port status:** ✅ interactions ported to `site/app/faculty/interactions.html`; lessons authoring
-lives in `site/app/faculty/lessons.html`. Reconcile which is canonical.
+**Port status (clarified 2026-07-16):** ✅ ported, and **the canonical owner is already decided in
+code** — `js/faculty-interactions.js` says outright that the standalone tool "is being retired in
+favour of the lesson creator", and the frozen prefill contract URL (`site/faculty/lessons.html`)
+resolves to the lesson creator. So:
+
+- **`faculty/lessons.html` is canonical for authoring.**
+- **`faculty/interactions.html` is still the only page with completion tracking** and the only route
+  into the per-lesson rollup (`report.html?i=`). It therefore **cannot be deleted until that moves.**
+
+Prefill handling was **removed from `interactions.html` on 2026-07-16**: it guessed New-vs-Update from
+slug existence, which is destructive either way (duplicate-PK failure, or silently overwriting another
+listing). The lesson creator asks explicitly instead. Remaining overlap to resolve: both pages write
+`interactions` rows, and `interactions.html` toggles publish unconditionally while `lessons.html`
+mirrors publish only onto components it owns — so a shared interaction can desync from its lesson.
 
 ---
 
@@ -121,6 +149,19 @@ Same button an instructor sees, but the director gets whole-course scope.
 | **Grade** | own `mySections` only | adds **"All sections (entire course)"** option + full section list | `initGradeTab` :977 |
 | **Report** | own `mySections` only | adds **"All sections (entire course)"** report scope | `initReportTab` :1276 |
 | **Export → Grades CSV** (Blackboard) | own sections' finalized scores | ALL course sections/students | `exportBlackboard` :2162 |
+
+**Port status of this section (added 2026-07-16):**
+
+- **Grade** ✅ fully ported (`faculty/grade.html` + `js/faculty-grade.js`) including the director
+  "All sections" scope, finalize, reopen, and extensions. It was **unreachable** until 2026-07-16 —
+  nav had no Grade entry and the only link sat inside Roster's *non-director* branch, on a page nav
+  hid from instructors. A `grade` nav entry now exists for all faculty.
+- **Report** ❌ **not ported.** ⚠️ Do not be misled by `site/app/faculty/report.html` — that is the
+  *interaction/lesson rollup* (keyed `?i=<slug>`), **not** this by-question report. The real port is
+  `js/faculty-report.js`, which **nothing imports**. It is **intentionally dormant**: the by-question
+  view will be merged into the lesson rollup summary rather than shipped standalone. **Do not delete
+  it** — it is the query layer that merge will reuse.
+- **Export** ❌ not ported. See §4 and `PLAN-2026-07-16-ADMIN.md` Tier 1.
 
 ---
 
@@ -172,12 +213,28 @@ they aren't mistaken for missing page features.
 ---
 
 ## 6. Open questions for the new page
-- Unify the director gate on the per-course `isDirectorForCurrent()` model; drop the legacy global
-  `is_director` shortcut.
-- Decide whether **extensions** and **full backup** become director-gated (currently open to any
-  grader).
-- Add explicit **section create/rename/retire** (today sections only appear via roster upload).
-- Confirm bulk CSV import + provisioning survived the port to `site/app/faculty/roster.html`.
-- Reconcile `faculty/interactions.html` vs `faculty/lessons.html` ownership of interaction authoring.
-- Consider course-level settings that have no home today (course create/rename, term/semester
-  config) if the page should own them.
+
+*Status updated 2026-07-16. The build plan these feed is
+[`PLAN-2026-07-16-ADMIN.md`](PLAN-2026-07-16-ADMIN.md).*
+
+**Resolved:**
+
+- ✅ **Director gate unified.** `site/app/` already uses the per-course `ctx.isDirectorForCurrent()`
+  model exclusively (`js/auth.js`); `interactions-admin.html`'s legacy global `is_director` shortcut
+  was never carried over. Build on it; don't reintroduce the shortcut. *(One narrow fallback in
+  `auth.js` still reads `is_director` — only when an instructor has no `instructor_course_access`
+  rows and the role is derived from sections taught.)*
+- ✅ **CSV import + provisioning confirmed ported** (see §2B).
+- ✅ **Interaction authoring ownership decided:** the lesson creator is canonical; `interactions.html`
+  keeps completion tracking until that moves (see §2E).
+
+**Still open:**
+
+- **Extensions gating** — still open to any grader, in both generations. Note migration 021 adds real
+  RLS here; align with it rather than duplicating the rule in client JS.
+- **Full JSON backup** — must become director-gated when ported. It is currently unscoped by *role*
+  **and** by *course*, and it orders `assignments` by `due_date`, **a column that no longer exists**
+  (it is `due_date_m` / `due_date_t`) — so the legacy query would fail if copied as-is.
+- **Section create/rename/retire** — sections still only ever appear as a side effect of roster upload.
+- **Course-level settings** (course create/rename, term/semester config) — no home in either generation.
+- **`system_admin` badge color** — legacy used a hardcoded purple with no token in `DESIGN.md`.

@@ -3,6 +3,11 @@
 // renderNav(ctx, { active, onCourseChange, mount }) injects the bar into `mount`
 // (default: <header id="topnav">). Links are role-appropriate; faculty get a course
 // switcher (when they have >1 course) that calls ctx.setCurrentCourse + onCourseChange.
+//
+// Help lives in the user dropdown rather than the main nav: it is a reference surface, not a
+// place work happens, and the nav bar is reserved for the latter. `help.html` is a bare filename
+// for the same reason the role links are — both student/ and faculty/ have one, and each shows
+// the topics that role may see (js/help.js).
 
 import { iconHTML, initials, esc, legacyUrl } from './util.js';
 import { updateToggleButtons } from './theme.js';
@@ -17,13 +22,17 @@ const STUDENT_LINKS = [
   { key: 'dashboard', label: 'Dashboard', href: 'dashboard.html', icon: 'dashboard',   emoji: '🏠' },
   { key: 'lessons',   label: 'Lessons',   href: 'lessons.html',   icon: 'assignments', emoji: '📚' },
 ];
-// Grade and Report are intentionally absent: Grade is reached from Roster, and Report (the lesson
-// rollup) is reached only via a link carrying its lesson key (?i=) — from an Interactions card or
-// the dashboard's "Open full rollup →".
+// Report (the lesson rollup) is intentionally absent: it is reached only via a link carrying its
+// lesson key (?i=) — from an Interactions card or the dashboard's "Open full rollup →".
+//
+// Grade is NOT director-gated: instructors grade their own sections (grade.html resolves scope from
+// the role). Lessons is not gated either — instructors get a read-only view of published lessons
+// (faculty-lessons.js filters to is_published; the page gates every authoring control on isDirector).
 const FACULTY_LINKS = [
   { key: 'dashboard',    label: 'Dashboard',    href: 'dashboard.html',         icon: 'dashboard',     emoji: '🏠' },
+  { key: 'grade',        label: 'Grade',        href: 'grade.html',             icon: 'grades',        emoji: '✅' },
   { key: 'roster',       label: 'Roster',       href: 'roster.html',            icon: 'roster',        emoji: '🧑‍🎓', directorOnly: true },
-  { key: 'lessons',      label: 'Lessons',      href: 'lessons.html',           icon: 'assignments',   emoji: '📚', directorOnly: true },
+  { key: 'lessons',      label: 'Lessons',      href: 'lessons.html',           icon: 'assignments',   emoji: '📚' },
   { key: 'interactions', label: 'Interactions', href: 'interactions.html',      icon: 'interactions',  emoji: '💡' },
   { key: 'admin',        label: 'Admin',        href: legacyUrl('admin.html'),  icon: 'settings',      emoji: '⚙️', external: true },
 ];
@@ -84,6 +93,10 @@ export function renderNav(ctx, opts = {}) {
               <div><div class="nm">${esc(name)}</div>
                 <div class="rl">${esc(roleLabel)}${courseTitle ? ' · ' + esc(courseTitle) : ''}</div></div>
             </div>
+            <a class="menu-item" href="help.html">
+              ${iconHTML('info', '❔', 'ic')}<span>Help</span>
+            </a>
+            <div class="menu-sep"></div>
             <button class="menu-item danger" data-signout>
               ${iconHTML('signout', '🚪', 'ic')}<span>Sign out</span>
             </button>

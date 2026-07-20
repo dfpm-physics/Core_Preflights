@@ -8,6 +8,135 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-20 — Matthew via Claude
+
+### Added — in-app Help centre with tiered, file-backed documentation
+
+**Frontend only. No database change, no migration, no build step.** Not yet pushed.
+
+**Why.** There was nowhere in the app to explain how it works, and — the prompting request — nowhere
+to make the AI's rules and behavior visible to the people whose work it touches. Faculty and students
+had to be told these things out of band, or read the repo.
+
+**What was added:**
+- **A `Help` item in the user dropdown** ([`site/app/js/nav.js`](site/app/js/nav.js)), above a new
+  separator that sets it off from Sign out. It is in the dropdown rather than the main nav because
+  the nav bar is reserved for places work happens; Help is a reference surface.
+- **[`site/app/help/`](site/app/help/)** — where help content lives. Markdown files plus
+  `MANIFEST.json`. **Adding a topic is a file and a manifest entry, no code change.** The authoring
+  contract, including the tier table and the deploy caveat, is
+  [`site/app/help/README.md`](site/app/help/README.md).
+- **Cumulative role tiers** — `student` → `instructor` → `director` → `admin`. A doc's `tier` is the
+  lowest role that may see it; each tier sees its own docs and every tier below. Director status is
+  resolved with `ctx.isDirectorForCurrent()`, so it is **per-course**: a director in Phys 215 who is
+  an instructor in Phys 110 sees director topics only while 215 is selected, and the page re-renders
+  on a course switch.
+- **[`site/app/js/help.js`](site/app/js/help.js)** + `student/help.html` and `faculty/help.html` —
+  index grouped by tier, doc reader, deep links (`help.html?doc=<id>`), Back/Forward via
+  `history.pushState`. Markdown renders through `marked` → `DOMPurify`, matching every other
+  markdown surface on the site.
+- Five starter docs, **all marked as stubs to be expanded**: two student-tier (getting started; how
+  AI is used on your work), one instructor (grading and the 3-state toggle), one director (AI rules
+  and behavior — the analysis workflows, that suggested scores are never final, that the hidden 0–5
+  diagnostics are not grades), one admin (system operations). The director and admin docs summarize
+  `CORE.md` and `PROJECT.md` and say so in-page; **those files stay authoritative.**
+
+**Known limit, deliberate:** these are static files on GitHub Pages, so **the tier gate controls what
+the page lists, not who can fetch a URL.** Anyone who guesses a filename can read any of them, signed
+in or not. No secret, credential, PII, or answer key may go in `site/app/help/`. Content that must
+actually be restricted belongs behind RLS.
+
+**Verify before pushing:** `python -m http.server 8000`, then
+`http://localhost:8000/site/app/faculty/help.html`. Assets were confirmed to serve and the manifest
+to parse; the rendered pages need a signed-in browser check, which was not possible here.
+
+### Added — `app` schema + three tiered agent roles (PREP v2 groundwork)
+
+**Applied to the live project** (`shzvpmlnqfmzfmuxkowi`) via
+[`supabase/admin/app_schema_bootstrap.sql`](supabase/admin/app_schema_bootstrap.sql), run as
+`postgres` in the SQL Editor. **Other agents: schema `app` and roles `prep_app_*` now exist.**
+
+**Why.** A schema audit found the data model conflates content with delivery (a preflight *is* its
+Fall-2026 due date, so it cannot be reused next term), has no `terms` concept, allows a student only
+one section ever, and spreads a single lesson's grade across three tables. The redesign separates
+catalogue / delivery / work — see the proposal linked from this entry's discussion. The rebuild
+happens in a **new schema in the same project**, not a new project, so the 73 provisioned student
+logins and 7 instructor accounts in `auth.users` keep working unchanged.
+
+**What was created — additive only; `public` is untouched** (verified after: still 16 tables, 62
+policies, identical to the pre-run introspection):
+- Schema `app`, owned by `prep_app_owner`. Currently empty.
+- Three login roles, all `BYPASSRLS`, none with rights on `public`:
+  `prep_app_owner` (owns `app` → full DDL, build-out only), `prep_app_dml` (data, no DDL — the
+  everyday agent role), `prep_app_read` (SELECT only).
+- Default privileges on `app` so future tables auto-grant to the agent tiers **and** to
+  `anon` / `authenticated` / `service_role`, with RLS still gating every row as it does in `public`.
+
+**Two PostgreSQL/Supabase constraints found by pre-flight checks, both documented in the script:**
+- *PG16+ role membership.* `createrole_self_grant` defaults to `''`, so a `CREATEROLE` role gets only
+  `ADMIN` on roles it creates, not `SET`. `CREATE SCHEMA ... AUTHORIZATION` then fails with
+  `42501: must be able to SET ROLE`. Fixed by `SET LOCAL createrole_self_grant = 'set, inherit'`
+  (§0). First run hit this and rolled back cleanly.
+- *`auth` schema is not ours.* `postgres` holds USAGE on `auth` and REFERENCES on `auth.users`
+  **without grant option**, so neither can be delegated to `prep_app_owner`. No `auth` grants are
+  attempted (§5); the two FKs into `auth.users` must be added by `postgres` after the tables exist
+  (§6). The app tier never needs to read `auth.users` — the uuid is stored locally and provisioning
+  runs through the existing edge function as `service_role`.
+
+**Verification.** [`supabase/admin/app_tier_check.py`](supabase/admin/app_tier_check.py) proves
+against the live DB that each tier connects, that only the owner can do DDL, and that **no tier can
+read or write anything in `public`**. All checks pass. Credentials live in the gitignored
+`supabase/admin/.env`; the committed SQL keeps `REPLACE_ME_*` placeholders.
+
+### Added — PREP v2 core model in `app` (18 tables)
+
+Applied via [`supabase/migrations/app/001_core_model.sql`](supabase/migrations/app/001_core_model.sql)
+as `prep_app_owner`. Numbered separately from `supabase/migrations/*.sql`, which remains the chain
+for `public`. Result: 18 tables, 77 constraints, 48 indexes, 10 triggers.
+
+**Scope (decided with Matthew).** Preflights only. The homework/quiz/exam layer —
+`grading_categories` with weights, `external_systems`, `external_links`, `import_batches` — is
+deliberately **not** built. `activity_kinds` **is** included as a lookup table seeded with one row,
+so adding a type later is an INSERT rather than a migration; that was a judgment call within the
+"preflights only" scope and is easy to drop.
+
+**The three-layer split** — the change everything else follows from:
+- *catalogue* (term-free, reusable): `courses`, `terms`, `activity_kinds`, `activities`,
+  `activity_components`
+- *delivery* (term-scoped): `course_offerings`, `sections`, `students`, `enrollments`,
+  `instructors`, `staff_assignments`, `assignments`, `assignment_section_due_dates`
+- *work* (per enrolment): `submissions`, `submission_components`, `grades`, `grade_events`
+- *analysis*: `analysis_reports`, replacing both `assignments.analysis_report` and
+  `interaction_analysis`
+
+**Decisions worth recording:**
+- `grades` is a **separate table** from `submissions`, with `submission_id` nullable — so an exam
+  scored in Gradescope can carry a grade with no submission in this system.
+- `switch_policy` lives on `assignments` as **data**, not compiled into a trigger, because the
+  research design's phase sequence deliberately changes what students may do.
+- An instructor unlock **requires `unlocked_by`**; the trigger refuses an unattributed unlock.
+- Modality is a property of a component, not a top-level entity — this is what removes the
+  parallel assignment/interaction worlds and the `lesson_completions` reconciliation layer.
+- `activity_components.slug` is the frozen-contract surface; existing `interactions.id` values
+  migrate here verbatim so deployed artifacts keep resolving.
+
+**Verified, not asserted.** [`app_invariant_test.py`](supabase/admin/app_invariant_test.py) builds a
+throwaway fixture, exercises the guarantees, and rolls back — all 15 checks pass, including:
+a second grade for the same (enrolment, assignment) is refused; `points_earned > points_possible` is
+refused (the "4 out of 2" bug, now structurally impossible); the effort→points curve matches
+migration 013 scaled to `points_possible`; and the component lock behaves per `switch_policy`.
+Structural checks confirm **zero foreign keys from `app` into `public`** (bootstrap §9 invariant) and
+`public` still at exactly 16 tables.
+
+**Still to do.** Add `app` under Dashboard → Settings → API → Exposed schemas (not yet done; only
+needed before the browser reads `app`). Write RLS for `app` — the point of the enrolment/staffing
+model is that ~62 bespoke policies collapse to two predicates. Migrate data from `public`. Add the
+§6 auth FKs as `postgres`. Then seal the owner with `ALTER ROLE prep_app_owner NOLOGIN` (§7).
+Migration `021_lesson_finalize_and_extensions.sql` remains **unapplied and should stay that way** —
+the redesign replaces nearly all of it.
+
+---
+
 ## 2026-07-20 — Casey via Claude
 
 ### Fixed — assignment-id collision that overwrote 34 phys-215 preflights; namespaced phys-110

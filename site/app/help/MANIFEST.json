@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "updated": "2026-07-20",
+  "tiers": ["student", "instructor", "director", "admin"],
+  "docs": [
+    {
+      "id": "getting-started",
+      "tier": "student",
+      "title": "Getting started",
+      "summary": "Signing in, finding your lessons, and submitting a preflight.",
+      "file": "student-getting-started.md"
+    },
+    {
+      "id": "ai-and-your-work",
+      "tier": "student",
+      "title": "How AI is used on your work",
+      "summary": "What the AI reads, what it decides, and what your instructor decides.",
+      "file": "ai-and-your-work.md"
+    },
+    {
+      "id": "grading",
+      "tier": "instructor",
+      "title": "Grading in PREP",
+      "summary": "The Grade tab, the 3-state colors, and finalizing AI-suggested scores.",
+      "file": "instructor-grading.md"
+    },
+    {
+      "id": "ai-rules",
+      "tier": "director",
+      "title": "AI rules and behavior",
+      "summary": "What the analysis skills do, what they may write, and what stays human.",
+      "file": "director-ai-rules.md"
+    },
+    {
+      "id": "system-operations",
+      "tier": "admin",
+      "title": "System operations",
+      "summary": "Supabase, migrations, deploys, and the shared-state rules.",
+      "file": "admin-system-operations.md"
+    }
+  ]
+}

@@ -15,13 +15,19 @@ legacy site page (`site/admin.html`) and are reached via the **Admin ↗** link 
 app/
   index.html            Router — resolves role, forwards to the right dashboard
   login.html            Unified login (cadet ID → @usafa.edu, or instructor email)
-  student/              dashboard · assignments (submit/review) · interactions
-  faculty/              dashboard · grade · report · roster (+sections) · interactions
+  student/              dashboard · assignments (submit/review) · interactions · help
+  faculty/              dashboard · grade · report · roster (+sections) · interactions · help
+  help/                 Help content: Markdown docs + MANIFEST.json (see help/README.md)
   css/styles.css        Tokenized design system + dark theme
-  js/                   supabase · auth · nav · theme · util · student-data
+  js/                   supabase · auth · nav · theme · util · student-data · help
                         faculty-data · faculty-grade · faculty-report · faculty-roster
   media/icons/          PNG icons (+ ICON-SEARCH-PROMPT.md). Missing → ic-dashboard.png → emoji.
 ```
+
+Help is reached from the **user dropdown**, not the nav bar. Topics are tiered
+(`student` → `instructor` → `director` → `admin`, cumulative) and each tier sees everything below
+it; the gate is presentation only, since the files are public static assets. To add a topic, drop a
+`.md` in `help/` and add a manifest entry — no code change. See [`help/README.md`](help/README.md).
 
 ### How a page boots
 `<head>` loads, in order: a tiny no-flash theme snippet → `css/styles.css` → the
@@ -68,7 +74,24 @@ forwarding) remain — GitHub Pages publishes from the root, so those two cannot
 
 ## Not yet ported
 
-Assignment builder, instructor management, and export still live on the legacy `admin.html`
-(reached via the **Admin ↗** nav link). Faculty section-scoping is enforced in client JS
-(mirroring the existing app), not RLS — true isolation would require new DB policies, which
-are out of scope here.
+*Verified 2026-07-16. Full detail: [`COURSE-ADMIN-INVENTORY.md`](COURSE-ADMIN-INVENTORY.md) ·
+build plan: [`PLAN-2026-07-16-ADMIN.md`](PLAN-2026-07-16-ADMIN.md).*
+
+Two director features still live only on the legacy `admin.html` (reached via the **Admin ↗** nav
+link), and **promotion deletes that page** — so both must be built natively before the app tree moves
+up, or the course loses them:
+
+- **Instructor / staff management** — add, change role, remove. Zero code in `site/app/`; the
+  `create-instructor` / `remove-instructor` edge functions already exist and are unchanged.
+- **Export** — Blackboard grades CSV and the full JSON backup.
+
+**The assignment builder *did* mostly port** — into the **lesson creator**
+([`faculty/lessons.html`](faculty/lessons.html)), where a preflight is a component of a lesson rather
+than a standalone item. Missing there: **duplicate**, and standalone (non-lesson) authoring.
+
+**`js/faculty-report.js` is intentionally dormant** — it is the ported query layer for the legacy
+by-question Report tab, which will be **merged into the lesson rollup summary** rather than shipped as
+its own page. Nothing imports it yet. **Don't delete it as dead code.**
+
+Faculty section-scoping is enforced in client JS (mirroring the existing app), not RLS — true
+isolation would require new DB policies. Migration 021 begins that repair, but is **not yet applied**.

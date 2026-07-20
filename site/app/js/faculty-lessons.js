@@ -97,6 +97,72 @@ export async function loadManager(ctx) {
   };
 }
 
+/** A question's point value, normalized. Non-numeric → 0, matching the max_total math below. */
+const pointsOf = (q) => (isNaN(Number(q?.points)) ? 0 : Number(q.points));
+
+/** Read an assignment's stored questions so a save can tell whether any point value changed.
+ *  Must be called BEFORE the write that overwrites them. [] when the row doesn't exist yet — a
+ *  first-time create has no scores to correct. */
+async function storedQuestions(assignmentId) {
+  const { data } = await db.from('assignments')
+    .select('questions').eq('id', assignmentId).maybeSingle();
+  return Array.isArray(data?.questions) ? data.questions : [];
+}
+
+/** True iff a question that ALREADY existed changed its point value. Added/removed questions don't
+ *  qualify — they have no scores rows to correct. Port of admin.html:1851 `pointsChanged`. */
+function pointsChanged(oldQs, newQs) {
+  return (newQs || []).some(q => {
+    const old = (oldQs || []).find(oq => oq.id === q.id);
+    return old && pointsOf(old) !== pointsOf(q);
+  });
+}
+
+/**
+ * Propagate changed question points onto every existing `scores` row for an assignment.
+ *
+ * Without this, editing a question's point value on an already-graded lesson leaves every graded row
+ * stale: `question_scores[q].max` keeps the OLD value and `total_score`/`max_total` no longer agree
+ * with the assignment — students see wrong totals and the grade export ships them. Port of
+ * admin.html:1871 `retroactivelyUpdateScores`, which the app dropped.
+ *
+ * Preserves the 3-state status (a contract with scores.question_scores[].status): `zero` stays 0,
+ * `full`/`warn` take the new point value — `warn` is full credit with a flag, so it scores like
+ * `full`. Questions absent from a row's question_scores are left alone (never graded).
+ *
+ * @returns {number} rows updated; 0 if none existed or the write failed.
+ */
+export async function retroactivelyUpdateScores(assignmentId, allQuestions) {
+  const qs_ = allQuestions || [];
+  const { data: scores, error } = await db.from('scores')
+    .select('student_id, question_scores, is_finalized').eq('assignment_id', assignmentId);
+  if (error || !scores?.length) return 0;
+
+  const newMaxTotal = qs_.reduce((s, q) => s + pointsOf(q), 0);
+
+  const upserts = scores.map(row => {
+    const qs = { ...(row.question_scores || {}) };
+    qs_.forEach(q => {
+      if (!qs[q.id]) return;                       // never graded — nothing to correct
+      const status = qs[q.id].status || (Number(qs[q.id].score) > 0 ? 'full' : 'zero');
+      qs[q.id] = { ...qs[q.id], max: pointsOf(q), score: status === 'zero' ? 0 : pointsOf(q) };
+    });
+    const newTotal = qs_.reduce((s, q) => s + (Number(qs[q.id]?.score) || 0), 0);
+    return {
+      student_id:      row.student_id,
+      assignment_id:   assignmentId,
+      question_scores: qs,
+      total_score:     Math.round(newTotal * 1000) / 1000,
+      max_total:       newMaxTotal,
+      is_finalized:    row.is_finalized,
+    };
+  });
+
+  const { error: upsertErr } = await db.from('scores')
+    .upsert(upserts, { onConflict: 'student_id,assignment_id' });
+  return upsertErr ? 0 : scores.length;
+}
+
 /**
  * Create (editingId null) or update a lesson and its inline-authored components.
  * Inline ("new") components are upserted first so the lesson's FKs resolve; "existing" components
@@ -109,13 +175,16 @@ export async function loadManager(ctx) {
  *   preflight:    { source:'none'|'existing'|'new', existingId },
  *   interaction:  { source:'none'|'existing'|'new', existingId, id, title, artifact_url, description },
  * }
- * @returns {{ error: object|null }} the first error encountered, or null on success.
+ * @returns {{ error: object|null, rescored: number }} the first error encountered (or null), and
+ *   how many `scores` rows a question-points change forced to be rewritten (0 = none; the caller
+ *   surfaces this, because a silent bulk score rewrite is exactly what a director must be told about).
  */
 export async function saveLesson(model, editingId) {
   const { id, course_id, is_published } = model;
   const pf = model.preflight   || { source: 'none' };
   const it = model.interaction || { source: 'none' };
   let preflight_id = null, interaction_id = null;
+  let rescored = 0;
 
   // Due dates flow from the lesson onto every component so they all share one deadline. Interactions
   // use M/T only (migration 020); assignments additionally keep the legacy NOT-NULL `due_date`.
@@ -129,6 +198,9 @@ export async function saveLesson(model, editingId) {
   // 1) Preflight component.
   if (pf.source === 'new') {
     const asgnId = preflightIdFor(id);
+    const nextQs = model.questions || [];
+    // Snapshot the stored points BEFORE the upsert overwrites them; a create returns [].
+    const prevQs = await storedQuestions(asgnId);
     // assignments.due_date is NOT NULL — mirror admin.html and seed it from the lesson dates.
     const seed = model.due_date_m || model.due_date_t || new Date().toISOString();
     const { error } = await db.from('assignments').upsert({
@@ -136,7 +208,7 @@ export async function saveLesson(model, editingId) {
       course_id,
       title: model.title,
       description: model.description,
-      questions: model.questions || [],
+      questions: nextQs,
       due_date:   seed,
       due_date_m: model.due_date_m,
       due_date_t: model.due_date_t,
@@ -145,10 +217,11 @@ export async function saveLesson(model, editingId) {
       reading_link:    pf.reading_link    || null,   // reading link shown to students
       is_published,
     }, { onConflict: 'id' });
-    if (error) return { error };
+    if (error) return { error, rescored };
     preflight_id = asgnId;
+    if (pointsChanged(prevQs, nextQs)) rescored = await retroactivelyUpdateScores(asgnId, nextQs);
   } else if (pf.source === 'existing') {
-    if (!pf.existingId) return { error: { message: 'Select an existing preflight assignment.' } };
+    if (!pf.existingId) return { error: { message: 'Select an existing preflight assignment.' }, rescored };
     preflight_id = pf.existingId;
     // Attached existing preflights are EDITABLE: write the revised questions + reference fields back
     // onto that same assignment, preserving its own title / publish state / due dates (a plain
@@ -161,8 +234,13 @@ export async function saveLesson(model, editingId) {
       upd.reading_link    = pf.reading_link    ?? null;
     }
     if (Object.keys(upd).length) {
+      // An attached-existing preflight is the likelier rescore case: it is a pre-built assignment
+      // that may already carry a full set of graded scores rows.
+      const prevQs = upd.questions ? await storedQuestions(pf.existingId) : null;
       const { error } = await db.from('assignments').update(upd).eq('id', pf.existingId);
-      if (error) return { error };
+      if (error) return { error, rescored };
+      if (upd.questions && pointsChanged(prevQs, upd.questions))
+        rescored = await retroactivelyUpdateScores(pf.existingId, upd.questions);
     }
   }
 
@@ -177,10 +255,10 @@ export async function saveLesson(model, editingId) {
       is_published,
       ...interactionDates,
     }, { onConflict: 'id' });
-    if (error) return { error };
+    if (error) return { error, rescored };
     interaction_id = it.id;
   } else if (it.source === 'existing') {
-    if (!it.existingId) return { error: { message: 'Select an existing interaction.' } };
+    if (!it.existingId) return { error: { message: 'Select an existing interaction.' }, rescored };
     interaction_id = it.existingId;
     // Attached existing interactions are EDITABLE: update title/url/description + the shared due
     // dates on that same row, preserving its id (the artifact `#i=` slug), course, and publish
@@ -191,7 +269,7 @@ export async function saveLesson(model, editingId) {
     if (it.description !== undefined) upd.description = it.description || null;
     if (Object.keys(upd).length) {
       const { error } = await db.from('interactions').update(upd).eq('id', it.existingId);
-      if (error) return { error };
+      if (error) return { error, rescored };
     }
   }
 
@@ -211,7 +289,7 @@ export async function saveLesson(model, editingId) {
   const { error } = editingId
     ? await db.from('lessons').update(row).eq('id', editingId)
     : await db.from('lessons').insert(row);
-  return { error: error || null };
+  return { error: error || null, rescored };
 }
 
 /** Toggle a lesson's published flag. Mirror it ONLY onto components the lesson owns (created

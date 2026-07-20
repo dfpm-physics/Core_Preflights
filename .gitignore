@@ -8,6 +8,9 @@ INBOX/
 # Skill / tooling config — each operator copies config.json.template locally (service keys, DB creds)
 .ai/skills/preflight-analyze/config.json
 supabase/admin/config.json
+supabase/admin/config.*.json
+# ^ covers config.owner.json — the sealed DDL-tier credential, kept out of the everyday
+#   config on purpose so routine tooling cannot pick it up. See app_schema_bootstrap.sql §7.
 
 # Python virtualenv + caches for admin/analysis tooling (psycopg2, etc.) — keep contained, never commit
 .venv/

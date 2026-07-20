@@ -1064,13 +1064,18 @@
 
       const btn = document.getElementById('lm-save');
       btn.disabled = true; btn.innerHTML = '<span class="spinner on-dark"></span> Saving…';
-      const { error } = await L.saveLesson(payload, editingId);
+      const { error, rescored } = await L.saveLesson(payload, editingId);
       btn.disabled = false; btn.textContent = 'Save lesson';
       if (error) {
         return fail(error.code === '23505' ? `A lesson with id “${id}” already exists.` : 'Could not save: ' + (error.message || 'unknown error'));
       }
       pendingSwap = null;
       closeModal();
+      // A question's point value changed, so every already-graded row for this preflight was
+      // rewritten to the new max. That silently changes cadets' totals — say so out loud.
+      if (rescored > 0) {
+        alert(`Saved.\n\nA question's point value changed, so ${rescored} existing score record${rescored !== 1 ? 's were' : ' was'} updated to match.\n\nStudent totals for this lesson have changed. Finalized grades keep their finalized state.`);
+      }
       load();
     }
 
