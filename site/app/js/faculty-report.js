@@ -13,7 +13,7 @@
 // faculty-data.js:loadAnalysisReports() already implements.
 //
 // The Report page you can actually reach (faculty/report.html) does NOT use this file: it
-// imports faculty-interactions.js, and that path IS migrated.
+// imports faculty-rollup.js, and that path IS migrated.
 //
 // ─────────────────────────────────────────────────────────────────────────────────────────
 // faculty-report.js — data layer for the faculty Report (submission analysis) view.

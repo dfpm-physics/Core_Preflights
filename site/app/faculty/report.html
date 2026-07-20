@@ -14,7 +14,7 @@
 <body>
   <header id="topnav"></header>
   <main class="page-wide" id="main">
-    <a class="report-back" href="interactions.html">‹ All interactions</a>
+    <a class="report-back" href="dashboard.html">‹ Dashboard</a>
 
     <!-- Lesson rollup as the page body: a single course-wide summary (no per-student list).
          Drill into individual students only through the header flag pills, which open the
@@ -74,7 +74,7 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { esc } from '../js/util.js';
-    import * as I from '../js/faculty-interactions.js';
+    import * as I from '../js/faculty-rollup.js';
 
     // Live bandwidth knobs for the objective-understanding histogram KDE (lrFine5). These are the
     // active defaults; the director-only floating tuner (mountKdeTuner) lets a director nudge them
@@ -96,7 +96,7 @@
       initTheme();
       // Report is not a nav destination — switching course leaves this lesson's context, so
       // send the user back to the interactions list rather than show a stale cross-course rollup.
-      renderNav(ctx, { active: '', onCourseChange: () => { location.href = 'interactions.html'; } });
+      renderNav(ctx, { active: '', onCourseChange: () => { location.href = 'dashboard.html'; } });
       wireModals();
       start();
     }
@@ -109,13 +109,14 @@
       document.getElementById('rm-export').addEventListener('click', exportCorpus);
     }
 
-    // The lesson is chosen entirely by the URL (?i=slug, optional &section=). No picker — the page
-    // is only ever reached by a link (interactions card or dashboard). No key → back to interactions.
+    // The lesson is chosen entirely by the URL (?i=<offering id>, optional &section=). No picker — the
+    // page is only ever reached by a link from the dashboard. No key → back to the dashboard.
+    // (The interactions page that used to be the other entry point was deleted 2026-07-20.)
     async function start() {
       const params = new URLSearchParams(location.search);
       const interactionId = params.get('i');
       const section = params.get('section');
-      if (!interactionId) { location.replace('interactions.html'); return; }
+      if (!interactionId) { location.replace('dashboard.html'); return; }
       if (!ctx.currentOffering) {
         document.getElementById('rm-title').textContent = 'Report';
         document.getElementById('rm-aggregate').innerHTML = `<div class="alert alert-warn">No course access.</div>`;
@@ -124,7 +125,7 @@
       document.getElementById('rm-aggregate').innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
       vm = await I.loadManager(ctx);
       const it = vm.interactions.find(x => x.id === interactionId);
-      if (!it) { location.replace('interactions.html'); return; }   // not in this course / not visible
+      if (!it) { location.replace('dashboard.html'); return; }   // not in this course / not visible
       showReport(interactionId, it.title, section);
     }
 

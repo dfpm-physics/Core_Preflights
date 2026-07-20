@@ -274,6 +274,11 @@
     function init() {
       initTheme();
       renderNav(ctx, { active: 'lessons', onCourseChange: () => load() });
+
+      // NOTE: the director-only "Legacy Actions" panel (nav.js: mountLegacyActions) is built and
+      // tested but not mounted — both of its intended entries are gone. The interactions page was
+      // deleted 2026-07-20, and the legacy Admin link was removed from the nav. Re-mount it here
+      // with an items array the moment there is a retiring surface worth reaching.
       wireModal();
       wireDelete();
       loadRagManifest();

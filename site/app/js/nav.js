@@ -9,15 +9,16 @@
 // for the same reason the role links are — both student/ and faculty/ have one, and each shows
 // the topics that role may see (js/help.js).
 
-import { iconHTML, initials, esc, legacyUrl } from './util.js';
+import { iconHTML, initials, esc } from './util.js';
 import { updateToggleButtons } from './theme.js';
 
-// All nav-rendering pages live one level deep (student/ , faculty/), so same-role links
-// are bare filenames; legacy out-links use legacyUrl() so they resolve in both phases.
+// All nav-rendering pages live one level deep (student/ , faculty/), so same-role links are
+// bare filenames. The nav no longer links out to the legacy site at all (see FACULTY_LINKS),
+// so legacyUrl() is not needed here; it remains in util.js for any page that still needs it.
 // Students navigate by LESSON, not by modality. Listing "Assignments" and "Interactions"
 // side by side showed a choice lesson twice — as two separate mandatory items — with nothing
 // saying they were alternatives (STUDENT-LESSON-VIEW.md §1). assignments.html still exists as
-// the written-preflight surface, reached from a lesson; interactions.html is superseded.
+// the written-preflight surface, reached from a lesson. interactions.html was deleted 2026-07-20.
 const STUDENT_LINKS = [
   { key: 'dashboard', label: 'Dashboard', href: 'dashboard.html', icon: 'dashboard',   emoji: '🏠' },
   { key: 'lessons',   label: 'Lessons',   href: 'lessons.html',   icon: 'assignments', emoji: '📚' },
@@ -28,13 +29,20 @@ const STUDENT_LINKS = [
 // Grade is NOT director-gated: instructors grade their own sections (grade.html resolves scope from
 // the role). Lessons is not gated either — instructors get a read-only view of published lessons
 // (faculty-lessons.js filters to is_published; the page gates every authoring control on isDirector).
+// Two links were removed on 2026-07-20:
+//   Interactions — the page was deleted. A lesson is now an assignment offering, so a standalone
+//     interaction cannot exist and the page's authoring half was unbuildable. Its read side lives
+//     on in the lesson rollup (faculty/report.html, reached from the dashboard).
+//   Admin — pointed at the legacy site/admin.html, which reads schema `public`. Now that the portal
+//     writes to `app`, that page shows stale data and edits made there never reach students, so
+//     linking to it from the portal was actively misleading.
+// KNOWN GAP: Export (Blackboard CSV / JSON backup) and instructor management lived ONLY on
+// admin.html and have no portal equivalent yet. They are currently unreachable from here.
 const FACULTY_LINKS = [
   { key: 'dashboard',    label: 'Dashboard',    href: 'dashboard.html',         icon: 'dashboard',     emoji: '🏠' },
   { key: 'grade',        label: 'Grade',        href: 'grade.html',             icon: 'grades',        emoji: '✅' },
   { key: 'roster',       label: 'Roster',       href: 'roster.html',            icon: 'roster',        emoji: '🧑‍🎓', directorOnly: true },
   { key: 'lessons',      label: 'Lessons',      href: 'lessons.html',           icon: 'assignments',   emoji: '📚' },
-  { key: 'interactions', label: 'Interactions', href: 'interactions.html',      icon: 'interactions',  emoji: '💡' },
-  { key: 'admin',        label: 'Admin',        href: legacyUrl('admin.html'),  icon: 'settings',      emoji: '⚙️', external: true },
 ];
 
 /* ── Course-view picker ────────────────────────────────────────────────────────
@@ -164,6 +172,64 @@ export function renderNav(ctx, opts = {}) {
   wireNav(ctx, mount, onCourseChange);
   updateToggleButtons();
   renderFooter();
+}
+
+/* ── Legacy Actions ────────────────────────────────────────────────────────────
+ * A floating, collapsible panel for surfaces that still work but are on their way out.
+ *
+ * WHY IT EXISTS RATHER THAN A NAV LINK
+ *   The nav bar states where work happens. A page that is being retired does not belong
+ *   there — listing it says "this is a normal part of the job" of something we intend to
+ *   delete. Demoting these to a labelled, director-only panel keeps them reachable while
+ *   being honest that they are legacy.
+ *
+ * DIRECTOR AND ABOVE ONLY. This is a presentation gate, not a security boundary — the
+ * pages themselves are RLS-gated. It exists so instructors are not sent to surfaces whose
+ * data or lifetime they should not have to reason about.
+ *
+ * @param {object} ctx
+ * @param {Array<{href, label, note?, emoji?}>} items
+ */
+export function mountLegacyActions(ctx, items = []) {
+  if (!ctx?.isDirectorForCurrent?.()) return;          // director / global admin only
+  if (!items.length) return;
+  if (document.getElementById('legacy-actions')) return;   // idempotent
+
+  const LS_KEY = 'cp.legacyActions.open';
+  let open = false;
+  try { open = localStorage.getItem(LS_KEY) === '1'; } catch (_) {}
+
+  const el = document.createElement('aside');
+  el.id = 'legacy-actions';
+  el.className = 'legacy-actions' + (open ? ' open' : '');
+  el.setAttribute('aria-label', 'Legacy actions');
+  el.innerHTML = `
+    <button class="la-toggle" data-la-toggle aria-expanded="${open}" aria-controls="la-body">
+      <span class="la-dot" aria-hidden="true"></span>
+      <span class="la-title">Legacy Actions</span>
+      <span class="la-caret" aria-hidden="true">▾</span>
+    </button>
+    <div class="la-body" id="la-body">
+      <p class="la-note">Older views kept while their replacements are built.</p>
+      ${items.map(i => `
+        <a class="la-item" href="${esc(i.href)}"${i.external ? ' target="_blank" rel="noopener"' : ''}>
+          <span class="la-ic" aria-hidden="true">${esc(i.emoji || '↗')}</span>
+          <span class="la-body-text">
+            <span class="la-label">${esc(i.label)}${i.external ? ' ↗' : ''}</span>
+            ${i.note ? `<span class="la-sub">${esc(i.note)}</span>` : ''}
+          </span>
+        </a>`).join('')}
+    </div>`;
+
+  document.body.appendChild(el);
+
+  const toggle = el.querySelector('[data-la-toggle]');
+  toggle.addEventListener('click', () => {
+    const nowOpen = !el.classList.contains('open');
+    el.classList.toggle('open', nowOpen);
+    toggle.setAttribute('aria-expanded', String(nowOpen));
+    try { localStorage.setItem(LS_KEY, nowOpen ? '1' : '0'); } catch (_) {}
+  });
 }
 
 /** Site footer with the required Flaticon attribution. Idempotent — safe to call again. */

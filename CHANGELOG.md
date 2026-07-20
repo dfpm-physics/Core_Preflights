@@ -54,6 +54,38 @@ for staleness. Migrations remain **written but not applied**; no live database o
 
 ## 2026-07-20 — Matthew via Claude
 
+### Removed — the interactions page and the legacy Admin link; nav reduced to four destinations
+
+**Frontend only. No database change.** Follows the part-2 rewire below. **Not yet pushed.**
+
+**`site/app/faculty/interactions.html` is deleted.** Its authoring half was already unbuildable
+(a standalone interaction cannot exist — `activities.assignment_id` is NOT NULL, publish is
+per-offering, role is per-term), and rather than keep the monitoring remnant on life support,
+Matthew chose to drop it and design a dedicated viewer later if one is wanted.
+
+Its data layer **survives under a truthful name**: `faculty-interactions.js` → **`faculty-rollup.js`**.
+The rename is the point — `faculty/report.html` (the lesson rollup) and the faculty dashboard both
+depend on it, so this was never "the interactions module". Function names and arities are unchanged,
+so both consumers were untouched. `report.html` now falls back to the dashboard where it used to
+fall back to the deleted page, and the dashboard's "Open full rollup →" remains its entry point.
+
+**The Admin link is removed from the faculty nav.** It opened the legacy `site/admin.html`, which
+reads schema `public`. Now that the portal writes to `app`, that page shows stale data and any edit
+made there never reaches students — so linking to it from the portal was actively misleading.
+
+> **Known gap, stated plainly:** Export (Blackboard CSV / JSON backup) and instructor management
+> live only on `admin.html` and have no portal equivalent. Removing the link does not lose a
+> *working* capability — both read and write `public`, so both were already producing wrong
+> results for the new model — but they do need rebuilding against `app` before they are next
+> needed. Instructor management is the nearer deadline; the `create-instructor` edge function is
+> already migrated and only wants a UI.
+
+**Added but not mounted: `mountLegacyActions()`** — a director-only floating "Legacy Actions"
+panel (collapsible, remembers its state, escapes its inputs, refuses to render for an instructor).
+It was built for the two entries above; both were then removed, so mounting it would ship an empty
+box. The component and its 13 tests stay, and `faculty/lessons.html` carries a comment showing the
+one line that re-enables it when a retiring surface next needs a home.
+
 ### Changed — schema rewire part 2: lesson builder, AI workflows, and a course-view switcher
 
 **Frontend, skills, and operator scripts. No migration, no database change.** Completes the
@@ -716,9 +748,46 @@ renders at `localhost:8000`.
 DOMPurify-permitted constructs, but no one has looked at it rendered. If DOMPurify does strip it, the
 Markdown tables below carry the whole payload and the page stays complete.
 
-**Still to do.** Point `site/app/` at the `app` schema and rewire. Write the architecture doc for the
-v2 model and add a supersession banner to `LESSON-UNIFICATION.md` pointing at it. Confirm a deployed
-lesson-02 artifact posts to the short slug before students launch it.
+### Fixed — the two director help docs contradicted each other on who may unlock a submission
+
+Review of both pages against the live schema found one error, one stale figure, and one gap — all
+three traceable to the same cause: four topics were explained independently in both documents, with
+no link between them, so improving one silently diverged from the other.
+
+- **Error.** `director-course-structure.md` said an unlock required "an instructor with the director
+  role." The policy is `submissions_staff_update`, scoped to staff of the *section*, which includes
+  plain instructors. The narrow claim would have sent instructors escalating to a director while a
+  student waited. Corrected, and the reference now owns the statement.
+- **Stale figure.** `extensions` had been added to the schema and to the reference's table listing
+  but not to the SVG, which claims to show every table. The delivery band was re-laid out from two
+  rows to three; a geometry check confirms all 20 boxes sit inside their bands with no overlap.
+- **Gap.** The structure doc described deadlines as offering-default plus section-override, missing
+  extensions entirely — the layer behind the most common question a director gets about dates. It
+  now documents the three-level precedence.
+
+**Deduplicated so it stops recurring.** `director-schema-reference.md` now owns the enforced-rules
+list and the exact accepted values; `director-course-structure.md` covers the shape of the model and
+links out twice rather than restating. Verified afterwards that the one-grade rule, graded/practice,
+and the enforced-rules list each appear in exactly one of the two.
+
+**Filled the reference's remaining gaps:** the four `switch_policy` values and what each does; what
+`grading_mode` changes for a student, and that all 74 Fall 2026 offerings are `points` /
+`lock_on_commit`; what happens to work when a student drops or changes section (a second enrolment,
+never an edit — which is why a mid-semester move cannot re-attribute past grades); what
+`grade_events` is for; and `terms_awaiting_freeze` as the check for when a semester is due to be
+sealed.
+
+**No UI procedures, by decision.** Both pages describe the model and deliberately say nothing about
+where to click, because `site/app/` does not read the `app` schema yet. Instructions get added at
+cutover.
+
+Re-verified: 20 of 20 tables documented, 52 fields checked against `information_schema`, SVG
+well-formed, both pages render at `localhost:8000`.
+
+**Still to do.** Point `site/app/` at the `app` schema and rewire, then add the UI procedures to both
+help docs. Write the architecture doc for the v2 model and add a supersession banner to
+`LESSON-UNIFICATION.md` pointing at it. Confirm a deployed lesson-02 artifact posts to the short slug
+before students launch it.
 
 ---
 

@@ -57,12 +57,16 @@ are unaffected.
 
 ## Why a student can only be graded once
 
-A student earns exactly one grade per assignment offering, whichever activity they used. The
-database enforces this, so a student who works through both a written preflight and an interactive
-lesson still receives one score, capped at the points you set.
+A student earns exactly one grade per assignment offering, whichever activity they used. A student
+who works through both a written preflight and an interactive lesson still receives one score,
+capped at the points you set for that semester.
 
-When a student commits to an activity, that choice locks. If someone commits to the wrong one, an
-instructor with the director role can unlock it. Every unlock records who performed it.
+When a student commits to an activity, that choice locks. Any staff member assigned to that
+student's section can release it — an instructor does not need to escalate to a director. Every
+unlock records who performed it, and the database refuses an anonymous one.
+
+The full list of rules the database enforces, and what happens when each is tested, is in
+[Data model reference](help.html?doc=schema-reference).
 
 ## Reusing work next semester
 
@@ -81,8 +85,22 @@ semester before you rebuild, or the record of what that class worked through is 
 Sections belong to a course offering, so section codes repeat safely across semesters and courses.
 Two courses can both have an M1A.
 
-An assignment offering carries one default deadline, and each section can override it. That is how
-M-day and T-day sections get different due dates. A section with no override uses the default.
+A student's deadline comes from the first of these that exists:
+
+1. An **extension** granted to that student
+2. Their **section's** deadline for that assignment
+3. The assignment's **default** deadline for the semester
+
+That is how M-day and T-day sections get different due dates, and how one student can be given more
+time without moving anyone else's deadline.
+
+## When a student changes section
+
+Moving a student adds a second enrolment rather than editing the first. Their earlier work stays
+attached to the section they did it in, so a mid-semester move never re-attributes past grades and a
+previous roster stays reconstructable.
+
+A student may hold several enrolments at once — across sections, courses, or semesters.
 
 ## Who can change what
 
@@ -105,20 +123,11 @@ permanent.
 Freeze before you rebuild any interactive lesson for the following semester. Once frozen, the
 record cannot be changed by ordinary editing, so later revisions cannot rewrite history.
 
-## The names behind these terms
+## Where to find more
 
-If you are reading data directly or briefing an AI agent, these are the underlying names:
-
-| What this page calls it | Stored as |
-|---|---|
-| Course offering | `course_offerings` |
-| Assignment (the container) | `assignments` |
-| Activity | `activities` |
-| Assignment offering | `assignment_offerings` |
-| Graded or practice setting | `offering_activities` |
-| A student's place in a section | `enrollments` |
-| A student's work | `submissions` |
-| A student's score | `grades` |
+[Data model reference](help.html?doc=schema-reference) covers every table and field, the exact
+values each setting accepts, and the complete list of rules the database enforces. It is the place
+to look when you need a precise answer rather than the shape of the thing.
 
 The repository's operating contract and project reference remain authoritative. If this page and
 those files ever disagree, they win and this page is the bug.

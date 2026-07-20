@@ -142,7 +142,7 @@
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md"
       ],
-      "note": "The container/activity/offering model, the graded-vs-practice settings, the one-grade guarantee and the activity lock all come from the app-schema migrations (001). Term calendar and freezing from 003 and 004. Role language follows CORE.md; PROJECT.md supplies the PREP/iPREP brand distinction. Deliberately omits RLS policy detail — every help doc is world-readable."
+      "note": "Conceptual companion to director-schema-reference.md, which owns the field-level detail and the enforced-rules list; this page links out rather than restating them, after a restated unlock rule drifted and contradicted the reference. Deliberately contains no UI procedures - site/app/ does not read the app schema yet."
     },
     {
       "doc": "site/app/help/director-schema-reference.md",
@@ -158,7 +158,7 @@
         "supabase/migrations/app/005_extensions.sql",
         "supabase/migrations/app/006_submission_lock_hardening.sql"
       ],
-      "note": "Every table and field is transcribed from the app-schema migrations and was verified against information_schema on the live database at authoring time. The inline SVG depends on the .sf-* token classes in styles.css. Deliberately omits RLS policy predicates - help docs are world-readable at every tier."
+      "note": "Every table and field transcribed from the app-schema migrations and verified against information_schema on the live database. Owns the enforced-rules list and the exact accepted values. Inline SVG depends on the .sf-* classes in styles.css. Omits RLS policy predicates - help docs are world-readable at every tier."
     }
   ]
 }

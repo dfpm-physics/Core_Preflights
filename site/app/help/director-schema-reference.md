@@ -4,7 +4,7 @@ it was written for: a preflight is defined once and scheduled many times, rather
 The diagram shows every table, grouped by layer. Blue marks the four tables that carry the spine of
 the system — an assignment is defined, scheduled, worked, and graded.
 
-<svg class="schema-fig" viewBox="0 0 900 476" role="img" aria-label="The four layers of the PREP data model and the tables in each">
+<svg class="schema-fig" viewBox="0 0 900 480" role="img" aria-label="The four layers of the PREP data model and the tables in each">
 
   <rect class="sf-band" x="104" y="12"  width="784" height="92"/>
   <rect class="sf-band-edge" x="104" y="12"  width="784" height="92"/>
@@ -12,19 +12,19 @@ the system — an assignment is defined, scheduled, worked, and graded.
   <text class="sf-band-note"  x="96" y="60"  text-anchor="end">no semester</text>
   <text class="sf-band-note"  x="96" y="72"  text-anchor="end">reusable</text>
 
-  <rect class="sf-band" x="104" y="116" width="784" height="140"/>
-  <rect class="sf-band-edge" x="104" y="116" width="784" height="140"/>
-  <text class="sf-band-label" x="96" y="176" text-anchor="end">DELIVERY</text>
-  <text class="sf-band-note"  x="96" y="190" text-anchor="end">one semester</text>
+  <rect class="sf-band" x="104" y="116" width="784" height="160"/>
+  <rect class="sf-band-edge" x="104" y="116" width="784" height="160"/>
+  <text class="sf-band-label" x="96" y="190" text-anchor="end">DELIVERY</text>
+  <text class="sf-band-note"  x="96" y="204" text-anchor="end">one semester</text>
 
-  <rect class="sf-band" x="104" y="268" width="784" height="92"/>
-  <rect class="sf-band-edge" x="104" y="268" width="784" height="92"/>
-  <text class="sf-band-label" x="96" y="306" text-anchor="end">WORK</text>
-  <text class="sf-band-note"  x="96" y="320" text-anchor="end">per student</text>
+  <rect class="sf-band" x="104" y="288" width="784" height="92"/>
+  <rect class="sf-band-edge" x="104" y="288" width="784" height="92"/>
+  <text class="sf-band-label" x="96" y="326" text-anchor="end">WORK</text>
+  <text class="sf-band-note"  x="96" y="340" text-anchor="end">per student</text>
 
-  <rect class="sf-band" x="104" y="372" width="784" height="80"/>
-  <rect class="sf-band-edge" x="104" y="372" width="784" height="80"/>
-  <text class="sf-band-label" x="96" y="410" text-anchor="end">ANALYSIS</text>
+  <rect class="sf-band" x="104" y="392" width="784" height="76"/>
+  <rect class="sf-band-edge" x="104" y="392" width="784" height="76"/>
+  <text class="sf-band-label" x="96" y="428" text-anchor="end">ANALYSIS</text>
 
   <rect class="sf-box" x="116" y="30" width="140" height="30" rx="6"/>
   <text class="sf-t" x="186" y="49" text-anchor="middle">courses</text>
@@ -39,49 +39,53 @@ the system — an assignment is defined, scheduled, worked, and graded.
   <text class="sf-cap" x="806" y="76" text-anchor="middle">what is inside</text>
   <text class="sf-cap" x="654" y="76" text-anchor="middle">the container</text>
 
-  <rect class="sf-box" x="116" y="134" width="152" height="30" rx="6"/>
-  <text class="sf-t" x="192" y="153" text-anchor="middle">course_offerings</text>
-  <rect class="sf-box" x="280" y="134" width="120" height="30" rx="6"/>
-  <text class="sf-t" x="340" y="153" text-anchor="middle">sections</text>
-  <rect class="sf-box" x="412" y="134" width="130" height="30" rx="6"/>
-  <text class="sf-t" x="477" y="153" text-anchor="middle">students</text>
-  <rect class="sf-box" x="554" y="134" width="140" height="30" rx="6"/>
-  <text class="sf-t" x="624" y="153" text-anchor="middle">enrollments</text>
-  <rect class="sf-box" x="706" y="134" width="170" height="30" rx="6"/>
-  <text class="sf-t" x="791" y="153" text-anchor="middle">instructors</text>
+  <rect class="sf-box" x="114" y="132" width="178" height="30" rx="6"/>
+  <text class="sf-t" x="203" y="151" text-anchor="middle">course_offerings</text>
+  <rect class="sf-box" x="308" y="132" width="178" height="30" rx="6"/>
+  <text class="sf-t" x="397" y="151" text-anchor="middle">sections</text>
+  <rect class="sf-box" x="502" y="132" width="178" height="30" rx="6"/>
+  <text class="sf-t" x="591" y="151" text-anchor="middle">students</text>
+  <rect class="sf-box" x="696" y="132" width="178" height="30" rx="6"/>
+  <text class="sf-t" x="785" y="151" text-anchor="middle">enrollments</text>
 
-  <rect class="sf-box-key" x="116" y="192" width="180" height="30" rx="6"/>
-  <text class="sf-t sf-t-key" x="206" y="211" text-anchor="middle">assignment_offerings</text>
-  <rect class="sf-box" x="308" y="192" width="176" height="30" rx="6"/>
-  <text class="sf-t" x="396" y="211" text-anchor="middle">offering_activities</text>
-  <rect class="sf-box" x="496" y="192" width="184" height="30" rx="6"/>
-  <text class="sf-t" x="588" y="211" text-anchor="middle">assignment_due_dates</text>
-  <rect class="sf-box" x="692" y="192" width="184" height="30" rx="6"/>
-  <text class="sf-t" x="784" y="211" text-anchor="middle">staff_assignments</text>
-  <text class="sf-cap" x="206" y="238" text-anchor="middle">scheduled into one semester</text>
-  <text class="sf-cap" x="396" y="238" text-anchor="middle">graded or practice</text>
+  <rect class="sf-box" x="114" y="176" width="178" height="30" rx="6"/>
+  <text class="sf-t" x="203" y="195" text-anchor="middle">instructors</text>
+  <rect class="sf-box" x="308" y="176" width="178" height="30" rx="6"/>
+  <text class="sf-t" x="397" y="195" text-anchor="middle">staff_assignments</text>
+  <rect class="sf-box-key" x="502" y="176" width="178" height="30" rx="6"/>
+  <text class="sf-t sf-t-key" x="591" y="195" text-anchor="middle">assignment_offerings</text>
+  <rect class="sf-box" x="696" y="176" width="178" height="30" rx="6"/>
+  <text class="sf-t" x="785" y="195" text-anchor="middle">offering_activities</text>
 
-  <rect class="sf-box-key" x="116" y="286" width="150" height="30" rx="6"/>
-  <text class="sf-t sf-t-key" x="191" y="305" text-anchor="middle">submissions</text>
-  <rect class="sf-box" x="278" y="286" width="190" height="30" rx="6"/>
-  <text class="sf-t" x="373" y="305" text-anchor="middle">submission_activities</text>
-  <rect class="sf-box-key" x="480" y="286" width="130" height="30" rx="6"/>
-  <text class="sf-t sf-t-key" x="545" y="305" text-anchor="middle">grades</text>
-  <rect class="sf-box" x="622" y="286" width="150" height="30" rx="6"/>
-  <text class="sf-t" x="697" y="305" text-anchor="middle">grade_events</text>
-  <text class="sf-cap" x="191" y="332" text-anchor="middle">the choice and the lock</text>
-  <text class="sf-cap" x="545" y="332" text-anchor="middle">exactly one per student</text>
+  <rect class="sf-box" x="114" y="220" width="178" height="30" rx="6"/>
+  <text class="sf-t" x="203" y="239" text-anchor="middle">assignment_due_dates</text>
+  <rect class="sf-box" x="308" y="220" width="178" height="30" rx="6"/>
+  <text class="sf-t" x="397" y="239" text-anchor="middle">extensions</text>
+  <text class="sf-cap" x="502" y="239">deadline: extension, then section, then the offering</text>
+  <text class="sf-cap" x="591" y="266" text-anchor="middle">scheduled into one semester</text>
+  <text class="sf-cap" x="785" y="266" text-anchor="middle">graded or practice</text>
 
-  <rect class="sf-box" x="116" y="392" width="170" height="30" rx="6"/>
-  <text class="sf-t" x="201" y="411" text-anchor="middle">analysis_reports</text>
-  <text class="sf-cap" x="470" y="411">AI cohort summaries, scoped to an assignment, a section, or the whole course</text>
+  <rect class="sf-box-key" x="114" y="306" width="178" height="30" rx="6"/>
+  <text class="sf-t sf-t-key" x="203" y="325" text-anchor="middle">submissions</text>
+  <rect class="sf-box" x="308" y="306" width="178" height="30" rx="6"/>
+  <text class="sf-t" x="397" y="325" text-anchor="middle">submission_activities</text>
+  <rect class="sf-box-key" x="502" y="306" width="178" height="30" rx="6"/>
+  <text class="sf-t sf-t-key" x="591" y="325" text-anchor="middle">grades</text>
+  <rect class="sf-box" x="696" y="306" width="178" height="30" rx="6"/>
+  <text class="sf-t" x="785" y="325" text-anchor="middle">grade_events</text>
+  <text class="sf-cap" x="203" y="352" text-anchor="middle">the choice and the lock</text>
+  <text class="sf-cap" x="591" y="352" text-anchor="middle">exactly one per student</text>
 
-  <path class="sf-link" d="M654 60 L654 192"/>
-  <polygon class="sf-arrow" points="654,198 650,190 658,190"/>
-  <path class="sf-link" d="M206 222 L206 286"/>
-  <polygon class="sf-arrow" points="206,292 202,284 210,284"/>
-  <path class="sf-link" d="M266 301 L480 301"/>
-  <polygon class="sf-arrow" points="486,301 478,297 478,305"/>
+  <rect class="sf-box" x="114" y="410" width="178" height="30" rx="6"/>
+  <text class="sf-t" x="203" y="429" text-anchor="middle">analysis_reports</text>
+  <text class="sf-cap" x="308" y="429">AI cohort summaries, scoped to an assignment, a section, or the whole course</text>
+
+  <path class="sf-link" d="M654 60 L654 118 L591 118 L591 170"/>
+  <polygon class="sf-arrow" points="591,176 587,168 595,168"/>
+  <path class="sf-link" d="M591 206 L591 300"/>
+  <polygon class="sf-arrow" points="591,306 587,298 595,298"/>
+  <path class="sf-link" d="M292 321 L496 321"/>
+  <polygon class="sf-arrow" points="502,321 494,317 494,325"/>
 </svg>
 
 Read the dashed arrows as the life of one piece of work: an **assignment** is scheduled as an
@@ -175,8 +179,33 @@ falls back to the offering; an assignment with no `due_at` and no section entry 
 | `switch_policy` | Whether a student may change activity after committing |
 | `due_at` | Default deadline, overridden per section |
 | `is_published` | Whether students can see it |
-| `content_snapshot` | What this class actually saw, captured at term close |
+| `content_snapshot` | What this class was given, captured at term close |
 | `content_snapshot_frozen_at` | When it was sealed. Once set, the snapshot cannot be edited |
+
+#### grading_mode
+
+`points` scores each question and adds them up — how written preflights have always worked.
+`effort` takes a 0–5 engagement rating and converts it to points: 3 or above earns full marks, 1 or
+2 earns half, 0 or nothing earns none. Correctness still gets recorded, as a diagnostic that carries
+no credit.
+
+Every Fall 2026 offering is `points`. Moving an assignment to `effort` changes what a score means to
+a student, so it is a teaching decision rather than a settings change.
+
+#### switch_policy
+
+What happens when a student has committed to one activity and wants the other:
+
+| Value | Effect |
+|---|---|
+| `lock_on_commit` | The choice is fixed once committed. Only a staff unlock reopens it |
+| `free_until_commit` | Same as above — committing is the moment that fixes it |
+| `one_way_to_interactive` | A student may move from the written activity to the interactive one, never back |
+| `lock_on_start` | The choice is fixed as soon as they begin |
+
+Every Fall 2026 offering is `lock_on_commit`. The setting is per offering, so a semester can run one
+rule while another runs a different one — which is what makes the phased comparison possible without
+a code change.
 
 ### offering_activities
 
@@ -203,6 +232,19 @@ old grades attached to the old section, because grades hang off the enrolment.
 
 `staff_assignments` with no section covers the whole offering — that is how a director is recorded.
 With a section, it covers that section only.
+
+#### When a student drops or changes section
+
+An enrolment carries a `status` of `active`, `dropped`, or `completed`, and a `dropped_at` date.
+Because every submission and grade hangs off the enrolment rather than off the student, marking one
+`dropped` leaves that work exactly where it was, attached to the section it was done in.
+
+Moving a student to a different section means a second enrolment, not an edit to the first. Their
+earlier work stays with the earlier section, which is what makes a mid-semester move safe and what
+keeps a past semester's section rosters reconstructable. A student may hold several enrolments at
+once — across sections, courses, or semesters.
+
+All 73 Fall 2026 enrolments are `active`.
 
 ## Work
 
@@ -262,6 +304,26 @@ One table holds everything the AI workflows produce for faculty:
 | `generated_at` | When the run produced it |
 
 Reports are written by the analysis workflows, never by the website. Nothing here affects a grade.
+
+## Two records that answer questions after the fact
+
+### grade_events
+
+Every change to a grade appends a row here — created, rescored, finalized, reopened, unlocked —
+with who did it and when. Nothing updates or deletes these rows.
+
+It exists because a retroactive rescore once corrupted totals silently in the previous system. When
+a score is disputed, or a total looks wrong, this is where the history is. Staff can read the events
+for grades in the sections they staff.
+
+### Knowing when a semester is due to be frozen
+
+`terms_awaiting_freeze` lists every term that still has unfrozen offerings, with how many are done,
+how many remain, and whether the grades deadline has already passed. A term disappears from the list
+once all of its offerings are sealed.
+
+Freezing is what makes an interactive lesson safe to rebuild, so this is the check to run before
+starting work on the following semester.
 
 ## What the database will not allow
 

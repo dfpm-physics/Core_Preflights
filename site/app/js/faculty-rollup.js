@@ -1,4 +1,10 @@
-// faculty-interactions.js — MONITORING ONLY. Read-side data layer for the interactions page.
+// faculty-rollup.js — read-side data layer for the LESSON ROLLUP (faculty/report.html).
+//
+// Named faculty-interactions.js until 2026-07-20, when the interactions page it was written for
+// was deleted: a lesson is now an assignment offering, so a standalone interaction cannot exist
+// and its authoring half was unbuildable. The read side survived because report.html and the
+// faculty dashboard both depend on it — hence the rename rather than a deletion. Function names
+// and arities are unchanged, so the two consumers were untouched by the move.
 //
 // ── THERE IS NO AUTHORING HERE, AND THERE CANNOT BE ─────────────────────────────────
 // Everything this page used to create, edit, publish and delete now belongs to an assignment

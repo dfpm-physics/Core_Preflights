@@ -11,7 +11,7 @@
 // no matrix; directors/admins get the scope toggle (all ↔ mine) and the matrix.
 
 import { loadFacultyDashboard } from './faculty-data.js';
-import { summarizeReports } from './faculty-interactions.js';
+import { summarizeReports } from './faculty-rollup.js';
 import { esc, iconHTML, fmtDate } from './util.js';
 
 let CTX = null, ROOT = null, MODEL = null;
@@ -121,7 +121,7 @@ function render() {
     ROOT.innerHTML = head(firstName, roleLabel) + `<div class="empty-state"><div class="es-ic">💡</div>
       <h3>No published lessons yet</h3><p>Once interactions are published for ${esc(MODEL.courseTitle)},
       this dashboard fills in with completion, effort, and misconception trends.
-      ${dir() ? '<a href="interactions.html">Manage interactions →</a>' : ''}</p></div>`;
+      ${dir() ? '<a href="lessons.html">Manage lessons →</a>' : ''}</p></div>`;
     return;
   }
 
