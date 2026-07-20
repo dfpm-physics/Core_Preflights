@@ -229,6 +229,28 @@ COMMIT;
 
 
 -- =====================================================================================
+-- 10) RLS ENFORCEMENT TESTING — run as `postgres` once, to enable app_rls_test.py.
+--
+--     Every agent tier carries BYPASSRLS out of necessity (a direct Postgres connection has
+--     no JWT, so auth.uid() is null and RLS would deny every row). That makes all three
+--     useless for testing whether the policies actually bite. This grant lets the owner drop
+--     DOWN into `authenticated` — a low-privilege role with no BYPASSRLS — so the policies
+--     genuinely apply and enforcement can be proven rather than assumed.
+--
+--     Not an escalation: `authenticated` holds strictly less than prep_app_owner already.
+--     INHERIT FALSE means the owner gains none of its privileges implicitly — only the
+--     ability to SET ROLE into it.
+--
+--       GRANT authenticated TO prep_app_owner WITH INHERIT FALSE, SET TRUE;
+--
+--     Sealing the owner (§7) also disables this, since the role can no longer connect.
+--     To revoke independently:
+--
+--       REVOKE authenticated FROM prep_app_owner;
+-- =====================================================================================
+
+
+-- =====================================================================================
 -- FULL UNDO (removes everything this script created; run as `postgres` if ever needed).
 -- WARNING: DROP SCHEMA app CASCADE destroys the v2 model and all data in it.
 --

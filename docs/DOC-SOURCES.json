@@ -1,0 +1,119 @@
+{
+  "schema": 1,
+  "updated": "2026-07-20",
+  "_comment": [
+    "Dependency index for documents that MUST STAY CURRENT. Each entry names the authoritative",
+    "sources a document was derived from, and the date it was last checked against them.",
+    "",
+    "Checked by scripts/docs/check_doc_sources.py — when a source changes after a document's",
+    "'reviewed' date, that document is flagged as possibly stale. See CORE.md section 5.",
+    "",
+    "DELIBERATELY NOT INDEXED: docs/decisions/ and docs/contracts/. Those are point-in-time",
+    "records and frozen interfaces — they are superseded, never refreshed, so a staleness flag",
+    "on them would be noise. See .ai/skills/docs-author/references/DESIGN-DOC.md.",
+    "",
+    "'reviewed' is an attestation ('someone read this against its sources on this date'), not an",
+    "edit date. Fixing a typo does not advance it; re-checking the content against the sources does."
+  ],
+  "docs": [
+    {
+      "doc": "site/app/help/student-getting-started.md",
+      "kind": "help",
+      "tier": "student",
+      "reviewed": "2026-07-20",
+      "sources": [
+        ".ai/instructions/PROJECT.md",
+        ".ai/instructions/CORE.md",
+        "site/app/js/student-lessons.js",
+        "site/app/js/auth.js"
+      ],
+      "note": "Sign-in model and roster/auth rules from PROJECT.md; the 2359-night-before due date rule from CORE.md section 2; what the Lessons and Dashboard pages actually show from the student modules."
+    },
+    {
+      "doc": "site/app/help/ai-and-your-work.md",
+      "kind": "help",
+      "tier": "student",
+      "reviewed": "2026-07-20",
+      "sources": [
+        ".ai/instructions/CORE.md",
+        ".ai/instructions/PROJECT.md",
+        ".ai/skills/preflight-analyze/SKILL.md",
+        ".ai/skills/interaction-aggregate/SKILL.md"
+      ],
+      "note": "Student-facing promise about what AI does and does not decide. CORE.md section 6 governs 3-state grading, is_finalized=false, and the hidden diagnostics; the two skills define what actually gets written."
+    },
+    {
+      "doc": "site/app/help/instructor-grading.md",
+      "kind": "help",
+      "tier": "instructor",
+      "reviewed": "2026-07-20",
+      "sources": [
+        ".ai/instructions/CORE.md",
+        ".ai/instructions/PROJECT.md",
+        "site/app/js/faculty-grade.js"
+      ],
+      "note": "The 3-state toggle, question_scores shape, and the 'all my sections' scoping rule. If the Grade tab's behaviour changes, this doc is wrong before anything else is."
+    },
+    {
+      "doc": "site/app/help/director-ai-rules.md",
+      "kind": "help",
+      "tier": "director",
+      "reviewed": "2026-07-20",
+      "sources": [
+        ".ai/instructions/CORE.md",
+        ".ai/instructions/PROJECT.md",
+        ".ai/skills/preflight-analyze/SKILL.md",
+        ".ai/skills/interaction-aggregate/SKILL.md",
+        "docs/contracts/INTERACTION-DATA-CONTRACT.md"
+      ],
+      "note": "Says in-page that CORE.md and PROJECT.md remain authoritative and that this page is the bug if they disagree — so it is the entry most likely to need a refresh when the contract moves."
+    },
+    {
+      "doc": "site/app/help/admin-system-operations.md",
+      "kind": "help",
+      "tier": "admin",
+      "reviewed": "2026-07-20",
+      "sources": [
+        ".ai/instructions/CORE.md",
+        ".ai/instructions/PROJECT.md",
+        "docs/operations/SYSTEM_GUIDE.md"
+      ],
+      "note": "Summarises the shared-state rules and the operating contract. Must never contain what SYSTEM_GUIDE.md may contain — help docs are public at every tier."
+    },
+    {
+      "doc": "site/app/help/README.md",
+      "kind": "reference",
+      "tier": null,
+      "reviewed": "2026-07-20",
+      "sources": [
+        "site/app/js/help.js",
+        "site/app/help/MANIFEST.json"
+      ],
+      "note": "The authoring contract. Documents the renderer's actual behaviour — tier gating, the manifest fields, the no-front-matter Jekyll trap. Not served to users."
+    },
+    {
+      "doc": "docs/operations/SYSTEM_GUIDE.md",
+      "kind": "operations",
+      "tier": null,
+      "reviewed": "2026-07-20",
+      "sources": [
+        ".ai/instructions/PROJECT.md",
+        ".ai/instructions/CORE.md"
+      ],
+      "note": "Course-director and system operating guide. Roles, edge functions, and admin procedures are defined in PROJECT.md and must agree."
+    },
+    {
+      "doc": ".ai/skills/docs-author/SKILL.md",
+      "kind": "skill",
+      "tier": null,
+      "reviewed": "2026-07-20",
+      "sources": [
+        "site/app/help/README.md",
+        "site/app/js/help.js",
+        "docs/README.md",
+        ".ai/instructions/CORE.md"
+      ],
+      "note": "Encodes the help-doc mechanics (no front matter, start at ##, manifest fields, tier gating) and the docs/ taxonomy. If the renderer or the taxonomy changes, the skill teaches the wrong thing to every future author."
+    }
+  ]
+}

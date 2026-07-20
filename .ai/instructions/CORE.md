@@ -148,6 +148,7 @@ The canonical domain procedures are agent-neutral Markdown runbooks under `.ai/s
 | `interaction-aggregate` | Cohort AI panels (readiness summary, misconception trends, showcase quotes) → `interaction_analysis`. Run after due date. |
 | `interaction-backfill` | Repair reports missing `report_data` by reconstructing schema-1 from `report_markdown`. |
 | `setup-preflight` | First-time machine setup — writes the config file above. |
+| `docs-author` | Decide whether a concept warrants documentation and which kind, then write it — in-app help docs (`site/app/help/`) or design docs (`docs/`). Read before adding any `.md` to either. |
 
 One-off/maintenance scripts live in `scripts/` (e.g. `scripts/fall2026/` Fall build+clean,
 `scripts/training/` disposable training data). All DB-mutating scripts **must be idempotent and
@@ -167,6 +168,22 @@ agents cannot drift.
 - **Standing authorization for live preflight analysis:** after a successful `preflight-analyze`
   run and exact read-back verification, update `CHANGELOG.md`, commit the run record, and push
   `main` unless the human explicitly opts out. The coordination gate in §0 still applies.
+- **Derived documents are indexed — when you change a source, check them.**
+  [`docs/DOC-SOURCES.json`](../../docs/DOC-SOURCES.json) maps every document that **must stay
+  current** — the in-app help topics, `docs/operations/`, the authoring contract, this repo's
+  skills — to the authoritative sources it was written from. Before committing a change to **this
+  file**, `PROJECT.md`, a skill, a contract, or any frontend module named in that index, run:
+  ```
+  python scripts/docs/check_doc_sources.py
+  ```
+  It is read-only (stdlib + `git`), exits non-zero when something is flagged, and catches
+  uncommitted edits — so it fires *before* the change lands, not after. For each flagged document:
+  fix it if it is now wrong, or bump its `reviewed` date if it is still correct. **A help doc that
+  contradicts the system is a bug** — students and instructors read those pages as authoritative,
+  and a stale one is worse than none. Registering a new document in the index is part of creating
+  it; see `.ai/skills/docs-author/`.
+  *Not indexed on purpose:* `docs/decisions/` and `docs/contracts/`. Those are point-in-time records
+  and frozen interfaces — they are superseded, never refreshed.
 - **Always update `CHANGELOG.md`** for any shipped feature, fix, schema/data change, or doc edit.
   Newest first. Attribute to the requesting human **and the agent**:
   `## YYYY-MM-DD — <Human> via <Agent>` (e.g. `via Claude`, `via Codex`). State **what** and **why**.

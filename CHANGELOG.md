@@ -10,6 +10,93 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-20 — Matthew via Claude
 
+### Added — `docs-author` skill: route a concept to the right doc, or to none
+
+**Docs and skill only. No frontend, database, migration, or build-step change.** Not yet pushed.
+
+**Why.** The Help centre shipped earlier today with five stub docs and an authoring contract
+(`site/app/help/README.md`) covering the *mechanics* of adding a topic — file plus manifest entry —
+but nothing about what belongs in one, who it is written for, or whether a given idea deserves a
+document at all. The same gap existed on the `docs/` side: four design docs had converged on a house
+format (title, **Status:** line, authorship line, numbered sections) that was never written down, so
+each new doc re-derived it. Both gaps invite the same failure — documenting everything, which trains
+readers to ignore documentation and leaves stale pages that are worse than missing ones.
+
+**What was added:**
+- **[`.ai/skills/docs-author/SKILL.md`](.ai/skills/docs-author/SKILL.md)** — a four-step workflow.
+  Step 1 is a **routing gate** that decides between a help doc, a design doc, a contract, an
+  architecture doc, a runbook, a `CHANGELOG.md` entry alone, or **nothing**. It is built to be able
+  to answer *no*: the design-doc gate skips the doc when no rejected alternative can be named, and
+  the help-doc gate escalates to a UI fix when the content would only warn users away from a trap
+  the interface permits.
+- **[`references/HELP-STYLE.md`](.ai/skills/docs-author/references/HELP-STYLE.md)** — checkable
+  style rules for help docs plus a pre-flight checklist, grounded in the reading research (users
+  scan rather than read; ~20% of words; F-pattern; arrival mid-task via `help.html?doc=`).
+- **[`references/DESIGN-DOC.md`](.ai/skills/docs-author/references/DESIGN-DOC.md)** — a template
+  matching the format `docs/` already uses, a content bar, and the lifecycle rules.
+- **[`.ai/instructions/CORE.md`](.ai/instructions/CORE.md)** — `docs-author` added to the §4 runbook
+  table so it is discoverable through the contract rather than by browsing `.ai/skills/`.
+
+**Two rules worth calling out, because they are opposites and both are deliberate:**
+- **Help docs must stay current; design docs must not be rewritten.** A help doc that disagrees with
+  the app is a bug. A design doc is a point-in-time record of reasoning — it is superseded by a new
+  doc with links in both directions, never edited into agreement with what shipped. Current-state
+  truth lives in `PROJECT.md`, the contracts, and the code.
+- **Required content never lives in a callout.** The five starter help docs each open with a `>`
+  blockquote stub marker; that is fine as a temporary flag, but readers skip boxes, so the skill
+  forbids the pattern for real content and tells authors to delete the marker when expanding a stub.
+
+**Security framing made explicit.** `site/app/help/README.md` already warned that tier gating
+controls what the Help page *lists*, not who can fetch a URL. The skill names that as CWE-425
+(forced browsing) and CWE-656 (security through obscurity), and turns it into an authoring rule with
+an enumerated never-list: no credential, connection string, internal path, answer key, or student
+PII — including indirect identifiers that could re-identify a cadet in a small section — at any tier.
+This is also the line that separates an admin-tier help doc from `docs/operations/`: help docs cover
+what happens inside the app UI, runbooks cover SQL, migrations, scripts, and deploys.
+
+**Verify:** nothing to render — these files are not served. `docs-author` is read by an agent before
+it writes documentation. No help doc was created in this change, by request.
+
+### Added — document/source dependency index and a staleness check
+
+**Docs, index, and one read-only script. No database, migration, frontend, or build-step change.**
+Not yet pushed.
+
+**Why.** Several documents are *derived* — the help topics and `SYSTEM_GUIDE.md` restate what
+`CORE.md`, `PROJECT.md`, the skills, and the frontend modules define, and `director-ai-rules.md`
+says so on its own page. Nothing connected them, so editing a source left the derived documents
+silently wrong. Users read help topics as authoritative; a stale one is worse than none.
+
+**What was added:**
+- **[`docs/DOC-SOURCES.json`](docs/DOC-SOURCES.json)** — the index. Eight entries, each naming a
+  document that must stay current, the sources it was written from, and a `reviewed` date. Following
+  Google's freshness-date convention, `reviewed` is an **attestation** ("someone checked this against
+  its sources"), not an edit date — fixing a typo does not advance it.
+- **[`scripts/docs/check_doc_sources.py`](scripts/docs/check_doc_sources.py)** — read-only checker
+  (stdlib + `git`, no dependencies, writes nothing). `check` flags documents whose sources moved and
+  exits non-zero; `list` prints the index; `--json` for both. It also **validates that every path in
+  the index still exists**, so a rename that isn't reflected there fails loudly instead of silently
+  un-tracking a document.
+- **[`.ai/instructions/CORE.md`](.ai/instructions/CORE.md) §5** — the rule: before committing a
+  change to `CORE.md`, `PROJECT.md`, a skill, a contract, or an indexed frontend module, run the
+  checker and resolve what it flags. Registering a new document is part of creating it.
+- **[`.ai/skills/docs-author/SKILL.md`](.ai/skills/docs-author/SKILL.md)** — registration added as
+  verification step 4 and rule 11.
+
+**Design note — what is deliberately *not* indexed.** `docs/decisions/` and `docs/contracts/` are
+excluded. Those are point-in-time records and frozen interfaces: they are superseded by new
+documents, never refreshed in place, so a staleness flag on them would be pure noise. This is the
+same current-vs-archival split the `docs-author` skill draws.
+
+**It catches uncommitted edits**, not just committed ones — so it fires before a change lands rather
+than after. Verified against this session's own work: the in-progress `CORE.md` edit correctly
+flagged all seven dependent documents.
+
+**Known limit, stated in the script:** comparison is by date, so a source edited later on the same
+day a document was reviewed is not flagged. The uncommitted-change path covers the case that
+matters in practice.
+
+
 ### Changed — documented box-alignment rule; fixed the two boxes that broke it
 
 **Frontend + docs only. No database change, no migration, no build step.** Not yet pushed.
@@ -187,12 +274,86 @@ while redirecting new students to the questions.
 Structural checks confirm **zero foreign keys from `app` into `public`** (bootstrap §9 invariant) and
 `public` still at exactly 16 tables.
 
-**Still to do.** Add `app` under Dashboard → Settings → API → Exposed schemas (not yet done; only
-needed before the browser reads `app`). Write RLS for `app` — the point of the enrolment/staffing
-model is that ~62 bespoke policies collapse to two predicates. Migrate data from `public`. Add the
-§6 auth FKs as `postgres`. Then seal the owner with `ALTER ROLE prep_app_owner NOLOGIN` (§7).
-Migration `021_lesson_finalize_and_extensions.sql` remains **unapplied and should stay that way** —
-the redesign replaces nearly all of it.
+### Added — RLS for `app` (50 policies), and the four `public` audit holes closed
+
+Applied via [`supabase/migrations/app/002_rls.sql`](supabase/migrations/app/002_rls.sql).
+**50 policies across 19 tables**, versus 62 in `public`, and nearly all of them are one of two
+shapes: *"does the caller own the enrolment this row hangs from"* (student rows) or *"does the
+caller staff the section that enrolment belongs to"* (staff rows), plus a director escalation.
+That regularity is the enrolment model paying off — `public` had no single join path from a row
+back to its owner, which is part of why its policies drifted wrong.
+
+**The July 2026 audit findings, addressed structurally:**
+
+| `public` today | `app` |
+|---|---|
+| roster world-readable (`students: SELECT true`, role `public`) | a student sees only themselves; staff see only students they teach |
+| anyone may insert/overwrite any student's answers before the due date | writes require owning the enrolment; **no policy grants `anon` anything at all** |
+| every finalized score readable by everyone (`is_finalized = true`, no owner check) | own grade only, and only once finalized |
+| `directors_delete_students`: `authenticated`, `USING (true)` | only a director of an offering that student is enrolled in |
+
+**No `auth.uid()`.** The app tier holds no privileges on schema `auth` (§5), so
+`app.current_uid()` reads the same JWT claim through `current_setting()`, which lives in
+`pg_catalog`. Behaviourally identical, and it drops a dependency on Supabase internals. Helpers are
+`SECURITY DEFINER` + `STABLE` so a policy on `students` can call a helper that reads `students`
+without recursing.
+
+**Enforcement is proven, not assumed.** Structural checks alone were not enough: every agent tier
+carries `BYPASSRLS` by necessity, so none of them can test whether policies actually bite. Bootstrap
+§10 adds `GRANT authenticated TO prep_app_owner WITH INHERIT FALSE, SET TRUE`, letting the owner drop
+*down* into a role with no `BYPASSRLS`.
+[`app_rls_test.py`](supabase/admin/app_rls_test.py) then runs four personas — two students, a
+section instructor, a director — against a fixture and rolls back. **All 23 checks pass**, including
+every row of the table above.
+
+### Added — term calendar columns, and `public` content + roster migrated into `app`
+
+`003_term_calendar.sql` adds `finals_start`, `finals_end`, `grades_due_on` to `terms` (all
+nullable, with an ordering CHECK). USAFA tracks more than start/end: instruction ends before the
+term does, and grades are due after finals. Fall 2026 is now recorded in full — instruction
+2026-08-06 → 12-10, finals 12-12 → 12-16, grades due 12-21.
+
+[`scripts/app_migration/migrate_public_to_app.py`](scripts/app_migration/migrate_public_to_app.py)
+— dry-run by default per CORE.md, idempotent, one transaction. Run dry, reviewed, then `--commit`.
+
+| Migrated | |
+|---|---|
+| 1 term, 2 courses, 2 course offerings | both phys-110 and phys-215 run in Fall 2026 |
+| 4 sections, 73 students, 73 enrolments | `M1A` → `meeting_days {M}, period 1`; the day/period regex is gone |
+| 7 instructors, 10 staff assignments | 6 offering-wide from `instructor_course_access` + 4 section-scoped from `sections.instructor_id` |
+| 74 assignments → 74 containers + 74 written activities + 74 offerings | |
+| 3 interactions → 3 interactive activities | attached to their lesson's container |
+| 148 per-section due dates | M sections take `due_date_m`, T sections `due_date_t` |
+| 14 lessons | **dissolved** — a lesson *was* the container, so it becomes one |
+
+**Deliberately left behind, all of it test data** (originals untouched in `public`): 64 responses
+and 64 unfinalized scores on `preflight-02` (from `scripts/training/seed_training_preflight02.py`,
+never real student work); 6 June backup interaction reports; 2 `interaction_analysis` rows scoped to
+section `M5A`, which does not exist; the single training-run `analysis_report`.
+
+**Decisions encoded, each documented in the script header:**
+- **An interaction migrates iff a lesson claims it.** That one rule resolves the duplicate lesson-02
+  slug as Matthew chose: `lesson-02-electric-charge-coulombs-law` comes across;
+  `lesson-02-electric-charge-and-coulombs-law` (published, orphaned, holding the analysis and backup
+  rows) does not. ⚠ **The activity slug is the frozen contract surface — confirm a deployed artifact
+  posts to the short slug before students launch it**, or submissions will be FK-rejected.
+- **Slugs de-prefixed.** `phys-110-preflight-02` → `preflight-02`; `app` scopes slug by course, so
+  the July 2026 collision namespace is no longer needed and cannot recur.
+- **`grading_mode` = `points`, not `effort`.** Preserves today's per-question scoring.
+  LESSON-UNIFICATION D3 proposes effort-gating both paths, but that is a pedagogical decision and a
+  migration is the wrong place to make it silently. One UPDATE per offering to switch.
+- **Graded-vs-practice derived from the old `completion_policy`:** lesson-02 (`preflight`) →
+  written graded with the interactive present as practice; lessons 03/04 (`choice`) → both graded.
+
+**Verified by read-back.** All counts reconcile. `public` is byte-for-byte unchanged on every
+metric (74/73/64/64/14/4 rows, 62 policies, 16 tables). Zero foreign keys from `app` into `public`.
+Both suites re-run green against the schema now holding real data: 22 invariant checks, 23 RLS
+enforcement checks.
+
+**Still to do.** **Close the migration read window** (§8 revoke). Add the §6 auth FKs as `postgres`.
+Point `site/app/` at the `app` schema and rewire. Then seal the owner with
+`ALTER ROLE prep_app_owner NOLOGIN` (§7). Migration `021_lesson_finalize_and_extensions.sql` remains
+**unapplied and should stay that way** — the redesign replaces nearly all of it.
 
 ---
 
