@@ -34,11 +34,26 @@ from docx import Document
 # ----------------------------------------------------------------------------
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 COURSE_ROOT = os.path.abspath(os.path.join(REPO_ROOT, ".."))  # Physics_215_Fall_2026/
-DOCX_PATH = os.path.join(COURSE_ROOT, "Preflights", "Physics215_Preflight_Questions_v12.docx")
 RAG_DIR_REL = "Text_Book_PDFs/215 Sections"  # relative to textbook_base_path (the course root)
 FIGURE_BASE_URL = "https://dfpm-physics.github.io/Core_Preflights/site/img/assignments"
 
 CONFIG_PATH = os.path.expanduser("~/.claude/skills/preflight-analyze/config.json")
+
+
+def _preflights_dir():
+    """The PREP `Preflights/` folder. Prefer the config's textbook_base_path (points at the
+    PREP course root on any machine); fall back to the repo-relative layout (repo inside PREP)."""
+    try:
+        with open(CONFIG_PATH) as f:
+            base = json.load(f).get("textbook_base_path")
+        if base and os.path.isdir(os.path.join(base, "Preflights")):
+            return os.path.join(base, "Preflights")
+    except Exception:
+        pass
+    return os.path.join(COURSE_ROOT, "Preflights")
+
+
+DOCX_PATH = os.path.join(_preflights_dir(), "Physics215_Preflight_Questions_v12.docx")
 DENVER = ZoneInfo("America/Denver")
 
 # ----------------------------------------------------------------------------

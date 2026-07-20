@@ -10,7 +10,47 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-20 — Casey via Claude
 
+### Fixed — assignment-id collision that overwrote 34 phys-215 preflights; namespaced phys-110
+
+**Incident.** `assignments.id` is a single globally-unique PK (not scoped by course). The phys-110
+build earlier today (entry below) upserted ids `preflight-02`…`preflight-41` with `on_conflict=id`
+and `course_id='phys-110'`, which **overwrote the identically-id'd phys-215 rows** — flipping 34 of
+37 phys-215 preflights to phys-110 content. Only `preflight-13/24/36` survived (the ids the 110 build
+skipped as 110 GRs). Fallout: the 64 fake training responses + prior scores on `preflight-02` were
+left pointing at a phys-110 kinematics question, and 15 phys-215 `lessons.preflight_id` FKs resolved
+to phys-110 rows. No real student data was affected (only `preflight-02` had any responses/scores).
+
+**Fix (pure DML, no DDL).** phys-215 keeps the bare `preflight-NN` ids (so its 15 lessons FKs + 64
+responses/scores realign automatically); **phys-110 is re-namespaced to `phys-110-preflight-NN`** so
+the two courses' id spaces are disjoint and neither build can clobber the other. Composite-key
+`(course_id, id)` was considered and rejected as a DDL-blocked, multi-table migration for a cosmetic
+gain. Steps, all verified by read-back:
+- [`build_110_preflights.py`](scripts/fall2026/build_110_preflights.py): row id now
+  `phys-110-preflight-NN` (course-prefixed; documented convention for any future course).
+- [`build_fall_preflights.py`](scripts/fall2026/build_fall_preflights.py) re-run `--commit` (HTTP 200)
+  to restore all 37 phys-215 `preflight-NN` rows. Also made its docx path resolve from the config
+  `textbook_base_path` (portable when the repo isn't nested inside the PREP OneDrive folder).
+- [`clean_stale_phys110_ids.py`](scripts/fall2026/clean_stale_phys110_ids.py) (new, snapshot +
+  dry-run by default) deleted the 3 orphaned phys-110 rows left under `preflight-12/23/35`.
+- Repopulated phys-110 (HTTP 201). Invariants: phys-215=37 (all `preflight-NN`), phys-110=37 (all
+  `phys-110-preflight-NN`), no id shared across courses, all phys-215 lessons FKs resolve to phys-215.
+
+### Changed — re-ran /preflight-analyze on phys-215 `preflight-02` with the new 0–5 diagnostics
+
+Re-graded the 64 lesson-2 training submissions per the updated
+[`preflight-analyze` skill](.ai/skills/preflight-analyze/SKILL.md) so they carry the hidden 0–5
+`q2_effort`/`q3_understanding` diagnostics (migration 022) the earlier run predated. 3-state credit
+stays liberal (q3: 42 full / 20 warn / 2 zero — only blanks scored zero) while the hidden
+`q3_understanding` spreads 0–5, flagging misconception answers (protons move, friction creates charge,
+etc.) as 1–2 **despite** earning full credit. Diagnostics stay out of `question_scores`, feedback, and
+totals; `is_finalized=false`; per-instructor `analysis_report` regenerated for the live section→
+instructor map (Casey: M1A/M3A; Tyler Jones: T1A; Matthew Recker: T3A). Read-back verified 64/64 rows,
+all diagnostics integers in [0,5].
+
 ### Added — 37 Physics 110 Fall 2026 written preflight assignments
+
+> Superseded in part by the id-collision fix above: the ids created here were `preflight-NN` and are
+> now `phys-110-preflight-NN`.
 
 Physics 110 previously had no preflight assignments in the DB. Added
 [`scripts/fall2026/build_110_preflights.py`](scripts/fall2026/build_110_preflights.py)

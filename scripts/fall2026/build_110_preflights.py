@@ -17,6 +17,11 @@ Usage:
     python3 build_110_preflights.py --commit   # upsert the 37 rows to Supabase
 
 Idempotent: upsert on `id` (on_conflict), so re-running updates rows in place.
+
+Assignment ids are course-prefixed (`phys-110-preflight-NN`). `assignments.id` is a single
+globally-unique PK (not scoped by course), and Physics 215 owns the bare `preflight-NN` ids
+(its lessons/responses/scores reference them). Prefixing keeps the two courses' preflight sets
+disjoint so neither build clobbers the other. Any future course should likewise prefix its ids.
 """
 
 import argparse
@@ -216,7 +221,7 @@ def build_rows():
             q3["expected_response"] = p["expected_response"]
 
         rows.append({
-            "id": f"preflight-{n:02d}",
+            "id": f"phys-110-preflight-{n:02d}",
             "course_id": "phys-110",
             "title": f"Lesson {n:02d} Preflight — {topic}",
             "description": "Complete before class. Full credit for a genuine, thoughtful effort.",
