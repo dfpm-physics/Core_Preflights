@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Course administration · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+</head>
+<body>
+  <header id="topnav"></header>
+  <main class="page-wide" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Loading…</span></div>
+  </main>
+
+  <!-- Generic modal — body swapped per action, following the established pattern (there is no
+       shared UI module; roster.html and grade.html do the same). -->
+  <div class="modal-backdrop" id="mk-modal">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head"><h2 id="mk-title"></h2><button class="modal-close" data-close>×</button></div>
+      <div id="mk-body"></div>
+      <div class="error-msg" id="mk-error" style="min-height:1em"></div>
+      <div class="row" style="gap:10px">
+        <button class="btn btn-primary" id="mk-ok"></button>
+        <button class="btn btn-secondary" data-close>Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { esc, lastFirst } from '../js/util.js';
+    import { allSectionIds } from '../js/faculty-grade.js';
+    import * as A from '../js/faculty-admin.js';
+
+    const ctx = await bootstrap({ require: 'faculty' });
+    if (ctx) init();
+
+    let tab = 'staff';
+    let cache = null;                       // last loadStaff() result, for the modals
+
+    function init() {
+      initTheme();
+      renderNav(ctx, { active: 'admin', onCourseChange: () => { cache = null; render(); } });
+      wireModal();
+      render();
+    }
+
+    const isAdmin = () => !!ctx.instructorRow?.is_global_admin;
+
+    function render() {
+      const root = document.getElementById('main');
+
+      // The nav already hides this page from instructors; this is the direct-URL case. It is a
+      // UX boundary, not a security one — RLS and the edge functions are what actually enforce.
+      if (!ctx.isDirectorForCurrent()) {
+        root.innerHTML = `<div class="page-head"><h1>Course administration</h1></div>
+          <div class="alert alert-info">Course administration is available to course directors and
+          system admins. You can grade your assigned sections from <a href="grade.html">Grade</a>.</div>`;
+        return;
+      }
+
+      root.innerHTML = `
+        <div class="page-head"><h1>Course administration</h1>
+          <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))}${
+            ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''} — this offering, and the people who run it.</div></div>
+        <div class="subtabs">
+          <button class="subtab ${tab === 'staff' ? 'active' : ''}" data-tab="staff">Staff</button>
+          <button class="subtab ${tab === 'export' ? 'active' : ''}" data-tab="export">Export</button>
+        </div>
+        <div id="panel"><div class="center-load"><span class="spinner"></span><span>Loading…</span></div></div>`;
+
+      root.querySelectorAll('[data-tab]').forEach(b =>
+        b.addEventListener('click', () => { tab = b.dataset.tab; render(); }));
+
+      if (tab === 'staff') renderStaff(); else renderExport();
+    }
+
+    /* ───────────────────────────── Staff ───────────────────────────── */
+    async function renderStaff() {
+      const panel = document.getElementById('panel');
+      cache = await A.loadStaff(ctx);
+      const { staff, sections } = cache;
+      const meId = ctx.user.id;
+
+      const rows = staff.map(s => {
+        const isMe = s.instructorId === meId;
+        const roleCell = s.implicit
+          ? `<span class="muted" style="font-size:0.8em">implicit — no staff row</span>`
+          : isMe
+          ? `<span class="score-badge full">${A.ROLE_LABEL[s.role] || '—'}</span>
+             <span class="muted" style="font-size:0.75em"> (you)</span>`
+          : `<select data-role-for="${esc(s.instructorId)}">
+               ${Object.entries(A.ROLE_LABEL).map(([v, l]) =>
+                 `<option value="${v}"${v === s.role ? ' selected' : ''}>${l}</option>`).join('')}
+             </select>`;
+
+        const scope = s.implicit ? `<span class="score-badge pending">every offering</span>`
+          : s.wide ? `<span class="score-badge pending">All sections</span>`
+          : s.sections.length
+            ? s.sections.map(x => `<span class="score-badge pending">${esc(x.code)}</span>`).join(' ')
+            : `<span class="muted" style="font-size:0.8em">— none —</span>`;
+
+        // Only a system admin may change another system admin — mirrors remove-instructor.
+        const canRemove = !isMe && (!s.sysadmin || isAdmin());
+        return `<tr>
+          <td><strong>${esc(lastFirst(s.name))}</strong>${
+            s.sysadmin ? ' <span class="score-badge partial">System admin</span>' : ''}</td>
+          <td>${roleCell}</td>
+          <td>${scope}</td>
+          <td style="text-align:right;white-space:nowrap">
+            ${s.implicit ? '' : `<button class="btn btn-ghost btn-sm" data-sections="${esc(s.instructorId)}">Sections</button>`}
+            <button class="btn btn-ghost btn-sm" data-reset="${esc(s.instructorId)}">Send reset</button>
+            ${canRemove
+              ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" data-remove="${esc(s.instructorId)}">Remove</button>`
+              : `<button class="btn btn-ghost btn-sm" disabled title="${isMe ? 'You cannot remove yourself' : 'Only a system admin can change another system admin'}">Remove</button>`}
+          </td></tr>`;
+      }).join('');
+
+      panel.innerHTML = `
+        <div class="card">
+          <div class="row wrap" style="justify-content:space-between;gap:10px">
+            <div>
+              <div class="card-title">Staff <span class="muted" style="font-weight:500">· ${staff.length}</span></div>
+              <div class="card-meta" style="margin-bottom:0">Who can grade, author, and administer this
+                offering. Roles do not carry into another term.</div>
+            </div>
+            <button class="btn btn-primary btn-sm" id="add-btn">+ Add staff</button>
+          </div>
+          <div class="table-wrap" style="margin-top:16px"><table>
+            <thead><tr><th>Name</th><th>Role</th><th>Sections</th><th></th></tr></thead>
+            <tbody>${rows}</tbody></table></div>
+          <div id="staff-status" class="muted" style="font-size:0.82em;min-height:1.2em;margin-top:12px"></div>
+          <div class="muted" style="font-size:0.8em">Removing revokes <strong>this offering only</strong> —
+            the person keeps their login and any other term they staff.
+            ${isAdmin() ? 'As a system admin you may also change other system admins.'
+                        : 'System-admin rows can only be changed by another system admin.'}</div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Section coverage</div>
+          <div class="card-meta">Derived from the rows above — <code>staff_assignments</code> replaced
+            <code>sections.instructor_id</code>, so adding staff and assigning a section are the same
+            action. Enrolment is managed on <a href="roster.html">Roster</a>.</div>
+          <div class="sec-grid">${sections.map(sec => {
+            const named = staff.filter(s => !s.implicit && s.sections.some(x => x.id === sec.id));
+            const wide = staff.filter(s => !s.implicit && s.wide);
+            return `<div class="sec-assign">
+              <div class="sec-tag">${esc(sec.code)}</div>
+              <div style="font-size:0.84em;margin-top:6px">${named.length
+                ? named.map(s => esc(s.name)).join(', ')
+                : `<span style="color:var(--red)">— unassigned —</span>`}</div>
+              ${wide.length ? `<div class="muted" style="font-size:0.76em;margin-top:4px">+ ${wide.length} offering-wide</div>` : ''}
+            </div>`; }).join('') || `<div class="muted">No sections yet — create them on Roster.</div>`}</div>
+        </div>`;
+
+      wireStaff(panel);
+    }
+
+    function wireStaff(panel) {
+      const status = (msg, colour = 'var(--muted)') => {
+        const el = document.getElementById('staff-status');
+        el.style.color = colour; el.textContent = msg;
+        if (colour !== 'var(--red)') setTimeout(() => { el.textContent = ''; }, 3000);
+      };
+
+      panel.querySelectorAll('[data-role-for]').forEach(sel => sel.addEventListener('change', async () => {
+        status('Saving…');
+        const { error } = await A.setRole(ctx, sel.dataset.roleFor, sel.value);
+        if (error) return status('⚠ ' + error.message, 'var(--red)');
+        status('✓ Role updated', 'var(--green)');
+        renderStaff();
+      }));
+
+      panel.querySelectorAll('[data-remove]').forEach(b => b.addEventListener('click', async () => {
+        const who = cache.staff.find(s => s.instructorId === b.dataset.remove);
+        if (!confirm(`Remove ${who.name} from this offering?\n\n`
+          + `They keep their PREP login and any other term they staff.`)) return;
+        status('Removing…');
+        const { data, error } = await A.removeStaff(ctx, b.dataset.remove);
+        const msg = data?.error || error?.message;
+        if (msg) return status('⚠ ' + msg, 'var(--red)');
+        status('✓ Removed', 'var(--green)');
+        renderStaff();
+      }));
+
+      panel.querySelectorAll('[data-reset]').forEach(b => b.addEventListener('click', () => {
+        const who = cache.staff.find(s => s.instructorId === b.dataset.reset);
+        openModal('Send reset email',
+          `<p style="font-size:0.94em;margin-bottom:14px">Email a six-digit reset code to
+             <strong>${esc(who.name)}</strong>?</p>
+           <div class="alert alert-info">This is the same code they could request themselves.
+             <strong>You will not see or set their password</strong> — they choose it from the code,
+             which expires in about 15 minutes.</div>
+           <div class="field"><label for="rs-email">Send to</label>
+             <input id="rs-email" type="email" placeholder="name@usafa.edu">
+             <div class="field-hint">Their sign-in address. PREP does not store a separate contact
+               address, so confirm this is the one they use.</div></div>`,
+          'Send code',
+          async () => {
+            const email = document.getElementById('rs-email').value.trim();
+            if (!email) return 'Enter their sign-in email.';
+            const { error } = await A.sendResetEmail(email);
+            if (error) return error.message;
+            status(`✓ Reset code sent to ${email}`, 'var(--green)');
+            return null;
+          });
+      }));
+
+      panel.querySelectorAll('[data-sections]').forEach(b => b.addEventListener('click', () => {
+        const who = cache.staff.find(s => s.instructorId === b.dataset.sections);
+        const checked = new Set(who.sections.map(x => x.id));
+        openModal(`Sections — ${who.name}`,
+          `<div class="alert alert-info">Leave everything unticked to give them
+             <strong>all sections</strong> of this offering. That is how a director is recorded, and it
+             covers sections added later.</div>
+           ${cache.sections.map(s => `<label class="row" style="gap:8px;padding:6px 0">
+              <input type="checkbox" value="${esc(s.id)}" data-sec ${checked.has(s.id) ? 'checked' : ''}
+                     style="width:auto;margin:0">
+              <span>${esc(s.code)}</span></label>`).join('')
+            || '<p class="muted">This offering has no sections yet.</p>'}`,
+          'Save sections',
+          async () => {
+            const ids = [...document.querySelectorAll('[data-sec]:checked')].map(i => i.value);
+            const { error } = await A.setStaffSections(ctx, who.instructorId, who.role, ids);
+            if (error) return error.message;
+            status('✓ Sections updated', 'var(--green)');
+            renderStaff();
+            return null;
+          });
+      }));
+
+      document.getElementById('add-btn').addEventListener('click', () => {
+        openModal('Add staff',
+          `<div class="field"><label for="as-name">Full name</label><input id="as-name" placeholder="Jane Doe"></div>
+           <div class="field"><label for="as-email">Email</label><input id="as-email" type="email" placeholder="jane.doe@usafa.edu">
+             <div class="field-hint">Becomes their sign-in address.</div></div>
+           <div class="field"><label for="as-pw">Temporary password</label><input id="as-pw" value="prep-temp-2026">
+             <div class="field-hint">Read it to them over a channel you trust. They should change it
+               from their Account page.</div></div>
+           <div class="field"><label for="as-role">Role in this offering</label>
+             <select id="as-role">
+               <option value="instructor">Instructor — grades their sections</option>
+               <option value="grader">Grader — grades only, no authoring</option>
+               <option value="director">Director — full administration</option>
+               ${isAdmin() ? '<option value="system_admin">System admin — every course, every term</option>' : ''}
+             </select>
+             ${isAdmin() ? '' : '<div class="field-hint">Only a system admin can grant the system-admin role.</div>'}</div>
+           <div class="alert alert-info">Adds one <code>staff_assignments</code> row for
+             <strong>this offering</strong>. It grants nothing in any other term.</div>`,
+          'Add to offering',
+          async () => {
+            const name = document.getElementById('as-name').value.trim();
+            const email = document.getElementById('as-email').value.trim();
+            const password = document.getElementById('as-pw').value;
+            const role = document.getElementById('as-role').value;
+            if (!name || !email || !password) return 'Name, email, and password are all required.';
+            const { data, error } = await A.addStaff(ctx, { name, email, password, role });
+            const msg = data?.error || error?.message;
+            if (msg) return msg;
+            status(`✓ ${name} added`, 'var(--green)');
+            renderStaff();
+            return null;
+          });
+      });
+    }
+
+    /* ───────────────────────────── Export ───────────────────────────── */
+    async function renderExport() {
+      const panel = document.getElementById('panel');
+      const { data: sections } = await import('../js/supabase.js')
+        .then(m => m.db.from('sections').select('id, code')
+          .eq('course_offering_id', ctx.currentOffering).order('code'));
+      const secs = sections || [];
+      const codeOf = Object.fromEntries(secs.map(s => [s.id, s.code]));
+
+      panel.innerHTML = `
+        <div class="card">
+          <div class="card-title">Blackboard grades CSV</div>
+          <div class="card-meta">Finalized grades only. A student with no finalized grade exports
+            <strong>blank, not zero</strong> — a zero posts to Blackboard as a real score.</div>
+          <div class="row wrap" style="gap:14px;align-items:flex-end">
+            <div class="field" style="margin-bottom:0;min-width:250px">
+              <label for="ex-scope">Sections</label>
+              <select id="ex-scope">
+                <option value="__all__">All sections (entire offering)</option>
+                ${secs.map(s => `<option value="${esc(s.id)}">${esc(s.code)}</option>`).join('')}
+              </select>
+            </div>
+            <button class="btn btn-primary" id="ex-csv">Download CSV</button>
+            <span id="ex-status" style="font-size:0.85em"></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Full JSON backup</div>
+          <div class="card-meta">Assignments, enrolments, submissions, and grades for
+            <strong>this offering</strong> — for archiving a term or moving data off-platform.</div>
+          <div class="alert alert-warn">Contains student PII and every free-response answer. It
+            downloads unencrypted — store it like a gradebook, not like a spreadsheet.</div>
+          <div class="row wrap" style="gap:14px">
+            <button class="btn btn-secondary" id="ex-json">Download backup (JSON)</button>
+            <span id="bk-status" style="font-size:0.85em"></span>
+          </div>
+        </div>`;
+
+      document.getElementById('ex-csv').addEventListener('click', async () => {
+        const st = document.getElementById('ex-status');
+        const pick = document.getElementById('ex-scope').value;
+        const ids = pick === '__all__' ? await allSectionIds(ctx) : [pick];
+        st.style.color = 'var(--muted)'; st.textContent = 'Building…';
+        const matrix = await A.gradeMatrix(ctx, ids);
+        if (!matrix.students.length) { st.style.color = 'var(--red)'; st.textContent = 'No students in scope.'; return; }
+        A.triggerDownload(A.buildGradesCsv(matrix, (id) => codeOf[id]),
+          A.exportFilename('Grades', 'csv'), 'text/csv');
+        st.style.color = 'var(--green)';
+        st.textContent = `✓ ${matrix.students.length} students, ${matrix.columns.length} assignments`;
+      });
+
+      document.getElementById('ex-json').addEventListener('click', async () => {
+        const st = document.getElementById('bk-status');
+        st.style.color = 'var(--muted)'; st.textContent = 'Building…';
+        const ids = await allSectionIds(ctx);
+        const backup = await A.buildBackup(ctx, ids);
+        A.triggerDownload(JSON.stringify(backup, null, 2),
+          A.exportFilename('Backup', 'json'), 'application/json');
+        st.style.color = 'var(--green)';
+        st.textContent = `✓ ${backup.enrollments.length} enrolments, ${backup.grades.length} grades`;
+      });
+    }
+
+    /* ───────────────────────────── Modal ───────────────────────────── */
+    let onConfirm = null;
+    function openModal(title, body, okLabel, handler) {
+      document.getElementById('mk-title').textContent = title;
+      document.getElementById('mk-body').innerHTML = body;
+      document.getElementById('mk-ok').textContent = okLabel;
+      document.getElementById('mk-error').textContent = '';
+      onConfirm = handler;
+      document.getElementById('mk-modal').classList.add('open');
+    }
+    function wireModal() {
+      const m = document.getElementById('mk-modal');
+      m.addEventListener('click', (e) => {
+        if (e.target === m || e.target.dataset.close !== undefined) m.classList.remove('open');
+      });
+      document.getElementById('mk-ok').addEventListener('click', async () => {
+        const btn = document.getElementById('mk-ok');
+        const err = document.getElementById('mk-error');
+        err.textContent = '';
+        btn.disabled = true;
+        const problem = await onConfirm?.();
+        btn.disabled = false;
+        if (problem) { err.textContent = problem; return; }
+        m.classList.remove('open');
+      });
+    }
+  </script>
+</body>
+</html>

@@ -8,6 +8,77 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-20 — Matthew Recker via Claude
+
+### Added — account page, password flows, and the native course-administration page
+
+**Frontend + docs. No migration, no schema change, no new edge function.** Builds the mocked designs
+in `tests/browser/test-account.html` and `tests/browser/test-admin.html` against schema `app`, closing
+the `KNOWN GAP` note left in `js/nav.js` (Export and staff management lived only on legacy
+`site/admin.html`, which reads `public`, and were unreachable from the portal).
+
+**Accounts.** New `js/account.js` plus twin shells `student/account.html` and `faculty/account.html`
+(the `help.html` pattern — a role-neutral page needs a copy in each role directory because nav links
+are bare filenames, so the logic lives in the module). Shows identity, changes the password, and
+surfaces the two preferences that already existed only as side effects (`cp.theme`,
+`cp.currentOffering`). New signed-out `reset.html` implements forgot-password as a **six-digit emailed
+code**, linked from `login.html`.
+
+**Why a code rather than a magic link:** cadets read mail on a phone and act on a lab desktop, and a
+link only authenticates the device that opened it. Requires the Supabase recovery template to use
+`{{ .Token }}` — *not yet configured*, see below.
+
+**Why change-password verifies the current one:** Supabase's `updateUser()` trusts the session and
+does not check the existing password, so an unattended unlocked browser would be enough to take an
+account over. `changePassword()` re-authenticates first.
+
+**Course administration.** New `faculty/admin.html` + `js/faculty-admin.js`, director-gated, with
+Staff and Export tabs. Staff reads `staff_assignments` (which replaced both
+`instructor_course_access` *and* `sections.instructor_id`, so adding staff and assigning a section are
+now one action), supports the three `app` roles — director / instructor / grader — and reuses the
+already-ported `create-instructor` / `remove-instructor` edge functions. Export isolates the
+gradebook behind `gradeMatrix()` so the lesson-unification move off per-question scoring changes one
+function rather than the CSV writer.
+
+Three legacy export defects are fixed rather than ported: the JSON backup is now director-gated and
+scoped to one offering (legacy was unscoped by both role and course, and ordered by a `due_date`
+column that no longer exists), and an unfinalized grade exports **blank rather than zero** — a zero
+posts to Blackboard as a real score.
+
+**Nav.** Restored the `admin` entry pointing at the native page (`directorOnly`), added a `system`
+entry gated on `is_global_admin`, and added **Account** to the user dropdown. The admin/system split
+is a permission boundary, not tidiness: creating an offering means appointing its director, which a
+director must not be able to do for themselves.
+
+**Auth.** `bootstrap()` now honours `user_metadata.must_change_password`, redirecting to the account
+page until the user picks their own password. Inert until the `set-password` edge function exists.
+Stored on the auth user rather than in a table because `app` DDL is sealed — this needs no migration.
+
+**Verified:** the existing `tests/app-schema` harness still passes 215/215; every PostgREST projection
+the new modules ship was checked against the live schema; all 110 module imports across `site/app`
+resolve. **Not yet verified in a browser against a signed-in director** — see below.
+
+**Known gaps, deliberately:** the Supabase recovery email template still sends a link, not a code, so
+`reset.html` will not work until that is switched. Director-triggered reset calls Supabase's public
+recovery endpoint directly, so it works today but is neither attributed nor rate-limited. The
+system-admin tier (`faculty/system.html` — offerings, courses, terms, people) is mocked but not built.
+Design: `site/app/PLAN-2026-07-20-ACCOUNTS.md`.
+
+### Added — legacy audit of admin capability not carried forward
+
+`site/app/LEGACY-AUDIT-2026-07-20.md`. A line-by-line re-read of the legacy pages found that
+`COURSE-ADMIN-INVENTORY.md` — which claims to catalog *every* director function — misses several, and
+that its §2D claim ("only system admins can add/remove the `system_admin` role") **describes a guard
+that never existed**: legacy passed the role dropdown straight through with no check, so any course
+director could mint or strip a system admin. Already fixed in the `app` edge functions; recorded so
+nobody restores the legacy behaviour on the doc's authority.
+
+Also documents three working features promotion would delete (the Report tab's copy-for-slides
+workflow, the "Did Not Submit" table, the Grade tab's flagged-only filter), four undocumented
+authoring behaviours (notably that `points = 0` silently makes a question ungradeable), and
+`site/review.html` — a credential-free student grade viewer the inventory never analyzed, now dead
+under migration 021's policies, recommended for deletion rather than porting.
+
 ## 2026-07-20 — Casey via Claude
 
 ### Added — PREP v2 design record and cutover runbook
@@ -53,6 +124,40 @@ for staleness. Migrations remain **written but not applied**; no live database o
 ---
 
 ## 2026-07-20 — Matthew via Claude
+
+### Added — preflight-02 training data migrated into `app` so Grade can be reviewed
+
+> ⚠ **TEST DATA IN A PRODUCTION SCHEMA.** 64 fabricated submissions now sit in `app` on
+> phys-215 `preflight-02`. **Remove them before real students submit:**
+> `.venv/Scripts/python scripts/app_migration/migrate_training_responses.py --undo --commit`
+
+**Live data change.** `app` had 0 submissions and 0 grades, so the Grade view rendered a correct
+but empty page and nobody could tell whether the rewire worked. `migrate_public_to_app.py` had
+deliberately left the 64 `seed_training_preflight02.py` rows behind in `public` as test data;
+this brings them across for review purposes only.
+
+New: **`scripts/app_migration/migrate_training_responses.py`** — dry-run by default, idempotent,
+and `--undo` removes exactly what it created. It uses **two connections** rather than opening the
+migration read window (bootstrap §8): the legacy `claude_code_recker` credential reads `public`
+(on a `set_session(readonly=True)` connection, so it cannot write there even by mistake) and the
+app tier writes `app`. That avoids a postgres-level grant, and one more thing to remember to close.
+
+Mapping: `responses.answers` → `submission_activities.content` on the **written** activity, with
+`submissions.status='committed'`; `scores` → `grades` with `question_scores` unchanged,
+`source='ai_suggested'`, `is_finalized=false`, and the hidden `q2_effort`/`q3_understanding`
+diagnostics into `grades.diagnostic` (which never affects points — CORE.md §6). `points_earned` is
+clamped to the **offering's** `points_possible`, since the offering is authoritative about what the
+assignment is worth this term and a CHECK enforces the bound.
+
+**Verified through RLS, per persona:** all seven instructors now see 73 enrolments, 64 answers and
+64 unfinalized suggested grades across 4 sections; the test cadet still sees 0 submissions and 0
+grades, because an unfinalized grade is invisible to the student it belongs to. Sample cards render
+real answers with `full`/`warn` states and their diagnostics.
+
+**Also confirmed:** the faculty accounts were already wired correctly — every instructor resolved to
+the right offering, sections and roster before this change. The empty Grade view was missing data,
+not missing permissions. **phys-110 is left as-is** by request: 37 assignment offerings but no
+sections, roster or staff, so the two global admins can switch into an empty course.
 
 ### Removed — the interactions page and the legacy Admin link; nav reduced to four destinations
 
@@ -188,9 +293,31 @@ offering-scoped row whose `payload` is keyed by section, merged on write to pres
 projection written by either workstream was validated against the live schema before use.
 
 **Still unverified:** faculty Grade, Roster and the rebuilt lesson builder have not been exercised
-in a browser — no instructor login was available. **Still not deployed:** the three edge functions
-are correct in the repo but the deployed versions still write `public`; provisioning student logins
-before they are redeployed would leave students unable to sign in.
+in a browser — no instructor login was available.
+
+### Deployed — the three edge functions, to the live project
+
+**Live state change.** `provision-students`, `create-instructor` and `remove-instructor` deployed to
+`shzvpmlnqfmzfmuxkowi` via `npx supabase@latest functions deploy` (the CLI has no winget package;
+`npx` is the supported route). `verify_jwt: true` is preserved on all three, matching their previous
+deployment. Until this ran, the deployed versions still wrote `public` — provisioning student logins
+would have written `public.students.auth_user_id`, left `app` unchanged, and **left students unable
+to sign in**.
+
+Verified against the live endpoints rather than assumed: each rejects the old `course_id` field with
+its own migration message, and `course_offering_id` passes validation through to the authentication
+check. Both halves of the new code path are therefore confirmed live.
+
+**Found while deploying — three MORE deployed functions, and two of them now serve stale data.**
+The project has six functions, not three. `gpt-create-lesson-link`, `gpt-lesson-input` and
+`gpt-list-lessons` back the Custom GPT integration; their source is tracked, but under
+`.ai/integrations/custom-gpt/`, not `supabase/functions/`, which is why they were invisible to this
+work. All three are public (`verify_jwt: false`). `gpt-lesson-input` and `gpt-list-lessons` query
+`public.lessons` and `public.lesson_chat_inputs` — the first no longer exists in `app` and the
+second is now stale, so the Custom GPT lists lessons that no longer match what students see.
+`gpt-create-lesson-link` only builds a prefill URL, and that contract is unchanged, so it is
+unaffected. **Not fixed here:** the integration has its own OpenAPI spec and contracts, and
+migrating it is its own piece of work.
 
 ### Changed — wired `site/app/` to schema `app` (PREP v2); two live migrations; one security fix
 

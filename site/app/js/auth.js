@@ -78,6 +78,18 @@ export async function bootstrap(opts = {}) {
   // ── Enforce required role ─────────────────────────────────────────────────
   if (opts.require && role !== opts.require) { go(roleHome(role)); return; }
 
+  // ── Forced password rotation ──────────────────────────────────────────────
+  // Set by the `set-password` edge function when a system admin types a password for someone
+  // by hand. That administrator knows the password, so it cannot be carried into normal use:
+  // every page bounces here until the user picks their own. The flag lives on the auth user
+  // (user_metadata) rather than in a table because schema `app` DDL is sealed — see
+  // PLAN-2026-07-20-ACCOUNTS.md §3. Until the edge function ships, nothing sets it and this
+  // is inert. The account page is exempt, or the redirect would loop.
+  if (user.user_metadata?.must_change_password && !/\/account\.html$/.test(location.pathname)) {
+    go(`${APP_ROOT}${role === 'faculty' ? 'faculty' : 'student'}/account.html?rotate=1`);
+    return;
+  }
+
   const ctx = {
     user, role, studentRow, instructorRow,
     courses: [],            // [{ offeringId, courseId, courseCode, courseTitle, termCode, termLabel, role }]

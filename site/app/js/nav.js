@@ -36,13 +36,19 @@ const STUDENT_LINKS = [
 //   Admin — pointed at the legacy site/admin.html, which reads schema `public`. Now that the portal
 //     writes to `app`, that page shows stale data and edits made there never reach students, so
 //     linking to it from the portal was actively misleading.
-// KNOWN GAP: Export (Blackboard CSV / JSON backup) and instructor management lived ONLY on
-// admin.html and have no portal equivalent yet. They are currently unreachable from here.
+// That gap (Export + staff management, which lived ONLY on legacy admin.html) is closed by the
+// native faculty/admin.html — director-gated, reading `app`. PLAN-2026-07-16-ADMIN.md T1.1.
+//
+// System is a SEPARATE destination gated on is_global_admin, not on director. The split is a
+// permission boundary, not tidiness: creating an offering means appointing its director, i.e.
+// minting course-level authority, which a director must not be able to do for themselves.
 const FACULTY_LINKS = [
   { key: 'dashboard',    label: 'Dashboard',    href: 'dashboard.html',         icon: 'dashboard',     emoji: '🏠' },
   { key: 'grade',        label: 'Grade',        href: 'grade.html',             icon: 'grades',        emoji: '✅' },
   { key: 'roster',       label: 'Roster',       href: 'roster.html',            icon: 'roster',        emoji: '🧑‍🎓', directorOnly: true },
   { key: 'lessons',      label: 'Lessons',      href: 'lessons.html',           icon: 'assignments',   emoji: '📚' },
+  { key: 'admin',        label: 'Admin',        href: 'admin.html',             icon: 'settings',      emoji: '⚙️', directorOnly: true },
+  { key: 'system',       label: 'System',       href: 'system.html',            icon: 'settings',      emoji: '🛠️', adminOnly: true },
 ];
 
 /* ── Course-view picker ────────────────────────────────────────────────────────
@@ -111,7 +117,10 @@ export function renderNav(ctx, opts = {}) {
   })();
 
   const links = (ctx.role === 'faculty' ? FACULTY_LINKS : STUDENT_LINKS)
-    .filter(l => !l.directorOnly || ctx.isDirectorForCurrent?.());
+    .filter(l => !l.directorOnly || ctx.isDirectorForCurrent?.())
+    // adminOnly is the global flag, NOT a director of the current course — the two are
+    // different powers and a director must not inherit the system tier by switching course.
+    .filter(l => !l.adminOnly || ctx.instructorRow?.is_global_admin);
   const name = ctx.studentRow?.name || ctx.instructorRow?.name || 'Account';
   const roleLabel = ctx.role === 'faculty'
     ? (ctx.instructorRow?.is_global_admin ? 'Global admin'
@@ -157,6 +166,9 @@ export function renderNav(ctx, opts = {}) {
             </div>
             ${switcherHTML}
             ${switcherHTML ? '<div class="menu-sep"></div>' : ''}
+            <a class="menu-item" href="account.html">
+              ${iconHTML('user', '👤', 'ic')}<span>Account</span>
+            </a>
             <a class="menu-item" href="help.html">
               ${iconHTML('info', '❔', 'ic')}<span>Help</span>
             </a>

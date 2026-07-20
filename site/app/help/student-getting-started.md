@@ -3,6 +3,14 @@
 Your account is your Air Force Academy address — `yourCadetID@usafa.edu`. Your starting password is
 the last six digits of your cadet ID. Change it the first time you sign in.
 
+To change it, open the menu with your name in the top-right corner and choose **Account**. Everyone
+starts with the same kind of password, so until you change it yours is not really private.
+
+If you have forgotten your password, use **Forgot your password?** on the sign-in page. PREP emails a
+six-digit code to your Academy address; enter the code and pick a new password. The code stops
+working after about fifteen minutes, so ask for a fresh one if it expires. Your instructor can send
+you the same code, but nobody — instructors and course directors included — can see your password.
+
 ## Finding your work
 
 **Lessons** is the one place to look. Each lesson card shows what is due, when it is due, and

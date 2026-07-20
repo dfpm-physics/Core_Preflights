@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+</head>
+<body>
+  <header id="topnav"></header>
+  <main class="page" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Loading account…</span></div>
+  </main>
+
+  <!-- Twin of student/account.html. Both are shells: everything lives in js/account.js so the
+       two cannot drift. See the note at the top of that module. -->
+  <script type="module">
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { renderAccount } from '../js/account.js';
+
+    const ctx = await bootstrap({ require: 'faculty' });
+    if (ctx) {
+      initTheme();
+      renderNav(ctx, { active: 'account', onCourseChange: () => renderAccount(ctx, document.getElementById('main')) });
+      renderAccount(ctx, document.getElementById('main'));
+    }
+  </script>
+</body>
+</html>
