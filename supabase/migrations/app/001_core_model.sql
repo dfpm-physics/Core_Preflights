@@ -14,42 +14,53 @@
 -- THE CENTRAL SHAPE — an assignment is a CONTAINER; activities are what is inside it
 -- =====================================================================================
 --
---   assignments            the container. Reusable, term-free. Has a kind (preflight,
---                          later homework/quiz/exam) and a selection_policy saying what
---                          the student may do with its contents.
+--   assignments          THE CONTAINER. Reusable, term-free. Pure definition: a kind,
+--     |                  a title, shared objectives. Carries no grading policy at all.
 --     |
---     +-- activities       the possibilities inside the container: a written question set,
---                          an interactive artifact. Each says whether it can be GRADED or
---                          is practice-only, and when it becomes available.
+--     +-- activities     what is INSIDE the container — the possibilities offered to the
+--                        student: a written question set, an interactive artifact. Also
+--                        pure content: the questions, the artifact URL.
 --
---   assignment_offerings   the container SCHEDULED into one term: due dates, points,
---                          publish state. This is the split that makes a preflight
---                          reusable in Fall 2026 and again in Spring 2027 without forking
---                          its content. Mirrors courses -> course_offerings.
+--   assignment_offerings the container SCHEDULED into one term: due dates, points, publish
+--     |                  state. Mirrors courses -> course_offerings. Submissions and grades
+--     |                  point HERE, so a Fall 2026 grade stays attached to Fall 2026.
+--     |
+--     +-- offering_activities
+--                        WHICH activities are live this term, WHICH one carries credit, and
+--                        WHEN each becomes available. This is the operational lever.
 --
--- The three cases this expresses:
---   1. student chooses          selection_policy='choice', two activities, both graded
---   2. do the written work, but interactive available later
---                               selection_policy='single', written grading_role='graded',
---                               interactive grading_role='practice', available_after='submit'
---   3. homework, one thing      selection_policy='single', one activity
+-- WHY grading policy sits on the OFFERING and not on the activity
+--   Whether the written questions or the interactive artifact carries credit is a per-term
+--   delivery decision, not a property of the content. Two consequences that matter:
 --
--- Case 2 is why grading_role lives on the ACTIVITY rather than being implied by the
--- container's policy: "present but never for credit" is a property of the thing itself.
+--     * Fall 2026 can grade the interactive while Spring 2027 grades the written, from the
+--       same library assignment, with no forking.
+--     * If the interactive breaks mid-term, flipping the whole cohort over to the questions
+--       is two UPDATEs on offering_activities. The library definition is never touched, and
+--       students who already earned a grade keep it (see the trigger note below).
+--
+-- The cases this expresses:
+--   1. student chooses            two offering_activities, both grading_role='graded'
+--   2. do the questions, but the interactive is there too
+--                                 written 'graded'; interactive 'practice'
+--   3. force interactive, questions present as a fallback
+--                                 interactive 'graded'; written 'practice'
+--                                 -> if implementation trouble hits, swap the two roles
+--   4. homework, one thing        one offering_activity, 'graded'
+--
+-- "single vs choice" is therefore DERIVED, not declared: one graded activity this term
+-- means single, two or more means choice. There is no selection_policy column to drift.
 --
 -- =====================================================================================
--- INVARIANTS ENFORCED STRUCTURALLY (see app_invariant_test.py — these are tested)
+-- INVARIANTS ENFORCED STRUCTURALLY (see app_invariant_test.py — these are tested, not assumed)
 --   * exactly one grade per (enrolment, assignment_offering)  -- UNIQUE on grades
 --   * a grade can never exceed the offering's value           -- CHECK points bound
 --   * exactly one submission per (enrolment, offering)        -- UNIQUE on submissions
+--   * a chosen activity must be offered in THAT offering      -- composite FK
+--   * a practice activity can never be chosen for credit      -- gradable trigger
 --   * the chosen activity cannot silently change              -- lock trigger, policy-driven
 --   * an unlock must name who performed it                    -- lock trigger
 --   * NO foreign key from `app` into `public`                 -- bootstrap §9
---
--- NOT enforced in the database, by choice: that selection_policy='choice' has 2+ gradable
--- activities and 'single' has exactly one. That is a cross-row authoring rule; enforcing it
--- would need a deferred constraint trigger for no integrity gain, because grade uniqueness
--- is guaranteed independently above. The authoring UI validates it.
 --
 -- DEFERRED TO A POSTGRES-RUN SNIPPET (bootstrap §6): the two FKs into auth.users, declared
 -- here as plain uuid columns because `postgres` cannot delegate REFERENCES on auth.users.
@@ -102,49 +113,46 @@ INSERT INTO assignment_kinds (id, label, sort_order) VALUES ('preflight', 'Prefl
 
 
 CREATE TABLE assignments (
-  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  course_id        uuid REFERENCES courses(id) ON DELETE CASCADE,   -- NULL = shared library
-  kind_id          text NOT NULL REFERENCES assignment_kinds(id),
-  slug             text NOT NULL,              -- 'preflight-02'
-  title            text NOT NULL,
-  description      text,
-  objectives       jsonb NOT NULL DEFAULT '[]'::jsonb,   -- [{key,label}] shared taxonomy
-  is_archived      boolean NOT NULL DEFAULT false,
-  created_at       timestamptz NOT NULL DEFAULT now(),
-  updated_at       timestamptz NOT NULL DEFAULT now(),
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  course_id   uuid REFERENCES courses(id) ON DELETE CASCADE,   -- NULL = shared library
+  kind_id     text NOT NULL REFERENCES assignment_kinds(id),
+  slug        text NOT NULL,                   -- 'preflight-02'
+  title       text NOT NULL,
+  description text,
+  objectives  jsonb NOT NULL DEFAULT '[]'::jsonb,   -- [{key,label}] shared taxonomy
+  is_archived boolean NOT NULL DEFAULT false,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT assignments_slug_unique UNIQUE NULLS NOT DISTINCT (course_id, slug)
 );
 COMMENT ON TABLE assignments IS
-  'THE CONTAINER. Holds the possibilities a student may work through, and knows nothing '
-  'about a semester or a due date — that is what lets the same preflight be scheduled in '
-  'Fall 2026 and Spring 2027 without forking it. Replaces the role the old `lessons` table '
-  'played, but as the primary noun rather than a reconciliation layer bolted over two '
-  'parallel worlds.';
-COMMENT ON TABLE assignments IS
-  'Carries NO grading policy. Whether an activity is graded, and whether the student gets a '
-  'choice, are per-term delivery decisions and live in offering_activities. "single vs choice" '
-  'is therefore DERIVED: one graded activity this term = single, two or more = choice.';
+  'THE CONTAINER — the reusable definition of a piece of work, holding the possibilities a '
+  'student may work through. Knows nothing about a semester, a due date, or which activity '
+  'carries credit; all three are per-term decisions living in assignment_offerings and '
+  'offering_activities. Replaces the role the old `lessons` table played, but as the primary '
+  'noun rather than a reconciliation layer bolted over two parallel worlds.';
 COMMENT ON COLUMN assignments.course_id IS
   'NULL means shared across courses. UNIQUE uses NULLS NOT DISTINCT so two shared '
   'assignments cannot share a slug.';
 
 
 CREATE TABLE activities (
-  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  assignment_id   uuid NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
-  modality        text NOT NULL CHECK (modality IN ('written','interactive')),
-  slug            text NOT NULL UNIQUE,
-  title           text,
-  content         jsonb NOT NULL DEFAULT '{}'::jsonb,
-  position        smallint NOT NULL DEFAULT 0,
-  created_at      timestamptz NOT NULL DEFAULT now(),
-  updated_at      timestamptz NOT NULL DEFAULT now(),
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  assignment_id uuid NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+  modality      text NOT NULL CHECK (modality IN ('written','interactive')),
+  slug          text NOT NULL UNIQUE,
+  title         text,
+  content       jsonb NOT NULL DEFAULT '{}'::jsonb,
+  position      smallint NOT NULL DEFAULT 0,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT activities_one_per_modality UNIQUE (assignment_id, modality)
 );
 COMMENT ON TABLE activities IS
-  'What is INSIDE an assignment — the possibilities offered to the student. Modality is a '
+  'What is INSIDE an assignment. Pure content — the questions or the artifact. Modality is a '
   'property here, not a top-level entity, which is what removes the old parallel '
-  'assignments/interactions worlds and the lesson_completions layer that reconciled them.';
+  'assignments/interactions worlds and the lesson_completions layer that reconciled them. '
+  'Whether an activity is graded is NOT stored here; see offering_activities.';
 COMMENT ON COLUMN activities.slug IS
   'FROZEN CONTRACT SURFACE. Deployed Claude artifacts post to interaction-submit.html#i=<slug>. '
   'Existing interactions.id values migrate here verbatim. Globally unique because the artifact '
@@ -170,12 +178,12 @@ COMMENT ON TABLE course_offerings IS
 
 
 CREATE TABLE sections (
-  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   course_offering_id uuid NOT NULL REFERENCES course_offerings(id) ON DELETE CASCADE,
-  code         text NOT NULL,                  -- 'M1A'
-  meeting_days text[] NOT NULL DEFAULT '{}',   -- {'M'} / {'T'} / {'M','W','F'}
-  period       smallint,
-  created_at   timestamptz NOT NULL DEFAULT now(),
+  code               text NOT NULL,            -- 'M1A'
+  meeting_days       text[] NOT NULL DEFAULT '{}',   -- {'M'} / {'T'} / {'M','W','F'}
+  period             smallint,
+  created_at         timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT sections_code_unique UNIQUE (course_offering_id, code)
 );
 COMMENT ON TABLE sections IS
@@ -272,11 +280,40 @@ COMMENT ON COLUMN assignment_offerings.content_snapshot IS
 COMMENT ON COLUMN assignment_offerings.switch_policy IS
   'The locking rule as DATA, not compiled into a trigger body — the phase sequence of the '
   'research design deliberately changes what students may do, and changing the experiment '
-  'should not require a migration. Lives on the OFFERING, not the assignment, because it is a '
-  'per-term research parameter. Enforced by app.submissions_lock_activity().';
+  'should not require a migration. Enforced by app.submissions_lock_activity().';
 COMMENT ON COLUMN assignment_offerings.grading_mode IS
   'effort: points derived 0-5 -> 0..points_possible by trigger (today''s interaction rule). '
   'points: points_earned written directly.';
+
+
+CREATE TABLE offering_activities (
+  assignment_offering_id uuid NOT NULL REFERENCES assignment_offerings(id) ON DELETE CASCADE,
+  activity_id            uuid NOT NULL REFERENCES activities(id)           ON DELETE CASCADE,
+  grading_role           text NOT NULL DEFAULT 'graded'
+                           CHECK (grading_role IN ('graded','practice')),
+  available_after        text NOT NULL DEFAULT 'always'
+                           CHECK (available_after IN ('always','submit','due')),
+  is_visible             boolean NOT NULL DEFAULT true,
+  position               smallint NOT NULL DEFAULT 0,
+  PRIMARY KEY (assignment_offering_id, activity_id),
+  CONSTRAINT offering_activities_offering_activity_key
+    UNIQUE (assignment_offering_id, activity_id)
+);
+COMMENT ON TABLE offering_activities IS
+  'THE OPERATIONAL LEVER. Which of an assignment''s activities are live this term, which one '
+  'carries credit, and when each opens. Swapping grading_role between two rows moves the whole '
+  'cohort from one modality to the other — the "if the interactive breaks, kick everyone over '
+  'to the questions" case — without touching the library definition and without disturbing '
+  'grades already earned.';
+COMMENT ON COLUMN offering_activities.grading_role IS
+  'graded:   eligible to be THE graded activity for this offering. Two or more graded rows '
+  '          means the student chooses; exactly one means it is required. '
+  'practice: present and workable, but can never carry credit. Covers both directions — '
+  '          questions available alongside a graded interactive, and an interactive available '
+  '          alongside graded questions.';
+COMMENT ON COLUMN offering_activities.available_after IS
+  'always: open from the start. submit: unlocks once the student commits their graded work. '
+  'due: unlocks at the deadline — study mode.';
 
 
 CREATE TABLE assignment_due_dates (
@@ -297,7 +334,7 @@ CREATE TABLE submissions (
   id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   enrollment_id          uuid NOT NULL REFERENCES enrollments(id)          ON DELETE CASCADE,
   assignment_offering_id uuid NOT NULL REFERENCES assignment_offerings(id) ON DELETE CASCADE,
-  chosen_activity_id     uuid REFERENCES activities(id) ON DELETE SET NULL,
+  chosen_activity_id     uuid,
   status                 text NOT NULL DEFAULT 'draft'
                            CHECK (status IN ('draft','committed','superseded')),
   committed_at           timestamptz,
@@ -305,15 +342,20 @@ CREATE TABLE submissions (
   unlocked_at            timestamptz,
   created_at             timestamptz NOT NULL DEFAULT now(),
   updated_at             timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT submissions_unique UNIQUE (enrollment_id, assignment_offering_id)
+  CONSTRAINT submissions_unique UNIQUE (enrollment_id, assignment_offering_id),
+  -- The chosen activity must actually be offered in THIS offering. MATCH SIMPLE means a NULL
+  -- chosen_activity_id satisfies the constraint, which is what we want before a choice is made.
+  CONSTRAINT submissions_activity_in_offering
+    FOREIGN KEY (assignment_offering_id, chosen_activity_id)
+    REFERENCES offering_activities (assignment_offering_id, activity_id) ON DELETE SET NULL
 );
 COMMENT ON TABLE submissions IS
   'One row per enrolment per assignment offering. The choice, the lock, and the identity of '
   'the attempt live together here — which is what makes double-credit structurally impossible '
   'rather than merely defended against in application code.';
 COMMENT ON COLUMN submissions.chosen_activity_id IS
-  'Which activity counts for credit. Must be a grading_role=''graded'' activity; practice '
-  'activities can be worked through freely and never appear here.';
+  'Which activity counts for credit. A composite FK guarantees it belongs to this offering, '
+  'and a trigger guarantees it is grading_role=''graded'' at the moment it is chosen.';
 COMMENT ON COLUMN submissions.unlocked_by IS
   'The escape hatch the old model lacked: an instructor can clear the committed choice when a '
   'student picks the wrong path by accident. The trigger REFUSES an unlock that does not name '
@@ -425,30 +467,43 @@ BEGIN
   RETURN NEW;
 END; $$;
 
-CREATE TRIGGER courses_touch              BEFORE UPDATE ON courses              FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
-CREATE TRIGGER assignments_touch          BEFORE UPDATE ON assignments          FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
-CREATE TRIGGER activities_touch           BEFORE UPDATE ON activities           FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
-CREATE TRIGGER students_touch             BEFORE UPDATE ON students             FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
-CREATE TRIGGER assignment_offerings_touch BEFORE UPDATE ON assignment_offerings FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
-CREATE TRIGGER submissions_touch          BEFORE UPDATE ON submissions          FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER courses_touch               BEFORE UPDATE ON courses               FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER assignments_touch           BEFORE UPDATE ON assignments           FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER activities_touch            BEFORE UPDATE ON activities            FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER students_touch              BEFORE UPDATE ON students              FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER assignment_offerings_touch  BEFORE UPDATE ON assignment_offerings  FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER submissions_touch           BEFORE UPDATE ON submissions           FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 CREATE TRIGGER submission_activities_touch BEFORE UPDATE ON submission_activities FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
-CREATE TRIGGER grades_touch               BEFORE UPDATE ON grades               FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER grades_touch                BEFORE UPDATE ON grades                FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
 
--- Only a gradable activity may be chosen for credit. Practice activities are worked through
--- freely but can never become the graded one — this is the case the old model could not express.
+-- Only a 'graded' activity may be chosen for credit.
+--
+-- Fires ONLY when chosen_activity_id is actually being set or changed. That matters: when a
+-- director flips the cohort from interactive to written, activities students already committed
+-- to become 'practice'. Their existing submission rows must stay updatable (status changes,
+-- unlocks) without this trigger rejecting them retroactively — the grades they already earned
+-- are not disturbed, and only NEW choices are held to the new roles.
 CREATE FUNCTION submissions_check_gradable() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   role_ text;
 BEGIN
+  IF TG_OP = 'UPDATE' AND NEW.chosen_activity_id IS NOT DISTINCT FROM OLD.chosen_activity_id THEN
+    RETURN NEW;
+  END IF;
   IF NEW.chosen_activity_id IS NULL THEN
     RETURN NEW;
   END IF;
-  SELECT grading_role INTO role_ FROM activities WHERE id = NEW.chosen_activity_id;
-  IF role_ <> 'graded' THEN
+
+  SELECT grading_role INTO role_
+    FROM offering_activities
+   WHERE assignment_offering_id = NEW.assignment_offering_id
+     AND activity_id            = NEW.chosen_activity_id;
+
+  IF role_ IS DISTINCT FROM 'graded' THEN
     RAISE EXCEPTION
-      'activity % has grading_role=%; only a graded activity can be chosen for credit',
-      NEW.chosen_activity_id, role_;
+      'activity % is % in this offering; only a graded activity can be chosen for credit',
+      NEW.chosen_activity_id, coalesce(role_, 'not offered');
   END IF;
   RETURN NEW;
 END; $$;
@@ -550,6 +605,9 @@ CREATE INDEX staff_offering_idx             ON staff_assignments (course_offerin
 CREATE INDEX staff_instructor_idx           ON staff_assignments (instructor_id);
 CREATE INDEX assignment_offerings_co_idx    ON assignment_offerings (course_offering_id, position);
 CREATE INDEX assignment_offerings_asg_idx   ON assignment_offerings (assignment_id);
+CREATE INDEX offering_activities_graded_idx ON offering_activities (assignment_offering_id)
+                                            WHERE grading_role = 'graded';
+CREATE INDEX offering_activities_act_idx    ON offering_activities (activity_id);
 CREATE INDEX submissions_offering_idx       ON submissions (assignment_offering_id);
 CREATE INDEX submission_activities_sub_idx  ON submission_activities (submission_id);
 CREATE INDEX grades_offering_idx            ON grades (assignment_offering_id);

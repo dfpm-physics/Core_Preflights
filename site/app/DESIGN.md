@@ -322,6 +322,35 @@ section assignments at `minmax(190px,1fr)` — so columns reflow without media q
 ladder is shallow on purpose (bg → sunken → card are close in value), so separation reads
 from shadow and a hairline border rather than from heavy contrast or boxes-in-boxes.
 
+### Alignment inside boxes
+
+**Left-align by default. Center only when the box is empty and the prompt *is* the
+content** — one glyph, one short call to action, nothing to read or compare. Centering
+says "this entire region is one target."
+
+| Center | Left-align |
+|---|---|
+| Empty states (`.empty-state`) | Anything with a title + body |
+| Drop targets while empty (`.dropzone`, `.lb-figdrop`, `.lb-drop`) | Selectable option cards (`.dest-box`, `.choice-card`) |
+| Single-value stat cells (`.report-stat`, `.us-cell`) | Filled drop targets, list items, form fields |
+
+The test is the **content**, not the component. A box flips as its content does:
+`.lb-drop` centers while it reads "Drop a preflight here" and reverts to left once a
+preflight fills it (`.lb-drop:has(.lb-drop-slot.empty)`).
+
+Two corollaries:
+
+- **Don't center just because a box is small, dashed, or decorative.** Centered multi-line
+  prose has no consistent left edge to return to, so it scans slower, and ragged-both-sides
+  text reads as a marketing tile rather than a control.
+- **A lone icon needs a home.** Don't let a bare glyph float on its own line above a title —
+  seat it in a tinted chip on the title row (the `{components.stat-tile}` icon-chip pattern:
+  rounded square, `color-mix` tint, title stack beside it). `.choice-card` in
+  [`student/lessons.html`](student/lessons.html) is the reference implementation; note it
+  gives **both** cards the same neutral chip, because an accent on one would be the styled
+  default that [`STUDENT-LESSON-VIEW.md`](../../docs/architecture/STUDENT-LESSON-VIEW.md) §5
+  forbids.
+
 ## Elevation
 
 Three shadow tiers, each with a dark-mode pairing that deepens the alpha (dark surfaces need

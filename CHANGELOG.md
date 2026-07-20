@@ -10,6 +10,42 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-20 — Matthew via Claude
 
+### Changed — documented box-alignment rule; fixed the two boxes that broke it
+
+**Frontend + docs only. No database change, no migration, no build step.** Not yet pushed.
+
+**Why.** Content inside boxed UI (drop targets, option pickers) was inconsistently aligned and
+`DESIGN.md` had no rule to settle it — three boxes centered (`.dropzone`, `.lb-figdrop`,
+`.empty-state`) and three left-aligned (`.lb-drop`, `.dest-box`, `.choice-card`), with nothing
+saying which was correct. The gap meant every new page re-litigated the question.
+
+**What.**
+
+- **`site/app/DESIGN.md`** — new **Alignment inside boxes** subsection under §Layout. The rule:
+  left-align by default; center only when the box is empty and the prompt *is* the content. The
+  test is the content, not the component, so a box flips as its content does. Two corollaries —
+  don't center just because a box is small or dashed, and a lone icon needs a home rather than
+  floating above a title.
+- **`site/app/css/styles.css`** — `.lb-drop` (lesson-builder preflight/interaction drop targets)
+  now centers its label + slot while empty via `.lb-drop:has(.lb-drop-slot.empty)`, matching
+  `.dropzone` and `.lb-figdrop`; it reverts to left-aligned once filled with a real title.
+  This was the one box actually inconsistent with the new rule.
+- **`site/app/student/lessons.html`** — the lesson choice cards keep their left alignment (they
+  carry title + body, so left is correct), but the orphaned `.choice-ic` glyph that floated on its
+  own line now sits in a tinted rounded-square chip on the title row, following the `.stat-tile`
+  icon-chip pattern and matching the §5 sketch in `docs/architecture/STUDENT-LESSON-VIEW.md`
+  (`✎  Written preflight` on one line). **Both** chips deliberately use the same neutral
+  `--mc-sel-bg` tint — an accent color on one path would be the styled default that
+  `STUDENT-LESSON-VIEW.md` §2/§5 forbids, since it would bias the modality preference the
+  choice screen exists to measure.
+
+**Note.** `:has()` is used for the empty-drop-target rule; it is baseline in all current browsers
+and degrades to the previous left-aligned rendering if unsupported.
+
+---
+
+## 2026-07-20 — Matthew via Claude
+
 ### Added — in-app Help centre with tiered, file-backed documentation
 
 **Frontend only. No database change, no migration, no build step.** Not yet pushed.
@@ -100,31 +136,54 @@ deliberately **not** built. `activity_kinds` **is** included as a lookup table s
 so adding a type later is an INSERT rather than a migration; that was a judgment call within the
 "preflights only" scope and is easy to drop.
 
-**The three-layer split** — the change everything else follows from:
-- *catalogue* (term-free, reusable): `courses`, `terms`, `activity_kinds`, `activities`,
-  `activity_components`
+**The shape, in Matthew's framing:** an **assignment is a container**; **activities** are the
+possibilities inside it. Naming follows that directly rather than my first draft, which had called
+the container `activities` and buried the contents in `activity_components`.
+
+- *catalogue* (term-free, reusable): `courses`, `terms`, `assignment_kinds`, `assignments`
+  (the container), `activities` (its contents — written question set, interactive artifact)
 - *delivery* (term-scoped): `course_offerings`, `sections`, `students`, `enrollments`,
-  `instructors`, `staff_assignments`, `assignments`, `assignment_section_due_dates`
-- *work* (per enrolment): `submissions`, `submission_components`, `grades`, `grade_events`
+  `instructors`, `staff_assignments`, `assignment_offerings`, `offering_activities`,
+  `assignment_due_dates`
+- *work* (per enrolment): `submissions`, `submission_activities`, `grades`, `grade_events`
 - *analysis*: `analysis_reports`, replacing both `assignments.analysis_report` and
   `interaction_analysis`
+
+**Grading policy lives on the OFFERING, not the activity** — `offering_activities` carries
+`grading_role` (`graded` | `practice`) and `available_after` per term. This was driven by a
+requirement raised during the build: the written questions should stay present-but-ungraded behind a
+forced interactive, **so that if the interactive implementation fails mid-term the whole cohort can
+be moved onto the questions**. That flip is two UPDATEs on `offering_activities`; the library
+assignment is never touched, and grades already earned are undisturbed. It also means Fall 2026 can
+grade the interactive while Spring 2027 grades the written, from one library definition.
+
+Consequently there is **no `selection_policy` column** — "single vs choice" is *derived*: one
+graded activity this term means required, two or more means the student chooses. Nothing to drift.
 
 **Decisions worth recording:**
 - `grades` is a **separate table** from `submissions`, with `submission_id` nullable — so an exam
   scored in Gradescope can carry a grade with no submission in this system.
-- `switch_policy` lives on `assignments` as **data**, not compiled into a trigger, because the
-  research design's phase sequence deliberately changes what students may do.
+- `switch_policy` lives on `assignment_offerings` as **data**, not compiled into a trigger, because
+  the research design's phase sequence deliberately changes what students may do.
 - An instructor unlock **requires `unlocked_by`**; the trigger refuses an unattributed unlock.
-- Modality is a property of a component, not a top-level entity — this is what removes the
+- The gradable-activity trigger fires **only when the choice actually changes**, so a mid-term flip
+  cannot retroactively invalidate submissions students already committed.
+- A composite FK guarantees a chosen activity belongs to the offering it is being chosen in.
+- Modality is a property of an activity, not a top-level entity — this is what removes the
   parallel assignment/interaction worlds and the `lesson_completions` reconciliation layer.
-- `activity_components.slug` is the frozen-contract surface; existing `interactions.id` values
-  migrate here verbatim so deployed artifacts keep resolving.
+  `assignments` now plays the role `lessons` did, as the primary noun rather than a patch.
+- `activities.slug` is the frozen-contract surface; existing `interactions.id` values migrate here
+  verbatim so deployed artifacts keep resolving.
+- **Open:** the name `assignment_offerings` (mirrors `course_offerings`) is not settled.
 
 **Verified, not asserted.** [`app_invariant_test.py`](supabase/admin/app_invariant_test.py) builds a
-throwaway fixture, exercises the guarantees, and rolls back — all 15 checks pass, including:
-a second grade for the same (enrolment, assignment) is refused; `points_earned > points_possible` is
+throwaway fixture, exercises the guarantees, and rolls back — all **22 checks pass**, including:
+a second grade for the same (enrolment, offering) is refused; `points_earned > points_possible` is
 refused (the "4 out of 2" bug, now structurally impossible); the effort→points curve matches
-migration 013 scaled to `points_possible`; and the component lock behaves per `switch_policy`.
+migration 013 scaled to `points_possible`; a practice activity can never be chosen for credit; an
+activity from another offering cannot be chosen; the lock behaves per `switch_policy`; and the full
+mid-term flip scenario — a graded interactive swapped to practice — leaves existing grades intact
+while redirecting new students to the questions.
 Structural checks confirm **zero foreign keys from `app` into `public`** (bootstrap §9 invariant) and
 `public` still at exactly 16 tables.
 

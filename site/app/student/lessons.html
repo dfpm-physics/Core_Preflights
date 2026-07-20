@@ -12,9 +12,18 @@
        (STUDENT-LESSON-VIEW.md §2, §5). */
     .choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 18px 0; }
     .choice-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 18px;
-      background: var(--card); display: flex; flex-direction: column; gap: 8px; transition: box-shadow .15s, border-color .15s; }
+      background: var(--card); display: flex; flex-direction: column; gap: 10px; transition: box-shadow .15s, border-color .15s; }
     .choice-card:hover { box-shadow: var(--shadow-md); border-color: var(--blue-lt); }
-    .choice-ic { font-size: 1.6em; line-height: 1; }
+    /* Header row: icon chip beside the title stack, per the §5 sketch in STUDENT-LESSON-VIEW.md
+       ("✎  Written preflight" on one line). Chip follows the .stat-tile icon-chip pattern
+       (DESIGN.md {components.stat-tile}) so a lone glyph never floats unanchored.
+       Both chips use the SAME neutral tint — an accent color on one would be the styled
+       default §5 forbids. */
+    .choice-head { display: flex; align-items: center; gap: 11px; }
+    .choice-ic { width: 42px; height: 42px; border-radius: 11px; flex: none;
+      display: grid; place-items: center; font-size: 1.25em; line-height: 1;
+      background: var(--mc-sel-bg); border: 1px solid var(--border); color: var(--text-soft); }
+    .choice-titles { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
     .choice-title { font-weight: 700; font-size: 1.02em; }
     .choice-meta { font-size: 0.8em; color: var(--muted); font-weight: 600; }
     .choice-body { font-size: 0.88em; color: var(--text-soft); line-height: 1.5; flex-grow: 1; }
@@ -247,17 +256,25 @@
           getting the physics right. Pick whichever suits you.</div>
         <div class="choice-grid">
           <div class="choice-card">
-            <div class="choice-ic">✎</div>
-            <div class="choice-title">Written preflight</div>
-            <div class="choice-meta">${qn} question${qn === 1 ? '' : 's'}</div>
+            <div class="choice-head">
+              <div class="choice-ic">✎</div>
+              <div class="choice-titles">
+                <div class="choice-title">Written preflight</div>
+                <div class="choice-meta">${qn} question${qn === 1 ? '' : 's'}</div>
+              </div>
+            </div>
             <div class="choice-body">Answer in your own words. Your work saves as you type, and you
               can come back and change it any time before the deadline.</div>
             <a class="btn btn-secondary" href="${esc(writtenHref(l))}">Start writing</a>
           </div>
           <div class="choice-card">
-            <div class="choice-ic">⚡</div>
-            <div class="choice-title">Interactive lesson</div>
-            <div class="choice-meta">Guided conversation</div>
+            <div class="choice-head">
+              <div class="choice-ic">⚡</div>
+              <div class="choice-titles">
+                <div class="choice-title">Interactive lesson</div>
+                <div class="choice-meta">Guided conversation</div>
+              </div>
+            </div>
             <div class="choice-body">Work through the material with an AI tutor that asks you
               questions and responds as you go, then sends a report back here.</div>
             <button class="btn btn-secondary" id="choice-launch">Launch ↗</button>

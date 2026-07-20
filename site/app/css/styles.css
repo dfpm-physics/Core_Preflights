@@ -1262,7 +1262,11 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 .lb-drop-label { font-size: 0.74em; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
   color: var(--muted); margin-bottom: 8px; }
 .lb-drop-slot { display: flex; align-items: center; gap: 8px; min-height: 34px; font-size: 0.86em; }
-.lb-drop-slot.empty { color: var(--muted); font-style: italic; }
+/* Empty, the box is a pure call-to-action target, so label + slot center — matching .dropzone
+   and .lb-figdrop (DESIGN.md §Layout → Alignment). Filled, it holds real content and reverts
+   to the left-aligned default. */
+.lb-drop:has(.lb-drop-slot.empty) { text-align: center; }
+.lb-drop-slot.empty { justify-content: center; color: var(--muted); font-style: italic; }
 .lb-drop-slot.filled { color: var(--text); font-weight: 600; }
 
 /* Prefill destination chooser — two large boxes, then a lesson picker in the orphan-card style. */
