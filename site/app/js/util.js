@@ -89,26 +89,16 @@ export function fmtDateTime(d) {
   return dt.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-/* ── Section / due-date logic (null-safe ports of the legacy index.html rules) ── */
-
-/** M-day sections start with 'M' and use due_date_m; T-day use due_date_t. */
-export function isMDay(sectionId) {
-  return String(sectionId ?? '').toUpperCase().startsWith('M');
-}
-
-/**
- * Resolve the effective due date for an assignment given a student's section and any
- * per-student extension. Mirrors index.html: pick the M/T date (falling back to the
- * other if one is blank); an extension overrides the computed date entirely.
- * @returns {{ due: Date|null, isPast: boolean }}
+/* ── Deadlines ────────────────────────────────────────────────────────────────
+ * `isMDay()` and `dueDateForSection()` used to live here. Both are gone: they inferred a
+ * meeting pattern from the first letter of a section code, which only ever worked for the
+ * two courses that happened to use [MT][135][A-D]. In schema `app` the meeting pattern is
+ * data (sections.meeting_days) and a deadline override is a row keyed by section
+ * (assignment_due_dates), so nothing needs to be guessed from a string.
+ *
+ * The replacement is `effectiveDue()` in js/schema.js, which also handles the per-student
+ * extension and reports which of the three sources won.
  */
-export function dueDateForSection(assignment, sectionId, extensionISO) {
-  const m = isMDay(sectionId);
-  const base = m ? (assignment.due_date_m || assignment.due_date_t)
-                 : (assignment.due_date_t || assignment.due_date_m);
-  const due = extensionISO ? new Date(extensionISO) : (base ? new Date(base) : null);
-  return { due: (due && !isNaN(due)) ? due : null, isPast: due && !isNaN(due) ? due < new Date() : false };
-}
 
 /** Human "Due in 3 days" / "Due today" / "2 days overdue" string. */
 export function relativeDue(due) {

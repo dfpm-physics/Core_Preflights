@@ -1,0 +1,13 @@
+{
+  "name": "prep-app-schema-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "OPTIONAL developer test harness for the site/app -> schema `app` wiring. Not part of the site, not a build step — see README.md.",
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

@@ -1,0 +1,75 @@
+// run.mjs — run every wiring test in order, cheapest first.
+//
+// Ordering is deliberate: pure logic and config need no network, so a mistake there is
+// reported in milliseconds instead of after a round of live queries.
+
+import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { summary, REPO } from './harness.mjs';
+
+/* ── Reset the test cadet's rows before the live suites ──────────────────────
+ * The end-to-end suite commits a submission, and migration 006 means a student cannot undo
+ * that — nor can staff delete it, because RLS grants DELETE on `submissions` to nobody. So
+ * the suite genuinely cannot clean up after itself, and a second run would otherwise fail
+ * "a choice offering starts unlocked" against residue from the first.
+ *
+ * cleanup.py does it with the operator tier. It is bounded to student 3009999999, so it
+ * cannot touch a real cadet's work even if invoked by accident.
+ */
+function resetTestData() {
+  const py = process.platform === 'win32'
+    ? resolve(REPO, '.venv/Scripts/python.exe')
+    : resolve(REPO, '.venv/bin/python');
+  const script = resolve(REPO, 'tests/app-schema/cleanup.py');
+
+  if (!existsSync(py)) {
+    console.log('  [warn] no project .venv — skipping reset. If the end-to-end suite reports');
+    console.log('         "a choice offering starts unlocked", run cleanup.py and re-run.\n');
+    return;
+  }
+  const r = spawnSync(py, [script, '--commit'], { encoding: 'utf8' });
+  if (r.status !== 0) {
+    console.log(`  [warn] cleanup.py failed (exit ${r.status}) — live suites may see stale rows.`);
+    if (r.stderr) console.log(`         ${r.stderr.trim().split('\n').pop()}`);
+  } else {
+    const removed = (r.stdout.match(/(\d+) row\(s\) removed/) || [])[1];
+    console.log(`=== reset ===\n  cleared ${removed ?? '?'} leftover row(s) for the test cadet\n`);
+  }
+}
+
+const OFFLINE = ['./test-schema.mjs', './test-config.mjs'];
+const LIVE    = ['./test-rest.mjs', './test-student.mjs', './test-isolation.mjs'];
+
+for (const s of OFFLINE) {
+  try { await import(s); }
+  catch (e) { console.log(`\n!! suite ${s} threw: ${e.stack || e.message}`); process.exitCode = 1; }
+}
+
+/* ── test-imports runs in its own process, deliberately ──────────────────────
+ * It imports every module in the app tree, and site/app/js/supabase.js captures window.db
+ * once at import time. Running it in-process would leave every later suite bound to the
+ * unauthenticated client it used, so the end-to-end tests would fail at bootstrap for a
+ * reason unrelated to the code under test. Isolating it keeps the module registry clean.
+ */
+{
+  const r = spawnSync(process.execPath, [resolve(import.meta.dirname, 'test-imports.mjs')],
+                      { encoding: 'utf8' });
+  process.stdout.write(r.stdout || '');
+  if (r.status !== 0) {
+    process.stderr.write(r.stderr || '');
+    process.exitCode = 1;
+  }
+}
+
+resetTestData();
+
+for (const s of LIVE) {
+  try { await import(s); }
+  catch (e) { console.log(`\n!! suite ${s} threw: ${e.stack || e.message}`); process.exitCode = 1; }
+}
+
+// Leave the database as we found it.
+resetTestData();
+
+process.exitCode = summary() ? (process.exitCode || 0) : 1;

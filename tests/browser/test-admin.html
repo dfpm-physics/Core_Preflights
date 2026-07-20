@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Course administration sandbox · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <!-- Director-only gate (internal design sandboxes).
+       ⚠ TEMPORARILY BYPASSED — 2026-07-20. guard.js still queries the `public` model
+       (instructors.is_director + instructor_course_access), but config.js pins the client to
+       schema `app` where is_director does not exist and staff_assignments replaced
+       instructor_course_access. The failed select nulls the whole row, and the fallback is gated
+       on `if (!ok && instr)`, so EVERY signed-in director is denied — global admins included.
+       That file is owned by another session mid-wiring, so it is left untouched here.
+       This page carries no real data (synthetic staff, no DB call), so it runs ungated meanwhile.
+       ▶ RESTORE the two commented lines below once guard.js is fixed. -->
+  <!-- <script>document.documentElement.style.opacity='0'</script> -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../site/app/js/config.js"></script>
+  <!-- <script type="module" src="./guard.js"></script> -->
+  <!-- Uses the LIVE design system and the LIVE nav module so this preview tracks the real app.
+       Everything else is UNWIRED: synthetic staff/sections, every control inert. This mocks
+       faculty/admin.html per site/app/PLAN-2026-07-16-ADMIN.md §4 (Staff · Export · Course),
+       re-scoped to schema `app` — see the SCHEMA note in the module below. No DB reads/writes. -->
+  <link rel="stylesheet" href="../../site/app/css/styles.css">
+  <style>
+    /* Sandbox chrome only — tokens only, per DESIGN.md ("a raw hex in a page is a bug"). */
+    .sandbox-strip { max-width: 1180px; margin: 14px auto -2px; padding: 8px 20px; display: flex;
+      align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.8em; color: var(--muted); }
+    .sandbox-strip .pill { font-weight: 700; font-size: 0.92em; color: var(--blue-lt);
+      background: var(--mc-sel-bg); border-radius: 999px; padding: 2px 10px; }
+    .sandbox-strip a { color: var(--blue-lt); }
+
+    /* Role badges. Proposal for PLAN §8's open question ("does system_admin earn a color token?"):
+       reuse existing tokens — gold for the system-admin flag, info-blue for director, neutral
+       for instructor/grader. No new token, and no port of legacy's hardcoded purple. */
+    .rbadge { display: inline-block; padding: 2px 10px; border-radius: 999px;
+      font-size: 0.75em; font-weight: 700; white-space: nowrap; }
+    .rbadge.sa   { background: color-mix(in srgb, var(--gold) 16%, transparent); color: var(--gold); }
+    .rbadge.dir  { background: var(--alert-info-bg); color: var(--alert-info-fg); }
+    .rbadge.inst { background: var(--surface-hover); color: var(--muted); }
+    .you-chip { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+      font-size: 0.7em; font-weight: 700; background: var(--mc-sel-bg); color: var(--muted); }
+
+    /* Roadmap tier marker. */
+    .tier { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px;
+      font-size: 0.68em; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+      background: var(--mc-sel-bg); color: var(--muted); vertical-align: middle; }
+    .tier.t1 { color: var(--blue-lt); }
+    .planned { opacity: 0.72; }
+    .planned input, .planned select, .planned button { pointer-events: none; }
+
+    table.staff td { vertical-align: middle; }
+    table.staff select { width: auto; min-width: 132px; padding: 5px 8px; font-size: 0.85em; margin: 0; }
+    .sec-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+    .sec-chip { font-size: 0.74em; font-weight: 700; padding: 1px 8px; border-radius: 999px;
+      background: var(--mc-sel-bg); color: var(--text-soft); }
+    .sec-chip.wide { background: var(--alert-info-bg); color: var(--alert-info-fg); }
+    .scope-edit { font-size: 0.74em; font-weight: 600; color: var(--blue-lt);
+      background: none; border: none; cursor: pointer; padding: 1px 4px; }
+
+    /* Blast-radius warning — an edit here reaches beyond this offering. */
+    .blast { display: flex; gap: 8px; font-size: 0.78em; color: var(--gold);
+      background: color-mix(in srgb, var(--gold) 8%, transparent);
+      border-left: 3px solid var(--gold); border-radius: var(--radius-sm);
+      padding: 8px 12px; margin-bottom: 16px; }
+
+    /* ── Floating role switcher ────────────────────────────────────────────── */
+    .rolebox { position: fixed; right: 20px; bottom: 20px; z-index: 90; width: 268px;
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow-lg); overflow: hidden; }
+    .rb-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+      border-bottom: 1px solid var(--border); background: var(--surface-sunken); }
+    .rb-head .t { font-size: 0.72em; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--blue-lt); flex: 1; }
+    .rb-head button { font: inherit; font-size: 0.9em; line-height: 1; cursor: pointer;
+      border: 1px solid var(--border); background: var(--card); color: var(--muted);
+      border-radius: var(--radius-sm); width: 26px; height: 24px; }
+    .rb-head button:hover { border-color: var(--blue-lt); color: var(--text); }
+    .rb-body { padding: 12px; }
+    .rolebox.collapsed .rb-body { display: none; }
+    .rb-opt { display: block; width: 100%; text-align: left; font: inherit; font-size: 0.86em;
+      font-weight: 600; cursor: pointer; padding: 8px 11px; margin-bottom: 6px;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--card); color: var(--text); transition: border-color .12s, background .12s; }
+    .rb-opt:hover { border-color: var(--blue-lt); background: var(--surface-hover); }
+    .rb-opt.on { border-color: var(--blue); background: var(--mc-sel-bg); }
+    .rb-opt .who { display: block; font-size: 0.82em; font-weight: 400; color: var(--muted); margin-top: 1px; }
+    .rb-sep { border-top: 1px solid var(--border); margin: 10px -12px; }
+    .rb-note { font-size: 0.74em; color: var(--muted); line-height: 1.45; }
+    .rb-note b { color: var(--text-soft); display: block; font-size: 1.02em; margin-bottom: 4px;
+      text-transform: uppercase; letter-spacing: 0.05em; }
+    .rb-note li { margin-left: 14px; margin-bottom: 2px; }
+    .rb-theme { font: inherit; font-size: 0.78em; font-weight: 600; cursor: pointer; margin-top: 10px;
+      width: 100%; padding: 6px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--surface-sunken); color: var(--text); }
+    .rb-theme:hover { border-color: var(--blue-lt); }
+
+    @media (max-width: 640px) { .rolebox { right: 10px; left: 10px; bottom: 10px; width: auto; } }
+  </style>
+</head>
+<body>
+  <header id="topnav"></header>
+
+  <div class="sandbox-strip">
+    <span class="pill">Sandbox</span>
+    <span>Course administration · unwired mock · synthetic data · schema <code>app</code> ·
+      spec: <a href="../../site/app/PLAN-2026-07-16-ADMIN.md">PLAN-2026-07-16-ADMIN.md</a> §4</span>
+  </div>
+
+  <main class="page-wide" id="main"></main>
+
+  <!-- Add-staff modal (static; opens for looks, saves nothing) -->
+  <div class="modal-backdrop" id="add-modal">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-head"><h2>Add staff</h2><button class="modal-close" data-close>×</button></div>
+      <div class="field"><label for="ai-name">Full name</label><input id="ai-name" placeholder="Jane Doe"></div>
+      <div class="field"><label for="ai-email">Email</label><input id="ai-email" placeholder="jane.doe@usafa.edu">
+        <div class="field-hint">Becomes their sign-in address. If they already have a PREP login,
+          they are attached to this offering instead of being created again.</div></div>
+      <div class="field"><label for="ai-role">Role in this offering</label><select id="ai-role">
+        <option value="instructor">Instructor — grades their sections</option>
+        <option value="grader">Grader — grades only, no authoring</option>
+        <option value="director">Director — full administration</option>
+      </select></div>
+      <div class="field"><label for="ai-scope">Scope</label><select id="ai-scope">
+        <option>All sections (offering-wide)</option>
+        <option>Specific sections…</option>
+      </select><div class="field-hint" id="ai-scope-hint">An offering-wide row means every section,
+        now and any added later.</div></div>
+      <div class="alert alert-info" style="margin-bottom:16px">Writes one
+        <code>staff_assignments</code> row for <strong>Physics 215 · Fall 2026</strong> only.
+        It does not grant access to any other term.</div>
+      <div class="row" style="gap:10px">
+        <button class="btn btn-primary" data-close>Add to offering</button>
+        <button class="btn btn-secondary" data-close>Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating role switcher -->
+  <aside class="rolebox" id="rolebox">
+    <div class="rb-head">
+      <span class="t">Preview as</span>
+      <button id="rb-toggle" title="Collapse">–</button>
+    </div>
+    <div class="rb-body">
+      <button class="rb-opt" data-role="instructor">Instructor<span class="who">Ben Roth · M1A, M3A</span></button>
+      <button class="rb-opt" data-role="director">Course director<span class="who">K. de La Harpe · this offering</span></button>
+      <button class="rb-opt" data-role="admin">System admin<span class="who">Matthew Recker · every offering</span></button>
+      <div class="rb-sep"></div>
+      <div class="rb-note" id="rb-note"></div>
+      <button class="rb-theme" id="rb-theme">◐ Toggle theme</button>
+    </div>
+  </aside>
+
+  <script type="module">
+    import { renderNav } from '../../site/app/js/nav.js';
+    import { setIconBase, esc, lastFirst } from '../../site/app/js/util.js';
+    setIconBase('../../site/app/media/icons/');  // sandbox lives outside site/app/<role>/
+
+    /* ── SCHEMA `app` — what this changes vs. the plan's `public`-era wording ─────
+     * The plan (2026-07-16) was written against instructor_course_access. In `app`:
+     *   • Scope is a COURSE OFFERING (course + term), not a course. A Fall 2026 director is
+     *     not a director of Physics 215 in perpetuity (001_core_model.sql:245).
+     *   • staff_assignments replaces instructor_course_access AND sections.instructor_id — so
+     *     "add staff" and "assign a section" are now ONE table, not two screens.
+     *   • section_id NULL = offering-wide (all sections, including ones added later).
+     *   • role has THREE values: director | instructor | grader. `grader` is new.
+     *   • instructors.is_director is gone. is_global_admin is a property of the PERSON and is
+     *     separate from their role in an offering — a global admin needs no staff row at all.
+     *   • courses.* is catalogue-level and terms.* is term-level: both are shared beyond this
+     *     offering, so editing them here has blast radius (flagged in the Course tab).
+     * ─────────────────────────────────────────────────────────────────────────── */
+
+    const OFFERING = { course: 'Physics 215', code: 'phys-215', term: 'Fall 2026' };
+
+    const SECTIONS = [
+      { code: 'M1A', days: ['M'],           period: 1, n: 20 },
+      { code: 'M1B', days: ['M'],           period: 1, n: 23 },
+      { code: 'M3A', days: ['M'],           period: 3, n: 19 },
+      { code: 'M5A', days: ['M'],           period: 5, n: 27 },
+      { code: 'T1A', days: ['T'],           period: 1, n: 20 },
+      { code: 'T3A', days: ['T'],           period: 3, n: 22 },
+      { code: 'T3B', days: ['T'],           period: 3, n: 25 },
+      // Free-form pattern: the legacy ^[MT][135][A-D]$ CHECK is deliberately gone.
+      { code: 'T5A-LAB', days: ['T', 'R'],  period: 5, n: 16 },
+    ];
+
+    /* sections: null = offering-wide staff row (section_id IS NULL); [] = row with no coverage. */
+    const STAFF = [
+      { id: 'u-recker',    name: 'Matthew Recker',       email: 'matthew.recker@usafa.edu',     role: null,         sections: null,        sysadmin: true, implicit: true },
+      { id: 'u-delaharpe', name: 'Kimberly de La Harpe', email: 'kimberly.delaharpe@usafa.edu', role: 'director',   sections: null,        sysadmin: false },
+      { id: 'u-roth',      name: 'Ben Roth',             email: 'ben.roth@usafa.edu',           role: 'instructor', sections: ['M1A', 'M3A'], sysadmin: false },
+      { id: 'u-hardy',     name: 'TJ Hardy',             email: 'tj.hardy@usafa.edu',           role: 'instructor', sections: ['M1B', 'M5A'], sysadmin: false },
+      { id: 'u-jones',     name: 'Tyler Jones',          email: 'tyler.jones@usafa.edu',        role: 'instructor', sections: ['T1A', 'T3A'], sysadmin: false },
+      { id: 'u-nguyen',    name: 'Alicia Nguyen',        email: 'alicia.nguyen@usafa.edu',      role: 'grader',     sections: ['T3B'],     sysadmin: false },
+      { id: 'u-park',      name: 'Daniel Park',          email: 'daniel.park@usafa.edu',        role: 'instructor', sections: [],          sysadmin: false },
+    ];
+
+    const ROLE_LABEL = { director: 'Director', instructor: 'Instructor', grader: 'Grader' };
+    const VIEWER = { instructor: 'u-roth', director: 'u-delaharpe', admin: 'u-recker' };
+
+    const ROLE_NOTES = {
+      instructor: ['No <b>Admin</b> entry in the nav bar', 'Staff and Course subtabs hidden',
+                   'Export limited to own sections', 'No JSON backup'],
+      director:   ['Full staff management, <b>this offering only</b>', 'Cannot set the system-admin flag',
+                   'Export covers every section', 'JSON backup, scoped to the offering'],
+      admin:      ['Every offering, in every term', 'Can grant and revoke system admin',
+                   'Needs no staff row — access is implicit', 'Own row is locked — no self-edit'],
+    };
+
+    /* ── ctx stub shaped like js/auth.js's real one ─────────────────────────── */
+    let role = 'director';               // instructor | director | admin
+    let tab  = 'staff';                  // staff | export | course
+    const me = () => STAFF.find(s => s.id === VIEWER[role]);
+    const isDirector = () => role !== 'instructor';
+    const isAdmin    = () => role === 'admin';
+
+    const ctx = {
+      role: 'faculty',
+      courses: [{ offeringId: 'off-215-f26', courseCode: OFFERING.code, courseTitle: OFFERING.course,
+                  termCode: 'fall-2026', termLabel: OFFERING.term }],
+      currentOffering: 'off-215-f26',
+      get instructorRow() { return { name: me().name, is_global_admin: isAdmin() }; },
+      isDirectorForCurrent: () => isDirector(),
+      courseTitleOf: () => OFFERING.course,
+      setCurrentOffering: async () => {},
+      signOut: () => alert('Sandbox — sign-out is not wired.'),
+    };
+
+    /* ── Nav ────────────────────────────────────────────────────────────────
+       renderNav is the live module, so it still reflects TODAY's FACULTY_LINKS: Admin is an
+       external link to legacy admin.html, shown to all faculty. This mock previews the post-T1.1
+       state, so patch the rendered link rather than editing nav.js from a sandbox. */
+    function drawNav() {
+      renderNav(ctx, { active: 'admin' });
+      const link = document.querySelector('#topnav .nav-link.external');
+      if (!link) return;
+      link.classList.remove('external');
+      link.removeAttribute('target'); link.removeAttribute('rel');
+      link.setAttribute('href', 'admin.html');
+      if (!isDirector()) link.remove();          // T1.1: directorOnly: true
+    }
+
+    /* ── Page ───────────────────────────────────────────────────────────────── */
+    const TABS = [
+      { key: 'staff',  label: 'Staff',  director: true  },
+      { key: 'export', label: 'Export', director: false },
+      { key: 'course', label: 'Course', director: true  },
+    ];
+
+    function render() {
+      drawNav();
+      const root = document.getElementById('main');
+      const visible = TABS.filter(t => !t.director || isDirector());
+      if (!visible.some(t => t.key === tab)) tab = visible[0].key;
+
+      root.innerHTML = `
+        <div class="page-head">
+          <h1>Course administration</h1>
+          <div class="sub">${OFFERING.course} · ${OFFERING.term} — this offering, and the people who run it.</div>
+        </div>
+        ${isDirector() ? '' : `<div class="alert alert-info">Course administration is scoped to course
+           directors and system admins. Your own grade export is below — everything else on this page
+           needs director access.</div>`}
+        <div class="subtabs">
+          ${visible.map(t => `<button class="subtab ${t.key === tab ? 'active' : ''}" data-tab="${t.key}">${t.label}</button>`).join('')}
+        </div>
+        <div id="panel"></div>`;
+
+      root.querySelectorAll('[data-tab]').forEach(b =>
+        b.addEventListener('click', () => { tab = b.dataset.tab; render(); }));
+
+      const panel = document.getElementById('panel');
+      if (tab === 'staff')  panel.innerHTML = staffTab();
+      if (tab === 'export') panel.innerHTML = exportTab();
+      if (tab === 'course') panel.innerHTML = courseTab();
+      wirePanel();
+      drawRoleBox();
+    }
+
+    /* ── Staff ──────────────────────────────────────────────────────────────── */
+    function roleCell(s) {
+      if (s.implicit) return `<span class="muted" style="font-size:0.8em">implicit — no staff row</span>`;
+      const isMe = s.id === me().id;
+      if (isMe) return `<span class="rbadge dir">${ROLE_LABEL[s.role]}</span><span class="you-chip">You</span>`;
+      return `<select>${Object.entries(ROLE_LABEL).map(([v, l]) =>
+        `<option value="${v}"${v === s.role ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
+    }
+
+    function scopeCell(s) {
+      if (s.implicit) return `<span class="sec-chip wide">every offering</span>`;
+      if (s.sections === null)
+        return `<div class="sec-chips"><span class="sec-chip wide">All sections</span>
+                ${s.id === me().id ? '' : '<button class="scope-edit">change</button>'}</div>`;
+      if (!s.sections.length)
+        return `<div class="sec-chips"><span class="muted" style="font-size:0.8em">— none assigned —</span>
+                <button class="scope-edit">assign</button></div>`;
+      return `<div class="sec-chips">${s.sections.map(x => `<span class="sec-chip">${x}</span>`).join('')}
+              <button class="scope-edit">change</button></div>`;
+    }
+
+    function actionCell(s) {
+      if (s.id === me().id) return `<span class="muted" style="font-size:0.8em">Cannot edit yourself</span>`;
+      if (s.sysadmin && !isAdmin())
+        return `<button class="btn btn-ghost btn-sm" disabled title="Only a system admin can change another system admin">Remove</button>`;
+      return `<button class="btn btn-ghost btn-sm" style="color:var(--red)">Remove</button>`;
+    }
+
+    function staffTab() {
+      const rows = STAFF.map(s => `<tr>
+        <td><strong>${esc(lastFirst(s.name))}</strong>${s.sysadmin ? ' <span class="rbadge sa">System admin</span>' : ''}</td>
+        <td class="muted" style="font-size:0.88em">${esc(s.email)}</td>
+        <td>${roleCell(s)}</td>
+        <td>${scopeCell(s)}</td>
+        <td style="text-align:right;white-space:nowrap">${actionCell(s)}</td></tr>`).join('');
+
+      // Coverage is DERIVED from the same staff rows — there is no sections.instructor_id any more.
+      const coverage = SECTIONS.map(sec => {
+        const who = STAFF.filter(s => !s.implicit && (s.sections === null || s.sections.includes(sec.code)));
+        const named = who.filter(s => s.sections !== null);
+        return { sec, named, wide: who.filter(s => s.sections === null) };
+      });
+      const uncovered = coverage.filter(c => !c.named.length).length;
+
+      return `
+        <div class="card">
+          <div class="row wrap" style="justify-content:space-between;gap:10px;margin-bottom:4px">
+            <div>
+              <div class="card-title">Staff <span class="muted" style="font-weight:500">· ${STAFF.length}</span><span class="tier t1">Tier 1</span></div>
+              <div class="card-meta" style="margin-bottom:0">Who can grade, author, and administer
+                <strong>${OFFERING.course} · ${OFFERING.term}</strong>. Roles do not carry into another term.</div>
+            </div>
+            <button class="btn btn-primary btn-sm" id="add-btn">+ Add staff</button>
+          </div>
+          <div class="table-wrap" style="margin-top:16px"><table class="staff">
+            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Sections</th><th></th></tr></thead>
+            <tbody>${rows}</tbody></table></div>
+          <div class="muted" style="font-size:0.8em;margin-top:12px">
+            Removing revokes <strong>this offering</strong> only — the person keeps their PREP login and
+            any other term they staff.
+            ${isAdmin() ? 'As a system admin you may also grant and revoke the system-admin flag.'
+                        : 'The system-admin flag can only be changed by another system admin.'}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Section coverage</div>
+          <div class="card-meta">Derived from the rows above — <code>staff_assignments</code> replaced
+            <code>sections.instructor_id</code>, so assigning a section and adding staff are now the
+            same action. ${uncovered ? `<strong>${uncovered} section${uncovered !== 1 ? 's have' : ' has'}
+            no named grader.</strong>` : 'Every section has a named grader.'}</div>
+          <div class="sec-grid">${coverage.map(({ sec, named, wide }) => `
+            <div class="sec-assign">
+              <div class="row" style="justify-content:space-between;align-items:flex-start">
+                <div class="sec-tag">${sec.code}</div>
+                <span class="muted" style="font-size:0.74em">${sec.days.join('/')} · P${sec.period}</span>
+              </div>
+              <div style="font-size:0.84em;margin-top:8px">${named.length
+                ? named.map(s => esc(s.name)).join(', ')
+                : `<span style="color:var(--red)">— unassigned —</span>`}</div>
+              ${wide.length ? `<div class="muted" style="font-size:0.76em;margin-top:4px">+ ${wide.length} offering-wide</div>` : ''}
+              <div class="muted" style="font-size:0.76em;margin-top:4px">${sec.n} students</div>
+            </div>`).join('')}</div>
+        </div>`;
+    }
+
+    /* ── Export ─────────────────────────────────────────────────────────────── */
+    function exportTab() {
+      const mine = me().sections === null ? SECTIONS.map(s => s.code) : me().sections;
+      const scopeOpts = isDirector()
+        ? `<option>All sections (entire offering)</option>${SECTIONS.map(s => `<option>${s.code}</option>`).join('')}`
+        : mine.map(s => `<option>${s}</option>`).join('');
+      const nStudents = isDirector()
+        ? SECTIONS.reduce((a, s) => a + s.n, 0)
+        : SECTIONS.filter(s => mine.includes(s.code)).reduce((a, s) => a + s.n, 0);
+
+      const csvCard = `
+        <div class="card">
+          <div class="card-title">Blackboard grades CSV<span class="tier t1">Tier 1</span></div>
+          <div class="card-meta">Finalized grades only. Students with no finalized grade export blank,
+            not zero — a blank is "not graded yet", and a zero would post as a real score.</div>
+          <div class="row wrap" style="gap:14px;align-items:flex-end">
+            <div class="field" style="margin-bottom:0;min-width:250px">
+              <label for="ex-scope">Scope</label>
+              <select id="ex-scope">${scopeOpts}</select>
+              <div class="field-hint">${isDirector()
+                ? 'Directors may export the whole offering.'
+                : 'Instructors export the sections they staff.'}</div>
+            </div>
+            <div class="field" style="margin-bottom:0;min-width:210px">
+              <label for="ex-lesson">Assignments</label>
+              <select id="ex-lesson"><option>All graded assignments</option><option>Preflight 02 — Charge &amp; Coulomb's Law</option><option>Preflight 03 — Vector Form</option></select>
+            </div>
+            <button class="btn btn-primary">Download CSV</button>
+          </div>
+          <div class="table-wrap" style="margin-top:18px"><table>
+            <thead><tr><th>Last Name</th><th>First Name</th><th>Student ID</th><th>Preflight 02 [15]</th><th>Preflight 03 [15]</th><th>Preflight 04 [15]</th></tr></thead>
+            <tbody>
+              <tr><td>Adams</td><td>Riley</td><td>3001284471</td><td>15</td><td>12</td><td>15</td></tr>
+              <tr><td>Bell</td><td>Jordan</td><td>3001299013</td><td>12</td><td>15</td><td></td></tr>
+              <tr><td>Chen</td><td>Morgan</td><td>3001301882</td><td>15</td><td>15</td><td>15</td></tr>
+              <tr><td class="muted" colspan="6">…preview of the first rows · ${nStudents} students,
+                ${isDirector() ? SECTIONS.length : mine.length} section${(isDirector() ? SECTIONS.length : mine.length) !== 1 ? 's' : ''}</td></tr>
+            </tbody></table></div>
+          <div class="muted" style="font-size:0.78em;margin-top:10px">Reads <code>grades</code> where
+            <code>is_finalized</code>, joined through <code>enrollments</code> — so a student who moved
+            sections keeps their history where it was earned.</div>
+        </div>`;
+
+      const backupCard = isDirector() ? `
+        <div class="card">
+          <div class="card-title">Full JSON backup<span class="tier t1">Tier 1</span></div>
+          <div class="card-meta">A point-in-time dump of enrollments, assignments, submissions, and
+            grades for <strong>this offering</strong> — for archiving a term or moving data off-platform.</div>
+          <div class="alert alert-warn">Contains student PII and every free-response answer. It downloads
+            unencrypted — store it like a gradebook, not like a spreadsheet.</div>
+          <div class="row wrap" style="gap:14px;align-items:flex-end">
+            <div class="field" style="margin-bottom:0;min-width:250px">
+              <label for="bk-scope">Include</label>
+              <select id="bk-scope"><option>${OFFERING.course} · ${OFFERING.term} (current)</option><option>${OFFERING.course} · all terms I direct</option></select>
+              <div class="field-hint">Scoped to offerings you direct — never the whole database.</div>
+            </div>
+            <button class="btn btn-secondary">Download backup (JSON)</button>
+          </div>
+          <div class="muted" style="font-size:0.8em;margin-top:12px">Last backup: none this term.</div>
+        </div>` : `
+        <div class="card">
+          <div class="card-title">Full JSON backup</div>
+          <div class="card-meta">Available to course directors and system admins.</div>
+          <div class="empty-state" style="padding:28px 24px">
+            <div class="es-ic">🔒</div>
+            <h3>Director access required</h3>
+            <p>Whole-offering data exports are restricted. Your grade export above covers your sections.</p>
+          </div>
+        </div>`;
+
+      return csvCard + backupCard;
+    }
+
+    /* ── Course ─────────────────────────────────────────────────────────────── */
+    function courseTab() {
+      return `
+        <div class="alert alert-info">Nothing on this tab exists in either the legacy site or the app
+          today — it is the Tier 2 proposal, mocked here to decide whether it earns a build.</div>
+
+        <div class="card planned">
+          <div class="card-title">Catalogue entry<span class="tier">Tier 2</span></div>
+          <div class="card-meta">The course itself, independent of any semester.</div>
+          <div class="blast"><span>⚠</span><span><strong>Shared across every term.</strong> These fields
+            live on <code>courses</code>, so a change here rewrites how ${OFFERING.course} appears in
+            past and future offerings too — not just ${OFFERING.term}.</span></div>
+          <div class="row wrap" style="gap:16px;align-items:flex-start">
+            <div class="field" style="flex:1;min-width:220px"><label>Title</label><input value="${OFFERING.course}"></div>
+            <div class="field" style="flex:1;min-width:170px"><label>Code</label><input value="${OFFERING.code}">
+              <div class="field-hint">Appears in URLs and export filenames.</div></div>
+            <div class="field" style="flex:1;min-width:170px"><label>Department</label><input value="DFPM"></div>
+          </div>
+          <button class="btn btn-primary">Save catalogue entry</button>
+        </div>
+
+        <div class="card planned">
+          <div class="card-title">Term calendar<span class="tier">Tier 2</span></div>
+          <div class="card-meta">Dates for ${OFFERING.term}.</div>
+          <div class="blast"><span>⚠</span><span><strong>Shared across every course in this term.</strong>
+            These live on <code>terms</code>, so editing them also moves Physics 110's calendar.
+            Arguably this belongs on a system-admin screen, not a course director's.</span></div>
+          <div class="row wrap" style="gap:16px;align-items:flex-start">
+            <div class="field" style="flex:1;min-width:150px"><label>Classes start</label><input type="date" value="2026-08-12"></div>
+            <div class="field" style="flex:1;min-width:150px"><label>Classes end</label><input type="date" value="2026-12-04"></div>
+            <div class="field" style="flex:1;min-width:150px"><label>Finals</label><input type="date" value="2026-12-08"></div>
+            <div class="field" style="flex:1;min-width:150px"><label>Grades due</label><input type="date" value="2026-12-16"></div>
+          </div>
+          <button class="btn btn-primary">Save calendar</button>
+        </div>
+
+        <div class="card planned">
+          <div class="card-title">This offering<span class="tier">Tier 2</span></div>
+          <div class="card-meta">Settings that apply to ${OFFERING.course} · ${OFFERING.term} alone —
+            the only block on this tab with no blast radius.</div>
+          <div class="field"><label>Default deadline</label>
+            <select><option>2359 the night before the lesson (America/Denver)</option><option>2359 the day of the lesson</option></select>
+            <div class="field-hint">Applied when an assignment is scheduled; each one can still override it.</div></div>
+          <div class="field"><label>Status</label>
+            <select><option>Active — students and staff can work in it</option><option>Archived — read-only for everyone</option></select>
+            <div class="field-hint">Archiving sets <code>course_offerings.is_active = false</code>.
+              Nothing is deleted; grades stay readable.</div></div>
+          <button class="btn btn-primary">Save offering</button>
+        </div>
+
+        <div class="card planned">
+          <div class="card-title">Sections<span class="tier">Tier 2</span></div>
+          <div class="card-meta">Sections are born from a roster upload today and can never be renamed
+            or retired. Codes are unique per offering, and meeting pattern is real data now — the old
+            <code>^[MT][135][A-D]$</code> format rule is gone, so <code>T5A-LAB</code> is legal.</div>
+          <div class="sec-grid">
+            ${SECTIONS.map(sec => `<div class="sec-assign">
+              <div class="row" style="justify-content:space-between">
+                <div class="sec-tag">${sec.code}</div>
+                <span class="score-badge full">active</span>
+              </div>
+              <div class="muted" style="font-size:0.8em;margin-top:8px">${sec.days.join('/')} · Period ${sec.period} · ${sec.n} students</div>
+              <div class="row" style="gap:6px;margin-top:10px">
+                <button class="btn btn-ghost btn-sm">Edit</button>
+                <button class="btn btn-ghost btn-sm">Retire</button>
+              </div></div>`).join('')}
+            <div class="sec-assign" style="display:grid;place-items:center;border-style:dashed">
+              <div style="text-align:center"><div style="font-size:1.5em">＋</div>
+                <div class="muted" style="font-size:0.82em">New section</div></div>
+            </div>
+          </div>
+          <div class="muted" style="font-size:0.8em;margin-top:14px">Retiring keeps enrollments and grades
+            but hides the section from grading, export, and roster upload.</div>
+        </div>
+
+        <div class="card planned">
+          <div class="card-title">Danger zone<span class="tier">Tier 2</span></div>
+          <div class="card-meta">Irreversible. Each requires typing the offering code to confirm.</div>
+          <div class="row wrap" style="justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--border)">
+            <div><strong style="font-size:0.94em">Un-finalize all grades</strong>
+              <div class="muted" style="font-size:0.82em">Reopens every grade in the offering for editing. Submissions untouched.</div></div>
+            <button class="btn btn-ghost btn-sm" style="color:var(--red)">Un-finalize</button>
+          </div>
+          <div class="row wrap" style="justify-content:space-between;gap:10px;padding:12px 0">
+            <div><strong style="font-size:0.94em">Delete this offering</strong>
+              <div class="muted" style="font-size:0.82em">Cascades to sections, enrollments, submissions, and grades. Archive instead unless it was created by mistake.</div></div>
+            <button class="btn btn-ghost btn-sm" style="color:var(--red)">Delete offering</button>
+          </div>
+        </div>`;
+    }
+
+    /* ── Wiring (mock only — nothing writes) ────────────────────────────────── */
+    function wirePanel() {
+      document.getElementById('add-btn')?.addEventListener('click', () => {
+        document.getElementById('add-modal').classList.add('open');
+      });
+    }
+    const modal = document.getElementById('add-modal');
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal || e.target.dataset.close !== undefined) modal.classList.remove('open');
+    });
+
+    /* ── Floating role switcher ─────────────────────────────────────────────── */
+    function drawRoleBox() {
+      document.querySelectorAll('.rb-opt').forEach(b => b.classList.toggle('on', b.dataset.role === role));
+      document.getElementById('rb-note').innerHTML =
+        `<b>What this role sees</b><ul>${ROLE_NOTES[role].map(n => `<li>${n}</li>`).join('')}</ul>`;
+    }
+    document.querySelectorAll('.rb-opt').forEach(b =>
+      b.addEventListener('click', () => { role = b.dataset.role; render(); }));
+    document.getElementById('rb-toggle').addEventListener('click', (e) => {
+      const box = document.getElementById('rolebox');
+      box.classList.toggle('collapsed');
+      e.target.textContent = box.classList.contains('collapsed') ? '+' : '–';
+    });
+    document.getElementById('rb-theme').addEventListener('click', () => {
+      const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+      document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+      try { localStorage.setItem('cp.theme', dark ? 'light' : 'dark'); } catch (e) {}
+    });
+
+    render();
+  </script>
+</body>
+</html>

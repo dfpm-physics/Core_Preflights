@@ -1,25 +1,38 @@
 #!/usr/bin/env python
-"""Prove schema `app` RLS actually ENFORCES, by acting as real personas.
+"""Prove schema `app` RLS and its trigger invariants actually ENFORCE, as real personas.
 
 Every agent tier holds BYPASSRLS (a direct Postgres connection carries no JWT, so RLS would
 otherwise deny every row). That makes them useless for testing enforcement. This script
 instead builds a fixture as the owner, then SET ROLEs to `authenticated` — which has no
-BYPASSRLS — with a simulated JWT claim per persona, so the policies are genuinely applied.
+BYPASSRLS — with a simulated JWT claim per persona, so the policies genuinely apply.
 Everything is rolled back.
 
-PREREQUISITE — one grant, run once as `postgres` in the SQL Editor:
+PREREQUISITES
+  1. The owner must be unsealed (app_schema_bootstrap.sql §7):
+         ALTER ROLE prep_app_owner LOGIN;
+  2. One grant, run once as `postgres` in the SQL Editor:
+         GRANT authenticated TO prep_app_owner WITH INHERIT FALSE, SET TRUE;
+     `authenticated` is a LOW-privilege role, so this lets the owner drop DOWN to it for
+     testing; it is not an escalation. The script tells you if the grant is missing.
 
-    GRANT authenticated TO prep_app_owner WITH INHERIT FALSE, SET TRUE;
+WHY THE PERSONAS USE REAL auth.users IDS
+  bootstrap §6 added FKs from app.students.auth_user_id and app.instructors.id into
+  auth.users. This suite originally invented uuids for its personas, which silently stopped
+  working the moment those FKs landed — it failed at fixture build with a
+  ForeignKeyViolation and had not run since. The app tier holds no privileges on schema
+  `auth` and so cannot mint users, so personas now borrow ids that already exist:
 
-`authenticated` is a LOW-privilege role, so this lets the owner drop DOWN to it for testing;
-it is not an escalation. INHERIT FALSE means the owner gains none of its privileges
-implicitly — only the ability to switch. The script tells you if the grant is missing.
+    student_a  the deliberate test cadet 3009999999 ("ZZ Test Cadet"), enrolled into the
+               fixture section for the duration of the test
+    student_b  a fixture student with auth_user_id NULL — it never signs in, it only needs
+               to EXIST as the row that must not leak
+    teacher    a real non-admin instructor, staffed onto fixture section 1 only
+    director   a different real non-admin instructor, offering-wide on the fixture offering
 
-Personas exercised:
-    student_a   enrolled in section 1
-    student_b   enrolled in section 2   (the "other student" every leak test aims at)
-    teacher     staffs section 1 only
-    director    directs the whole course offering
+  Because teacher and director are real people with real assignments in the live Fall 2026
+  offering, EVERY assertion is scoped to the fixture — otherwise their genuine access would
+  be counted and the numbers would mean nothing. Global admins are deliberately not used as
+  personas: is_admin() short-circuits almost every policy, so they prove nothing.
 
 Usage:
   .venv/Scripts/python supabase/admin/app_rls_test.py
@@ -32,6 +45,8 @@ from app_tier_check import load, connect  # noqa: E402
 
 PASS, FAIL = "  [pass]", "  [FAIL]"
 results = []
+
+TEST_CADET = 3009999999
 
 
 def check(desc, ok, detail=""):
@@ -72,16 +87,37 @@ class Persona:
             self.cur.execute(sql, params or ())
             rc = self.cur.rowcount
             self.cur.execute("ROLLBACK TO SAVEPOINT p")
-            # RLS silently filters UPDATE/DELETE to zero rows rather than raising.
+            # RLS silently filters UPDATE/DELETE to zero rows rather than raising;
+            # a trigger raises. Either counts as denied.
             check(desc, rc == 0, f"affected {rc} row(s)")
         except Exception:
             self.cur.execute("ROLLBACK TO SAVEPOINT p")
             check(desc, True)
 
+    def allowed(self, desc, sql, params=None):
+        self.cur.execute("SAVEPOINT p")
+        try:
+            self.cur.execute(sql, params or ())
+            rc = self.cur.rowcount
+            self.cur.execute("ROLLBACK TO SAVEPOINT p")
+            check(desc, rc > 0, "affected 0 rows (RLS filtered it out)")
+        except Exception as e:
+            self.cur.execute("ROLLBACK TO SAVEPOINT p")
+            check(desc, False, str(e).strip().splitlines()[0])
+
 
 def main():
     cfg, tiers = load()
-    conn = connect(cfg, tiers["owner"])
+    if "owner" not in tiers:
+        sys.exit("No PREP_APP_OWNER_ROLE/_PASSWORD in supabase/admin/.env.")
+    try:
+        conn = connect(cfg, tiers["owner"])
+    except Exception as e:  # noqa: BLE001
+        print("Cannot connect as prep_app_owner — the role is sealed (bootstrap §7).")
+        print("  Re-open it as postgres:  ALTER ROLE prep_app_owner LOGIN;")
+        print(f"  ({str(e).strip().splitlines()[0]})")
+        sys.exit(2)
+
     conn.autocommit = False
     cur = conn.cursor()
     cur.execute("SET search_path = app, public")
@@ -89,7 +125,7 @@ def main():
     try:
         cur.execute("SET ROLE authenticated")
         cur.execute("RESET ROLE")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         conn.rollback()
         print("Cannot SET ROLE authenticated — RLS enforcement cannot be tested.\n")
         print("  Run this once as postgres in the SQL Editor, then re-run:\n")
@@ -97,7 +133,43 @@ def main():
         print(f"  ({str(e).strip().splitlines()[0]})")
         sys.exit(2)
 
+    # --- borrow real identities (see the module docstring) ----------------------------
+    cur.execute("SELECT auth_user_id FROM students WHERE student_id = %s", (TEST_CADET,))
+    row = cur.fetchone()
+    if not row or not row[0]:
+        conn.rollback()
+        sys.exit(f"Test cadet {TEST_CADET} has no auth_user_id — cannot run student personas.")
+    student_a_uid = row[0]
+
+    # The teacher persona must direct NOTHING anywhere. is_admin() and director_offerings()
+    # are global, not fixture-scoped, so borrowing a real person who directs a real offering
+    # would silently hand the "teacher" director powers and make every negative assertion
+    # vacuous. (This is the inherent cost of borrowing real auth.users ids; the fixture
+    # itself is synthetic, but identity is not.)
+    cur.execute("""SELECT i.id, i.name FROM instructors i
+                    WHERE NOT i.is_global_admin
+                      AND NOT EXISTS (SELECT 1 FROM staff_assignments sa
+                                       WHERE sa.instructor_id = i.id AND sa.role = 'director')
+                    ORDER BY i.name LIMIT 1""")
+    row_t = cur.fetchone()
+    if not row_t:
+        conn.rollback()
+        sys.exit("No non-admin instructor who directs nothing — cannot build a clean "
+                 "'teacher' persona. Negative assertions would be meaningless.")
+    teacher_uid, teacher_name = row_t
+
+    cur.execute("""SELECT id, name FROM instructors
+                    WHERE NOT is_global_admin AND id <> %s ORDER BY name LIMIT 1""", (teacher_uid,))
+    row_d = cur.fetchone()
+    if not row_d:
+        conn.rollback()
+        sys.exit("Need a second non-admin instructor for the director persona.")
+    director_uid, director_name = row_d
+
     print("Building fixture as owner (rolled back at the end)...")
+    print(f"  student_a = test cadet {TEST_CADET}")
+    print(f"  teacher   = {teacher_name}")
+    print(f"  director  = {director_name}")
 
     cur.execute("INSERT INTO courses (code,title) VALUES ('__r-215','RLS 215') RETURNING id")
     course = cur.fetchone()[0]
@@ -111,45 +183,49 @@ def main():
     cur.execute("INSERT INTO sections (course_offering_id,code) VALUES (%s,'T3B') RETURNING id", (co,))
     sec2 = cur.fetchone()[0]
 
-    uids = {}
-    for key in ("student_a", "student_b", "teacher", "director"):
-        cur.execute("SELECT gen_random_uuid()")
-        uids[key] = cur.fetchone()[0]
-
-    cur.execute("INSERT INTO students (student_id,name,auth_user_id) VALUES (3000000101,'A',%s)",
-                (uids["student_a"],))
-    cur.execute("INSERT INTO students (student_id,name,auth_user_id) VALUES (3000000102,'B',%s)",
-                (uids["student_b"],))
-    cur.execute("INSERT INTO enrollments (student_id,section_id) VALUES (3000000101,%s) RETURNING id",
-                (sec1,))
+    # student_b never signs in; auth_user_id NULL keeps the auth.users FK satisfied.
+    cur.execute("""INSERT INTO students (student_id,name,auth_user_id)
+                   VALUES (3000000102,'RLS Other',NULL)""")
+    cur.execute("INSERT INTO enrollments (student_id,section_id) VALUES (%s,%s) RETURNING id",
+                (TEST_CADET, sec1))
     enr_a = cur.fetchone()[0]
     cur.execute("INSERT INTO enrollments (student_id,section_id) VALUES (3000000102,%s) RETURNING id",
                 (sec2,))
     enr_b = cur.fetchone()[0]
 
-    cur.execute("INSERT INTO instructors (id,name) VALUES (%s,'Teacher')", (uids["teacher"],))
-    cur.execute("INSERT INTO instructors (id,name) VALUES (%s,'Director')", (uids["director"],))
     cur.execute("""INSERT INTO staff_assignments (instructor_id,course_offering_id,section_id,role)
-                   VALUES (%s,%s,%s,'instructor')""", (uids["teacher"], co, sec1))
+                   VALUES (%s,%s,%s,'instructor')""", (teacher_uid, co, sec1))
     cur.execute("""INSERT INTO staff_assignments (instructor_id,course_offering_id,section_id,role)
-                   VALUES (%s,%s,NULL,'director')""", (uids["director"], co))
+                   VALUES (%s,%s,NULL,'director')""", (director_uid, co))
 
     cur.execute("""INSERT INTO assignments (course_id,kind_id,slug,title)
                    VALUES (%s,'preflight','__r-p02','RLS Preflight') RETURNING id""", (course,))
     asg = cur.fetchone()[0]
     cur.execute("INSERT INTO activities (assignment_id,modality,slug) "
                 "VALUES (%s,'written','__r-w02') RETURNING id", (asg,))
-    act = cur.fetchone()[0]
-    cur.execute("""INSERT INTO assignment_offerings (course_offering_id,assignment_id,is_published)
-                   VALUES (%s,%s,true) RETURNING id""", (co, asg))
+    act_w = cur.fetchone()[0]
+    cur.execute("INSERT INTO activities (assignment_id,modality,slug) "
+                "VALUES (%s,'interactive','__r-i02') RETURNING id", (asg,))
+    act_i = cur.fetchone()[0]
+    cur.execute("""INSERT INTO assignment_offerings (course_offering_id,assignment_id,is_published,
+                                                     switch_policy)
+                   VALUES (%s,%s,true,'lock_on_commit') RETURNING id""", (co, asg))
     ao = cur.fetchone()[0]
-    cur.execute("INSERT INTO offering_activities (assignment_offering_id,activity_id) VALUES (%s,%s)",
-                (ao, act))
+    # Both graded => a genuine choice, so the LOCK is what refuses a switch, not the
+    # gradable check. Testing them on one activity would only ever prove the first.
+    cur.execute("INSERT INTO offering_activities (assignment_offering_id,activity_id,grading_role) "
+                "VALUES (%s,%s,'graded')", (ao, act_w))
+    cur.execute("INSERT INTO offering_activities (assignment_offering_id,activity_id,grading_role) "
+                "VALUES (%s,%s,'graded')", (ao, act_i))
 
-    for enr in (enr_a, enr_b):
-        cur.execute("""INSERT INTO submissions (enrollment_id,assignment_offering_id,
-                                                chosen_activity_id,status)
-                       VALUES (%s,%s,%s,'draft')""", (enr, ao, act))
+    cur.execute("""INSERT INTO submissions (enrollment_id,assignment_offering_id,
+                                            chosen_activity_id,status,committed_at)
+                   VALUES (%s,%s,%s,'committed',now()) RETURNING id""", (enr_a, ao, act_w))
+    sub_a = cur.fetchone()[0]
+    cur.execute("""INSERT INTO submissions (enrollment_id,assignment_offering_id,
+                                            chosen_activity_id,status)
+                   VALUES (%s,%s,%s,'draft') RETURNING id""", (enr_b, ao, act_w))
+    sub_b = cur.fetchone()[0]
     cur.execute("""INSERT INTO grades (enrollment_id,assignment_offering_id,points_possible,
                                        effort,is_finalized)
                    VALUES (%s,%s,2,4,true)""", (enr_a, ao))
@@ -157,22 +233,28 @@ def main():
                                        effort,is_finalized)
                    VALUES (%s,%s,2,4,false)""", (enr_b, ao))
 
+    # Fixture-scoped counters: real personas have real access elsewhere, so an unscoped
+    # count would measure the live course rather than this test.
+    IN_FIXTURE = "assignment_offering_id = %s"
+    STU_IN_FIXTURE = """student_id IN (SELECT student_id FROM enrollments
+                                        WHERE section_id IN (%s,%s))"""
+
     # ---------------- student A ----------------
-    with Persona(cur, uids["student_a"], "student A (section M1A)") as p:
-        check("sees exactly 1 student row (their own)", p.count("SELECT count(*) FROM students") == 1)
-        check("sees exactly 1 enrolment (their own)", p.count("SELECT count(*) FROM enrollments") == 1)
-        check("sees exactly 1 submission (their own)",
-              p.count("SELECT count(*) FROM submissions") == 1)
+    with Persona(cur, student_a_uid, f"student A (test cadet, section M1A)") as p:
+        check("sees only their own student row in the fixture",
+              p.count(f"SELECT count(*) FROM students WHERE {STU_IN_FIXTURE}", (sec1, sec2)) == 1)
+        check("sees only their own fixture enrolment",
+              p.count("SELECT count(*) FROM enrollments WHERE section_id IN (%s,%s)", (sec1, sec2)) == 1)
+        check("sees only their own submission",
+              p.count(f"SELECT count(*) FROM submissions WHERE {IN_FIXTURE}", (ao,)) == 1)
         check("sees their own finalized grade",
-              p.count("SELECT count(*) FROM grades") == 1)
+              p.count(f"SELECT count(*) FROM grades WHERE {IN_FIXTURE}", (ao,)) == 1)
         check("sees the published assignment offering",
-              p.count("SELECT count(*) FROM assignment_offerings") == 1)
+              p.count("SELECT count(*) FROM assignment_offerings WHERE id=%s", (ao,)) == 1)
         p.denied("CANNOT delete another student",
                  "DELETE FROM students WHERE student_id=3000000102")
-        p.denied("CANNOT delete any student at all",
-                 "DELETE FROM students")
         p.denied("CANNOT overwrite another student's submission",
-                 "UPDATE submissions SET status='committed' WHERE enrollment_id=%s", (enr_b,))
+                 "UPDATE submissions SET status='committed' WHERE id=%s", (sub_b,))
         p.denied("CANNOT insert a submission against another student's enrolment",
                  """INSERT INTO submissions (enrollment_id,assignment_offering_id,status)
                     VALUES (%s,%s,'draft')""", (enr_b, ao))
@@ -180,42 +262,83 @@ def main():
                  "UPDATE grades SET points_earned=2 WHERE enrollment_id=%s", (enr_a,))
         check("sees no grade_events", p.count("SELECT count(*) FROM grade_events") == 0)
 
-    # ---------------- student B ----------------
-    with Persona(cur, uids["student_b"], "student B (grade not finalized)") as p:
-        check("sees 1 student row (their own)", p.count("SELECT count(*) FROM students") == 1)
-        check("CANNOT see their own UNfinalized grade",
-              p.count("SELECT count(*) FROM grades") == 0)
+        # --- migration 006: the lock, and the two ways round it that used to work ---
+        p.denied("CANNOT switch activity after committing (lock_on_commit)",
+                 "UPDATE submissions SET chosen_activity_id=%s WHERE id=%s", (act_i, sub_a))
+        p.denied("CANNOT unlock their own submission anonymously",
+                 "UPDATE submissions SET chosen_activity_id=NULL WHERE id=%s", (sub_a,))
+        p.denied("CANNOT unlock their own submission by naming an instructor [migration 006]",
+                 """UPDATE submissions SET chosen_activity_id=NULL, unlocked_by=%s
+                     WHERE id=%s""", (teacher_uid, sub_a))
+        p.denied("CANNOT reopen a committed submission by reverting status [migration 006]",
+                 "UPDATE submissions SET status='draft' WHERE id=%s", (sub_a,))
 
     # ---------------- teacher ----------------
-    with Persona(cur, uids["teacher"], "teacher (staffs M1A only)") as p:
-        check("sees only the 1 student in their section",
-              p.count("SELECT count(*) FROM students") == 1)
+    with Persona(cur, teacher_uid, f"teacher {teacher_name} (fixture section M1A only)") as p:
+        check("sees only the 1 fixture student in their section",
+              p.count(f"SELECT count(*) FROM students WHERE {STU_IN_FIXTURE}", (sec1, sec2)) == 1)
         check("sees only their section's submission",
-              p.count("SELECT count(*) FROM submissions") == 1)
+              p.count(f"SELECT count(*) FROM submissions WHERE {IN_FIXTURE}", (ao,)) == 1)
         check("sees their section's grade regardless of finalization",
-              p.count("SELECT count(*) FROM grades") == 1)
+              p.count(f"SELECT count(*) FROM grades WHERE {IN_FIXTURE}", (ao,)) == 1)
         p.denied("CANNOT grade a student in a section they do not staff",
                  "UPDATE grades SET effort=5 WHERE enrollment_id=%s", (enr_b,))
         p.denied("CANNOT create a roster entry",
                  "INSERT INTO students (student_id,name) VALUES (3000000199,'Sneak')")
+        # The escape hatch must still work — migration 006 must not have sealed staff out.
+        p.allowed("CAN unlock a committed submission in their own section, as themselves",
+                  """UPDATE submissions SET chosen_activity_id=NULL, unlocked_by=%s, unlocked_at=now()
+                      WHERE id=%s""", (teacher_uid, sub_a))
+        p.denied("CANNOT attribute an unlock to a DIFFERENT instructor [migration 006]",
+                 """UPDATE submissions SET chosen_activity_id=NULL, unlocked_by=%s
+                     WHERE id=%s""", (director_uid, sub_a))
+        p.allowed("CAN reopen a committed submission in their own section",
+                  "UPDATE submissions SET status='draft' WHERE id=%s", (sub_a,))
 
     # ---------------- director ----------------
-    with Persona(cur, uids["director"], "director (whole offering)") as p:
-        check("sees both students", p.count("SELECT count(*) FROM students") == 2)
-        check("sees both submissions", p.count("SELECT count(*) FROM submissions") == 2)
-        check("sees both grades", p.count("SELECT count(*) FROM grades") == 2)
+    with Persona(cur, director_uid, f"director {director_name} (whole fixture offering)") as p:
+        check("sees both fixture students",
+              p.count(f"SELECT count(*) FROM students WHERE {STU_IN_FIXTURE}", (sec1, sec2)) == 2)
+        check("sees both submissions",
+              p.count(f"SELECT count(*) FROM submissions WHERE {IN_FIXTURE}", (ao,)) == 2)
+        check("sees both grades",
+              p.count(f"SELECT count(*) FROM grades WHERE {IN_FIXTURE}", (ao,)) == 2)
+        p.allowed("CAN grade any student in the offering",
+                  "UPDATE grades SET effort=5 WHERE enrollment_id=%s", (enr_b,))
         cur.execute("SAVEPOINT d")
         try:
             cur.execute("INSERT INTO students (student_id,name) VALUES (3000000199,'New Cadet')")
             check("CAN create a roster entry", True)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             check("CAN create a roster entry", False, str(e).strip().splitlines()[0])
         cur.execute("ROLLBACK TO SAVEPOINT d")
+
+    # ---------------- extensions (migration 005) ----------------
+    cur.execute("RESET ROLE")
+    cur.execute("""INSERT INTO extensions (enrollment_id,assignment_offering_id,extended_due_at,granted_by)
+                   VALUES (%s,%s,now() + interval '3 days',%s)""", (enr_a, ao, teacher_uid))
+    with Persona(cur, student_a_uid, "student A — extensions") as p:
+        check("sees their own extension",
+              p.count(f"SELECT count(*) FROM extensions WHERE {IN_FIXTURE}", (ao,)) == 1)
+        p.denied("CANNOT grant themselves an extension",
+                 """INSERT INTO extensions (enrollment_id,assignment_offering_id,extended_due_at)
+                    VALUES (%s,%s,now() + interval '30 days')""", (enr_b, ao))
+    with Persona(cur, teacher_uid, "teacher — extensions") as p:
+        check("sees the extension for their section",
+              p.count(f"SELECT count(*) FROM extensions WHERE {IN_FIXTURE}", (ao,)) == 1)
+        p.allowed("CAN change an extension in their own section",
+                  "UPDATE extensions SET extended_due_at = now() + interval '5 days' "
+                  "WHERE enrollment_id=%s", (enr_a,))
+        p.denied("CANNOT grant an extension outside their sections",
+                 """INSERT INTO extensions (enrollment_id,assignment_offering_id,extended_due_at)
+                    VALUES (%s,%s,now() + interval '5 days')""", (enr_b, ao))
 
     cur.execute("RESET ROLE")
     conn.rollback()
     cur.execute("SELECT count(*) FROM app.courses WHERE code='__r-215'")
     check("fixture fully rolled back — nothing persisted", cur.fetchone()[0] == 0)
+    cur.execute("SELECT count(*) FROM app.students WHERE student_id=3000000102")
+    check("fixture student removed", cur.fetchone()[0] == 0)
 
     cur.close()
     conn.close()

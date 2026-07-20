@@ -13,8 +13,6 @@
     .review-score-badge.full { background: var(--alert-ok-bg);    border-color: var(--alert-ok-bd);    color: var(--alert-ok-fg); }
     .review-score-badge.warn { background: var(--alert-warn-bg);  border-color: var(--alert-warn-bd);  color: var(--alert-warn-fg); }
     .review-score-badge.zero { background: var(--alert-error-bg); border-color: var(--alert-error-bd); color: var(--alert-error-fg); }
-    .review-feedback { margin-top: 8px; padding: 10px 14px; background: var(--feedback-bg); border-left: 3px solid var(--gold);
-      border-radius: 0 6px 6px 0; font-size: 0.88em; color: var(--feedback-fg); line-height: 1.5; }
     .score-hero { background: linear-gradient(135deg, var(--blue), var(--blue-lt)); color: #fff; border: none; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -27,50 +25,60 @@
   </main>
 
   <script type="module">
-    import { db } from '../js/supabase.js';
+    // The written-preflight surface. Reached from a lesson; students navigate by lesson, not
+    // by modality (STUDENT-LESSON-VIEW.md §1).
+    //
+    // AGAINST SCHEMA `app`: an assignment's questions live in the WRITTEN ACTIVITY's content,
+    // the student's answers live in submission_activities, and committing is an explicit act
+    // that sets submissions.status='committed' and records which activity carries credit.
+    // Nothing on this page queries a table directly — every read and write goes through
+    // student-data.js, so the choice/lock rules are applied in exactly one place.
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { loadAssignmentStatuses } from '../js/student-data.js';
-    import { esc, deadlineClass, relativeDue, fmtDateTime } from '../js/util.js';
+    import {
+      loadAssignmentStatuses, saveWrittenAnswers, commitSubmission,
+    } from '../js/student-data.js';
+    import { questionsOf, readingLinkOf, displayPoints } from '../js/schema.js';
+    import { esc, deadlineClass, fmtDateTime } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
     if (!ctx) { /* redirected */ } else { init(); }
 
-    const sid = ctx?.studentRow?.student_id;
     let list = [];
-    let current = null;       // current assignment object
+    let current = null;       // the current item from loadAssignmentStatuses()
     let answers = {};
     let saveTimer = null;
 
     async function init() {
       initTheme();
-      renderNav(ctx, { active: 'assignments', onCourseChange: () => loadList() });
+      renderNav(ctx, { active: 'lessons', onCourseChange: () => loadList() });
       await loadList();
     }
 
     async function loadList() {
       const root = document.getElementById('main');
-      if (!ctx.currentCourse) {
-        root.innerHTML = `<div class="alert alert-warn">Your section isn't assigned to a course yet.</div>`;
+      if (!ctx.currentOffering) {
+        root.innerHTML = `<div class="alert alert-warn">You're not enrolled in a course this term.</div>`;
         return;
       }
       root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
-      list = await loadAssignmentStatuses(ctx);
+      list = (await loadAssignmentStatuses(ctx)).filter(a => a.written);
 
       const params = new URLSearchParams(location.search);
       const openId = params.get('a');
       if (openId) {
-        const a = list.find(x => String(x.id) === String(openId));
+        const a = list.find(x => String(x.offeringId) === String(openId));
         if (a) { openAssignment(a); return; }
       }
       renderList();
     }
 
     const STATUS_META = {
-      'graded':      { dot: 'green', text: a => `${a.score.total_score} / ${a.score.max_total} pts` },
+      'graded':      { dot: 'green', text: a => `${a.earned ?? 0} / ${a.pointsPossible} pts` },
       'pending':     { dot: 'blue',  text: () => '⏳ Pending grading' },
       'submitted':   { dot: 'green', text: () => '✓ Submitted' },
+      'in-progress': { dot: 'blue',  text: a => `Draft · ${a.answered}/${a.qCount} answered` },
       'overdue':     { dot: 'red',   text: () => 'Not submitted' },
       'not-started': { dot: 'grey',  text: () => 'Not started' },
     };
@@ -80,33 +88,36 @@
       if (!list.length) {
         root.innerHTML = `<div class="page-head"><h1>Assignments</h1></div>
           <div class="empty-state"><div class="es-ic">📋</div><h3>No assignments yet</h3>
-          <p>Published assignments for ${esc(ctx.courseTitleOf(ctx.currentCourse))} will appear here.</p></div>`;
+          <p>Published assignments for ${esc(ctx.courseTitleOf(ctx.currentOffering))} will appear here.</p></div>`;
         return;
       }
       const items = list.map(a => {
-        const meta = STATUS_META[a.status];
+        const meta = STATUS_META[a.status] || STATUS_META['not-started'];
         const dueCls = deadlineClass(a.due, a.isPast);
         const dueText = a.due
           ? (a.isPast ? `Closed ${a.due.toLocaleDateString()}` : `Due ${fmtDateTime(a.due)}`)
           : 'No due date';
-        return `<a class="list-item" href="?a=${encodeURIComponent(a.id)}" data-open="${esc(a.id)}">
+        // A lesson offering both paths says so, so the list never reads as two separate items.
+        const choiceTag = a.isChoice
+          ? `<span class="tag blue" title="You may do the written preflight or the interactive lesson">choice</span>` : '';
+        return `<a class="list-item" href="?a=${encodeURIComponent(a.offeringId)}" data-open="${esc(a.offeringId)}">
           <span class="status-dot ${meta.dot}"></span>
           <div class="li-body">
-            <div class="li-title">${esc(a.title)}</div>
-            <div class="li-meta"><span>${a.qCount} question${a.qCount===1?'':'s'} · ${a.totalPts} pts</span>
+            <div class="li-title">${esc(a.title)} ${choiceTag}</div>
+            <div class="li-meta"><span>${a.qCount} question${a.qCount===1?'':'s'} · ${a.pointsPossible} pts</span>
               <span class="deadline ${dueCls}">${esc(dueText)}</span></div>
           </div>
-          <div class="li-right"><span class="muted" style="font-size:0.82em">${meta.text(a)}</span><span class="li-arrow">›</span></div>
+          <div class="li-right"><span class="muted" style="font-size:0.82em">${esc(meta.text(a))}</span><span class="li-arrow">›</span></div>
         </a>`;
       }).join('');
       root.innerHTML = `<div class="page-head"><h1>My assignments</h1>
-        <div class="sub">Open assignments can be edited until the deadline. Click one to submit or view your grade.</div></div>
+        <div class="sub">Open assignments can be edited until you submit. Click one to work on it or view your grade.</div></div>
         <div class="list">${items}</div>`;
 
       root.querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', (e) => {
         e.preventDefault();
-        const a = list.find(x => String(x.id) === el.dataset.open);
-        if (a) { history.replaceState(null, '', `?a=${encodeURIComponent(a.id)}`); openAssignment(a); }
+        const a = list.find(x => String(x.offeringId) === el.dataset.open);
+        if (a) { history.replaceState(null, '', `?a=${encodeURIComponent(a.offeringId)}`); openAssignment(a); }
       }));
     }
 
@@ -116,60 +127,59 @@
       renderList();
     }
 
-    async function openAssignment(a) {
-      current = a; answers = {};
+    function openAssignment(a) {
+      current = a;
       const root = document.getElementById('main');
-      root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
+      const written = a.written;
+      const questions = questionsOf(written);
 
-      // a.due / a.isPast already account for the per-student extension (computed in the
-      // list load), so we only need the saved answers + any finalized score here.
-      const [{ data: existing }, { data: scoreRow }] = await Promise.all([
-        db.from('responses').select('answers, is_final').eq('student_id', sid).eq('assignment_id', a.id).maybeSingle(),
-        db.from('scores').select('total_score, max_total, question_scores, is_finalized')
-          .eq('student_id', sid).eq('assignment_id', a.id).maybeSingle(),
-      ]);
+      // Answers come from the submission we already loaded — no extra round trip. The list
+      // load stitched submissions and grades onto every item.
+      answers = { ...(a.submission?.activities?.[written.id]?.content || {}) };
 
-      const isGraded = !!scoreRow?.is_finalized;
-      const isPast = a.isPast;
-      const isFinal = !!existing?.is_final;   // submitted, but still editable until the deadline
-      const locked = isPast;
-      const due = a.due;
+      const grade = a.grade;
+      const isGraded = a.status === 'graded';
+      const committed = a.submission?.status === 'committed';
+      // Committing locks WHICH PATH counts (switch_policy, enforced by the DB) — it does not
+      // freeze the answers. A student may keep refining written work until the deadline, which
+      // is the behaviour STUDENT-LESSON-VIEW §4 describes (state SUBMITTED, "still editable").
+      // Only the deadline makes this page read-only.
+      const locked = a.isPast;
 
-      const figHTML = a.figure_url
-        ? `<div style="margin-bottom:20px;text-align:center"><img src="${esc(a.figure_url)}" alt="Assignment figure"
-            style="max-width:100%;max-height:400px;border-radius:8px;border:1px solid var(--border)"></div>` : '';
+      const readingLink = readingLinkOf(written);
       let descHTML = a.description ? `<span>${esc(a.description)}</span>` : '';
-      if (a.reading_link) descHTML += (descHTML ? '<br>' : '') +
-        `<a href="${esc(a.reading_link)}" target="_blank" rel="noopener"
+      if (readingLink) descHTML += (descHTML ? '<br>' : '') +
+        `<a href="${esc(readingLink)}" target="_blank" rel="noopener"
           style="display:inline-flex;gap:6px;margin-top:8px;font-size:0.88em;color:var(--blue-lt);font-weight:600;text-decoration:none">📖 Read before completing ↗</a>`;
 
       const header = `
         <button class="btn btn-secondary btn-sm" id="back-btn" style="margin-bottom:20px">← Back to assignments</button>
         <div class="card">
           <div class="card-title">${esc(a.title)}</div>
-          <div class="card-meta">${due ? 'Due ' + fmtDateTime(due) : 'No due date'} · ${a.totalPts} pts</div>
+          <div class="card-meta">${a.due ? 'Due ' + fmtDateTime(a.due) : 'No due date'} · ${a.pointsPossible} pts</div>
           <div style="font-size:0.9em;color:var(--muted)">${descHTML}</div>
-        </div>${figHTML}`;
+        </div>`;
 
       if (isGraded) {
+        const earned = displayPoints(grade, a) ?? 0;
         root.innerHTML = header + `
           <div class="card score-hero">
             <div class="row wrap" style="justify-content:space-between">
               <div><div style="font-size:0.78em;opacity:0.8;text-transform:uppercase;letter-spacing:0.05em">Total score</div>
-                <div style="font-size:2em;font-weight:800">${scoreRow.total_score} / ${scoreRow.max_total} pts</div></div>
+                <div style="font-size:2em;font-weight:800">${esc(earned)} / ${esc(grade.points_possible ?? a.pointsPossible)} pts</div></div>
               <div style="font-size:0.85em;opacity:0.85">Graded by your instructor</div>
             </div>
           </div>
           <div id="review-questions"></div>`;
-        renderReviewQuestions(a.questions || [], existing?.answers || {}, scoreRow.question_scores || {});
+        renderReviewQuestions(questions, answers, grade.question_scores || {});
       } else {
-        if (existing?.answers) answers = existing.answers;
-        const closed = isFinal && !isPast
-          ? `<div class="alert alert-ok">Submitted${due ? ' — you can still edit your answers until ' + fmtDateTime(due) : ''}.</div>`
-          : isPast
-          ? `<div class="alert alert-warn">This assignment is past due. Your submitted answers are shown below${existing?.answers ? ' (grading in progress)' : ''}.</div>` : '';
+        const banner = committed
+          ? `<div class="alert alert-ok">Submitted${a.due ? ' — you can still edit your answers until ' + fmtDateTime(a.due) : ''}.</div>`
+          : a.isPast
+          ? `<div class="alert alert-warn">This assignment is past due${Object.keys(answers).length ? ' — your saved draft is shown below' : ''}.</div>`
+          : '';
         root.innerHTML = header + `
-          ${closed}
+          ${banner}
           <div id="progress-wrap" style="margin-bottom:8px;${locked?'display:none':''}">
             <div class="row" style="justify-content:space-between;font-size:0.78em;color:var(--muted);margin-bottom:4px">
               <span id="progress-label">0 of 0 answered</span><span id="save-status" style="color:var(--green)"></span>
@@ -181,10 +191,10 @@
             <button class="btn btn-primary" id="submit-btn">Submit assignment</button>
             <span id="submit-status" style="font-size:0.85em"></span>
           </div>`;
-        renderQuestions(a.questions || [], locked);
+        renderQuestions(questions, locked);
         updateProgress();
         document.getElementById('submit-btn')?.addEventListener('click', submitAssignment);
-        wireInputs();
+        if (!locked) wireInputs();
       }
       document.getElementById('back-btn').addEventListener('click', backToList);
       window.scrollTo(0, 0);
@@ -193,11 +203,11 @@
     function renderQuestions(questions, readOnly) {
       const c = document.getElementById('questions');
       c.innerHTML = questions.map((q, idx) => {
-        const pts = q.points === 1 ? '1 pt' : `${q.points} pts`;
+        const pts = Number(q.points) === 1 ? '1 pt' : `${Number(q.points) || 0} pts`;
         const val = answers[q.id] ?? '';
         let input = '';
         if (q.type === 'multiple_choice') {
-          input = `<div class="mc-options">${(q.options||[]).map((opt,i)=>`
+          input = `<div class="mc-options">${(q.options||[]).map((opt)=>`
             <label class="mc-option ${val===opt?'selected':''}" data-mc="${esc(q.id)}">
               <input type="radio" name="mc-${esc(q.id)}" value="${esc(opt)}" ${val===opt?'checked':''} ${readOnly?'disabled':''}
                 data-qid="${esc(q.id)}"> ${esc(opt)}</label>`).join('')}</div>`;
@@ -245,24 +255,18 @@
 
     async function autoSave() {
       if (!current) return;
-      const { data, error } = await db.from('responses').upsert({
-        student_id: sid, assignment_id: current.id, answers, updated_at: new Date().toISOString(),
-      }, { onConflict: 'student_id,assignment_id' }).select('is_final').maybeSingle();
+      const { error } = await saveWrittenAnswers(ctx, current.offeringId, current.written.id, answers);
       const st = document.getElementById('save-status');
       if (error) {
-        if (st) { st.textContent = '⚠ Save failed'; setTimeout(() => { st.textContent = ''; }, 2000); }
+        if (st) { st.textContent = '⚠ Save failed'; setTimeout(() => { st.textContent = ''; }, 2500); }
         return;
       }
-      // Past the deadline the database keeps the draft as it stood at the cutoff and drops the
-      // late edit, so the write succeeds without storing what's on screen. Re-open rather than
-      // report a save that didn't happen.
-      if (data?.is_final) { openAssignment(current); return; }
       if (st) { st.textContent = '✓ Saved'; setTimeout(() => { st.textContent = ''; }, 2000); }
     }
 
     function updateProgress() {
       if (!current) return;
-      const qs = current.questions || [];
+      const qs = questionsOf(current.written);
       const answered = qs.filter(q => answers[q.id] && String(answers[q.id]).trim()).length;
       const lbl = document.getElementById('progress-label');
       const bar = document.getElementById('progress-bar');
@@ -273,23 +277,41 @@
     async function submitAssignment() {
       const btn = document.getElementById('submit-btn');
       const status = document.getElementById('submit-status');
-      const qs = current.questions || [];
+      const qs = questionsOf(current.written);
       const answered = qs.filter(q => answers[q.id] && String(answers[q.id]).trim()).length;
-      if (answered < qs.length &&
-          !confirm(`Submit with ${answered} of ${qs.length} questions answered?\n\n` +
-                   `You can keep editing until the deadline.`)) return;
+
+      // Submitting is now a commitment, not just a flag: it locks the answers and, on a
+      // choice lesson, decides which path is graded. Say that plainly before they click.
+      const extra = current.isChoice
+        ? `\n\nThis makes the written preflight the version that counts for this lesson, and you ` +
+          `won't be able to switch to the interactive lesson afterwards.`
+        : '';
+      if (!confirm(`Submit with ${answered} of ${qs.length} questions answered?` +
+                   `\n\nYou can keep editing your answers until the deadline.${extra}`)) return;
 
       clearTimeout(saveTimer);   // don't let a queued autosave race the submit
       btn.disabled = true; btn.innerHTML = '<span class="spinner on-dark"></span> Submitting…';
-      const { error } = await db.from('responses').upsert({
-        student_id: sid, assignment_id: current.id, answers, is_final: true,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'student_id,assignment_id' });
-      if (error) {
-        status.textContent = '⚠ Submission failed — please try again.'; status.style.color = 'var(--red)';
+
+      // Save first so the committed row holds what is on screen, then commit.
+      const { error: saveErr } = await saveWrittenAnswers(ctx, current.offeringId, current.written.id, answers);
+      if (saveErr) {
+        status.textContent = '⚠ Could not save your answers — ' + saveErr.message;
+        status.style.color = 'var(--red)';
         btn.disabled = false; btn.textContent = 'Submit assignment'; return;
       }
-      openAssignment(current);   // re-render in the locked, submitted state
+
+      const { error } = await commitSubmission(ctx, current.offeringId, current.written.id);
+      if (error) {
+        // The DB refuses for reasons the student needs to read verbatim — e.g. already
+        // committed to the interactive path and locked by switch_policy.
+        status.textContent = '⚠ ' + (error.message || 'Submission failed — please try again.');
+        status.style.color = 'var(--red)';
+        btn.disabled = false; btn.textContent = 'Submit assignment'; return;
+      }
+
+      await loadList();                                        // re-read the committed state
+      const again = list.find(x => x.offeringId === current.offeringId);
+      if (again) openAssignment(again); else backToList();
     }
 
     function renderReviewQuestions(questions, studentAnswers, questionScores) {
@@ -297,7 +319,7 @@
       document.getElementById('review-questions').innerHTML = questions.map((q, idx) => {
         const answer = studentAnswers[q.id] ?? '';
         const qs = questionScores[q.id] || {};
-        const pts = q.points === 1 ? '1 pt' : `${q.points} pts`;
+        const pts = Number(q.points) === 1 ? '1 pt' : `${Number(q.points) || 0} pts`;
         const status = qs.status || (qs.score >= q.points ? 'full' : 'zero');
         const ansHTML = !String(answer).trim()
           ? `<div class="muted" style="font-style:italic;font-size:0.88em">No answer submitted.</div>`
@@ -311,7 +333,7 @@
           <div class="question-pts">${pts}</div>
           <div class="row" style="margin-bottom:10px">
             <span class="review-score-badge ${status}">${labels[status]||labels.full}</span>
-            <span class="muted" style="font-size:0.9em">${qs.score ?? '—'} / ${q.points} pts</span>
+            <span class="muted" style="font-size:0.9em">${qs.score ?? '—'} / ${Number(q.points) || 0} pts</span>
           </div>${ansHTML}${fbHTML}</div>`;
       }).join('');
     }

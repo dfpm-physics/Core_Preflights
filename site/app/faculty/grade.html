@@ -52,6 +52,8 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { esc, lastFirst, fmtDate } from '../js/util.js';
+    // Questions now live in the written activity's content, not on the assignment row.
+    import { questionsOf } from '../js/schema.js';
     import * as G from '../js/faculty-grade.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
@@ -59,6 +61,8 @@
 
     // ── State ──
     let gradeData = {}, current = null, extensionMap = {}, scoreMap = {}, responseMap = {};
+    // `current` is now an assignment OFFERING (shapeOffering), not an assignment row.
+    let currentStudents = [], enrollmentOf = {}, questions = [];
     let maxTotal = 0, extSid = null;
     let cachedMy = [], cachedAll = [];
 
@@ -82,7 +86,7 @@
     }
 
     async function populate(reset) {
-      if (!ctx.currentCourse) { container().innerHTML = `<div class="alert alert-warn">No course access.</div>`; return; }
+      if (!ctx.currentOffering) { container().innerHTML = `<div class="alert alert-warn">No course access.</div>`; return; }
       const [asgns, my, all] = await Promise.all([
         G.gradeAssignmentList(ctx),
         G.mySectionIds(ctx),
@@ -98,7 +102,8 @@
       const list = director ? all : my;
       secSel().innerHTML = '<option value="">— all my sections —</option>'
         + (director ? '<option value="__all__">All sections (entire course)</option>' : '')
-        + list.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+        // A section id is a uuid now; the CODE is what an instructor recognises.
+        + list.map(s => `<option value="${esc(s)}">${esc(ctx.sectionCodeOf(s))}</option>`).join('');
 
       if (reset) { container().innerHTML = `<div class="muted">Select an assignment to begin grading.</div>`; document.getElementById('grade-actions').style.display = 'none'; }
       else if (asgnSel().value) loadView();
@@ -116,9 +121,16 @@
       container().innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
 
       const data = await G.loadGradingData(ctx, asgnId, resolveSectionIds());
-      if (!data.assignment) { container().innerHTML = `<div class="alert alert-error">Assignment not found.</div>`; actions.style.display = 'none'; return; }
-      current = data.assignment; responseMap = data.responseMap; scoreMap = data.scoreMap; extensionMap = data.extensionMap;
-      maxTotal = (current.questions || []).reduce((s, q) => s + (isNaN(Number(q.points)) ? 0 : Number(q.points)), 0);
+      if (!data.offering) { container().innerHTML = `<div class="alert alert-error">Assignment not found.</div>`; actions.style.display = 'none'; return; }
+      current = data.offering; responseMap = data.responseMap; scoreMap = data.gradeMap; extensionMap = data.extensionMap;
+      currentStudents = data.students;
+      // Enrolment is the key for every per-student write now (grades, extensions), so keep
+      // the map the click handlers need — they only ever have a student id to hand.
+      enrollmentOf = Object.fromEntries(data.students.map(s => [s.student_id, s.enrollment_id]));
+      questions = questionsOf(current.written);
+      // The offering's points_possible is authoritative — the DB CHECK bounds points_earned
+      // against exactly that column, not against the sum of the question list.
+      maxTotal = Number(current.pointsPossible ?? 0);
 
       if (!data.students.length) { container().innerHTML = `<div class="alert alert-warn">No students found for the selected section(s).</div>`; actions.style.display = 'none'; return; }
 
@@ -131,11 +143,11 @@
     const isZeroPointQuestion = q => Number(q?.points) === 0;
 
     function studentTotal(sid) {
-      return (current.questions || []).reduce((s, q) => s + (Number(gradeData[sid][q.id]?.score) || 0), 0);
+      return questions.reduce((s, q) => s + (Number(gradeData[sid][q.id]?.score) || 0), 0);
     }
 
     function render(students) {
-      const qs = current.questions || [];
+      const qs = questions;
       const displayQs = qs.filter(q => !isZeroPointQuestion(q));
       container().innerHTML = students.map(st => {
         const sid = st.student_id;
@@ -176,7 +188,7 @@
 
         return `<div class="grade-card${finalized ? ' finalized' : ''}" id="gc-${sid}">
           <div class="gc-head">
-            <span class="gc-name">${nm}</span><span class="tag">Sec ${esc(st.section_id)}</span>
+            <span class="gc-name">${nm}</span><span class="tag">Sec ${esc(ctx.sectionCodeOf(st.section_id))}</span>
             ${headExtras}
             <span class="gc-total" id="tot-${sid}">${total.toFixed(2)} / ${maxTotal.toFixed(2)} pts</span>
           </div>
@@ -244,20 +256,20 @@
     // ── Save / finalize / reopen ──
     async function doSave() {
       const st = document.getElementById('save-status'); st.textContent = 'Saving…';
-      const { error } = await G.saveScores(ctx, current, gradeData);
+      const { error } = await G.saveScores(ctx, current, currentStudents, gradeData);
       st.textContent = error ? '⚠ Save failed: ' + error.message : '✓ Saved draft';
       setTimeout(() => { st.textContent = ''; }, 3000);
     }
     async function doFinalize() {
       if (!confirm('Finalize grades? Students will see their scores and feedback immediately.')) return;
       const st = document.getElementById('save-status'); st.textContent = 'Publishing…';
-      const { error } = await G.finalizeScores(ctx, current, gradeData);
+      const { error } = await G.finalizeScores(ctx, current, currentStudents, gradeData);
       st.textContent = error ? '⚠ Finalize failed' : '✅ Published to students';
       setTimeout(loadView, 1200);
     }
     async function reopen(sid, name) {
       if (!confirm(`Reopen grades for ${name}? Their scores are hidden until you re-finalize.`)) return;
-      const { error } = await G.reopenScore(current.id, sid);
+      const { error } = await G.reopenScore(ctx, current.offeringId, enrollmentOf[sid]);
       if (error) { alert('Error reopening: ' + error.message); return; }
       loadView();
     }
@@ -272,7 +284,7 @@
       extSid = sid;
       document.getElementById('ext-name').textContent = name;
       document.getElementById('ext-error').textContent = '';
-      const existing = extensionMap[sid] || current?.due_date_m || current?.due_date_t;
+      const existing = extensionMap[sid] || current?.dueAt;
       const inp = document.getElementById('ext-due');
       if (existing) {
         const d = new Date(existing), pad = n => String(n).padStart(2, '0');
@@ -284,14 +296,14 @@
       const val = document.getElementById('ext-due').value;
       const err = document.getElementById('ext-error');
       if (!val) { err.textContent = 'Please select a date and time.'; return; }
-      const { error } = await G.setExtension(ctx, current.id, extSid, new Date(val).toISOString());
+      const { error } = await G.setExtension(ctx, current.offeringId, enrollmentOf[extSid], new Date(val).toISOString());
       if (error) { err.textContent = 'Save failed: ' + error.message; return; }
       document.getElementById('ext-modal').classList.remove('open');
       loadView();
     }
     async function removeExt(sid, name) {
       if (!confirm(`Remove extension for ${name}? They revert to the original due date.`)) return;
-      const { error } = await G.removeExtension(current.id, sid);
+      const { error } = await G.removeExtension(current.offeringId, enrollmentOf[sid]);
       if (error) { alert('Failed to remove extension: ' + error.message); return; }
       loadView();
     }

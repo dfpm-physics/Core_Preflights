@@ -30,14 +30,27 @@ try {
       location.replace(`${APP}login.html?next=${encodeURIComponent(location.pathname)}`);
     } else {
       const uid = session.user.id;
+
+      // Schema `app` (PREP v2). Two columns this used to read are gone, and the way they
+      // failed together is why every sandbox locked:
+      //   • instructors.is_director no longer exists — 001_core_model.sql dropped it so that
+      //     course-level authority has ONE source of truth. Selecting it made PostgREST
+      //     return 400, so `instr` came back null…
+      //   • …and the fallback was gated on `instr` being truthy, so it never ran. A director
+      //     was therefore denied by a query that failed before it could ever say yes.
+      //     The fallback is deliberately UN-GATED now: it is the authoritative check, not a
+      //     top-up, and it must run even when the first lookup returns nothing.
+      //   • instructor_course_access -> staff_assignments (term-scoped).
       const { data: instr } = await window.db.from('instructors')
-        .select('is_director, is_global_admin').eq('id', uid).maybeSingle();
-      let ok = !!(instr && (instr.is_global_admin || instr.is_director));
-      if (!ok && instr) {
-        // Course-scoped directors (newer model) qualify too.
-        const { data: acc } = await window.db.from('instructor_course_access')
+        .select('id, is_global_admin').eq('id', uid).maybeSingle();
+
+      let ok = !!instr?.is_global_admin;
+      if (!ok) {
+        // A director of ANY offering qualifies — these are internal design pages, not
+        // course-scoped content, so there is no particular offering to check against.
+        const { data: staff } = await window.db.from('staff_assignments')
           .select('role').eq('instructor_id', uid).eq('role', 'director').limit(1);
-        ok = !!(acc && acc.length);
+        ok = !!(staff && staff.length);
       }
       ok ? reveal() : deny('Director access required');
     }

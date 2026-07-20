@@ -50,7 +50,8 @@
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
-        "site/app/js/faculty-grade.js"
+        "site/app/js/faculty-grade.js",
+        "site/app/js/auth.js"
       ],
       "note": "The 3-state toggle, question_scores shape, and the 'all my sections' scoping rule. If the Grade tab's behaviour changes, this doc is wrong before anything else is."
     },
@@ -153,7 +154,9 @@
         "supabase/migrations/app/002_rls.sql",
         "supabase/migrations/app/003_term_calendar.sql",
         "supabase/migrations/app/004_content_snapshot.sql",
-        "site/app/css/styles.css"
+        "site/app/css/styles.css",
+        "supabase/migrations/app/005_extensions.sql",
+        "supabase/migrations/app/006_submission_lock_hardening.sql"
       ],
       "note": "Every table and field is transcribed from the app-schema migrations and was verified against information_schema on the live database at authoring time. The inline SVG depends on the .sf-* token classes in styles.css. Deliberately omits RLS policy predicates - help docs are world-readable at every tier."
     }

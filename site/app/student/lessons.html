@@ -61,7 +61,7 @@
 
     async function loadList() {
       const root = document.getElementById('main');
-      if (!ctx.currentCourse) {
+      if (!ctx.currentOffering) {
         root.innerHTML = `<div class="alert alert-warn">Your section isn't assigned to a course yet.</div>`;
         return;
       }
@@ -130,7 +130,7 @@
 
       root.innerHTML = `
         <div class="page-head"><h1>Lessons</h1>
-          <div class="sub">${esc(ctx.courseTitleOf(ctx.currentCourse))} · Section ${esc(ctx.studentRow.section_id || '—')}</div>
+          <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))} · Section ${esc(ctx.sectionCodeOf(ctx.sectionIds[0]) || '—')}</div>
         </div>
         ${open.length ? `<section class="dash-section">
           <div class="section-head"><h2>To do</h2><span class="count-pill">${open.length}</span></div>

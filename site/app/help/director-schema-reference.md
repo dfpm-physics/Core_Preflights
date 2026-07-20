@@ -156,6 +156,13 @@ One semester's run, and the people in it:
 | `assignment_offerings` | An assignment scheduled into one semester |
 | `offering_activities` | Which activities are live this semester, and which carries credit |
 | `assignment_due_dates` | Per-section deadline overrides |
+| `extensions` | Per-student deadline overrides, attached to their enrolment |
+
+### Which deadline applies
+
+Three sources, highest first: a student's **extension**, then their section's entry in
+**assignment_due_dates**, then the offering's own `due_at`. A section with no entry of its own
+falls back to the offering; an assignment with no `due_at` and no section entry has no deadline.
 
 ### assignment_offerings
 
@@ -265,8 +272,9 @@ These are enforced by the database, not by the site, so they hold no matter what
 - **A score can never exceed the points possible.** A four out of two is rejected.
 - **A practice activity can never be chosen for credit.**
 - **An activity from another assignment or another semester cannot be chosen.**
-- **A committed choice cannot be silently changed** — an instructor unlock is required, and it
-  records who performed it.
+- **A committed choice cannot be silently changed** — only a staff member can release it, and only
+  in their own name. A student cannot unlock their own work, nor reopen it by reverting its status,
+  and an unlock cannot be attributed to a colleague who did not perform it.
 - **A frozen snapshot cannot be edited.** Correcting one requires clearing the seal first, as a
   separate deliberate step.
 

@@ -46,14 +46,14 @@
 
     async function load() {
       const root = document.getElementById('main');
-      if (!ctx.currentCourse) { root.innerHTML = `<div class="alert alert-warn">Your section isn't assigned to a course yet.</div>`; return; }
+      if (!ctx.currentOffering) { root.innerHTML = `<div class="alert alert-warn">Your section isn't assigned to a course yet.</div>`; return; }
       root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
       const items = await loadInteractionStatuses(ctx);
 
       if (!items.length) {
         root.innerHTML = `<div class="page-head"><h1>Lesson interactions</h1></div>
           <div class="empty-state"><div class="es-ic">💡</div><h3>Nothing published yet</h3>
-          <p>Interactive lessons for ${esc(ctx.courseTitleOf(ctx.currentCourse))} will show up here.</p></div>`;
+          <p>Interactive lessons for ${esc(ctx.courseTitleOf(ctx.currentOffering))} will show up here.</p></div>`;
         return;
       }
 

@@ -51,7 +51,13 @@ export function renderNav(ctx, opts = {}) {
     ? (ctx.instructorRow?.is_global_admin ? 'Global admin'
         : ctx.isDirectorForCurrent?.() ? 'Director' : 'Instructor')
     : 'Student';
-  const courseTitle = ctx.currentCourse ? ctx.courseTitleOf(ctx.currentCourse) : '';
+  const courseTitle = ctx.currentOffering ? ctx.courseTitleOf(ctx.currentOffering) : '';
+
+  // Only disambiguate by term when the caller actually spans more than one. Showing
+  // "Physics 215 · Fall 2026" to everyone in a single-term deployment is noise.
+  const spansTerms = new Set(ctx.courses.map(c => c.termCode)).size > 1;
+  const pillLabel = (c) =>
+    (c.courseTitle || c.courseCode) + (spansTerms && c.termLabel ? ` · ${c.termLabel}` : '');
 
   const linksHTML = links.map(l => `
     <a class="nav-link${l.key === active ? ' active' : ''}${l.external ? ' external' : ''}"
@@ -64,8 +70,8 @@ export function renderNav(ctx, opts = {}) {
     <div class="course-switch" role="tablist" aria-label="Course">
       <span class="cs-ic">${iconHTML('course', '📚', 'ic')}</span>
       ${ctx.courses.map(c => `
-        <button class="course-pill${c.course_id === ctx.currentCourse ? ' active' : ''}"
-          data-course="${esc(c.course_id)}">${esc(c.course_title || c.course_id)}</button>`).join('')}
+        <button class="course-pill${c.offeringId === ctx.currentOffering ? ' active' : ''}"
+          data-course="${esc(c.offeringId)}">${esc(pillLabel(c))}</button>`).join('')}
     </div>` : '';
 
   mount.className = 'topnav';
@@ -145,11 +151,14 @@ function wireNav(ctx, mount, onCourseChange) {
   mount.querySelector('[data-signout]')?.addEventListener('click', () => ctx.signOut());
 
   // Course switcher
+  // Course switcher. setCurrentOffering is async — it re-resolves the section scope for the
+  // newly selected offering — so the page callback must wait for it, or the page would reload
+  // its data against the previous offering's sections.
   mount.querySelectorAll('.course-pill').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const id = btn.dataset.course;
-      if (id === ctx.currentCourse) return;
-      ctx.setCurrentCourse(id);
+      if (id === ctx.currentOffering) return;
+      await ctx.setCurrentOffering(id);
       mount.querySelectorAll('.course-pill').forEach(p =>
         p.classList.toggle('active', p.dataset.course === id));
       // Refresh the brand subtitle to the newly selected course.

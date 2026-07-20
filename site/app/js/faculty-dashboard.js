@@ -289,7 +289,7 @@ function yourSections() {
         <div class="cv" style="color:${col}">${f1(u)}${u == null ? '' : '<span class="cv-unit">/5</span>'}</div></div>`;
     }).join('');
     return `<div class="sec-card mine">
-      <div class="sec-top"><span class="sc-tag">${esc(sec.id)}</span>
+      <div class="sec-top"><span class="sc-tag">${esc(sec.code)}</span>
         <div class="grow"><div class="sc-meta">${sec.n} student${sec.n === 1 ? '' : 's'}</div>
           ${sec.instructorName ? `<div class="sc-instr">${esc(sec.instructorName)}</div>` : ''}</div>
         <span class="you-badge">You</span></div>
@@ -339,7 +339,7 @@ function matrix() {
     }).join('');
     const ca = cellFor(s.id, MODEL.activeId);
     return `<tr class="${s.isMine ? 'mine' : ''} ${split ? 'grp-split' : ''}">
-      <td class="sticky-l"><span class="mx-sec">${esc(s.id)}</span>${s.instructorName ? ` <span class="mx-instr">· ${esc(s.instructorName)}</span>` : ''}</td>
+      <td class="sticky-l"><span class="mx-sec">${esc(s.code)}</span>${s.instructorName ? ` <span class="mx-instr">· ${esc(s.instructorName)}</span>` : ''}</td>
       <td class="muted">${s.n}</td>
       ${cells}
       <td class="effcell">${f1(ca.effort)}</td>

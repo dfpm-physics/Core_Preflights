@@ -42,7 +42,7 @@
       root.innerHTML = `
         <div class="page-head">
           <h1>Welcome back, ${esc(firstName)}</h1>
-          <div class="sub">${esc(ctx.courseTitleOf(ctx.currentCourse))} · Section ${esc(ctx.studentRow.section_id || '—')}</div>
+          <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))} · Section ${esc(ctx.sectionCodeOf(ctx.sectionIds[0]) || '—')}</div>
         </div>
         ${statTiles(vm.stats)}
         ${upNextSection(vm.upNext)}

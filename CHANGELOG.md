@@ -54,6 +54,140 @@ for staleness. Migrations remain **written but not applied**; no live database o
 
 ## 2026-07-20 — Matthew via Claude
 
+### Changed — wired `site/app/` to schema `app` (PREP v2); two live migrations; one security fix
+
+**Frontend, edge functions, two applied migrations, and a new test harness.** The `app` schema
+was already built and populated; this connects the portal to it. **Not yet pushed.** The legacy
+pages (`site/admin.html`, `site/index.html`) are untouched and still read `public`.
+
+**Why now.** `supabase/migrations/app/001–004` built and migrated the v2 model, but every query
+in `site/app/` still pointed at `public`. The two models were fully divergent — the portal was
+reading a schema that is no longer where the work happens.
+
+**The client moved, once.** `site/app/js/config.js` now creates its client with
+`db: { schema: 'app' }`, so every `db.from(...)` in the tree resolves against `app` with no call
+site naming a schema. `site/js/config.js` (the legacy pages) deliberately stays on `public`; a
+test asserts both halves of that split, because changing either silently breaks the other.
+
+**What the port actually required** — this was not a rename:
+
+| `public` | `app` |
+|---|---|
+| `courses.id` `'phys-215'` | `courses.id` uuid + `courses.code` |
+| `instructor_course_access` | `staff_assignments` (term-scoped, optionally per-section) |
+| `instructors.is_director` | **gone** — authority lives only in `staff_assignments.role` |
+| `students.section_id` | `enrollments` (a student may hold several) |
+| `assignments` (+questions, due dates, published) | `assignments` + `activities` + `assignment_offerings` + `offering_activities` + `assignment_due_dates` |
+| `interactions` (own table) | `activities` with `modality='interactive'` |
+| `responses` | `submissions` + `submission_activities` |
+| `scores` | `grades` (keyed on the enrolment) |
+| `lessons`, `lesson_completions` | **gone** — a lesson IS an assignment offering |
+| `due_date_m` / `due_date_t` | `assignment_due_dates` per section |
+
+**The unit of scope is now the course OFFERING, not the course.** `auth.js` resolves which
+offerings a caller can act in and mirrors `app.staff_sections()` exactly, so the UI scopes to the
+same rows RLS returns — scope wider and the page shows unexplained blanks, narrower and it hides
+work an instructor is meant to grade. The nav course-switcher keys on the offering.
+
+**New: `js/schema.js`** holds every SELECT projection and all the derived rules (deadline
+precedence, status, lock policy, effort→points) in one place, because computing them per page is
+how the old frontend drifted. `student-lessons.js` became a projection over `student-data.js`
+rather than a second query layer, for the same reason.
+
+**Two behavioural changes worth knowing:**
+- **A student can no longer write an input to their own grade.** In `public`, the interaction
+  receiver's own upsert carried `effort` and a trigger turned it into a score. `grades_staff_write`
+  correctly forbids that, so effort now travels inside the stored `schema:1` payload on
+  `submission_activities` and becomes a grade only when staff or the analysis workflow reads it.
+- **Committing is explicit.** `public` treated "a `responses` row exists" as submitted, so an
+  autosaved draft counted. Hence the new `in-progress` state. Written answers stay editable until
+  the deadline (STUDENT-LESSON-VIEW §4); committing fixes *which path* is graded, not the text.
+
+**The frozen artifact↔site contract is unchanged.** `interaction-submit.html#i=<slug>` still
+receives the same payload; the slug is now `activities.slug` (globally unique for exactly this
+reason) and everything else is resolved from it. No deployed artifact needs rebuilding.
+
+### Added — migration `005_extensions.sql` (applied)
+
+`public.extensions` was empty and deliberately not migrated, but the Grade view offers extensions
+and the student's deadline must honour them. Keyed on `enrollment_id` like every other
+per-student table, so moving a cadet between sections cannot carry a Fall 2026 extension into
+Spring 2027. Three RLS policies; deadline precedence is extension > per-section > offering.
+
+### Fixed — migration `006_submission_lock_hardening.sql` (applied) — students could defeat the activity lock
+
+**Found by `tests/app-schema/test-student.mjs`, reproduced against the live schema as a genuinely
+signed-in student.** `001_core_model.sql` lists "the chosen activity cannot silently change" as a
+structurally-enforced invariant, and `director-schema-reference.md` repeats it to directors as a
+database guarantee. **It did not hold.** Two independent bypasses:
+
+1. **Self-unlock by attribution.** `submissions_lock_activity()` refused an unlock with no
+   `unlocked_by`, but never checked the caller was staff *or* the person named. With
+   `submissions_student_update` allowing a student to write any column of their own row, and
+   `instructors_read` being `USING (true)`, a student could list instructors, pick one, clear
+   their own committed choice, and switch modality — with the audit trail naming an instructor
+   who did nothing.
+2. **Status revert.** The lock only engaged when `OLD.status = 'committed'`. Setting status back
+   to `'draft'` was permitted, after which the choice was free. This needed no instructor id.
+
+Both are closed in the trigger (RLS decides which *rows* a caller may touch; a `WITH CHECK`
+cannot see `OLD`, so it is the wrong place for legal column transitions). A `current_uid() IS
+NULL` bypass is retained for direct/operator connections, which already hold BYPASSRLS; a browser
+user can never reach it, since an auth-issued JWT always carries `sub`.
+
+**Why it mattered beyond tidiness:** `switch_policy` serves the research design. A student who
+works the written preflight, reads the questions, then switches to the interactive lesson
+contaminates the revealed-preference signal the study exists to collect.
+
+### Fixed — `supabase/admin/app_rls_test.py` had been silently unrunnable
+
+Bootstrap §6 added FKs from `app.students.auth_user_id` / `app.instructors.id` into `auth.users`.
+The suite invented uuids for its personas, so it began failing at fixture build with a
+`ForeignKeyViolation` and had not run since. Personas now borrow real ids (the app tier cannot
+mint `auth.users` rows), every assertion is scoped to the fixture so the personas' genuine access
+elsewhere is not counted, and the "teacher" is chosen as someone who directs nothing — otherwise
+`director_offerings()` is global and every negative assertion is vacuous. Extended to cover
+migration 005 and 006. **34 checks, all passing.**
+
+### Fixed — `tests/browser/guard.js` locked every design sandbox
+
+It selected `instructors.is_director` (dropped in v2), so PostgREST returned 400 and `instr` came
+back null — and the fallback was *gated on `instr`*, so it never ran. A director was denied by a
+query that failed before it could say yes. Now selects `id, is_global_admin`, falls back to
+`staff_assignments` un-gated. Verified per persona: 5 directors + 2 admins pass, an
+instructor-only account and a student are correctly denied.
+
+### Added — `tests/app-schema/`: an optional Node harness (180 checks)
+
+**Not a build step, and the site still has no Node dependency** (CORE.md §2) — nothing here is
+served, imported, or needed to deploy. What Node buys is running the *shipped* modules against
+the live database as a real signed-in user, instead of reimplementing the logic in Python and
+testing the reimplementation. Five suites: pure domain rules, config targeting, PostgREST
+projections (imported from `schema.js` so they cannot drift from what ships, with a negative
+control), the end-to-end student path through RLS, and isolation (anon sees nothing; the
+app-pinned client cannot reach `public`). Plus `test-imports.mjs`, a static linker for a project
+that has no linker — it caught real breakage from renamed exports.
+
+Tests sign in as **`3009999999` "ZZ Test Cadet"**, a deliberate test row; no real cadet account is
+touched. `cleanup.py` handles teardown because RLS grants `DELETE` on `submissions` to nobody —
+the suite genuinely cannot clean up after itself, which is the policy working as intended.
+
+### Changed — edge functions moved to `app`
+
+All three take `course_offering_id` instead of `course_id` and return a message naming the
+migration when sent the old field. `create-instructor` and `remove-instructor` also **stop
+treating `is_director` as a second global-admin flag** — under the old code a course director
+could create and remove *system admins*.
+
+**Verification:** 180 Node checks, 34 RLS persona checks, and the tier check all pass; the
+database is left with zero test rows. **Not verified end-to-end: the faculty Grade and Roster
+pages** — call sites are updated and imports resolve, but no instructor login was available to
+exercise them in a browser.
+
+**Deferred by agreement:** the lesson builder (`faculty/lessons.html`, `faculty-lessons.js`) and
+interactions admin (`faculty/interactions.html`, `faculty-interactions.js`) are still on `public`
+and are re-architectures rather than ports — a lesson is now an assignment offering.
+
 ### Added — `docs-author` skill: route a concept to the right doc, or to none
 
 **Docs and skill only. No frontend, database, migration, or build-step change.** Not yet pushed.

@@ -1,8 +1,15 @@
 ## Scope: what you can see
 
-You grade the sections assigned to you. The **— all my sections —** filter on the Grade and Report
-tabs means exactly that: sections assigned to *you*. If you are a director or system admin with no
-sections of your own personally assigned, that filter looks empty — switch to **All sections**.
+You grade the sections you staff, for the semester you are looking at. Staffing is recorded one of
+two ways, and which one you have decides what the filter shows:
+
+- **Assigned to specific sections** — you see those sections and no others.
+- **Assigned to the whole course** (how a director is recorded) — you see *every* section in it.
+
+The **— all my sections —** filter on the Grade tab means whichever of those applies to you, so a
+director sees the full course under it rather than an empty list.
+
+Access is per semester. Directing a course in one term does not carry into the next.
 
 ## The 3-state toggle
 
@@ -25,9 +32,12 @@ Suggested feedback is editable. If a yellow flag is wrong, clear the feedback an
 
 ## Extensions
 
-A per-student extension overrides the computed due date for that student on that assignment. Due
-dates are otherwise 2359 the night before the lesson — M-day and T-day sections carry separate
-dates, resolved from the section letter.
+A per-student extension overrides the deadline for that student on that assignment, and takes
+precedence over everything else.
+
+Otherwise each section carries its own deadline — 2359 the night before that section meets — set
+per section on the assignment rather than inferred from the section's name. An assignment may also
+carry a default deadline used by any section without one of its own.
 
 ## The Report tab
 

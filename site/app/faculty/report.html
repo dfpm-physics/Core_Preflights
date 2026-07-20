@@ -116,7 +116,7 @@
       const interactionId = params.get('i');
       const section = params.get('section');
       if (!interactionId) { location.replace('interactions.html'); return; }
-      if (!ctx.currentCourse) {
+      if (!ctx.currentOffering) {
         document.getElementById('rm-title').textContent = 'Report';
         document.getElementById('rm-aggregate').innerHTML = `<div class="alert alert-warn">No course access.</div>`;
         return;

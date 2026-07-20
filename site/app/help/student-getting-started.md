@@ -18,6 +18,16 @@ deadline; after the deadline the form locks.
 
 Preflights are due at **2359 the night before the lesson**.
 
+## Lessons that offer a choice
+
+Some lessons let you either write the preflight or work through the interactive lesson. Submitting
+one of them chooses it: that path becomes the one you are graded on, and you cannot switch to the
+other yourself afterwards.
+
+Anything you did on the other path is kept and your instructor can still see it — it just is not
+what counts. If you picked the wrong one, ask your instructor; they can release it so you can
+choose again.
+
 ## Seeing your grade
 
 Grades appear on the lesson once your instructor has reviewed them. A score you can see has been

@@ -1,19 +1,30 @@
-// student-lessons.js — lesson-centric queries for a logged-in student.
-//
-// The student's view of a lesson: which paths it offers, where they are in it, and what their
-// single 2-point grade is. Replaces the two parallel worlds in student-data.js (assignments and
-// interactions listed side by side, each with its own to-do count) with one lesson per row.
+// student-lessons.js — lesson-centric view for a logged-in student, against schema `app`.
 //
 // Spec: docs/architecture/STUDENT-LESSON-VIEW.md §4 (states) and §9 (this file).
-// Model + rules: docs/architecture/LESSON-UNIFICATION.md (see its §6 amendment for the lock).
 //
-// Requires migration 021. Without lesson_completions rows every lesson resolves to 'not-started'.
+// ── WHY THIS FILE IS NOW THIN ────────────────────────────────────────────────────
+// It used to carry its own queries, its own deadline maths, and its own state machine over
+// four tables (lessons, assignments, interactions, responses, lesson_completions) — because
+// in `public` a "lesson" was a reconciliation layer bolted over two parallel worlds, and the
+// student view had to do that reconciliation itself.
+//
+// In `app` a lesson IS an assignment offering: one container, whose activities are the paths
+// through it. So the reconciliation is gone, and this file is a PROJECTION over
+// student-data.js rather than a second query layer. That is deliberate — two independent
+// loaders is exactly how the old frontend drifted into showing a lesson twice, once per
+// modality, as two separate mandatory items (STUDENT-LESSON-VIEW §1).
+//
+// The eight-state vocabulary below is preserved verbatim, because it is the student-facing
+// contract the page renders and the doc describes. Only its derivation changed.
+//
+// `lesson_completions` is gone with no replacement: it existed to reconcile two grade
+// sources, and there is now exactly one (app.grades, UNIQUE per enrolment per offering).
 
-import { db } from './supabase.js';
-import { isMDay } from './util.js';
+import { loadAssignmentStatuses } from './student-data.js';
+import { questionsOf, answeredCount, displayPoints } from './schema.js';
 
 /**
- * The eight states a lesson can be in for one student (STUDENT-LESSON-VIEW §4).
+ * The states a lesson can be in for one student (STUDENT-LESSON-VIEW §4).
  * Computed once, here — never re-derived in a renderer, so the list and the dashboard
  * cannot disagree.
  */
@@ -40,129 +51,102 @@ export const STATE_DOT = {
   [STATE.MISSED]:      'red',
 };
 
-/** Count non-empty answers in a responses.answers blob. Drives warning 2 (§6). */
-function countAnswers(answers) {
-  return Object.values(answers || {}).filter(v => String(v ?? '').trim().length > 0).length;
-}
-
 /**
- * Effective deadline for this student on this lesson.
+ * Map one stitched assignment item onto the lesson state machine.
  *
- * MIRRORS lesson_due_for_student() in migration 021 — section day picks the M/T date, and an
- * extension REPLACES it (lesson-scoped wins over assignment-scoped). This copy exists only so
- * the UI can gate before the server refuses; the DB is authoritative. If the two ever disagree
- * the student gets a confusing failure, so a change to one is a change to both.
+ * The one asymmetry worth naming, carried over unchanged from the old model: committing the
+ * INTERACTIVE path is a lock (STATE.COMPLETE), while committing the WRITTEN path is not
+ * (STATE.SUBMITTED — still editable until the deadline). The database agrees: switch_policy
+ * locks which ACTIVITY carries credit, but nothing stops a student refining their written
+ * answers afterwards, and nothing should.
  */
-function effectiveDue(lesson, sectionId, extensionISO) {
-  const m = isMDay(sectionId);
-  const base = m ? (lesson.due_date_m || lesson.due_date_t)
-                 : (lesson.due_date_t || lesson.due_date_m);
-  const raw = extensionISO || base;
-  const due = raw ? new Date(raw) : null;
-  if (!due || isNaN(due)) return { due: null, isPast: false };
-  return { due, isPast: due < new Date() };
-}
+function resolveState(item) {
+  const grade = item.grade;
+  if (grade?.is_finalized) return STATE.GRADED;
 
-function resolveState(completion, draft, isPast) {
-  if (completion) {
-    if (completion.is_finalized) return STATE.GRADED;
-    if (isPast) return STATE.GRADING;
-    // An interaction completion is the lock; a preflight completion still allows editing.
-    return completion.path === 'interaction' ? STATE.COMPLETE : STATE.SUBMITTED;
+  const committed = item.submission?.status === 'committed';
+  const chosenModality = item.chosenActivity?.modality || null;
+
+  if (committed) {
+    if (item.isPast) return STATE.GRADING;
+    return chosenModality === 'interactive' ? STATE.COMPLETE : STATE.SUBMITTED;
   }
-  if (isPast) return STATE.MISSED;
-  return countAnswers(draft?.answers) > 0 ? STATE.DRAFT : STATE.NOT_STARTED;
+  if (item.isPast) return STATE.MISSED;
+  return item.answered > 0 ? STATE.DRAFT : STATE.NOT_STARTED;
 }
 
 /**
- * Every published lesson for the student's course, resolved to one row each.
+ * Every published lesson for the student's current offering, one row each.
  *
- * @returns {Promise<Array>} sorted by lesson_number then deadline, each:
- *   { id, title, description, lesson_number, completion_policy, objectives, points,
- *     preflight, interaction,      // joined component rows; either may be null
+ * @returns {Promise<Array>} sorted by lesson number then deadline, each:
+ *   { id, offeringId, title, description, lesson_number, objectives, points,
+ *     preflight, interaction,        // the two activities; either may be null
  *     due, isPast, isExtended,
- *     draft,                       // { answers, is_final } | null
- *     completion,                  // { path, points, understanding, is_finalized } | null
+ *     draft,                         // { answers } | null
+ *     completion,                    // { path, points, is_finalized } | null — shape preserved
  *     state, dot, writtenAnswerCount,
- *     canChoose,                   // choice policy AND both components attached AND still open
- *     hasInteraction }             // artifact is launchable — always true if one is attached
+ *     canChoose, hasInteraction }
  */
 export async function loadLessonStatuses(ctx) {
-  const sid = ctx.studentRow.student_id;
-  const sectionId = ctx.studentRow.section_id;
+  const items = await loadAssignmentStatuses(ctx);
 
-  const { data: lessons } = await db.from('lessons')
-    .select('id, title, description, lesson_number, completion_policy, objectives, points, ' +
-            'preflight_id, interaction_id, due_date_m, due_date_t')
-    .eq('is_published', true).eq('course_id', ctx.currentCourse)
-    .order('lesson_number', { ascending: true, nullsFirst: false });
+  const rows = items.map(item => {
+    const written = item.written;
+    const interactive = item.interactive;
+    const state = resolveState(item);
+    const savedAnswers = written ? (item.submission?.activities?.[written.id]?.content || null) : null;
 
-  if (!lessons?.length) return [];
-
-  const lessonIds = lessons.map(l => l.id);
-  const preflightIds = lessons.map(l => l.preflight_id).filter(Boolean);
-  const interactionIds = lessons.map(l => l.interaction_id).filter(Boolean);
-
-  // Batched — no N+1. Extensions are fetched on both scopes (021 allows either).
-  const [{ data: asgns }, { data: inters }, { data: responses }, { data: completions },
-         { data: exts }] = await Promise.all([
-    preflightIds.length
-      ? db.from('assignments')
-          .select('id, title, description, questions, reading_link, figure_url')
-          .in('id', preflightIds)
-      : Promise.resolve({ data: [] }),
-    interactionIds.length
-      ? db.from('interactions').select('id, title, description, artifact_url')
-          .in('id', interactionIds)
-      : Promise.resolve({ data: [] }),
-    preflightIds.length
-      ? db.from('responses').select('assignment_id, answers, is_final, updated_at')
-          .eq('student_id', sid).in('assignment_id', preflightIds)
-      : Promise.resolve({ data: [] }),
-    db.from('lesson_completions')
-      .select('lesson_id, path, points, understanding, is_finalized, completed_at')
-      .eq('student_id', sid).in('lesson_id', lessonIds),
-    db.from('extensions').select('assignment_id, lesson_id, extended_due_date')
-      .eq('student_id', sid),
-  ]);
-
-  const asgnMap  = Object.fromEntries((asgns  || []).map(a => [a.id, a]));
-  const interMap = Object.fromEntries((inters || []).map(i => [i.id, i]));
-  const respMap  = Object.fromEntries((responses   || []).map(r => [r.assignment_id, r]));
-  const compMap  = Object.fromEntries((completions || []).map(c => [c.lesson_id, c]));
-
-  // Lesson-scoped extension wins over an assignment-scoped one on the lesson's preflight —
-  // and an assignment-scoped grant extends the WHOLE lesson (both paths), matching 021.
-  const extByLesson = Object.fromEntries(
-    (exts || []).filter(e => e.lesson_id).map(e => [e.lesson_id, e.extended_due_date]));
-  const extByAsgn = Object.fromEntries(
-    (exts || []).filter(e => e.assignment_id).map(e => [e.assignment_id, e.extended_due_date]));
-
-  const rows = lessons.map(l => {
-    const ext = extByLesson[l.id] || (l.preflight_id ? extByAsgn[l.preflight_id] : null) || null;
-    const { due, isPast } = effectiveDue(l, sectionId, ext);
-
-    const preflight  = l.preflight_id  ? (asgnMap[l.preflight_id]   || null) : null;
-    const interaction = l.interaction_id ? (interMap[l.interaction_id] || null) : null;
-    const draft = l.preflight_id ? (respMap[l.preflight_id] || null) : null;
-    const completion = compMap[l.id] || null;
-    const state = resolveState(completion, draft, isPast);
+    // `completion` keeps its old shape so the page's renderers are untouched, but it is now
+    // derived from the single grades row rather than a separate lesson_completions table.
+    const committed = item.submission?.status === 'committed';
+    const completion = committed ? {
+      path: item.chosenActivity?.modality === 'interactive' ? 'interaction' : 'preflight',
+      points: displayPoints(item.grade, item) ?? 0,
+      understanding: item.grade?.diagnostic?.overall_understanding ?? null,
+      is_finalized: !!item.grade?.is_finalized,
+      completed_at: item.submission?.committedAt || null,
+    } : null;
 
     return {
-      ...l,
-      preflight, interaction,
-      due, isPast, isExtended: !!ext,
-      draft, completion, state,
-      dot: STATE_DOT[state],
-      writtenAnswerCount: countAnswers(draft?.answers),
-      // A choice is only real while both components exist and the lesson is still open.
-      canChoose: l.completion_policy === 'choice' && !!preflight && !!interaction && !isPast
-                 && !completion,
-      hasInteraction: !!interaction,
+      id: item.offeringId,
+      offeringId: item.offeringId,
+      title: item.title,
+      description: item.description,
+      lesson_number: item.position ?? null,
+      objectives: item.objectives,
+      points: item.pointsPossible,
+
+      // The two paths, under the names the page already uses.
+      preflight: written ? {
+        id: written.id, title: written.title,
+        questions: questionsOf(written),
+        reading_link: written.content?.reading_link || null,
+        gradingRole: written.gradingRole,
+      } : null,
+      interaction: interactive ? {
+        id: interactive.id, slug: interactive.slug, title: interactive.title,
+        description: interactive.content?.description || null,
+        artifact_url: interactive.content?.artifact_url || null,
+        gradingRole: interactive.gradingRole,
+      } : null,
+
+      due: item.due, isPast: item.isPast, isExtended: item.dueSource === 'extension',
+      draft: savedAnswers ? { answers: savedAnswers } : null,
+      completion,
+      state, dot: STATE_DOT[state],
+      writtenAnswerCount: answeredCount(savedAnswers, questionsOf(written)),
+
+      // A choice is only real while BOTH paths are graded this term and the lesson is still
+      // open and uncommitted. `isChoice` is derived from offering_activities, not declared —
+      // there is no completion_policy column to drift out of step with reality.
+      canChoose: item.isChoice && !!written && !!interactive && !item.isPast && !committed,
+      hasInteraction: !!interactive,
+      // Kept for renderers that showed the policy; derived, not stored.
+      completion_policy: item.isChoice ? 'choice' : 'preflight',
     };
   });
 
-  // lesson_number is optional; fall back to the deadline so ordering is always stable.
+  // Position is optional; fall back to the deadline so ordering is always stable.
   return rows.sort((a, b) => {
     const an = a.lesson_number, bn = b.lesson_number;
     if (an != null && bn != null && an !== bn) return an - bn;
@@ -174,17 +158,17 @@ export async function loadLessonStatuses(ctx) {
 
 /** One view-model for the student dashboard (STUDENT-LESSON-VIEW §8). */
 export async function loadStudentLessonDashboard(ctx) {
-  if (!ctx.currentCourse) return { noCourse: true };
+  if (!ctx.currentOffering) return { noCourse: true };
 
   const lessons = await loadLessonStatuses(ctx);
 
-  const toDo    = lessons.filter(l => l.state === STATE.NOT_STARTED || l.state === STATE.DRAFT);
-  const missed  = lessons.filter(l => l.state === STATE.MISSED);
-  const graded  = lessons.filter(l => l.state === STATE.GRADED);
-  const done    = lessons.filter(l => l.completion);
+  const toDo   = lessons.filter(l => l.state === STATE.NOT_STARTED || l.state === STATE.DRAFT);
+  const missed = lessons.filter(l => l.state === STATE.MISSED);
+  const graded = lessons.filter(l => l.state === STATE.GRADED);
+  const done   = lessons.filter(l => l.completion);
 
-  // Points earned out of points available — NOT a correctness percentage. A lesson is 2 points
-  // of effort (LESSON-UNIFICATION D3); showing a percentage of per-question scores here would
+  // Points earned out of points available — NOT a correctness percentage. A lesson is worth
+  // its offering's points_possible; showing a percentage of per-question scores here would
   // tell cadets they're graded on getting it right, which is the one thing the choice UI must
   // not imply (STUDENT-LESSON-VIEW §2, §8).
   const earned    = done.reduce((s, l) => s + (l.completion.points || 0), 0);
@@ -192,12 +176,7 @@ export async function loadStudentLessonDashboard(ctx) {
 
   return {
     noCourse: false,
-    stats: {
-      toDo: toDo.length,
-      missed: missed.length,
-      graded: graded.length,
-      earned, available,
-    },
+    stats: { toDo: toDo.length, missed: missed.length, graded: graded.length, earned, available },
     lessons, toDo, missed, graded,
     upNext: toDo.slice(0, 6),
   };

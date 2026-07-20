@@ -17,6 +17,11 @@ supabase/admin/config.*.json
 __pycache__/
 *.pyc
 
+# Node modules for the OPTIONAL wiring test harness (tests/app-schema/). The site itself has
+# no Node dependency and no build step — see CORE.md §2 and tests/app-schema/README.md. This
+# is dev-only tooling; nothing here is served or required to deploy.
+tests/app-schema/node_modules/
+
 # Textbook PDFs — too large for git (~968 MB); download from Teams instead
 # See textbook-pdfs/README.md for instructions
 textbook-pdfs/**/*.pdf
@@ -24,6 +29,12 @@ textbook-pdfs/**/*.PDF
 
 # Supabase CLI local state (linked-project ref, version cache) — machine-specific
 supabase/.temp/
+
+# Node deps for the OPTIONAL developer test harness (tests/app-schema/). The site itself still
+# has no Node dependency and no build step per CORE.md §2 — nothing here is served, imported, or
+# needed to deploy. npm always materialises deps per-project, so this folder cannot live
+# elsewhere; ignoring it is the fix. tests/app-schema/README.md already assumed this rule.
+node_modules/
 
 # macOS
 .DS_Store

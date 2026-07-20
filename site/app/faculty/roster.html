@@ -43,7 +43,8 @@
 
     let tab = 'students';
     let pendingRoster = [];
-    let sectionIds = [];
+    // Sections of the current OFFERING: [{ id (uuid), code, meeting_days, period }].
+    let offeringSections = [];
     let editSid = null;
 
     async function init() {
@@ -66,7 +67,7 @@
       }
       root.innerHTML = `
         <div class="page-head"><h1>Roster &amp; sections</h1>
-          <div class="sub">${esc(ctx.courseTitleOf(ctx.currentCourse))} — manage enrollment and instructor assignments.</div></div>
+          <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))} — manage enrollment and instructor assignments.</div></div>
         <div class="subtabs">
           <button class="subtab ${tab === 'students' ? 'active' : ''}" data-tab="students">Students</button>
           <button class="subtab ${tab === 'sections' ? 'active' : ''}" data-tab="sections">Sections</button>
@@ -80,8 +81,9 @@
     async function renderStudents() {
       const panel = document.getElementById('panel');
       panel.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
-      const { students, sectionIds: secIds, total, unprovisioned } = await R.loadRoster(ctx);
-      sectionIds = secIds;
+      const { students, sections, total, unprovisioned } = await R.loadRoster(ctx);
+      // Sections are {id, code} now — the id is a uuid, the code is what people read.
+      offeringSections = sections;
 
       const prov = unprovisioned > 0
         ? `<div class="row wrap" style="justify-content:space-between;gap:10px">
@@ -97,11 +99,11 @@
             <tbody>${students.map(s => `<tr>
               <td>${s.student_id}</td>
               <td>${esc(lastFirst(s.name))}</td>
-              <td>${esc(s.section_id)}</td>
+              <td>${esc(s.section_code)}</td>
               <td style="text-align:center" class="${s.auth_user_id ? 'auth-yes' : 'auth-no'}">${s.auth_user_id ? '✓' : '—'}</td>
               <td style="white-space:nowrap">
-                <button class="btn btn-ghost btn-sm" data-edit="${s.student_id}" data-name="${esc(lastFirst(s.name))}" data-section="${esc(s.section_id)}">Edit section</button>
-                <button class="btn btn-ghost btn-sm" style="color:var(--red)" data-remove="${s.student_id}" data-name="${esc(lastFirst(s.name))}">Remove</button>
+                <button class="btn btn-ghost btn-sm" data-edit="${esc(s.enrollment_id)}" data-name="${esc(lastFirst(s.name))}" data-section="${esc(s.section_id)}">Edit section</button>
+                <button class="btn btn-ghost btn-sm" style="color:var(--red)" data-remove="${esc(s.enrollment_id)}" data-name="${esc(lastFirst(s.name))}">Remove</button>
               </td></tr>`).join('')}</tbody></table></div>`
         : `<div class="empty-state"><div class="es-ic">🧑‍🎓</div><h3>No students yet</h3><p>Upload a roster CSV to get started.</p></div>`;
 
@@ -133,8 +135,8 @@
       dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
       dz.addEventListener('drop', (e) => { e.preventDefault(); dz.classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) readCsv(f); });
       document.getElementById('prov-btn')?.addEventListener('click', doProvision);
-      panel.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openSecModal(+b.dataset.edit, b.dataset.name, b.dataset.section)));
-      panel.querySelectorAll('[data-remove]').forEach(b => b.addEventListener('click', () => doRemove(+b.dataset.remove, b.dataset.name)));
+      panel.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openSecModal(b.dataset.edit, b.dataset.name, b.dataset.section)));
+      panel.querySelectorAll('[data-remove]').forEach(b => b.addEventListener('click', () => doRemove(b.dataset.remove, b.dataset.name)));
     }
 
     function readCsv(file) {
@@ -143,13 +145,14 @@
       reader.readAsText(file);
     }
     function previewCsv(text) {
-      const { rows, errors } = R.parseRosterCsv(text);
+      const known = Object.fromEntries(offeringSections.map(x => [x.code.toUpperCase(), x]));
+      const { rows, errors } = R.parseRosterCsv(text, known);
       if (errors.length) { alert('Could not import:\n' + errors.slice(0, 6).join('\n')); return; }
       pendingRoster = rows;
-      const sects = [...new Set(rows.map(r => r.section_id))].join(', ');
+      const sects = [...new Set(rows.map(r => r.section_code))].join(', ');
       document.getElementById('csv-info').textContent = `${rows.length} students — sections: ${sects}`;
       document.getElementById('csv-table').innerHTML = `<table><thead><tr><th>Student ID</th><th>Name</th><th>Section</th></tr></thead>
-        <tbody>${rows.slice(0, 10).map(r => `<tr><td>${r.student_id}</td><td>${esc(r.name)}</td><td>${r.section_id}</td></tr>`).join('')}
+        <tbody>${rows.slice(0, 10).map(r => `<tr><td>${r.student_id}</td><td>${esc(r.name)}</td><td>${esc(r.section_code)}</td></tr>`).join('')}
         ${rows.length > 10 ? `<tr><td colspan="3" class="muted">…and ${rows.length - 10} more</td></tr>` : ''}</tbody></table>`;
       document.getElementById('csv-preview').style.display = '';
       document.getElementById('csv-commit').onclick = doCommit;
@@ -178,7 +181,7 @@
       setTimeout(renderStudents, 1200);
     }
 
-    async function doRemove(sid, name) {
+    async function doRemove(enrollmentId, name) {
       if (!confirm(`Remove ${name} (${sid})?\n\nThis permanently deletes their record, all submissions, and all scores.`)) return;
       const { error } = await R.removeStudent(sid);
       if (error) { alert('Error removing student: ' + error.message); return; }
@@ -191,10 +194,10 @@
       m.addEventListener('click', (e) => { if (e.target.id === 'sec-modal' || e.target.dataset.close !== undefined) m.classList.remove('open'); });
       document.getElementById('sm-save').addEventListener('click', saveSection);
     }
-    function openSecModal(sid, name, cur) {
-      editSid = sid;
-      document.getElementById('sm-name').textContent = `${name} (${sid})`;
-      document.getElementById('sm-select').innerHTML = sectionIds.map(s => `<option value="${esc(s)}"${s === cur ? ' selected' : ''}>${esc(s)}</option>`).join('');
+    function openSecModal(enrollmentId, name, cur) {
+      editSid = enrollmentId;
+      document.getElementById('sm-name').textContent = name;
+      document.getElementById('sm-select').innerHTML = offeringSections.map(x => `<option value="${esc(x.id)}"${x.id === cur ? ' selected' : ''}>${esc(x.code)}</option>`).join('');
       document.getElementById('sm-error').textContent = '';
       document.getElementById('sec-modal').classList.add('open');
     }
@@ -211,13 +214,13 @@
     async function renderSections() {
       const panel = document.getElementById('panel');
       panel.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
-      const { sections, instructors } = await R.loadSections(ctx);
+      const { sections, bySection, instructors } = await R.loadSections(ctx);
       if (!sections.length) { panel.innerHTML = `<div class="empty-state"><div class="es-ic">🗂️</div><h3>No sections yet</h3><p>Upload a roster to create sections.</p></div>`; return; }
       const grid = sections.map(s => `<div class="sec-assign">
-        <div class="sec-tag">${esc(s.id)}</div>
+        <div class="sec-tag">${esc(s.code)}</div>
         <select data-section="${esc(s.id)}">
           <option value="">— unassigned —</option>
-          ${instructors.map(i => `<option value="${esc(i.id)}"${i.id === s.instructor_id ? ' selected' : ''}>${esc(i.name)}</option>`).join('')}
+          ${instructors.map(i => `<option value="${esc(i.id)}"${i.id === (bySection[s.id]?.[0]?.instructorId) ? ' selected' : ''}>${esc(i.name)}</option>`).join('')}
         </select></div>`).join('');
       panel.innerHTML = `<div class="card"><div class="card-title">Assign instructors</div>
         <div class="card-meta">Each instructor grades the sections assigned here. Changes save instantly.</div>
@@ -225,8 +228,8 @@
         <div id="sec-status" class="muted" style="font-size:0.82em;margin-top:12px"></div></div>`;
       panel.querySelectorAll('select[data-section]').forEach(sel => sel.addEventListener('change', async () => {
         const out = document.getElementById('sec-status'); out.textContent = 'Saving…';
-        const { error } = await R.assignInstructor(sel.dataset.section, sel.value);
-        out.textContent = error ? '⚠ ' + error.message : `✓ ${sel.dataset.section} updated`;
+        const { error } = await R.assignInstructor(ctx, sel.dataset.section, sel.value);
+        out.textContent = error ? '⚠ ' + error.message : `✓ ${ctx.sectionCodeOf(sel.dataset.section)} updated`;
         setTimeout(() => { out.textContent = ''; }, 2500);
       }));
     }
