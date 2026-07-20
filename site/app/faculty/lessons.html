@@ -15,8 +15,12 @@
     <div class="center-load"><span class="spinner"></span><span>Loading lessons…</span></div>
   </main>
 
-  <!-- New / edit lesson modal (directors). The inline preflight question builder renders into the
-       container below; everything else is static. -->
+  <!-- New / edit lesson modal (directors).
+       Reading order matches the model in supabase/migrations/app/001_core_model.sql:
+         CONTAINER  (assignments)          — slug, title, description, objectives
+         ACTIVITIES (activities)           — the written question set, the interactive artifact
+         OFFERING   (assignment_offerings) — points, deadline, publish: this term only
+       The inline question builder renders into #lb-q-list; everything else is static. -->
   <div class="modal-backdrop" id="lesson-modal">
     <div class="modal" style="max-width:760px">
       <div class="modal-head"><h2 id="lm-title">New lesson</h2><button class="modal-close" data-close>×</button></div>
@@ -24,7 +28,7 @@
       <div class="alert alert-warn" id="lm-notice" style="display:none"></div>
 
       <div class="row wrap" style="gap:14px">
-        <div class="field grow" style="min-width:160px"><label for="f-course">Course</label><select id="f-course"></select></div>
+        <div class="field grow" style="min-width:180px"><label for="f-course">Course &amp; term</label><select id="f-course"></select></div>
         <div class="field grow" style="min-width:160px"><label for="f-id">Lesson id (slug)</label>
           <input id="f-id" type="text"><div class="field-hint" id="f-id-hint">Lowercase letters, numbers, hyphens.</div></div>
         <div class="field" style="min-width:110px;flex:0 0 110px"><label for="f-num">Lesson #</label>
@@ -34,7 +38,8 @@
       <div class="field"><label for="f-desc">Description (optional)</label>
         <textarea id="f-desc" placeholder="Short description shown to students"></textarea></div>
 
-      <!-- Completion policy ------------------------------------------------- -->
+      <!-- Allowed mode. NOT a stored column: it is written to offering_activities.grading_role
+           and read back from it (see policyOf/roleFor in faculty-lessons.js). -->
       <div class="field">
         <label>Allowed mode</label>
         <div class="seg" id="f-policy" role="tablist" aria-label="Allowed mode">
@@ -45,30 +50,24 @@
         <div class="field-hint" id="f-policy-hint"></div>
       </div>
 
-      <!-- Preflight component (attach existing OR author inline) ------------ -->
+      <!-- Written activity ------------------------------------------------- -->
       <div class="lb-section" id="lb-preflight">
         <div class="lb-head"><span class="lb-ttl">Free-Response Preflight</span><span class="grow"></span>
-          <div class="seg" id="f-pf-source" role="tablist" aria-label="Preflight source">
-            <button type="button" data-pfsrc="none" aria-pressed="false">None</button>
-            <button type="button" data-pfsrc="existing" aria-pressed="false">Use existing</button>
-            <button type="button" data-pfsrc="new" aria-pressed="true">Create new</button>
+          <div class="seg" id="f-pf-source" role="tablist" aria-label="Include written questions">
+            <button type="button" data-pfsrc="none" aria-pressed="false">Not this term</button>
+            <button type="button" data-pfsrc="new"  aria-pressed="true">Include</button>
           </div>
         </div>
-
-        <!-- Use existing: reference an already-created assignment (never modified here) -->
-        <div id="lb-pf-existing" style="display:none">
-          <div class="field" style="margin-bottom:0"><label for="f-pf-pick">Existing preflight assignment</label>
-            <select id="f-pf-pick"></select>
-            <div class="field-hint">Attaches an existing assignment by reference — its questions and publish state stay owned by the Assignments tool and aren't changed here.</div></div>
+        <div class="field-hint" id="lb-pf-detached" style="display:none;margin:2px 0 0">
+          The question set stays in the library — it is only detached from this term's lesson, and can be re-attached later.
         </div>
 
-        <!-- Create new: inline question builder -->
         <div id="lb-pf-new">
           <div class="lb-grid2" style="margin-bottom:10px">
             <div class="field"><label for="f-pf-refpdf-sel">Reference PDF (grading RAG, optional)</label>
               <select id="f-pf-refpdf-sel"></select>
               <input id="f-pf-refpdf" type="text" data-pf="reference_pdf" placeholder="Text_Book_PDFs/…/Section.pdf" style="display:none;margin-top:6px">
-              <div class="field-hint">From the shared RAG manifest. “Add new…” stores a one-off path on this assignment — add it to <code>textbook-pdfs/rag-manifest.txt</code> and commit to share it with everyone running the grader.</div></div>
+              <div class="field-hint">From the shared RAG manifest. “Add new…” stores a one-off path on this activity — add it to <code>textbook-pdfs/rag-manifest.txt</code> and commit to share it with everyone running the grader.</div></div>
             <div class="field" style="max-width:160px"><label for="f-pf-refpages">Reference pages</label>
               <input id="f-pf-refpages" type="text" data-pf="reference_pages" placeholder="170-179"></div>
           </div>
@@ -83,29 +82,23 @@
         </div>
       </div>
 
-      <!-- Interaction component (attach existing OR author inline) ---------- -->
+      <!-- Interactive activity ---------------------------------------------- -->
       <div class="lb-section" id="lb-interaction">
         <div class="lb-head"><span class="lb-ttl">AI Interaction</span><span class="grow"></span>
-          <div class="seg" id="f-i-source" role="tablist" aria-label="Interaction source">
-            <button type="button" data-isrc="none" aria-pressed="false">None</button>
-            <button type="button" data-isrc="existing" aria-pressed="false">Use existing</button>
-            <button type="button" data-isrc="new" aria-pressed="true">Create new</button>
+          <div class="seg" id="f-i-source" role="tablist" aria-label="Include AI interaction">
+            <button type="button" data-isrc="none" aria-pressed="false">Not this term</button>
+            <button type="button" data-isrc="new"  aria-pressed="true">Include</button>
           </div>
         </div>
-
-        <!-- Use existing: reference an already-created interaction (never modified here) -->
-        <div id="lb-i-existing" style="display:none">
-          <div class="field" style="margin-bottom:0"><label for="f-i-pick">Existing interaction</label>
-            <select id="f-i-pick"></select>
-            <div class="field-hint">Attaches an existing interaction by reference — its URL and publish state stay owned by the Interactions tool and aren't changed here.</div></div>
+        <div class="field-hint" id="lb-i-detached" style="display:none;margin:2px 0 0">
+          The artifact stays in the library — it is only detached from this term's lesson, and can be re-attached later.
         </div>
 
-        <!-- Create new: inline interaction fields -->
         <div id="lb-i-new">
           <div class="row wrap" style="gap:12px">
             <div class="field grow" style="min-width:180px"><label for="f-i-id">Interaction id (slug)</label>
-              <input id="f-i-id" type="text" data-i="id">
-              <div class="field-hint">Defaults to the lesson id; must match the slug the AI tool posts in <code>#i=</code>.</div></div>
+              <input id="f-i-id" type="text" data-i="slug">
+              <div class="field-hint" id="f-i-id-hint">Defaults to the lesson id; must match the slug the AI tool posts in <code>#i=</code>.</div></div>
             <div class="field grow" style="min-width:180px"><label for="f-i-title">Interaction title (optional)</label>
               <input id="f-i-title" type="text" data-i="title" placeholder="Defaults to the lesson title"></div>
           </div>
@@ -117,15 +110,34 @@
         </div>
       </div>
 
-      <!-- Due dates + publish ---------------------------------------------- -->
-      <div class="row wrap" style="gap:14px;margin-top:14px">
-        <div class="field grow" style="min-width:150px"><label for="f-due-m">M-day due date</label>
-          <input id="f-due-m" type="date"></div>
-        <div class="field grow" style="min-width:150px"><label for="f-due-t">T-day due date</label>
-          <input id="f-due-t" type="date"></div>
+      <!-- This term: points, deadlines, publish ----------------------------- -->
+      <div class="lb-section" id="lb-term">
+        <div class="lb-head"><span class="lb-ttl">This term</span><span class="grow"></span></div>
+        <div class="row wrap" style="gap:14px">
+          <div class="field" style="min-width:110px;flex:0 0 110px"><label for="f-pts">Points</label>
+            <input id="f-pts" type="number" min="0" step="0.5" value="2"></div>
+          <div class="field" style="min-width:150px"><label for="f-mode">Grading</label>
+            <select id="f-mode">
+              <option value="points">Points (per question)</option>
+              <option value="effort">Effort (0–5 → points)</option>
+            </select></div>
+          <div class="field grow" style="min-width:190px" id="f-switch-wrap"><label for="f-switch">Once a student commits</label>
+            <select id="f-switch">
+              <option value="lock_on_commit">Lock the choice (instructor can unlock)</option>
+              <option value="free_until_commit">Lock the choice permanently</option>
+              <option value="one_way_to_interactive">Allow written → interaction only</option>
+              <option value="lock_on_start">Lock on start</option>
+            </select></div>
+        </div>
+        <div class="field-hint" style="margin:-4px 0 10px">Points and the deadline belong to this term's run of the lesson — editing them never touches the library content or another semester.</div>
+
+        <!-- One date per meeting-day letter that this offering's sections actually use. The old
+             fixed M/T pair inferred the day from the first character of a section code; the
+             pattern is a column on the section now, so the fields are generated from data. -->
+        <div class="row wrap" style="gap:14px" id="f-due-days"></div>
+        <div class="field-hint" id="f-due-hint" style="margin-top:-4px"></div>
+        <label class="check-inline" style="margin-top:10px"><input type="checkbox" id="f-pub"> Published (visible to students)</label>
       </div>
-      <div class="field-hint" style="margin-top:-4px">A student's effective deadline is picked by their section day (M-day sections use the M date, T-day the T date).</div>
-      <label class="check-inline" style="margin-top:10px"><input type="checkbox" id="f-pub"> Published (visible to students)</label>
 
       <div class="row" style="gap:10px;margin-top:18px">
         <button class="btn btn-primary" id="lm-save">Save lesson</button>
@@ -135,18 +147,20 @@
     </div>
   </div>
 
-  <!-- Delete confirmation (directors). Container-only is a normal click; deleting all contents
-       (which cascades student work) needs a deliberate 5-second hold. -->
+  <!-- Delete confirmation (directors).
+       Both options are destructive in schema `app`, which is the change worth reading twice:
+       submissions and grades hang off the OFFERING, so removing the lesson from the term takes
+       this term's work with it. Only the library definition survives. -->
   <div class="modal-backdrop" id="del-modal">
-    <div class="modal" style="max-width:500px">
-      <div class="modal-head"><h2>Delete lesson</h2><button class="modal-close" data-delclose>×</button></div>
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head"><h2>Remove lesson</h2><button class="modal-close" data-delclose>×</button></div>
       <p id="del-msg" style="margin:0 0 12px"></p>
       <div class="alert alert-info" id="del-info" style="margin-bottom:16px">Loading impact…</div>
       <div class="lb-del-actions">
-        <button class="btn btn-secondary" id="del-container">Delete container only</button>
+        <button class="btn btn-secondary" id="del-container">Remove from this term</button>
         <button class="btn hold-btn" id="del-all">
           <span class="hold-fill" id="del-fill"></span>
-          <span class="hold-label" id="del-all-label">Hold 5s · delete all contents</span></button>
+          <span class="hold-label" id="del-all-label">Hold 5s · delete library copy too</span></button>
         <button class="btn btn-ghost" data-delclose>Cancel</button>
       </div>
     </div>
@@ -173,14 +187,16 @@
         </button>
       </div>
       <div class="dest-pick" id="dest-pick" style="display:none">
-        <div class="muted" style="font-size:.82em;margin-bottom:8px">Pick the lesson to add it to. Red cards already have an interaction — it would be replaced.</div>
+        <div class="muted" style="font-size:.82em;margin-bottom:8px">Pick the lesson to add it to. Red cards already have an interaction — a different slug would replace it.</div>
         <div class="lb-orphans" id="dest-lessons"></div>
       </div>
     </div>
   </div>
 
-  <!-- Swap confirmation: replacing a lesson's interaction displaces the old one (it is orphaned,
-       never deleted) and strands any student reports already attached to it. -->
+  <!-- Replace confirmation. UNIQUE(assignment_id, modality) means a lesson holds at most one
+       interactive activity, so a NEW slug is not an edit — the old activity is deleted and its
+       student reports cascade with it. The old model orphaned them instead; this one does not,
+       so the count has to be shown before, not explained after. -->
   <div class="modal-backdrop" id="swap-modal">
     <div class="modal" style="max-width:520px">
       <div class="modal-head"><h2>Replace this lesson's interaction?</h2><button class="modal-close" data-swapclose>×</button></div>
@@ -189,18 +205,6 @@
       <div class="lb-del-actions">
         <button class="btn btn-primary" id="swap-ok">Replace interaction</button>
         <button class="btn btn-ghost" data-swapclose>Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Due-date reconciliation: shown only when both attached components already carry dates. -->
-  <div class="modal-backdrop" id="due-modal">
-    <div class="modal" style="max-width:470px">
-      <div class="modal-head"><h2>Which due dates?</h2></div>
-      <p style="margin:0 0 12px">Both attached components already have due dates. Which set should this lesson — and all of its parts — use?</p>
-      <div class="lb-del-actions" style="flex-direction:column;align-items:stretch;gap:8px">
-        <button class="btn btn-secondary" id="due-pick-pf"></button>
-        <button class="btn btn-secondary" id="due-pick-i"></button>
       </div>
     </div>
   </div>
@@ -220,16 +224,17 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { esc, fmtDate } from '../js/util.js';
+    import { questionsOf } from '../js/schema.js';
     import * as L from '../js/faculty-lessons.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
     if (!ctx) { /* redirected */ } else { init(); }
 
-    let vm = null, editingId = null, model = null, interactionIdTouched = false;
-    // Set only when a prefill link is about to displace a lesson's existing interaction.
-    let pendingSwap = null;   // { fromId, fromTitle, reports }
-    let compose = { preflight: null, interaction: null };   // the drag-drop composer selection
-    let ragManifest = [];                                   // approved RAG reference paths (shared manifest)
+    let vm = null, editingId = null, model = null, interactionSlugTouched = false;
+    // Set only when saving would REPLACE an existing interactive activity with a different slug.
+    let pendingSwap = null;   // { activityId, fromSlug, fromTitle, reports }
+    let compose = { assignmentId: null };   // the "schedule an existing assignment" selection
+    let ragManifest = [];                   // approved RAG reference paths (shared manifest)
     const isDirector = () => ctx.isDirectorForCurrent();
 
     // The committed manifest of approved RAG reference files (textbook-pdfs/rag-manifest.txt).
@@ -257,11 +262,14 @@
       'Your response is visible to your instructor, but your name is not shown — it is for an overall class diagnostic.';
 
     const POLICY_LABEL = { preflight: 'Free-Response', interaction: 'AI Interaction', choice: 'Student Choice' };
+    // The hints spell out the DERIVED rule, because "graded vs practice" is now the actual stored
+    // thing and a director flipping a term over needs to know that is what the control does.
     const POLICY_HINT = {
-      preflight:   'Only the free-response preflight counts — students see just the preflight (any attached interaction is optional practice).',
-      interaction: 'Only the AI interaction counts — students see just the interaction (any attached preflight is optional practice).',
-      choice:      'Both modes are allowed; each student picks one, and the first submission locks the grade.',
+      preflight:   'The written preflight carries credit; an attached interaction is practice (workable, never graded).',
+      interaction: 'The AI interaction carries credit; attached written questions are practice (workable, never graded).',
+      choice:      'Both count — each student picks one, and the commit rule below decides whether they may change it.',
     };
+    const DAY_LABEL = { M: 'M-day', T: 'T-day', W: 'W-day', R: 'R-day', F: 'F-day', _all: 'Due date' };
 
     function init() {
       initTheme();
@@ -276,13 +284,13 @@
       const root = document.getElementById('main');
       root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
       vm = await L.loadManager(ctx);
-      compose = { preflight: null, interaction: null };
+      compose = { assignmentId: null };
 
       const newBtn = isDirector() ? `<button class="btn btn-primary" id="new-btn">+ New lesson</button>` : '';
       const head = `<div class="page-head">
         <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
           <div><h1>Lessons</h1>
-            <div class="sub">${isDirector() ? 'Combine existing content or author new — then publish' : 'Published lessons'} for ${esc(ctx.courseTitleOf(ctx.currentOffering))}.</div></div>
+            <div class="sub">${isDirector() ? 'Schedule library content or author new — then publish' : 'Published lessons'} for ${esc(ctx.courseTitleOf(ctx.currentOffering))}${ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''}.</div></div>
           ${newBtn}
         </div></div>`;
 
@@ -291,9 +299,9 @@
       const composeHtml = isDirector() ? composeRegion() : '';
       const body = vm.lessons.length
         ? vm.lessons.map(card).join('')
-        : `<div class="empty-state"><div class="es-ic">📚</div><h3>No lessons yet</h3>
+        : `<div class="empty-state"><div class="es-ic">📚</div><h3>No lessons scheduled this term</h3>
              <p>${isDirector()
-                  ? (composeHtml ? 'Drag content into the composer above, or click <strong>+ New lesson</strong>.'
+                  ? (composeHtml ? 'Pick an assignment from the library above to schedule it, or click <strong>+ New lesson</strong>.'
                                  : 'Click <strong>+ New lesson</strong> to create one.')
                   : 'Nothing has been published yet.'}</p></div>`;
 
@@ -301,111 +309,87 @@
       wireNew();
       document.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openEdit(b.dataset.edit)));
       document.querySelectorAll('[data-pub]').forEach(b => b.addEventListener('click', () => doTogglePublish(b.dataset.pub)));
-      document.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => openDeleteModal(vm.lessons.find(x => x.id === b.dataset.del))));
+      document.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => openDeleteModal(vm.lessons.find(x => x.offeringId === b.dataset.del))));
       if (isDirector()) wireCompose();
     }
 
-    // ── Compose-from-orphans (main page) ──────────────────────────────────
-    // Assignments/interactions not yet owned by any lesson render as draggable thumbnails; drop one
-    // of each into the boxes, then "Create lesson" opens the editor prefilled with those references.
-    function orphanCard(o, type) {
-      const badge = type === 'preflight' ? 'Preflight' : 'Interactive';
-      const meta  = type === 'preflight'
-        ? `${o.nq} q · ${o.is_published ? 'published' : 'draft'}`
-        : (o.is_published ? 'published' : 'draft');
-      return `<div class="lb-orphan ${type === 'preflight' ? 'pf' : 'int'}" draggable="true"
-                data-otype="${type}" data-oid="${esc(o.id)}" title="Drag into a box below, or click">
-        <span class="lb-orphan-badge">${badge}</span>
-        <span class="lb-orphan-title">${esc(o.title || o.id)}</span>
-        <span class="lb-orphan-meta">${esc(meta)}</span>
+    // ── Schedule from the library (main page) ─────────────────────────────
+    // The old page dragged an orphan preflight and an orphan interaction into two boxes and
+    // stapled them together. In `app` the written questions and the artifact are both activities
+    // OF ONE assignment container, so there is one thing to pick — the container — and its
+    // activities come with it. See the header of faculty-lessons.js.
+    function libraryCard(a) {
+      const bits = [];
+      if (a.written) bits.push(`${a.questionCount} q`);
+      if (a.interactive) bits.push('interactive');
+      return `<div class="lb-orphan ${a.interactive ? 'int' : 'pf'}" draggable="true"
+                data-oid="${esc(a.id)}" title="Drag into the box below, or click">
+        <span class="lb-orphan-badge">${esc(a.slug)}</span>
+        <span class="lb-orphan-title">${esc(a.title || a.slug)}</span>
+        <span class="lb-orphan-meta">${esc(bits.join(' · ') || 'empty')}</span>
       </div>`;
     }
     function composeRegion() {
-      const pfOrphans = (vm.assignments  || []).filter(a => !a.ownedBy);
-      const iOrphans  = (vm.interactions || []).filter(i => !i.ownedBy);
-      if (!pfOrphans.length && !iOrphans.length) return '';
-      const cards = pfOrphans.map(o => orphanCard(o, 'preflight')).join('')
-                  + iOrphans.map(o => orphanCard(o, 'interaction')).join('');
+      const free = (vm.library || []).filter(a => !a.isScheduled);
+      if (!free.length) return '';
       return `<div class="lb-compose" id="lb-compose">
-        <div class="lb-compose-head"><strong>Compose a lesson from unassigned content</strong>
-          <div class="muted" style="font-size:.82em;margin-top:2px">Drag a preflight and/or an interaction into the boxes, then create the lesson. (Click a card to add it too.)</div></div>
-        <div class="lb-orphans">${cards}</div>
+        <div class="lb-compose-head"><strong>Schedule an assignment from the library</strong>
+          <div class="muted" style="font-size:.82em;margin-top:2px">These exist in <code>${esc(ctx.currentCourseCode || '')}</code> but are not scheduled this term. Drop one into the box (or click it), then schedule it — you set its points, deadline, and which activity carries credit.</div></div>
+        <div class="lb-orphans">${free.map(libraryCard).join('')}</div>
         <div class="lb-drops">
-          <div class="lb-drop" data-drop="preflight" id="drop-pf">
-            <div class="lb-drop-label">Free-response preflight</div>
-            <div class="lb-drop-slot empty" id="slot-pf">Drop a preflight here</div></div>
-          <div class="lb-drop" data-drop="interaction" id="drop-int">
-            <div class="lb-drop-label">AI interaction</div>
-            <div class="lb-drop-slot empty" id="slot-int">Drop an interaction here</div></div>
+          <div class="lb-drop" data-drop="assignment" id="drop-asg">
+            <div class="lb-drop-label">Assignment to schedule</div>
+            <div class="lb-drop-slot empty" id="slot-asg">Drop an assignment here</div></div>
         </div>
         <div class="row" style="gap:10px;margin-top:12px;align-items:center">
-          <button class="btn btn-primary" id="compose-make" disabled>Create lesson from selection →</button>
+          <button class="btn btn-primary" id="compose-make" disabled>Schedule this term →</button>
           <button class="btn btn-ghost btn-sm" id="compose-clear">Clear</button>
         </div>
       </div>`;
     }
-    function slotFill(type) {
-      const id = compose[type];
-      const slot = document.getElementById(type === 'preflight' ? 'slot-pf' : 'slot-int');
-      if (!id) {
-        slot.innerHTML = type === 'preflight' ? 'Drop a preflight here' : 'Drop an interaction here';
-        slot.classList.add('empty'); slot.classList.remove('filled');
-        return;
-      }
-      const list = type === 'preflight' ? vm.assignments : vm.interactions;
-      const o = (list || []).find(x => x.id === id);
-      slot.innerHTML = `<span class="lb-slot-title">${esc(o?.title || id)}</span>`
-        + `<button class="lb-slot-x" data-clear="${type}" title="Remove">×</button>`;
-      slot.classList.remove('empty'); slot.classList.add('filled');
-    }
     function renderComposeSlots() {
-      slotFill('preflight'); slotFill('interaction');
-      document.querySelectorAll('.lb-orphan').forEach(c => {
-        const sel = compose[c.dataset.otype] === c.dataset.oid;
-        c.classList.toggle('selected', sel);
-      });
+      const slot = document.getElementById('slot-asg');
+      if (!slot) return;
+      const a = (vm.library || []).find(x => x.id === compose.assignmentId);
+      if (!a) {
+        slot.innerHTML = 'Drop an assignment here';
+        slot.classList.add('empty'); slot.classList.remove('filled');
+      } else {
+        slot.innerHTML = `<span class="lb-slot-title">${esc(a.title || a.slug)}</span>`
+          + `<button class="lb-slot-x" data-clear="1" title="Remove">×</button>`;
+        slot.classList.remove('empty'); slot.classList.add('filled');
+      }
+      document.querySelectorAll('.lb-orphan[data-oid]').forEach(c =>
+        c.classList.toggle('selected', compose.assignmentId === c.dataset.oid));
       const make = document.getElementById('compose-make');
-      if (make) make.disabled = !(compose.preflight || compose.interaction);
+      if (make) make.disabled = !compose.assignmentId;
     }
-    function addToCompose(type, id) { compose[type] = id; renderComposeSlots(); }
     function wireCompose() {
       const region = document.getElementById('lb-compose');
       if (!region) return;
-      region.querySelectorAll('.lb-orphan').forEach(cardEl => {
+      region.querySelectorAll('.lb-orphan[data-oid]').forEach(cardEl => {
         cardEl.addEventListener('dragstart', e => {
-          e.dataTransfer.setData('text/plain', JSON.stringify({ type: cardEl.dataset.otype, id: cardEl.dataset.oid }));
+          e.dataTransfer.setData('text/plain', cardEl.dataset.oid);
           e.dataTransfer.effectAllowed = 'copy';
         });
-        cardEl.addEventListener('click', () => addToCompose(cardEl.dataset.otype, cardEl.dataset.oid));
+        cardEl.addEventListener('click', () => { compose.assignmentId = cardEl.dataset.oid; renderComposeSlots(); });
       });
-      region.querySelectorAll('.lb-drop').forEach(box => {
-        const accept = box.dataset.drop;
-        box.addEventListener('dragover',  e => { e.preventDefault(); box.classList.add('over'); });
-        box.addEventListener('dragleave', () => box.classList.remove('over'));
-        box.addEventListener('drop', e => {
-          e.preventDefault(); box.classList.remove('over');
-          let data; try { data = JSON.parse(e.dataTransfer.getData('text/plain')); } catch { return; }
-          if (!data || data.type !== accept) { box.classList.add('reject'); setTimeout(() => box.classList.remove('reject'), 450); return; }
-          addToCompose(data.type, data.id);
-        });
+      const box = region.querySelector('.lb-drop');
+      box.addEventListener('dragover',  e => { e.preventDefault(); box.classList.add('over'); });
+      box.addEventListener('dragleave', () => box.classList.remove('over'));
+      box.addEventListener('drop', e => {
+        e.preventDefault(); box.classList.remove('over');
+        const id = e.dataTransfer.getData('text/plain');
+        if (!id) return;
+        compose.assignmentId = id; renderComposeSlots();
       });
       region.addEventListener('click', e => {
-        const x = e.target.closest('[data-clear]'); if (x) addToCompose(x.dataset.clear, null);
+        if (e.target.closest('[data-clear]')) { compose.assignmentId = null; renderComposeSlots(); }
       });
-      document.getElementById('compose-clear').addEventListener('click', () => { compose = { preflight: null, interaction: null }; renderComposeSlots(); });
-      document.getElementById('compose-make').addEventListener('click', openComposeModal);
-    }
-    function openComposeModal() {
-      const pfId = compose.preflight, iId = compose.interaction;
-      const pf = (vm.assignments  || []).find(a => a.id === pfId);
-      const it = (vm.interactions || []).find(x => x.id === iId);
-      // Suggest a lesson slug/number/title from the chosen components — the slug must differ from
-      // either component id so both stay "referenced" (not lesson-owned).
-      const m = /(\d+)/.exec(pfId || iId || '');
-      const num = m ? String(parseInt(m[1], 10)) : '';
-      const slug = num ? `lesson-${num.padStart(2, '0')}` : '';
-      const title = (it?.title || pf?.title || '').replace(/\bpreflight\b/i, '').replace(/\s{2,}/g, ' ').replace(/^[\s—-]+|[\s—-]+$/g, '').trim();
-      openEdit(null, { compose: true, id: slug, num, title, pfExisting: pfId || null, iExisting: iId || null });
+      document.getElementById('compose-clear').addEventListener('click', () => { compose.assignmentId = null; renderComposeSlots(); });
+      document.getElementById('compose-make').addEventListener('click', () => {
+        if (compose.assignmentId) openEdit(null, { assignmentId: compose.assignmentId });
+      });
     }
 
     function comp(ok, label) {
@@ -413,27 +397,28 @@
     }
 
     function card(l) {
-      const status = l.is_published
+      const status = l.isPublished
         ? `<span class="score-badge full">Published</span>`
         : `<span class="score-badge pending">Draft</span>`;
-      const dues = [l.due_date_m ? `M ${esc(fmtDate(l.due_date_m))}` : null,
-                    l.due_date_t ? `T ${esc(fmtDate(l.due_date_t))}` : null].filter(Boolean).join(' · ');
-      const nq = (l.preflight?.questions || []).length;
+      // Deadlines are per section now, so the card shows the distinct dates actually in force
+      // rather than a fixed M/T pair. One date for everyone collapses to a single entry.
+      const dues = dueSummary(l);
+      const nq = questionsOf(l.written).length;
       const manage = isDirector() ? `
-        <button class="btn btn-ghost btn-sm" data-edit="${esc(l.id)}">Edit</button>
-        <button class="btn btn-ghost btn-sm" data-pub="${esc(l.id)}">${l.is_published ? 'Unpublish' : 'Publish'}</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--red)" data-del="${esc(l.id)}">Delete</button>` : '';
+        <button class="btn btn-ghost btn-sm" data-edit="${esc(l.offeringId)}">Edit</button>
+        <button class="btn btn-ghost btn-sm" data-pub="${esc(l.offeringId)}">${l.isPublished ? 'Unpublish' : 'Publish'}</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--red)" data-del="${esc(l.offeringId)}">Remove</button>` : '';
 
       return `<div class="card">
         <div class="row wrap" style="justify-content:space-between;align-items:flex-start;gap:12px">
           <div class="grow" style="min-width:220px">
-            <div class="row" style="gap:8px;align-items:center"><div class="card-title">${l.lesson_number != null ? esc(String(l.lesson_number)) + '. ' : ''}${esc(l.title)}</div>${status}</div>
-            <div class="muted" style="font-size:0.8em;margin-top:3px"><code>${esc(l.id)}</code>${dues ? ' · Due ' + dues : ''}</div>
+            <div class="row" style="gap:8px;align-items:center"><div class="card-title">${l.lessonNumber != null ? esc(String(l.lessonNumber)) + '. ' : ''}${esc(l.title)}</div>${status}</div>
+            <div class="muted" style="font-size:0.8em;margin-top:3px"><code>${esc(l.slug)}</code>${dues ? ' · Due ' + esc(dues) : ''} · ${l.pointsPossible} pt${l.pointsPossible === 1 ? '' : 's'}</div>
             ${l.description ? `<div class="muted" style="font-size:0.86em;margin-top:6px">${esc(l.description)}</div>` : ''}
             <div class="row wrap" style="gap:8px;margin-top:10px;align-items:center">
-              <span class="score-badge" style="font-size:0.72em">${esc(POLICY_LABEL[l.completion_policy] || l.completion_policy)}</span>
-              ${comp(!!l.preflight_id, nq ? `Free response · ${nq} q` : 'Free response')}
-              ${comp(!!l.interaction_id, 'AI Interaction')}
+              <span class="score-badge" style="font-size:0.72em">${esc(POLICY_LABEL[l.policy] || l.policy)}</span>
+              ${comp(!!l.written, nq ? `Free response · ${nq} q` : 'Free response')}
+              ${comp(!!l.interactive, 'AI Interaction')}
             </div>
           </div>
         </div>
@@ -441,49 +426,98 @@
       </div>`;
     }
 
+    /** The deadlines actually in force, labelled by section code where they differ. */
+    function dueSummary(l) {
+      const byDate = {};
+      (vm.sections || []).forEach(s => {
+        const iso = l.dueBySection?.[s.id] || l.dueAt;
+        if (!iso) return;
+        (byDate[String(iso).slice(0, 10)] ||= []).push(s.code);
+      });
+      const dates = Object.keys(byDate).sort();
+      if (!dates.length) return l.dueAt ? fmtDate(l.dueAt) : '';
+      if (dates.length === 1) return fmtDate(dates[0]);
+      return dates.map(d => `${byDate[d].join('/')} ${fmtDate(d)}`).join(' · ');
+    }
+
     function wireNew() { document.getElementById('new-btn')?.addEventListener('click', () => openEdit(null)); }
 
     // ── Editor model ──────────────────────────────────────────────────────
     function blankModel() {
       return {
+        assignmentId: null,
         policy: 'choice', questions: [],
-        preflight:   { source: 'new', existingId: '', reference_pdf: '', reference_pages: '', reading_link: '' },
-        interaction: { source: 'new', existingId: '', id: '', title: '', artifact_url: '', description: '' },
-      };
-    }
-    // A component is created-inline ("new") when its id equals the lesson id; otherwise it's an
-    // attached-existing ("existing") reference. No component id at all ⇒ "none".
-    function modelFromLesson(l) {
-      const pfExisting = !!l.preflight_id   && l.preflight_id   !== l.id;
-      const iExisting  = !!l.interaction_id && l.interaction_id !== l.id;
-      const pfRow = l.preflight || {};
-      return {
-        policy: l.completion_policy || 'choice',
-        questions: JSON.parse(JSON.stringify(pfRow.questions || [])),
-        preflight: {
-          source: l.preflight_id ? (pfExisting ? 'existing' : 'new') : 'none',
-          existingId: pfExisting ? l.preflight_id : '',
-          reference_pdf:   pfRow.reference_pdf   || '',
-          reference_pages: pfRow.reference_pages || '',
-          reading_link:    pfRow.reading_link    || '',
-        },
-        interaction: {
-          source: l.interaction_id ? (iExisting ? 'existing' : 'new') : 'none',
-          existingId: iExisting ? l.interaction_id : '',
-          id: (l.interaction_id && !iExisting) ? l.interaction_id : '',
-          title: l.interaction?.title || '',
-          artifact_url: l.interaction?.artifact_url || '',
-          description: l.interaction?.description || '',
-        },
+        written:     { include: true, reference_pdf: '', reference_pages: '', reading_link: '' },
+        interactive: { include: true, slug: '', title: '', artifact_url: '', description: '' },
+        existingInteractive: null,       // { id, slug } when the container already has one
+        pointsPossible: 2, gradingMode: 'points', switchPolicy: 'lock_on_commit',
+        dueByDay: {},
       };
     }
 
-    // When a preflight is authored inline, two questions are always pinned first: Q1 is a
-    // reading-time diagnostic (0 pts, names hidden) and Q2 is the shared reading reflection
-    // (the meaningful-gate, identical to the interaction). Only relevant when source is "new".
+    /** Editor model from a scheduled lesson (a shaped assignment offering). */
+    function modelFromLesson(l) {
+      const dueByDay = {};
+      (vm.sections || []).forEach(s => {
+        const iso = l.dueBySection?.[s.id] || l.dueAt;
+        if (!iso) return;
+        (s.meeting_days || ['_all']).forEach(d => { if (!dueByDay[d]) dueByDay[d] = String(iso).slice(0, 10); });
+      });
+      if (!Object.keys(dueByDay).length && l.dueAt) dueByDay._all = String(l.dueAt).slice(0, 10);
+
+      const w = l.written, i = l.interactive;
+      return {
+        assignmentId: l.assignmentId,
+        policy: l.policy,
+        questions: JSON.parse(JSON.stringify(questionsOf(w))),
+        written: {
+          include: !!w,
+          reference_pdf:   w?.content?.reference_pdf   || '',
+          reference_pages: w?.content?.reference_pages || '',
+          reading_link:    w?.content?.reading_link    || '',
+        },
+        interactive: {
+          include: !!i,
+          slug: i?.slug || '',
+          title: i?.title || '',
+          artifact_url: i?.content?.artifact_url || '',
+          description: i?.content?.description || '',
+        },
+        existingInteractive: i ? { id: i.id, slug: i.slug } : null,
+        pointsPossible: l.pointsPossible ?? 2,
+        gradingMode: l.gradingMode || 'points',
+        switchPolicy: l.switchPolicy || 'lock_on_commit',
+        dueByDay,
+      };
+    }
+
+    /** Editor model from a library assignment being scheduled for the first time. */
+    function modelFromLibrary(a) {
+      const m = blankModel();
+      m.assignmentId = a.id;
+      m.written.include = !!a.written;
+      m.questions = JSON.parse(JSON.stringify(a.written?.content?.questions || []));
+      m.written.reference_pdf   = a.written?.content?.reference_pdf   || '';
+      m.written.reference_pages = a.written?.content?.reference_pages || '';
+      m.written.reading_link    = a.written?.content?.reading_link    || '';
+      m.interactive.include = !!a.interactive;
+      if (a.interactive) {
+        m.interactive.slug = a.interactive.slug;
+        m.interactive.title = a.interactive.title || '';
+        m.interactive.artifact_url = a.interactive.content?.artifact_url || '';
+        m.interactive.description  = a.interactive.content?.description  || '';
+        m.existingInteractive = { id: a.interactive.id, slug: a.interactive.slug };
+      }
+      m.policy = (a.written && a.interactive) ? 'choice' : (a.interactive ? 'interaction' : 'preflight');
+      return m;
+    }
+
+    // Two questions are always pinned first when authoring written questions: Q1 is a reading-time
+    // diagnostic (0 pts, names hidden) and Q2 is the shared reading reflection (the meaningful-gate,
+    // identical to the interaction).
     const roleRank = (q) => q.role === 'reading_time' ? 0 : q.role === 'reading_reflection' ? 1 : 2;
     function ensureDefaultQuestions() {
-      if (model.preflight?.source !== 'new') return;
+      if (!model.written.include) return;
       if (!model.questions.some(q => q.role === 'reading_reflection')) {
         model.questions.push({
           id: nextQid(), type: 'free_response', text: READING_REFLECTION_TEXT, points: 1,
@@ -499,33 +533,37 @@
       model.questions.sort((a, b) => roleRank(a) - roleRank(b));   // stable: time, reflection, rest
     }
 
-    // id null → new; id set → edit. prefill overlays the base model (from a compose action or an
-    // artifact link); for any field it omits, it falls back to the existing row.
-    function openEdit(id, prefill) {
+    // id null → new; id set (an assignment-offering uuid) → edit. prefill overlays the base model
+    // (from a library pick or an artifact link); for any field it omits, the existing row stands.
+    async function openEdit(id, prefill) {
       editingId = id;
       pendingSwap = null;              // the destination chooser re-arms this after openEdit returns
-      const existing = id ? vm.lessons.find(x => x.id === id) : null;
-      model = existing ? modelFromLesson(existing) : blankModel();
+      const existing = id ? vm.lessons.find(x => x.offeringId === id) : null;
+
+      let libraryRow = null;
+      if (!existing && prefill?.assignmentId) {
+        libraryRow = (vm.library || []).find(a => a.id === prefill.assignmentId)
+                  || await L.getLibraryAssignment(prefill.assignmentId);
+      }
+      model = existing ? modelFromLesson(existing)
+            : libraryRow ? modelFromLibrary(libraryRow)
+            : blankModel();
 
       if (prefill) {
         if (['preflight', 'interaction', 'choice'].includes(prefill.policy)) model.policy = prefill.policy;
-        if (prefill.compose) {
-          // Compose-from-existing: reference the dragged components; unfilled side becomes "none".
-          model.preflight.source     = prefill.pfExisting ? 'existing' : 'none';
-          model.preflight.existingId = prefill.pfExisting || '';
-          model.interaction.source     = prefill.iExisting ? 'existing' : 'none';
-          model.interaction.existingId = prefill.iExisting || '';
-        } else if (prefill.iid != null || prefill.iurl != null || prefill.id) {
-          // Artifact link → author a NEW interaction inline (one slug serves both by default).
-          model.interaction.source = 'new';
-          if (prefill.iid != null)    model.interaction.id = prefill.iid;
-          else if (prefill.id)        model.interaction.id = prefill.id;
-          if (prefill.iurl != null)   model.interaction.artifact_url = prefill.iurl;
-          if (prefill.ititle != null) model.interaction.title = prefill.ititle;
-          if (prefill.idesc != null)  model.interaction.description = prefill.idesc;
+        if (prefill.iid != null || prefill.iurl != null) {
+          // Artifact link → the interactive activity is what the link carries.
+          model.interactive.include = true;
+          if (prefill.iid != null)    model.interactive.slug = prefill.iid;
+          else if (prefill.id && !model.interactive.slug) model.interactive.slug = prefill.id;
+          if (prefill.iurl != null)   model.interactive.artifact_url = prefill.iurl;
+          if (prefill.ititle != null) model.interactive.title = prefill.ititle;
+          if (prefill.idesc != null)  model.interactive.description = prefill.idesc;
         }
+        if (prefill.due_m) model.dueByDay.M = prefill.due_m;
+        if (prefill.due_t) model.dueByDay.T = prefill.due_t;
       }
-      interactionIdTouched = !!id || !!(prefill && prefill.iid != null);
+      interactionSlugTouched = !!id || !!libraryRow || !!(prefill && prefill.iid != null);
       ensureDefaultQuestions();
 
       const pick = (pv, ev) => (pv != null && pv !== '' ? pv : (ev ?? ''));
@@ -533,80 +571,104 @@
       document.getElementById('lm-notice').style.display = 'none';
       document.getElementById('lm-title').textContent =
         id ? 'Edit lesson' : (prefill ? 'New lesson — review & save' : 'New lesson');
-      document.getElementById('f-course').innerHTML = ctx.courses
-        .map(c => `<option value="${esc(c.course_id)}">${esc(c.course_title || c.course_id)}</option>`).join('');
-      const vCourse = pick(prefill?.course, existing?.course_id ?? ctx.currentCourse);
-      document.getElementById('f-course').value = ctx.courses.some(c => c.course_id === vCourse) ? vCourse : ctx.currentCourse;
+
+      // The scope selector lists OFFERINGS (course in a term). Everything scheduled hangs off one.
+      const courseSel = document.getElementById('f-course');
+      courseSel.innerHTML = ctx.courses.map(c =>
+        `<option value="${esc(c.offeringId)}">${esc(c.courseTitle || c.courseCode)}${c.termLabel ? ' · ' + esc(c.termLabel) : ''}</option>`).join('');
+      const wantOffering = prefill?.offeringId || ctx.currentOffering;
+      courseSel.value = ctx.courses.some(c => c.offeringId === wantOffering) ? wantOffering : ctx.currentOffering;
+      courseSel.disabled = !!id;                     // an offering cannot move between terms
 
       const idField = document.getElementById('f-id');
-      idField.value = id ?? (prefill?.id ?? '');
-      idField.disabled = !!id;                        // slug is the PK — fixed once created
-      document.getElementById('f-id-hint').textContent = id ? 'The id cannot be changed after creation.' : 'Lowercase letters, numbers, hyphens.';
-      document.getElementById('f-num').value   = pick(prefill?.num, existing?.lesson_number);
-      document.getElementById('f-title').value = pick(prefill?.title, existing?.title);
-      document.getElementById('f-desc').value  = pick(prefill?.desc, existing?.description);
-      document.getElementById('f-due-m').value = prefill?.due_m ?? (existing?.due_date_m ? String(existing.due_date_m).slice(0, 10) : '');
-      document.getElementById('f-due-t').value = prefill?.due_t ?? (existing?.due_date_t ? String(existing.due_date_t).slice(0, 10) : '');
-      document.getElementById('f-pub').checked = prefill && prefill.pub != null ? prefill.pub : !!existing?.is_published;
+      idField.value = existing?.slug ?? libraryRow?.slug ?? pick(prefill?.id, '');
+      // The slug identifies the library container. Fixed once the container exists — whether we
+      // are editing this term's run or scheduling one someone else already authored.
+      idField.disabled = !!(existing || libraryRow);
+      document.getElementById('f-id-hint').textContent = idField.disabled
+        ? 'The library id cannot be changed after creation.'
+        : 'Lowercase letters, numbers, hyphens.';
+      document.getElementById('f-num').value   = pick(prefill?.num, existing?.lessonNumber);
+      document.getElementById('f-title').value = pick(prefill?.title, existing?.title ?? libraryRow?.title);
+      document.getElementById('f-desc').value  = pick(prefill?.desc, existing?.description ?? libraryRow?.description);
+      document.getElementById('f-pub').checked = prefill && prefill.pub != null ? prefill.pub : !!existing?.isPublished;
+      document.getElementById('f-pts').value    = model.pointsPossible;
+      document.getElementById('f-mode').value   = model.gradingMode;
+      document.getElementById('f-switch').value = model.switchPolicy;
 
-      // Inline component fields from the model.
       renderRefPdfSelect();
-      document.getElementById('f-pf-refpages').value = model.preflight.reference_pages;
-      document.getElementById('f-pf-readlink').value = model.preflight.reading_link;
-      document.getElementById('f-i-id').value    = model.interaction.id;
-      document.getElementById('f-i-id').disabled = model.interaction.source === 'existing';
-      document.getElementById('f-i-title').value = model.interaction.title;
-      document.getElementById('f-i-url').value   = model.interaction.artifact_url;
-      document.getElementById('f-i-desc').value  = model.interaction.description;
+      document.getElementById('f-pf-refpages').value = model.written.reference_pages;
+      document.getElementById('f-pf-readlink').value = model.written.reading_link;
+      renderInteractiveFields();
+      renderDueDays();
 
       updateSourceSegs();
-      renderPickers();
       applyComponentVisibility();
       updatePolicyAvailability();     // also refreshes the policy segmented control + hint
       renderQuestions();
-      // Compose/attach of an existing component with nothing loaded yet → fetch it so the director
-      // can edit (edit-mode already hydrated these from the lesson's rows).
-      if (model.preflight.source === 'existing' && model.preflight.existingId && !model.questions.length) {
-        loadExistingPreflight(model.preflight.existingId);
-      }
-      if (model.interaction.source === 'existing' && model.interaction.existingId && !model.interaction.artifact_url) {
-        loadExistingInteraction(model.interaction.existingId);
-      }
       document.getElementById('lesson-modal').classList.add('open');
-      ensureLessonDueDates();          // adopt component due dates when the lesson has none (may prompt)
     }
 
     function closeModal() { document.getElementById('lesson-modal').classList.remove('open'); }
 
-    // ── Sources, components & policy ──────────────────────────────────────
+    function renderInteractiveFields() {
+      const idEl = document.getElementById('f-i-id');
+      idEl.value = model.interactive.slug;
+      // A shipped slug is the artifact's `#i=` contract surface: every student report resolves
+      // through it, so it is read-only once the activity exists. A prefill link carrying a
+      // DIFFERENT slug goes through the replace path, not through this field.
+      idEl.disabled = !!model.existingInteractive;
+      document.getElementById('f-i-id-hint').innerHTML = model.existingInteractive
+        ? 'Frozen — deployed artifacts post to this slug and every student report resolves through it.'
+        : 'Defaults to the lesson id; must match the slug the AI tool posts in <code>#i=</code>.';
+      document.getElementById('f-i-title').value = model.interactive.title;
+      document.getElementById('f-i-url').value   = model.interactive.artifact_url;
+      document.getElementById('f-i-desc').value  = model.interactive.description;
+    }
+
+    // One date input per meeting-day letter the offering's sections actually use, so a course
+    // meeting W/F needs no code change. No meeting-day data at all → one plain due date.
+    function renderDueDays() {
+      const days = (vm.meetingDays && vm.meetingDays.length) ? vm.meetingDays : ['_all'];
+      document.getElementById('f-due-days').innerHTML = days.map(d =>
+        `<div class="field grow" style="min-width:150px"><label for="f-due-${esc(d)}">${esc(DAY_LABEL[d] || d + '-day')} due date</label>
+           <input id="f-due-${esc(d)}" type="date" data-due="${esc(d)}" value="${esc(model.dueByDay[d] || '')}"></div>`).join('');
+      const secs = (vm.sections || []).filter(s => (s.meeting_days || []).length);
+      document.getElementById('f-due-hint').textContent = secs.length
+        ? `A student's deadline comes from their section's meeting day (${secs.map(s => `${s.code}=${(s.meeting_days || []).join('/')}`).join(', ')}).`
+        : 'Sections in this term declare no meeting days, so one deadline applies to everyone.';
+    }
+
+    // ── Components & policy ───────────────────────────────────────────────
     function updatePolicySeg() {
       document.querySelectorAll('#f-policy button').forEach(b =>
         b.setAttribute('aria-pressed', String(b.dataset.policy === model.policy)));
       document.getElementById('f-policy-hint').textContent = POLICY_HINT[model.policy] || '';
+      // switch_policy only means anything when there is a choice to lock.
+      document.getElementById('f-switch-wrap').style.display = model.policy === 'choice' ? '' : 'none';
     }
     function updateSourceSegs() {
+      const pfSrc = model.written.include ? 'new' : 'none';
+      const iSrc  = model.interactive.include ? 'new' : 'none';
       document.querySelectorAll('#f-pf-source button').forEach(b =>
-        b.setAttribute('aria-pressed', String(b.dataset.pfsrc === model.preflight.source)));
+        b.setAttribute('aria-pressed', String(b.dataset.pfsrc === pfSrc)));
       document.querySelectorAll('#f-i-source button').forEach(b =>
-        b.setAttribute('aria-pressed', String(b.dataset.isrc === model.interaction.source)));
+        b.setAttribute('aria-pressed', String(b.dataset.isrc === iSrc)));
     }
     function applyComponentVisibility() {
-      const ps = model.preflight.source, is = model.interaction.source;
-      // Both editors show for a new component OR an existing one that's been chosen — attached
-      // existing assignments/interactions are editable, not just referenced.
-      const pfEditor = ps === 'new' || (ps === 'existing' && !!model.preflight.existingId);
-      const iEditor  = is === 'new' || (is === 'existing' && !!model.interaction.existingId);
-      document.getElementById('lb-pf-existing').style.display = ps === 'existing' ? '' : 'none';
-      document.getElementById('lb-pf-new').style.display      = pfEditor ? '' : 'none';
-      document.getElementById('lb-i-existing').style.display  = is === 'existing' ? '' : 'none';
-      document.getElementById('lb-i-new').style.display       = iEditor ? '' : 'none';
+      document.getElementById('lb-pf-new').style.display = model.written.include ? '' : 'none';
+      document.getElementById('lb-i-new').style.display  = model.interactive.include ? '' : 'none';
+      // "Not this term" detaches, it does not delete — say so where the director just clicked.
+      document.getElementById('lb-pf-detached').style.display =
+        (!model.written.include && model.assignmentId) ? '' : 'none';
+      document.getElementById('lb-i-detached').style.display =
+        (!model.interactive.include && model.existingInteractive) ? '' : 'none';
     }
     function availablePolicies() {
-      const pf = model.preflight.source !== 'none', it = model.interaction.source !== 'none';
       const av = [];
-      if (pf) av.push('preflight');
-      if (it) av.push('interaction');
-      if (pf && it) av.push('choice');
+      if (model.written.include) av.push('preflight');
+      if (model.interactive.include) av.push('interaction');
+      if (model.written.include && model.interactive.include) av.push('choice');
       return av;
     }
     function updatePolicyAvailability() {
@@ -620,46 +682,21 @@
       });
       updatePolicySeg();
     }
-    function setPreflightSource(src) {
-      model.preflight.source = src;
-      if (src === 'new') { ensureDefaultQuestions(); renderQuestions(); }
+    function setWrittenIncluded(on) {
+      model.written.include = on;
+      if (on) { ensureDefaultQuestions(); renderQuestions(); }
       updateSourceSegs(); applyComponentVisibility(); updatePolicyAvailability();
     }
-    function setInteractionSource(src) {
-      model.interaction.source = src;
-      // The interaction id (artifact `#i=` slug) is editable for a new interaction, fixed for an
-      // attached existing one.
-      document.getElementById('f-i-id').disabled = (src === 'existing' && !!model.interaction.existingId);
+    function setInteractiveIncluded(on) {
+      model.interactive.include = on;
       updateSourceSegs(); applyComponentVisibility(); updatePolicyAvailability();
-    }
-    // The two "use existing" dropdowns, filled from the full course lists loaded by loadManager.
-    // A row already owned by ANOTHER lesson is shown disabled so it can't be double-attached.
-    function pickerOptions(rows, selId, kind) {
-      const label = kind === 'preflight' ? 'preflight assignment' : 'interaction';
-      const out = [`<option value="">— select ${label} —</option>`];
-      rows.forEach(r => {
-        const owned = r.ownedBy && r.ownedBy !== editingId;
-        const meta  = kind === 'preflight'
-          ? `${r.nq} q${r.is_published ? '' : ' · draft'}`
-          : (r.is_published ? 'published' : 'draft');
-        const tag = owned ? ` — already in ${r.ownedBy}` : '';
-        out.push(`<option value="${esc(r.id)}"${r.id === selId ? ' selected' : ''}${owned ? ' disabled' : ''}>`
-          + `${esc(r.title || r.id)} · ${esc(meta)}${esc(tag)}</option>`);
-      });
-      return out.join('');
-    }
-    function renderPickers() {
-      document.getElementById('f-pf-pick').innerHTML = pickerOptions(vm.assignments  || [], model.preflight.existingId,   'preflight');
-      document.getElementById('f-i-pick').innerHTML  = pickerOptions(vm.interactions || [], model.interaction.existingId, 'interaction');
     }
 
     // Reference-PDF dropdown, fed by the committed RAG manifest. "+ Add new…" reveals a free-text
-    // field for a one-off path (stored only on this assignment until it's added to the manifest).
-    // Dropdown shows just the base filename (no directory, no extension); the stored value stays the
-    // full path the grader resolves under textbook_base_path.
+    // field for a one-off path (stored only on this activity until it's added to the manifest).
     const ragLabel = (p) => (p.split('/').pop() || p).replace(/\.[^.]+$/, '');
     function renderRefPdfSelect() {
-      const cur = model.preflight.reference_pdf || '';
+      const cur = model.written.reference_pdf || '';
       const inManifest = ragManifest.includes(cur);
       const opts = ['<option value="">— none —</option>']
         .concat(ragManifest.map(p => `<option value="${esc(p)}">${esc(ragLabel(p))}</option>`));
@@ -672,8 +709,8 @@
     }
     function handleRefSelect(v) {
       const inp = document.getElementById('f-pf-refpdf');
-      if (v === '__add__') { inp.style.display = ''; inp.value = ''; model.preflight.reference_pdf = ''; inp.focus(); }
-      else { inp.style.display = 'none'; inp.value = v; model.preflight.reference_pdf = v; }
+      if (v === '__add__') { inp.style.display = ''; inp.value = ''; model.written.reference_pdf = ''; inp.focus(); }
+      else { inp.style.display = 'none'; inp.value = v; model.written.reference_pdf = v; }
     }
 
     // Drag-dropped / picked image → upload to the lesson-figures Storage bucket, then fill figure_url.
@@ -691,86 +728,7 @@
       renderQuestions();
     }
 
-    // Attaching an existing preflight loads its questions into the EDITABLE builder so a director can
-    // revise them; saving writes the edits back onto that same assignment (see faculty-lessons.js).
-    async function loadExistingPreflight(id) {
-      model.preflight.existingId = id;
-      if (!id) { model.questions = []; renderQuestions(); applyComponentVisibility(); return; }
-      const a = await L.getAssignment(id);
-      model.questions = JSON.parse(JSON.stringify(a?.questions || []));
-      model.preflight.reference_pdf   = a?.reference_pdf   || '';
-      model.preflight.reference_pages = a?.reference_pages || '';
-      model.preflight.reading_link    = a?.reading_link    || '';
-      document.getElementById('f-pf-refpages').value = model.preflight.reference_pages;
-      document.getElementById('f-pf-readlink').value = model.preflight.reading_link;
-      renderRefPdfSelect();
-      renderQuestions();
-      applyComponentVisibility();
-    }
-
-    // When a lesson has no due dates but its attached components do, adopt them: use whichever
-    // source has dates; if BOTH do, prompt for which set. Runs on compose and on opening an
-    // already-combined lesson that still lacks dates. Never overrides dates the director set.
-    const dstr = (v) => v ? String(v).slice(0, 10) : '';
-    async function ensureLessonDueDates() {
-      const mEl = document.getElementById('f-due-m'), tEl = document.getElementById('f-due-t');
-      if (mEl.value || tEl.value) return;
-      const pfId = model.preflight.source   === 'existing' ? model.preflight.existingId   : null;
-      const iId  = model.interaction.source === 'existing' ? model.interaction.existingId : null;
-      if (!pfId && !iId) return;
-      const [pf, it] = await Promise.all([
-        pfId ? L.getAssignment(pfId)  : Promise.resolve(null),
-        iId  ? L.getInteraction(iId)  : Promise.resolve(null),
-      ]);
-      const pfM = dstr(pf?.due_date_m), pfT = dstr(pf?.due_date_t);
-      const itM = dstr(it?.due_date_m), itT = dstr(it?.due_date_t);
-      const pfHas = pfM || pfT, itHas = itM || itT;
-      let m = '', t = '';
-      if (pfHas && itHas) {
-        const pick = await promptDueDateChoice({ pfM, pfT, itM, itT });
-        if (pick === 'preflight')        { m = pfM; t = pfT; }
-        else if (pick === 'interaction') { m = itM; t = itT; }
-        else return;
-      } else if (pfHas) { m = pfM; t = pfT; }
-      else if (itHas)   { m = itM; t = itT; }
-      else return;
-      if (mEl.value || tEl.value) return;   // re-check after the await (director may have typed)
-      mEl.value = m; tEl.value = t;
-    }
-    function promptDueDateChoice({ pfM, pfT, itM, itT }) {
-      return new Promise(resolve => {
-        const modal = document.getElementById('due-modal');
-        const pfBtn = document.getElementById('due-pick-pf');
-        const iBtn  = document.getElementById('due-pick-i');
-        const fmt = (m, t) => `M ${m || '—'} · T ${t || '—'}`;
-        pfBtn.textContent = `Use preflight dates · ${fmt(pfM, pfT)}`;
-        iBtn.textContent  = `Use interaction dates · ${fmt(itM, itT)}`;
-        const done = (val) => { modal.classList.remove('open'); pfBtn.onclick = null; iBtn.onclick = null; resolve(val); };
-        pfBtn.onclick = () => done('preflight');
-        iBtn.onclick  = () => done('interaction');
-        modal.classList.add('open');
-      });
-    }
-
-    // Attaching an existing interaction loads its title/URL/description into the EDITABLE fields;
-    // saving updates that same interaction row (its id — the artifact `#i=` slug — stays fixed).
-    async function loadExistingInteraction(id) {
-      model.interaction.existingId = id;
-      const idEl = document.getElementById('f-i-id');
-      if (!id) { idEl.disabled = false; applyComponentVisibility(); return; }
-      const it = await L.getInteraction(id);
-      model.interaction.id = id;
-      model.interaction.title = it?.title || '';
-      model.interaction.artifact_url = it?.artifact_url || '';
-      model.interaction.description = it?.description || '';
-      idEl.value = id; idEl.disabled = true;          // existing PK — not editable
-      document.getElementById('f-i-title').value = model.interaction.title;
-      document.getElementById('f-i-url').value   = model.interaction.artifact_url;
-      document.getElementById('f-i-desc').value  = model.interaction.description;
-      applyComponentVisibility();
-    }
-
-    // ── Preflight question builder ────────────────────────────────────────
+    // ── Question builder ──────────────────────────────────────────────────
     function nextQid() {
       let max = 0;
       model.questions.forEach(q => { const m = /^q(\d+)$/.exec(q.id || ''); if (m) max = Math.max(max, +m[1]); });
@@ -885,23 +843,25 @@
           else                           q[ds.f] = t.value;
           return;
         }
-        if (ds.pf) { model.preflight[ds.pf] = t.value; return; }
-        if (ds.i)  { if (ds.i === 'id') interactionIdTouched = true; model.interaction[ds.i] = t.value; return; }
+        if (ds.due) { model.dueByDay[ds.due] = t.value || ''; return; }
+        if (ds.pf)  { model.written[ds.pf] = t.value; return; }
+        if (ds.i)   { if (ds.i === 'slug') interactionSlugTouched = true; model.interactive[ds.i] = t.value; return; }
       });
 
-      // Mirror the lesson id into the interaction id (only while authoring a NEW interaction) until
+      // Mirror the lesson id into the interaction slug (only while authoring a NEW artifact) until
       // the director sets one explicitly — "one slug serves both" is the default.
       document.getElementById('f-id').addEventListener('input', (e) => {
-        if (editingId || interactionIdTouched || model.interaction.source !== 'new') return;
-        model.interaction.id = e.target.value;
+        if (editingId || interactionSlugTouched || model.existingInteractive) return;
+        model.interactive.slug = e.target.value;
         document.getElementById('f-i-id').value = e.target.value;
       });
 
       backdrop.addEventListener('change', (e) => {
         const t = e.target;
-        if (t.id === 'f-pf-pick')       { loadExistingPreflight(t.value); return; }
-        if (t.id === 'f-i-pick')        { loadExistingInteraction(t.value); return; }
         if (t.id === 'f-pf-refpdf-sel') { handleRefSelect(t.value); return; }
+        if (t.id === 'f-pts')    { model.pointsPossible = parseFloat(t.value) || 0; return; }
+        if (t.id === 'f-mode')   { model.gradingMode = t.value; return; }
+        if (t.id === 'f-switch') { model.switchPolicy = t.value; return; }
         if (t.dataset.figfile != null)  { const f = t.files?.[0]; if (f) handleFigureFile(+t.dataset.figfile, f); return; }
       });
 
@@ -914,8 +874,8 @@
           updatePolicySeg();
           return;
         }
-        const pfSrcBtn = e.target.closest('[data-pfsrc]'); if (pfSrcBtn) { setPreflightSource(pfSrcBtn.dataset.pfsrc); return; }
-        const iSrcBtn  = e.target.closest('[data-isrc]');  if (iSrcBtn)  { setInteractionSource(iSrcBtn.dataset.isrc); return; }
+        const pfSrcBtn = e.target.closest('[data-pfsrc]'); if (pfSrcBtn) { setWrittenIncluded(pfSrcBtn.dataset.pfsrc === 'new'); return; }
+        const iSrcBtn  = e.target.closest('[data-isrc]');  if (iSrcBtn)  { setInteractiveIncluded(iSrcBtn.dataset.isrc === 'new'); return; }
         const qadd = e.target.closest('[data-qadd]'); if (qadd) { addQuestion(qadd.dataset.qadd); return; }
         const qrm  = e.target.closest('[data-qrm]');  if (qrm)  { model.questions.splice(+qrm.dataset.qrm, 1); renderQuestions(); return; }
         const figpick = e.target.closest('[data-figpick]');
@@ -948,18 +908,11 @@
     }
 
     // ── Student preview (questions only) ──────────────────────────────────
-    // Shows exactly what students answer — the reading-time Q1, reading reflection Q2, and any
-    // further questions (with figures) as read-only inputs. Never renders the AI Interaction.
-    async function openPreview() {
-      const pfSrc = model.preflight.source;
-      let questions = [], title = document.getElementById('f-title').value.trim();
-      if (pfSrc === 'new') { ensureDefaultQuestions(); questions = model.questions; }
-      else if (pfSrc === 'existing' && model.preflight.existingId) {
-        const data = await L.getAssignment(model.preflight.existingId);
-        questions = data?.questions || [];
-        if (data?.title) title = data.title;
-      }
-      document.getElementById('preview-body').innerHTML = previewHtml(title, questions);
+    function openPreview() {
+      if (model.written.include) ensureDefaultQuestions();
+      const title = document.getElementById('f-title').value.trim();
+      document.getElementById('preview-body').innerHTML =
+        previewHtml(title, model.written.include ? model.questions : []);
       document.getElementById('preview-modal').classList.add('open');
     }
     function previewHtml(title, questions) {
@@ -990,119 +943,152 @@
     function fail(msg) { const e = document.getElementById('lm-error'); e.textContent = msg; e.style.display = ''; return false; }
 
     async function saveLesson() {
-      const err = document.getElementById('lm-error'); err.style.display = 'none';
-      const id = document.getElementById('f-id').value.trim();
+      document.getElementById('lm-error').style.display = 'none';
+      const slug = document.getElementById('f-id').value.trim();
       const title = document.getElementById('f-title').value.trim();
       const numRaw = document.getElementById('f-num').value.trim();
-      const dueM = document.getElementById('f-due-m').value;
-      const dueT = document.getElementById('f-due-t').value;
+      const offeringId = document.getElementById('f-course').value;
+      const course = ctx.courses.find(c => c.offeringId === offeringId);
 
-      if (!editingId && !/^[a-z0-9-]+$/.test(id)) return fail('Lesson id must be lowercase letters, numbers, and hyphens only.');
+      if (!model.assignmentId && !L.isValidSlug(slug))
+        return fail('Lesson id must be lowercase letters, numbers, and hyphens only.');
       if (!title) return fail('Enter a lesson title.');
-
-      const pfSrc = model.preflight.source, iSrc = model.interaction.source;
-
+      if (!model.written.include && !model.interactive.include)
+        return fail('A lesson needs at least one activity — include the written questions, the AI interaction, or both.');
       if (!availablePolicies().includes(model.policy))
-        return fail('The selected mode needs its component attached — add the preflight and/or interaction, or change the allowed mode.');
+        return fail('The selected mode needs its activity included — add the preflight and/or interaction, or change the allowed mode.');
 
-      const questions = model.questions;
-      if (pfSrc === 'new') {
+      if (model.written.include) {
         ensureDefaultQuestions();
-        if (questions.some(q => !(q.text || '').trim()))
+        if (model.questions.some(q => !(q.text || '').trim()))
           return fail('Every free-response question needs question text (including the pinned Q1 and Q2).');
-      } else if (pfSrc === 'existing') {
-        if (!model.preflight.existingId) return fail('Select an existing preflight assignment, or set the preflight to None.');
-        if (questions.length && questions.some(q => !(q.text || '').trim()))
-          return fail('Every question needs question text.');
       }
-
-      const inter = model.interaction;
-      if (iSrc === 'new') {
-        if (!/^[a-z0-9-]+$/.test((inter.id || '').trim())) return fail('Interaction id must be lowercase letters, numbers, and hyphens only.');
-        if (!(inter.artifact_url || '').trim()) return fail('Enter the interaction URL.');
-      } else if (iSrc === 'existing') {
-        if (!inter.existingId) return fail('Select an existing interaction, or set the interaction to None.');
-        if (!(inter.artifact_url || '').trim()) return fail('Enter the interaction URL.');
-      }
-
-      const pf = model.preflight;
-      const payload = {
-        id: editingId || id,
-        course_id: document.getElementById('f-course').value,
-        title,
-        description: document.getElementById('f-desc').value.trim() || null,
-        lesson_number: numRaw === '' ? null : parseInt(numRaw, 10),
-        completion_policy: model.policy,
-        due_date_m: dueM ? `${dueM}T23:59:59` : null,
-        due_date_t: dueT ? `${dueT}T23:59:59` : null,
-        is_published: document.getElementById('f-pub').checked,
-        questions,                                           // used only when preflight source is 'new'
-        preflight: pfSrc === 'none' ? { source: 'none' }
-          : pfSrc === 'existing' ? { source: 'existing', existingId: pf.existingId, questions,
-              reference_pdf:   (pf.reference_pdf   || '').trim() || null,
-              reference_pages: (pf.reference_pages || '').trim() || null,
-              reading_link:    (pf.reading_link    || '').trim() || null }
-          : { source: 'new',
-              reference_pdf:   (pf.reference_pdf   || '').trim() || null,
-              reference_pages: (pf.reference_pages || '').trim() || null,
-              reading_link:    (pf.reading_link    || '').trim() || null },
-        interaction: iSrc === 'none' ? { source: 'none' }
-          : iSrc === 'existing' ? { source: 'existing', existingId: inter.existingId,
-              title: (inter.title || '').trim() || null,
-              artifact_url: (inter.artifact_url || '').trim() || null,
-              description: (inter.description || '').trim() || null }
-          : { source: 'new', id: inter.id.trim(), title: (inter.title || '').trim() || null,
-              artifact_url: inter.artifact_url.trim(), description: (inter.description || '').trim() || null },
-      };
-
-      // Last gate before the write: swapping a lesson's interaction displaces the old one and
-      // strands any reports already attached to it. Confirm with the real count, never silently.
-      if (pendingSwap && payload.interaction?.id !== pendingSwap.fromId) {
-        if (pendingSwap.reports === null) pendingSwap.reports = await L.countInteractionReports(pendingSwap.fromId);
-        if (!(await promptSwapConfirm(pendingSwap))) return;
+      if (model.interactive.include) {
+        if (!L.isValidSlug(model.interactive.slug))
+          return fail('Interaction id must be lowercase letters, numbers, and hyphens only.');
+        if (!(model.interactive.artifact_url || '').trim()) return fail('Enter the interaction URL.');
       }
 
       const btn = document.getElementById('lm-save');
-      btn.disabled = true; btn.innerHTML = '<span class="spinner on-dark"></span> Saving…';
-      const { error, rescored } = await L.saveLesson(payload, editingId);
-      btn.disabled = false; btn.textContent = 'Save lesson';
+      const busy = (on) => {
+        btn.disabled = on;
+        btn.innerHTML = on ? '<span class="spinner on-dark"></span> Saving…' : 'Save lesson';
+      };
+
+      // A DIFFERENT slug on an existing artifact is not an edit. UNIQUE(assignment_id, modality)
+      // holds one interactive activity per container, so the old one must be deleted — taking its
+      // student reports with it. Confirm with the real count, then do it explicitly.
+      const existingI = model.existingInteractive;
+      if (model.interactive.include && existingI && existingI.slug !== model.interactive.slug.trim()) {
+        const reports = await L.countActivityReports(existingI.id);
+        const ok = await promptSwapConfirm({ fromSlug: existingI.slug, reports });
+        if (!ok) return;
+        busy(true);
+        const { error } = await L.replaceInteractive(model.assignmentId, existingI.id, {
+          slug: model.interactive.slug.trim(),
+          title: (model.interactive.title || '').trim() || title,
+          artifact_url: model.interactive.artifact_url.trim(),
+          description: (model.interactive.description || '').trim() || null,
+        });
+        busy(false);
+        if (error) return fail('Could not replace the interaction: ' + (error.message || 'unknown error'));
+        model.existingInteractive = null;   // saveLesson re-reads the container's activities
+      }
+
+      const payload = {
+        assignmentId: model.assignmentId,
+        courseId: course?.courseId || ctx.currentCourse,
+        courseCode: course?.courseCode || ctx.currentCourseCode,
+        courseOfferingId: offeringId,
+        slug, title,
+        description: document.getElementById('f-desc').value.trim() || null,
+        lessonNumber: numRaw === '' ? null : parseInt(numRaw, 10),
+        objectives: [],
+        policy: model.policy,
+        pointsPossible: parseFloat(document.getElementById('f-pts').value) || 0,
+        gradingMode: document.getElementById('f-mode').value,
+        switchPolicy: document.getElementById('f-switch').value,
+        isPublished: document.getElementById('f-pub').checked,
+        dueByDay: model.dueByDay,
+        sections: vm.sections,
+        written: model.written.include ? {
+          include: true,
+          questions: model.questions,
+          reference_pdf:   (model.written.reference_pdf   || '').trim() || null,
+          reference_pages: (model.written.reference_pages || '').trim() || null,
+          reading_link:    (model.written.reading_link    || '').trim() || null,
+        } : { include: false },
+        interactive: model.interactive.include ? {
+          include: true,
+          slug: model.interactive.slug.trim(),
+          title: (model.interactive.title || '').trim() || null,
+          artifact_url: model.interactive.artifact_url.trim(),
+          description: (model.interactive.description || '').trim() || null,
+        } : { include: false },
+      };
+
+      busy(true);
+      const { error, rescored, unchosen } = await L.saveLesson(ctx, payload, editingId);
+      busy(false);
       if (error) {
-        return fail(error.code === '23505' ? `A lesson with id “${id}” already exists.` : 'Could not save: ' + (error.message || 'unknown error'));
+        return fail(error.code === '23505'
+          ? `That id is already taken — either “${slug}” already exists in this course, or this assignment is already scheduled this term.`
+          : 'Could not save: ' + (error.message || 'unknown error'));
       }
       pendingSwap = null;
       closeModal();
-      // A question's point value changed, so every already-graded row for this preflight was
-      // rewritten to the new max. That silently changes cadets' totals — say so out loud.
+
+      const notes = [];
+      // A question's point value changed, so every already-graded row for this lesson was rewritten
+      // to the new max. That silently changes cadets' totals — say so out loud.
       if (rescored > 0) {
-        alert(`Saved.\n\nA question's point value changed, so ${rescored} existing score record${rescored !== 1 ? 's were' : ' was'} updated to match.\n\nStudent totals for this lesson have changed. Finalized grades keep their finalized state.`);
+        notes.push(`A question's point value changed, so ${rescored} existing grade${rescored !== 1 ? 's were' : ' was'} updated to match. `
+          + `Student totals for this lesson have changed; finalized grades keep their finalized state.`);
       }
+      // Detaching an activity clears the choice of anyone who had committed to it (the composite
+      // FK is ON DELETE SET NULL). They keep their work; they no longer have a graded selection.
+      if (unchosen > 0) {
+        notes.push(`${unchosen} student${unchosen !== 1 ? 's had' : ' had'} committed to an activity that is no longer part of this lesson, `
+          + `so their selection was cleared. Their saved work is untouched, but they must pick again.`);
+      }
+      if (notes.length) alert('Saved.\n\n' + notes.join('\n\n'));
       load();
     }
 
     // ── Publish ───────────────────────────────────────────────────────────
-    async function doTogglePublish(id) {
-      const l = vm.lessons.find(x => x.id === id);
-      const { error } = await L.togglePublish(l);
+    async function doTogglePublish(offeringId) {
+      const l = vm.lessons.find(x => x.offeringId === offeringId);
+      const { error } = await L.togglePublish(offeringId, l.isPublished);
       if (error) alert('Could not update: ' + error.message);
       load();
     }
 
-    // ── Delete (container-only click, or 5-second hold for all contents) ──
+    // ── Remove (from the term, or from the library too) ───────────────────
     let delLesson = null, holdTimer = null;
     function openDeleteModal(l) {
       if (!l) return;
       delLesson = l;
-      document.getElementById('del-msg').innerHTML = `Delete lesson <strong>${esc(l.title)}</strong> (<code>${esc(l.id)}</code>)?`;
+      document.getElementById('del-msg').innerHTML = `Remove lesson <strong>${esc(l.title)}</strong> (<code>${esc(l.slug)}</code>)?`;
       const info = document.getElementById('del-info');
       info.textContent = 'Loading impact…';
       cancelHold();
       document.getElementById('del-modal').classList.add('open');
-      L.countLessonWork(l).then(({ responses, reports }) => {
-        const parts = [];
-        if (l.preflight_id)   parts.push(`preflight <code>${esc(l.preflight_id)}</code>${responses ? ` + its <strong>${responses}</strong> student response${responses === 1 ? '' : 's'}` : ''}`);
-        if (l.interaction_id) parts.push(`interaction <code>${esc(l.interaction_id)}</code>${reports ? ` + its <strong>${reports}</strong> student report${reports === 1 ? '' : 's'}` : ''}`);
-        info.innerHTML = `<strong>Container only</strong> removes just the lesson grouping — the preflight and interaction stay as reusable orphans.<br><br>`
-          + `<strong>All contents</strong> also permanently deletes ${parts.join(' and ') || 'the attached components'}. This cannot be undone — hold the button for 5&nbsp;seconds.`;
+      L.countLessonWork(l).then(({ submissions, grades, reports }) => {
+        // Both paths destroy this term's work: submissions and grades hang off the OFFERING with
+        // ON DELETE CASCADE. That is a real difference from the old "container only" delete, which
+        // destroyed nothing, so it is stated first and in numbers.
+        const work = [];
+        if (submissions) work.push(`<strong>${submissions}</strong> submission${submissions === 1 ? '' : 's'}`);
+        if (reports)     work.push(`<strong>${reports}</strong> interaction report${reports === 1 ? '' : 's'}`);
+        if (grades)      work.push(`<strong>${grades}</strong> grade${grades === 1 ? '' : 's'}`);
+        const workTxt = work.length
+          ? `This term's ${work.join(', ')} will be permanently deleted.`
+          : `No student work has been recorded for it yet.`;
+        info.innerHTML = `<strong>Remove from this term</strong> unschedules the lesson. ${workTxt} `
+          + `The question set and artifact stay in the library and can be scheduled again.<br><br>`
+          + `<strong>Delete library copy too</strong> also removes the reusable assignment and its activities `
+          + `for every term — including every student report ever submitted against the artifact. `
+          + `This cannot be undone — hold the button for 5&nbsp;seconds.`;
       });
     }
     function closeDelete() { cancelHold(); document.getElementById('del-modal').classList.remove('open'); }
@@ -1114,10 +1100,9 @@
     }
     function cancelHold() {
       if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
-      const btn = document.getElementById('del-all');
-      if (btn) { btn.classList.remove('holding'); }
+      document.getElementById('del-all')?.classList.remove('holding');
       const lbl = document.getElementById('del-all-label');
-      if (lbl) lbl.textContent = 'Hold 5s · delete all contents';
+      if (lbl) lbl.textContent = 'Hold 5s · delete library copy too';
     }
     async function doDeleteAll() {
       const l = delLesson; closeDelete();
@@ -1130,8 +1115,8 @@
       modal.addEventListener('click', (e) => { if (e.target === modal || e.target.closest('[data-delclose]')) closeDelete(); });
       document.getElementById('del-container').addEventListener('click', async () => {
         const l = delLesson; closeDelete();
-        const { error } = await L.deleteLesson(l.id);
-        if (error) alert('Could not delete: ' + error.message);
+        const { error } = await L.unscheduleLesson(l.offeringId);
+        if (error) alert('Could not remove: ' + error.message);
         load();
       });
       const holdBtn = document.getElementById('del-all');
@@ -1142,15 +1127,22 @@
     }
 
     // ── Prefill from a query link (e.g. generated by an AI tool) ──
-    // ?new=1&id=<lesson slug>&course=&title=&desc=&policy=&num=&due_m=&due_t=
+    // ?new=1&id=<lesson slug>&course=<course code>&title=&desc=&policy=&num=&due_m=&due_t=
     //   &url=<interaction url>&iid=<interaction slug, defaults to id>&ititle=&idesc=&pub=0
-    // Contract: docs/contracts/INTERACTION-PREFILL-LINK.md
+    // Contract: docs/contracts/INTERACTION-PREFILL-LINK.md — the URL and every parameter name are
+    // FROZEN, so the handler adapts rather than the link. Two parameters needed re-interpretation
+    // under schema `app`, neither visible to whoever built the link:
+    //   course=phys-215  is a course CODE; the scope is now an OFFERING, so it resolves to the
+    //                    current term's offering of that course (see resolveOffering).
+    //   due_m / due_t    were columns; they are now per-section rows, keyed off each section's
+    //                    meeting_days, which is exactly what the M/T letters always meant.
     function prefillFromQuery() {
       const p = new URLSearchParams(location.search);
       if (!p.has('new') && !p.has('id') && !p.has('iid') && !p.has('title')) return;
       if (isDirector()) {
         openDestChooser({
-          id: p.get('id'), course: p.get('course'), title: p.get('title'), desc: p.get('desc'),
+          id: p.get('id'), offeringId: resolveOffering(p.get('course')),
+          title: p.get('title'), desc: p.get('desc'),
           policy: p.get('policy'), num: p.get('num'), due_m: p.get('due_m'), due_t: p.get('due_t'),
           iid: p.get('iid'), iurl: p.get('url') ?? p.get('iurl'),
           ititle: p.get('ititle'), idesc: p.get('idesc'),
@@ -1160,6 +1152,14 @@
       history.replaceState(null, '', location.pathname);   // clean URL so refresh won't re-open
     }
 
+    /** A course code from a prefill link → an offering id. Prefers the term already in view; ctx.courses
+     *  is sorted newest term first, so the fallback lands on the current semester, not an old one. */
+    function resolveOffering(code) {
+      if (!code) return ctx.currentOffering;
+      const here = ctx.courses.find(c => c.offeringId === ctx.currentOffering && c.courseCode === code);
+      return (here || ctx.courses.find(c => c.courseCode === code))?.offeringId || ctx.currentOffering;
+    }
+
     // ── Destination chooser ───────────────────────────────────────────────
     // A prefill link knows its artifact but not its destination. It used to guess: a slug that
     // matched an existing lesson silently rewrote it, and a slug that didn't silently created a
@@ -1167,7 +1167,7 @@
     function openDestChooser(prefill) {
       const modal = document.getElementById('dest-modal');
       const pick  = document.getElementById('dest-pick');
-      const known = prefill.id ? vm.lessons.find(x => x.id === prefill.id) : null;
+      const known = prefill.id ? vm.lessons.find(x => x.slug === prefill.id) : null;
 
       pick.style.display = 'none';
       modal.querySelectorAll('.dest-box').forEach(b => b.classList.remove('active'));
@@ -1190,22 +1190,25 @@
 
     function renderDestLessons(prefill) {
       const wrap = document.getElementById('dest-lessons');
-      const lessons = (vm.lessons || []).slice()
-        .sort((a, b) => (a.lesson_number ?? 1e9) - (b.lesson_number ?? 1e9));
+      const lessons = (vm.lessons || []).slice();
       if (!lessons.length) {
         wrap.innerHTML = `<div class="muted" style="font-size:.85em">No lessons yet — choose <strong>Create new lesson</strong>.</div>`;
         return;
       }
+      const iid = prefill.iid || prefill.id;
       wrap.innerHTML = lessons.map(l => {
-        const swap = !!l.interaction;
+        // Only a DIFFERENT slug is a replacement. The same slug just refreshes the URL in place,
+        // which keeps every student report attached — and is the outcome to prefer.
+        const swap = !!l.interactive && l.interactive.slug !== iid;
         const meta = [
-          l.lesson_number != null ? 'L' + l.lesson_number : null,
-          l.is_published ? 'published' : 'draft',
-          swap ? `replaces “${l.interaction.title || l.interaction.id}”` : 'no interaction yet',
+          l.lessonNumber != null ? 'L' + l.lessonNumber : null,
+          l.isPublished ? 'published' : 'draft',
+          !l.interactive ? 'no interaction yet'
+            : swap ? `replaces “${l.interactive.slug}”` : 'updates this artifact in place',
         ].filter(Boolean).join(' · ');
-        return `<div class="lb-orphan les${swap ? ' swap' : ''}" data-lid="${esc(l.id)}" title="${esc(l.title || l.id)}">
-          <span class="lb-orphan-badge">${swap ? 'Will replace' : 'Add to'}</span>
-          <span class="lb-orphan-title">${esc(l.title || l.id)}</span>
+        return `<div class="lb-orphan les${swap ? ' swap' : ''}" data-lid="${esc(l.offeringId)}" title="${esc(l.title || l.slug)}">
+          <span class="lb-orphan-badge">${swap ? 'Will replace' : (l.interactive ? 'Will update' : 'Add to')}</span>
+          <span class="lb-orphan-title">${esc(l.title || l.slug)}</span>
           <span class="lb-orphan-meta">${esc(meta)}</span>
         </div>`;
       }).join('');
@@ -1213,8 +1216,8 @@
         c.addEventListener('click', () => chooseDestLesson(c.dataset.lid, prefill)));
     }
 
-    async function chooseDestLesson(lessonId, prefill) {
-      const lesson = vm.lessons.find(x => x.id === lessonId);
+    async function chooseDestLesson(offeringId, prefill) {
+      const lesson = vm.lessons.find(x => x.offeringId === offeringId);
       if (!lesson) return;
       closeDest();
 
@@ -1222,34 +1225,31 @@
       // state — openEdit's pick() falls back to the existing row for every field omitted here,
       // so passing the artifact's lesson-level values would quietly rewrite the target lesson.
       const iid = prefill.iid || prefill.id;
-      openEdit(lesson.id, {
+      await openEdit(lesson.offeringId, {
         iid,
         iurl:   prefill.iurl,
         ititle: prefill.ititle || prefill.title,
         idesc:  prefill.idesc  || prefill.desc,
       });
 
-      if (lesson.interaction && lesson.interaction.id !== iid) {
-        pendingSwap = {
-          fromId: lesson.interaction.id,
-          fromTitle: lesson.interaction.title || lesson.interaction.id,
-          reports: null,
-        };
-        await renderSwapNotice();
+      if (lesson.interactive && lesson.interactive.slug !== iid) {
+        pendingSwap = { activityId: lesson.interactive.id, fromSlug: lesson.interactive.slug, reports: null };
+        renderSwapNotice();
       }
     }
 
     async function renderSwapNotice() {
       const el = document.getElementById('lm-notice');
       if (!pendingSwap) { el.style.display = 'none'; return; }
-      el.textContent = `Saving replaces this lesson's interaction “${pendingSwap.fromTitle}”. The old one is kept and becomes unassigned — it is never deleted.`;
+      el.textContent = `Saving replaces this lesson's interaction “${pendingSwap.fromSlug}”. Checking how many student reports are attached…`;
       el.style.display = '';
-      const n = await L.countInteractionReports(pendingSwap.fromId);
+      const n = await L.countActivityReports(pendingSwap.activityId);
       if (!pendingSwap) return;                  // director closed/changed the form during the await
       pendingSwap.reports = n;
-      if (n > 0) {
-        el.textContent = `Saving replaces this lesson's interaction “${pendingSwap.fromTitle}”, which already holds ${n} student report${n === 1 ? '' : 's'}. Those reports stay attached to the old interaction and will no longer be reachable from this lesson.`;
-      }
+      el.textContent = n > 0
+        ? `Saving replaces this lesson's interaction “${pendingSwap.fromSlug}”, which holds ${n} student report${n === 1 ? '' : 's'}. `
+          + `Those reports are attached to that artifact and would be DELETED with it. To keep them, restore the original slug and only change the URL.`
+        : `Saving replaces this lesson's interaction “${pendingSwap.fromSlug}”. No student reports are attached to it yet, so nothing is lost.`;
     }
 
     function promptSwapConfirm(swap) {
@@ -1258,12 +1258,13 @@
         const ok = document.getElementById('swap-ok');
         const info = document.getElementById('swap-info');
         document.getElementById('swap-msg').textContent =
-          `“${swap.fromTitle}” is currently attached to this lesson. Saving swaps in the new artifact and leaves the old interaction unassigned.`;
+          `“${swap.fromSlug}” is this lesson's interactive activity. A lesson holds only one, so saving a different slug deletes it and creates the new one.`;
         const n = swap.reports || 0;
         info.className = 'alert ' + (n > 0 ? 'alert-warn' : 'alert-info');
         info.textContent = n > 0
-          ? `${n} student report${n === 1 ? '' : 's'} already submitted against “${swap.fromTitle}”. They are NOT deleted, but they stay with the old interaction and drop out of this lesson's view. Grades already recorded are unaffected.`
-          : 'No student reports are attached to it yet, so nothing is stranded.';
+          ? `${n} student report${n === 1 ? '' : 's'} submitted against “${swap.fromSlug}” will be PERMANENTLY DELETED, in every term the artifact ran. `
+            + `If the artifact was only rebuilt, cancel and keep the slug — changing just the URL preserves all of them.`
+          : 'No student reports are attached to it yet, so nothing is lost.';
         const done = (val) => {
           modal.classList.remove('open');
           ok.onclick = null;

@@ -37,6 +37,64 @@ const FACULTY_LINKS = [
   { key: 'admin',        label: 'Admin',        href: legacyUrl('admin.html'),  icon: 'settings',      emoji: '⚙️', external: true },
 ];
 
+/* ── Course-view picker ────────────────────────────────────────────────────────
+ * Lives in the USER MENU, not the nav bar. The nav bar is for destinations; which
+ * course you are looking at is context, and context already lives in that menu —
+ * its header names you, your role and your course. Putting the control beside the
+ * thing it describes is why this is not a separate nav control.
+ *
+ * It replaces the old `.course-switch` pill row, which the term axis made untenable:
+ * a flat row of pills cannot express one course offered across several semesters,
+ * and it only appeared at all when someone held more than one course.
+ *
+ * Offered to ANY role with more than one offering — a student enrolled in two courses
+ * needs this for the same reason a system administrator does. It grants no access:
+ * the list is whatever RLS already allowed auth.js to resolve, so switching can only
+ * ever reach a course the caller could already read.
+ *
+ * Exported and pure (string in, string out) so it can be unit-tested without a DOM.
+ */
+export function courseMenuHTML(ctx) {
+  const courses = ctx.courses || [];
+  if (courses.length < 2) return '';                    // nothing to switch between
+
+  const spansTerms = new Set(courses.map(c => c.termCode)).size > 1;
+  const roleWord = (c) => ctx.instructorRow?.is_global_admin
+    ? 'Admin' : c.role ? c.role[0].toUpperCase() + c.role.slice(1) : '';
+
+  // Group by term. auth.js already sorted newest term first, so insertion order is right.
+  const byTerm = new Map();
+  courses.forEach(c => {
+    const key = c.termLabel || c.termCode || '';
+    if (!byTerm.has(key)) byTerm.set(key, []);
+    byTerm.get(key).push(c);
+  });
+
+  const option = (c) => {
+    const active = c.offeringId === ctx.currentOffering;
+    // When the term is already a heading above, repeating it on every row is noise.
+    const sub = [spansTerms ? null : c.termLabel, roleWord(c)].filter(Boolean).join(' · ');
+    return `
+      <button class="menu-item course-opt${active ? ' active' : ''}" role="menuitemradio"
+              aria-checked="${active}" data-course="${esc(c.offeringId)}">
+        <span class="co-check" aria-hidden="true">${active ? '✓' : ''}</span>
+        <span class="co-body">
+          <span class="co-title">${esc(c.courseTitle || c.courseCode)}</span>
+          ${sub ? `<span class="co-sub">${esc(sub)}</span>` : ''}
+        </span>
+      </button>`;
+  };
+
+  return `
+    <div class="menu-sep"></div>
+    <div class="menu-label" id="course-view-label">Course view</div>
+    <div class="menu-scroll" role="group" aria-labelledby="course-view-label">
+      ${[...byTerm.entries()].map(([term, list]) =>
+        (spansTerms && term ? `<div class="menu-subhead">${esc(term)}</div>` : '') +
+        list.map(option).join('')).join('')}
+    </div>`;
+}
+
 export function renderNav(ctx, opts = {}) {
   const { active = '', onCourseChange } = opts;
   const mount = opts.mount || document.getElementById('topnav') || (() => {
@@ -56,23 +114,13 @@ export function renderNav(ctx, opts = {}) {
   // Only disambiguate by term when the caller actually spans more than one. Showing
   // "Physics 215 · Fall 2026" to everyone in a single-term deployment is noise.
   const spansTerms = new Set(ctx.courses.map(c => c.termCode)).size > 1;
-  const pillLabel = (c) =>
-    (c.courseTitle || c.courseCode) + (spansTerms && c.termLabel ? ` · ${c.termLabel}` : '');
+  const switcherHTML = courseMenuHTML(ctx);
 
   const linksHTML = links.map(l => `
     <a class="nav-link${l.key === active ? ' active' : ''}${l.external ? ' external' : ''}"
        href="${esc(l.href)}"${l.external ? ' target="_blank" rel="noopener"' : ''}>
       <span>${esc(l.label)}</span>
     </a>`).join('');
-
-  // Faculty course switcher (only when more than one course is accessible)
-  const switcherHTML = (ctx.role === 'faculty' && ctx.courses.length > 1) ? `
-    <div class="course-switch" role="tablist" aria-label="Course">
-      <span class="cs-ic">${iconHTML('course', '📚', 'ic')}</span>
-      ${ctx.courses.map(c => `
-        <button class="course-pill${c.offeringId === ctx.currentOffering ? ' active' : ''}"
-          data-course="${esc(c.offeringId)}">${esc(pillLabel(c))}</button>`).join('')}
-    </div>` : '';
 
   mount.className = 'topnav';
   mount.innerHTML = `
@@ -86,7 +134,6 @@ export function renderNav(ctx, opts = {}) {
       </div>
       <nav class="nav-links" id="nav-links">${linksHTML}</nav>
       <div class="nav-right">
-        ${switcherHTML}
         <button class="theme-toggle" data-theme-toggle><span data-theme-icon>🌙</span></button>
         <div class="user-menu">
           <button class="user-chip" data-user-toggle>
@@ -97,8 +144,11 @@ export function renderNav(ctx, opts = {}) {
             <div class="menu-head">
               <span class="mh-ic">${iconHTML('user', '👤', 'ic')}</span>
               <div><div class="nm">${esc(name)}</div>
-                <div class="rl">${esc(roleLabel)}${courseTitle ? ' · ' + esc(courseTitle) : ''}</div></div>
+                <div class="rl">${esc(roleLabel)}${courseTitle ? ' · ' + esc(courseTitle) : ''}${
+                  spansTerms && ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''}</div></div>
             </div>
+            ${switcherHTML}
+            ${switcherHTML ? '<div class="menu-sep"></div>' : ''}
             <a class="menu-item" href="help.html">
               ${iconHTML('info', '❔', 'ic')}<span>Help</span>
             </a>
@@ -151,19 +201,42 @@ function wireNav(ctx, mount, onCourseChange) {
   mount.querySelector('[data-signout]')?.addEventListener('click', () => ctx.signOut());
 
   // Course switcher
-  // Course switcher. setCurrentOffering is async — it re-resolves the section scope for the
-  // newly selected offering — so the page callback must wait for it, or the page would reload
-  // its data against the previous offering's sections.
-  mount.querySelectorAll('.course-pill').forEach(btn => {
-    btn.addEventListener('click', async () => {
+  // Course-view picker. setCurrentOffering is async — it re-resolves the section scope for
+  // the newly selected offering — so the page callback must WAIT for it, or the page reloads
+  // its data against the previous offering's sections and silently shows the wrong course.
+  mount.querySelectorAll('.course-opt').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();                       // don't let the outside-click handler close it yet
       const id = btn.dataset.course;
-      if (id === ctx.currentOffering) return;
+      if (id === ctx.currentOffering) { pop?.classList.remove('open'); return; }
+
+      btn.classList.add('busy');
       await ctx.setCurrentOffering(id);
-      mount.querySelectorAll('.course-pill').forEach(p =>
-        p.classList.toggle('active', p.dataset.course === id));
-      // Refresh the brand subtitle to the newly selected course.
+
+      mount.querySelectorAll('.course-opt').forEach(p => {
+        const on = p.dataset.course === id;
+        p.classList.toggle('active', on);
+        p.setAttribute('aria-checked', String(on));
+        const tick = p.querySelector('.co-check');
+        if (tick) tick.textContent = on ? '✓' : '';
+      });
+      btn.classList.remove('busy');
+
+      // Keep the two places the course is named in step with the new selection.
       const sub = mount.querySelector('.brand-sub');
       if (sub) sub.textContent = ctx.courseTitleOf(id);
+      const rl = mount.querySelector('.menu-head .rl');
+      if (rl) {
+        const c = ctx.courses.find(x => x.offeringId === id);
+        rl.textContent = [
+          ctx.instructorRow?.is_global_admin ? 'Global admin'
+            : ctx.isDirectorForCurrent?.() ? 'Director' : (ctx.role === 'faculty' ? 'Instructor' : 'Student'),
+          ctx.courseTitleOf(id),
+          c?.termLabel,
+        ].filter(Boolean).join(' · ');
+      }
+
+      pop?.classList.remove('open');
       onCourseChange?.(id);
     });
   });

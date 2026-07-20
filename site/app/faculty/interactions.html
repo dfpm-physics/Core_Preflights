@@ -10,40 +10,28 @@
   <script src="../js/config.js"></script>
 </head>
 <body>
+  <!--
+    MONITORING ONLY — the add / edit / publish / delete controls that used to live on this page
+    are gone, and should not be added back. Under schema `app` every one of them writes a row
+    that belongs to an assignment or its offering, i.e. to the lesson builder:
+
+      * activities.assignment_id is NOT NULL, so a standalone interaction cannot exist
+      * publishing is assignment_offerings.is_published — one flag for the whole assignment,
+        for one term. There is no per-interaction publish
+      * graded-vs-practice is offering_activities.grading_role, a per-term delivery decision
+      * deadlines are assignment_offerings.due_at + assignment_due_dates
+
+    Authoring is therefore in exactly one place: faculty/lessons.html. Prefill links are also
+    frozen to that page (docs/contracts/INTERACTION-PREFILL-LINK.md) — this page's old prefill
+    base is retired and must not be revived.
+
+    What remains here is the part with no other home: completion per lesson x section, and the
+    links into the per-student report viewer + cohort AI panels on faculty/report.html.
+  -->
   <header id="topnav"></header>
   <main class="page-wide" id="main">
     <div class="center-load"><span class="spinner"></span><span>Loading interactions…</span></div>
   </main>
-
-  <!-- Add / edit modal (directors) -->
-  <div class="modal-backdrop" id="edit-modal">
-    <div class="modal" style="max-width:620px">
-      <div class="modal-head"><h2 id="em-title">New interaction</h2><button class="modal-close" data-close>×</button></div>
-      <div class="alert alert-error" id="em-error" style="display:none"></div>
-      <div class="row wrap" style="gap:14px">
-        <div class="field grow" style="min-width:160px"><label for="f-course">Course</label><select id="f-course"></select></div>
-        <div class="field grow" style="min-width:160px"><label for="f-id">Interaction id (slug)</label>
-          <input id="f-id" type="text"><div class="field-hint" id="f-id-hint">Lowercase letters, numbers, hyphens.</div></div>
-      </div>
-      <div class="field"><label for="f-title">Title</label><input id="f-title" type="text"></div>
-      <div class="field"><label for="f-desc">Description (optional)</label>
-        <textarea id="f-desc" placeholder="Short description shown to students"></textarea></div>
-      <div class="field"><label for="f-url">Artifact URL</label>
-        <input id="f-url" type="text" placeholder="https://claude.ai/public/artifacts/...">
-        <div class="field-hint">The link students open to launch the activity.</div></div>
-      <div class="field"><label for="f-due">Due date (optional)</label>
-        <input id="f-due" type="date">
-        <div class="field-hint">Used by the dashboard to pick the “active” lesson. Leave blank to fall back to creation order.</div></div>
-      <label class="check-inline"><input type="checkbox" id="f-pub"> Published (visible to students)</label>
-      <div class="row" style="gap:10px;margin-top:18px">
-        <button class="btn btn-primary" id="em-save">Save</button>
-        <button class="btn btn-secondary" data-close>Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- The lesson rollup now lives on its own page (faculty/report.html), reached by the completion
-       links below with the lesson key (?i=slug). Its flag→student→full-report modals moved there too. -->
 
   <script type="module">
     import { bootstrap } from '../js/auth.js';
@@ -55,17 +43,18 @@
     const ctx = await bootstrap({ require: 'faculty' });
     if (!ctx) { /* redirected */ } else { init(); }
 
-    let vm = null, editingId = null;
+    let vm = null;
     const isDirector = () => ctx.isDirectorForCurrent();
 
     function init() {
       initTheme();
       renderNav(ctx, { active: 'interactions', onCourseChange: () => load() });
-      wireModals();
       load();
     }
 
     const barClass = p => p >= 80 ? '' : p >= 40 ? 'partial' : 'low';
+    // `?i=` carries the ASSIGNMENT OFFERING id — the identity of a lesson in one term. The old
+    // key was the interaction slug, which could not tell two terms of one artifact apart.
     const reportHref = (id, section) =>
       `report.html?i=${encodeURIComponent(id)}${section ? `&section=${encodeURIComponent(section)}` : ''}`;
 
@@ -74,35 +63,28 @@
       root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
       vm = await I.loadManager(ctx);
 
-      const newBtn = isDirector()
-        ? `<button class="btn btn-primary" id="new-btn">+ New interaction</button>` : '';
       const head = `<div class="page-head">
         <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
           <div><h1>Lesson interactions</h1>
-            <div class="sub">${isDirector() ? 'Add, edit, publish, and track completion' : 'Completion across your sections'} for ${esc(ctx.courseTitleOf(ctx.currentOffering))}.</div></div>
-          ${newBtn}
+            <div class="sub">Completion and reports for ${esc(ctx.courseTitleOf(ctx.currentOffering))}${ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''}.</div></div>
+          ${isDirector() ? `<a class="btn btn-secondary" href="lessons.html">Edit lessons →</a>` : ''}
         </div></div>`;
 
       if (vm.noCourse) { root.innerHTML = head + `<div class="alert alert-warn">No course access found.</div>`; return; }
       if (!vm.interactions.length) {
         root.innerHTML = head + `<div class="empty-state"><div class="es-ic">💡</div><h3>No interactions yet</h3>
-          <p>${isDirector() ? 'Click <strong>+ New interaction</strong> to add one.' : 'Nothing has been published for your sections yet.'}</p></div>`;
-        wireNew();
+          <p>${isDirector()
+               ? 'Attach an AI interaction to a lesson in the <a href="lessons.html">lesson builder</a> — it will appear here once it is scheduled.'
+               : 'Nothing has been published for your sections yet.'}</p></div>`;
         return;
       }
 
       root.innerHTML = head + vm.interactions.map(card).join('');
-      wireNew();
-      // The rollup lives on faculty/report.html now; completion controls navigate there, carrying
-      // the lesson key (?i=) and, for a per-section bar, the section to preselect its scope.
       document.querySelectorAll('[data-report]').forEach(b => {
         const go = () => { location.href = reportHref(b.dataset.report, b.dataset.section || null); };
         b.addEventListener('click', go);
         b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
       });
-      document.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openEdit(b.dataset.edit)));
-      document.querySelectorAll('[data-pub]').forEach(b => b.addEventListener('click', () => doTogglePublish(b.dataset.pub)));
-      document.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => doDelete(b.dataset.del, b.dataset.title)));
     }
 
     function card(it) {
@@ -110,135 +92,44 @@
       const status = it.is_published
         ? `<span class="score-badge full">Published</span>`
         : `<span class="score-badge pending">Draft</span>`;
+      // Whether the artifact carries credit THIS TERM is offering_activities.grading_role — the
+      // lever that decides where a student's grade comes from, so it is worth showing even on a
+      // read-only page. It is changed in the lesson builder.
+      const role = it.gradingRole === 'practice'
+        ? `<span class="score-badge pending" style="font-size:0.72em" title="The written questions carry credit this term">Practice</span>`
+        : (it.isChoice
+            ? `<span class="score-badge" style="font-size:0.72em" title="Students choose this or the written questions">Student choice</span>`
+            : `<span class="score-badge full" style="font-size:0.72em">Graded</span>`);
+
       const completion = it.is_published
-        ? `<div role="button" tabindex="0" class="clickable" data-report="${esc(it.id)}" data-title="${esc(it.title)}" title="View completion & reports">
+        ? `<div role="button" tabindex="0" class="clickable" data-report="${esc(it.id)}" title="View completion & reports">
              <div style="font-size:1.4em;font-weight:800">${it.total ? p + '%' : '—'}</div>
              <div class="muted" style="font-size:0.78em">${it.done}/${it.total} reports</div></div>`
         : `<div class="muted" style="font-size:0.82em">Draft · ${it.count} report${it.count === 1 ? '' : 's'}</div>`;
 
       const chips = (it.is_published && it.perSection.length) ? `<div class="row wrap" style="gap:14px;margin-top:14px">${
-        it.perSection.map(s => { const sp = pct(s.done, s.total); return `<div class="progress-row clickable" style="min-width:150px;flex:1" data-report="${esc(it.id)}" data-title="${esc(it.title)}" data-section="${esc(s.sectionId)}" title="View ${esc(s.sectionId)} completion">
-          <span class="pr-label">${esc(s.sectionId)}</span><span class="pr-count">${s.done}/${s.total}</span>
+        it.perSection.map(s => { const sp = pct(s.done, s.total); return `<div class="progress-row clickable" style="min-width:150px;flex:1" data-report="${esc(it.id)}" data-section="${esc(s.sectionId)}" title="View ${esc(s.code)} completion">
+          <span class="pr-label">${esc(s.code)}</span><span class="pr-count">${s.done}/${s.total}</span>
           <div class="pr-track"><div class="pr-fill ${barClass(sp)}" style="width:${sp}%"></div></div></div>`; }).join('')
       }</div>` : '';
 
       const view = (it.is_published || it.count)
-        ? `<button class="btn btn-ghost btn-sm" data-report="${esc(it.id)}" data-title="${esc(it.title)}">View completion</button>` : '';
-      const manage = isDirector() ? `
-        <button class="btn btn-ghost btn-sm" data-edit="${esc(it.id)}">Edit</button>
-        <button class="btn btn-ghost btn-sm" data-pub="${esc(it.id)}">${it.is_published ? 'Unpublish' : 'Publish'}</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--red)" data-del="${esc(it.id)}" data-title="${esc(it.title)}">Delete</button>` : '';
+        ? `<button class="btn btn-ghost btn-sm" data-report="${esc(it.id)}">View completion &amp; reports</button>` : '';
 
       return `<div class="card">
         <div class="row wrap" style="justify-content:space-between;align-items:flex-start;gap:12px">
           <div class="grow" style="min-width:220px">
-            <div class="row" style="gap:8px"><div class="card-title">${esc(it.title)}</div>${status}</div>
-            <div class="muted" style="font-size:0.8em;margin-top:3px"><code>${esc(it.id)}</code>${it.due_date_m ? ` · Due ${esc(fmtDate(it.due_date_m))}` : ''}</div>
+            <div class="row" style="gap:8px"><div class="card-title">${esc(it.title)}</div>${status}${role}</div>
+            <div class="muted" style="font-size:0.8em;margin-top:3px"><code>${esc(it.slug)}</code>${it.due_at ? ` · Due ${esc(fmtDate(it.due_at))}` : ''}</div>
             ${it.description ? `<div class="muted" style="font-size:0.86em;margin-top:6px">${esc(it.description)}</div>` : ''}
             ${it.artifact_url ? `<a href="${esc(it.artifact_url)}" target="_blank" rel="noopener" style="font-size:0.82em;color:var(--blue-lt);text-decoration:none">Open artifact ↗</a>` : '<div class="muted" style="font-size:0.82em">No artifact URL set</div>'}
           </div>
           <div style="text-align:right;flex-shrink:0">${completion}</div>
         </div>
         ${chips}
-        <div class="row wrap" style="gap:8px;margin-top:14px">${view}${manage}</div>
+        ${view ? `<div class="row wrap" style="gap:8px;margin-top:14px">${view}</div>` : ''}
       </div>`;
     }
-
-    function wireNew() { document.getElementById('new-btn')?.addEventListener('click', () => openEdit(null)); }
-
-    // ── Add / edit ──
-    function wireModals() {
-      const m = document.getElementById('edit-modal');
-      m.addEventListener('click', (e) => { if (e.target.id === 'edit-modal' || e.target.dataset.close !== undefined) m.classList.remove('open'); });
-      document.getElementById('em-save').addEventListener('click', saveEdit);
-    }
-
-    // id set → update that existing slug; id null → insert a new row.
-    // prefill (from a query link) supplies the values to show; for any field the link
-    // omits we fall back to the existing row, so a re-posted link never wipes data.
-    function openEdit(id, prefill) {
-      editingId = id;
-      document.getElementById('em-error').style.display = 'none';
-      document.getElementById('f-course').innerHTML = ctx.courses
-        .map(c => `<option value="${esc(c.course_id)}">${esc(c.course_title || c.course_id)}</option>`).join('');
-      const idField = document.getElementById('f-id'), hint = document.getElementById('f-id-hint');
-      const existing = id ? vm.interactions.find(x => x.id === id) : null;
-
-      const pick = (pv, ev) => (pv != null ? pv : (ev ?? ''));
-      const vCourse = prefill ? pick(prefill.course, existing?.course_id) : (existing?.course_id ?? ctx.currentCourse);
-      const vTitle  = prefill ? pick(prefill.title,  existing?.title)        : (existing?.title ?? '');
-      const vDesc   = prefill ? pick(prefill.desc,   existing?.description)  : (existing?.description ?? '');
-      const vUrl    = prefill ? pick(prefill.url,    existing?.artifact_url) : (existing?.artifact_url ?? '');
-      const vDue    = prefill ? pick(prefill.due,    existing?.due_date_m)   : (existing?.due_date_m ?? '');
-      const vPub    = prefill ? (prefill.pub != null ? prefill.pub : !!existing?.is_published) : !!existing?.is_published;
-
-      document.getElementById('f-course').value = ctx.courses.some(c => c.course_id === vCourse) ? vCourse : ctx.currentCourse;
-      idField.value = id ?? (prefill?.id ?? '');
-      idField.disabled = !!id;                       // the slug is the PK — fixed once it exists
-      hint.textContent = id ? 'The id cannot be changed after creation.' : 'Lowercase letters, numbers, hyphens.';
-      document.getElementById('f-title').value = vTitle;
-      document.getElementById('f-desc').value  = vDesc;
-      document.getElementById('f-url').value   = vUrl;
-      document.getElementById('f-due').value   = vDue ? String(vDue).slice(0, 10) : '';   // timestamptz → YYYY-MM-DD for <input type=date>
-      document.getElementById('f-pub').checked = vPub;
-      document.getElementById('em-title').textContent =
-        prefill ? (id ? 'Update interaction — review & save' : 'New interaction — review & save')
-                : (id ? 'Edit interaction' : 'New interaction');
-      document.getElementById('edit-modal').classList.add('open');
-    }
-
-    async function saveEdit() {
-      const err = document.getElementById('em-error'); err.style.display = 'none';
-      const id = document.getElementById('f-id').value.trim();
-      const title = document.getElementById('f-title').value.trim();
-      const due = document.getElementById('f-due').value;     // 'YYYY-MM-DD' or ''
-      const fields = {
-        id, course_id: document.getElementById('f-course').value, title,
-        description: document.getElementById('f-desc').value.trim() || null,
-        artifact_url: document.getElementById('f-url').value.trim() || null,
-        due_date_m: due ? `${due}T23:59:59` : null,           // retiring tool: one field sets both M and T
-        due_date_t: due ? `${due}T23:59:59` : null,
-        is_published: document.getElementById('f-pub').checked,
-      };
-      if (!editingId && !/^[a-z0-9-]+$/.test(id)) { err.textContent = 'Id must be lowercase letters, numbers, and hyphens only.'; err.style.display = ''; return; }
-      if (!title) { err.textContent = 'Enter a title.'; err.style.display = ''; return; }
-
-      const btn = document.getElementById('em-save');
-      btn.disabled = true; btn.innerHTML = '<span class="spinner on-dark"></span> Saving…';
-      const { error } = await I.saveInteraction(fields, editingId);
-      btn.disabled = false; btn.textContent = 'Save';
-      if (error) {
-        err.textContent = error.code === '23505' ? `An interaction with id “${id}” already exists.` : 'Could not save: ' + error.message;
-        err.style.display = ''; return;
-      }
-      document.getElementById('edit-modal').classList.remove('open');
-      load();
-    }
-
-    async function doTogglePublish(id) {
-      const it = vm.interactions.find(x => x.id === id);
-      const { error } = await I.togglePublish(id, it.is_published);
-      if (error) alert('Could not update: ' + error.message);
-      load();
-    }
-    async function doDelete(id, title) {
-      if (!confirm(`Delete interaction “${title}”?\n\nThis also deletes every student report submitted for it. This cannot be undone.`)) return;
-      const { error } = await I.deleteInteraction(id);
-      if (error) alert('Could not delete: ' + error.message);
-      load();
-    }
-
-    // ── Prefill was REMOVED here (2026-07-16) ──
-    // This page used to accept ?new=1&id=… and guess New-vs-Update from whether the slug already
-    // existed. That guess is destructive either way: guess "new" on an existing slug and Save fails
-    // on the duplicate PK; guess "update" on a slug the director meant as new and Save silently
-    // overwrites someone else's listing. The lesson creator hit the same fork and resolved it by
-    // asking explicitly (`openDestChooser` in faculty/lessons.html) rather than guessing.
-    //
-    // Removing it is safe: the FROZEN prefill contract URL is `site/faculty/lessons.html`
-    // (docs/contracts/INTERACTION-PREFILL-LINK.md), so no artifact-generated link targets this page.
-    // Authoring is canonical in the lesson creator; this page is for tracking completion.
-    // Do not reintroduce prefill here — send it to lessons.html, which asks before it writes.
   </script>
 </body>
 </html>

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account &amp; password sandbox · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <!-- Director-only gate (internal design sandboxes). -->
+  <script>document.documentElement.style.opacity='0'</script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../site/app/js/config.js"></script>
+  <script type="module" src="./guard.js"></script>
+  <!-- Uses the LIVE design system and the LIVE nav module. Everything else is UNWIRED: synthetic
+       identities, every control inert, no auth call of any kind. Mocks the proposed
+       site/app/account.html plus the three password flows. Spec: site/app/PLAN-2026-07-20-ACCOUNTS.md -->
+  <link rel="stylesheet" href="../../site/app/css/styles.css">
+  <style>
+    .sandbox-strip { max-width: 1180px; margin: 14px auto -2px; padding: 8px 20px; display: flex;
+      align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.8em; color: var(--muted); }
+    .sandbox-strip .pill { font-weight: 700; font-size: 0.92em; color: var(--blue-lt);
+      background: var(--mc-sel-bg); border-radius: 999px; padding: 2px 10px; }
+    .sandbox-strip a { color: var(--blue-lt); }
+
+    .rbadge { display: inline-block; padding: 2px 10px; border-radius: 999px;
+      font-size: 0.75em; font-weight: 700; white-space: nowrap; }
+    .rbadge.sa   { background: color-mix(in srgb, var(--gold) 16%, transparent); color: var(--gold); }
+    .rbadge.dir  { background: var(--alert-info-bg); color: var(--alert-info-fg); }
+    .rbadge.inst { background: var(--surface-hover); color: var(--muted); }
+
+    /* Read-only identity rows — fields the user cannot change themselves. */
+    .idrow { display: flex; justify-content: space-between; gap: 16px; padding: 11px 0;
+      border-bottom: 1px solid var(--border); font-size: 0.92em; }
+    .idrow:last-child { border-bottom: none; }
+    .idrow .k { color: var(--muted); }
+    .idrow .v { font-weight: 600; text-align: right; }
+    .idrow .v .why { display: block; font-weight: 400; font-size: 0.8em; color: var(--muted); margin-top: 2px; }
+
+    /* Password strength meter */
+    .pwbar { height: 5px; border-radius: 999px; background: var(--border); overflow: hidden; margin-top: 8px; }
+    .pwbar span { display: block; height: 100%; width: 33%; background: var(--red); transition: width .2s, background .2s; }
+    .pwbar.ok span   { width: 100%; background: var(--green); }
+    .pwbar.mid span  { width: 66%;  background: var(--gold); }
+
+    /* One-time code input */
+    .codebox { display: flex; gap: 8px; }
+    .codebox input { font-size: 1.5em; font-weight: 700; text-align: center; letter-spacing: 0.1em;
+      font-variant-numeric: tabular-nums; padding: 12px 4px; margin: 0; }
+
+    .tier { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px;
+      font-size: 0.68em; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+      background: var(--mc-sel-bg); color: var(--muted); vertical-align: middle; }
+    .tier.new { color: var(--green); }
+
+    /* Forced-rotation interstitial: deliberately has no nav and no way out. */
+    .lockwrap { max-width: 460px; margin: 8vh auto; }
+    .lockwrap .crest { font-size: 2.4em; text-align: center; margin-bottom: 8px; }
+
+    /* ── Floating switcher (two axes: identity + screen) ─────────────────── */
+    .rolebox { position: fixed; right: 20px; bottom: 20px; z-index: 90; width: 264px;
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow-lg); overflow: hidden; }
+    .rb-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+      border-bottom: 1px solid var(--border); background: var(--surface-sunken); }
+    .rb-head .t { font-size: 0.72em; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--blue-lt); flex: 1; }
+    .rb-head button { font: inherit; font-size: 0.9em; line-height: 1; cursor: pointer;
+      border: 1px solid var(--border); background: var(--card); color: var(--muted);
+      border-radius: var(--radius-sm); width: 26px; height: 24px; }
+    .rb-body { padding: 12px; }
+    .rolebox.collapsed .rb-body { display: none; }
+    .rb-lbl { font-size: 0.68em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); margin: 2px 0 6px; }
+    .rb-opt { display: block; width: 100%; text-align: left; font: inherit; font-size: 0.84em;
+      font-weight: 600; cursor: pointer; padding: 7px 10px; margin-bottom: 5px;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--card); color: var(--text); }
+    .rb-opt:hover { border-color: var(--blue-lt); background: var(--surface-hover); }
+    .rb-opt.on { border-color: var(--blue); background: var(--mc-sel-bg); }
+    .rb-sep { border-top: 1px solid var(--border); margin: 10px -12px; }
+    .rb-theme { font: inherit; font-size: 0.78em; font-weight: 600; cursor: pointer; margin-top: 4px;
+      width: 100%; padding: 6px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--surface-sunken); color: var(--text); }
+    @media (max-width: 640px) { .rolebox { right: 10px; left: 10px; bottom: 10px; width: auto; } }
+  </style>
+</head>
+<body>
+  <header id="topnav"></header>
+
+  <div class="sandbox-strip">
+    <span class="pill">Sandbox</span>
+    <span>Account &amp; password flows · unwired mock ·
+      spec: <a href="../../site/app/PLAN-2026-07-20-ACCOUNTS.md">PLAN-2026-07-20-ACCOUNTS.md</a></span>
+  </div>
+
+  <main class="page" id="main"></main>
+
+  <aside class="rolebox" id="rolebox">
+    <div class="rb-head"><span class="t">Preview</span><button id="rb-toggle" title="Collapse">–</button></div>
+    <div class="rb-body">
+      <div class="rb-lbl">Signed in as</div>
+      <button class="rb-opt" data-role="student">Student</button>
+      <button class="rb-opt" data-role="instructor">Instructor</button>
+      <button class="rb-opt" data-role="director">Course director</button>
+      <button class="rb-opt" data-role="admin">System admin</button>
+      <div class="rb-sep"></div>
+      <div class="rb-lbl">Screen</div>
+      <button class="rb-opt" data-screen="account">Account page</button>
+      <button class="rb-opt" data-screen="request">Forgot — request code</button>
+      <button class="rb-opt" data-screen="verify">Forgot — enter code</button>
+      <button class="rb-opt" data-screen="forced">Forced change (first login)</button>
+      <div class="rb-sep"></div>
+      <button class="rb-theme" id="rb-theme">◐ Toggle theme</button>
+    </div>
+  </aside>
+
+  <script type="module">
+    import { renderNav } from '../../site/app/js/nav.js';
+    import { setIconBase, esc } from '../../site/app/js/util.js';
+    setIconBase('../../site/app/media/icons/');
+
+    /* ── The four synthetic identities ──────────────────────────────────────── */
+    const WHO = {
+      student: {
+        name: 'Riley Adams', email: '3001284471@usafa.edu', role: 'student',
+        rows: [['Cadet ID', '3001284471', 'Issued by the registrar — not editable here.'],
+               ['Section', 'M1A · Physics 215 · Fall 2026', 'Set by your roster enrollment. Ask your instructor to change it.'],
+               ['Sign-in email', '3001284471@usafa.edu', 'Derived from your cadet ID.']],
+      },
+      instructor: {
+        name: 'Ben Roth', email: 'ben.roth@usafa.edu', role: 'faculty', label: 'Instructor', cls: 'inst',
+        rows: [['Sign-in email', 'ben.roth@usafa.edu', 'Contact a course director to change this.'],
+               ['Physics 215 · Fall 2026', 'Instructor — M1A, M3A', ''],
+               ['Physics 110 · Spring 2026', 'Director', '']],
+      },
+      director: {
+        name: 'Kimberly de La Harpe', email: 'kimberly.delaharpe@usafa.edu', role: 'faculty', label: 'Course director', cls: 'dir',
+        rows: [['Sign-in email', 'kimberly.delaharpe@usafa.edu', ''],
+               ['Physics 215 · Fall 2026', 'Director — all sections', ''],
+               ['Physics 215 · Spring 2026', 'Director — all sections', '']],
+      },
+      admin: {
+        name: 'Matthew Recker', email: 'matthew.recker@usafa.edu', role: 'faculty', label: 'System admin', cls: 'sa',
+        rows: [['Sign-in email', 'matthew.recker@usafa.edu', ''],
+               ['System admin', 'Every course, every term', 'Implicit — no staff assignment row.'],
+               ['Physics 110 · Fall 2026', 'Director', '']],
+      },
+    };
+
+    let role = 'student';
+    let screen = 'account';
+    const who = () => WHO[role];
+    const isFaculty = () => who().role === 'faculty';
+
+    const ctx = {
+      get role() { return who().role; },
+      courses: [{ offeringId: 'off-215-f26', courseCode: 'phys-215', courseTitle: 'Physics 215',
+                  termCode: 'fall-2026', termLabel: 'Fall 2026' }],
+      currentOffering: 'off-215-f26',
+      get instructorRow() { return isFaculty() ? { name: who().name, is_global_admin: role === 'admin' } : null; },
+      get studentRow() { return isFaculty() ? null : { name: who().name }; },
+      isDirectorForCurrent: () => role === 'director' || role === 'admin',
+      courseTitleOf: () => 'Physics 215',
+      setCurrentOffering: async () => {},
+      signOut: () => alert('Sandbox — sign-out is not wired.'),
+    };
+
+    /* Nav is hidden on the forced-rotation screen ON PURPOSE — see renderForced(). */
+    function drawNav() {
+      const bar = document.getElementById('topnav');
+      if (screen === 'forced') { bar.innerHTML = ''; bar.className = ''; return; }
+      renderNav(ctx, {});
+      // PROPOSED: an "Account" item in the user dropdown, above Help. Everyone gets it.
+      const pop = document.querySelector('#user-menu-pop .menu-sep');
+      if (pop) {
+        const a = document.createElement('a');
+        a.className = 'menu-item'; a.href = 'account.html';
+        a.innerHTML = '<span class="ic icon-fallback">⚙️</span><span>Account</span>';
+        pop.parentNode.insertBefore(a, pop.previousElementSibling);
+      }
+    }
+
+    function render() {
+      drawNav();
+      const root = document.getElementById('main');
+      root.className = screen === 'account' ? 'page' : 'page';
+      if (screen === 'account') root.innerHTML = renderAccount();
+      if (screen === 'request') root.innerHTML = renderRequest();
+      if (screen === 'verify')  root.innerHTML = renderVerify();
+      if (screen === 'forced')  root.innerHTML = renderForced();
+      wire();
+      document.querySelectorAll('.rb-opt').forEach(b => b.classList.toggle('on',
+        b.dataset.role === role || b.dataset.screen === screen));
+    }
+
+    /* ══ 1. THE ACCOUNT PAGE ═══════════════════════════════════════════════ */
+    function renderAccount() {
+      const w = who();
+      const badge = isFaculty() ? `<span class="rbadge ${w.cls}">${w.label}</span>` : '';
+
+      return `
+        <div class="page-head"><h1>Account</h1>
+          <div class="sub">${esc(w.name)} ${badge}</div></div>
+
+        <div class="card">
+          <div class="card-title">Who you are</div>
+          <div class="card-meta">Identity comes from the roster and your course assignments, so most of
+            it is not editable here — that keeps grades attached to the right person.</div>
+          ${w.rows.map(([k, v, why]) => `<div class="idrow">
+            <span class="k">${esc(k)}</span>
+            <span class="v">${esc(v)}${why ? `<span class="why">${esc(why)}</span>` : ''}</span>
+          </div>`).join('')}
+        </div>
+
+        <div class="card">
+          <div class="card-title">Change password<span class="tier new">New</span></div>
+          <div class="card-meta">You will stay signed in on this device. Other devices are signed out.</div>
+          <div class="field"><label for="pw-cur">Current password</label>
+            <input type="password" id="pw-cur" autocomplete="current-password"></div>
+          <div class="field"><label for="pw-new">New password</label>
+            <input type="password" id="pw-new" autocomplete="new-password">
+            <div class="pwbar" id="pwbar"><span></span></div>
+            <div class="field-hint" id="pw-hint">At least 8 characters. Longer beats complicated.</div></div>
+          <div class="field"><label for="pw-cf">Confirm new password</label>
+            <input type="password" id="pw-cf" autocomplete="new-password"></div>
+          <div class="row" style="gap:10px">
+            <button class="btn btn-primary">Update password</button>
+            <span class="muted" style="font-size:0.82em">Forgot your current one?
+              <a href="#" data-go="request">Reset it by email</a></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Preferences</div>
+          <div class="card-meta">Saved to this browser only — they do not follow you to another device.</div>
+          <div class="field"><label for="pf-theme">Appearance</label>
+            <select id="pf-theme"><option>Match my system</option><option>Light</option><option>Dark</option></select>
+            <div class="field-hint">Currently stored as <code>cp.theme</code> in local storage.</div></div>
+          ${isFaculty() ? `<div class="field"><label for="pf-course">Default course on sign-in</label>
+            <select id="pf-course"><option>Most recent term</option><option>Physics 215 · Fall 2026</option><option>Physics 110 · Fall 2026</option></select>
+            <div class="field-hint">Today this is remembered as <code>cp.currentOffering</code> from your
+              last visit; making it explicit removes the surprise of landing in the wrong course.</div></div>` : ''}
+          <button class="btn btn-secondary">Save preferences</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Sessions</div>
+          <div class="card-meta">If you signed in on a shared or lab machine and forgot to sign out.</div>
+          <button class="btn btn-secondary">Sign out everywhere</button>
+        </div>`;
+    }
+
+    /* ══ 2. FORGOT PASSWORD — request a code ═══════════════════════════════ */
+    function renderRequest() {
+      return `
+        <div class="page-head"><h1>Reset your password</h1>
+          <div class="sub">We will email you a six-digit code.</div></div>
+        <div class="card">
+          <div class="field"><label for="rq-email">Your sign-in email</label>
+            <input type="email" id="rq-email" value="${esc(who().email)}" autocomplete="username">
+            <div class="field-hint">${role === 'student'
+              ? 'For cadets this is your ID followed by <code>@usafa.edu</code>.'
+              : 'The address you sign in with.'}</div></div>
+          <div class="alert alert-info">If an account exists for that address, a code is on its way.
+            The message is identical either way — that is deliberate, so this page cannot be used to
+            discover who has an account.</div>
+          <div class="row" style="gap:10px">
+            <button class="btn btn-primary" data-go="verify">Email me a code</button>
+            <a class="btn btn-secondary" href="#" data-go="account">Back</a>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Not getting the email?</div>
+          <div class="card-meta">Check junk mail first. If nothing arrives within a few minutes, your
+            instructor or course director can send the reset for you — they cannot see or set your
+            password, only trigger the same email.</div>
+        </div>`;
+    }
+
+    /* ══ 3. FORGOT PASSWORD — enter the code ══════════════════════════════ */
+    function renderVerify() {
+      return `
+        <div class="page-head"><h1>Enter your code</h1>
+          <div class="sub">Sent to ${esc(who().email)} · expires in 15 minutes</div></div>
+        <div class="card">
+          <div class="field"><label for="vf-code">Six-digit code</label>
+            <div class="codebox">
+              ${[0,1,2,3,4,5].map(i => `<input id="${i ? '' : 'vf-code'}" inputmode="numeric" maxlength="1" aria-label="Digit ${i+1}">`).join('')}
+            </div>
+            <div class="field-hint">Straight from the email. Codes are single-use.</div></div>
+          <div class="field"><label for="vf-new">New password</label>
+            <input type="password" id="vf-new" autocomplete="new-password">
+            <div class="field-hint">At least 8 characters.</div></div>
+          <div class="field"><label for="vf-cf">Confirm new password</label>
+            <input type="password" id="vf-cf" autocomplete="new-password"></div>
+          <div class="row" style="gap:10px">
+            <button class="btn btn-primary">Set new password</button>
+            <a class="btn btn-secondary" href="#" data-go="request">Send a new code</a>
+          </div>
+        </div>`;
+    }
+
+    /* ══ 4. FORCED CHANGE ON FIRST LOGIN ══════════════════════════════════
+     * Reached when an admin set this password by hand. There is deliberately NO nav, no skip,
+     * and no other link: the whole point is that an admin-known password cannot be carried
+     * into normal use. auth.js would redirect here from any page until the flag clears. */
+    function renderForced() {
+      return `
+        <div class="lockwrap">
+          <div class="card">
+            <div class="crest">🔒</div>
+            <div class="card-title" style="text-align:center;font-size:1.2em">Choose a new password</div>
+            <div class="card-meta" style="text-align:center">Your current password was set for you by an
+              administrator. Pick your own before continuing — they know the one you have now.</div>
+            <div class="field"><label for="fc-new">New password</label>
+              <input type="password" id="fc-new" autocomplete="new-password">
+              <div class="pwbar" id="pwbar"><span></span></div>
+              <div class="field-hint">At least 8 characters, and different from the one you were given.</div></div>
+            <div class="field"><label for="fc-cf">Confirm new password</label>
+              <input type="password" id="fc-cf" autocomplete="new-password"></div>
+            <button class="btn btn-primary btn-block">Set password and continue</button>
+            <div class="muted" style="font-size:0.78em;text-align:center;margin-top:12px">
+              Signing out without setting one brings you back here next time.</div>
+          </div>
+        </div>`;
+    }
+
+    /* ── Wiring: navigation between mock screens + a live strength meter ───── */
+    function wire() {
+      document.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', (e) => {
+        e.preventDefault(); screen = el.dataset.go; render();
+      }));
+      const pw = document.getElementById('pw-new') || document.getElementById('fc-new');
+      const bar = document.getElementById('pwbar');
+      pw?.addEventListener('input', () => {
+        const n = pw.value.length;
+        bar.className = 'pwbar' + (n >= 12 ? ' ok' : n >= 8 ? ' mid' : '');
+      });
+    }
+
+    document.querySelectorAll('.rb-opt').forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.role) role = b.dataset.role;
+      if (b.dataset.screen) screen = b.dataset.screen;
+      render();
+    }));
+    document.getElementById('rb-toggle').addEventListener('click', (e) => {
+      const box = document.getElementById('rolebox');
+      box.classList.toggle('collapsed');
+      e.target.textContent = box.classList.contains('collapsed') ? '+' : '–';
+    });
+    document.getElementById('rb-theme').addEventListener('click', () => {
+      const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+      document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+      try { localStorage.setItem('cp.theme', dark ? 'light' : 'dark'); } catch (e) {}
+    });
+
+    render();
+  </script>
+</body>
+</html>

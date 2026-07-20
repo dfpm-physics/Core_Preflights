@@ -96,7 +96,11 @@ export function shapeOffering(row) {
     slug: a.slug,
     title: a.title,
     description: a.description,
-    objectives: a.objectives || [],
+    // Declared as a jsonb ARRAY ([{key,label}]), but the migration wrote `{}` — an empty
+    // OBJECT — into all 74 rows, and `x || []` passes that straight through because `{}` is
+    // truthy. Anything calling .map() on it would throw. Coerce rather than trust the column:
+    // the shape contract is what consumers rely on, and one bad writer should not reach them.
+    objectives: Array.isArray(a.objectives) ? a.objectives : [],
     kind: a.kind_id,
     courseId: a.course_id,
     pointsPossible: Number(row.points_possible ?? 0),

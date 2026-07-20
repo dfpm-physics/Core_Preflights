@@ -178,7 +178,10 @@
     function renderScope() {
       const host = document.getElementById('rm-scope');
       const secs = vm.sections, opts = ['all', ...secs.map(s => s.id)];
-      const label = v => v === 'all' ? 'All sections' : v;
+      // A section id is a uuid in schema `app`; the CODE ('M1A') is what a human reads.
+      // The uuid stays the VALUE everywhere (scope keys, comparisons) — only labels change.
+      const codeOf = id => (vm.sections.find(s => s.id === id)?.code) || id;
+      const label = v => v === 'all' ? 'All sections' : codeOf(v);
       if (opts.length <= SEG_MAX) {
         host.innerHTML = `<div class="seg" role="group" aria-label="Section">`
           + opts.map(v => `<button data-scope="${esc(v)}" aria-pressed="${reportScope === v}">${esc(label(v))}</button>`).join('') + `</div>`;
@@ -187,15 +190,16 @@
         });
       } else {
         host.innerHTML = `<select aria-label="Section"><option value="all" ${reportScope === 'all' ? 'selected' : ''}>All sections (${secs.length})</option>`
-          + secs.map(s => `<option value="${esc(s.id)}" ${reportScope === s.id ? 'selected' : ''}>${esc(s.id)} (${s.students.length})</option>`).join('') + `</select>`;
+          + secs.map(s => `<option value="${esc(s.id)}" ${reportScope === s.id ? 'selected' : ''}>${esc(s.code || s.id)} (${s.students.length})</option>`).join('') + `</select>`;
         host.querySelector('select').addEventListener('change', e => { reportScope = e.target.value; renderAggregate(); });
       }
     }
 
-    // Roster for the chosen scope, each student tagged with its section id.
+    // Roster for the chosen scope. `section` is tagged with the section CODE, not its id:
+    // it is only ever rendered (quote attribution, roster rows), never compared.
     function rosterInScope() {
       const src = reportScope === 'all' ? vm.sections : vm.sections.filter(s => s.id === reportScope);
-      return src.flatMap(s => s.students.map(st => ({ ...st, section: s.id })));
+      return src.flatMap(s => s.students.map(st => ({ ...st, section: s.code || s.id })));
     }
 
     // Completion "Submitted" badge — submitted = a report row exists for the student (doneStudentIds).

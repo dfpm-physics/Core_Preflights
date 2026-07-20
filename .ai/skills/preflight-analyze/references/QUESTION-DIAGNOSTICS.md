@@ -2,9 +2,13 @@
 
 Read this file whenever `/preflight-analyze` scores a submitted written preflight. Produce exactly
 two integer diagnostics. Store only the numbers; do not add them to feedback, `question_scores`,
-`total_score`, `max_total`, `analysis_report`, or the printed per-student report.
+`points_earned`, `points_possible`, the analysis report, or the printed per-student report.
 
-## Q2 effort (`scores.q2_effort`)
+Both values live in **one place**: the `diagnostic` jsonb on the enrolment's `app.grades` row
+(`{"q2_effort": N, "q3_understanding": N}`). The old `scores.q2_effort` / `scores.q3_understanding`
+columns belonged to the retired `public` schema.
+
+## Q2 effort (`grades.diagnostic.q2_effort`)
 
 Measure engagement with the reading-reflection answer, not correctness. Adapt the engagement rubric
 from `docs/contracts/INTERACTION-DATA-CONTRACT.md` §5.2 to this single written response.
@@ -21,7 +25,7 @@ from `docs/contracts/INTERACTION-DATA-CONTRACT.md` §5.2 to this single written 
 Do not lower Q2 effort because the student's reflection contains incorrect physics. Score how
 substantively the student engaged with the prompt.
 
-## Q3 understanding (`scores.q3_understanding`)
+## Q3 understanding (`grades.diagnostic.q3_understanding`)
 
 Measure demonstrated physics understanding against `expected_response` and the configured textbook
 reference. Correctness and reasoning both matter.
@@ -42,9 +46,13 @@ may receive understanding 4 or 5 even if its prose is brief.
 ## Missing data and storage
 
 - Score blank Q2 or Q3 answers inside an existing submission as `0`.
-- Do not create a `scores` row or diagnostic values for a student with no response row.
-- If the assignment does not define `q2` or `q3`, store `null` for that missing diagnostic and warn
-  the operator; do not invent a value.
-- Write the diagnostics in the same `scores` batch upsert as the existing suggested grade.
-- Read back `student_id`, `q2_effort`, and `q3_understanding` for the run's exact student ids; require
-  one row per submitted student and integer values in `[0,5]` wherever the question exists.
+- Do not create a `grades` row or diagnostic values for a student with no submitted work.
+- If the assignment does not define `q2` or `q3`, **omit that key** from `diagnostic` and warn the
+  operator; do not invent a value. (`diagnostic` is `NOT NULL DEFAULT '{}'`, so an absent key is the
+  natural "not assessed" — there is no column to null out any more.)
+- Write the diagnostics in the same `grades` batch upsert as the suggested grade, keyed on
+  `enrollment_id` — never `student_id` alone.
+- Read back `enrollment_id` and `diagnostic` for the run's exact enrolment ids; require one row per
+  graded enrolment and integer values in `[0,5]` wherever the question exists.
+- Never let a diagnostic reach `points_earned`. `grades` has `CHECK (points_earned <= points_possible)`
+  and these numbers are on a different scale entirely — a leak would be both wrong and rejected.

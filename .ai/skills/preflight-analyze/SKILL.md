@@ -1,30 +1,56 @@
 ---
 name: preflight-analyze
 description: >
-  Physics 215 preflight assignment analysis skill for USAFA. Use when the user wants to analyze
-  student submissions, generate per-instructor misconception reports, apply auto-grading, write
-  suggested scores and hidden Q2-effort/Q3-understanding diagnostics to Supabase, or says
-  /preflight-analyze. Also triggers for "analyze preflight", "grade submissions", "check who hasn't
-  submitted", "run analysis on assignment", or "preflight analyze". This skill is run by a Course
-  Director or System Admin, not individual instructors. Optional filter argument: "M" for M-day
-  sections or "T" for T-day sections.
+  Physics preflight assignment analysis skill for USAFA (PREP v2, schema `app`). Use when the user
+  wants to analyze student submissions, generate per-instructor misconception reports, apply
+  auto-grading, write suggested grades and hidden Q2-effort/Q3-understanding diagnostics to
+  Supabase, or says /preflight-analyze. Also triggers for "analyze preflight", "grade submissions",
+  "check who hasn't submitted", "run analysis on assignment", or "preflight analyze". This skill is
+  run by a Course Director or System Admin, not individual instructors. Optional filter argument:
+  "M" for M-day sections or "T" for T-day sections.
 ---
 
-# Physics 215 Preflight Analyzer
+# Physics Preflight Analyzer
 
-You are analyzing student submissions for a Physics 215 preflight assignment at USAFA. Your job is to:
-1. Fetch all student responses from Supabase (filtered by M-day or T-day sections if requested)
+You are analyzing student submissions for a physics preflight assignment at USAFA. Your job is to:
+1. Fetch all student work from Supabase (filtered by M-day or T-day sections if requested)
 2. Optionally read referenced textbook pages for grounding (RAG)
 3. Analyze responses question by question for physics misconceptions
 4. Generate hidden 0–5 diagnostics for Q2 effort and Q3 understanding
-5. Write suggested scores back to Supabase (`is_finalized = false`)
+5. Write suggested grades back to Supabase (`is_finalized = false`, `source = 'ai_suggested'`)
 6. Print a structured per-instructor report in the conversation
 
 This skill is run by a **Course Director or System Admin** — not individual instructors. A single run covers all sections for a given day (M-day or T-day). Results are stored per-instructor and are visible to each instructor in the Report tab.
 
 ---
 
-## Step 0 — Read Config
+## Where the data lives (PREP v2 — read this before writing any request)
+
+This workflow runs against schema **`app`**, not `public`. The `public` tables the older version of
+this skill used no longer back the live site, so a run that writes there grades into a schema
+nothing reads. The mapping:
+
+| what you need | `public` (retired) | `app` (now) |
+|---|---|---|
+| the course | `courses.id = 'phys-215'` | `courses.id` uuid + `courses.code = 'phys-215'` |
+| the term | — | `terms` → `course_offerings (course_id, term_id)` |
+| the assignment | `assignments` (one row: questions + due dates + publish state) | `assignments` (container: slug/title/objectives) + `activities` (the questions) + `assignment_offerings` (points/due/published, per term) |
+| the questions | `assignments.questions` | the **written** activity's `activities.content.questions` |
+| the reference PDF | `assignments.reference_pdf` / `.reference_pages` | same keys inside that `content` object |
+| a section | `sections.id = 'M1A'` | `sections.id` uuid + `sections.code`; `sections.meeting_days` (`{M}` / `{T}`) replaces sniffing the code |
+| who teaches it | `sections.instructor_id` | `staff_assignments` with `section_id` set (`section_id IS NULL` = offering-wide, i.e. a director — never a grouping key) |
+| a student in a course | `students.section_id` | `enrollments (student_id, section_id, status)` |
+| their answers | `responses.answers` | `submissions` → `submission_activities.content` for the written activity |
+| their score | `scores` | `grades` |
+| the diagnostics | `scores.q2_effort` / `.q3_understanding` | `grades.diagnostic` (jsonb) |
+| the class report | `assignments.analysis_report` (jsonb column) | `analysis_reports` (table) |
+
+**Everything per-student keys on `enrollment_id`, not `student_id`.** Get it from `enrollments`.
+That is what stops a section change from silently re-attributing a cadet's history.
+
+---
+
+## Step 0 — Read Config, and set the schema headers once
 
 Read the config file at `~/.claude/skills/preflight-analyze/config.json`.
 
@@ -32,7 +58,8 @@ Read the config file at `~/.claude/skills/preflight-analyze/config.json`.
 {
   "supabase_url": "https://YOUR-PROJECT-ID.supabase.co",
   "supabase_service_key": "...",
-  "textbook_base_path": "/path/to/your/textbook/pdfs/"
+  "textbook_base_path": "/path/to/your/textbook/pdfs/",
+  "default_course_id": "phys-215"
 }
 ```
 
@@ -42,66 +69,136 @@ Store as:
 - `SUPA_URL` = supabase_url
 - `SUPA_KEY` = supabase_service_key (service_role key — bypasses RLS)
 - `PDF_BASE` = textbook_base_path
+- `COURSE_CODE` = the course argument, else `default_course_id` (it is a course **code**, e.g. `phys-215`)
+
+### The schema headers — decide these once, apply to every request
+
+PostgREST serves one schema per request and defaults to `public`. **Every** call in this skill
+therefore carries a profile header. Fix these two header blocks at the start of the run and reuse
+them verbatim; do not decide per call site.
+
+```
+READ_HEADERS  (GET)
+  apikey: {SUPA_KEY}
+  Authorization: Bearer {SUPA_KEY}
+  Accept-Profile: app
+
+WRITE_HEADERS  (POST / PATCH / PUT / DELETE)
+  apikey: {SUPA_KEY}
+  Authorization: Bearer {SUPA_KEY}
+  Content-Type: application/json
+  Content-Profile: app
+```
+
+A request that omits its profile header silently hits `public` and is a failed run, not a partial
+one. If any response looks like the old shape (a `questions` column on `assignments`, a
+`section_id` on `students`), you are in the wrong schema — stop and fix the headers.
 
 ---
 
-## Step 1 — Parse Arguments and Identify the Assignment
+## Step 1 — Parse Arguments and Resolve the Offering
 
-The skill accepts arguments in the form: `/preflight-analyze [assignment-id] [M|T]`
+The skill accepts arguments in the form: `/preflight-analyze [course] [assignment-slug] [M|T]`
 
 Examples:
-- `/preflight-analyze preflight-2` — analyze all sections for preflight-2
-- `/preflight-analyze preflight-2 M` — analyze only M-day sections for preflight-2
-- `/preflight-analyze preflight-2 T` — analyze only T-day sections for preflight-2
+- `/preflight-analyze phys-215 preflight-02` — analyze all sections for preflight-02
+- `/preflight-analyze phys-215 preflight-02 M` — analyze only M-day sections
 - `/preflight-analyze M` — list assignments, then analyze M-day sections for the chosen one
 
 Parse the arguments:
 - If an argument matches `M` or `T` (case-insensitive): set `DAY_FILTER = "M"` or `"T"`. Otherwise `DAY_FILTER = null` (analyze all sections).
-- If the remaining argument looks like an assignment ID (e.g., `preflight-2`): set `ASSIGNMENT_ID` directly.
+- If an argument looks like a course code (`phys-215`, `phys-110`): set `COURSE_CODE`.
+- If the remaining argument looks like an assignment slug (e.g. `preflight-02`): set `ASSIGNMENT_SLUG`.
 
-If no assignment ID was provided, call the Supabase REST API to list published assignments:
+> **Slugs are no longer prefixed.** `app.assignments` is `UNIQUE (course_id, slug)`, so the
+> `phys-110-preflight-NN` namespacing that dodged the July 2026 global-PK collision is gone —
+> both courses use plain `preflight-NN`. Always pair a slug with its course.
+
+### 1a. Resolve the course offering (the term anchor)
 
 ```
-GET {SUPA_URL}/rest/v1/assignments?select=id,title,due_date_m,due_date_t,is_published&is_published=eq.true&order=due_date_m.asc
-Headers:
-  apikey: {SUPA_KEY}
-  Authorization: Bearer {SUPA_KEY}
+GET {SUPA_URL}/rest/v1/course_offerings?select=id,is_active,course_id,term_id,courses!inner(id,code,title),terms!inner(id,code,label)&courses.code=eq.{COURSE_CODE}&is_active=is.true
+Headers: READ_HEADERS
 ```
 
-Print the list and ask the user which assignment to analyze. Wait for their answer.
+Expect exactly one row → `COURSE_OFFERING_ID`, `TERM_LABEL`, `COURSE_TITLE`. If zero, the course
+code is wrong or the term is not activated; if more than one, two terms are active at once — stop
+and ask which term to analyze rather than guessing.
+
+### 1b. Find the assignment offering
+
+If no assignment slug was provided, list what is published:
+
+```
+GET {SUPA_URL}/rest/v1/assignment_offerings?select=id,points_possible,grading_mode,due_at,is_published,position,assignments!inner(id,slug,title)&course_offering_id=eq.{COURSE_OFFERING_ID}&is_published=is.true&order=position.asc
+Headers: READ_HEADERS
+```
+
+Print the list (slug, title, due date) and ask the user which to analyze. Wait for their answer.
+
+With a slug in hand:
+
+```
+GET {SUPA_URL}/rest/v1/assignment_offerings?select=id,points_possible,grading_mode,assignments!inner(id,slug,title)&assignments.slug=eq.{ASSIGNMENT_SLUG}&course_offering_id=eq.{COURSE_OFFERING_ID}
+Headers: READ_HEADERS
+```
+
+Set `OFFERING_ID` (`assignment_offerings.id`) — **this is the key every write in this run uses.**
 
 If a `DAY_FILTER` was set, print: "Analyzing **{M-day / T-day} sections only** for this assignment."
 
 ---
 
-## Step 2 — Fetch Assignment Details
+## Step 2 — Fetch Offering Details and the Written Activity
 
 ```
-GET {SUPA_URL}/rest/v1/assignments?select=*&id=eq.{ASSIGNMENT_ID}
-Headers: apikey + Authorization as above
+GET {SUPA_URL}/rest/v1/assignment_offerings?select=id,points_possible,grading_mode,switch_policy,opens_at,due_at,is_published,position,course_offering_id,assignments!inner(id,slug,title,description,objectives,kind_id,course_id),offering_activities(grading_role,available_after,is_visible,position,activities(id,slug,modality,title,content)),assignment_due_dates(section_id,due_at)&id=eq.{OFFERING_ID}
+Headers: READ_HEADERS
 ```
 
-Parse response into:
-- `assignment.id`, `assignment.title`, `assignment.questions` (JSON array)
-- `assignment.reference_pdf` (may be null)
-- `assignment.reference_pages` (may be null, e.g., "45-52, 60")
+This is the same projection the site uses (`OFFERING_SELECT` in `site/app/js/schema.js`) — keep it
+that way so the skill and the UI can never disagree about what an assignment is.
 
-Before analyzing responses, verify migration 022 is available:
-```
-GET {SUPA_URL}/rest/v1/scores?select=q2_effort,q3_understanding&limit=0
-Headers: apikey + Authorization as above
-```
-If either column is missing, stop before any write and tell the operator to apply
-`supabase/migrations/022_preflight_question_diagnostics.sql` through the coordinated DDL workflow.
+From the embedded `offering_activities`, take the entry whose `activities.modality = 'written'`:
+
+- `WRITTEN_ACTIVITY_ID` = `activities.id` — you need it to pick the right `submission_activities` row
+- `QUESTIONS` = `activities.content.questions` (the array the old `assignments.questions` held)
+- `REFERENCE_PDF` = `activities.content.reference_pdf` (may be null)
+- `REFERENCE_PAGES` = `activities.content.reference_pages` (may be null, e.g. `"45-52, 60"`)
+- `POINTS_POSSIBLE` = the offering's `points_possible` (**not** a per-question sum you invent)
+
+An offering may also carry an **interactive** activity (`modality = 'interactive'`). This skill
+grades the written path only. If the interactive activity is `grading_role = 'graded'`, say so in
+the report — students who chose it are graded by `/interaction-aggregate`'s sibling backfill, not
+here, and must not be counted as missing.
+
+### Preflight checks — do these before any analysis
+
+1. **Points agree.** `sum(q.points for q in QUESTIONS)` must equal `POINTS_POSSIBLE`. `grades` has
+   `CHECK (points_earned <= points_possible)`, so a mismatch means every write will either be
+   rejected or silently under-report. If they differ, stop and report both numbers — a director
+   fixes the offering, you do not paper over it.
+2. **The grades shape is reachable.**
+   ```
+   GET {SUPA_URL}/rest/v1/grades?select=diagnostic,question_scores,effort&limit=0
+   Headers: READ_HEADERS
+   ```
+   HTTP 200 confirms the columns exist in `app`. A 400 means the projection or the profile header
+   is wrong; a 404 means you are pointed at `public`. Stop before writing anything.
+3. **Grading mode.** These offerings are `grading_mode = 'points'`, so you write `points_earned`
+   directly. If you find `grading_mode = 'effort'`, stop: a DB trigger derives points from
+   `grades.effort` and would overwrite anything you put in `points_earned`. Written preflights are
+   not effort-graded today; an offering that says otherwise is a configuration change nobody told
+   you about.
 
 ---
 
 ## Step 3 — RAG: Read Textbook Pages (if applicable)
 
-If `reference_pdf` is set AND `reference_pages` is set:
+If `REFERENCE_PDF` is set AND `REFERENCE_PAGES` is set:
 
-1. Construct the full path: `{PDF_BASE}/{reference_pdf}`
-2. Parse `reference_pages` into page numbers (e.g., "45-52, 60" → pages 45–52 and 60)
+1. Construct the full path: `{PDF_BASE}/{REFERENCE_PDF}`
+2. Parse `REFERENCE_PAGES` into page numbers (e.g., "45-52, 60" → pages 45–52 and 60)
 3. Read those pages with the current agent's PDF-reading capability
 4. Store the extracted text as `REFERENCE_TEXT` — you will use it during analysis to ground your physics responses
 
@@ -111,52 +208,82 @@ If either field is null, skip this step (proceed without RAG context).
 > `textbook-pdfs/rag-manifest.txt` (one path per line; `#` comments ignored). The PDFs themselves are
 > gitignored and fetched from Teams, so the manifest is the shared contract that keeps the names
 > **identical across every operator's local repo** — the faculty lesson creator populates its
-> "Reference PDF" dropdown from it. If a lesson's `reference_pdf` is **not** in the manifest, treat it
-> as unverified: resolve `{PDF_BASE}/{reference_pdf}` as usual, but if the file is missing, warn and
+> "Reference PDF" dropdown from it. If an activity's `reference_pdf` is **not** in the manifest, treat it
+> as unverified: resolve `{PDF_BASE}/{REFERENCE_PDF}` as usual, but if the file is missing, warn and
 > proceed without RAG (Error Handling), and flag that the reference should be added to the manifest
 > and committed so it is shared.
 
 ---
 
-## Step 4 — Fetch the Roster
+## Step 4 — Fetch the Roster (sections → staff → enrolments)
+
+### 4a. Sections, and the day filter
 
 ```
-GET {SUPA_URL}/rest/v1/students?select=student_id,name,section_id&order=student_id.asc
-Headers: apikey + Authorization
+GET {SUPA_URL}/rest/v1/sections?select=id,code,meeting_days,period,course_offering_id&course_offering_id=eq.{COURSE_OFFERING_ID}&order=code.asc
+Headers: READ_HEADERS
 ```
 
-Build a map: `studentMap[student_id] = { name, section_id }`
+**Apply the day filter on `meeting_days`, not on the section code.** Keep sections whose
+`meeting_days` array contains `DAY_FILTER` (e.g. `["M"]` matches `M`). The old rule — "section id
+starts with M" — was a string-sniffing workaround for a schema that had nowhere to put the meeting
+pattern. It is now data, so use it; a course with a `W`/`F` pattern will work without a code change.
 
-**Apply day filter**: If `DAY_FILTER` is set:
-- Keep only students whose `section_id` starts with `DAY_FILTER` (e.g., `M` keeps `M1A`, `M1B`, `M3C`, etc.)
-- Print: "Filtering to {N} students in {M-day / T-day} sections: {list of section IDs}"
+Build `sectionMap[section_id] = { code, meeting_days }` and `SECTION_IDS` = the filtered ids.
+Print: "Filtering to {N} sections in {M-day / T-day}: {codes}".
 
-Also fetch sections with their instructors:
+### 4b. Who teaches each section
+
 ```
-GET {SUPA_URL}/rest/v1/sections?select=id,instructor_id,instructors(name)
-Headers: apikey + Authorization
+GET {SUPA_URL}/rest/v1/staff_assignments?select=id,instructor_id,section_id,role,instructors!inner(id,name,is_global_admin)&course_offering_id=eq.{COURSE_OFFERING_ID}
+Headers: READ_HEADERS
 ```
 
-Build: `sectionMap[section_id] = { instructor_name }`
+- Rows **with** a `section_id` name the instructor of that section — this is the grouping key,
+  replacing the old `sections.instructor_id`.
+- Rows with `section_id = null` are **offering-wide** (that is how a director is recorded). They are
+  authorization, not teaching load: **never group students by them.** A director with no section
+  rows produces no instructor block, which is correct.
 
-If `DAY_FILTER` is set, keep only sections that start with `DAY_FILTER`.
+Build `sectionMap[section_id].instructor = { id, name }`.
+
+### 4c. The enrolled students
+
+```
+GET {SUPA_URL}/rest/v1/enrollments?select=id,student_id,section_id,status,students!inner(student_id,name)&section_id=in.({SECTION_IDS})&status=eq.active&order=student_id.asc
+Headers: READ_HEADERS
+```
+
+Build `enrolmentMap[enrollment_id] = { student_id, name, section_id }` and the reverse
+`byStudent[student_id] = enrollment_id`. Only `status = 'active'` enrolments count; a dropped cadet
+is not "missing".
 
 ---
 
-## Step 5 — Fetch All Responses
+## Step 5 — Fetch All Submitted Work
 
 ```
-GET {SUPA_URL}/rest/v1/responses?select=student_id,answers,submitted_at,updated_at&assignment_id=eq.{ASSIGNMENT_ID}
-Headers: apikey + Authorization
+GET {SUPA_URL}/rest/v1/submissions?select=id,enrollment_id,chosen_activity_id,status,committed_at,updated_at,submission_activities(activity_id,content,report_markdown,updated_at)&assignment_offering_id=eq.{OFFERING_ID}&enrollment_id=in.({ENROLLMENT_IDS})
+Headers: READ_HEADERS
 ```
 
-Join each response with `studentMap` to get `name` and `section_id`.
-
-**If DAY_FILTER is set**: discard responses from students not in the filtered set.
+For each submission, find the embedded `submission_activities` entry whose
+`activity_id = WRITTEN_ACTIVITY_ID`. Its `content` **is** the answers object — the same
+`{ "q1": "…", "q2": "…" }` shape `responses.answers` used to hold.
 
 Compute:
-- `submittedStudents` = set of student_ids who submitted (within the filtered set)
-- `missingStudents` = all students in the filtered roster who did NOT submit
+- `submittedEnrolments` = enrolments with a written activity row whose `content` has at least one non-empty answer
+- `missingEnrolments` = filtered roster enrolments with no such row
+
+> **Draft vs. committed is new, and it matters.** `public` treated "a `responses` row exists" as
+> submitted, so an autosave counted as a submission. `app` makes committing explicit
+> (`submissions.status`). **Grade any student whose written content is non-empty** — someone who
+> wrote real answers and never pressed Submit should not be silently zeroed — but count
+> `status = 'draft'` separately and list those cadets in the report so the instructor can decide.
+> Do not treat a draft as missing.
+>
+> If a cadet's `chosen_activity_id` is the **interactive** activity, they took the other path.
+> List them under "took the interactive path", not under missing.
 
 ---
 
@@ -187,8 +314,9 @@ Read `references/QUESTION-DIAGNOSTICS.md` in full. For every submitted student, 
 - `q3_understanding`: integer 0–5 using the demonstrated-physics-understanding rubric.
 
 These are diagnostics, not grade points. Do not put either value into student feedback,
-`question_scores`, grade totals, `analysis_report`, or the printed per-student report. A Q3 answer may
-receive yellow/full credit for genuine effort while its hidden understanding diagnostic is 1 or 2.
+`question_scores`, `points_earned`, the analysis report, or the printed per-student report. They go
+in one place only: `grades.diagnostic`. A Q3 answer may receive yellow/full credit for genuine
+effort while its hidden understanding diagnostic is 1 or 2.
 
 ### Grading Decision — THREE STATES ONLY
 
@@ -235,7 +363,7 @@ The bar for red is HIGH. Only award zero when the response is:
 
 - **Red** (`zero`): `feedback = "No answer provided."` (if blank) or a brief note on what was expected (if off-topic/gibberish).
 
-### Physics 215 Misconception Taxonomy
+### Physics Misconception Taxonomy
 Look for these patterns in free-response answers:
 
 | Misconception | Description |
@@ -273,9 +401,10 @@ For each free-response question, produce:
 
 ---
 
-## Step 8 — Generate Per-Instructor Bulleted Summaries
+## Step 8 — Write Per-Instructor Summaries to `analysis_reports`
 
-Group students and responses by instructor (using `sectionMap` → `instructor_id`). For each instructor (within filtered set), generate a summary covering **all their sections combined**.
+Group students by instructor (using `sectionMap` → `instructor`). For each instructor (within
+filtered set), generate a summary covering **all their sections combined**.
 
 **Aggregate per instructor, never per section.** Pool every response from all of an instructor's sections into one set before computing counts and identifying misconceptions. Do not produce separate summaries, counts, or misconception lists for each section, and do not label bullets by section (e.g., no "M1A: 3 students, M1B: 2 students"). One combined summary per instructor per question is the only output.
 
@@ -293,57 +422,87 @@ Write a **bulleted list** (newline-separated strings, no prose paragraphs). Each
 
 **For auto-graded questions (numerical/MC)**, write 1–2 bullets only: correct rate and the most common wrong answer if any.
 
-### Storage structure
+### Where it goes now: one row per instructor
+
+`assignments.analysis_report` — a single jsonb column holding a `by_instructor` map — is gone. Its
+replacement is the `analysis_reports` **table**, keyed
+`UNIQUE NULLS NOT DISTINCT (scope, scope_id, audience_id, kind)`. Write one row per instructor:
+
+| column | value |
+|---|---|
+| `scope` | `"assignment_offering"` |
+| `scope_id` | `OFFERING_ID` |
+| `audience_id` | the instructor's `instructors.id` (this is what `audience_id` is for) |
+| `kind` | `"by_question"` — the breakdown axis this skill owns (`ROLLUP-AGREEMENT.md` §6) |
+| `payload` | the object below |
 
 ```json
 {
   "generated_at": "{ISO timestamp}",
   "day_filter": "M",
-  "by_instructor": {
-    "{instructor_uuid}": {
-      "instructor_name": "...",
-      "sections": ["M1A", "M1B"],
-      "questions": {
-        "q1": { "summary": "bullet one\nbullet two\nbullet three" },
-        "q2": { "summary": "..." }
-      }
+  "instructor_name": "…",
+  "sections": [{ "id": "{section uuid}", "code": "M1A" }],
+  "breakdown": {
+    "axis": "question",
+    "items": {
+      "q1": { "summary": "bullet one\nbullet two\nbullet three" },
+      "q2": { "summary": "…" }
     }
-  }
+  },
+  "meta": { "n": 37, "generated_by": "preflight-analyze@{YYYY-MM-DD}" }
 }
 ```
 
-Include `"day_filter": null` when no filter was applied, or `"M"` / `"T"` when filtered.
+Include `"day_filter": null` when no filter was applied. Each `summary` is a `\n`-joined string of
+bullet text (one bullet per line, no leading `•` or `-`) — the shape `ROLLUP-AGREEMENT.md` §7 fixes
+for `breakdown[].summary`, unchanged from what the old `questions[].summary` held.
 
-Each `summary` value is a `\n`-joined string of bullet text (one bullet per line, no leading `•` or `-`).
+> **Why per-instructor rows instead of one merged document.** RLS on `analysis_reports` reads
+> `audience_id = current_uid()` first, so an instructor's own row reaches them directly. It also
+> deletes the merge step: M-day and T-day runs now touch **different rows**, so they cannot
+> overwrite each other and there is nothing to hand-merge.
+>
+> The one case that still collides is an instructor who teaches on **both** days: the second run
+> replaces their row, because a per-question summary written over the M cohort cannot be merged
+> with one written over the T cohort. When an instructor spans both days, run the assignment
+> **without** a day filter so their summary covers all their sections at once.
 
-**IMPORTANT**: When `DAY_FILTER` is set, only update entries for instructors within the filtered day. Fetch the existing `analysis_report` first, then merge — preserve any existing instructor entries for the other day so running M and T separately produces a complete combined report.
+### Writing it
 
-Fetch existing report before writing:
+Fetch what already exists for this offering (you need the row ids to update in place):
+
 ```
-GET {SUPA_URL}/rest/v1/assignments?select=analysis_report&id=eq.{ASSIGNMENT_ID}
-Headers: apikey + Authorization
+GET {SUPA_URL}/rest/v1/analysis_reports?select=id,audience_id,payload,generated_at&scope=eq.assignment_offering&scope_id=eq.{OFFERING_ID}&kind=eq.by_question
+Headers: READ_HEADERS
 ```
 
-Merge: `existingReport.by_instructor = { ...existingReport.by_instructor, ...newInstructorEntries }`
+Then, per instructor:
 
-Write to Supabase using PATCH:
-```
-PATCH {SUPA_URL}/rest/v1/assignments?id=eq.{ASSIGNMENT_ID}
-Headers:
-  apikey: {SUPA_KEY}
-  Authorization: Bearer {SUPA_KEY}
-  Content-Type: application/json
-  Prefer: return=minimal
+- **Row exists** for that `audience_id` →
+  ```
+  PATCH {SUPA_URL}/rest/v1/analysis_reports?id=eq.{ROW_ID}
+  Headers: WRITE_HEADERS + Prefer: return=minimal
+  Body: { "payload": { … }, "generated_at": "{ISO}" }
+  ```
+- **No row** →
+  ```
+  POST {SUPA_URL}/rest/v1/analysis_reports
+  Headers: WRITE_HEADERS + Prefer: return=minimal
+  Body: { "scope": "assignment_offering", "scope_id": "{OFFERING_ID}",
+          "audience_id": "{instructor uuid}", "kind": "by_question",
+          "payload": { … }, "generated_at": "{ISO}" }
+  ```
 
-Body:
-{ "analysis_report": { "generated_at": "...", "day_filter": "M", "by_instructor": { ... } } }
-```
+Read-then-write rather than an upsert on purpose: the unique key contains a nullable column
+(`audience_id`), and an explicit PATCH-or-POST is unambiguous where `on_conflict` inference is not.
 
 ---
 
-## Step 9 — Write Suggested Scores to Supabase
+## Step 9 — Write Suggested Grades to Supabase
 
-For each student who submitted (within filtered set), build a `question_scores` object:
+For each student who submitted (within filtered set), build a `question_scores` object — **the
+3-state shape is unchanged**:
+
 ```json
 {
   "q1": { "score": 8, "max": 10, "feedback": "Good explanation but missed direction component.", "status": "warn" },
@@ -359,46 +518,63 @@ For each student who submitted (within filtered set), build a `question_scores` 
 
 Always include `status` — the admin UI relies on it to show the three-state color toggle.
 
-Compute `total_score` = sum of all question scores.
-Compute `max_total` = sum of all question max points.
+Compute `points_earned` = sum of all question scores. It must be ≤ `POINTS_POSSIBLE`
+(a DB CHECK enforces this); Step 2's points check is what makes that true.
 
-Upsert to Supabase (service key bypasses RLS):
+### First: never clobber a finalized grade
+
 ```
-POST {SUPA_URL}/rest/v1/scores?on_conflict=student_id%2Cassignment_id
-Headers:
-  apikey: {SUPA_KEY}
-  Authorization: Bearer {SUPA_KEY}
-  Content-Type: application/json
-  Prefer: resolution=merge-duplicates
+GET {SUPA_URL}/rest/v1/grades?select=enrollment_id,is_finalized,source&assignment_offering_id=eq.{OFFERING_ID}&enrollment_id=in.({ENROLLMENT_IDS})
+Headers: READ_HEADERS
+```
 
-Body: (array of score objects)
+**Drop every enrolment whose grade has `is_finalized = true` from the payload.** A finalized grade
+is an instructor's decision; a re-run must not silently revert it. Count them and report them as
+skipped. (The old skill's upsert had no such guard — it would have overwritten a finalized score.)
+
+### Then upsert
+
+```
+POST {SUPA_URL}/rest/v1/grades?on_conflict=enrollment_id%2Cassignment_offering_id
+Headers: WRITE_HEADERS + Prefer: resolution=merge-duplicates,return=minimal
+
+Body: (array of grade objects)
 [{
-  "student_id": {student_id},
-  "assignment_id": "{ASSIGNMENT_ID}",
-  "question_scores": { ... },
-  "q2_effort": {integer 0-5 or null if q2 is absent},
-  "q3_understanding": {integer 0-5 or null if q3 is absent},
-  "total_score": {N},
-  "max_total": {N},
+  "enrollment_id": "{enrolment uuid}",
+  "assignment_offering_id": "{OFFERING_ID}",
+  "submission_id": "{submission uuid, or null}",
+  "points_earned": {N},
+  "points_possible": {POINTS_POSSIBLE},
+  "question_scores": { … },
+  "diagnostic": {
+    "q2_effort": {integer 0-5, or omit if q2 is absent},
+    "q3_understanding": {integer 0-5, or omit if q3 is absent}
+  },
+  "source": "ai_suggested",
   "is_finalized": false,
   "graded_at": "{ISO timestamp}"
 }]
 ```
 
-Send all students in a single batch upsert. The `UNIQUE(student_id, assignment_id)` constraint means re-running the skill updates suggestions without creating duplicates.
+Send all students in a single batch upsert. `UNIQUE (enrollment_id, assignment_offering_id)` means
+re-running updates suggestions without creating duplicates. Leave `graded_by` unset — this skill is
+not a person, and the column names the instructor who finalized.
 
-Read the written rows back for the exact submitted student ids:
-```
-GET {SUPA_URL}/rest/v1/scores?select=student_id,q2_effort,q3_understanding&assignment_id=eq.{ASSIGNMENT_ID}&student_id=in.({IDS})
-Headers: apikey + Authorization as above
-```
-Require exactly one row per submitted student. Where `q2`/`q3` exists on the assignment, require an
-integer in `[0,5]`; where it is absent, require `null`. Compare every returned value to the run's
-in-memory diagnostic before reporting success.
+### Read back and verify exactly
 
-After exact read-back verification, report: "Wrote suggested scores plus hidden Q2-effort and
-Q3-understanding diagnostics for {N} students ({day_filter} sections). Scores are marked
-is_finalized=false — instructors must review and finalize in the admin panel."
+```
+GET {SUPA_URL}/rest/v1/grades?select=enrollment_id,points_earned,points_possible,question_scores,diagnostic,source,is_finalized&assignment_offering_id=eq.{OFFERING_ID}&enrollment_id=in.({ENROLLMENT_IDS})
+Headers: READ_HEADERS
+```
+
+Require exactly one row per graded enrolment, with `source = "ai_suggested"` and
+`is_finalized = false`. Where `q2`/`q3` exists on the assignment, require an integer in `[0,5]` at
+`diagnostic.q2_effort` / `diagnostic.q3_understanding`; where absent, require the key to be absent.
+Compare every returned value to the run's in-memory diagnostic before reporting success.
+
+After exact read-back verification, report: "Wrote suggested grades plus hidden Q2-effort and
+Q3-understanding diagnostics for {N} students ({day_filter} sections); skipped {M} already-finalized.
+Grades are marked is_finalized=false — instructors must review and finalize in the admin panel."
 
 ---
 
@@ -408,20 +584,22 @@ Print one report block per instructor (all their sections combined), then a comb
 
 ```
 ═══════════════════════════════════════════════════
-# Physics 215 Preflight Analysis — {Assignment Title}
-Generated: {date}
+# {Course} Preflight Analysis — {Assignment Title}
+Generated: {date}   Term: {TERM_LABEL}
 {DAY_FILTER ? "Scope: M-Day sections only" | "Scope: T-Day sections only" : "Scope: All sections"}
 ═══════════════════════════════════════════════════
 
-## Instructor: {instructor_name} — Sections: {M1A, M1B, ...}
+## Instructor: {instructor_name} — Sections: {M1A, M3A, ...}
 
 ### Submission Summary
 | Metric | Value |
 |--------|-------|
 | Students in sections | {N} |
-| Submitted | {N} |
+| Submitted (committed) | {N} |
+| Submitted (still draft) | {N} |
+| Took the interactive path | {N} |
 | Missing | {N} |
-| Average score (auto-graded) | {X.X} / {max} |
+| Average score (auto-graded) | {X.X} / {POINTS_POSSIBLE} |
 
 ### Missing Students
 | Name | Section | Student ID |
@@ -451,10 +629,10 @@ After all instructors, print:
 | ...       | ...     | ...       | ...     | ...       |
 
 **Next steps:**
-- Instructors can review and adjust suggested scores in the Admin panel (Grade tab)
+- Instructors can review and adjust suggested grades in the Admin panel (Grade tab)
 - Yellow-highlighted scores are AI suggestions awaiting instructor review
 - Click "Finalize & Publish Grades" to make scores visible to students
-- To analyze the other day's sections, run: /preflight-analyze {ASSIGNMENT_ID} {OTHER_DAY}
+- To analyze the other day's sections, run: /preflight-analyze {COURSE_CODE} {ASSIGNMENT_SLUG} {OTHER_DAY}
 ═══════════════════════════════════════════════════
 ```
 
@@ -463,23 +641,27 @@ After all instructors, print:
 ## Error Handling
 
 - **Supabase API error**: Print the status code and error message. If 401/403, remind user the service_role key is required (not the anon key).
-- **No responses found**: Print "No submissions found for assignment '{id}'. Has the assignment been published and submitted by students?"
+- **Wrong schema**: a 404 on a table that exists, or a response carrying `public`-era columns, means a profile header was dropped. Stop; do not retry blindly.
+- **No offering found**: Print "No published assignment '{slug}' in {COURSE_CODE} for the active term. Has it been created and published for this offering?"
+- **No submissions found**: Print "No work found for '{slug}'. Has the offering been published and worked by students?"
 - **PDF not found**: Warn "Reference PDF not found at {path} — proceeding without textbook context." Continue without RAG.
 - **Partial config**: If any required config key is missing, list which keys are missing and stop.
-- **Empty filtered set**: If `DAY_FILTER` is set but no students match, print "No {M-day / T-day} students found in the roster."
-- **Diagnostic schema missing**: Stop before writing anything and direct the operator to migration 022.
-- **Diagnostic read-back mismatch**: Treat the run as failed; report the mismatched student ids and do not claim success.
+- **Empty filtered set**: If `DAY_FILTER` is set but no sections match, print "No {M-day / T-day} sections found in this offering."
+- **Points mismatch**: question points ≠ `points_possible` — stop before writing and report both.
+- **`grading_mode = 'effort'`**: stop; a trigger owns `points_earned` on that offering.
+- **Diagnostic read-back mismatch**: Treat the run as failed; report the mismatched enrolment ids and do not claim success.
 
 ---
 
 ## Important Rules
 
-1. **Never finalize scores** — always write `is_finalized: false`. Instructors confirm in the admin panel.
-2. **Never deduct without feedback** — every score of zero must have a non-empty `feedback` string explaining why.
-3. **Three states, simple rule** — Green = correct. Yellow = genuine on-topic attempt with flawed reasoning (full credit + tailored corrective feedback). Red = blank, off-topic, or not a good-faith attempt (zero credit). When in doubt between yellow and red, choose yellow.
-4. **Yellow gets full credit** — `warn` status always has `score = q.points`. Never assign partial credit on free-response; it's either full points (green or yellow) or zero (red).
-5. **Yellow feedback must be tailored** — never use the same feedback string for two different students' yellow answers on the same question. Each `warn` feedback must name the specific flaw in that student's response and correct it using `expected_response` and/or `REFERENCE_TEXT`. A generic "the reasoning may be incorrect" paste is not acceptable.
-6. **Protect the service key** — never print `SUPA_KEY` in the output. Reference it as `[service_key]` if you need to show a sample request.
-7. **Re-running is safe** — the upsert with `merge-duplicates` updates existing suggestions without touching finalized scores.
-8. **Merge analysis reports** — when `DAY_FILTER` is set, always fetch the existing `analysis_report` and merge, so M and T runs don't overwrite each other.
-9. **Diagnostics never affect grades** — `q2_effort` and `q3_understanding` are 0–5 research/teaching diagnostics only. Never use them in `question_scores`, `total_score`, `max_total`, status, feedback, or finalization, and never render or print individual values.
+1. **Never finalize grades** — always write `is_finalized: false` and `source: "ai_suggested"`. Instructors confirm in the admin panel.
+2. **Never overwrite a finalized grade** — filter them out before the upsert (Step 9) and report the count.
+3. **Never deduct without feedback** — every score of zero must have a non-empty `feedback` string explaining why.
+4. **Three states, simple rule** — Green = correct. Yellow = genuine on-topic attempt with flawed reasoning (full credit + tailored corrective feedback). Red = blank, off-topic, or not a good-faith attempt (zero credit). When in doubt between yellow and red, choose yellow.
+5. **Yellow gets full credit** — `warn` status always has `score = q.points`. Never assign partial credit on free-response; it's either full points (green or yellow) or zero (red).
+6. **Yellow feedback must be tailored** — never use the same feedback string for two different students' yellow answers on the same question. Each `warn` feedback must name the specific flaw in that student's response and correct it using `expected_response` and/or `REFERENCE_TEXT`. A generic "the reasoning may be incorrect" paste is not acceptable.
+7. **Protect the service key** — never print `SUPA_KEY` in the output. Reference it as `[service_key]` if you need to show a sample request.
+8. **Every request names its schema** — `Accept-Profile: app` on reads, `Content-Profile: app` on writes, decided once in Step 0.
+9. **Key on `enrollment_id`** — never write a grade or read work by `student_id` alone; the enrolment is what carries the section and the term.
+10. **Diagnostics never affect grades** — `q2_effort` and `q3_understanding` live only in `grades.diagnostic`. Never use them in `question_scores`, `points_earned`, `points_possible`, status, feedback, finalization, or the analysis report, and never render or print individual values.

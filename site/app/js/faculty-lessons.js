@@ -1,117 +1,233 @@
-// faculty-lessons.js — data layer for the faculty Lesson creation/management tool.
+// faculty-lessons.js — data layer for the faculty Lesson builder, against schema `app`.
 //
-// A *lesson* (migration 016) groups at most one written preflight (an assignments row)
-// and at most one Claude-artifact interaction (an interactions row) under one slug, with a
-// completion_policy (preflight | interaction | choice) that decides which mode(s) are allowed.
+// WHAT MOVED
+//   lessons (own table)          ->  gone. A "lesson" IS an assignment offering.
+//   lessons.preflight_id         ->  activities(modality='written')   of the same assignment
+//   lessons.interaction_id       ->  activities(modality='interactive') of the same assignment
+//   assignments.questions        ->  activities.content.questions
+//   interactions.artifact_url    ->  activities.content.artifact_url
+//   lessons.completion_policy    ->  DERIVED from offering_activities.grading_role
+//   due_date_m / due_date_t      ->  assignment_offerings.due_at + assignment_due_dates(section)
+//   *.is_published (3 places)    ->  assignment_offerings.is_published (one place, per term)
+//   scores(student, assignment)  ->  grades(enrollment, assignment_offering)
 //
-// Each component can come from one of two sources:
-//   • "new"      — author the component inline (the preflight is keyed off the lesson slug;
-//                  the interaction is keyed by the artifact's `#i=` slug).
-//   • "existing" — REFERENCE an already-created assignment / interaction by id. Its content and
-//                  publish state are NOT modified here; the lesson just points at it. This is how
-//                  the pre-built Fall preflights and standalone interactions are combined into
-//                  lessons without duplicating them.
-// A component may also be omitted ("none"). "1 or both" — a lesson may carry just a preflight,
-// just an interaction, or both; completion_policy then declares which of those modes students may use.
+// ── THE THREE THINGS A DIRECTOR WILL NOTICE ─────────────────────────────────────────
 //
-// Ownership rule: a component is lesson-OWNED (created inline) iff its id equals the lesson id.
-// Only owned components are touched by publish mirroring; attached-existing (referenced) components
-// are managed in their own tool. This keeps a shared standalone assignment/interaction from being
-// silently unpublished when a lesson that references it is unpublished.
+// 1. A LESSON IS NO LONGER ASSEMBLED FROM TWO INDEPENDENT PIECES.
+//    The old page let you drag ANY orphan preflight together with ANY orphan interaction and
+//    staple them into a lesson. In v2 the written question set and the interactive artifact are
+//    both `activities` OF ONE `assignments` container — they are what is inside it, not two
+//    rows a third row points at. So composing means picking a CONTAINER (which brings its
+//    activities with it) and scheduling it into this term. The old cross-pairing is not
+//    expressible, and deliberately so: it was the reconciliation layer the v2 model removes.
 //
-// Scope note: this is the authoring tool only. The student Save/Submit lifecycle, the
-// completion-creating triggers, and the merged rollup are later phases of LESSON-UNIFICATION.
+// 2. "ALLOWED MODE" IS DERIVED, NEVER STORED.
+//    There is no completion_policy column. Two graded activities in the offering means the
+//    student chooses; exactly one means it is required. This module translates the three
+//    familiar labels to and from `offering_activities.grading_role` so the UI is unchanged:
+//      preflight   -> written graded,     interactive practice (if attached)
+//      interaction -> interactive graded, written practice     (if attached)
+//      choice      -> both graded
+//
+// 3. SETTING A COMPONENT TO "NONE" NO LONGER DELETES IT.
+//    It removes the offering_activity row — the activity stays in the library and can be
+//    re-attached next term. Publish state moved with it: activities have no is_published, so
+//    unpublishing a lesson no longer reaches into shared content. That whole class of "a lesson
+//    silently unpublished a standalone assignment" bug is gone with the columns.
+//
+// SAFETY NOTE ON DELETES. `submissions` and `grades` hang off the OFFERING with ON DELETE
+// CASCADE, so removing a scheduled lesson destroys this term's student work — which the old
+// "delete container only" did NOT. countLessonWork() exists so the page can state the number
+// before the director commits, never after.
 
 import { db } from './supabase.js';
+import {
+  OFFERING_SELECT, shapeOffering, questionsOf, lessonNumber, chunked,
+} from './schema.js';
 
-const LESSON_COLS =
-  'id, course_id, title, description, lesson_number, preflight_id, interaction_id, ' +
-  'completion_policy, objectives, points, due_date_m, due_date_t, is_published';
+/* ══════════════════════════════════════════════════════════════════════════════
+ * Derived policy  <->  offering_activities.grading_role
+ * ════════════════════════════════════════════════════════════════════════════ */
 
-// The preflight assignment a lesson AUTHORS inline is keyed off the lesson slug — there is no
-// external contract on an assignments.id, so the director never manages a second id. (Attached
-// existing preflights keep their own id; the interaction id is the artifact's `#i=` slug.)
-export const preflightIdFor = (lessonSlug) => lessonSlug;
+/** The familiar three-way label for an offering, read back out of the graded roles. */
+export function policyOf(offering) {
+  const graded = offering?.gradedActivities || [];
+  if (graded.length > 1) return 'choice';
+  if (graded.length === 1) return graded[0].modality === 'interactive' ? 'interaction' : 'preflight';
+  return 'choice';   // nothing graded yet — the editor's neutral default
+}
 
-/** A component is created-inline (lesson-owned) iff its id equals the lesson id. */
-export const isOwnedComponent = (lessonId, componentId) => !!componentId && componentId === lessonId;
+/** grading_role for one modality under a chosen policy. */
+export function roleFor(policy, modality) {
+  if (policy === 'choice') return 'graded';
+  if (policy === 'interaction') return modality === 'interactive' ? 'graded' : 'practice';
+  return modality === 'written' ? 'graded' : 'practice';   // 'preflight'
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * Slugs
+ * ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @returns {{ noCourse?, lessons:[...], assignments:[...], interactions:[...] }}
- *   Directors see all lessons (incl. drafts); instructors see only published ones.
- *   `assignments`/`interactions` are the full course-scoped lists that back the "use existing"
- *   pickers, each annotated with `ownedBy` (the lesson id already referencing it, or null).
+ * The slug for a written activity, minted from the course code and the assignment slug.
+ *
+ * `activities.slug` is globally unique, so it CANNOT just be the assignment slug —
+ * phys-110 and phys-215 both have a `preflight-02`. This reproduces the namespacing the
+ * migration used (`phys-110-preflight-31-written`), which is also why written slugs are
+ * generated rather than typed: nothing external references them.
+ */
+export const writtenSlugFor = (courseCode, assignmentSlug) =>
+  `${courseCode || 'course'}-${assignmentSlug}-written`;
+
+/**
+ * An interactive activity's slug is the OPPOSITE case: it is the FROZEN contract surface.
+ * Deployed Claude artifacts post to `interaction-submit.html#i=<slug>`, so the director types
+ * it, it must match the artifact, and it is never regenerated or renamed once shipped.
+ */
+export const isValidSlug = (s) => /^[a-z0-9-]+$/.test(String(s || '').trim());
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * Loading
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Everything the Lessons page renders.
+ *
+ * Two lists, because v2 separates the two questions the old single list conflated:
+ *   lessons — what is SCHEDULED in ctx.currentOffering (this term's run)
+ *   library — assignments in ctx.currentCourse NOT scheduled here yet (available to schedule)
+ *
+ * Directors see drafts; instructors see only published offerings (RLS already enforces the
+ * read side — the filter narrows the query, it does not secure it).
+ *
+ * @returns {{ noCourse?, isDirector, lessons:[], library:[], meetingDays:[], sections:[] }}
  */
 export async function loadManager(ctx) {
-  const course = ctx.currentCourse;
-  if (!course) return { noCourse: true, lessons: [], assignments: [], interactions: [] };
+  const empty = { noCourse: true, isDirector: false, lessons: [], library: [], meetingDays: [], sections: [] };
+  if (!ctx.currentOffering || !ctx.currentCourse) return empty;
   const isDirector = ctx.isDirectorForCurrent();
 
-  let q = db.from('lessons').select(LESSON_COLS).eq('course_id', course)
-    .order('lesson_number', { nullsFirst: false }).order('title');
-  if (!isDirector) q = q.eq('is_published', true);
+  let offeringQ = db.from('assignment_offerings')
+    .select(OFFERING_SELECT)
+    .eq('course_offering_id', ctx.currentOffering)
+    .order('position', { ascending: true, nullsFirst: false });
+  if (!isDirector) offeringQ = offeringQ.eq('is_published', true);
 
-  // Full course lists power both the "use existing" pickers and the lesson-card hydration below.
-  const [{ data: lessonRows }, { data: allAsgn }, { data: allInter }] = await Promise.all([
-    q,
+  const [{ data: offeringRows }, { data: libraryRows }, { data: sectionRows }] = await Promise.all([
+    offeringQ,
+    // The catalogue for this course, with its activities — the "schedule an existing
+    // assignment" picker. Archived containers are hidden; they are the v2 retirement flag.
     db.from('assignments')
-      .select('id, title, description, questions, is_published, due_date_m, due_date_t, reference_pdf, reference_pages, reading_link')
-      .eq('course_id', course)
-      .order('due_date_m', { ascending: true, nullsFirst: false }).order('title'),
-    db.from('interactions')
-      .select('id, title, description, artifact_url, is_published')
-      .eq('course_id', course).order('title'),
+      .select('id,course_id,kind_id,slug,title,description,objectives,is_archived,' +
+              'activities(id,slug,modality,title,content,position)')
+      .eq('course_id', ctx.currentCourse).eq('is_archived', false)
+      .order('slug'),
+    db.from('sections')
+      .select('id,code,meeting_days,period')
+      .eq('course_offering_id', ctx.currentOffering).order('code'),
   ]);
-  const lessons = lessonRows || [];
-  const assignments = allAsgn || [];
-  const interactions = allInter || [];
 
-  // Which existing rows are already referenced by a lesson (and by which one).
-  const asgnOwner = {}, interOwner = {};
-  lessons.forEach(l => {
-    if (l.preflight_id)   asgnOwner[l.preflight_id]   = l.id;
-    if (l.interaction_id) interOwner[l.interaction_id] = l.id;
+  const lessons = (offeringRows || [])
+    .map(shapeOffering)
+    .filter(Boolean)
+    .map(o => ({
+      ...o,
+      policy: policyOf(o),
+      lessonNumber: o.position ?? lessonNumber(o.slug, o.title),
+      questionCount: questionsOf(o.written).length,
+    }))
+    .sort((a, b) => (a.lessonNumber ?? 1e9) - (b.lessonNumber ?? 1e9)
+                 || String(a.slug || '').localeCompare(String(b.slug || '')));
+
+  const scheduled = new Set(lessons.map(l => l.assignmentId));
+  const library = (libraryRows || []).map(a => {
+    const acts = (a.activities || []).slice()
+      .sort((x, y) => (x.position ?? 0) - (y.position ?? 0));
+    return {
+      id: a.id,
+      slug: a.slug,
+      title: a.title,
+      description: a.description,
+      courseId: a.course_id,
+      kind: a.kind_id,
+      objectives: Array.isArray(a.objectives) ? a.objectives : [],
+      activities: acts,
+      written: acts.find(x => x.modality === 'written') || null,
+      interactive: acts.find(x => x.modality === 'interactive') || null,
+      questionCount: (acts.find(x => x.modality === 'written')?.content?.questions || []).length,
+      // Which offering in THIS term already runs it (null = free to schedule).
+      scheduledAs: lessons.find(l => l.assignmentId === a.id)?.offeringId || null,
+      isScheduled: scheduled.has(a.id),
+    };
   });
 
-  const asgnById  = Object.fromEntries(assignments.map(a => [a.id, a]));
-  const interById = Object.fromEntries(interactions.map(i => [i.id, i]));
+  const sections = sectionRows || [];
+  // The distinct meeting-day letters actually present in this offering. The old page hardcoded
+  // M and T; the pattern is data on the section now, so the due-date UI is generated from it
+  // and a course meeting W/F needs no code change.
+  const meetingDays = [...new Set(sections.flatMap(s => s.meeting_days || []))].sort();
 
-  const items = lessons.map(l => ({
-    ...l,
-    objectives: Array.isArray(l.objectives) ? l.objectives : [],
-    preflight:   l.preflight_id   ? (asgnById[l.preflight_id]   || null) : null,
-    interaction: l.interaction_id ? (interById[l.interaction_id] || null) : null,
-  }));
+  return { noCourse: false, isDirector, lessons, library, sections, meetingDays };
+}
 
+/** One library assignment with its activities — used when the editor opens a container. */
+export async function getLibraryAssignment(assignmentId) {
+  if (!assignmentId) return null;
+  const { data } = await db.from('assignments')
+    .select('id,course_id,kind_id,slug,title,description,objectives,is_archived,' +
+            'activities(id,slug,modality,title,content,position)')
+    .eq('id', assignmentId).maybeSingle();
+  if (!data) return null;
+  const acts = data.activities || [];
   return {
-    noCourse: false,
-    lessons: items,
-    assignments: assignments.map(a => ({
-      id: a.id, title: a.title, is_published: a.is_published,
-      nq: (a.questions || []).length, ownedBy: asgnOwner[a.id] || null,
-    })),
-    interactions: interactions.map(i => ({
-      id: i.id, title: i.title, artifact_url: i.artifact_url, is_published: i.is_published,
-      ownedBy: interOwner[i.id] || null,
-    })),
+    ...data,
+    objectives: Array.isArray(data.objectives) ? data.objectives : [],
+    written: acts.find(a => a.modality === 'written') || null,
+    interactive: acts.find(a => a.modality === 'interactive') || null,
   };
 }
 
-/** A question's point value, normalized. Non-numeric → 0, matching the max_total math below. */
-const pointsOf = (q) => (isNaN(Number(q?.points)) ? 0 : Number(q.points));
+/* ══════════════════════════════════════════════════════════════════════════════
+ * Due dates — per meeting-day, materialized per section
+ * ════════════════════════════════════════════════════════════════════════════ */
 
-/** Read an assignment's stored questions so a save can tell whether any point value changed.
- *  Must be called BEFORE the write that overwrites them. [] when the row doesn't exist yet — a
- *  first-time create has no scores to correct. */
-async function storedQuestions(assignmentId) {
-  const { data } = await db.from('assignments')
-    .select('questions').eq('id', assignmentId).maybeSingle();
-  return Array.isArray(data?.questions) ? data.questions : [];
+/** 'YYYY-MM-DD' -> the end-of-day local ISO the DB stores as timestamptz. */
+const endOfDay = (d) => (d ? `${d}T23:59:59` : null);
+
+/**
+ * Turn the editor's per-day map ({M:'2026-08-24', T:'2026-08-25'}) into one
+ * assignment_due_dates row per section, using each section's own meeting_days.
+ *
+ * This is the generalization of due_date_m / due_date_t. The old pair inferred the day by
+ * sniffing the FIRST CHARACTER of a section code ('M1A' -> M-day), which broke the moment a
+ * course met on any other pattern. Now the pattern is a column and the override is a row.
+ */
+export function dueRowsFor(offeringId, dueByDay, sections) {
+  const rows = [];
+  (sections || []).forEach(sec => {
+    // First meeting day with a date wins; a section meeting M/W/F takes the M date.
+    const day = (sec.meeting_days || []).find(d => dueByDay?.[d]);
+    if (!day) return;
+    rows.push({ assignment_offering_id: offeringId, section_id: sec.id, due_at: endOfDay(dueByDay[day]) });
+  });
+  return rows;
 }
 
-/** True iff a question that ALREADY existed changed its point value. Added/removed questions don't
- *  qualify — they have no scores rows to correct. Port of admin.html:1851 `pointsChanged`. */
-function pointsChanged(oldQs, newQs) {
+/** The offering's DEFAULT deadline: the earliest per-day date, so nobody's default is late. */
+export function defaultDueFrom(dueByDay) {
+  const all = Object.values(dueByDay || {}).filter(Boolean).sort();
+  return all.length ? endOfDay(all[0]) : null;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * Retroactive grade correction
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+const pointsOf = (q) => (isNaN(Number(q?.points)) ? 0 : Number(q.points));
+
+/** True iff a question that ALREADY existed changed its point value. Added/removed questions
+ *  don't qualify — they have no graded rows to correct. */
+export function pointsChanged(oldQs, newQs) {
   return (newQs || []).some(q => {
     const old = (oldQs || []).find(oq => oq.id === q.id);
     return old && pointsOf(old) !== pointsOf(q);
@@ -119,204 +235,392 @@ function pointsChanged(oldQs, newQs) {
 }
 
 /**
- * Propagate changed question points onto every existing `scores` row for an assignment.
+ * Propagate changed question points onto every existing grade for an offering.
  *
- * Without this, editing a question's point value on an already-graded lesson leaves every graded row
- * stale: `question_scores[q].max` keeps the OLD value and `total_score`/`max_total` no longer agree
- * with the assignment — students see wrong totals and the grade export ships them. Port of
- * admin.html:1871 `retroactivelyUpdateScores`, which the app dropped.
+ * Without this, editing a question's value on an already-graded lesson leaves each row stale:
+ * `question_scores[q].max` keeps the OLD number and the total no longer agrees with the
+ * questions — students see wrong totals and the export ships them.
  *
- * Preserves the 3-state status (a contract with scores.question_scores[].status): `zero` stays 0,
- * `full`/`warn` take the new point value — `warn` is full credit with a flag, so it scores like
- * `full`. Questions absent from a row's question_scores are left alone (never graded).
+ * ONE V2 DIFFERENCE THAT MATTERS: the ceiling is no longer the sum of the question points, it
+ * is `assignment_offerings.points_possible`, and `grades_within_bounds` is a CHECK. So the
+ * recomputed total is clamped to the offering's value — the write is rejected outright
+ * otherwise, which is the constraint doing the job the old code had to remember to do.
  *
- * @returns {number} rows updated; 0 if none existed or the write failed.
+ * Preserves the 3-state status: `zero` stays 0, `full`/`warn` take the new value (warn is full
+ * credit with a flag). Questions absent from a row are left alone — they were never graded.
+ *
+ * @returns {number} rows rewritten (0 if none existed or the write failed).
  */
-export async function retroactivelyUpdateScores(assignmentId, allQuestions) {
-  const qs_ = allQuestions || [];
-  const { data: scores, error } = await db.from('scores')
-    .select('student_id, question_scores, is_finalized').eq('assignment_id', assignmentId);
-  if (error || !scores?.length) return 0;
+export async function retroactivelyUpdateGrades(offeringId, questions, pointsPossible) {
+  const qs_ = questions || [];
+  const { data: grades, error } = await db.from('grades')
+    .select('id, enrollment_id, question_scores, is_finalized, points_possible')
+    .eq('assignment_offering_id', offeringId);
+  if (error || !grades?.length) return 0;
 
-  const newMaxTotal = qs_.reduce((s, q) => s + pointsOf(q), 0);
-
-  const upserts = scores.map(row => {
+  const possible = Number(pointsPossible ?? 0);
+  const rows = grades.map(row => {
     const qs = { ...(row.question_scores || {}) };
     qs_.forEach(q => {
       if (!qs[q.id]) return;                       // never graded — nothing to correct
       const status = qs[q.id].status || (Number(qs[q.id].score) > 0 ? 'full' : 'zero');
       qs[q.id] = { ...qs[q.id], max: pointsOf(q), score: status === 'zero' ? 0 : pointsOf(q) };
     });
-    const newTotal = qs_.reduce((s, q) => s + (Number(qs[q.id]?.score) || 0), 0);
+    const total = qs_.reduce((s, q) => s + (Number(qs[q.id]?.score) || 0), 0);
     return {
-      student_id:      row.student_id,
-      assignment_id:   assignmentId,
+      enrollment_id: row.enrollment_id,
+      assignment_offering_id: offeringId,
       question_scores: qs,
-      total_score:     Math.round(newTotal * 1000) / 1000,
-      max_total:       newMaxTotal,
-      is_finalized:    row.is_finalized,
+      points_earned: Math.min(Math.round(total * 1000) / 1000, possible),
+      points_possible: possible,
+      is_finalized: row.is_finalized,
     };
   });
 
-  const { error: upsertErr } = await db.from('scores')
-    .upsert(upserts, { onConflict: 'student_id,assignment_id' });
-  return upsertErr ? 0 : scores.length;
+  const { error: upErr } = await db.from('grades')
+    .upsert(rows, { onConflict: 'enrollment_id,assignment_offering_id' });
+  return upErr ? 0 : rows.length;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * Saving
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/** Existing activities of a container, keyed by modality. */
+async function activitiesOf(assignmentId) {
+  const { data } = await db.from('activities')
+    .select('id,slug,modality,title,content,position').eq('assignment_id', assignmentId);
+  const out = { written: null, interactive: null };
+  (data || []).forEach(a => { out[a.modality] = a; });
+  return out;
 }
 
 /**
- * Create (editingId null) or update a lesson and its inline-authored components.
- * Inline ("new") components are upserted first so the lesson's FKs resolve; "existing" components
- * are referenced by id only (never modified); "none" leaves the FK null.
+ * Create or update one lesson: container -> activities -> offering -> roles -> deadlines.
+ *
+ * The order is forced by the foreign keys, and each step is a separate round trip because
+ * PostgREST has no transaction across requests. A failure therefore leaves the earlier steps
+ * applied — which is survivable precisely because every step is an upsert keyed on something
+ * stable, so re-clicking Save converges rather than duplicating.
  *
  * model = {
- *   id, course_id, title, description, lesson_number,
- *   completion_policy, objectives:[{key,label}], due_date_m, due_date_t, is_published,
- *   questions:[…],                                   // inline preflight builder (source 'new')
- *   preflight:    { source:'none'|'existing'|'new', existingId },
- *   interaction:  { source:'none'|'existing'|'new', existingId, id, title, artifact_url, description },
+ *   offeringId, assignmentId, courseId, courseOfferingId, courseCode,
+ *   slug, title, description, lessonNumber, objectives[],
+ *   policy: 'preflight'|'interaction'|'choice',
+ *   pointsPossible, gradingMode, switchPolicy, isPublished,
+ *   dueByDay: { M:'YYYY-MM-DD', … }, sections: [{id, meeting_days}],
+ *   written:     { include, questions[], reference_pdf, reference_pages, reading_link },
+ *   interactive: { include, slug, title, artifact_url, description },
  * }
- * @returns {{ error: object|null, rescored: number }} the first error encountered (or null), and
- *   how many `scores` rows a question-points change forced to be rewritten (0 = none; the caller
- *   surfaces this, because a silent bulk score rewrite is exactly what a director must be told about).
+ *
+ * @returns {{ error, offeringId, rescored, unchosen }}
+ *   rescored — grades rewritten because a question's point value changed (the page must SAY so;
+ *              a silent bulk total rewrite is exactly what a director has to be told about).
+ *   unchosen — students whose committed choice was cleared because the activity they picked was
+ *              detached from the offering (the composite FK is ON DELETE SET NULL).
  */
-export async function saveLesson(model, editingId) {
-  const { id, course_id, is_published } = model;
-  const pf = model.preflight   || { source: 'none' };
-  const it = model.interaction || { source: 'none' };
-  let preflight_id = null, interaction_id = null;
-  let rescored = 0;
+export async function saveLesson(ctx, model, editingOfferingId) {
+  const out = { error: null, offeringId: editingOfferingId || null, rescored: 0, unchosen: 0 };
+  const courseOfferingId = model.courseOfferingId || ctx.currentOffering;
 
-  // Due dates flow from the lesson onto every component so they all share one deadline. Interactions
-  // use M/T only (migration 020); assignments additionally keep the legacy NOT-NULL `due_date`.
-  const lessonM = model.due_date_m || null, lessonT = model.due_date_t || null;
-  const hasDates = !!(lessonM || lessonT);
-  const interactionDates = hasDates ? { due_date_m: lessonM, due_date_t: lessonT } : {};
-  const assignmentDates  = hasDates
-    ? { due_date_m: lessonM, due_date_t: lessonT, due_date: lessonM || lessonT }
-    : {};
-
-  // 1) Preflight component.
-  if (pf.source === 'new') {
-    const asgnId = preflightIdFor(id);
-    const nextQs = model.questions || [];
-    // Snapshot the stored points BEFORE the upsert overwrites them; a create returns [].
-    const prevQs = await storedQuestions(asgnId);
-    // assignments.due_date is NOT NULL — mirror admin.html and seed it from the lesson dates.
-    const seed = model.due_date_m || model.due_date_t || new Date().toISOString();
-    const { error } = await db.from('assignments').upsert({
-      id: asgnId,
-      course_id,
-      title: model.title,
-      description: model.description,
-      questions: nextQs,
-      due_date:   seed,
-      due_date_m: model.due_date_m,
-      due_date_t: model.due_date_t,
-      reference_pdf:   pf.reference_pdf   || null,   // grading RAG grounding for /preflight-analyze
-      reference_pages: pf.reference_pages || null,
-      reading_link:    pf.reading_link    || null,   // reading link shown to students
-      is_published,
-    }, { onConflict: 'id' });
-    if (error) return { error, rescored };
-    preflight_id = asgnId;
-    if (pointsChanged(prevQs, nextQs)) rescored = await retroactivelyUpdateScores(asgnId, nextQs);
-  } else if (pf.source === 'existing') {
-    if (!pf.existingId) return { error: { message: 'Select an existing preflight assignment.' }, rescored };
-    preflight_id = pf.existingId;
-    // Attached existing preflights are EDITABLE: write the revised questions + reference fields back
-    // onto that same assignment, preserving its own title / publish state / due dates (a plain
-    // UPDATE touches only these columns). Skip if no questions were loaded (avoids wiping the row).
-    const upd = { ...assignmentDates };                // sync the shared due dates onto the assignment
-    if (Array.isArray(pf.questions) && pf.questions.length) {
-      upd.questions       = pf.questions;
-      upd.reference_pdf   = pf.reference_pdf   ?? null;
-      upd.reference_pages = pf.reference_pages ?? null;
-      upd.reading_link    = pf.reading_link    ?? null;
-    }
-    if (Object.keys(upd).length) {
-      // An attached-existing preflight is the likelier rescore case: it is a pre-built assignment
-      // that may already carry a full set of graded scores rows.
-      const prevQs = upd.questions ? await storedQuestions(pf.existingId) : null;
-      const { error } = await db.from('assignments').update(upd).eq('id', pf.existingId);
-      if (error) return { error, rescored };
-      if (upd.questions && pointsChanged(prevQs, upd.questions))
-        rescored = await retroactivelyUpdateScores(pf.existingId, upd.questions);
-    }
-  }
-
-  // 2) Interaction component (M/T due dates only — migration 020).
-  if (it.source === 'new') {
-    const { error } = await db.from('interactions').upsert({
-      id: it.id,
-      course_id,
-      title: it.title || model.title,
-      description: it.description,
-      artifact_url: it.artifact_url,
-      is_published,
-      ...interactionDates,
-    }, { onConflict: 'id' });
-    if (error) return { error, rescored };
-    interaction_id = it.id;
-  } else if (it.source === 'existing') {
-    if (!it.existingId) return { error: { message: 'Select an existing interaction.' }, rescored };
-    interaction_id = it.existingId;
-    // Attached existing interactions are EDITABLE: update title/url/description + the shared due
-    // dates on that same row, preserving its id (the artifact `#i=` slug), course, and publish
-    // state. title is NOT NULL, so only overwrite it when a non-empty value is provided.
-    const upd = { ...interactionDates };
-    if (it.title && it.title.trim()) upd.title = it.title.trim();
-    if (it.artifact_url !== undefined) upd.artifact_url = it.artifact_url || null;
-    if (it.description !== undefined) upd.description = it.description || null;
-    if (Object.keys(upd).length) {
-      const { error } = await db.from('interactions').update(upd).eq('id', it.existingId);
-      if (error) return { error, rescored };
-    }
-  }
-
-  // 3) The lesson row itself. Insert on create (surfaces a duplicate-slug 23505); update on edit.
-  const row = {
-    id, course_id,
+  /* 1 ── the CONTAINER (assignments). Term-free, reusable, carries no grading policy. */
+  let assignmentId = model.assignmentId || null;
+  const container = {
+    course_id: model.courseId,
+    kind_id: model.kind || 'preflight',
     title: model.title,
-    description: model.description,
-    lesson_number: model.lesson_number,
-    preflight_id, interaction_id,
-    completion_policy: model.completion_policy,
-    objectives: model.objectives || [],
-    due_date_m: model.due_date_m,
-    due_date_t: model.due_date_t,
-    is_published,
+    description: model.description ?? null,
+    objectives: Array.isArray(model.objectives) ? model.objectives : [],
   };
-  const { error } = editingId
-    ? await db.from('lessons').update(row).eq('id', editingId)
-    : await db.from('lessons').insert(row);
-  return { error: error || null, rescored };
+  if (assignmentId) {
+    const { error } = await db.from('assignments').update(container).eq('id', assignmentId);
+    if (error) return { ...out, error };
+  } else {
+    const { data, error } = await db.from('assignments')
+      .insert({ ...container, slug: model.slug }).select('id').single();
+    if (error) return { ...out, error };
+    assignmentId = data.id;
+  }
+  out.assignmentId = assignmentId;
+
+  /* 2 ── the ACTIVITIES (what is inside the container). */
+  const existing = await activitiesOf(assignmentId);
+  const wanted = [];      // [{ id, modality }] — everything that should be attached this term
+
+  if (model.written?.include) {
+    const content = {
+      questions: model.written.questions || [],
+      reading_link: model.written.reading_link || null,
+      reference_pdf: model.written.reference_pdf || null,
+      reference_pages: model.written.reference_pages || null,
+    };
+    if (existing.written) {
+      // Snapshot the stored points BEFORE the overwrite so a change can be detected.
+      const prevQs = existing.written.content?.questions || [];
+      const { error } = await db.from('activities')
+        .update({ title: model.title, content }).eq('id', existing.written.id);
+      if (error) return { ...out, error };
+      wanted.push({ id: existing.written.id, modality: 'written' });
+      if (pointsChanged(prevQs, content.questions) && editingOfferingId) {
+        out.rescored = await retroactivelyUpdateGrades(
+          editingOfferingId, content.questions, model.pointsPossible);
+      }
+    } else {
+      const { data, error } = await db.from('activities').insert({
+        assignment_id: assignmentId,
+        modality: 'written',
+        slug: writtenSlugFor(model.courseCode, model.slug),
+        title: model.title,
+        content,
+        position: 0,
+      }).select('id').single();
+      if (error) return { ...out, error };
+      wanted.push({ id: data.id, modality: 'written' });
+    }
+  }
+
+  if (model.interactive?.include) {
+    const content = {
+      artifact_url: model.interactive.artifact_url || null,
+      description: model.interactive.description || null,
+    };
+    if (existing.interactive) {
+      // The slug is NEVER rewritten here. It is the frozen `#i=` contract and every student
+      // report already posted resolves through it; a swap is an explicit delete + create,
+      // handled by replaceInteractive() so the report loss is confirmed first.
+      const { error } = await db.from('activities')
+        .update({ title: model.interactive.title || model.title, content })
+        .eq('id', existing.interactive.id);
+      if (error) return { ...out, error };
+      wanted.push({ id: existing.interactive.id, modality: 'interactive' });
+    } else {
+      const { data, error } = await db.from('activities').insert({
+        assignment_id: assignmentId,
+        modality: 'interactive',
+        slug: model.interactive.slug,
+        title: model.interactive.title || model.title,
+        content,
+        position: 1,
+      }).select('id').single();
+      if (error) return { ...out, error };
+      wanted.push({ id: data.id, modality: 'interactive' });
+    }
+  }
+
+  /* 3 ── the OFFERING (this term's run: points, deadline, publish). */
+  const offeringRow = {
+    points_possible: Number(model.pointsPossible ?? 2),
+    grading_mode: model.gradingMode || 'points',
+    switch_policy: model.switchPolicy || 'lock_on_commit',
+    due_at: defaultDueFrom(model.dueByDay),
+    is_published: !!model.isPublished,
+    position: model.lessonNumber == null ? null : model.lessonNumber,
+  };
+  let offeringId = editingOfferingId || null;
+  if (offeringId) {
+    const { error } = await db.from('assignment_offerings').update(offeringRow).eq('id', offeringId);
+    if (error) return { ...out, error };
+  } else {
+    const { data, error } = await db.from('assignment_offerings').insert({
+      course_offering_id: courseOfferingId,
+      assignment_id: assignmentId,
+      ...offeringRow,
+    }).select('id').single();
+    if (error) return { ...out, error };
+    offeringId = data.id;
+  }
+  out.offeringId = offeringId;
+
+  /* 4 ── offering_activities: WHICH activities are live and WHICH carries credit.
+   *      Diffed rather than delete-all-then-insert. Deleting a row a student already
+   *      committed to nulls their chosen_activity_id through the composite FK, so rows that
+   *      are staying must not be churned just to change a role. */
+  const { data: currentOA } = await db.from('offering_activities')
+    .select('activity_id, grading_role, available_after, is_visible, position')
+    .eq('assignment_offering_id', offeringId);
+
+  const wantIds = new Set(wanted.map(w => w.id));
+  const stale = (currentOA || []).filter(r => !wantIds.has(r.activity_id));
+  if (stale.length) {
+    out.unchosen = await countCommittedTo(offeringId, stale.map(r => r.activity_id));
+    const { error } = await db.from('offering_activities').delete()
+      .eq('assignment_offering_id', offeringId)
+      .in('activity_id', stale.map(r => r.activity_id));
+    if (error) return { ...out, error };
+  }
+
+  const oaRows = wanted.map((w, i) => ({
+    assignment_offering_id: offeringId,
+    activity_id: w.id,
+    grading_role: roleFor(model.policy, w.modality),
+    available_after: model.availableAfter?.[w.modality] || 'always',
+    is_visible: true,
+    position: i,
+  }));
+  if (oaRows.length) {
+    const { error } = await db.from('offering_activities')
+      .upsert(oaRows, { onConflict: 'assignment_offering_id,activity_id' });
+    if (error) return { ...out, error };
+  }
+
+  /* 5 ── per-section deadlines. No dependents, so a clean replace is safe. */
+  const dueRows = dueRowsFor(offeringId, model.dueByDay, model.sections);
+  const { error: delErr } = await db.from('assignment_due_dates')
+    .delete().eq('assignment_offering_id', offeringId);
+  if (delErr) return { ...out, error: delErr };
+  if (dueRows.length) {
+    const { error } = await db.from('assignment_due_dates')
+      .upsert(dueRows, { onConflict: 'assignment_offering_id,section_id' });
+    if (error) return { ...out, error };
+  }
+
+  return out;
 }
 
-/** Toggle a lesson's published flag. Mirror it ONLY onto components the lesson owns (created
- *  inline, id === lesson id) so a published lesson's own parts follow it — while a referenced,
- *  shared standalone assignment/interaction keeps whatever publish state its own tool set. */
-export async function togglePublish(lesson) {
-  const next = !lesson.is_published;
-  const { error } = await db.from('lessons').update({ is_published: next }).eq('id', lesson.id);
+/** How many students have COMMITTED to one of these activities — i.e. how many choices
+ *  detaching them would silently clear. */
+async function countCommittedTo(offeringId, activityIds) {
+  if (!activityIds?.length) return 0;
+  const { data } = await db.from('submissions')
+    .select('id, chosen_activity_id')
+    .eq('assignment_offering_id', offeringId)
+    .in('chosen_activity_id', activityIds);
+  return (data || []).length;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * Publish
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Publish state is now ONE boolean in ONE place, on the offering.
+ *
+ * The old version mirrored the flag onto the assignment and interaction rows it "owned",
+ * with an ownership rule (id === lesson id) invented purely to stop a lesson from
+ * unpublishing shared content. Activities have no publish column, so both the mirroring and
+ * the ownership rule are gone. Per-activity visibility, if ever needed, is
+ * offering_activities.is_visible — a per-term decision, where it belongs.
+ */
+export function togglePublish(offeringId, isPublished) {
+  return db.from('assignment_offerings')
+    .update({ is_published: !isPublished }).eq('id', offeringId);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * Removal
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Count the student work a removal would destroy.
+ *
+ * Worth being precise about, because the v2 answer is different from the old one: the old
+ * "container only" delete destroyed NOTHING (responses hung off the assignment, which
+ * survived). Here submissions and grades hang off the OFFERING, so unscheduling the lesson
+ * takes this term's work with it.
+ *
+ * @returns {{ submissions, grades, reports }} reports = interactive artifacts received
+ */
+export async function countLessonWork(lesson) {
+  const offeringId = lesson?.offeringId;
+  if (!offeringId) return { submissions: 0, grades: 0, reports: 0 };
+
+  const [{ data: subs }, { count: gradeCount }] = await Promise.all([
+    db.from('submissions').select('id').eq('assignment_offering_id', offeringId),
+    db.from('grades').select('*', { count: 'exact', head: true })
+      .eq('assignment_offering_id', offeringId),
+  ]);
+
+  let reports = 0;
+  const interactiveId = lesson.interactive?.id;
+  const submissionIds = (subs || []).map(s => s.id);
+  if (interactiveId && submissionIds.length) {
+    for (const ids of chunked(submissionIds)) {
+      const { count } = await db.from('submission_activities')
+        .select('*', { count: 'exact', head: true })
+        .eq('activity_id', interactiveId).in('submission_id', ids);
+      reports += count || 0;
+    }
+  }
+  return { submissions: (subs || []).length, grades: gradeCount || 0, reports };
+}
+
+/** Count the reports attached to ONE interactive activity — the swap/replace warning. */
+export async function countActivityReports(activityId) {
+  if (!activityId) return 0;
+  const { count } = await db.from('submission_activities')
+    .select('*', { count: 'exact', head: true }).eq('activity_id', activityId);
+  return count || 0;
+}
+
+/**
+ * Unschedule: delete the assignment_offering only.
+ *
+ * The library assignment and its activities survive and can be scheduled again — that is the
+ * v2 equivalent of "delete the container, keep the parts". What does NOT survive is this
+ * term's submissions and grades, which cascade. countLessonWork() first, always.
+ */
+export function unscheduleLesson(offeringId) {
+  return db.from('assignment_offerings').delete().eq('id', offeringId);
+}
+
+/**
+ * Delete the lesson AND its library definition (the nuclear "delete all contents").
+ *
+ * Order is forced: assignment_offerings.assignment_id is ON DELETE RESTRICT, so the offering
+ * must go first or the assignment delete is refused. Activities cascade from the assignment,
+ * and submission_activities cascade from the activities.
+ *
+ * Refuses when the container is scheduled in ANOTHER term — deleting shared library content
+ * from inside one term's page would silently destroy a different offering's lesson.
+ */
+export async function deleteLessonAndContents(lesson) {
+  const { offeringId, assignmentId } = lesson;
+  const { data: others } = await db.from('assignment_offerings')
+    .select('id').eq('assignment_id', assignmentId).neq('id', offeringId);
+  if (others?.length) {
+    return { error: { message:
+      `This assignment is also scheduled in ${others.length} other term${others.length === 1 ? '' : 's'}. ` +
+      `Remove it from this term instead — deleting the library definition would delete those too.` } };
+  }
+  let { error } = await db.from('assignment_offerings').delete().eq('id', offeringId);
   if (error) return { error };
-  if (isOwnedComponent(lesson.id, lesson.preflight_id))
-    await db.from('assignments').update({ is_published: next }).eq('id', lesson.preflight_id);
-  if (isOwnedComponent(lesson.id, lesson.interaction_id))
-    await db.from('interactions').update({ is_published: next }).eq('id', lesson.interaction_id);
-  return { error: null };
+  ({ error } = await db.from('assignments').delete().eq('id', assignmentId));
+  return { error: error || null };
 }
 
-/** Delete the lesson CONTAINER only. Its component assignment/interaction rows are left intact
- *  (the FK is ON DELETE SET NULL), so they become reusable orphans; the lesson's own children
- *  (lesson_chat_inputs, lesson_completions) cascade away. Deleting student work is never implicit. */
-export function deleteLesson(id) {
-  return db.from('lessons').delete().eq('id', id);
+/**
+ * Replace an assignment's interactive activity with a different SLUG.
+ *
+ * UNIQUE(assignment_id, modality) means a container holds at most one interactive activity, so
+ * a new slug is not an edit — the old activity must go, and its student reports cascade with
+ * it. That is a harder consequence than the old model's ("the old interaction is orphaned, never
+ * deleted"), and the reason the page confirms with a real count first.
+ *
+ * When the slug is UNCHANGED, never call this: saveLesson() updates the URL in place and every
+ * report stays attached. That is the safe path and the one to prefer.
+ */
+export async function replaceInteractive(assignmentId, oldActivityId, next) {
+  if (oldActivityId) {
+    const { error } = await db.from('activities').delete().eq('id', oldActivityId);
+    if (error) return { error };
+  }
+  return db.from('activities').insert({
+    assignment_id: assignmentId,
+    modality: 'interactive',
+    slug: next.slug,
+    title: next.title || null,
+    content: { artifact_url: next.artifact_url || null, description: next.description || null },
+    position: 1,
+  });
 }
 
-/** Upload a figure image to the PUBLIC `lesson-figures` Storage bucket and return its public URL.
- *  Static-site friendly: the browser posts straight to Supabase Storage (never to GitHub Pages),
- *  and figure_url then stores the returned public URL. Requires the bucket + faculty-insert policy
- *  from migration 019. Returns { url } on success or { error }. */
+/* ══════════════════════════════════════════════════════════════════════════════
+ * Figures — unchanged: Supabase Storage is schema-agnostic
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/** Upload a figure to the PUBLIC `lesson-figures` bucket and return its public URL.
+ *  Static-site friendly: the browser posts straight to Storage, never to GitHub Pages, and
+ *  the question's `figure_url` then stores the returned public URL. */
 const FIGURE_BUCKET = 'lesson-figures';
 export async function uploadFigure(file) {
   if (!file || !(file.type || '').startsWith('image/')) return { error: { message: 'Choose an image file.' } };
@@ -327,71 +631,4 @@ export async function uploadFigure(file) {
   if (error) return { error };
   const { data } = db.storage.from(FIGURE_BUCKET).getPublicUrl(path);
   return { url: data?.publicUrl || null };
-}
-
-/** Fetch an existing assignment's editable content (title, questions, reference fields) so the
- *  lesson editor can load it into the builder (attached existing preflights are editable) and the
- *  student-view Preview can render it. The picker list omits the heavy questions blob. */
-export async function getAssignment(id) {
-  const { data } = await db.from('assignments')
-    .select('title, questions, reference_pdf, reference_pages, reading_link, due_date_m, due_date_t')
-    .eq('id', id).maybeSingle();
-  return data || null;
-}
-
-/** Fetch an existing interaction's editable fields so the lesson editor can load and revise it
- *  (attached existing interactions are editable, like preflights). Tolerates a pre-migration-020
- *  schema (no due_date_m/t columns) by falling back to the legacy single due_date. */
-export async function getInteraction(id) {
-  const { data } = await db.from('interactions')
-    .select('title, artifact_url, description, due_date_m, due_date_t')
-    .eq('id', id).maybeSingle();
-  return data || null;
-}
-
-/** Count the student reports attached to ONE interaction. Used before swapping a lesson's
- *  interaction: reports are keyed by `interaction_id`, so they follow the OLD interaction when it
- *  is displaced and stop being reachable from the lesson. The director should see that number
- *  before saving, not discover it afterward. */
-export async function countInteractionReports(interactionId) {
-  if (!interactionId) return 0;
-  const { count } = await db.from('preflight_interaction_reports')
-    .select('*', { count: 'exact', head: true }).eq('interaction_id', interactionId);
-  return count || 0;
-}
-
-/** Count the student work that a "delete all contents" would destroy, so the confirm dialog can
- *  state it exactly: preflight responses (assignment → responses CASCADE) + interaction reports
- *  (interaction → preflight_interaction_reports CASCADE). */
-export async function countLessonWork(lesson) {
-  let responses = 0, reports = 0;
-  if (lesson.preflight_id) {
-    const { count } = await db.from('responses')
-      .select('*', { count: 'exact', head: true }).eq('assignment_id', lesson.preflight_id);
-    responses = count || 0;
-  }
-  if (lesson.interaction_id) {
-    const { count } = await db.from('preflight_interaction_reports')
-      .select('*', { count: 'exact', head: true }).eq('interaction_id', lesson.interaction_id);
-    reports = count || 0;
-  }
-  return { responses, reports };
-}
-
-/** Delete the lesson AND its attached component rows (the nuclear "delete all contents").
- *  Deleting the assignment CASCADEs its responses/scores/extensions; deleting the interaction
- *  CASCADEs its reports/analysis. Gated in the UI behind a 5-second hold. Order: the lesson first
- *  (its SET NULL FKs release), then each component. Stops and returns the first error. */
-export async function deleteLessonAndContents(lesson) {
-  let { error } = await db.from('lessons').delete().eq('id', lesson.id);
-  if (error) return { error };
-  if (lesson.preflight_id) {
-    ({ error } = await db.from('assignments').delete().eq('id', lesson.preflight_id));
-    if (error) return { error };
-  }
-  if (lesson.interaction_id) {
-    ({ error } = await db.from('interactions').delete().eq('id', lesson.interaction_id));
-    if (error) return { error };
-  }
-  return { error: null };
 }

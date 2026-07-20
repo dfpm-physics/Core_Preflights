@@ -180,10 +180,14 @@ import urllib.error
 import urllib.request
 
 cfg = json.loads(pathlib.Path("~/.claude/skills/preflight-analyze/config.json").expanduser().read_text())
-url = cfg["supabase_url"].rstrip("/") + "/rest/v1/courses?select=id,title"
+url = cfg["supabase_url"].rstrip("/") + "/rest/v1/courses?select=code,title"
 req = urllib.request.Request(url, headers={
     "apikey": cfg["supabase_service_key"],
     "Authorization": "Bearer " + cfg["supabase_service_key"],
+    # REQUIRED. Without it PostgREST answers from `public`, so this check would pass even
+    # when schema `app` is unreachable — verifying the wrong thing and reporting success.
+    # `courses.id` is a uuid in `app`; `code` is the 'phys-215' identifier.
+    "Accept-Profile": "app",
 })
 try:
     with urllib.request.urlopen(req, timeout=15) as resp:

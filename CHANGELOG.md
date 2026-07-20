@@ -54,6 +54,112 @@ for staleness. Migrations remain **written but not applied**; no live database o
 
 ## 2026-07-20 — Matthew via Claude
 
+### Changed — schema rewire part 2: lesson builder, AI workflows, and a course-view switcher
+
+**Frontend, skills, and operator scripts. No migration, no database change.** Completes the
+`public` → `app` move begun in "Schema rewire part 1". **Not yet pushed.**
+
+#### Added — course-view switcher (user menu)
+
+Faculty and multi-course students can now change which course/term they are looking at. It lives
+in the **user dropdown, not the nav bar**: the nav bar is for destinations, while which course you
+are viewing is context — and that menu already names you, your role and your course. The control
+now sits beside the thing it describes.
+
+It replaces the `.course-switch` pill row, which the term axis made untenable — a flat row cannot
+express one course offered across several semesters. The picker groups by term (headings appear
+only when more than one term is in play), marks the current row for assistive tech, and caps its
+height so a system admin with many offerings cannot push *Sign out* off-screen.
+
+Two calls worth recording: **students get it too** when they hold more than one enrolment (the
+data supports it identically, and it grants no access — the list is only what RLS already
+resolved); and **a global admin is labelled "Admin", not "Director"**, because auth.js marks every
+offering `director` for an admin, which would read as false on each row.
+
+`courseMenuHTML()` is exported as a pure function so it is testable without a DOM — 23 checks
+covering grouping, selection, escaping and the admin case.
+
+#### Changed — lesson builder rebuilt on assignments + offerings
+
+A lesson IS an assignment offering, so authoring is now: pick or create the container →
+attach its activities → schedule it into the term → set which activity carries credit. What a
+director will notice:
+
+- **Cross-pairing is gone.** An arbitrary preflight can no longer be stapled to an arbitrary
+  interaction; both are activities of one container.
+- **Removing a lesson is now destructive** — `submissions` and `grades` cascade from the offering.
+  The delete modal states the counts first.
+- **Publish no longer mirrors.** One flag on the offering covers both modalities.
+- **Swapping an artifact slug deletes its reports** rather than orphaning them. The modal says so
+  and steers toward keeping the slug and changing only the URL — which is the intended workflow.
+
+The **prefill contract needs no URL change**: `site/faculty/lessons.html` and every parameter name
+survive. `course=phys-215` is now resolved from a code to the current term's offering, and
+`due_m`/`due_t` become per-section rows keyed off `sections.meeting_days` — both invisible to link
+authors.
+
+#### Changed — interactions admin reduced to monitoring
+
+Its authoring half was **unbuildable, not merely stale**: `activities.assignment_id` is NOT NULL so
+a standalone interaction cannot exist; publish is `assignment_offerings.is_published` covering the
+whole assignment; graded-vs-practice is `offering_activities`. Every control edited something the
+assignment or offering owns — i.e. the lesson builder. `docs/contracts/INTERACTION-PREFILL-LINK.md`
+had *already* retired this page as a prefill base.
+
+Create/edit/publish/delete are removed, with a comment explaining why they cannot return. What
+remains is genuinely useful and homeless: completion per lesson × section, the per-student report
+viewer, and cohort AI panels (now from `analysis_reports`). **Pending decision:** whether the page
+is deleted once the lesson rollup absorbs those three panels.
+
+#### Changed — AI workflows moved to `app`
+
+`preflight-analyze` writes `grades` (upsert on `enrollment_id, assignment_offering_id`,
+`source='ai_suggested'`, `is_finalized=false`, hidden diagnostics into `grades.diagnostic`) and
+`analysis_reports` (`kind='by_question'`, one row per instructor via `audience_id` — which removes
+the old fetch-and-merge step, so M and T runs now touch different rows). `interaction-aggregate`
+and `interaction-backfill` follow the same path. Operator scripts moved off the
+`claude_code_recker` credential (which only ever had rights in `public`) to the `prep_app_dml`
+tier, with `SET search_path = app` in one place so no query can reach `public`.
+
+**Two safety gaps closed on the way:** the backfill's grade upsert now carries
+`WHERE NOT is_finalized`, and the skill filters finalized grades before its batch upsert. The old
+`scores` upsert would have silently reverted a finalized score.
+
+**One structural change forced by a constraint:** `analysis_reports` is
+`UNIQUE (scope, scope_id, audience_id, kind)` and that key carries no lesson, so per-section rows
+would have collided across every lesson in the term. A lesson's analysis is now one
+offering-scoped row whose `payload` is keyed by section, merged on write to preserve the M/T split.
+
+#### Fixed — three latent defects found while verifying
+
+- **`assignments.objectives` is `{}` on all 74 rows** where the column is declared as an array.
+  `x || []` passed it through because `{}` is truthy, so anything calling `.map()` would throw.
+  `shapeOffering` now coerces. The data itself is still wrong and should be normalised to `[]`.
+- **`faculty-report.js` is unmigrated dead code.** Nothing imports it — which is why the app works
+  and why the import checker cannot see it. It carries a prominent warning header now rather than
+  waiting to break whoever wires it up. (It is kept on purpose: it is the query layer for the
+  by-question report, to be merged into the lesson rollup.)
+- **`faculty/report.html` rendered section uuids** where a human expects `M1A`. Labels now show
+  the code; the uuid remains the value everywhere it is compared.
+
+#### Fixed — two documents that were wrong, not merely stale
+
+- **`.ai/skills/setup-preflight/SKILL.md`** — its connection test omitted `Accept-Profile: app`, so
+  it validated against `public` and **would have reported success even if `app` were unreachable**.
+  A setup wizard that cannot fail is worse than none.
+- **`site/app/help/director-ai-rules.md`** — said the database converts effort to points. True only
+  on `grading_mode='effort'`; every Fall 2026 preflight is scheduled as `points`, where the
+  analysis run applies the same curve. Corrected to say which applies when.
+
+**Verification:** 202 Node checks (including 23 new switcher checks), 169 named imports resolving,
+34 RLS persona checks, and `py_compile` on both operator scripts — all passing. Every PostgREST
+projection written by either workstream was validated against the live schema before use.
+
+**Still unverified:** faculty Grade, Roster and the rebuilt lesson builder have not been exercised
+in a browser — no instructor login was available. **Still not deployed:** the three edge functions
+are correct in the repo but the deployed versions still write `public`; provisioning student logins
+before they are redeployed would leave students unable to sign in.
+
 ### Changed — wired `site/app/` to schema `app` (PREP v2); two live migrations; one security fix
 
 **Frontend, edge functions, two applied migrations, and a new test harness.** The `app` schema

@@ -35,8 +35,12 @@ is deliberately deferred.
 
 Run after an interactive lesson's due date. It reads the cohort's session reports and produces
 section-level panels — readiness summary, misconception trends, showcase quotes — for the lesson
-rollup. Interactive lessons are graded on **effort** (0–5), which the database converts to points;
-a reading reflection that is not a genuine attempt caps effort.
+rollup. Interactive lessons are graded on **effort** (0–5); a reading reflection that is not a
+genuine attempt caps effort. How effort becomes points depends on how the assignment is set up for
+the semester: an assignment set to **effort** grading has the database convert it automatically,
+while one set to **points** — which is how every Fall 2026 preflight is currently scheduled — has
+the analysis run apply the same 0–5 scale when it writes the score. The scale is identical either
+way; only who applies it differs.
 
 ## The line that does not move
 

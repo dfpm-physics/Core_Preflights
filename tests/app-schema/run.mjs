@@ -38,7 +38,7 @@ function resetTestData() {
   }
 }
 
-const OFFLINE = ['./test-schema.mjs', './test-config.mjs'];
+const OFFLINE = ['./test-schema.mjs', './test-config.mjs', './test-nav.mjs'];
 const LIVE    = ['./test-rest.mjs', './test-student.mjs', './test-isolation.mjs'];
 
 for (const s of OFFLINE) {

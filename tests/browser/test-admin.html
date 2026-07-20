@@ -5,19 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Course administration sandbox · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
-  <!-- Director-only gate (internal design sandboxes).
-       ⚠ TEMPORARILY BYPASSED — 2026-07-20. guard.js still queries the `public` model
-       (instructors.is_director + instructor_course_access), but config.js pins the client to
-       schema `app` where is_director does not exist and staff_assignments replaced
-       instructor_course_access. The failed select nulls the whole row, and the fallback is gated
-       on `if (!ok && instr)`, so EVERY signed-in director is denied — global admins included.
-       That file is owned by another session mid-wiring, so it is left untouched here.
-       This page carries no real data (synthetic staff, no DB call), so it runs ungated meanwhile.
-       ▶ RESTORE the two commented lines below once guard.js is fixed. -->
-  <!-- <script>document.documentElement.style.opacity='0'</script> -->
+  <!-- Director-only gate (internal design sandboxes). -->
+  <script>document.documentElement.style.opacity='0'</script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../../site/app/js/config.js"></script>
-  <!-- <script type="module" src="./guard.js"></script> -->
+  <script type="module" src="./guard.js"></script>
   <!-- Uses the LIVE design system and the LIVE nav module so this preview tracks the real app.
        Everything else is UNWIRED: synthetic staff/sections, every control inert. This mocks
        faculty/admin.html per site/app/PLAN-2026-07-16-ADMIN.md §4 (Staff · Export · Course),
@@ -47,6 +39,7 @@
       font-size: 0.68em; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
       background: var(--mc-sel-bg); color: var(--muted); vertical-align: middle; }
     .tier.t1 { color: var(--blue-lt); }
+    .tier.new { color: var(--green); }
     .planned { opacity: 0.72; }
     .planned input, .planned select, .planned button { pointer-events: none; }
 
@@ -110,29 +103,13 @@
 
   <main class="page-wide" id="main"></main>
 
-  <!-- Add-staff modal (static; opens for looks, saves nothing) -->
-  <div class="modal-backdrop" id="add-modal">
-    <div class="modal" style="max-width:480px">
-      <div class="modal-head"><h2>Add staff</h2><button class="modal-close" data-close>×</button></div>
-      <div class="field"><label for="ai-name">Full name</label><input id="ai-name" placeholder="Jane Doe"></div>
-      <div class="field"><label for="ai-email">Email</label><input id="ai-email" placeholder="jane.doe@usafa.edu">
-        <div class="field-hint">Becomes their sign-in address. If they already have a PREP login,
-          they are attached to this offering instead of being created again.</div></div>
-      <div class="field"><label for="ai-role">Role in this offering</label><select id="ai-role">
-        <option value="instructor">Instructor — grades their sections</option>
-        <option value="grader">Grader — grades only, no authoring</option>
-        <option value="director">Director — full administration</option>
-      </select></div>
-      <div class="field"><label for="ai-scope">Scope</label><select id="ai-scope">
-        <option>All sections (offering-wide)</option>
-        <option>Specific sections…</option>
-      </select><div class="field-hint" id="ai-scope-hint">An offering-wide row means every section,
-        now and any added later.</div></div>
-      <div class="alert alert-info" style="margin-bottom:16px">Writes one
-        <code>staff_assignments</code> row for <strong>Physics 215 · Fall 2026</strong> only.
-        It does not grant access to any other term.</div>
+  <!-- Generic modal — body swapped by openModal() (static; opens for looks, saves nothing) -->
+  <div class="modal-backdrop" id="mk-modal">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head"><h2 id="mk-title"></h2><button class="modal-close" data-close>×</button></div>
+      <div id="mk-body"></div>
       <div class="row" style="gap:10px">
-        <button class="btn btn-primary" data-close>Add to offering</button>
+        <button class="btn btn-primary" data-close id="mk-ok"></button>
         <button class="btn btn-secondary" data-close>Cancel</button>
       </div>
     </div>
@@ -201,18 +178,75 @@
     const ROLE_LABEL = { director: 'Director', instructor: 'Instructor', grader: 'Grader' };
     const VIEWER = { instructor: 'u-roth', director: 'u-delaharpe', admin: 'u-recker' };
 
+    /* ── GLOBAL SCOPE (system administration) ────────────────────────────────
+     * Everything above is scoped to ONE offering. These three layers sit above it and have no
+     * home in either generation of the site — the inventory flagged "course create/rename, term
+     * config" as open question #4 and the plan left it at Tier 2 "Course settings".
+     *   courses          catalogue entry, no term          → shared by every offering
+     *   terms            calendar, no course               → shared by every course
+     *   course_offerings course × term, is_active          → what a director actually directs
+     * A director cannot create any of these: making a new offering means granting someone
+     * authority, which is exactly what a director must not be able to do for themselves.
+     * So this tier is gated on instructors.is_global_admin, not on staff_assignments.role. */
+    const COURSES = [
+      { code: 'phys-110', title: 'Physics 110', dept: 'DFPM', offerings: 3 },
+      { code: 'phys-215', title: 'Physics 215', dept: 'DFPM', offerings: 3 },
+    ];
+    const TERMS = [
+      { code: 'fall-2025',   label: 'Fall 2025',   starts: '2025-08-13', ends: '2025-12-05', gradesDue: '2025-12-17', state: 'past' },
+      { code: 'spring-2026', label: 'Spring 2026', starts: '2026-01-12', ends: '2026-05-01', gradesDue: '2026-05-13', state: 'past' },
+      { code: 'fall-2026',   label: 'Fall 2026',   starts: '2026-08-12', ends: '2026-12-04', gradesDue: '2026-12-16', state: 'current' },
+      { code: 'spring-2027', label: 'Spring 2027', starts: '2027-01-11', ends: '2027-04-30', gradesDue: '2027-05-12', state: 'planned' },
+    ];
+    const OFFERINGS = [
+      { course: 'phys-215', term: 'fall-2026',   director: 'u-delaharpe', sections: 8,  students: 172, active: true  },
+      { course: 'phys-110', term: 'fall-2026',   director: 'u-recker',    sections: 12, students: 240, active: true  },
+      { course: 'phys-215', term: 'spring-2026', director: 'u-delaharpe', sections: 7,  students: 150, active: false },
+      { course: 'phys-110', term: 'spring-2026', director: 'u-roth',      sections: 11, students: 228, active: false },
+      { course: 'phys-215', term: 'fall-2025',   director: 'u-recker',    sections: 8,  students: 168, active: false },
+      { course: 'phys-110', term: 'fall-2025',   director: 'u-recker',    sections: 10, students: 210, active: false },
+    ];
+    /* Everyone with a PREP login, across all offerings — including people who staff none. */
+    const PEOPLE = [
+      { id: 'u-recker',    name: 'Matthew Recker',       email: 'matthew.recker@usafa.edu',     sysadmin: true,
+        staffs: [{ o: 'Physics 110 · Fall 2026', r: 'director' }] },
+      { id: 'u-delaharpe', name: 'Kimberly de La Harpe', email: 'kimberly.delaharpe@usafa.edu', sysadmin: false,
+        staffs: [{ o: 'Physics 215 · Fall 2026', r: 'director' }, { o: 'Physics 215 · Spring 2026', r: 'director' }] },
+      { id: 'u-roth',      name: 'Ben Roth',             email: 'ben.roth@usafa.edu',           sysadmin: false,
+        staffs: [{ o: 'Physics 215 · Fall 2026', r: 'instructor' }, { o: 'Physics 110 · Spring 2026', r: 'director' }] },
+      { id: 'u-hardy',     name: 'TJ Hardy',             email: 'tj.hardy@usafa.edu',           sysadmin: false,
+        staffs: [{ o: 'Physics 215 · Fall 2026', r: 'instructor' }] },
+      { id: 'u-jones',     name: 'Tyler Jones',          email: 'tyler.jones@usafa.edu',        sysadmin: false,
+        staffs: [{ o: 'Physics 215 · Fall 2026', r: 'instructor' }] },
+      { id: 'u-nguyen',    name: 'Alicia Nguyen',        email: 'alicia.nguyen@usafa.edu',      sysadmin: false,
+        staffs: [{ o: 'Physics 215 · Fall 2026', r: 'grader' }] },
+      { id: 'u-park',      name: 'Daniel Park',          email: 'daniel.park@usafa.edu',        sysadmin: false,
+        staffs: [{ o: 'Physics 215 · Fall 2026', r: 'instructor' }] },
+      { id: 'u-vasquez',   name: 'Elena Vasquez',        email: 'elena.vasquez@usafa.edu',      sysadmin: true,
+        staffs: [{ o: 'Physics 110 · Fall 2026', r: 'instructor' }] },
+      // The case with no home on a course-scoped page: hired, has a login, staffs nothing yet.
+      { id: 'u-obrien',    name: "Sean O'Brien",         email: 'sean.obrien@usafa.edu',        sysadmin: false,
+        staffs: [] },
+    ];
+    const personName = (id) => PEOPLE.find(p => p.id === id)?.name || '— unassigned —';
+    const courseTitle = (code) => COURSES.find(c => c.code === code)?.title || code;
+    const termLabel   = (code) => TERMS.find(t => t.code === code)?.label || code;
+
     const ROLE_NOTES = {
       instructor: ['No <b>Admin</b> entry in the nav bar', 'Staff and Course subtabs hidden',
                    'Export limited to own sections', 'No JSON backup'],
       director:   ['Full staff management, <b>this offering only</b>', 'Cannot set the system-admin flag',
                    'Export covers every section', 'JSON backup, scoped to the offering'],
-      admin:      ['Every offering, in every term', 'Can grant and revoke system admin',
-                   'Needs no staff row — access is implicit', 'Own row is locked — no self-edit'],
+      admin:      ['A second nav entry: <b>System</b>', 'Create courses, terms, and offerings',
+                   'Appoint course directors', 'Grant and revoke system admin',
+                   'Needs no staff row — access is implicit'],
     };
 
     /* ── ctx stub shaped like js/auth.js's real one ─────────────────────────── */
     let role = 'director';               // instructor | director | admin
+    let view = 'course';                 // course (one offering) | system (global)
     let tab  = 'staff';                  // staff | export | course
+    let sysTab = 'offerings';            // offerings | courses | terms | people
     const me = () => STAFF.find(s => s.id === VIEWER[role]);
     const isDirector = () => role !== 'instructor';
     const isAdmin    = () => role === 'admin';
@@ -236,11 +270,26 @@
     function drawNav() {
       renderNav(ctx, { active: 'admin' });
       const link = document.querySelector('#topnav .nav-link.external');
-      if (!link) return;
-      link.classList.remove('external');
-      link.removeAttribute('target'); link.removeAttribute('rel');
-      link.setAttribute('href', 'admin.html');
-      if (!isDirector()) link.remove();          // T1.1: directorOnly: true
+      if (link) {
+        link.classList.remove('external');
+        link.removeAttribute('target'); link.removeAttribute('rel');
+        link.setAttribute('href', '#');
+        link.classList.toggle('active', view === 'course');
+        link.onclick = (e) => { e.preventDefault(); view = 'course'; render(); };
+        if (!isDirector()) link.remove();        // T1.1: directorOnly: true
+      }
+      // PROPOSED second entry: System, gated on is_global_admin — NOT on director. It is a
+      // separate page because its scope is different: admin.html administers one offering,
+      // system.html administers the things offerings are made of.
+      const bar = document.querySelector('#topnav .nav-links');
+      if (isAdmin() && bar) {
+        const a = document.createElement('a');
+        a.className = 'nav-link' + (view === 'system' ? ' active' : '');
+        a.href = '#';
+        a.innerHTML = '<span>System</span>';
+        a.onclick = (e) => { e.preventDefault(); view = 'system'; render(); };
+        bar.appendChild(a);
+      }
     }
 
     /* ── Page ───────────────────────────────────────────────────────────────── */
@@ -251,7 +300,9 @@
     ];
 
     function render() {
+      if (view === 'system' && !isAdmin()) view = 'course';   // losing admin drops you back
       drawNav();
+      if (view === 'system') return renderSystem();
       const root = document.getElementById('main');
       const visible = TABS.filter(t => !t.director || isDirector());
       if (!visible.some(t => t.key === tab)) tab = visible[0].key;
@@ -303,9 +354,11 @@
 
     function actionCell(s) {
       if (s.id === me().id) return `<span class="muted" style="font-size:0.8em">Cannot edit yourself</span>`;
+      // Director and up may TRIGGER a reset email; nobody but a system admin may SET a password.
+      const reset = `<button class="btn btn-ghost btn-sm" data-reset="${esc(s.name)}">Send reset email</button>`;
       if (s.sysadmin && !isAdmin())
-        return `<button class="btn btn-ghost btn-sm" disabled title="Only a system admin can change another system admin">Remove</button>`;
-      return `<button class="btn btn-ghost btn-sm" style="color:var(--red)">Remove</button>`;
+        return reset + `<button class="btn btn-ghost btn-sm" disabled title="Only a system admin can change another system admin">Remove</button>`;
+      return reset + `<button class="btn btn-ghost btn-sm" style="color:var(--red)">Remove</button>`;
     }
 
     function staffTab() {
@@ -530,13 +583,332 @@
         </div>`;
     }
 
+    /* ══════════════════════════════════════════════════════════════════════════
+     * SYSTEM ADMINISTRATION — the global tier (proposed faculty/system.html)
+     * ════════════════════════════════════════════════════════════════════════ */
+    const SYS_TABS = [
+      { key: 'offerings', label: 'Offerings' },
+      { key: 'courses',   label: 'Courses'   },
+      { key: 'terms',     label: 'Terms'     },
+      { key: 'people',    label: 'People'    },
+    ];
+
+    function renderSystem() {
+      const root = document.getElementById('main');
+      root.innerHTML = `
+        <div class="page-head">
+          <h1>System administration</h1>
+          <div class="sub">Courses, terms, offerings, and everyone with a PREP login — across every course.</div>
+        </div>
+        <div class="alert alert-warn">Global scope. Changes here affect every course and term, not just
+          one offering. Restricted to <code>instructors.is_global_admin</code>.</div>
+        <div class="subtabs">
+          ${SYS_TABS.map(t => `<button class="subtab ${t.key === sysTab ? 'active' : ''}" data-systab="${t.key}">${t.label}</button>`).join('')}
+        </div>
+        <div id="panel"></div>`;
+      root.querySelectorAll('[data-systab]').forEach(b =>
+        b.addEventListener('click', () => { sysTab = b.dataset.systab; renderSystem(); }));
+
+      const panel = document.getElementById('panel');
+      if (sysTab === 'offerings') panel.innerHTML = offeringsTab();
+      if (sysTab === 'courses')   panel.innerHTML = coursesTab();
+      if (sysTab === 'terms')     panel.innerHTML = termsTab();
+      if (sysTab === 'people')    panel.innerHTML = peopleTab();
+      wireSystem();
+      drawRoleBox();
+    }
+
+    /* ── Offerings — where a course director is actually appointed ───────────── */
+    function offeringsTab() {
+      const byTerm = {};
+      OFFERINGS.forEach(o => { (byTerm[o.term] ||= {})[o.course] = o; });
+
+      const matrix = `<div class="table-wrap"><table>
+        <thead><tr><th>Course</th>${TERMS.map(t =>
+          `<th style="text-align:center">${t.label}${t.state === 'current' ? ' ●' : ''}</th>`).join('')}</tr></thead>
+        <tbody>${COURSES.map(c => `<tr><td><strong>${c.title}</strong></td>${TERMS.map(t => {
+          const o = byTerm[t.code]?.[c.code];
+          if (!o) return `<td style="text-align:center"><button class="btn btn-ghost btn-sm" data-new-offering>+ create</button></td>`;
+          return `<td style="text-align:center">
+            <span class="score-badge ${o.active ? 'full' : 'pending'}">${o.active ? 'active' : 'archived'}</span>
+            <div class="muted" style="font-size:0.74em;margin-top:3px">${esc(personName(o.director).split(' ').slice(-1)[0])}</div></td>`;
+        }).join('')}</tr>`).join('')}</tbody></table></div>`;
+
+      const rows = OFFERINGS.map((o, i) => `<tr>
+        <td><strong>${courseTitle(o.course)}</strong></td>
+        <td>${termLabel(o.term)}</td>
+        <td><select data-director="${i}">
+          <option value="">— unassigned —</option>
+          ${PEOPLE.map(p => `<option value="${p.id}"${p.id === o.director ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}
+        </select></td>
+        <td style="text-align:center">${o.sections}</td>
+        <td style="text-align:center">${o.students}</td>
+        <td><span class="score-badge ${o.active ? 'full' : 'pending'}">${o.active ? 'active' : 'archived'}</span></td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn btn-ghost btn-sm">${o.active ? 'Archive' : 'Reactivate'}</button></td></tr>`).join('');
+
+      return `
+        <div class="card">
+          <div class="row wrap" style="justify-content:space-between;gap:10px;margin-bottom:4px">
+            <div>
+              <div class="card-title">Offerings <span class="muted" style="font-weight:500">· ${OFFERINGS.length}</span></div>
+              <div class="card-meta" style="margin-bottom:0">A course in one term. Appointing its director
+                is the act that creates course-level authority — which is why it lives here and not on
+                the director's own page.</div>
+            </div>
+            <button class="btn btn-primary btn-sm" data-new-offering>+ New offering</button>
+          </div>
+          <div class="table-wrap" style="margin-top:16px"><table>
+            <thead><tr><th>Course</th><th>Term</th><th>Director</th><th style="text-align:center">Sections</th><th style="text-align:center">Students</th><th>Status</th><th></th></tr></thead>
+            <tbody>${rows}</tbody></table></div>
+          <div class="muted" style="font-size:0.8em;margin-top:12px">Changing the director writes a
+            <code>staff_assignments</code> row with <code>role='director'</code> and
+            <code>section_id NULL</code>, and demotes the previous holder to instructor rather than
+            removing them — losing your own access by reassigning is the classic footgun.</div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Coverage by term</div>
+          <div class="card-meta">Which courses run when. Empty cells are the gap a rollover fills.</div>
+          ${matrix}
+        </div>`;
+    }
+
+    /* ── Courses — the catalogue ─────────────────────────────────────────────── */
+    function coursesTab() {
+      return `
+        <div class="card">
+          <div class="row wrap" style="justify-content:space-between;gap:10px;margin-bottom:4px">
+            <div>
+              <div class="card-title">Courses <span class="muted" style="font-weight:500">· ${COURSES.length}</span></div>
+              <div class="card-meta" style="margin-bottom:0">Catalogue entries. A course exists
+                independently of any semester — creating one does not schedule it.</div>
+            </div>
+            <button class="btn btn-primary btn-sm" data-new-course>+ New course</button>
+          </div>
+          <div class="table-wrap" style="margin-top:16px"><table>
+            <thead><tr><th>Code</th><th>Title</th><th>Department</th><th style="text-align:center">Offerings</th><th></th></tr></thead>
+            <tbody>${COURSES.map(c => `<tr>
+              <td><code>${c.code}</code></td>
+              <td><strong>${c.title}</strong></td>
+              <td>${c.dept}</td>
+              <td style="text-align:center">${c.offerings}</td>
+              <td style="text-align:right;white-space:nowrap">
+                <button class="btn btn-ghost btn-sm">Edit</button>
+                <button class="btn btn-ghost btn-sm" style="color:var(--red)" ${c.offerings ? 'disabled title="Has offerings — archive those first"' : ''}>Delete</button>
+              </td></tr>`).join('')}</tbody></table></div>
+          <div class="muted" style="font-size:0.8em;margin-top:12px">The code appears in URLs and export
+            filenames, so renaming one breaks existing links and Blackboard imports. Editing a title
+            rewrites it for <strong>every</strong> term, past included.</div>
+        </div>`;
+    }
+
+    /* ── Terms — the calendar ────────────────────────────────────────────────── */
+    function termsTab() {
+      return `
+        <div class="card">
+          <div class="row wrap" style="justify-content:space-between;gap:10px;margin-bottom:4px">
+            <div>
+              <div class="card-title">Terms <span class="muted" style="font-weight:500">· ${TERMS.length}</span></div>
+              <div class="card-meta" style="margin-bottom:0">Shared by every course. This is the axis the
+                old schema had no concept of — it is why a Fall 2026 director is not a director forever.</div>
+            </div>
+            <button class="btn btn-primary btn-sm" data-new-term>+ New term</button>
+          </div>
+          <div class="table-wrap" style="margin-top:16px"><table>
+            <thead><tr><th>Term</th><th>Classes start</th><th>Classes end</th><th>Grades due</th><th>Status</th><th></th></tr></thead>
+            <tbody>${TERMS.map(t => `<tr>
+              <td><strong>${t.label}</strong><div class="muted" style="font-size:0.78em"><code>${t.code}</code></div></td>
+              <td>${t.starts}</td><td>${t.ends}</td><td>${t.gradesDue}</td>
+              <td><span class="score-badge ${t.state === 'current' ? 'full' : t.state === 'planned' ? 'partial' : 'pending'}">${t.state}</span></td>
+              <td style="text-align:right"><button class="btn btn-ghost btn-sm">Edit</button></td></tr>`).join('')}</tbody></table></div>
+          <div class="muted" style="font-size:0.8em;margin-top:12px">Editing a term moves the calendar for
+            every course running in it. Dates are stored as plain dates; assignment deadlines are still
+            computed as 2359 America/Denver and stored UTC.</div>
+        </div>`;
+    }
+
+    /* ── People — promotion outside any course ───────────────────────────────── */
+    function peopleTab() {
+      const rows = PEOPLE.map(p => {
+        const isMe = p.id === me().id;
+        return `<tr>
+          <td><strong>${esc(lastFirst(p.name))}</strong>${isMe ? '<span class="you-chip">You</span>' : ''}</td>
+          <td class="muted" style="font-size:0.88em">${esc(p.email)}</td>
+          <td>${isMe
+            ? `<span class="rbadge sa">System admin</span><div class="muted" style="font-size:0.72em;margin-top:2px">cannot demote yourself</div>`
+            : `<button class="switch${p.sysadmin ? ' on' : ''}"><span class="track"><span class="knob"></span></span><span>${p.sysadmin ? 'Yes' : 'No'}</span></button>`}</td>
+          <td>${p.staffs.length
+            ? `<div class="sec-chips">${p.staffs.map(s => `<span class="sec-chip">${esc(s.o)} · ${ROLE_LABEL[s.r]}</span>`).join('')}</div>`
+            : `<span class="muted" style="font-size:0.8em">— none —</span>`}</td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="btn btn-ghost btn-sm" data-reset="${esc(p.name)}">Send reset email</button>
+            <button class="btn btn-ghost btn-sm" data-setpw="${esc(p.name)}"${isMe ? ' disabled' : ''}>Set password</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--red)"${isMe ? ' disabled' : ''}>Delete</button>
+          </td></tr>`;
+      }).join('');
+
+      const orphans = PEOPLE.filter(p => !p.staffs.length && !p.sysadmin).length;
+
+      return `
+        <div class="card">
+          <div class="row wrap" style="justify-content:space-between;gap:10px;margin-bottom:4px">
+            <div>
+              <div class="card-title">People <span class="muted" style="font-weight:500">· ${PEOPLE.length}</span></div>
+              <div class="card-meta" style="margin-bottom:0">Everyone with a PREP login. A person can exist
+                here with no course at all — hire first, assign later.</div>
+            </div>
+            <button class="btn btn-primary btn-sm" data-new-person>+ Add person</button>
+          </div>
+          ${orphans ? `<div class="alert alert-info">${orphans} ${orphans === 1 ? 'person staffs' : 'people staff'}
+            no offering. They can sign in but will see an empty dashboard.</div>` : ''}
+          <div class="table-wrap" style="margin-top:16px"><table>
+            <thead><tr><th>Name</th><th>Email</th><th>System admin</th><th>Staffs</th><th></th></tr></thead>
+            <tbody>${rows}</tbody></table></div>
+          <div class="muted" style="font-size:0.8em;margin-top:12px">System admin is a property of the
+            <strong>person</strong>, not of any course — it implicitly staffs every offering in every term,
+            with no <code>staff_assignments</code> row. Granting it is the one action no course director
+            can take.</div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Password operations<span class="tier new">Planned</span></div>
+          <div class="card-meta">Two tiers, deliberately. Spec:
+            <a href="../../site/app/PLAN-2026-07-20-ACCOUNTS.md">PLAN-2026-07-20-ACCOUNTS.md</a>.</div>
+          <div class="idrow"><span class="k"><strong>Send reset email</strong> — director and up
+            <span class="why" style="display:block;font-weight:400;font-size:0.84em;color:var(--muted)">
+            Triggers the same six-digit code the user could request themselves. The sender never learns
+            the password. Safe to delegate, so it sits on Staff and Roster too.</span></span></div>
+          <div class="idrow"><span class="k"><strong>Set password</strong> — system admin only
+            <span class="why" style="display:block;font-weight:400;font-size:0.84em;color:var(--muted)">
+            For when email fails — the realistic cadet case. The admin knows the password, so the account
+            is flagged and the user must replace it at next sign-in before reaching any page.</span></span></div>
+          <div class="alert alert-warn" style="margin-top:14px">Verify <code>@usafa.edu</code>
+            deliverability before relying on emailed codes for cadets. If mail does not arrive,
+            <strong>Set password</strong> is the only recovery path — which is exactly why it exists.</div>
+        </div>`;
+    }
+
+    /* ── Modals for the global tier ──────────────────────────────────────────── */
+    function openModal(title, body, ok) {
+      document.getElementById('mk-title').textContent = title;
+      document.getElementById('mk-body').innerHTML = body;
+      document.getElementById('mk-ok').textContent = ok;
+      document.getElementById('mk-modal').classList.add('open');
+    }
+    const selOf = (label, opts, hint) =>
+      `<div class="field"><label>${label}</label><select>${opts}</select>${hint ? `<div class="field-hint">${hint}</div>` : ''}</div>`;
+
+    function wireSystem() {
+      wirePasswordActions(document.getElementById('panel'));
+      document.querySelectorAll('[data-new-offering]').forEach(b => b.addEventListener('click', () => openModal(
+        'New offering',
+        selOf('Course', COURSES.map(c => `<option>${c.title}</option>`).join(''))
+        + selOf('Term', TERMS.map(t => `<option${t.state === 'planned' ? ' selected' : ''}>${t.label}</option>`).join(''))
+        + selOf('Course director', `<option value="">— assign later —</option>`
+            + PEOPLE.map(p => `<option>${esc(p.name)}</option>`).join(''),
+            'Gets an offering-wide director row. You can leave it unassigned and appoint later.')
+        + selOf('Copy content from', `<option value="">— start empty —</option>`
+            + OFFERINGS.map(o => `<option>${courseTitle(o.course)} · ${termLabel(o.term)}</option>`).join(''),
+            'Copies assignments, activities, and schedule shape — never enrollments, submissions, or grades.')
+        + `<div class="alert alert-info" style="margin-bottom:16px">Creates the
+             <code>course_offerings</code> row. Sections and enrollments still come from a roster upload
+             on the Roster page afterwards.</div>`,
+        'Create offering')));
+
+      document.querySelector('[data-new-course]')?.addEventListener('click', () => openModal(
+        'New course',
+        `<div class="field"><label>Code</label><input placeholder="phys-330">
+           <div class="field-hint">Lowercase, hyphenated, permanent. It shows up in URLs and export filenames.</div></div>
+         <div class="field"><label>Title</label><input placeholder="Physics 330"></div>
+         <div class="field"><label>Department</label><input value="DFPM"></div>
+         <div class="alert alert-info" style="margin-bottom:16px">Adds a catalogue entry only. To run it,
+           create an offering for a term afterwards.</div>`,
+        'Create course'));
+
+      document.querySelector('[data-new-term]')?.addEventListener('click', () => openModal(
+        'New term',
+        `<div class="field"><label>Code</label><input placeholder="fall-2027">
+           <div class="field-hint">Lowercase, hyphenated. Sorts newest-first in the course switcher.</div></div>
+         <div class="field"><label>Label</label><input placeholder="Fall 2027"></div>
+         <div class="row wrap" style="gap:12px">
+           <div class="field" style="flex:1;min-width:140px"><label>Classes start</label><input type="date"></div>
+           <div class="field" style="flex:1;min-width:140px"><label>Classes end</label><input type="date"></div>
+         </div>
+         <div class="row wrap" style="gap:12px">
+           <div class="field" style="flex:1;min-width:140px"><label>Finals end</label><input type="date"></div>
+           <div class="field" style="flex:1;min-width:140px"><label>Grades due</label><input type="date"></div>
+         </div>
+         <div class="alert alert-info" style="margin-bottom:16px">Dates must run in order —
+           start ≤ end ≤ finals ≤ grades due — a CHECK constraint enforces it.</div>`,
+        'Create term'));
+
+      document.querySelector('[data-new-person]')?.addEventListener('click', () => openModal(
+        'Add person',
+        `<div class="field"><label>Full name</label><input placeholder="Jane Doe"></div>
+         <div class="field"><label>Email</label><input placeholder="jane.doe@usafa.edu">
+           <div class="field-hint">Becomes their sign-in address.</div></div>
+         <div class="field"><label>Temporary password</label><input value="prep-2026-temp"></div>
+         ${selOf('System admin', '<option>No</option><option>Yes — full access to every course</option>',
+            'Grants every offering in every term, with no staff row.')}
+         ${selOf('Attach to an offering now', '<option value="">— none, assign later —</option>'
+            + OFFERINGS.filter(o => o.active).map(o => `<option>${courseTitle(o.course)} · ${termLabel(o.term)}</option>`).join(''),
+            'Optional. A person with no offering can sign in but sees an empty dashboard.')}
+         <div class="alert alert-info" style="margin-bottom:16px">Creates the Auth login and the
+           <code>instructors</code> row via <code>create-instructor</code>.</div>`,
+        'Create person'));
+    }
+
+    /* ── Password modals, shared by the Staff tab and the People tab ────────── */
+    function wirePasswordActions(scope) {
+      scope.querySelectorAll('[data-reset]').forEach(b => b.addEventListener('click', () => openModal(
+        'Send reset email',
+        `<p style="font-size:0.94em;margin-bottom:14px">Email a six-digit reset code to
+           <strong>${esc(b.dataset.reset)}</strong>?</p>
+         <div class="alert alert-info" style="margin-bottom:16px">This is the same code they could
+           request themselves. <strong>You will not see or set their password</strong> — they choose it
+           from the emailed code, which expires in 15 minutes.</div>
+         <div class="muted" style="font-size:0.82em">Logged against your account so it is clear who
+           triggered the reset.</div>`,
+        'Send code')));
+
+      scope.querySelectorAll('[data-setpw]').forEach(b => b.addEventListener('click', () => openModal(
+        'Set password',
+        `<p style="font-size:0.94em;margin-bottom:14px">Set a password for
+           <strong>${esc(b.dataset.setpw)}</strong> by hand.</p>
+         <div class="alert alert-warn" style="margin-bottom:16px">Use this only when email cannot reach
+           them. <strong>You will know their password</strong>, so the account is flagged: at their next
+           sign-in they must replace it before they can reach any page.</div>
+         <div class="field"><label>Temporary password</label><input value="prep-2026-temp">
+           <div class="field-hint">Read it to them over a channel you trust. It is single-use by design.</div></div>
+         <div class="field"><label>Deliver by</label><select>
+           <option>Show once on screen — I will read it out</option>
+           <option>Also email it to them</option></select></div>
+         <div class="muted" style="font-size:0.82em">System admins only. Logged against your account.</div>`,
+        'Set password')));
+    }
+
     /* ── Wiring (mock only — nothing writes) ────────────────────────────────── */
     function wirePanel() {
-      document.getElementById('add-btn')?.addEventListener('click', () => {
-        document.getElementById('add-modal').classList.add('open');
-      });
+      wirePasswordActions(document.getElementById('panel'));
+      document.getElementById('add-btn')?.addEventListener('click', () => openModal(
+        'Add staff',
+        `<div class="field"><label>Full name</label><input placeholder="Jane Doe"></div>
+         <div class="field"><label>Email</label><input placeholder="jane.doe@usafa.edu">
+           <div class="field-hint">If they already have a PREP login they are attached to this
+             offering rather than created again.</div></div>
+         ${selOf('Role in this offering',
+            '<option>Instructor — grades their sections</option>'
+          + '<option>Grader — grades only, no authoring</option>'
+          + '<option>Director — full administration</option>')}
+         ${selOf('Scope', '<option>All sections (offering-wide)</option><option>Specific sections…</option>',
+            'An offering-wide row means every section, including any added later.')}
+         <div class="alert alert-info" style="margin-bottom:16px">Writes one
+           <code>staff_assignments</code> row for <strong>${OFFERING.course} · ${OFFERING.term}</strong>
+           only. It grants nothing in any other term.</div>`,
+        'Add to offering'));
     }
-    const modal = document.getElementById('add-modal');
+    const modal = document.getElementById('mk-modal');
     modal.addEventListener('click', (e) => {
       if (e.target === modal || e.target.dataset.close !== undefined) modal.classList.remove('open');
     });

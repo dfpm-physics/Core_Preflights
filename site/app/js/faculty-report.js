@@ -1,6 +1,24 @@
+// ⚠ NOT MIGRATED TO SCHEMA `app`. DO NOT WIRE THIS UP AS-IS.
+//
+// Nothing imports this module — which is why the app works, and also why the import checker
+// (tests/app-schema/test-imports.mjs) cannot catch what follows. Every query below targets
+// `public` tables and columns that this client can no longer reach: site/app/js/config.js
+// pins it to schema `app`, so importing this file yields 404s on `responses` and 400s on
+// `assignments.questions`, `assignments.analysis_report` and `students.section_id`.
+//
+// It is kept deliberately (see site/app/README.md): it is the ported query layer for the
+// by-question report, which is to be MERGED INTO THE LESSON ROLLUP rather than shipped as its
+// own page. Migrate it as part of that merge, not before — the replacement reads the
+// `analysis_reports` table (scope='assignment_offering'), which
+// faculty-data.js:loadAnalysisReports() already implements.
+//
+// The Report page you can actually reach (faculty/report.html) does NOT use this file: it
+// imports faculty-interactions.js, and that path IS migrated.
+//
+// ─────────────────────────────────────────────────────────────────────────────────────────
 // faculty-report.js — data layer for the faculty Report (submission analysis) view.
 // Ported from admin.html's report tab. Reuses the shared assignment/section pickers from
-// faculty-grade.js so there's one source of truth. No DB changes.
+// faculty-grade.js so there's one source of truth.
 
 import { db } from './supabase.js';
 import { lastFirst } from './util.js';
