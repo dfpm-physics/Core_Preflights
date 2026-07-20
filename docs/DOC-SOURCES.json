@@ -114,6 +114,20 @@
         ".ai/instructions/CORE.md"
       ],
       "note": "Encodes the help-doc mechanics (no front matter, start at ##, manifest fields, tier gating) and the docs/ taxonomy. If the renderer or the taxonomy changes, the skill teaches the wrong thing to every future author."
+    },
+    {
+      "doc": "site/app/help/director-course-structure.md",
+      "kind": "help",
+      "tier": "director",
+      "reviewed": "2026-07-20",
+      "sources": [
+        "supabase/migrations/app/001_core_model.sql",
+        "supabase/migrations/app/003_term_calendar.sql",
+        "supabase/migrations/app/004_content_snapshot.sql",
+        ".ai/instructions/CORE.md",
+        ".ai/instructions/PROJECT.md"
+      ],
+      "note": "The container/activity/offering model, the graded-vs-practice settings, the one-grade guarantee and the activity lock all come from the app-schema migrations (001). Term calendar and freezing from 003 and 004. Role language follows CORE.md; PROJECT.md supplies the PREP/iPREP brand distinction. Deliberately omits RLS policy detail — every help doc is world-readable."
     }
   ]
 }

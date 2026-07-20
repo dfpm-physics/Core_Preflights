@@ -350,6 +350,47 @@ metric (74/73/64/64/14/4 rows, 62 policies, 16 tables). Zero foreign keys from `
 Both suites re-run green against the schema now holding real data: 22 invariant checks, 23 RLS
 enforcement checks.
 
+### Added — snapshot-at-term-close, so an artifact can be rebuilt without erasing history
+
+`004_content_snapshot.sql` plus
+[`scripts/app_migration/freeze_term.py`](scripts/app_migration/freeze_term.py) (dry-run by default).
+
+**The problem it solves.** An interactive activity is a slug plus an artifact URL. Rebuilding the
+artifact for a later term means overwriting that URL in place — which keeps **one stable slug per
+lesson forever**, so slugs never proliferate and the frozen `#i=<slug>` contract needs no change.
+The cost is that "what did Fall 2026 actually run?" becomes unanswerable. Freezing captures it first.
+
+Considered and rejected: allowing multiple generations of an activity per container (dropping
+`activities_one_per_modality`). It would have supported A/B-testing two artifact variants and made
+stale bookmarked artifacts fail safe, but it forces new slugs every rebuild — reintroducing exactly
+the slug-proliferation problem this avoids. Deferred, not foreclosed: `offering_activities` already
+selects which activities are live, so dropping the constraint later remains a one-line change.
+
+**Freezing happens at term close, not at publish** — publish can toggle more than once, and the end
+of term is when the record should harden. `terms.grades_due_on` is the trigger date;
+the `terms_awaiting_freeze` view lists what is overdue. Once `content_snapshot_frozen_at` is set, a
+trigger refuses any change to the snapshot; a deliberate correction must clear the stamp in its own
+statement first. Verified: first freeze succeeds, overwrite blocked, re-freeze without force
+refused, forced re-freeze succeeds.
+
+### Added — help doc: Course and assignment structure (director tier)
+
+[`site/app/help/director-course-structure.md`](site/app/help/director-course-structure.md), written
+against the `docs-author` skill. Reference mode, tier `director` (cumulative to admin): the four
+levels (course → course offering → assignment → activity), the graded/practice settings and the four
+arrangements they produce, the one-grade guarantee and the activity lock, how reuse works across
+semesters, and why to freeze before rebuilding an artifact.
+
+**Deliberately omits all RLS policy detail.** Help docs are static files on GitHub Pages and are
+world-readable at every tier, so access-control internals cannot appear in one. Role behaviour is
+described functionally instead. Registered in `docs/DOC-SOURCES.json`; manifest validated; renders
+at `localhost:8000` under the director tier.
+
+⚠ **The doc describes the `app` schema, which the UI does not use yet.** It is accurate about the
+database and premature about the product. If other directors should not see it before `site/app/`
+cuts over, remove the `course-structure` entry from `site/app/help/MANIFEST.json` and restore it at
+cutover — the file itself can stay.
+
 **Still to do.** **Close the migration read window** (§8 revoke). Add the §6 auth FKs as `postgres`.
 Point `site/app/` at the `app` schema and rewire. Then seal the owner with
 `ALTER ROLE prep_app_owner NOLOGIN` (§7). Migration `021_lesson_finalize_and_extensions.sql` remains

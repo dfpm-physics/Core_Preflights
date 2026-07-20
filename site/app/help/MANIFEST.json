@@ -25,6 +25,13 @@
       "file": "instructor-grading.md"
     },
     {
+      "id": "course-structure",
+      "tier": "director",
+      "title": "Course and assignment structure",
+      "summary": "How courses, terms, assignments, and activities relate — and what carries over to next semester.",
+      "file": "director-course-structure.md"
+    },
+    {
       "id": "ai-rules",
       "tier": "director",
       "title": "AI rules and behavior",
