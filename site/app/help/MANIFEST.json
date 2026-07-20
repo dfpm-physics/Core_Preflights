@@ -32,6 +32,13 @@
       "file": "director-course-structure.md"
     },
     {
+      "id": "schema-reference",
+      "tier": "director",
+      "title": "Data model reference",
+      "summary": "Every table and field, grouped into four layers, with what the database enforces.",
+      "file": "director-schema-reference.md"
+    },
+    {
       "id": "ai-rules",
       "tier": "director",
       "title": "AI rules and behavior",

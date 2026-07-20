@@ -128,6 +128,20 @@
         ".ai/instructions/PROJECT.md"
       ],
       "note": "The container/activity/offering model, the graded-vs-practice settings, the one-grade guarantee and the activity lock all come from the app-schema migrations (001). Term calendar and freezing from 003 and 004. Role language follows CORE.md; PROJECT.md supplies the PREP/iPREP brand distinction. Deliberately omits RLS policy detail — every help doc is world-readable."
+    },
+    {
+      "doc": "site/app/help/director-schema-reference.md",
+      "kind": "help",
+      "tier": "director",
+      "reviewed": "2026-07-20",
+      "sources": [
+        "supabase/migrations/app/001_core_model.sql",
+        "supabase/migrations/app/002_rls.sql",
+        "supabase/migrations/app/003_term_calendar.sql",
+        "supabase/migrations/app/004_content_snapshot.sql",
+        "site/app/css/styles.css"
+      ],
+      "note": "Every table and field is transcribed from the app-schema migrations and was verified against information_schema on the live database at authoring time. The inline SVG depends on the .sf-* token classes in styles.css. Deliberately omits RLS policy predicates - help docs are world-readable at every tier."
     }
   ]
 }

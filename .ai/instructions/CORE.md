@@ -30,6 +30,17 @@ There is **one production Supabase database** (`shzvpmlnqfmzfmuxkowi`) and **one
 (GitHub Pages off `main`). Multiple agents write to both. Treat every mutation as visible to
 everyone else, immediately.
 
+**That database now holds two schemas. Know which one you are touching.**
+
+| Schema | Status | Holds |
+|---|---|---|
+| `public` | **Live.** Serves every page in `site/`. Authoritative for anything student-facing today. | The original model — `assignments` / `responses` / `scores`, `interactions`, `lessons` |
+| `app` | **Built, tested, not yet wired to any page.** | The PREP v2 redesign, holding the real Fall 2026 content and roster |
+
+`app` is not dead code and `public` is not obsolete. The app refactor in `site/app/` will cut over
+to `app`; until it does, a change to student-visible behaviour belongs in `public`. See
+[`docs/architecture/`](../../docs/architecture/) for the v2 model and why it is shaped that way.
+
 - **Nothing an agent "remembers" privately is shared.** Claude Code has a private per-project
   memory store outside the repo; Codex has its own session state. **Neither is visible to the
   other agent or to humans.** If a fact matters to whoever works next, it must live in the
@@ -42,6 +53,11 @@ everyone else, immediately.
 - **No concurrent DDL.** Schema changes (new tables/columns/policies) are coordinated in advance,
   never run by two agents at once. The service key is DML-only by convention; the `claude_code_recker`
   DB role is explicitly `BYPASSRLS` **but has no DDL**.
+- **DDL on `app` is sealed shut.** Three scoped roles cover that schema — `prep_app_owner` (owns it,
+  full DDL), `prep_app_dml` (data only), `prep_app_read` (SELECT only). None holds any privilege on
+  `public`. After build-out the owner was set `NOLOGIN`, so it **cannot connect at all**; a schema
+  change requires a human to run `ALTER ROLE prep_app_owner LOGIN;` as `postgres`, and to re-seal
+  afterwards. Treat an unseal as a coordination event under the gate below.
 
 **Coordination gate — the CHANGELOG is an audit trail, not a lock.** Before any live DB mutation or
 push to `main`:
@@ -117,6 +133,7 @@ from the committed `.template`:
 |---|---|---|
 | `~/.claude/skills/preflight-analyze/config.json` | `supabase_url`, `supabase_service_key` (service_role — bypasses RLS), `textbook_base_path`, `default_course_id` | `.ai/skills/preflight-analyze/config.json.template` |
 | `supabase/admin/config.json` | `claude_code_recker` DB role creds (Session pooler host) | `supabase/admin/config.json.template` |
+| `supabase/admin/.env` | The three `prep_app_*` role credentials for schema `app` (same pooler host) | — generated when `app_schema_bootstrap.sql` is run |
 
 Notes:
 - The first path is **Claude-branded but agent-neutral in practice** — the Python scripts read it via
@@ -187,8 +204,14 @@ agents cannot drift.
 - **Always update `CHANGELOG.md`** for any shipped feature, fix, schema/data change, or doc edit.
   Newest first. Attribute to the requesting human **and the agent**:
   `## YYYY-MM-DD — <Human> via <Agent>` (e.g. `via Claude`, `via Codex`). State **what** and **why**.
-- **Migrations:** SQL in `supabase/migrations/`, numbered. Adding a migration file ≠ applying it —
-  coordinate application (see §0, no concurrent DDL) and record it in the CHANGELOG.
+- **Migrations — two separate chains, one per schema.** `supabase/migrations/*.sql` is the chain for
+  `public`; `supabase/migrations/app/*.sql` is the chain for `app`. They are numbered independently
+  and must not be interleaved. Adding a migration file ≠ applying it — coordinate application
+  (see §0, no concurrent DDL) and record it in the CHANGELOG. Applying anything in the `app` chain
+  additionally requires unsealing `prep_app_owner` first.
+- **`021_lesson_finalize_and_extensions.sql` is deliberately unapplied. Do not apply it.** It looks
+  like a pending migration; it is not. It implements the lesson-unification model that the `app`
+  redesign replaced. Applying it would add columns and triggers to `public` that nothing wants.
 
 > Agent-specific standing authorizations (e.g. commit-and-push defaults for a particular operator)
 > live in that agent's root entry file, not here.

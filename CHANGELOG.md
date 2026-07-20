@@ -391,10 +391,50 @@ database and premature about the product. If other directors should not see it b
 cuts over, remove the `course-structure` entry from `site/app/help/MANIFEST.json` and restore it at
 cutover — the file itself can stay.
 
-**Still to do.** **Close the migration read window** (§8 revoke). Add the §6 auth FKs as `postgres`.
-Point `site/app/` at the `app` schema and rewire. Then seal the owner with
-`ALTER ROLE prep_app_owner NOLOGIN` (§7). Migration `021_lesson_finalize_and_extensions.sql` remains
-**unapplied and should stay that way** — the redesign replaces nearly all of it.
+### Changed — CORE.md now describes both schemas, both migration chains, and the sealed DDL tier
+
+An agent auto-loading CORE.md previously saw a system with one schema and one migration chain. Four
+edits: §0 gains a table distinguishing `public` (live, serves every page) from `app` (built, tested,
+not yet wired) and states which is authoritative for what; §0 also records the three `prep_app_*`
+roles and that the owner is `NOLOGIN`, so DDL on `app` requires a deliberate unseal; §3 adds
+`supabase/admin/.env` to the secrets table; §5 documents the two independent migration chains **and
+that `021_lesson_finalize_and_extensions.sql` must not be applied** — it looks like a pending
+migration and applying it would be wrong.
+
+### Closed out — migration window revoked, auth FKs added, DDL tier sealed
+
+Run in the SQL Editor as `postgres`. The two FKs into `auth.users` now exist on `app.students` and
+`app.instructors`, matching what `public` carries. `prep_app_owner` is `NOLOGIN`; `app_tier_check.py`
+reports it as `[gate]` rather than a failure, which is the script behaving as designed. No app-tier
+role can read `public` any more.
+
+### Added — help doc: Data model reference (director tier), with an inline schema diagram
+
+[`site/app/help/director-schema-reference.md`](site/app/help/director-schema-reference.md) plus a
+scoped `.sf-*` block in `site/app/css/styles.css`. Every table and field across the four layers,
+what the database enforces, and an inline SVG of the layer stack.
+
+**The diagram is SVG inside Markdown, which the docs-author skill nominally forbids.** Matthew
+waived that for this document. It is safe here: `help.js` calls `DOMPurify.sanitize()` with default
+config, whose allowlist covers SVG elements and `class` — so the figure survives while scripts and
+event handlers would not. It carries no `<style>`, no `style=""`, and no `<script>`; all colour comes
+from the theme tokens, so it follows light and dark with one copy. **The skill's claim that "tags are
+stripped" is imprecise and should be corrected when that skill is next revised.**
+
+**Verified rather than asserted:** a checker parsed the document and cross-checked it against
+`information_schema` on the live database — 52 documented fields all exist, and all 19 base tables
+are documented. The first run of that checker caught a real gap (`analysis_reports` had no section)
+and also produced a false positive from a regex that ran past section boundaries; the checker was
+fixed before the result was trusted. Registered in `docs/DOC-SOURCES.json`; manifest validated;
+renders at `localhost:8000`.
+
+⚠ **The SVG has not been checked in a browser.** It is well-formed XML and uses only
+DOMPurify-permitted constructs, but no one has looked at it rendered. If DOMPurify does strip it, the
+Markdown tables below carry the whole payload and the page stays complete.
+
+**Still to do.** Point `site/app/` at the `app` schema and rewire. Write the architecture doc for the
+v2 model and add a supersession banner to `LESSON-UNIFICATION.md` pointing at it. Confirm a deployed
+lesson-02 artifact posts to the short slug before students launch it.
 
 ---
 
