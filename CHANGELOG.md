@@ -8,6 +8,29 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-20 — Casey via Claude
+
+### Added — 37 Physics 110 Fall 2026 written preflight assignments
+
+Physics 110 previously had no preflight assignments in the DB. Added
+[`scripts/fall2026/build_110_preflights.py`](scripts/fall2026/build_110_preflights.py)
+(adapted from the 215 `build_fall_preflights.py`) and **ran `--commit` against the live DB
+(HTTP 201), verified by full read-back**: 37 `assignments` rows (`course_id='phys-110'`,
+`is_published=true`), one per lesson for lessons 2–41 excluding Lesson 1 and the three GRs
+(13, 24, 36), per the syllabus rule "every lesson has a preflight except Lesson 1 and GRs."
+
+Each row mirrors the 215 three-question structure (2 pts total): Q1 reading-time reflection
+(0 pts), Q2 confusing/interesting reflection (1 pt), Q3 the lesson's JiTT or Journal
+conceptual question (1 pt) with a grader `expected_response`. Q1/Q2 use the exact live 215
+wording; the 7 lab lessons (6, 7, 10, 19, 23, 32, 38) use the lab-instruction wording variant.
+Sources: `Physics110_Preflight_Questions_v2.docx` (questions + RAG lines + grader hints) and
+the Fall 2026 syllabus **Table 2** (M/T preflight due dates, stored as 2359 America/Denver →
+UTC, DST-aware). `reading_link` is null on every row. RAG `reference_pdf`/`reference_pages`
+point into `Text_Book_PDFs/110 Sections/` (apostrophes/dashes normalized to match the
+on-disk filenames; all 30 non-lab PDF paths verified to resolve); labs carry null RAG.
+No embedded figures exist in the docx, so no figure assets were added. The builder is
+idempotent (upsert on `id`) and dry-run by default per CORE.md §4.
+
 ## 2026-07-16 — Casey via Codex
 
 ### Added — hidden Q2-effort and Q3-understanding diagnostics for written preflights
