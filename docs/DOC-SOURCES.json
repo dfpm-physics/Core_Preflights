@@ -38,7 +38,7 @@
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
         ".ai/skills/preflight-analyze/SKILL.md",
-        ".ai/skills/interaction-aggregate/SKILL.md"
+        ".ai/skills/lesson-aggregate/SKILL.md"
       ],
       "note": "Student-facing promise about what AI does and does not decide. CORE.md section 6 governs 3-state grading, is_finalized=false, and the hidden diagnostics; the two skills define what actually gets written."
     },
@@ -64,7 +64,7 @@
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
         ".ai/skills/preflight-analyze/SKILL.md",
-        ".ai/skills/interaction-aggregate/SKILL.md",
+        ".ai/skills/lesson-aggregate/SKILL.md",
         "docs/contracts/INTERACTION-DATA-CONTRACT.md"
       ],
       "note": "Says in-page that CORE.md and PROJECT.md remain authoritative and that this page is the bug if they disagree — so it is the entry most likely to need a refresh when the contract moves."

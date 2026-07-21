@@ -346,6 +346,37 @@ export const FREE_RESPONSE_KEY = '__free_response__';
 export const FREE_RESPONSE_LABEL = 'Free response';
 
 /**
+ * Reading-time buckets, in minutes. Upper bound is exclusive; the last is open-ended.
+ *
+ * Reported as a distribution and a MEDIAN, never a mean. These are self-reported durations in
+ * prose ("about half an hour", "a couple hours"), so the tail is long and one student who read
+ * for three hours would drag a mean somewhere no individual sits. The median is the number a
+ * director can act on, and the buckets are what show a bimodal class — the case that actually
+ * matters, where half read properly and half skimmed.
+ */
+export const READING_BUCKETS = [
+  { key: 'lt15',  label: '<15m',   min: 0,  max: 15 },
+  { key: 'm15_29', label: '15–29m', min: 15, max: 30 },
+  { key: 'm30_44', label: '30–44m', min: 30, max: 45 },
+  { key: 'm45_59', label: '45–59m', min: 45, max: 60 },
+  { key: 'gte60', label: '60m+',   min: 60, max: Infinity },
+];
+
+/** Whole positive minutes, or null. Zero is rejected on purpose: `/preflight-analyze` omits the
+ *  key when a student stated no duration, so a 0 that reaches here is bad data, not a claim that
+ *  someone read for zero minutes. */
+export const minutes = v =>
+  (Number.isFinite(v) && v > 0 && v < 1440) ? Math.round(v) : null;
+
+/** Median of a numeric list, or null. */
+export function median(xs) {
+  const a = (xs || []).filter(n => n != null).slice().sort((x, y) => x - y);
+  if (!a.length) return null;
+  const mid = a.length >> 1;
+  return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
+}
+
+/**
  * The written path's two diagnostics, pulled off a `grades` row.
  *
  * `grades.diagnostic` is polymorphic by modality: for an interactive grade it holds the frozen
@@ -367,17 +398,45 @@ export function writtenSignals(grade) {
 }
 
 /**
+ * The written path's `schema: 1` assessment, if /preflight-analyze has emitted one.
+ *
+ * `grades.diagnostic` is polymorphic, and this is the third thing it can hold: alongside the
+ * per-question `q2_effort`/`q3_understanding` pair, a full schema:1 payload written by
+ * /preflight-analyze (`.ai/skills/preflight-analyze/references/WRITTEN-SCHEMA1.md`) — the
+ * written path's equivalent of what the artifact sends. It is what lets one cohort aggregator,
+ * and `summarizeReports`, serve both modalities from one shape.
+ *
+ * Identified by `schema === 1` rather than by sniffing for fields, so a diagnostic holding only
+ * the q2/q3 pair is never mistaken for one.
+ *
+ * @returns {object|null} the payload, or null when this grade carries no schema:1 assessment
+ */
+export function writtenReport(grade) {
+  const d = grade?.diagnostic;
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return null;
+  return d.schema === 1 ? d : null;
+}
+
+/**
  * One student's effort for a lesson, whichever way they worked it, with its provenance.
  *
- * Precedence is "what a human graded" → "what the analysis produced" → "what the artifact
- * claimed". The claim ranks last on purpose: a student's own artifact writes it, so it is
- * evidence until a grader confirms it, not a grade.
+ * Precedence is "what a human graded" → "what the analysis assessed across the whole attempt"
+ * → "the reading-reflection question alone" → "what the artifact claimed". The claim ranks last
+ * on purpose: a student's own artifact writes it, so it is evidence until a grader confirms it,
+ * not a grade.
  *
- * @returns {{ effort: number|null, source: 'grade'|'diagnostic'|'claimed'|null }}
+ * `report` (schema:1 `effort`) outranks `q2_effort` because it is the commensurable measure —
+ * engagement across the whole attempt, gated by the reflection's meaningful-flag, exactly as the
+ * artifact scores it. `q2_effort` scores the reflection answer alone and stays as the fallback
+ * for grades written before /preflight-analyze emitted schema:1.
+ *
+ * @returns {{ effort: number|null, source: 'grade'|'report'|'diagnostic'|'claimed'|null }}
  */
 export function effortSignal(grade, reportData) {
   const graded = int05(grade?.effort);
   if (graded != null) return { effort: graded, source: 'grade' };
+  const assessed = int05(writtenReport(grade)?.effort);
+  if (assessed != null) return { effort: assessed, source: 'report' };
   const { effort: diag } = writtenSignals(grade);
   if (diag != null) return { effort: diag, source: 'diagnostic' };
   const claimed = int05(reportData?.effort);

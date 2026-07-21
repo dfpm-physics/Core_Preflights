@@ -402,7 +402,7 @@ Each entry maps to a `{components.*}` token and the classes in [`css/styles.css`
 The faculty lesson-summary rollup was redesigned (classes in the **"Rollup v3"** block of
 `css/styles.css`; intent visible in the [`test-summary.html`](../../tests/browser/test-summary.html) sandbox).
 It is built from bordered boxes inside a tinted header. The AI-summary panels read the cohort
-synthesis from `interaction_analysis` (migration 014, written by `/interaction-aggregate`) and
+synthesis from `interaction_analysis` (migration 014, written by `/lesson-aggregate`) and
 degrade to "coming soon" skeletons when no row exists for the scope.
 
 - **Tinted lesson header (`.lesson-head`)** — a full-bleed header that bleeds to the card/modal
@@ -501,7 +501,7 @@ actionable. Fluid grids mean most cards resize before any breakpoint fires.
   pipeline beyond it.
 - **AI rollup panels are wired with graceful degradation.** The Rollup v3 "AI readiness
   summary" and "Misconceptions → trends" panels read `interaction_analysis` (migration 014,
-  written by `/interaction-aggregate`) and render its Markdown-light prose (sanitized via
+  written by `/lesson-aggregate`) and render its Markdown-light prose (sanitized via
   `.ai-prose`); with no row for the scope they fall back to the `.ai-box` / `.ai-tbd` / `.sk`
   skeletons. The student-responses panel is single-section only: it shows the aggregator's
   per-section "AI pick" quotes (`selected_quotes`, resolved to live reflection text) plus a

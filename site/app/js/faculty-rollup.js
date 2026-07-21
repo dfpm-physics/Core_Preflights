@@ -72,7 +72,8 @@ import { db } from './supabase.js';
 import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT,
   shapeOffering, shapeSubmission, artifactUrlOf, chunked,
-  int05, writtenSignals, effortSignal, FREE_RESPONSE_KEY, FREE_RESPONSE_LABEL,
+  int05, writtenSignals, writtenReport, effortSignal, FREE_RESPONSE_KEY, FREE_RESPONSE_LABEL,
+  minutes, median, READING_BUCKETS,
 } from './schema.js';
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -319,7 +320,18 @@ export async function loadInteractionData(offeringId, studentIds) {
     if (!interactiveWork && !writtenWork) return;
 
     const grade = gradeBy[s.enrollmentId] || null;
-    const reportData = interactiveWork?.content || null;
+
+    // THE BRIDGE. An interactive student's schema:1 assessment rides on their submission (the
+    // artifact wrote it); a written student's rides on their GRADE (/preflight-analyze wrote it).
+    // Different tables, same shape — so both are surfaced as `report_data` and everything
+    // downstream folds one uniform structure instead of branching on modality.
+    //
+    // Without this the schema:1 emission would be written and never read, which is the same
+    // failure the by_question breakdown had. Writing to the database is not the same as it
+    // being used.
+    const written = writtenReport(grade);
+    const reportData = interactiveWork?.content || written || null;
+
     const { effort, source } = effortSignal(grade, reportData);
     const { understanding } = writtenSignals(grade);
 
@@ -354,7 +366,7 @@ export const BY_QUESTION_KEY = '__by_question__';
 
 /**
  * Cohort AI synthesis for one lesson — the free-text panels the rollup shows as placeholders
- * until the /interaction-aggregate skill has run: readiness summary, misconception-trend prose,
+ * until the /lesson-aggregate skill has run: readiness summary, misconception-trend prose,
  * showcase quotes. Numeric rollups stay computed live in the browser (summarizeReports).
  *
  * `interaction_analysis` (one row per section, with a '__all__' sentinel) collapsed into
@@ -366,7 +378,7 @@ export const BY_QUESTION_KEY = '__by_question__';
  * `kind='by_question'` rows come from /preflight-analyze: one per INSTRUCTOR, carrying the
  * written preflight's per-question analysis — including its misconception findings — as
  * `payload.breakdown.items[qid].summary` bullet strings. `kind='cohort'`-shaped rows come from
- * /interaction-aggregate and carry the section panels. See docs/decisions/ROLLUP-AGREEMENT.md §6.
+ * /lesson-aggregate and carry the section panels. See docs/decisions/ROLLUP-AGREEMENT.md §6.
  *
  * This function used to ignore `kind` entirely, and a by_question payload has neither
  * `by_section` nor `section_id` — so every one of them fell through to `out['__all__']`, each
@@ -468,6 +480,10 @@ export function summarizeReports(rows, possible = 2) {
     path:   r?.path || (r?.report_data ? 'interactive' : 'written'),
     score:  num(r?.score),
     d:      (r?.report_data && typeof r.report_data === 'object') ? r.report_data : {},
+  })).map(it => ({
+    // Does an assessment exist for this student at all? Distinguishes "answered but named no
+    // duration" from "nothing has assessed this submission yet", which are different facts.
+    ...it, hasWork: Object.keys(it.d).length > 0,
   }));
   const n = list.length;
 
@@ -494,6 +510,28 @@ export function summarizeReports(rows, possible = 2) {
     points.push(score != null ? score : pointsForEffort(e, possible));
   });
 
+  // ── Reading time (DIAGNOSTIC). Q1 of every preflight asks how long the student spent on the
+  //    reading; it is worth 0 points, its answers are anonymous to instructors, and until now
+  //    nothing read them. /preflight-analyze parses the prose to whole minutes.
+  //
+  //    Median + buckets, never a mean — see READING_BUCKETS in schema.js for why. `notStated`
+  //    is tracked separately from "no data": a student who answered without naming a duration is
+  //    a different fact from a student who did not submit, and collapsing them would let a
+  //    half-answered cohort look fully measured.
+  const readingVals = [];
+  let readingNotStated = 0;
+  list.forEach(({ d, hasWork, path }) => {
+    const m = minutes(d.reading_minutes);
+    if (m != null) { readingVals.push(m); return; }
+    // Only a student who WORKED the question set can have withheld a duration. Q1 does not
+    // exist on the interactive path, so counting an artifact taker as "gave no duration" would
+    // manufacture a refusal out of a question they were never asked.
+    if (hasWork && (path === 'written' || path === 'both')) readingNotStated++;
+  });
+  const readingBuckets = READING_BUCKETS.map(b => ({
+    ...b, count: readingVals.filter(m => m >= b.min && m < b.max).length,
+  }));
+
   // ── Engagement metadata.
   const completed = list.filter(({ d }) => d.completed === true).length;
   const durations = list.map(({ d }) => typeof d.duration_min === 'number' ? d.duration_min : null);
@@ -510,11 +548,15 @@ export function summarizeReports(rows, possible = 2) {
   const overallAvg = mean(overall), selfAvg = mean(self);
   const overallHist = [0, 0, 0, 0, 0, 0];
   overall.forEach(u => { if (u != null) overallHist[u]++; });
-  const understandingFrom = {
-    interactive: list.filter(({ d }) => int05(d.overall_understanding) != null).length,
-    written:     list.filter(({ d, frUnderstanding }) =>
-                   int05(d.overall_understanding) == null && frUnderstanding != null).length,
-  };
+  // Attribute by the PATH the student took, not by which field happened to supply the number.
+  // Once /preflight-analyze emits schema:1, a written student HAS an overall_understanding, so
+  // keying off "which field was populated" would file them under interactive and quietly
+  // overstate artifact coverage — the exact miscount this whole change exists to remove.
+  const understandingFrom = { interactive: 0, written: 0 };
+  list.forEach(({ d, frUnderstanding, path }) => {
+    if (int05(d.overall_understanding) == null && frUnderstanding == null) return;
+    if (path === 'written') understandingFrom.written++; else understandingFrom.interactive++;
+  });
 
   // ── Objectives — group by key, average understanding/confidence + a 0–5 distribution.
   const objMap = {};
@@ -615,6 +657,13 @@ export function summarizeReports(rows, possible = 2) {
     },
     completed, completedPct: n ? Math.round((completed / n) * 100) : 0,
     durationAvg: mean(durations), messageAvg: mean(messages),
+    // Reading time: minutes, so median + buckets rather than the 0–5 treatment everything else gets.
+    reading: {
+      median: median(readingVals), assessed: readingVals.length, notStated: readingNotStated,
+      buckets: readingBuckets,
+      min: readingVals.length ? Math.min(...readingVals) : null,
+      max: readingVals.length ? Math.max(...readingVals) : null,
+    },
     understanding: { overall: overallAvg, self: selfAvg, dist: overallHist,
       gap: (overallAvg != null && selfAvg != null) ? selfAvg - overallAvg : null,
       from: understandingFrom },

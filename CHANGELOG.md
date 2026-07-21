@@ -10,6 +10,206 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-21 — Matthew Recker via Claude
 
+### Added — System > Data: a generic table browser over schema `app`
+
+**Frontend + one read-only script. No migration, no DDL, no live DB write from the feature
+itself** — the generator only reads `information_schema`, and every write the page performs is an
+ordinary authenticated PostgREST call subject to the same RLS as any other page.
+
+Fills the slot `nav.js:51` has been reserving since the app refactor began (`{ key: 'system',
+adminOnly: true }` pointing at a `system.html` that did not exist) and that `faculty-admin.js:5-6`
+names as the home of the global tier. It also delivers what `nav.js:42-44` originally scoped that
+destination for: creating an offering and appointing its director is now editing
+`course_offerings` and `staff_assignments`, reached generically rather than through bespoke forms.
+
+**New files**
+
+- `site/app/faculty/system.html` — the browser. Table picker, sortable/paged row list, text search,
+  row editor, delete. Gated on `is_global_admin` (not `isDirectorForCurrent()`, which a director
+  also satisfies). No per-table code whatsoever.
+- `site/app/js/system-admin.js` — the data layer: list, insert, update, delete, bulk FK-label
+  resolution, value coercion, and the cascade preview.
+- `site/app/js/db-schema.js` — **generated**. The catalogue for all 20 `app` tables: 147 columns,
+  33 foreign keys with their delete rules, the 10 CHECK-derived value sets, and per-table RLS
+  policy coverage.
+- `scripts/app/gen_db_schema.py` — regenerates the above. Read-only, connects as
+  `prep_app_read`, stdlib + psycopg2 via the project `.venv`. `--check` mode exits non-zero on drift.
+- `tests/app-schema/test-db-schema.mjs` — 29 checks; registered in `run.mjs`.
+
+**Why the catalogue is generated rather than introspected at runtime.** The obvious source is
+PostgREST's OpenAPI spec at `/rest/v1/`, but it now refuses publishable keys —
+`401 {"message":"Secret API key required"}` — and a static page must never carry a secret key. So
+the catalogue is generated and committed as a plain ES module. The no-build, no-Node deploy path
+(CORE.md §2) is unchanged: `db-schema.js` is a normal source file the browser imports.
+**Re-run the generator after any migration in `supabase/migrations/app/` and commit the result;**
+the new test fails when it drifts.
+
+**Why this adds no authority.** Every call goes through the ordinary anon-key client as the
+signed-in administrator, so a system admin can do exactly what `002_rls.sql`'s `is_admin()` already
+permits — no service key, no edge function, no RLS bypass. Four tables are readable but not fully
+writable *by anyone* through the API, and the page states each reason up front instead of letting
+it surface as an opaque refusal at save time: `submission_activities` (students own their work),
+`submissions` (staff may unlock only, per the migration-006 trigger), `grade_events` (append-only
+audit), `analysis_reports` (written by the service tier).
+
+**Deletion is gated on a cascade preview.** The FK graph is deep and mostly `ON DELETE CASCADE` —
+`courses → course_offerings → sections → enrollments → submissions → submission_activities`, with
+`grades → grade_events` hanging off enrolments — so removing one `courses` row would take a term of
+student work with it. The page walks that graph first, counts what would go per table, and requires
+the row's label typed exactly before it will delete. `ON DELETE RESTRICT` referrers block the
+delete outright and are listed.
+
+**Verification — read this before trusting it.** Full `tests/app-schema` suite: 244 passed, 0
+failed, including the live drift check and the 29 new structural checks. All modules pass
+`node --check`; import integrity confirms all 223 named imports across `site/app/` resolve; the
+page and its whole module graph were confirmed to serve over `python -m http.server`.
+**The interactive UI itself was NOT verified in a browser** — rendering, the row editor, the
+cascade-preview modal and every write path are unexercised, because the page requires a
+`is_global_admin` login the agent does not hold. Per CORE.md §2 that is stated here rather than
+left for the next operator to discover: **a system admin should click through it on a
+low-consequence table before relying on it, and should test one delete against a throwaway row.**
+
+## 2026-07-21 — Matthew Recker via Claude
+
+### Added — the reading-time question (Q1) is finally rolled up
+
+Every preflight's Q1 asks *"How much time did you spend reading the book in preparation for this
+lesson?"* — 0 points, names hidden from instructors because it is a class diagnostic, not an
+assessment of the individual. **It has never been aggregated.** 64 written submissions carry an
+answer; the distribution has been sitting in the database unread since the term began.
+
+`/preflight-analyze` now parses each answer to whole minutes into `diagnostic.reading_minutes`. It
+has to be the parser — the answers are prose (*"About half an hour."*, *"An hour and a quarter —
+this one was dense."*, *"Maybe 20 minutes, I skimmed it."*) and nothing else in the pipeline reads
+them. The key is **omitted** when an answer names no duration: absent means "not stated", `0`
+would claim the student read for zero minutes.
+
+Reported as a **median and five buckets, never a mean.** Self-reported durations have a long tail;
+one student who genuinely struggled for three hours would drag a mean somewhere no student sits.
+The buckets exist to show a *bimodal* class — half reading properly, half skimming — which is the
+shape that actually changes what a director covers in class, and which a single number hides. The
+outlier is deliberately not clamped: a three-hour read is a real signal.
+
+`not_stated` counts only written-path students. An artifact taker is never asked Q1, so counting
+them as having withheld a duration would manufacture a refusal out of an unasked question. (Caught
+by a test, not by inspection — the first implementation got it wrong.)
+
+Rendered in the lesson rollup as its own panel, deliberately styled unlike the 0–5 effort chart so
+the uneven minute buckets are not read as a shared scale. `/lesson-aggregate` is told to cite the
+median and the shape in `readiness_summary`, never an individual time.
+
+### Fixed — the pinned-question lookup matched nothing on every live lesson
+
+A read of the live database found **0 of 74 written activities carrying any question `role`**.
+`faculty/lessons.html` writes `role: "reading_time"` / `"reading_reflection"` on newly authored
+lessons, but `scripts/fall2026/build_fall_preflights.py` — which built everything in the current
+term — emits `{id, type, text, points}` with no role at all.
+
+So `_reflection_question_id()`, added hours earlier in this same batch, returned `None` for every
+lesson in the term: written showcase quotes would have silently never worked, and the reading-time
+lookup would have failed the same way. Found by probing the live schema before building on it
+rather than after.
+
+Now resolves by `role` → prompt **text** → position, and reports which signal it used. The text is
+verbatim-identical across all 74 rows, so the fallback is anchored to something a director does not
+hand-edit; position (`q1`/`q2`) is last and weakest because position is the first thing an edit
+changes. **The permanent fix is to backfill `role` onto the 74 live rows** — that is a DML change
+and a coordination event under CORE.md §0, so it is proposed here, not done. When it lands the
+fallbacks stop firing on their own.
+
+### Changed — one per-student shape, one cohort aggregator, across both modalities
+
+**Docs, skills and tooling. No migration, no schema change, no live DB write** — nothing here has
+been *run* against the database yet; the next `/preflight-analyze` run is what starts emitting the
+new payload.
+
+The asymmetry this closes: an interactive lesson gets a per-student `schema: 1` assessment for
+free (the artifact writes it at submit), while the written path never had an equivalent producer.
+So every cohort summary that folds `schema: 1` described only artifact takers.
+`LESSON-UNIFICATION.md` §11 named this exact gap — *"the work that makes the preflight and the
+interaction commensurable"* — and specified the fix; it was never built because the doc predates
+the `app` redesign and was written against `lesson_completions`.
+
+**1. `/preflight-analyze` now emits `schema: 1` into `grades.diagnostic`.** New reference
+`references/WRITTEN-SCHEMA1.md` defines the payload: `effort` (engagement across the whole
+attempt, gated by the reflection's meaningful-flag), `overall_understanding`, `objectives[]`,
+`misconceptions[]` against the taxonomy, `reading_reflection`, `flags`. The column comment already
+described this shape — `app` was built for both paths to fill it; only one ever did.
+
+It already did the analysis. Step 7 reads every answer and classifies it against the misconception
+taxonomy; Step 8 flattened the findings into prose. This emits the *structure* alongside, so the
+numbers survive into the rollup instead of being lost to English. The generic taxonomy table gained
+stable kebab-case ids for exactly this reason — prose cannot be counted, and two students with the
+same misconception must carry the same id or they never aggregate.
+
+**Purely additive.** `q2_effort` / `q3_understanding` keep their rubrics and are *not* renames:
+`diagnostic.effort` measures the whole attempt, `q2_effort` measures the reflection answer alone.
+Both are kept; `effortSignal()` prefers the commensurable one and falls back. Four keys are
+deliberately NOT emitted — `reading_reflection.text` (already stored as the student's answer;
+copying it would duplicate student prose into a second table), `honor` (unknowable without a
+transcript — an absent key reads as "not assessed", `"none"` would falsely read as "assessed and
+clean"), `self_rated_understanding`, and the conversation metadata.
+
+**`objectives` is normally `[]` today, and that is correct output, not a gap.** Nothing populates
+`activities.content.questions[].objective_key` — zero mentions in the skill, nothing in
+`scripts/fall2026/`, and `lessons.html:1011` hardcodes `objectives: []`. Inventing a breakdown
+would put fabricated axes on the faculty radar. When a director authors the keys, the array fills
+and the radar gains real axes with no code change.
+
+**2. The rollup reads it** (`faculty-rollup.js`). The bridge is small and load-bearing: an
+interactive student's assessment rides on their *submission*, a written student's on their
+*grade*. Both are now surfaced as `report_data`, so `summarizeReports` folds one shape.
+Without this the emission would be written and read by nothing — the same failure as the
+`by_question` breakdown fixed earlier today. Consequence: misconception bars, flag tallies and the
+reflection gate now work for written cohorts. Understanding attribution was re-keyed to the
+student's *path* rather than to which field supplied the number — otherwise a written student with
+`overall_understanding` would file under "interactive" and overstate artifact coverage.
+
+**3. `/interaction-aggregate` → `/lesson-aggregate`, and it is modality-blind.**
+`ROLLUP-AGREEMENT.md` §12 flagged the rename as wanted-but-cosmetic; it is now substantive. The
+tool (`supabase/admin/lesson_aggregate.py`) is keyed on the **offering**, not on an interactive
+activity — a question-only lesson has no artifact slug to name — and `--lesson` accepts either an
+assignment or an activity slug (old flags kept as aliases). `_load_reports` pulls both modalities
+and normalizes them; `summarize` gained the same `paths` provenance, merged effort distribution and
+`__free_response__` objective the browser computes, because the prose is required to cite the same
+figures the bars show. Written reflection text is lifted from the student's stored answer at the
+question marked `role: "reading_reflection"`, so showcase quotes work on both paths.
+
+**4. Cohort prose ownership moved to `/lesson-aggregate` for every lesson type.** This closes the
+`misconception_trends` / `readiness_summary` gap noted earlier today rather than patching the
+by-question writer. `ROLLUP-AGREEMENT.md` §6 gave preflight-only lessons' cohort prose to
+`/preflight-analyze` because nothing could then read the written path; that table now carries a
+dated supersession note (the doc is a point-in-time record, so it is annotated, not rewritten).
+
+**Why the two skills were not merged** — the question that started this. They run on different
+clocks. Grading is per-student and runs early and often, frequently split M-day/T-day; aggregation
+is per-cohort and must run once, after the deadline, unfiltered. A merged skill would either make
+grading wait for the deadline, or emit a "readiness summary" describing half a class that the
+second day's run then silently replaces. `LESSON-UNIFICATION.md` §12 had already decided against a
+monolith on maintainability grounds; the cadence argument is the harder one.
+
+**Docs corrected, not just bumped.** `CORE.md` §6 and `PROJECT.md` still described diagnostics
+living in `scores.q2_effort` — the *retired* `public` schema — which this change made actively
+misleading. Both now document `grades.diagnostic` and the two-producer model.
+`site/app/help/director-ai-rules.md` and `docs/operations/SYSTEM_GUIDE.md` described aggregation as
+interactive-only and the diagnostics as two integers; both were wrong as written and are fixed —
+a help doc that contradicts the system is a bug (CORE.md §5). The other seven documents
+`check_doc_sources.py` flagged were read and are unaffected; their `reviewed` dates were already
+current, so nothing was bumped to silence the check.
+
+**Verified:** `supabase/admin/aggregate_summarize_test.py` is new — 45 assertions over the Python
+`summarize()` and the pinned-question resolver, asserting the same cases as the JS suite so the two
+engines cannot drift (they must agree, or the aggregator's prose contradicts the browser's bars).
+`tests/app-schema/test-rollup.mjs` grew to 108 assertions, including the schema:1 recognition,
+effort precedence, the reading-time rollup, and the payoff cases (misconceptions counted for a
+written cohort, no phantom radar axis from an empty `objectives`). Full suite green (244 + 108 +
+45). The reading-time panel was rendered against the shipped stylesheet in both themes. The live
+database was **read** (SELECT-only role) to establish the `role`-marker and Q1-answer facts above;
+nothing was written to it, and no
+`/preflight-analyze` or `/lesson-aggregate` run has yet produced or consumed the new payload** —
+the SQL in `lesson_aggregate.py` is compile-checked and its pure logic is unit-tested, but the two
+new queries are unproven against live data.
+
 ### Changed — faculty summaries now describe BOTH ways a lesson can be worked
 
 **Frontend + tests only (`site/app/`, `tests/`). No migration, no schema change, no DB write.**

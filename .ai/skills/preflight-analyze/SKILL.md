@@ -3,7 +3,8 @@ name: preflight-analyze
 description: >
   Physics preflight assignment analysis skill for USAFA (PREP v2, schema `app`). Use when the user
   wants to analyze student submissions, generate per-instructor misconception reports, apply
-  auto-grading, write suggested grades and hidden Q2-effort/Q3-understanding diagnostics to
+  auto-grading, write suggested grades plus the per-student schema:1 assessment (effort,
+  understanding, misconceptions, flags) and hidden Q2-effort/Q3-understanding diagnostics to
   Supabase, or says /preflight-analyze. Also triggers for "analyze preflight", "grade submissions",
   "check who hasn't submitted", "run analysis on assignment", or "preflight analyze". This skill is
   run by a Course Director or System Admin, not individual instructors. Optional filter argument:
@@ -17,8 +18,12 @@ You are analyzing student submissions for a physics preflight assignment at USAF
 2. Optionally read referenced textbook pages for grounding (RAG)
 3. Analyze responses question by question for physics misconceptions
 4. Generate hidden 0–5 diagnostics for Q2 effort and Q3 understanding
-5. Write suggested grades back to Supabase (`is_finalized = false`, `source = 'ai_suggested'`)
-6. Print a structured per-instructor report in the conversation
+5. Emit a per-student `schema: 1` assessment — effort, understanding, structured
+   `misconceptions[]`, reading-reflection judgment, flags — so a written preflight and an
+   interactive lesson can be summarized by the same cohort aggregator
+   ([`references/WRITTEN-SCHEMA1.md`](references/WRITTEN-SCHEMA1.md))
+6. Write suggested grades back to Supabase (`is_finalized = false`, `source = 'ai_suggested'`)
+7. Print a structured per-instructor report in the conversation
 
 This skill is run by a **Course Director or System Admin** — not individual instructors. A single run covers all sections for a given day (M-day or T-day). Results are stored per-instructor and are visible to each instructor in the Report tab.
 
@@ -169,7 +174,7 @@ From the embedded `offering_activities`, take the entry whose `activities.modali
 
 An offering may also carry an **interactive** activity (`modality = 'interactive'`). This skill
 grades the written path only. If the interactive activity is `grading_role = 'graded'`, say so in
-the report — students who chose it are graded by `/interaction-aggregate`'s sibling backfill, not
+the report — students who chose it are graded by `/lesson-aggregate`'s sibling backfill, not
 here, and must not be counted as missing.
 
 ### Preflight checks — do these before any analysis
@@ -318,6 +323,25 @@ These are diagnostics, not grade points. Do not put either value into student fe
 in one place only: `grades.diagnostic`. A Q3 answer may receive yellow/full credit for genuine
 effort while its hidden understanding diagnostic is 1 or 2.
 
+### Q1 — the reading-time question is data, not an answer to grade
+
+Q1 is *"How much time did you spend reading the book in preparation for this lesson?"*, worth **0
+points**, with names hidden from instructors. It is not graded and has no right answer — but it is
+the one question that says whether the class did the reading, and until now nothing read it.
+
+**Parse each answer to whole minutes → `diagnostic.reading_minutes`** ("About half an hour." → 30;
+"An hour and a quarter" → 75; a range takes its midpoint). Omit the key when the answer states no
+duration — absent means "not stated", `0` would mean "read for zero minutes". Full rules and the
+worked table: [`references/WRITTEN-SCHEMA1.md`](references/WRITTEN-SCHEMA1.md) §`reading_minutes`.
+
+Do not grade Q1, do not write feedback on it, and do not include individual reading times in the
+printed report or the per-instructor bullets. It is reported only as a class distribution.
+
+**Identifying Q1 and Q2.** Prefer `role: "reading_time"` / `role: "reading_reflection"` on the
+question object. As of 2026-07-21 **no live activity carries a role** — the Fall builder predates
+the convention — so fall back to the prompt text, which is verbatim-identical across all 74. Fall
+back to position (`q1`, `q2`) last, and say in the run report which signal you used.
+
 ### Grading Decision — THREE STATES ONLY
 
 For each free-response answer, assign exactly one of:
@@ -364,21 +388,29 @@ The bar for red is HIGH. Only award zero when the response is:
 - **Red** (`zero`): `feedback = "No answer provided."` (if blank) or a brief note on what was expected (if off-topic/gibberish).
 
 ### Physics Misconception Taxonomy
-Look for these patterns in free-response answers:
+Look for these patterns in free-response answers. **The `id` column is not decoration** — it is
+what goes in `misconceptions[].id` (Step 9), and it is what the rollup counts. Two students with
+the same misconception must carry the same id or they will not aggregate.
 
-| Misconception | Description |
-|---|---|
-| **Vector/scalar confusion** | Treating velocity as speed, ignoring direction in force problems |
-| **Newton's 3rd law errors** | Claiming action/reaction forces cancel; confusing pairs |
-| **Newton's 2nd law sign errors** | Incorrect direction of net force or acceleration |
-| **Free-body diagram errors** | Missing normal force, friction, or weight component |
-| **Energy/work/power conflation** | Using "energy" when they mean "force" or "work"; misidentifying conservative vs non-conservative |
-| **Conservation law misapplication** | Applying conservation of energy with friction; ignoring system boundaries |
-| **Kinematics errors** | Mixing up displacement/distance; incorrect kinematic equation choice |
-| **Unit/dimensional errors** | Using wrong units; inconsistent unit handling |
-| **Charge/field confusion** | Confusing field direction with force direction; signed charge errors |
-| **Induction/polarization confusion** | Conflating charging by induction vs. conduction; misidentifying which charges move |
-| **Circular reasoning** | Restating the question as the answer; tautological explanations |
+| id | Misconception | Description |
+|---|---|---|
+| `vector-scalar` | Vector/scalar confusion | Treating velocity as speed, ignoring direction in force problems |
+| `newton-3rd` | Newton's 3rd law errors | Claiming action/reaction forces cancel; confusing pairs |
+| `newton-2nd-sign` | Newton's 2nd law sign errors | Incorrect direction of net force or acceleration |
+| `free-body` | Free-body diagram errors | Missing normal force, friction, or weight component |
+| `energy-work-power` | Energy/work/power conflation | Using "energy" when they mean "force" or "work"; misidentifying conservative vs non-conservative |
+| `conservation-misapplied` | Conservation law misapplication | Applying conservation of energy with friction; ignoring system boundaries |
+| `kinematics` | Kinematics errors | Mixing up displacement/distance; incorrect kinematic equation choice |
+| `units` | Unit/dimensional errors | Using wrong units; inconsistent unit handling |
+| `charge-field` | Charge/field confusion | Confusing field direction with force direction; signed charge errors |
+| `induction-polarization` | Induction/polarization confusion | Conflating charging by induction vs. conduction; misidentifying which charges move |
+| `circular-reasoning` | Circular reasoning | Restating the question as the answer; tautological explanations |
+
+**Prefer a per-preflight id where one exists.** `.ai/instructions/PROJECT.md` § "Known
+Misconception Patterns" carries assignment-specific tables (`scalar-sum`, `forces-cancel`,
+`wavelength-confusion`, `shielding`, …) with the exact correction to give the student. Those are
+more precise than the generic ids above and are the first place to look; fall back to this table,
+and coin a new kebab-case id only when neither fits.
 
 If `REFERENCE_TEXT` was loaded in Step 3, cross-reference student answers against the textbook content to identify factual errors more accurately.
 
@@ -402,6 +434,19 @@ For each free-response question, produce:
 ---
 
 ## Step 8 — Write Per-Instructor Summaries to `analysis_reports`
+
+> **You own the by-question breakdown, and nothing else in the rollup (changed 2026-07-21).**
+> `ROLLUP-AGREEMENT.md` §6 originally also assigned this skill the cohort prose —
+> `readiness_summary`, `misconception_trends`, `selected_quotes` — for preflight-only lessons,
+> because no aggregator could read the written path. `/lesson-aggregate` now can: both modalities
+> emit the same `schema: 1` assessment (Step 9), so **one aggregator writes the cohort prose for
+> every lesson type**. Do not write those three fields here.
+>
+> The reason is cadence, not tidiness. This skill runs when work needs grading, often split
+> M-day/T-day; cohort prose must be written once, after the deadline, over the whole cohort. A
+> readiness summary produced by an M-day run would describe half a class and then be silently
+> replaced by the T-day run. The `kind='by_question'` row you write here is per-instructor and
+> per-question, so the M/T split is harmless to it.
 
 Group students by instructor (using `sectionMap` → `instructor`). For each instructor (within
 filtered set), generate a summary covering **all their sections combined**.
@@ -548,13 +593,33 @@ Body: (array of grade objects)
   "question_scores": { … },
   "diagnostic": {
     "q2_effort": {integer 0-5, or omit if q2 is absent},
-    "q3_understanding": {integer 0-5, or omit if q3 is absent}
+    "q3_understanding": {integer 0-5, or omit if q3 is absent},
+
+    "schema": 1,
+    "source": "preflight-analyze",
+    "effort": {integer 0-5, capped at 2 when the reflection is not meaningful},
+    "overall_understanding": {integer 0-5, or omit},
+    "objectives": [ {"key": "…", "label": "…", "understanding": {0-5}} ],
+    "misconceptions": [ {"id": "…", "label": "…", "description": "…",
+                         "severity": "major|minor", "evidence": "…"} ],
+    "reading_reflection": {"meaningful": {bool}, "engagement": {integer 0-5}},
+    "reading_minutes": {whole minutes parsed from Q1, or OMIT if the answer states no duration},
+    "flags": {"needs_follow_up": {bool}, "notable": {bool}}
   },
   "source": "ai_suggested",
   "is_finalized": false,
   "graded_at": "{ISO timestamp}"
 }]
 ```
+
+**The `schema: 1` half of `diagnostic` is the per-student structured assessment** — the written
+path's equivalent of what the artifact emits, and what lets one cohort aggregator serve both
+modalities. Read
+[`references/WRITTEN-SCHEMA1.md`](references/WRITTEN-SCHEMA1.md) before emitting it: it defines
+every field, why `effort` is not `q2_effort`, why `objectives` is normally `[]` today, and the
+four keys you must NOT emit (`reading_reflection.text`, `honor`,
+`self_rated_understanding`, and the conversation metadata). It is purely additive — `q2_effort`
+and `q3_understanding` keep their existing rubrics and must survive the write unchanged.
 
 Send all students in a single batch upsert. `UNIQUE (enrollment_id, assignment_offering_id)` means
 re-running updates suggestions without creating duplicates. Leave `graded_by` unset — this skill is
@@ -570,11 +635,21 @@ Headers: READ_HEADERS
 Require exactly one row per graded enrolment, with `source = "ai_suggested"` and
 `is_finalized = false`. Where `q2`/`q3` exists on the assignment, require an integer in `[0,5]` at
 `diagnostic.q2_effort` / `diagnostic.q3_understanding`; where absent, require the key to be absent.
-Compare every returned value to the run's in-memory diagnostic before reporting success.
+Then run the `schema: 1` checks in
+[`references/WRITTEN-SCHEMA1.md`](references/WRITTEN-SCHEMA1.md) §Verification — including that no
+`text` or `honor` key reached the payload, and that `q2_effort`/`q3_understanding` came back
+unchanged. Compare every returned value to the run's in-memory diagnostic before reporting
+success.
 
-After exact read-back verification, report: "Wrote suggested grades plus hidden Q2-effort and
-Q3-understanding diagnostics for {N} students ({day_filter} sections); skipped {M} already-finalized.
-Grades are marked is_finalized=false — instructors must review and finalize in the admin panel."
+After exact read-back verification, report: "Wrote suggested grades plus the schema:1 per-student
+assessment (effort, understanding, {K} misconceptions across the cohort, flags) and the hidden
+Q2-effort / Q3-understanding diagnostics for {N} students ({day_filter} sections); skipped {M}
+already-finalized. Grades are marked is_finalized=false — instructors must review and finalize in
+the admin panel."
+
+State the objectives situation explicitly in that report — "objectives: [] (no `objective_key`
+authored on this assignment's questions)" or the count emitted. A reader must not have to guess
+whether an empty breakdown means "not authored" or "the analysis failed".
 
 ---
 
@@ -664,4 +739,6 @@ After all instructors, print:
 7. **Protect the service key** — never print `SUPA_KEY` in the output. Reference it as `[service_key]` if you need to show a sample request.
 8. **Every request names its schema** — `Accept-Profile: app` on reads, `Content-Profile: app` on writes, decided once in Step 0.
 9. **Key on `enrollment_id`** — never write a grade or read work by `student_id` alone; the enrolment is what carries the section and the term.
-10. **Diagnostics never affect grades** — `q2_effort` and `q3_understanding` live only in `grades.diagnostic`. Never use them in `question_scores`, `points_earned`, `points_possible`, status, feedback, finalization, or the analysis report, and never render or print individual values.
+10. **Diagnostics never affect grades** — everything in `grades.diagnostic` (`q2_effort`, `q3_understanding`, and the whole `schema: 1` payload including its `effort`) is diagnostic only. Never use any of it in `question_scores`, `points_earned`, `points_possible`, status, feedback, finalization, or the analysis report, and never render or print individual per-student values. The `effort` inside `diagnostic` is **not** `grades.effort` and must not be written to that column: these offerings are `grading_mode='points'` (Step 2), where points come from `question_scores`.
+11. **Emit structure, not just prose** — the misconceptions you identify in Step 7 must appear BOTH as Step 8's per-instructor bullets and as `misconceptions[]` in Step 9's `schema: 1` payload, using the same taxonomy ids. Prose alone cannot be counted, and the two disagreeing is a bug. See [`references/WRITTEN-SCHEMA1.md`](references/WRITTEN-SCHEMA1.md).
+12. **Never invent an objective breakdown** — emit `objectives: []` unless the questions carry `objective_key`. Fabricated objectives become axes on the faculty radar.

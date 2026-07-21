@@ -10,7 +10,7 @@ description: >
   misconceptions, reading reflection, integrity, and triage flags per INTERACTION-DATA-CONTRACT.md,
   then writes them to app.submission_activities.content and the enrolment's app.grades row. NOT the
   cohort-aggregation skill (readiness summaries / misconception trends across a class) — that is
-  /interaction-aggregate. Run by a Course Director / System Admin on a machine with the scoped
+  /lesson-aggregate. Run by a Course Director / System Admin on a machine with the scoped
   prep_app_dml DB role.
 ---
 
@@ -20,7 +20,7 @@ description: >
 > because some interaction reports arrived as Markdown only (artifacts that predate, or omitted, the
 > `d=` structured payload), so they show in completion counts but contribute nothing to the rollup.
 > The **cohort AGGREGATION** skill — class-level readiness summaries, misconception clustering,
-> showcase quotes — is **`/interaction-aggregate`**, a separate skill. Keep the two distinct.
+> showcase quotes — is **`/lesson-aggregate`**, a separate skill. Keep the two distinct.
 
 A lesson **interaction** report ideally carries a structured `report_data` blob (the contract's `d`)
 that powers every numeric rollup in the faculty UI. Reports missing it have the Markdown but no

@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>System · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+</head>
+<body>
+  <header id="topnav"></header>
+  <main class="page-wide" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Loading…</span></div>
+  </main>
+
+  <!-- Generic modal — body swapped per action, following the established pattern (there is no
+       shared UI module; admin.html, roster.html and grade.html all do the same). -->
+  <div class="modal-backdrop" id="sy-modal">
+    <div class="modal" style="max-width:680px">
+      <div class="modal-head"><h2 id="sy-title"></h2><button class="modal-close" data-close>×</button></div>
+      <div id="sy-body"></div>
+      <div class="error-msg" id="sy-error" style="min-height:1em"></div>
+      <div class="row" style="gap:10px">
+        <button class="btn btn-primary" id="sy-ok"></button>
+        <button class="btn btn-secondary" data-close>Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { esc, runPage, showFatal } from '../js/util.js';
+    import * as S from '../js/system-admin.js';
+
+    /* ── What this page is ──────────────────────────────────────────────────────────────────
+     * A generic browser over every table in schema `app` — the Django-admin surface for the
+     * system tier. It has no per-table code: the column list, types, foreign keys and CHECK
+     * value sets all come from js/db-schema.js, which scripts/app/gen_db_schema.py generates
+     * from information_schema. Adding a table to a migration and re-running the generator makes
+     * it appear here; nothing in this file needs to change.
+     *
+     * It also delivers what nav.js:42-44 originally scoped this destination for. Creating an
+     * offering and appointing its director is now just editing `course_offerings` and
+     * `staff_assignments` — the same permission boundary, reached generically.
+     *
+     * SECURITY: every query runs as the signed-in administrator through the ordinary anon-key
+     * client, so RLS applies unchanged. The is_global_admin check below is a UX boundary — it
+     * decides what to render, not what the database will permit. Four tables are read-only or
+     * partly so by design; S.WRITE_NOTES explains each in the banner rather than letting the
+     * administrator discover it as an opaque refusal at save time.
+     */
+
+    let table = S.TABLE_NAMES?.[0] || 'courses';
+    let page = 0, sort = null, dir = 'asc', search = '';
+    let view = null;                        // last listRows result + fk label maps
+    let onConfirm = null;                   // active modal's confirm handler
+
+    const ctx = await bootstrap({ require: 'faculty' });
+    const isAdmin = () => !!ctx?.instructorRow?.is_global_admin;
+
+    runPage(ctx, init);
+
+    function init() {
+      initTheme();
+      renderNav(ctx, { active: 'system', onCourseChange: () => render().catch(showFatal) });
+      wireModal();
+      return render();
+    }
+
+    async function render() {
+      const root = document.getElementById('main');
+
+      // The nav already hides this page from non-admins; this is the direct-URL case.
+      if (!isAdmin()) {
+        root.innerHTML = `<div class="page-head"><h1>System</h1></div>
+          <div class="alert alert-info">System administration is available to system
+          administrators. Course-level settings for your own course are under
+          <a href="admin.html">Admin</a>.</div>`;
+        return;
+      }
+
+      root.innerHTML = `
+        <div class="page-head"><h1>System</h1>
+          <div class="sub">Every table in schema <code>app</code>. Changes here are live and
+          immediate — this is the same database the site serves from.</div></div>
+        <div style="display:grid;grid-template-columns:minmax(180px,220px) 1fr;gap:18px;align-items:start">
+          <nav class="card" id="tablist" style="padding:8px"></nav>
+          <div id="panel"><div class="center-load"><span class="spinner"></span><span>Loading…</span></div></div>
+        </div>`;
+
+      renderTableList();
+      await renderPanel();
+    }
+
+    /* ───────────────────────────── Table picker ───────────────────────────── */
+    function renderTableList() {
+      const list = document.getElementById('tablist');
+      list.innerHTML = S.TABLE_NAMES.map(name => {
+        const p = S.permissions(name);
+        const ro = !p.insert && !p.update && !p.delete;
+        return `<button class="btn btn-ghost btn-sm" data-table="${esc(name)}"
+          style="display:block;width:100%;text-align:left;${
+            name === table ? 'background:var(--surface-2);font-weight:600' : ''}">
+          ${esc(name)}${ro ? ' <span class="muted" style="font-size:0.75em">read-only</span>' : ''}
+        </button>`;
+      }).join('');
+
+      list.querySelectorAll('[data-table]').forEach(b =>
+        b.addEventListener('click', () => {
+          table = b.dataset.table; page = 0; sort = null; dir = 'asc'; search = '';
+          render().catch(showFatal);
+        }));
+    }
+
+    /* ───────────────────────────── Row list ───────────────────────────── */
+    async function renderPanel() {
+      const panel = document.getElementById('panel');
+      const meta = S.tableMeta(table);
+      const perms = S.permissions(table);
+
+      let result;
+      try {
+        result = await S.listRows(table, { page, sort, dir, search });
+      } catch (e) {
+        panel.innerHTML = `<div class="alert alert-error">Could not read
+          <code>${esc(table)}</code>: ${esc(S.rlsHint(e))}</div>`;
+        return;
+      }
+      const labels = await S.fkLabels(table, result.rows);
+      view = { ...result, labels };
+
+      const fkByColumn = {};
+      meta.foreignKeys.forEach(fk => { if (fk.columns.length === 1) fkByColumn[fk.columns[0]] = fk; });
+
+      const head = meta.columns.map(c => {
+        const active = (sort || meta.primaryKey[0]) === c.name;
+        const arrow = active ? (dir === 'asc' ? ' ▲' : ' ▼') : '';
+        return `<th style="white-space:nowrap"><button class="btn btn-ghost btn-sm"
+          data-sort="${esc(c.name)}" title="${esc(c.type)}${c.nullable ? '' : ' · required'}"
+          style="padding:2px 4px;font-weight:${active ? '700' : '500'}">${esc(c.name)}${arrow}</button></th>`;
+      }).join('');
+
+      const body = result.rows.map((row, i) => {
+        const cells = meta.columns.map(c => cell(row, c, fkByColumn, labels)).join('');
+        return `<tr>${cells}<td style="text-align:right;white-space:nowrap">
+          <button class="btn btn-ghost btn-sm" data-edit="${i}">${perms.update ? 'Edit' : 'View'}</button>
+          ${perms.delete ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)"
+             data-del="${i}">Delete</button>` : ''}
+        </td></tr>`;
+      }).join('');
+
+      const pages = Math.max(1, Math.ceil(result.count / result.pageSize));
+      const note = perms.note;
+
+      panel.innerHTML = `
+        <div class="card">
+          <div class="row wrap" style="justify-content:space-between;gap:10px;align-items:flex-end">
+            <div>
+              <div class="card-title">${esc(table)}</div>
+              <div class="card-meta">${result.count.toLocaleString()} row${
+                result.count === 1 ? '' : 's'} · ${meta.columns.length} columns${
+                meta.rls ? ' · RLS enabled' : ''}</div>
+            </div>
+            <div class="row" style="gap:8px">
+              <input id="sy-search" placeholder="Search text columns…" value="${esc(search)}"
+                     style="min-width:200px">
+              ${perms.insert ? `<button class="btn btn-primary btn-sm" id="sy-add">Add row</button>`
+                             : `<button class="btn btn-primary btn-sm" disabled
+                                  title="No INSERT policy for your account">Add row</button>`}
+            </div>
+          </div>
+
+          ${note ? `<div class="alert alert-info" style="margin-top:10px">
+            <strong>Limited writes.</strong> ${esc(note)}</div>` : ''}
+
+          <div class="table-wrap" style="overflow-x:auto;margin-top:12px">
+            <table><thead><tr>${head}<th></th></tr></thead>
+            <tbody>${body || `<tr><td colspan="${meta.columns.length + 1}">
+              <div class="empty-state">No rows${search ? ' match that search' : ''}.</div>
+            </td></tr>`}</tbody></table>
+          </div>
+
+          <div class="row" style="justify-content:space-between;margin-top:10px">
+            <span class="muted" style="font-size:0.85em">Page ${page + 1} of ${pages}</span>
+            <div class="row" style="gap:6px">
+              <button class="btn btn-secondary btn-sm" id="sy-prev" ${page === 0 ? 'disabled' : ''}>Previous</button>
+              <button class="btn btn-secondary btn-sm" id="sy-next" ${page + 1 >= pages ? 'disabled' : ''}>Next</button>
+            </div>
+          </div>
+        </div>`;
+
+      wireList();
+    }
+
+    /** One cell — FK label, null, boolean, JSON and long text all need distinct treatment. */
+    function cell(row, col, fkByColumn, labels) {
+      const v = row[col.name];
+      if (v == null) return `<td><span class="muted">—</span></td>`;
+
+      const fk = fkByColumn[col.name];
+      if (fk) {
+        const label = labels[fk.refTable]?.[v];
+        return `<td title="${esc(String(v))}">${label
+          ? `<span class="score-badge pending">${esc(String(label))}</span>`
+          : `<span class="muted" style="font-size:0.8em">${esc(String(v).slice(0, 8))}…</span>`}</td>`;
+      }
+      if (typeof v === 'boolean') {
+        return `<td>${v ? '<span style="color:var(--green)">✓</span>'
+                        : '<span class="muted">✗</span>'}</td>`;
+      }
+      if (typeof v === 'object') {
+        const s = JSON.stringify(v);
+        return `<td title="${esc(s)}"><code style="font-size:0.75em">${
+          esc(s.length > 40 ? s.slice(0, 40) + '…' : s)}</code></td>`;
+      }
+      const s = String(v);
+      return `<td title="${esc(s)}">${esc(s.length > 48 ? s.slice(0, 48) + '…' : s)}</td>`;
+    }
+
+    function wireList() {
+      const panel = document.getElementById('panel');
+
+      panel.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', () => {
+        const col = b.dataset.sort;
+        if ((sort || S.tableMeta(table).primaryKey[0]) === col) dir = dir === 'asc' ? 'desc' : 'asc';
+        else { sort = col; dir = 'asc'; }
+        page = 0;
+        renderPanel().catch(showFatal);
+      }));
+
+      panel.querySelector('#sy-prev')?.addEventListener('click', () => {
+        page = Math.max(0, page - 1); renderPanel().catch(showFatal);
+      });
+      panel.querySelector('#sy-next')?.addEventListener('click', () => {
+        page += 1; renderPanel().catch(showFatal);
+      });
+
+      const box = panel.querySelector('#sy-search');
+      box?.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        search = box.value; page = 0; renderPanel().catch(showFatal);
+      });
+
+      panel.querySelector('#sy-add')?.addEventListener('click', () => openEditor(null));
+      panel.querySelectorAll('[data-edit]').forEach(b =>
+        b.addEventListener('click', () => openEditor(view.rows[+b.dataset.edit])));
+      panel.querySelectorAll('[data-del]').forEach(b =>
+        b.addEventListener('click', () => openDelete(view.rows[+b.dataset.del])));
+    }
+
+    /* ───────────────────────────── Row editor ───────────────────────────── */
+    async function openEditor(row) {
+      const meta = S.tableMeta(table);
+      const perms = S.permissions(table);
+      const creating = !row;
+      const readOnly = creating ? !perms.insert : !perms.update;
+
+      // FK pickers need their target rows. Load them in parallel before painting the form so the
+      // modal opens complete rather than filling in under the administrator's cursor.
+      const single = meta.foreignKeys.filter(fk => fk.columns.length === 1);
+      const optionSets = {};
+      await Promise.all(single.map(async fk => {
+        optionSets[fk.columns[0]] = { fk, options: await S.fkOptions(fk.refTable) };
+      }));
+
+      const fields = meta.columns.map(col => {
+        // A generated PK is shown, never edited: it is how the row is addressed.
+        if (col.generated && creating) return '';
+        const val = creating ? '' : S.present(col, row[col.name]);
+        const dis = readOnly || (!creating && col.pk) ? ' disabled' : '';
+        const req = col.nullable ? '' : ' <span style="color:var(--red)">*</span>';
+        const hint = [col.type, col.nullable ? 'nullable' : 'required',
+                      col.pk ? 'primary key' : null, col.default ? `default ${col.default}` : null]
+                      .filter(Boolean).join(' · ');
+
+        let control;
+        const enumVals = meta.enums[col.name];
+        const fkSet = optionSets[col.name];
+
+        if (enumVals) {
+          control = `<select data-col="${esc(col.name)}"${dis}>
+            ${col.nullable ? '<option value="">— none —</option>' : ''}
+            ${enumVals.map(v => `<option value="${esc(v)}"${
+              v === val ? ' selected' : ''}>${esc(v)}</option>`).join('')}</select>`;
+        } else if (col.udt === 'bool') {
+          control = `<select data-col="${esc(col.name)}"${dis}>
+            ${col.nullable ? '<option value=""></option>' : ''}
+            <option value="true"${val === 'true' ? ' selected' : ''}>true</option>
+            <option value="false"${val === 'false' ? ' selected' : ''}>false</option></select>`;
+        } else if (fkSet && fkSet.options.length && fkSet.options.length < 500) {
+          control = `<select data-col="${esc(col.name)}"${dis}>
+            ${col.nullable ? '<option value="">— none —</option>' : ''}
+            ${fkSet.options.map(o => `<option value="${esc(String(o.value))}"${
+              String(o.value) === val ? ' selected' : ''}>${esc(String(o.label))}</option>`).join('')}
+            </select>`;
+        } else if (col.udt === 'jsonb' || col.udt === 'json') {
+          control = `<textarea data-col="${esc(col.name)}" rows="4"
+            style="font-family:monospace;font-size:0.85em"${dis}>${esc(val)}</textarea>`;
+        } else {
+          control = `<input data-col="${esc(col.name)}" value="${esc(val)}"${dis}>`;
+        }
+
+        return `<div class="field">
+          <label>${esc(col.name)}${req}</label>${control}
+          <div class="field-hint">${esc(hint)}${
+            fkSet && fkSet.options.length >= 500
+              ? ` — too many rows to list; paste a ${esc(fkSet.fk.refTable)} id`
+              : ''}</div>
+        </div>`;
+      }).join('');
+
+      const title = creating ? `Add row to ${table}`
+                             : `${readOnly ? 'View' : 'Edit'} row in ${table}`;
+      openModal(title,
+        `${readOnly ? `<div class="alert alert-info">${esc(perms.note
+            || 'Your account has no write policy for this table.')}</div>` : ''}
+         <div style="max-height:52vh;overflow-y:auto;padding-right:6px">${fields}</div>`,
+        readOnly ? null : (creating ? 'Create' : 'Save changes'),
+        async () => {
+          const form = {};
+          document.querySelectorAll('#sy-body [data-col]').forEach(el => {
+            if (!el.disabled) form[el.dataset.col] = el.value;
+          });
+          try {
+            if (creating) await S.insertRow(table, form);
+            else {
+              const pk = Object.fromEntries(meta.primaryKey.map(c => [c, row[c]]));
+              await S.updateRow(table, pk, form);
+            }
+          } catch (e) { return S.rlsHint(e); }
+          await renderPanel();
+          return null;
+        });
+    }
+
+    /* ───────────────────────────── Delete ───────────────────────────── */
+    async function openDelete(row) {
+      const meta = S.tableMeta(table);
+      const pk = Object.fromEntries(meta.primaryKey.map(c => [c, row[c]]));
+      const label = meta.labelColumn ? row[meta.labelColumn] : null;
+      const token = String(label ?? Object.values(pk)[0]);
+
+      openModal(`Delete row from ${table}`,
+        `<div class="center-load"><span class="spinner"></span><span>Checking what this
+          would remove…</span></div>`, null, null);
+
+      const pv = await S.cascadePreview(table, pk);
+      const body = document.getElementById('sy-body');
+
+      const lines = (arr, verb) => arr.map(d =>
+        `<tr><td style="text-align:right;padding-right:10px"><strong>${d.count.toLocaleString()}</strong></td>
+         <td>${esc(d.table)}</td><td class="muted" style="font-size:0.85em">${verb}</td></tr>`).join('');
+
+      const total = pv.deletes.reduce((n, d) => n + d.count, 0);
+
+      if (pv.blocks.length) {
+        body.innerHTML = `<div class="alert alert-error"><strong>This row cannot be deleted.</strong>
+          Another table references it with ON DELETE RESTRICT:
+          <ul>${pv.blocks.map(b => `<li>${b.count.toLocaleString()} row(s) in
+            <code>${esc(b.table)}</code> via <code>${esc(b.column)}</code></li>`).join('')}</ul>
+          Remove those first.</div>`;
+        setOk(null, null);
+        return;
+      }
+
+      body.innerHTML = `
+        <p>Delete <strong>${esc(token)}</strong> from <code>${esc(table)}</code>?</p>
+        ${total || pv.nulls.length ? `
+          <div class="alert alert-warn">
+            <strong>This cascades.</strong> The database will also remove or clear:
+            <table style="margin-top:6px"><tbody>
+              ${lines(pv.deletes, 'deleted')}
+              ${lines(pv.nulls, 'reference cleared')}
+            </tbody></table>
+            ${pv.truncated ? `<div class="muted" style="font-size:0.85em;margin-top:6px">
+              Counts past the first ${500} related rows are approximate — the real total is at
+              least this large.</div>` : ''}
+          </div>`
+        : `<div class="alert alert-info">Nothing else references this row.</div>`}
+        <div class="field">
+          <label>Type <code>${esc(token)}</code> to confirm</label>
+          <input id="sy-confirm-token" autocomplete="off">
+        </div>`;
+
+      setOk('Delete permanently', async () => {
+        const typed = document.getElementById('sy-confirm-token').value.trim();
+        if (typed !== token) return `Type ${token} exactly to confirm.`;
+        try { await S.deleteRow(table, pk); }
+        catch (e) { return S.rlsHint(e); }
+        page = 0;
+        await renderPanel();
+        return null;
+      });
+      document.getElementById('sy-ok').style.background = 'var(--red)';
+    }
+
+    /* ───────────────────────────── Modal plumbing ─────────────────────────────
+     * Copied rather than imported, matching admin.html:341-364 — there is no shared UI module
+     * and the 25 lines are cheaper than the coupling. */
+    function wireModal() {
+      const back = document.getElementById('sy-modal');
+      back.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeModal));
+      back.addEventListener('click', (e) => { if (e.target === back) closeModal(); });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && back.classList.contains('open')) closeModal();
+      });
+      document.getElementById('sy-ok').addEventListener('click', async () => {
+        if (!onConfirm) return;
+        const ok = document.getElementById('sy-ok');
+        const err = document.getElementById('sy-error');
+        ok.disabled = true; err.textContent = '';
+        const msg = await onConfirm();
+        ok.disabled = false;
+        if (msg) { err.textContent = msg; return; }
+        closeModal();
+      });
+    }
+
+    function setOk(labelText, handler) {
+      const ok = document.getElementById('sy-ok');
+      onConfirm = handler;
+      ok.textContent = labelText || '';
+      ok.classList.toggle('hidden', !labelText);
+      ok.style.background = '';
+    }
+
+    function openModal(titleText, bodyHTML, okLabel, handler) {
+      document.getElementById('sy-title').textContent = titleText;
+      document.getElementById('sy-body').innerHTML = bodyHTML;
+      document.getElementById('sy-error').textContent = '';
+      setOk(okLabel, handler);
+      document.getElementById('sy-modal').classList.add('open');
+    }
+
+    function closeModal() {
+      document.getElementById('sy-modal').classList.remove('open');
+      onConfirm = null;
+    }
+  </script>
+</body>
+</html>

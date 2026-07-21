@@ -1,20 +1,21 @@
 ---
-name: interaction-aggregate
+name: lesson-aggregate
 description: >
-  Cohort/section AGGREGATION tool for lesson interactions. Reads the per-student structured
-  data across an interactive activity and writes the class-level AI synthesis the faculty
-  rollup shows as "coming soon" placeholders: a readiness summary, misconception trends, and
-  2-3 AI-picked reading-reflection quotes — one scope per section PLUS a whole-course scope.
-  Use when a director wants the lesson rollup's AI panels filled — i.e. "aggregate the
-  interaction", "summarize the lesson rollup", "generate the readiness summary / misconception
-  trends / showcase quotes for a lesson", or /interaction-aggregate. Writes to the
-  app.analysis_reports table. NOT /interaction-backfill, which fills per-student structured
-  content — that must already be populated (this consumes it). Run AFTER the due date (when
-  submissions are frozen) by a Course Director / System Admin on a machine with the scoped
-  prep_app_dml DB role.
+  Cohort/section AGGREGATION tool for a LESSON, whichever way students worked it — the interactive
+  artifact, the written question set, or a mix. Reads the per-student schema:1 assessment across
+  the whole cohort and writes the class-level AI synthesis the faculty rollup shows as "coming
+  soon" placeholders: a readiness summary, misconception trends, and 2-3 AI-picked
+  reading-reflection quotes — one scope per section PLUS a whole-course scope.
+  Use when a director wants the lesson rollup's AI panels filled — i.e. "aggregate the lesson",
+  "summarize the lesson rollup", "generate the readiness summary / misconception
+  trends / showcase quotes for a lesson", or /lesson-aggregate. Writes to the
+  app.analysis_reports table. NOT /interaction-backfill and NOT /preflight-analyze, which produce
+  the per-student structured content — that must already be populated (this consumes it). Run
+  AFTER the due date (when submissions are frozen) by a Course Director / System Admin on a
+  machine with the scoped prep_app_dml DB role.
 ---
 
-# Interaction Aggregate — cohort/section analysis for the lesson rollup
+# Lesson Aggregate — cohort/section analysis for the lesson rollup
 
 > **Scope / what this is.** This is the **cohort AGGREGATION** skill the
 > [`INTERACTION-AGGREGATION.md`](../../../docs/decisions/INTERACTION-AGGREGATION.md) spec describes. It turns many
@@ -25,8 +26,33 @@ description: >
 > 3. **Showcase quotes** — 2-3 of the most interesting reading-reflection comments, per section.
 >
 > It does **not** touch grades and does **not** recompute the numeric charts — those stay live in
-> the browser. It only writes the AI layer to `app.analysis_reports`. Keep it distinct from
-> `/interaction-backfill` (per-student structured-data repair, which must run first).
+> the browser. It only writes the AI layer to `app.analysis_reports`.
+
+## It aggregates a LESSON, not an interaction (renamed 2026-07-21)
+
+Named `/interaction-aggregate` until it only had one kind of input. A lesson can be worked two
+ways and **both paths now emit the same `schema: 1` per-student assessment**, so one aggregator
+serves both:
+
+| path | who writes the assessment | where it lands |
+|---|---|---|
+| interactive | the Claude artifact, at submit | `submission_activities.content` |
+| written | `/preflight-analyze`, at grading | `grades.diagnostic` |
+
+`pull` normalizes both into `report_data`, so nothing downstream branches on modality. A
+question-only lesson gets a full rollup; a mixed lesson's prose describes the whole cohort
+instead of the half that took the artifact.
+
+**Two clocks, two skills — this is why they are not merged.** Grading is per-student and runs
+early and often, sometimes split M-day/T-day. Aggregation is per-cohort and runs once, after the
+deadline, unfiltered — a readiness summary written over half a cohort is worse than none. Keep
+this distinct from `/preflight-analyze` (per-student grading + assessment) and
+`/interaction-backfill` (repair of interactive assessments), both of which must run first.
+
+**Check the cohort before you write.** `pull` reports a `paths` block and warns when structured
+content is missing, split by path — an interactive report without schema:1 needs
+`/interaction-backfill`; a written submission without one needs `/preflight-analyze` to have run.
+Aggregating over a cohort that is half-unassessed produces prose that misdescribes the class.
 
 **Canonical specs:** [`INTERACTION-AGGREGATION.md`](../../../docs/decisions/INTERACTION-AGGREGATION.md) (the design),
 [`ROLLUP-AGREEMENT.md`](../../../docs/decisions/ROLLUP-AGREEMENT.md) (the output contract — field shapes and style),
@@ -42,9 +68,11 @@ frozen — the analysis is a point-in-time read of the cohort.
 
 | what you are reading / writing | `public` (retired) | `app` (now) |
 |---|---|---|
-| the lesson | `interactions` (own table) | `activities` where `modality = 'interactive'`; `activities.slug` is the old `interactions.id` verbatim |
+| the lesson | `interactions` (own table) | an `assignment_offering` — its `activities` may be interactive, written, or both; `activities.slug` is the old `interactions.id` verbatim |
 | which term it runs in | — | `offering_activities` → `assignment_offerings` → `course_offerings` |
-| the per-student data | `preflight_interaction_reports.report_data` | `submission_activities.content`, via `submissions` |
+| the per-student data (interactive) | `preflight_interaction_reports.report_data` | `submission_activities.content`, via `submissions` |
+| the per-student data (written) | — | `grades.diagnostic` where `schema = 1`, written by `/preflight-analyze` |
+| the written reflection TEXT | — | the student's answer in `submission_activities.content`, at the question marked `role: "reading_reflection"` — deliberately **not** copied into `grades.diagnostic` |
 | effort / points | `…​.effort` / `…​.score` | `grades.effort` / `grades.points_earned` |
 | the section | `students.section_id` (`'M1A'`) | `enrollments` → `sections.id` (uuid) + `sections.code` |
 | the output | `interaction_analysis` (one row per section) | `analysis_reports` (one row per offering — see below) |
@@ -93,20 +121,26 @@ the credential (`supabase/admin/.env`) is missing or the direct host was used in
 **Session pooler** — see `supabase/admin/app_schema_bootstrap.sql`. (The `owner` tier failing to
 connect is expected once sealed.)
 
-## Step 1 — Pick the activity & confirm data is ready
+## Step 1 — Pick the lesson & confirm data is ready
 
 ```
 .venv/Scripts/python supabase/admin/interaction_reports.py stats
 ```
-Pick the interactive activity slug to aggregate. If its `missing` count is > 0, run
-`/interaction-backfill` for it first.
+Pick the lesson to aggregate. If an interactive activity's `missing` count is > 0, run
+`/interaction-backfill` for it first. `stats` covers the interactive path only — for the written
+path, `pull` (Step 2) reports what is missing and the fix is a `/preflight-analyze` run.
 
 ## Step 2 — Pull the cohort
 
 ```
-.venv/Scripts/python supabase/admin/interaction_aggregate.py pull \
-  --activity <slug> --out <scratch>/agg.json
+.venv/Scripts/python supabase/admin/lesson_aggregate.py pull \
+  --lesson <slug> --out <scratch>/agg.json
 ```
+`--lesson` takes the **assignment slug** (`preflight-08` — the lesson) or an **activity slug**
+(`lesson-08-potential` — the frozen artifact key). Prefer the assignment slug: it names the
+lesson rather than one of its halves, and a question-only lesson has no artifact slug at all.
+(`--activity` and `--interaction` remain as aliases.)
+
 Writes one JSON file with a scope per section **plus** a whole-course `__all__` scope. Each scope
 carries a **precomputed `numbers` summary** (effort/understanding/objective/misconception/
 reflection/flag aggregates — the same figures the UI bars show, now scaled by the offering's
@@ -115,11 +149,28 @@ the free-text fields (reflection text, misconception descriptions/evidence, obje
 narratives). The `__all__` scope is **numbers only**. **Read that file.** Use the **session
 scratchpad** for it — it contains reflection text and must not land in the repo.
 
-`pull` refuses to guess if the activity is scheduled in more than one *active* offering (i.e. it is
+`pull` refuses to guess if the lesson is scheduled in more than one *active* offering (i.e. it is
 being re-run in a new term while the old one is still active) — deactivate the stale
 `course_offering` first.
 
-(`--interaction` is still accepted as an alias for `--activity`.)
+### Read the cohort shape before writing a word
+
+The file's top level carries `modalities` (what the lesson offers) and `paths` (how the cohort
+actually worked it: `interactive_n`, `written_n`, `mixed`). Every scope's `numbers.paths` repeats
+it per section, and each report row carries its own `path`.
+
+**This changes what the prose may claim.** Effort is one distribution across both paths (Q2 of a
+written preflight is the same reading reflection the artifact scores, on the same rubric), so an
+effort mean describes everyone. Understanding is *not* one measurement:
+`numbers.understanding.from` splits it, and `objectives` marks each item `source:
+"interactive"` or `"written"` — the written path contributes a single `__free_response__` item
+rather than a per-objective breakdown, because one free-response question does not decompose.
+Say "the question-set cohort" or "the artifact cohort" when a finding is specific to one; never
+imply an objective breakdown exists for students who never had one.
+
+Heed `pull`'s warnings before continuing: missing structured content is reported **split by path**
+because the remedy differs (`/interaction-backfill` vs. a `/preflight-analyze` run), and a lesson
+whose written activity has no `role: "reading_reflection"` question cannot supply written quotes.
 
 ## Step 3 — Write the analysis (per scope)
 
@@ -140,6 +191,16 @@ notable flags (reflection-capped, honor, needs-follow-up counts), and **what to 
 class**. For `__all__`, synthesize across sections (note if one section lags) using the per-section
 reports you already read.
 
+**Use `numbers.reading` where it exists** — the class's self-reported time on the reading (Q1),
+as a **median** and five buckets. It is often the most actionable number on the page: a median
+that collapses, or a bimodal split where half the class is under 15 minutes, changes what is worth
+covering in class more than any single objective score does. Cite the median and the shape ("half
+the section under 20 minutes"), never an individual's time — Q1 is anonymous to instructors by
+design. Correlate it with effort or understanding only if the data actually shows a relationship;
+do not assert the obvious story if the numbers are flat. `not_stated` counts students who answered
+Q1 without naming a duration; only written-path students can appear there, since the interactive
+path never asks the question.
+
 ### misconception_trends — every scope
 Cluster the free-text `misconceptions[].description`/`evidence`: which recur, fold novel/variant
 ones into known buckets (taxonomy ids in `.ai/instructions/PROJECT.md` / the contract), note section concentration and
@@ -147,11 +208,24 @@ which look like genuine class-wide gaps vs. one-off slips. This prose sits **und
 prevalence bars — don't restate the bars, add the *why/pattern*. For `__all__`, note cross-section
 spread (a misconception in every section vs. isolated to one).
 
+**On a mixed cohort, say whether a misconception is path-specific.** Both paths now emit
+`misconceptions[]` against the same taxonomy, so they aggregate together — but a misconception
+that appears only among question-set takers, or only in artifact transcripts, is a finding in
+itself (it may reflect what each path surfaces rather than what students believe). Check the
+`path` on the report rows before claiming a pattern is class-wide. The written path's entries
+come from `/preflight-analyze`'s reading of the answers; the interactive path's from the
+transcript, which sees reasoning the written answers never show.
+
 ### selected_quotes — per-section scopes ONLY (2-3 each)
 Pick the **2-3 most interesting reading-reflection comments** for that section, as
 `[{student_id, section_id}]` (the rollup resolves the verbatim text + name live). Selection
 criteria:
 - **Meaningful** (`reflection.meaningful` not false) and genuinely engaged with the reading.
+- **Either path is eligible.** The reading reflection is the *same question* in both modalities
+  (LESSON-UNIFICATION.md §11), which is exactly what makes the quotes comparable. An interactive
+  student's text arrives in the schema:1 payload; a written student's is lifted from their stored
+  answer. Both appear as `reflection.text` — do not favour one path, and if a section is mixed,
+  prefer a set that is not all from one path.
 - **Representative of a common theme** OR **genuinely illuminating** — a real connection across
   topics, a sharp question, a vivid articulation an instructor could read aloud to spark discussion.
 - **Diverse** — don't pick 2-3 that all say the same thing.
@@ -168,19 +242,19 @@ Write the array to a scratch file (e.g. `<scratch>/filled.json`).
 ## Step 4 — Write back
 
 ```
-.venv/Scripts/python supabase/admin/interaction_aggregate.py write-analysis --in <scratch>/filled.json --dry-run
-.venv/Scripts/python supabase/admin/interaction_aggregate.py write-analysis --in <scratch>/filled.json
+.venv/Scripts/python supabase/admin/lesson_aggregate.py write-analysis --in <scratch>/filled.json --dry-run
+.venv/Scripts/python supabase/admin/lesson_aggregate.py write-analysis --in <scratch>/filled.json
 ```
 The writer merges your scopes into the offering's `analysis_reports` row (analysis is
 regeneratable; scopes you didn't send are preserved), **re-derives each scope's `meta.n` +
 `meta.source_fingerprint` from the live rows** (so they can't drift), stamps
-`meta.generated_by = "interaction-aggregate@<date>"`, resolves section codes to ids, validates
+`meta.generated_by = "lesson-aggregate@<date>"`, resolves section codes to ids, validates
 quote membership, and enforces "no quotes on `__all__`". `--dry-run` first, then commit.
 
 ## Step 5 — Verify
 
 ```
-.venv/Scripts/python supabase/admin/interaction_aggregate.py status --activity <slug>
+.venv/Scripts/python supabase/admin/lesson_aggregate.py status --activity <slug>
 ```
 Lists the scopes just written with `n`, quote count, and a `STALE` flag (stored vs. recomputed
 fingerprint — should be blank right after a run). Spot-check one section's prose against a couple
@@ -246,7 +320,7 @@ signal to re-run a scope whose work was resubmitted after aggregation.
    so the prose always agrees with the live bars.
 4. **Per-section quotes from that section only; `__all__` gets none.** Enforced by the writer, but
    produce them correctly so it never trips.
-5. **Mark provenance.** The writer stamps `meta.generated_by = "interaction-aggregate@<date>"`.
+5. **Mark provenance.** The writer stamps `meta.generated_by = "lesson-aggregate@<date>"`.
 6. **Merge, never replace wholesale.** Send only the scopes you actually rewrote; the writer keeps
    the others. Do not hand-assemble a payload and PATCH it directly.
 7. **Keep student-identifying scratch files out of the repo** — reflection text and names go to the

@@ -40,8 +40,10 @@ function resetTestData() {
 
 // test-legacy-actions.mjs stubs `document`, so it runs LAST among the offline suites —
 // the stub is global and would otherwise leak into anything imported after it.
-const OFFLINE = ['./test-schema.mjs', './test-config.mjs', './test-nav.mjs',
-                 './test-legacy-actions.mjs'];
+// test-db-schema.mjs is structural-offline, but its last check shells out to
+// gen_db_schema.py --check, so it does touch the network when a .venv is present.
+const OFFLINE = ['./test-schema.mjs', './test-config.mjs', './test-db-schema.mjs',
+                 './test-nav.mjs', './test-legacy-actions.mjs'];
 const LIVE    = ['./test-rest.mjs', './test-student.mjs', './test-isolation.mjs'];
 
 for (const s of OFFLINE) {

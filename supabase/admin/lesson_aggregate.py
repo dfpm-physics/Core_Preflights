@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""interaction_aggregate.py — DB I/O for the `/interaction-aggregate` skill (schema `app`).
+"""lesson_aggregate.py — DB I/O for the `/lesson-aggregate` skill (schema `app`).
 
 Connects to Supabase as the scoped `prep_app_dml` role (supabase/admin/.env, read through
 app_tier_check) and produces the COHORT analysis that fills the faculty lesson rollup's three
@@ -60,11 +60,11 @@ Safety / scope:
 All file/stdout I/O is UTF-8 (reflections contain emoji). Run from repo root via the project venv.
 
 Examples:
-  .venv/Scripts/python supabase/admin/interaction_aggregate.py pull \
+  .venv/Scripts/python supabase/admin/lesson_aggregate.py pull \
       --activity lesson-02-electric-charge-coulombs-law --out <scratch>/agg.json
-  .venv/Scripts/python supabase/admin/interaction_aggregate.py write-analysis --in <scratch>/filled.json --dry-run
-  .venv/Scripts/python supabase/admin/interaction_aggregate.py write-analysis --in <scratch>/filled.json
-  .venv/Scripts/python supabase/admin/interaction_aggregate.py status --activity lesson-02-electric-charge-coulombs-law
+  .venv/Scripts/python supabase/admin/lesson_aggregate.py write-analysis --in <scratch>/filled.json --dry-run
+  .venv/Scripts/python supabase/admin/lesson_aggregate.py write-analysis --in <scratch>/filled.json
+  .venv/Scripts/python supabase/admin/lesson_aggregate.py status --activity lesson-02-electric-charge-coulombs-law
 """
 import argparse
 import hashlib
@@ -126,6 +126,15 @@ def _int05(v):
 def _num(v):
     return float(v) if isinstance(v, (int, float, Decimal)) and not isinstance(v, bool) else None
 
+def _median(xs):
+    """Median, or None. Used for reading minutes, where a mean would be distorted by the tail."""
+    a = sorted(x for x in xs if x is not None)
+    if not a:
+        return None
+    mid = len(a) // 2
+    return a[mid] if len(a) % 2 else (a[mid - 1] + a[mid]) / 2
+
+
 def _mean(xs):
     a = [n for n in xs if n is not None]
     return round(sum(a) / len(a), 2) if a else None
@@ -156,22 +165,67 @@ def summarize(rows, points_possible):
         d = r.get("report_data")
         items.append({
             "effort": _int05(r.get("effort")),
+            "q2_effort": _int05(r.get("q2_effort")),
+            "q3": _int05(r.get("q3_understanding")),
+            "path": r.get("path") or ("interactive" if isinstance(d, dict) else "written"),
             "points": _num(r.get("points_earned")),
             "d": d if isinstance(d, dict) else {},
         })
     n = len(items)
 
+    # How this cohort worked the lesson. Every figure below is only interpretable against it —
+    # "avg effort 3.8" means something different for 40 artifacts, 40 question sets, or a split.
+    # A student who did both counts in each, so these do not sum to n.
+    paths = {"interactive": 0, "written": 0, "both": 0}
+    for it in items:
+        if it["path"] in paths:
+            paths[it["path"]] += 1
+    paths["interactive_n"] = paths["interactive"] + paths["both"]
+    paths["written_n"] = paths["written"] + paths["both"]
+    paths["mixed"] = paths["interactive_n"] > 0 and paths["written_n"] > 0
+
+    # Effort — ONE distribution across both paths. Q2 of a written preflight is the same reading
+    # reflection the artifact scores, on the same rubric, so these are one population. Precedence
+    # mirrors schema.js effortSignal(): grade -> whole-attempt assessment -> reflection-only.
     effort_hist = [0, 0, 0, 0, 0, 0]
     effort_na = 0
     efforts, points = [], []
     for it in items:
-        e = it["effort"] if it["effort"] is not None else _int05(it["d"].get("effort"))
+        e = it["effort"]
+        if e is None:
+            e = _int05(it["d"].get("effort"))
+        if e is None:
+            e = it["q2_effort"]
         if e is None:
             effort_na += 1
         else:
             effort_hist[e] += 1
             efforts.append(e)
         points.append(it["points"] if it["points"] is not None else _points_for_effort(e, pp))
+
+    # Reading time (DIAGNOSTIC) — Q1, worth 0 points, anonymous to instructors, and until
+    # 2026-07-21 never rolled up at all. /preflight-analyze parses the prose to whole minutes.
+    # Median + buckets, never a mean: self-reported durations have a long tail and one three-hour
+    # reader would drag a mean somewhere no student sits. Mirrors READING_BUCKETS in schema.js.
+    reading_vals = []
+    reading_not_stated = 0
+    for it in items:
+        m = it["d"].get("reading_minutes")
+        m = round(m) if isinstance(m, (int, float)) and not isinstance(m, bool) and 0 < m < 1440 else None
+        if m is not None:
+            reading_vals.append(m)
+        elif it["d"] and it["path"] in ("written", "both"):
+            # Assessed, worked the question set, named no duration. Only the written path can
+            # withhold a duration — Q1 does not exist on the interactive path, so counting an
+            # artifact taker here would manufacture a refusal out of an unasked question.
+            reading_not_stated += 1
+    reading_buckets = [
+        {"key": k, "label": lbl, "min": lo, "max": (None if hi == float("inf") else hi),
+         "count": sum(1 for m in reading_vals if lo <= m < hi)}
+        for k, lbl, lo, hi in (("lt15", "<15m", 0, 15), ("m15_29", "15-29m", 15, 30),
+                               ("m30_44", "30-44m", 30, 45), ("m45_59", "45-59m", 45, 60),
+                               ("gte60", "60m+", 60, float("inf")))
+    ]
 
     completed = sum(1 for it in items if it["d"].get("completed") is True)
     durations = [it["d"].get("duration_min") for it in items
@@ -181,12 +235,23 @@ def summarize(rows, points_possible):
                 if isinstance(it["d"].get("message_count"), int)
                 and not isinstance(it["d"].get("message_count"), bool)]
 
-    overall = [_int05(it["d"].get("overall_understanding")) for it in items]
+    # Understanding — the holistic read, falling back to the written free-response score for a
+    # student who has no holistic one. Without the fallback a question-only cohort reports no
+    # understanding at all. `from` records the split so prose never implies the two measures are
+    # the same instrument; it is keyed on the PATH taken, not on which field supplied the number.
+    overall = [(_int05(it["d"].get("overall_understanding"))
+                if _int05(it["d"].get("overall_understanding")) is not None else it["q3"])
+               for it in items]
     self_rated = [_int05(it["d"].get("self_rated_understanding")) for it in items]
     overall_hist = [0, 0, 0, 0, 0, 0]
     for u in overall:
         if u is not None:
             overall_hist[u] += 1
+    und_from = {"interactive": 0, "written": 0}
+    for it, u in zip(items, overall):
+        if u is None:
+            continue
+        und_from["written" if it["path"] == "written" else "interactive"] += 1
 
     # Objectives — group by key, mean understanding/confidence, carry inline label.
     obj = {}
@@ -203,9 +268,21 @@ def summarize(rows, points_possible):
             c = _int05(o.get("confidence"))
             if c is not None:
                 m["c"].append(c)
+    objectives = [{"key": m["key"], "label": m["label"], "assessed": len(m["u"]),
+                   "understanding": _mean(m["u"]), "confidence": _mean(m["c"]),
+                   "source": "interactive"} for m in obj.values()]
+
+    # The written path's contribution: ONE synthetic objective. The free-response question
+    # measures understanding on the same 0-5 scale, so it belongs in the same breakdown — but it
+    # does NOT decompose, so it appears as a single item rather than being spread across the
+    # authored objectives. Matches FREE_RESPONSE_KEY in site/app/js/schema.js.
+    fr = [it["q3"] for it in items if it["q3"] is not None]
+    if fr:
+        objectives.append({"key": "__free_response__", "label": "Free response",
+                           "assessed": len(fr), "understanding": _mean(fr), "confidence": None,
+                           "source": "written"})
     objectives = sorted(
-        ({"key": m["key"], "label": m["label"], "assessed": len(m["u"]),
-          "understanding": _mean(m["u"]), "confidence": _mean(m["c"])} for m in obj.values()),
+        objectives,
         key=lambda x: (x["understanding"] if x["understanding"] is not None else 99),  # weakest first
     )
 
@@ -260,13 +337,19 @@ def summarize(rows, points_possible):
 
     return {
         "n": n,
+        "paths": paths,
         "effort": {"hist": effort_hist, "not_assessed": effort_na, "avg": _mean(efforts),
                    "points_total": round(sum(points), 2), "points_max": round(n * pp, 2)},
         "completed": completed, "completed_pct": round(completed / n * 100) if n else 0,
         "duration_avg": _mean(durations), "message_avg": _mean(messages),
+        "reading": {"median": _median(reading_vals), "assessed": len(reading_vals),
+                    "not_stated": reading_not_stated, "buckets": reading_buckets,
+                    "min": min(reading_vals) if reading_vals else None,
+                    "max": max(reading_vals) if reading_vals else None},
         "understanding": {"overall": _mean(overall), "self": _mean(self_rated), "dist": overall_hist,
                           "gap": (round(_mean(self_rated) - _mean(overall), 2)
-                                  if _mean(self_rated) is not None and _mean(overall) is not None else None)},
+                                  if _mean(self_rated) is not None and _mean(overall) is not None else None),
+                          "from": und_from},
         "objectives": objectives,
         "misconceptions": misconceptions,
         "reflection": {"meaningful": refl_meaningful, "assessed": refl_assessed,
@@ -276,10 +359,17 @@ def summarize(rows, points_possible):
     }
 
 
-def _ai_inputs(d):
-    """The free-text fields the model reads to write prose + pick quotes (contract §5)."""
+def _ai_inputs(d, row=None):
+    """The free-text fields the model reads to write prose + pick quotes (contract §5).
+
+    `row` carries the two things that are not inside the schema:1 payload on the written path:
+    which path the student took, and the reflection TEXT — which for a written preflight is the
+    student's stored answer, not a copy in the diagnostic (WRITTEN-SCHEMA1.md deliberately omits
+    it rather than duplicating student prose into a second table).
+    """
     if not isinstance(d, dict):
         d = {}
+    row = row or {}
     r = d.get("reading_reflection") if isinstance(d.get("reading_reflection"), dict) else {}
     misc = [
         {"id": m.get("id"), "label": m.get("label"), "description": m.get("description"),
@@ -292,14 +382,20 @@ def _ai_inputs(d):
         for o in (d.get("objectives") or []) if isinstance(o, dict)
     ]
     return {
+        "path": row.get("path"),
         "effort": d.get("effort"), "effort_rationale": d.get("effort_rationale"),
         "completed": d.get("completed"),
         "overall_understanding": d.get("overall_understanding"),
         "self_rated_understanding": d.get("self_rated_understanding"),
+        "free_response_understanding": row.get("q3_understanding"),
+        "reading_minutes": d.get("reading_minutes"),
         "objectives": objs, "misconceptions": misc,
-        "reflection": {"text": r.get("text"), "meaningful": r.get("meaningful"),
-                       "engagement": r.get("engagement"), "topics": r.get("topics"),
-                       "sentiment": r.get("sentiment")},
+        # Interactive text comes from the payload; written text from the stored answer.
+        "reflection": {"text": r.get("text") or row.get("reflection_text"),
+                       "meaningful": r.get("meaningful"),
+                       "engagement": r.get("engagement") if r.get("engagement") is not None
+                                     else row.get("q2_effort"),
+                       "topics": r.get("topics"), "sentiment": r.get("sentiment")},
         "ai_summary": d.get("ai_summary"), "key_strengths": d.get("key_strengths"),
         "recommended_review": d.get("recommended_review"),
         "flags": d.get("flags"),
@@ -313,27 +409,47 @@ def _fingerprint(scope_rows):
     return hashlib.sha1(json.dumps(basis, default=str).encode("utf-8")).hexdigest()[:16]
 
 
-def _activity_meta(conn, slug):
-    """The interactive activity plus the ONE active offering that schedules it.
+def _lesson_meta(conn, slug):
+    """The LESSON — one assignment offering — plus both activity ids, either of which may be None.
 
-    An activity can be re-offered in a later term, so the offering is not implied by the slug;
+    Keyed on the offering, not on an interactive activity, because a lesson can be worked two
+    ways and a question-only lesson has no interactive slug to name. `slug` accepts either the
+    ASSIGNMENT slug (`preflight-08`, the lesson) or an ACTIVITY slug (`lesson-08-potential`, the
+    frozen artifact key) so existing invocations keep working.
+
+    An assignment can be re-offered in a later term, so the offering is not implied by the slug;
     this refuses to guess when more than one active offering claims it.
     """
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
-        select act.id as activity_id, act.slug, act.title as activity_title,
+        select ao.id as offering_id, ao.points_possible, ao.grading_mode, ao.is_published,
                a.slug as assignment_slug, a.title as assignment_title,
-               ao.id as offering_id, ao.points_possible, ao.grading_mode, ao.is_published,
-               co.id as course_offering_id, c.code as course_code, t.code as term_code
-          from activities act
-          join assignments          a  on a.id  = act.assignment_id
-          join offering_activities  oa on oa.activity_id = act.id
-          join assignment_offerings ao on ao.id  = oa.assignment_offering_id
-          join course_offerings     co on co.id  = ao.course_offering_id
-          join courses              c  on c.id   = co.course_id
-          join terms                t  on t.id   = co.term_id
-         where act.slug = %s and act.modality = 'interactive' and co.is_active
-    """, (slug,))
+               co.id as course_offering_id, c.code as course_code, t.code as term_code,
+               max(case when act.modality = 'interactive' then act.id::text end) as interactive_id,
+               max(case when act.modality = 'interactive' then act.slug end)     as interactive_slug,
+               max(case when act.modality = 'interactive' then act.title end)    as interactive_title,
+               max(case when act.modality = 'written'     then act.id::text end) as written_id,
+               max(case when act.modality = 'written'     then act.slug end)     as written_slug,
+               max(case when act.modality = 'written'
+                        then act.content::text end)                              as written_content
+          from assignment_offerings ao
+          join assignments          a  on a.id  = ao.assignment_id
+          join course_offerings     co on co.id = ao.course_offering_id
+          join courses              c  on c.id  = co.course_id
+          join terms                t  on t.id  = co.term_id
+          join offering_activities  oa on oa.assignment_offering_id = ao.id
+          join activities           act on act.id = oa.activity_id
+         where co.is_active
+           and ao.id in (
+                 select oa2.assignment_offering_id
+                   from offering_activities oa2
+                   join activities act2 on act2.id = oa2.activity_id
+                   join assignment_offerings ao2 on ao2.id = oa2.assignment_offering_id
+                   join assignments a2 on a2.id = ao2.assignment_id
+                  where act2.slug = %(slug)s or a2.slug = %(slug)s)
+         group by ao.id, ao.points_possible, ao.grading_mode, ao.is_published,
+                  a.slug, a.title, co.id, c.code, t.code
+    """, {"slug": slug})
     rows = cur.fetchall()
     if not rows:
         return None
@@ -341,7 +457,69 @@ def _activity_meta(conn, slug):
         terms = ", ".join(sorted({r["term_code"] for r in rows}))
         sys.exit(f"'{slug}' is scheduled in more than one active offering ({terms}) — "
                  f"deactivate the stale course_offering before aggregating.")
-    return rows[0]
+    m = rows[0]
+    # Back-compat aliases: the pull file has always carried these names.
+    m["activity_id"] = m["interactive_id"]
+    m["slug"] = m["interactive_slug"] or m["assignment_slug"]
+    m["activity_title"] = m["interactive_title"] or m["assignment_title"]
+    m["written_content"] = json.loads(m["written_content"]) if m["written_content"] else None
+    return m
+
+
+# The two pinned questions, and how to find them when nobody marked them.
+#
+# `role` is the durable contract (LESSON-UNIFICATION.md §11) and is what faculty/lessons.html
+# writes on every newly authored lesson. But it was added AFTER the Fall 2026 preflights were
+# built: scripts/fall2026/build_fall_preflights.py emits `{id, type, text, points}` with no role,
+# and a read of the live database on 2026-07-21 found **0 of 74** written activities carrying any
+# role at all. A role-only lookup therefore returns None for every lesson currently in the term —
+# silently disabling written showcase quotes and the reading-time rollup.
+#
+# So: prefer the role, then fall back to the prompt text, which that same read found on 74/74.
+# Text matching is normally a smell; here it is anchored to a prompt the builder pins verbatim
+# and which a director does not hand-edit. The id fallback (q1/q2) is last and deliberately
+# weakest — it is positional, and position is the first thing to change when a lesson is edited.
+#
+# The right permanent fix is to backfill `role` onto the 74 live rows; that is a DML change and
+# a coordination event, so it is proposed rather than done here. When it lands, the fallbacks
+# stop firing on their own and can eventually be deleted.
+_ROLE_TEXT_MATCH = {
+    "reading_time": "how much time did you spend reading",
+    "reading_reflection": "confusing or most interesting",
+}
+_ROLE_FALLBACK_ID = {"reading_time": "q1", "reading_reflection": "q2"}
+
+
+def _pinned_question_id(written_content, role):
+    """The question id for a pinned role — by role, else by prompt text, else by position.
+
+    Returns (id, how) so callers can report WHICH signal identified it; a run that silently
+    depends on a positional guess is one an operator should be told about.
+    """
+    if not isinstance(written_content, dict):
+        return None, None
+    questions = [q for q in (written_content.get("questions") or []) if isinstance(q, dict)]
+
+    for q in questions:
+        if q.get("role") == role and q.get("id"):
+            return q["id"], "role"
+
+    needle = _ROLE_TEXT_MATCH.get(role)
+    if needle:
+        for q in questions:
+            if needle in str(q.get("text") or "").lower() and q.get("id"):
+                return q["id"], "text"
+
+    want = _ROLE_FALLBACK_ID.get(role)
+    for q in questions:
+        if q.get("id") == want:
+            return q["id"], "position"
+    return None, None
+
+
+def _reflection_question_id(written_content):
+    """Which written question IS the reading reflection. See _pinned_question_id."""
+    return _pinned_question_id(written_content, "reading_reflection")[0]
 
 
 def _sections(conn, course_offering_id):
@@ -353,25 +531,73 @@ def _sections(conn, course_offering_id):
     return {str(i): c for i, c in rows}, {c: str(i) for i, c in rows}
 
 
-def _load_reports(conn, activity_id, offering_id):
-    """All work on one interactive activity, joined to the enrolment's section and its grade."""
+def _load_reports(conn, offering_id, interactive_id, written_id, refl_qid=None):
+    """All work on one LESSON, by either path, joined to the enrolment's section and its grade.
+
+    The schema:1 assessment lives in a different table depending on how the student worked:
+    on their SUBMISSION for the interactive path (the artifact wrote it) and on their GRADE for
+    the written path (/preflight-analyze wrote it — see that skill's WRITTEN-SCHEMA1.md). Both
+    are normalized into `report_data` here so everything downstream folds one shape.
+
+    A student who did both is one row, and the interactive assessment wins: it is the richer
+    record (transcript-derived) and it is what they were graded on when the artifact is the
+    graded activity.
+
+    A NULL activity id simply never matches in its LEFT JOIN, so a single-modality lesson needs
+    no special case.
+    """
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
         select e.student_id, e.id as enrollment_id, sec.id as section_id, sec.code as section_code,
-               g.effort, g.points_earned, sa.content as report_data, sa.updated_at
-          from submission_activities sa
-          join submissions  s   on s.id   = sa.submission_id
-          join enrollments  e   on e.id   = s.enrollment_id
-          join sections     sec on sec.id = e.section_id
-          left join grades  g   on g.enrollment_id = s.enrollment_id
-                               and g.assignment_offering_id = s.assignment_offering_id
-         where sa.activity_id = %s and s.assignment_offering_id = %s
+               g.effort, g.points_earned, g.diagnostic,
+               sa_i.content as interactive_content,
+               sa_w.content as written_content,
+               (sa_i.id is not null) as did_interactive,
+               (sa_w.id is not null) as did_written,
+               greatest(coalesce(sa_i.updated_at, sa_w.updated_at),
+                        coalesce(sa_w.updated_at, sa_i.updated_at)) as updated_at
+          from submissions s
+          join enrollments e   on e.id   = s.enrollment_id
+          join sections    sec on sec.id = e.section_id
+          left join submission_activities sa_i
+                 on sa_i.submission_id = s.id and sa_i.activity_id = %(iid)s
+          left join submission_activities sa_w
+                 on sa_w.submission_id = s.id and sa_w.activity_id = %(wid)s
+          left join grades g on g.enrollment_id = s.enrollment_id
+                           and g.assignment_offering_id = s.assignment_offering_id
+         where s.assignment_offering_id = %(oid)s
+           and (sa_i.id is not null or sa_w.id is not null)
          order by sec.code, e.student_id
-    """, (activity_id, offering_id))
+    """, {"iid": interactive_id, "wid": written_id, "oid": offering_id})
     rows = cur.fetchall()
+
     for r in rows:                      # uuids -> str so they compare against JSON payload keys
         r["section_id"] = str(r["section_id"])
         r["enrollment_id"] = str(r["enrollment_id"])
+
+        diag = r.get("diagnostic") if isinstance(r.get("diagnostic"), dict) else {}
+        interactive = r["interactive_content"] if isinstance(r["interactive_content"], dict) else None
+        written_assessment = diag if diag.get("schema") == 1 else None
+
+        r["path"] = ("both" if r["did_interactive"] and r["did_written"]
+                     else "interactive" if r["did_interactive"] else "written")
+        r["report_data"] = interactive or written_assessment
+        # The reflection-only diagnostic, kept separate: it measures one question, not the
+        # attempt, and the free-response understanding has no interactive equivalent.
+        r["q2_effort"] = diag.get("q2_effort")
+        r["q3_understanding"] = diag.get("q3_understanding")
+
+        # Quote source. The written reflection is stored verbatim as the student's ANSWER, not
+        # copied into the diagnostic, so it is lifted here rather than read off report_data.
+        r["reflection_text"] = None
+        if refl_qid and isinstance(r["written_content"], dict):
+            answers = r["written_content"].get("answers")
+            answers = answers if isinstance(answers, dict) else r["written_content"]
+            val = answers.get(refl_qid)
+            if isinstance(val, str) and val.strip():
+                r["reflection_text"] = val.strip()
+
+        del r["interactive_content"], r["written_content"]
     return rows
 
 
@@ -386,15 +612,24 @@ def _existing_payload(conn, offering_id):
 
 # ── pull ─────────────────────────────────────────────────────────────────────────────
 def cmd_pull(args, conn):
-    meta = _activity_meta(conn, args.activity)
+    meta = _lesson_meta(conn, args.activity)
     if not meta:
-        sys.exit(f"No interactive activity '{args.activity}' in an active offering.")
-    reports = _load_reports(conn, meta["activity_id"], meta["offering_id"])
+        sys.exit(f"No lesson '{args.activity}' in an active offering "
+                 f"(tried it as both an assignment slug and an activity slug).")
+    refl_qid = _reflection_question_id(meta.get("written_content"))
+    reports = _load_reports(conn, meta["offering_id"], meta["interactive_id"],
+                            meta["written_id"], refl_qid)
     if not reports:
         sys.exit(f"No work recorded for '{args.activity}' yet — nothing to aggregate.")
 
     pp = meta["points_possible"]
-    missing = sum(1 for r in reports if not isinstance(r["report_data"], dict))
+    # Missing structure, split by path, because the fix differs: an interactive report without
+    # schema:1 needs /interaction-backfill; a written one needs /preflight-analyze to have run.
+    missing_i = sum(1 for r in reports
+                    if not isinstance(r["report_data"], dict) and r["path"] != "written")
+    missing_w = sum(1 for r in reports
+                    if not isinstance(r["report_data"], dict) and r["path"] == "written")
+    missing = missing_i + missing_w
     by_section = defaultdict(list)
     for r in reports:
         by_section[r["section_id"]].append(r)
@@ -409,7 +644,7 @@ def cmd_pull(args, conn):
             "source_fingerprint": _fingerprint(rows),
             "numbers": summarize(rows, pp),
             "reports": [{"student_id": r["student_id"], "section_id": sec_id,
-                         **_ai_inputs(r["report_data"])} for r in rows],
+                         **_ai_inputs(r["report_data"], r)} for r in rows],
         })
     # Whole-course scope: numbers only. Prose is synthesized from the per-section reports above;
     # no quotes (the "All sections" view never shows them).
@@ -420,12 +655,19 @@ def cmd_pull(args, conn):
         "reports": [],
     })
 
+    whole = next(s for s in scopes if s["is_whole_course"])
     out = {
         "activity_slug": meta["slug"], "activity_title": meta["activity_title"],
         "assignment_slug": meta["assignment_slug"], "assignment_title": meta["assignment_title"],
         "assignment_offering_id": str(meta["offering_id"]),
         "course_code": meta["course_code"], "term_code": meta["term_code"],
         "points_possible": float(pp), "grading_mode": meta["grading_mode"],
+        # What this lesson offers, and how the cohort actually worked it. The prose must not
+        # describe an artifact nobody took, or omit a question set half the class chose.
+        "modalities": {"interactive": bool(meta["interactive_id"]),
+                       "written": bool(meta["written_id"])},
+        "paths": whole["numbers"]["paths"],
+        "reflection_question_id": refl_qid,
         "report_count": len(reports), "missing_report_data": missing,
         "sections": [{"id": s["section_id"], "code": s["section_code"]}
                      for s in scopes if not s["is_whole_course"]],
@@ -435,9 +677,19 @@ def cmd_pull(args, conn):
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
         print(f"Wrote {len(scopes)} scope(s) over {len(reports)} report(s) to {args.out}")
-        if missing:
-            print(f"  ⚠ {missing} report(s) lack structured content — run /interaction-backfill first "
-                  f"so the numbers are complete (they are excluded from means but skew counts).")
+        p = out["paths"]
+        print(f"  paths: {p['interactive_n']} interactive, {p['written_n']} written"
+              f"{' (mixed cohort)' if p['mixed'] else ''}")
+        if missing_i:
+            print(f"  ⚠ {missing_i} interactive report(s) lack structured content — run "
+                  f"/interaction-backfill first (they are excluded from means but skew counts).")
+        if missing_w:
+            print(f"  ⚠ {missing_w} written submission(s) have no schema:1 assessment — run "
+                  f"/preflight-analyze for this offering first, or they contribute nothing but a "
+                  f"denominator.")
+        if meta["written_id"] and not refl_qid:
+            print(f"  ⚠ no question marked role=\"reading_reflection\" on the written activity — "
+                  f"written reflections cannot be quoted (see LESSON-UNIFICATION.md §11).")
     else:
         print(text)
 
@@ -456,10 +708,12 @@ def cmd_write(args, conn):
 
     def ctx(slug):
         if slug not in cache:
-            meta = _activity_meta(conn, slug)
+            meta = _lesson_meta(conn, slug)
             if not meta:
                 return None
-            rows = _load_reports(conn, meta["activity_id"], meta["offering_id"])
+            rows = _load_reports(conn, meta["offering_id"], meta["interactive_id"],
+                                 meta["written_id"],
+                                 _reflection_question_id(meta.get("written_content")))
             by_id, by_code = _sections(conn, meta["course_offering_id"])
             cache[slug] = {
                 "meta": meta, "rows": rows,
@@ -529,7 +783,7 @@ def cmd_write(args, conn):
         rows = c["rows"] if sec == ALL else [r for r in c["rows"] if r["section_id"] == sec]
         scope_meta = dict(it.get("meta") or {})
         scope_meta.update({"n": len(rows),
-                           "generated_by": f"interaction-aggregate@{date.today().isoformat()}",
+                           "generated_by": f"lesson-aggregate@{date.today().isoformat()}",
                            "source_fingerprint": _fingerprint(rows)})
         oid = str(c["meta"]["offering_id"])
         bucket = pending.setdefault(oid, {"ctx": c, "scopes": {}})
@@ -560,7 +814,7 @@ def cmd_write(args, conn):
             "axis": "objective",                      # ROLLUP-AGREEMENT §5 — interactive lessons
             "activity_slug": c["meta"]["slug"],
             "assignment_slug": c["meta"]["assignment_slug"],
-            "generated_by": f"interaction-aggregate@{date.today().isoformat()}",
+            "generated_by": f"lesson-aggregate@{date.today().isoformat()}",
             "scopes": scopes,
         })
         try:
@@ -608,8 +862,9 @@ def cmd_status(args, conn):
     print(f"{'activity / section':56} {'n':>3} {'quotes':>6} {'stale':>5}  generated_at")
     print("-" * 100)
     for r in rows:
-        meta = _activity_meta(conn, r["activity_slug"])
-        live = _load_reports(conn, meta["activity_id"], meta["offering_id"]) if meta else []
+        meta = _lesson_meta(conn, r["activity_slug"])
+        live = (_load_reports(conn, meta["offering_id"], meta["interactive_id"], meta["written_id"])
+                if meta else [])
         scopes = (r["payload"] or {}).get("scopes") or {}
         # '__all__' last, matching the pull order.
         for key in sorted(scopes, key=lambda k: (k == ALL, scopes[k].get("section_code") or k)):
@@ -623,12 +878,14 @@ def cmd_status(args, conn):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Cohort analysis I/O for the /interaction-aggregate skill (schema app).")
+    p = argparse.ArgumentParser(description="Cohort analysis I/O for the /lesson-aggregate skill (schema app).")
     sub = p.add_subparsers(dest="cmd", required=True)
 
+    # --lesson is the accurate name: the unit is an assignment offering worked by either path.
+    # --activity / --interaction stay as aliases so existing runbooks and cron entries keep working.
     pl = sub.add_parser("pull", help="dump per-section + whole-course scopes (numbers + AI-input text)")
-    pl.add_argument("--activity", "--interaction", dest="activity", required=True,
-                    help="interactive activity slug to aggregate")
+    pl.add_argument("--lesson", "--activity", "--interaction", dest="activity", required=True,
+                    help="assignment slug (preferred) or activity slug of the lesson to aggregate")
     pl.add_argument("--out", help="write JSON here (UTF-8) instead of stdout")
 
     w = sub.add_parser("write-analysis", help="merge model-written scopes into the offering's row")
@@ -637,7 +894,8 @@ def main():
     w.add_argument("--dry-run", action="store_true", help="show changes, commit nothing")
 
     st = sub.add_parser("status", help="list analysis scopes + staleness (the verify step)")
-    st.add_argument("--activity", "--interaction", dest="activity", help="limit to one activity slug")
+    st.add_argument("--lesson", "--activity", "--interaction", dest="activity",
+                    help="limit to one lesson (assignment or activity slug)")
 
     args = p.parse_args()
     conn = _connect()

@@ -177,9 +177,9 @@ The canonical domain procedures are agent-neutral Markdown runbooks under `.ai/s
 
 | Runbook (`.ai/skills/<name>/SKILL.md`) | What it does |
 |---|---|
-| `preflight-analyze` | Fetch responses for an assignment, grade free-response (3-state full/warn/zero, liberal), read reference PDFs for RAG, write suggested `scores` (`is_finalized=false`) + per-instructor `analysis_report` aggregated across all sections assigned to each instructor. |
-| `interaction-aggregate` | Cohort AI panels (readiness summary, misconception trends, showcase quotes) → `interaction_analysis`. Run after due date. |
-| `interaction-backfill` | Repair reports missing `report_data` by reconstructing schema-1 from `report_markdown`. |
+| `preflight-analyze` | **Per-student.** Fetch responses for an assignment, grade free-response (3-state full/warn/zero, liberal), read reference PDFs for RAG, write suggested `grades` (`is_finalized=false`) + the per-student `schema: 1` assessment into `grades.diagnostic` + a per-instructor `by_question` row in `analysis_reports`. Run whenever work needs grading; may be run per day filter (M/T). |
+| `lesson-aggregate` | **Per-cohort.** AI panels for one lesson — readiness summary, misconception trends, showcase quotes → `analysis_reports`. Modality-blind: folds the `schema: 1` assessment from *both* paths (the artifact's, on the submission; `preflight-analyze`'s, on the grade). Run **after the due date**, once, unfiltered. Renamed from `interaction-aggregate` 2026-07-21. |
+| `interaction-backfill` | Repair reports missing `report_data` by reconstructing schema-1 from `report_markdown`. Interactive path only — the written path's equivalent is a `preflight-analyze` re-run. |
 | `setup-preflight` | First-time machine setup — writes the config file above. |
 | `docs-author` | Decide whether a concept warrants documentation and which kind, then write it — in-app help docs (`site/app/help/`) or design docs (`docs/`). Read before adding any `.md` to either. |
 
@@ -241,9 +241,19 @@ The full table catalog, JSONB shapes, roles, and edge functions are in
 
 - **Grading is 3-state:** `full` (green), `warn` (yellow = full credit but flagged wrong/vague),
   `zero` (red). Suggested scores are always `is_finalized=false`; the human finalizes in the admin UI.
-- **Written-preflight diagnostics are not grades:** `/preflight-analyze` writes `scores.q2_effort`
-  and `scores.q3_understanding` as 0–5 integers after migration 022. They never affect points,
-  feedback, status, totals, or finalization, and no student page requests or renders them.
+- **Written-preflight diagnostics are not grades:** `/preflight-analyze` writes them into
+  `app.grades.diagnostic` (jsonb) — the 0–5 `q2_effort` / `q3_understanding` pair, plus a
+  `schema: 1` per-student assessment (overall effort + understanding, `misconceptions[]`,
+  reading-reflection judgment, flags) in the same shape the artifact emits. Nothing in that column
+  ever affects points, feedback, status, totals, or finalization, and no student page requests or
+  renders any of it. The `effort` inside `diagnostic` is **not** `grades.effort`: written
+  offerings are `grading_mode='points'`, where points come from `question_scores`.
+  *(The retired `public` equivalent was `scores.q2_effort` / `.q3_understanding`, migration 022.)*
+- **One per-student shape, two producers.** The artifact writes `schema: 1` to
+  `submission_activities.content`; `/preflight-analyze` writes it to `grades.diagnostic`. That is
+  what lets `/lesson-aggregate` summarize a cohort without caring how each student worked the
+  lesson. Per-student extraction and cohort synthesis stay **separate skills on separate clocks** —
+  grading runs early and often (often split M/T), aggregation runs once after the deadline.
 - **Interaction grade = effort** (0–5 → 0/1/2 via DB trigger); a non-meaningful reading reflection
   caps effort at 2. Full transport spec (frozen v1): `docs/contracts/INTERACTION-DATA-CONTRACT.md`.
 - **The artifact↔site contract is frozen:** artifacts post by stable slug to

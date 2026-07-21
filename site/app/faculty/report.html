@@ -242,6 +242,31 @@
     // histograms) — the single, shared effort-chart style (matches the dashboard spotlight).
     const EFFORT_COL = ['var(--d0)', 'var(--d1)', 'var(--d2)', 'var(--d3)', 'var(--d4)', 'var(--d5)'];
 
+    // Reading time — Q1 of every preflight ("how long did you spend reading?"), 0 points and
+    // anonymous to instructors. Horizontal bars, not the 0–5 vertical treatment: the buckets are
+    // uneven minute ranges with text labels, and reading them side-by-side against the effort
+    // chart would falsely suggest a shared scale. Median rather than mean — one three-hour
+    // reader would drag a mean somewhere no student actually sits.
+    function readingChart(r) {
+      if (!r || !r.assessed) {
+        return `<div class="empty-note">No reading times recorded${
+          r && r.notStated ? ` — ${r.notStated} answered Q1 without naming a duration` : ''}.</div>`;
+      }
+      const max = Math.max(1, ...r.buckets.map(b => b.count));
+      const rows = r.buckets.map(b => `<div class="rt-row">
+          <span class="rt-lab">${esc(b.label)}</span>
+          <span class="rt-track"><span class="rt-fill" style="width:${b.count / max * 100}%"></span></span>
+          <span class="rt-n">${b.count}</span>
+        </div>`).join('');
+      const spread = (r.min != null && r.max != null && r.min !== r.max)
+        ? ` <span class="dim">· ${r.min}–${r.max} min range</span>` : '';
+      return `<div class="rt-wrap">
+        <div class="rt-median">median <b>${r.median} min</b>${spread}</div>
+        ${rows}
+        ${r.notStated ? `<div class="rt-note">${r.notStated} gave no duration</div>` : ''}
+      </div>`;
+    }
+
     // Effort distribution — vertical 0–5 bars with the submission count above each bar.
     function effortChart(eff) {
       const counts = eff.hist, max = Math.max(...counts, 1);
@@ -415,7 +440,7 @@
       </div>`;
     }
 
-    // Real AI prose (readiness summary / misconception trends), written by /interaction-aggregate.
+    // Real AI prose (readiness summary / misconception trends), written by /lesson-aggregate.
     // The text is AI-produced and stored as an inert blob, so sanitize at render time like the
     // full-report Markdown does.
     function aiProse(md) {
@@ -555,6 +580,13 @@
       const mixNote = s.paths?.interactiveN && s.paths?.writtenN
         ? `· ${s.paths.interactiveN} interactive + ${s.paths.writtenN} questions`
         : s.paths?.writtenN ? '· question set' : '· interactive';
+      // Reading time only appears when someone reported one — an interactive-only cohort never
+      // answers Q1, and an empty panel there would imply the class read nothing.
+      const rtSec = s.reading?.assessed ? `<div class="lr-sec fw-panel">
+          <div class="lr-eyebrow">Time spent reading <span class="dim">· Q1 · ${s.reading.assessed} of ${s.n} reported · anonymous</span></div>
+          ${readingChart(s.reading)}
+        </div>` : '';
+
       const row2 = `<div class="lr-sec sum-row2">
         <div class="sum-cell">
           <div class="lr-eyebrow">Effort distribution <span class="dim">${s.effort.avg == null ? '' : '· ' + f1(s.effort.avg) + ' / 5 avg'} ${mixNote}</span></div>
@@ -634,7 +666,7 @@
       const objSec = s.objectives.length ? `<div class="lr-sec obj-box">
         <div class="lr-eyebrow">Understanding by objective <span class="dim">${objMix}</span></div>${objRows}</div>` : '';
 
-      return row2 + aiSec + mcSec + objSec + responsesSection(rows, roster, analysis, reportScope !== 'all');
+      return row2 + rtSec + aiSec + mcSec + objSec + responsesSection(rows, roster, analysis, reportScope !== 'all');
     }
 
     // ── Flags: header pills → flagged-students list → one student summary → full report ──

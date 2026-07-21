@@ -92,12 +92,31 @@ Three tiers, enforced in `site/admin.html` via `isDirectorForCurrent()`:
 ```
 `status` drives the 3-state color toggle: `"full"` = green, `"warn"` = yellow (full credit but flagged), `"zero"` = red.
 
-**`scores.q2_effort` / `scores.q3_understanding`** — hidden integer diagnostics written by
-`/preflight-analyze`. Q2 measures engagement with the reading reflection; Q3 measures demonstrated
-physics understanding. Blank answers inside a submission score 0; students with no response have no
-score row. These columns do not contribute to grade points or feedback, and student pages omit them
-from their explicit Supabase selects and rendering. They remain retrievable through direct database/API
-access allowed by the existing `scores` RLS; faculty retrieval and visualization are deferred.
+**`grades.diagnostic`** (jsonb) — everything `/preflight-analyze` learns about a student that is
+**not** a grade. Two layers, both hidden from students:
+
+- `q2_effort` / `q3_understanding` — 0–5 integers scoring two specific questions. Q2 measures
+  engagement with the reading reflection; Q3 measures demonstrated physics understanding on the
+  free-response question. Blank answers inside a submission score 0; students with no response
+  have no grade row.
+- a `schema: 1` payload — the **per-student assessment**, in the same shape the Claude artifact
+  emits for an interactive lesson: `effort` (engagement across the whole attempt, capped at 2 when
+  the reflection is not meaningful), `overall_understanding`, `objectives[]`, `misconceptions[]`
+  against the taxonomy below, `reading_reflection` (the judgment, not the text — that stays in the
+  student's answer), and `flags`. Spec:
+  `.ai/skills/preflight-analyze/references/WRITTEN-SCHEMA1.md`.
+
+This is what makes a written preflight and an interactive lesson **commensurable**: one cohort
+aggregator (`/lesson-aggregate`) reads `submission_activities.content` for artifact takers and
+`grades.diagnostic` for question-set takers, folds one shape, and summarizes the whole class.
+
+None of it contributes to grade points, feedback, status, or finalization, and student pages omit
+it from their explicit Supabase selects and rendering. Note that `diagnostic.effort` is **not**
+`grades.effort` — written offerings are `grading_mode='points'`, so their points come from
+`question_scores` and the effort column stays NULL.
+
+*(The retired `public` equivalent was the `scores.q2_effort` / `scores.q3_understanding` columns
+added by migration 022. There was no structured-assessment equivalent.)*
 
 **`assignments.analysis_report`** — written by `/preflight-analyze`, read by Report tab:
 ```json
@@ -177,17 +196,24 @@ link's `id` must equal the artifact's `#i=` slug. Full spec + builder: `docs/con
   `students.auth_user_id = auth.uid()`, so a spoofed `student_id` is rejected by the DB.
   Directors/admins read all reports; instructors read their own sections.
 
-**Deferred (now spec'd, not built):** the **cohort aggregator** that produces the rollup's AI panels
-(per-section readiness summaries, misconception trends, AI-picked showcase quotes) and where its
-*output* is stored — designed in `docs/decisions/INTERACTION-AGGREGATION.md` (proposes a new `interaction_analysis`
-table; mirrors the `assignments.analysis_report` pattern). All inputs are already in `report_data`, so
-no data-contract change is needed. Distinct from `/interaction-backfill`, which only fills per-student
-`report_data`.
+**The cohort aggregator is `/lesson-aggregate`** (renamed from `/interaction-aggregate`
+2026-07-21). It produces the rollup's AI panels — per-section readiness summaries, misconception
+trends, AI-picked showcase quotes — into `app.analysis_reports`, and it is **modality-blind**:
+it reads the `schema: 1` assessment from `submission_activities.content` for artifact takers and
+from `grades.diagnostic` for question-set takers, so a question-only lesson and a mixed cohort
+both get a full rollup. Driven by `supabase/admin/lesson_aggregate.py` (`pull` →
+`write-analysis` → `status`). Original design: `docs/decisions/INTERACTION-AGGREGATION.md`
+(written against the retired `interaction_analysis` table); output contract:
+`docs/decisions/ROLLUP-AGREEMENT.md`. Distinct from `/interaction-backfill`, which only repairs
+per-student `report_data` on the interactive path.
 
 ## preflight-analyze Skill
 
-Analyzes student submissions for a given assignment, writes suggested scores plus hidden Q2-effort
-and Q3-understanding diagnostics to Supabase, and generates per-instructor misconception reports.
+Analyzes student submissions for a given assignment and writes, per student: suggested scores, the
+hidden Q2-effort / Q3-understanding diagnostics, and the `schema: 1` assessment described under
+`grades.diagnostic` above. It also generates the per-instructor by-question misconception report.
+It does **not** write cohort prose — that is `/lesson-aggregate`'s, on a different clock (grading
+runs early and often, often split M/T; aggregation runs once after the deadline).
 
 **First time on a new machine? Run the setup wizard:**
 ```

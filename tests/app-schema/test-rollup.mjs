@@ -15,7 +15,8 @@
 
 import { check, eq, section, installBrowser, summary } from './harness.mjs';
 import {
-  writtenSignals, effortSignal, FREE_RESPONSE_KEY, FREE_RESPONSE_LABEL, int05,
+  writtenSignals, writtenReport, effortSignal, FREE_RESPONSE_KEY, FREE_RESPONSE_LABEL, int05,
+  minutes, median,
 } from '../../site/app/js/schema.js';
 
 installBrowser();
@@ -222,6 +223,117 @@ eq('no counted misconceptions from a question set', writtenOnly.misconceptions.l
 eq('no flags from a question set', writtenOnly.flags, { needs_follow_up: 0, notable: 0 });
 eq('no reflection metadata from a question set', writtenOnly.reflection.assessed, 0);
 eq('points still accrue for written students', writtenOnly.effort.pointsTotal > 0, true);
+
+/* ── The written schema:1 assessment (/preflight-analyze) ─────────────────── */
+section('written schema:1 — recognition');
+
+const s1 = { schema: 1, source: 'preflight-analyze', effort: 4, overall_understanding: 3,
+             objectives: [], misconceptions: [{ id: 'scalar-sum', label: 'Scalar sum',
+               description: 'Adds magnitudes without direction.', severity: 'major' }],
+             reading_reflection: { meaningful: true, engagement: 4 },
+             flags: { needs_follow_up: false, notable: false } };
+
+eq('a schema:1 diagnostic is recognized', writtenReport({ diagnostic: s1 })?.effort, 4);
+check('a q2/q3-only diagnostic is NOT mistaken for one',
+      writtenReport({ diagnostic: { q2_effort: 4, q3_understanding: 2 } }) === null);
+check('an absent diagnostic is null', writtenReport(null) === null);
+check('a diagnostic without schema:1 is null',
+      writtenReport({ diagnostic: { effort: 4, misconceptions: [] } }) === null);
+eq('the q2/q3 pair survives alongside a schema:1 payload',
+   writtenSignals({ diagnostic: { ...s1, q2_effort: 5, q3_understanding: 1 } }),
+   { effort: 5, understanding: 1 });
+
+section('written schema:1 — effort precedence');
+
+eq('the whole-attempt assessment outranks the reflection-only q2_effort',
+   effortSignal({ diagnostic: { ...s1, effort: 4, q2_effort: 1 } }, null),
+   { effort: 4, source: 'report' });
+eq('q2_effort still serves grades written before schema:1 existed',
+   effortSignal({ diagnostic: { q2_effort: 3 } }, null), { effort: 3, source: 'diagnostic' });
+eq('a human grade still outranks the assessment',
+   effortSignal({ effort: 5, diagnostic: s1 }, null), { effort: 5, source: 'grade' });
+
+section('written schema:1 — it reaches the cohort summary');
+
+// The payoff: a written cohort whose grades carry schema:1 now produces the panels that were
+// interactive-only. These rows are what loadInteractionData yields once the bridge surfaces
+// grades.diagnostic as report_data.
+const s1Row = (id, over) => ({
+  student_id: id, path: 'written', effort: over.effort, understanding: over.q3 ?? null,
+  report_data: { ...s1, ...over },
+});
+const writtenStructured = summarizeReports([
+  s1Row(1, { effort: 4, overall_understanding: 3, q3: 2 }),
+  s1Row(2, { effort: 2, overall_understanding: 1, q3: 1,
+             misconceptions: [{ id: 'scalar-sum', label: 'Scalar sum', description: 'x', severity: 'major' }],
+             flags: { needs_follow_up: true, notable: false } }),
+], 2);
+
+eq('misconceptions are now COUNTED for a written cohort',
+   writtenStructured.misconceptions.map(m => [m.id, m.count]), [['scalar-sum', 2]]);
+eq('…with severity carried through', writtenStructured.misconceptions[0].major, 2);
+eq('flags tally for a written cohort', writtenStructured.flags.needs_follow_up, 1);
+eq('the reflection gate is assessed', writtenStructured.reflection.assessed, 2);
+eq('understanding comes from the holistic read, not the free-response question',
+   writtenStructured.understanding.overall, 2);
+eq('…and is attributed to the written path, not inflated as interactive coverage',
+   writtenStructured.understanding.from, { interactive: 0, written: 2 });
+eq('effort still merges as one population', writtenStructured.effort.avg, 3);
+eq('the free-response objective still reports q3 separately from the holistic read',
+   writtenStructured.objectives.find(o => o.key === FREE_RESPONSE_KEY)?.understanding, 1.5);
+check('an empty objectives[] puts no phantom axis on the radar',
+      writtenStructured.radar.axisCount === 1 && writtenStructured.radar.reason === 'written-only');
+
+/* ── Reading time (Q1) ────────────────────────────────────────────────────── */
+section('reading time — minutes, median, buckets');
+
+eq('whole positive minutes are accepted', [minutes(15), minutes(75), minutes(30.4)], [15, 75, 30]);
+check('zero is rejected — /preflight-analyze omits the key rather than writing 0',
+      minutes(0) === null);
+check('negatives and absurd values are rejected', minutes(-5) === null && minutes(5000) === null);
+check('non-numbers are rejected', minutes('30') === null && minutes(null) === null);
+
+eq('median of an odd list', median([10, 60, 30]), 30);
+eq('median of an even list averages the middle pair', median([10, 20, 40, 60]), 30);
+eq('median of nothing is null', median([]), null);
+
+const rt = (id, mins) => ({
+  student_id: id, path: 'written', effort: 3, understanding: 3,
+  report_data: { ...s1, effort: 3, reading_minutes: mins },
+});
+const reading = summarizeReports([
+  rt(1, 10), rt(2, 20), rt(3, 35), rt(4, 50), rt(5, 90), rt(6, undefined),
+], 2);
+
+eq('only students who named a duration are counted', reading.reading.assessed, 5);
+eq('a student who answered without a duration is tracked separately',
+   reading.reading.notStated, 1);
+eq('the median is reported, not the mean (mean would be 41)', reading.reading.median, 35);
+eq('buckets span the ranges', reading.reading.buckets.map(b => [b.key, b.count]),
+   [['lt15', 1], ['m15_29', 1], ['m30_44', 1], ['m45_59', 1], ['gte60', 1]]);
+eq('the spread is reported for context',
+   [reading.reading.min, reading.reading.max], [10, 90]);
+
+// The outlier case the median exists for.
+const skewed = summarizeReports([rt(1, 20), rt(2, 25), rt(3, 30), rt(4, 180)], 2);
+eq('one three-hour reader does not move the median', skewed.reading.median, 27.5);
+eq('…but is still visible in the top bucket',
+   skewed.reading.buckets.find(b => b.key === 'gte60').count, 1);
+
+const noReading = summarizeReports([
+  interactiveRow(1, { effort: 4, overall: 4 }),
+  interactiveRow(2, { effort: 3, overall: 3 }),
+], 2);
+eq('an interactive cohort reports no reading time (Q1 is a written question)',
+   noReading.reading.assessed, 0);
+eq('…and is not counted as having withheld it', noReading.reading.notStated, 0);
+eq('…with a null median rather than a zero', noReading.reading.median, null);
+
+const unassessed = summarizeReports([
+  { student_id: 1, path: 'written', effort: null, understanding: null, report_data: null },
+], 2);
+eq('an ungraded submission is not counted as "gave no duration"',
+   unassessed.reading.notStated, 0);
 
 /* ── loadAnalysis: two skills write this table and `kind` separates them ───── */
 section('loadAnalysis — by_question rows must not corrupt the panel map');

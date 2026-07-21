@@ -108,6 +108,17 @@ difference an instructor perceives.
 Two skills, split by rollup type (per `LESSON-UNIFICATION.md` §12). **Each skill, for the lesson types
 it owns, must emit the same prose fields in the same shapes** so the union reads as one rollup.
 
+> **Superseded 2026-07-21 — ownership moved; the field shapes below still stand.** This table
+> split cohort prose across two skills because, when it was written, nothing could read the
+> written path's per-student assessment. `/preflight-analyze` now emits `schema: 1` into
+> `grades.diagnostic` (its `references/WRITTEN-SCHEMA1.md`), so `/lesson-aggregate` — the renamed
+> `/interaction-aggregate` — reads **both** modalities and owns `readiness_summary`,
+> `misconception_trends` and `selected_quotes` for **every** lesson type. `/preflight-analyze`
+> keeps only the `kind='by_question'` breakdown. The driver is cadence: grading runs early and
+> often, sometimes split M/T; cohort prose must be written once, after the deadline, over a whole
+> cohort. Everything else in this document — the panel set, field shapes, style, grounding rule —
+> is unchanged. See `CHANGELOG.md` 2026-07-21.
+
 | Lesson type | Breakdown axis | Owner skill | Fields it must write |
 |---|---|---|---|
 | **preflight-only** | question | `/preflight-analyze` | `readiness_summary`, `breakdown(axis=question)`, `misconception_trends`, `selected_quotes`, `flags_note?` |

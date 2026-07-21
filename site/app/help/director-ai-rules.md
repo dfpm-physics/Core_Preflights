@@ -25,22 +25,38 @@ it. The posture is deliberately liberal: preflights measure pre-class engagement
 
 ### Hidden diagnostics
 
-The run also writes two 0–5 integers per submission — engagement with the reading reflection, and
-demonstrated understanding on the physics question. **These are not grades.** They never affect
-points, feedback, status, totals, or finalization, and no student-facing page requests or renders
-them. They exist to measure the instrument, not the student. Faculty-facing visualization of them
-is deliberately deferred.
+The run also writes a per-student assessment that sits beside the grade and never becomes one:
+two 0–5 integers — engagement with the reading reflection, and demonstrated understanding on the
+physics question — plus an overall effort and understanding read, the misconceptions the answers
+showed, and follow-up flags. **None of it is a grade.** It never affects points, feedback, status,
+totals, or finalization, and no student-facing page requests or renders any of it. It exists to
+measure the instrument, not the student, and to let a written preflight be summarized the same way
+an interactive lesson is. Per-student values are never displayed individually.
 
-## Interaction aggregation
+## Lesson aggregation
 
-Run after an interactive lesson's due date. It reads the cohort's session reports and produces
-section-level panels — readiness summary, misconception trends, showcase quotes — for the lesson
-rollup. Interactive lessons are graded on **effort** (0–5); a reading reflection that is not a
-genuine attempt caps effort. How effort becomes points depends on how the assignment is set up for
-the semester: an assignment set to **effort** grading has the database convert it automatically,
-while one set to **points** — which is how every Fall 2026 preflight is currently scheduled — has
-the analysis run apply the same 0–5 scale when it writes the score. The scale is identical either
-way; only who applies it differs.
+Run **after a lesson's due date**, once, across the whole cohort. It reads the per-student
+assessments and produces section-level panels — readiness summary, misconception trends, showcase
+quotes — for the lesson rollup.
+
+**It covers both ways a lesson can be worked.** Students who took the interactive artifact and
+students who answered the question set are summarized together, because both now produce the same
+per-student assessment. Where the two genuinely differ, the rollup says so rather than blurring
+them: effort is one measurement across both paths (the reading reflection is the same question
+either way), while understanding is reported per objective for the artifact and as a single
+free-response measure for the question set.
+
+Interactive lessons are graded on **effort** (0–5); a reading reflection that is not a genuine
+attempt caps effort. How effort becomes points depends on how the assignment is set up for the
+semester: an assignment set to **effort** grading has the database convert it automatically, while
+one set to **points** — which is how every Fall 2026 preflight is currently scheduled — has the
+analysis run apply the same 0–5 scale when it writes the score. The scale is identical either way;
+only who applies it differs.
+
+**Grading and aggregation are separate runs on purpose.** Grading happens whenever work needs
+scoring, often M-day and T-day separately. Aggregation happens once, after the deadline, over the
+whole class — a readiness summary written over half a cohort would describe a class that does not
+exist.
 
 ## The line that does not move
 
