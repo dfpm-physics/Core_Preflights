@@ -8,6 +8,29 @@
   <link rel="stylesheet" href="../css/styles.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../js/config.js"></script>
+  <style>
+    /* Sort controls live inside <th>, which is white-on-blue (styles.css:742). A .btn there
+       paints its own surface and dark text, so the header reads as empty boxes. These inherit
+       instead — the header stays a header and the whole row remains one visual band. */
+    .sy-sort {
+      background: none; border: 0; padding: 0; margin: 0;
+      color: inherit; font: inherit; text-align: left;
+      cursor: pointer; white-space: nowrap;
+    }
+    .sy-sort:hover { text-decoration: underline; }
+    .sy-sort .sy-arrow { opacity: 0.75; font-size: 0.8em; }
+    .sy-raw { opacity: 0.65; font-size: 0.78em; font-weight: 400; }
+
+    /* A uuid is 36 characters of noise in a list. Cells stay on one line and elide; the full
+       value is in the title attribute and in the row editor. */
+    .sy-cell { max-width: 22em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #sy-rows td { vertical-align: middle; }
+
+    .sy-pick { display: block; padding: 5px 2px; border-bottom: 1px solid var(--border); }
+    .sy-pick:last-child { border-bottom: 0; }
+    .sy-pick input { width: auto; margin-right: 8px; vertical-align: middle; }
+    .sy-gear { padding: 2px 8px; line-height: 1.6; }
+  </style>
 </head>
 <body>
   <header id="topnav"></header>
@@ -24,6 +47,7 @@
       <div class="error-msg" id="sy-error" style="min-height:1em"></div>
       <div class="row" style="gap:10px">
         <button class="btn btn-primary" id="sy-ok"></button>
+        <button class="btn btn-secondary" id="sy-alt" style="display:none"></button>
         <button class="btn btn-secondary" data-close>Cancel</button>
       </div>
     </div>
@@ -33,8 +57,9 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, runPage, showFatal } from '../js/util.js';
+    import { esc, runPage, showFatal, fmtDateTime } from '../js/util.js';
     import * as S from '../js/system-admin.js';
+    import * as P from '../js/system-prefs.js';
 
     /* ── What this page is ──────────────────────────────────────────────────────────────────
      * A generic browser over every table in schema `app` — the Django-admin surface for the
@@ -47,6 +72,12 @@
      * offering and appointing its director is now just editing `course_offerings` and
      * `staff_assignments` — the same permission boundary, reached generically.
      *
+     * WHAT IS SHOWN vs WHAT EXISTS: js/system-prefs.js decides which tables appear in the picker
+     * and which columns appear in the list, defaulting to a curated set per table the way a
+     * Django ModelAdmin declares list_display. Both are changed from the gear buttons and
+     * remembered per browser. Hiding is presentational only — the row editor always shows every
+     * column, and nothing here changes what is read, written, or permitted.
+     *
      * SECURITY: every query runs as the signed-in administrator through the ordinary anon-key
      * client, so RLS applies unchanged. The is_global_admin check below is a UX boundary — it
      * decides what to render, not what the database will permit. Four tables are read-only or
@@ -54,7 +85,7 @@
      * administrator discover it as an opaque refusal at save time.
      */
 
-    let table = S.TABLE_NAMES?.[0] || 'courses';
+    let table = P.visibleTables()[0] || S.TABLE_NAMES[0];
     let page = 0, sort = null, dir = 'asc', search = '';
     let view = null;                        // last listRows result + fk label maps
     let onConfirm = null;                   // active modal's confirm handler
@@ -83,15 +114,27 @@
         return;
       }
 
+      // A saved table choice can point at a table later hidden from the picker; fall back rather
+      // than render a list whose selected entry is invisible.
+      if (!P.visibleTables().includes(table)) table = P.visibleTables()[0] || S.TABLE_NAMES[0];
+
       root.innerHTML = `
         <div class="page-head"><h1>System</h1>
           <div class="sub">Every table in schema <code>app</code>. Changes here are live and
           immediate — this is the same database the site serves from.</div></div>
-        <div style="display:grid;grid-template-columns:minmax(180px,220px) 1fr;gap:18px;align-items:start">
-          <nav class="card" id="tablist" style="padding:8px"></nav>
+        <div style="display:grid;grid-template-columns:minmax(190px,230px) 1fr;gap:18px;align-items:start">
+          <nav class="card" style="padding:10px">
+            <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span class="card-title" style="font-size:0.9em">Tables</span>
+              <button class="btn btn-ghost btn-sm sy-gear" id="sy-tables-gear"
+                      title="Choose which tables appear here">⚙</button>
+            </div>
+            <div id="tablist"></div>
+          </nav>
           <div id="panel"><div class="center-load"><span class="spinner"></span><span>Loading…</span></div></div>
         </div>`;
 
+      document.getElementById('sy-tables-gear').addEventListener('click', openTablePicker);
       renderTableList();
       await renderPanel();
     }
@@ -99,20 +142,32 @@
     /* ───────────────────────────── Table picker ───────────────────────────── */
     function renderTableList() {
       const list = document.getElementById('tablist');
-      list.innerHTML = S.TABLE_NAMES.map(name => {
+      const shown = P.visibleTables();
+
+      list.innerHTML = shown.map(name => {
         const p = S.permissions(name);
         const ro = !p.insert && !p.update && !p.delete;
         return `<button class="btn btn-ghost btn-sm" data-table="${esc(name)}"
+          title="${esc(name)}"
           style="display:block;width:100%;text-align:left;${
             name === table ? 'background:var(--surface-2);font-weight:600' : ''}">
-          ${esc(name)}${ro ? ' <span class="muted" style="font-size:0.75em">read-only</span>' : ''}
+          ${esc(P.humanizeTable(name))}${
+            ro ? ' <span class="muted" style="font-size:0.72em">read-only</span>' : ''}
         </button>`;
       }).join('');
+
+      const hidden = S.TABLE_NAMES.length - shown.length;
+      if (hidden > 0) {
+        list.insertAdjacentHTML('beforeend',
+          `<div class="muted" style="font-size:0.75em;padding:8px 2px 2px">
+             ${hidden} table${hidden === 1 ? '' : 's'} hidden</div>`);
+      }
 
       list.querySelectorAll('[data-table]').forEach(b =>
         b.addEventListener('click', () => {
           table = b.dataset.table; page = 0; sort = null; dir = 'asc'; search = '';
-          render().catch(showFatal);
+          renderTableList();
+          renderPanel().catch(showFatal);
         }));
     }
 
@@ -121,6 +176,9 @@
       const panel = document.getElementById('panel');
       const meta = S.tableMeta(table);
       const perms = S.permissions(table);
+      const cols = P.visibleColumns(table)
+        .map(name => meta.columns.find(c => c.name === name))
+        .filter(Boolean);
 
       let result;
       try {
@@ -136,16 +194,18 @@
       const fkByColumn = {};
       meta.foreignKeys.forEach(fk => { if (fk.columns.length === 1) fkByColumn[fk.columns[0]] = fk; });
 
-      const head = meta.columns.map(c => {
+      const head = cols.map(c => {
         const active = (sort || meta.primaryKey[0]) === c.name;
-        const arrow = active ? (dir === 'asc' ? ' ▲' : ' ▼') : '';
-        return `<th style="white-space:nowrap"><button class="btn btn-ghost btn-sm"
-          data-sort="${esc(c.name)}" title="${esc(c.type)}${c.nullable ? '' : ' · required'}"
-          style="padding:2px 4px;font-weight:${active ? '700' : '500'}">${esc(c.name)}${arrow}</button></th>`;
+        const arrow = active
+          ? `<span class="sy-arrow">${dir === 'asc' ? ' ▲' : ' ▼'}</span>` : '';
+        return `<th><button class="sy-sort" data-sort="${esc(c.name)}"
+          title="${esc(c.name)} · ${esc(c.type)}${c.nullable ? '' : ' · required'}"
+          style="font-weight:${active ? '700' : '600'}">${
+            esc(P.humanizeColumn(table, c.name))}${arrow}</button></th>`;
       }).join('');
 
       const body = result.rows.map((row, i) => {
-        const cells = meta.columns.map(c => cell(row, c, fkByColumn, labels)).join('');
+        const cells = cols.map(c => cell(row, c, fkByColumn, labels)).join('');
         return `<tr>${cells}<td style="text-align:right;white-space:nowrap">
           <button class="btn btn-ghost btn-sm" data-edit="${i}">${perms.update ? 'Edit' : 'View'}</button>
           ${perms.delete ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)"
@@ -155,19 +215,23 @@
 
       const pages = Math.max(1, Math.ceil(result.count / result.pageSize));
       const note = perms.note;
+      const customised = P.columnsCustomised(table);
 
       panel.innerHTML = `
         <div class="card">
           <div class="row wrap" style="justify-content:space-between;gap:10px;align-items:flex-end">
             <div>
-              <div class="card-title">${esc(table)}</div>
+              <div class="card-title">${esc(P.humanizeTable(table))}
+                <span class="sy-raw"><code>${esc(table)}</code></span></div>
               <div class="card-meta">${result.count.toLocaleString()} row${
-                result.count === 1 ? '' : 's'} · ${meta.columns.length} columns${
-                meta.rls ? ' · RLS enabled' : ''}</div>
+                result.count === 1 ? '' : 's'} · showing ${cols.length} of ${meta.columns.length}
+                columns${customised ? ' (customised)' : ''}${meta.rls ? ' · RLS enabled' : ''}</div>
             </div>
             <div class="row" style="gap:8px">
               <input id="sy-search" placeholder="Search text columns…" value="${esc(search)}"
-                     style="min-width:200px">
+                     style="min-width:190px">
+              <button class="btn btn-ghost btn-sm sy-gear" id="sy-cols-gear"
+                      title="Choose which columns appear in this list">⚙</button>
               ${perms.insert ? `<button class="btn btn-primary btn-sm" id="sy-add">Add row</button>`
                              : `<button class="btn btn-primary btn-sm" disabled
                                   title="No INSERT policy for your account">Add row</button>`}
@@ -177,9 +241,9 @@
           ${note ? `<div class="alert alert-info" style="margin-top:10px">
             <strong>Limited writes.</strong> ${esc(note)}</div>` : ''}
 
-          <div class="table-wrap" style="overflow-x:auto;margin-top:12px">
+          <div class="table-wrap" style="margin-top:12px">
             <table><thead><tr>${head}<th></th></tr></thead>
-            <tbody>${body || `<tr><td colspan="${meta.columns.length + 1}">
+            <tbody id="sy-rows">${body || `<tr><td colspan="${cols.length + 1}">
               <div class="empty-state">No rows${search ? ' match that search' : ''}.</div>
             </td></tr>`}</tbody></table>
           </div>
@@ -196,7 +260,7 @@
       wireList();
     }
 
-    /** One cell — FK label, null, boolean, JSON and long text all need distinct treatment. */
+    /** One cell — FK label, null, boolean, timestamp, JSON and long text each need treatment. */
     function cell(row, col, fkByColumn, labels) {
       const v = row[col.name];
       if (v == null) return `<td><span class="muted">—</span></td>`;
@@ -206,7 +270,7 @@
         const label = labels[fk.refTable]?.[v];
         return `<td title="${esc(String(v))}">${label
           ? `<span class="score-badge pending">${esc(String(label))}</span>`
-          : `<span class="muted" style="font-size:0.8em">${esc(String(v).slice(0, 8))}…</span>`}</td>`;
+          : `<code class="muted" style="font-size:0.78em">${esc(String(v).slice(0, 8))}…</code>`}</td>`;
       }
       if (typeof v === 'boolean') {
         return `<td>${v ? '<span style="color:var(--green)">✓</span>'
@@ -214,11 +278,21 @@
       }
       if (typeof v === 'object') {
         const s = JSON.stringify(v);
-        return `<td title="${esc(s)}"><code style="font-size:0.75em">${
-          esc(s.length > 40 ? s.slice(0, 40) + '…' : s)}</code></td>`;
+        return `<td title="${esc(s.slice(0, 400))}"><code class="muted"
+          style="font-size:0.75em">${esc(s.length > 28 ? s.slice(0, 28) + '…' : s)}</code></td>`;
+      }
+      // Timestamps read as an ISO wall of text; the site already has a format for them.
+      if (['timestamptz', 'timestamp', 'date'].includes(col.udt)) {
+        return `<td title="${esc(String(v))}" style="white-space:nowrap">${
+          esc(fmtDateTime(v) || String(v))}</td>`;
       }
       const s = String(v);
-      return `<td title="${esc(s)}">${esc(s.length > 48 ? s.slice(0, 48) + '…' : s)}</td>`;
+      // A bare uuid that is not a foreign key is still unreadable — elide it the same way.
+      if (col.udt === 'uuid') {
+        return `<td title="${esc(s)}"><code class="muted"
+          style="font-size:0.78em">${esc(s.slice(0, 8))}…</code></td>`;
+      }
+      return `<td class="sy-cell" title="${esc(s)}">${esc(s)}</td>`;
     }
 
     function wireList() {
@@ -245,6 +319,7 @@
         search = box.value; page = 0; renderPanel().catch(showFatal);
       });
 
+      panel.querySelector('#sy-cols-gear')?.addEventListener('click', openColumnPicker);
       panel.querySelector('#sy-add')?.addEventListener('click', () => openEditor(null));
       panel.querySelectorAll('[data-edit]').forEach(b =>
         b.addEventListener('click', () => openEditor(view.rows[+b.dataset.edit])));
@@ -252,7 +327,85 @@
         b.addEventListener('click', () => openDelete(view.rows[+b.dataset.del])));
     }
 
-    /* ───────────────────────────── Row editor ───────────────────────────── */
+    /* ───────────────────────────── Column picker ─────────────────────────────
+     * Order follows the table definition, not the click order: a stable, predictable layout is
+     * worth more here than letting someone reorder columns, and it keeps the saved value a plain
+     * set rather than something that has to be reconciled against a migration. */
+    function openColumnPicker() {
+      const meta = S.tableMeta(table);
+      const current = new Set(P.visibleColumns(table));
+
+      const rows = meta.columns.map(c => `
+        <label class="sy-pick">
+          <input type="checkbox" data-col="${esc(c.name)}"${current.has(c.name) ? ' checked' : ''}>
+          <strong>${esc(P.humanizeColumn(table, c.name))}</strong>
+          <span class="sy-raw"><code>${esc(c.name)}</code> · ${esc(c.type)}${
+            c.pk ? ' · primary key' : ''}${c.nullable ? '' : ' · required'}</span>
+        </label>`).join('');
+
+      openModal(`Columns in ${P.humanizeTable(table)}`,
+        `<p class="muted" style="font-size:0.88em">Which columns appear in the list. This changes
+         the view only — the row editor always shows every column, and nothing here affects what
+         is stored or who may read it. Saved in this browser.</p>
+         <div style="max-height:52vh;overflow-y:auto;padding-right:6px">${rows}</div>`,
+        'Save', async () => {
+          const picked = [...document.querySelectorAll('#sy-body [data-col]')]
+            .filter(el => el.checked).map(el => el.dataset.col);
+          if (!picked.length) return 'Choose at least one column.';
+          P.setVisibleColumns(table, picked);
+          await renderPanel();
+          return null;
+        });
+
+      setAlt('Reset to default', async () => {
+        P.resetColumns(table);
+        await renderPanel();
+        return null;
+      });
+    }
+
+    /* ───────────────────────────── Table picker ───────────────────────────── */
+    function openTablePicker() {
+      const current = new Set(P.visibleTables());
+
+      const rows = S.TABLE_NAMES.map(name => {
+        const meta = S.tableMeta(name);
+        const p = S.permissions(name);
+        const ro = !p.insert && !p.update && !p.delete;
+        return `<label class="sy-pick">
+          <input type="checkbox" data-tbl="${esc(name)}"${current.has(name) ? ' checked' : ''}>
+          <strong>${esc(P.humanizeTable(name))}</strong>
+          <span class="sy-raw"><code>${esc(name)}</code> · ${meta.columns.length} columns${
+            ro ? ' · read-only' : ''}</span>
+        </label>`;
+      }).join('');
+
+      openModal('Tables shown in this view',
+        `<p class="muted" style="font-size:0.88em">Which tables appear in the sidebar. Everything
+         in schema <code>app</code> is listed here — the ones off by default are junction tables,
+         machine-written logs, and a lookup, which are rarely where you start. Saved in this
+         browser.</p>
+         <div style="max-height:52vh;overflow-y:auto;padding-right:6px">${rows}</div>`,
+        'Save', async () => {
+          const picked = [...document.querySelectorAll('#sy-body [data-tbl]')]
+            .filter(el => el.checked).map(el => el.dataset.tbl);
+          if (!picked.length) return 'Choose at least one table.';
+          P.setVisibleTables(picked);
+          await render();
+          return null;
+        });
+
+      setAlt('Reset to default', async () => {
+        P.resetTables();
+        await render();
+        return null;
+      });
+    }
+
+    /* ───────────────────────────── Row editor ─────────────────────────────
+     * Always every column, regardless of what the list is showing: hiding a column is about
+     * scanning a list, and an editor that silently omitted fields would be a way to create a row
+     * with surprising values. */
     async function openEditor(row) {
       const meta = S.tableMeta(table);
       const perms = S.permissions(table);
@@ -273,7 +426,7 @@
         const val = creating ? '' : S.present(col, row[col.name]);
         const dis = readOnly || (!creating && col.pk) ? ' disabled' : '';
         const req = col.nullable ? '' : ' <span style="color:var(--red)">*</span>';
-        const hint = [col.type, col.nullable ? 'nullable' : 'required',
+        const hint = [col.name, col.type, col.nullable ? 'nullable' : 'required',
                       col.pk ? 'primary key' : null, col.default ? `default ${col.default}` : null]
                       .filter(Boolean).join(' · ');
 
@@ -305,7 +458,7 @@
         }
 
         return `<div class="field">
-          <label>${esc(col.name)}${req}</label>${control}
+          <label>${esc(P.humanizeColumn(table, col.name))}${req}</label>${control}
           <div class="field-hint">${esc(hint)}${
             fkSet && fkSet.options.length >= 500
               ? ` — too many rows to list; paste a ${esc(fkSet.fk.refTable)} id`
@@ -313,8 +466,8 @@
         </div>`;
       }).join('');
 
-      const title = creating ? `Add row to ${table}`
-                             : `${readOnly ? 'View' : 'Edit'} row in ${table}`;
+      const title = creating ? `Add row to ${P.humanizeTable(table)}`
+                             : `${readOnly ? 'View' : 'Edit'} row in ${P.humanizeTable(table)}`;
       openModal(title,
         `${readOnly ? `<div class="alert alert-info">${esc(perms.note
             || 'Your account has no write policy for this table.')}</div>` : ''}
@@ -344,7 +497,7 @@
       const label = meta.labelColumn ? row[meta.labelColumn] : null;
       const token = String(label ?? Object.values(pk)[0]);
 
-      openModal(`Delete row from ${table}`,
+      openModal(`Delete row from ${P.humanizeTable(table)}`,
         `<div class="center-load"><span class="spinner"></span><span>Checking what this
           would remove…</span></div>`, null, null);
 
@@ -353,7 +506,8 @@
 
       const lines = (arr, verb) => arr.map(d =>
         `<tr><td style="text-align:right;padding-right:10px"><strong>${d.count.toLocaleString()}</strong></td>
-         <td>${esc(d.table)}</td><td class="muted" style="font-size:0.85em">${verb}</td></tr>`).join('');
+         <td>${esc(P.humanizeTable(d.table))}</td>
+         <td class="muted" style="font-size:0.85em">${verb}</td></tr>`).join('');
 
       const total = pv.deletes.reduce((n, d) => n + d.count, 0);
 
@@ -368,7 +522,8 @@
       }
 
       body.innerHTML = `
-        <p>Delete <strong>${esc(token)}</strong> from <code>${esc(table)}</code>?</p>
+        <p>Delete <strong>${esc(token)}</strong> from
+           <code>${esc(table)}</code>?</p>
         ${total || pv.nulls.length ? `
           <div class="alert alert-warn">
             <strong>This cascades.</strong> The database will also remove or clear:
@@ -377,7 +532,7 @@
               ${lines(pv.nulls, 'reference cleared')}
             </tbody></table>
             ${pv.truncated ? `<div class="muted" style="font-size:0.85em;margin-top:6px">
-              Counts past the first ${500} related rows are approximate — the real total is at
+              Counts past the first 500 related rows are approximate — the real total is at
               least this large.</div>` : ''}
           </div>`
         : `<div class="alert alert-info">Nothing else references this row.</div>`}
@@ -400,7 +555,8 @@
 
     /* ───────────────────────────── Modal plumbing ─────────────────────────────
      * Copied rather than imported, matching admin.html:341-364 — there is no shared UI module
-     * and the 25 lines are cheaper than the coupling. */
+     * and the lines are cheaper than the coupling. `sy-alt` is the one addition: the pickers need
+     * a "Reset to default" that is neither confirm nor cancel. */
     function wireModal() {
       const back = document.getElementById('sy-modal');
       back.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeModal));
@@ -408,16 +564,19 @@
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && back.classList.contains('open')) closeModal();
       });
-      document.getElementById('sy-ok').addEventListener('click', async () => {
-        if (!onConfirm) return;
-        const ok = document.getElementById('sy-ok');
-        const err = document.getElementById('sy-error');
-        ok.disabled = true; err.textContent = '';
-        const msg = await onConfirm();
-        ok.disabled = false;
-        if (msg) { err.textContent = msg; return; }
-        closeModal();
-      });
+      document.getElementById('sy-ok').addEventListener('click', () => runHandler(onConfirm));
+    }
+
+    async function runHandler(handler) {
+      if (!handler) return;
+      const ok = document.getElementById('sy-ok');
+      const alt = document.getElementById('sy-alt');
+      const err = document.getElementById('sy-error');
+      ok.disabled = true; alt.disabled = true; err.textContent = '';
+      const msg = await handler();
+      ok.disabled = false; alt.disabled = false;
+      if (msg) { err.textContent = msg; return; }
+      closeModal();
     }
 
     function setOk(labelText, handler) {
@@ -428,16 +587,26 @@
       ok.style.background = '';
     }
 
+    /** Secondary action, hidden unless a modal asks for one. */
+    function setAlt(labelText, handler) {
+      const alt = document.getElementById('sy-alt');
+      alt.style.display = labelText ? '' : 'none';
+      alt.textContent = labelText || '';
+      alt.onclick = handler ? () => runHandler(handler) : null;
+    }
+
     function openModal(titleText, bodyHTML, okLabel, handler) {
       document.getElementById('sy-title').textContent = titleText;
       document.getElementById('sy-body').innerHTML = bodyHTML;
       document.getElementById('sy-error').textContent = '';
       setOk(okLabel, handler);
+      setAlt(null, null);
       document.getElementById('sy-modal').classList.add('open');
     }
 
     function closeModal() {
       document.getElementById('sy-modal').classList.remove('open');
+      setAlt(null, null);
       onConfirm = null;
     }
   </script>

@@ -124,12 +124,44 @@ destination for: creating an offering and appointing its director is now editing
   also satisfies). No per-table code whatsoever.
 - `site/app/js/system-admin.js` — the data layer: list, insert, update, delete, bulk FK-label
   resolution, value coercion, and the cascade preview.
+- `site/app/js/system-prefs.js` — what the view *shows*: curated default columns per table, the
+  default-hidden table set, the snake_case → Title Case humanizer, and localStorage persistence.
+  Pure (imports only `db-schema.js`), so it is unit-tested without a browser or a database.
 - `site/app/js/db-schema.js` — **generated**. The catalogue for all 20 `app` tables: 147 columns,
   33 foreign keys with their delete rules, the 10 CHECK-derived value sets, and per-table RLS
   policy coverage.
 - `scripts/app/gen_db_schema.py` — regenerates the above. Read-only, connects as
   `prep_app_read`, stdlib + psycopg2 via the project `.venv`. `--check` mode exits non-zero on drift.
-- `tests/app-schema/test-db-schema.mjs` — 29 checks; registered in `run.mjs`.
+- `tests/app-schema/test-db-schema.mjs`, `tests/app-schema/test-system-prefs.mjs` — 29 + 26
+  checks; both registered in `run.mjs`.
+
+**What the view shows is an authoring decision, not "everything".** The first cut rendered every
+column of every table and was unreadable — a 36-character uuid, two audit timestamps and a JSON
+blob crowding out the code and title a human actually navigates by. This follows Django's
+`ModelAdmin.list_display` instead: `CURATED_COLUMNS` names the columns worth scanning for all 21
+tables, six low-level tables (junctions, the append-only audit log, the service-written report
+store, a three-row lookup) are hidden from the sidebar by default, and two gear buttons — one on
+the table list, one on the row list — change either, persisted per browser under `cp.system.*`.
+Hiding is presentational only: **the row editor always shows every column**, and nothing about
+visibility affects what is read, written, or permitted.
+
+Tables and columns render as Title Case with underscores as spaces (`assignment_offerings` →
+"Assignment Offerings"), the way Django derives a `verbose_name`. A trailing `_id` is dropped only
+for a real foreign key, because that cell renders the target's label — so `course_offering_id`
+reads "Course Offering", while `students.student_id` keeps its suffix as "Student ID", being a
+cadet number rather than a hidden key. The raw identifier is never discarded: it stays in a title
+attribute, beside every picker entry, and in each editor field hint, because it is the name that
+appears in a migration or an error message.
+
+A table added by a future migration is not left raw — `defaultColumns()` falls back to a rule
+(keep the label, foreign keys, enums, booleans and short scalars; drop audit timestamps, JSON,
+long text and a bare uuid key) so it arrives readable before anyone curates it.
+
+**Fixed — invisible table headers.** The sort controls were `.btn.btn-ghost` inside `<th>`, which
+`styles.css:742` styles white-on-blue; the buttons painted their own surface and dark text, so the
+header row rendered as a band of empty boxes. They are now unstyled buttons that inherit the
+header's colour and font. Cells also elide rather than wrap — uuids to eight characters, JSON to a
+fragment, timestamps through `fmtDateTime` — with the full value in a title attribute.
 
 **Why the catalogue is generated rather than introspected at runtime.** The obvious source is
 PostgREST's OpenAPI spec at `/rest/v1/`, but it now refuses publishable keys —
@@ -154,15 +186,20 @@ student work with it. The page walks that graph first, counts what would go per 
 the row's label typed exactly before it will delete. `ON DELETE RESTRICT` referrers block the
 delete outright and are listed.
 
-**Verification — read this before trusting it.** Full `tests/app-schema` suite: 244 passed, 0
-failed, including the live drift check and the 29 new structural checks. All modules pass
-`node --check`; import integrity confirms all 223 named imports across `site/app/` resolve; the
-page and its whole module graph were confirmed to serve over `python -m http.server`.
-**The interactive UI itself was NOT verified in a browser** — rendering, the row editor, the
-cascade-preview modal and every write path are unexercised, because the page requires a
-`is_global_admin` login the agent does not hold. Per CORE.md §2 that is stated here rather than
-left for the next operator to discover: **a system admin should click through it on a
-low-consequence table before relying on it, and should test one delete against a throwaway row.**
+**Verification — read this before trusting it.** Full `tests/app-schema` suite: 257 passed, 0
+failed, including the live drift check and the 55 new checks. All modules pass `node --check`;
+import integrity confirms every named import across `site/app/` resolves; the page and its whole
+module graph were confirmed to serve over `python -m http.server`. `test-system-prefs.mjs` guards
+the one real drift risk the curated lists introduce — a migration renaming a column would
+otherwise make it silently vanish from the view, since unknown names are filtered out rather than
+rendered as dead headers.
+
+**The interactive UI was verified only from a screenshot** — the header-rendering fix above came
+from one. Everything else remains unexercised in a browser: the row editor, both gear modals, the
+cascade-preview modal, and every write path, because the page requires an `is_global_admin` login
+the agent does not hold. Per CORE.md §2 that is stated here rather than left for the next operator
+to discover: **a system admin should click through it on a low-consequence table before relying on
+it, and should test one delete against a throwaway row.**
 
 ## 2026-07-21 — Matthew Recker via Claude
 

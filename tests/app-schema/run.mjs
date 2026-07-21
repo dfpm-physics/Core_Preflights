@@ -61,7 +61,9 @@ for (const s of OFFLINE) {
  *   test-rollup   imports faculty-rollup.js for summarizeReports (pure, but the module's
  *                 supabase.js import still binds a client)
  */
-for (const suite of ['test-imports.mjs', 'test-rollup.mjs']) {
+//   test-system-prefs  calls installBrowser() to stub window/localStorage for the persistence
+//                 round-trip; those stubs are global and would leak into later suites
+for (const suite of ['test-imports.mjs', 'test-rollup.mjs', 'test-system-prefs.mjs']) {
   const r = spawnSync(process.execPath, [resolve(import.meta.dirname, suite)],
                       { encoding: 'utf8' });
   process.stdout.write(r.stdout || '');
