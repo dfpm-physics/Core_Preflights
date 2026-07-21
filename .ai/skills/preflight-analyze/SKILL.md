@@ -566,16 +566,35 @@ Always include `status` — the admin UI relies on it to show the three-state co
 Compute `points_earned` = sum of all question scores. It must be ≤ `POINTS_POSSIBLE`
 (a DB CHECK enforces this); Step 2's points check is what makes that true.
 
-### First: never clobber a finalized grade
+### First: never clobber a human's work
 
 ```
 GET {SUPA_URL}/rest/v1/grades?select=enrollment_id,is_finalized,source&assignment_offering_id=eq.{OFFERING_ID}&enrollment_id=in.({ENROLLMENT_IDS})
 Headers: READ_HEADERS
 ```
 
-**Drop every enrolment whose grade has `is_finalized = true` from the payload.** A finalized grade
-is an instructor's decision; a re-run must not silently revert it. Count them and report them as
-skipped. (The old skill's upsert had no such guard — it would have overwritten a finalized score.)
+**Drop two groups from the payload, and report both counts as skipped:**
+
+1. **`is_finalized = true`** — a finalized grade is an instructor's published decision; a re-run
+   must not silently revert it. (The pre-`app` skill had no such guard and would have overwritten
+   a finalized score.)
+2. **`source = 'instructor'`** (even when `is_finalized = false`) — this is an instructor's saved
+   but unpublished draft. It is the case that actually bites on a re-run: an instructor spends an
+   afternoon adjusting scores and comments, saves without publishing, and a re-run scoped to
+   "everyone who submitted" silently reverts all of it to a fresh AI suggestion.
+
+> **Why `source` can now be trusted for this.** Until 2026-07-21 the Grade view hardcoded
+> `source:'instructor'` on every row it wrote, so a single click of *Save draft* relabelled every
+> AI suggestion in the section — the column could not distinguish a reviewed grade from an
+> untouched one, and this guard would have skipped the whole section. `gradeRows()` in
+> `site/app/js/faculty-grade.js` now marks a row `instructor` only when that student's card was
+> actually edited, and preserves the prior `source` otherwise. **This guard depends on that fix;
+> do not apply it to a deployment that predates it.**
+
+A student on an approved extension submits *after* this run, so they will not be in it at all. They
+are not lost: the Grade tab's "Extensions ready to grade" queue lists exactly those cadets once
+their own deadline passes, and they are graded by hand. Do not re-run the whole assignment to pick
+up a handful of late submissions — that is the scenario guard 2 exists for.
 
 ### Then upsert
 

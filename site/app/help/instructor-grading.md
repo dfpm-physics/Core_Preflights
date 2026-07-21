@@ -42,10 +42,58 @@ review them, change anything you disagree with, then finalize. Students see noth
 
 Suggested feedback is editable. If a yellow flag is wrong, clear the feedback and set it green.
 
+A card tagged **AI suggested** has not been edited by anyone. Editing any question on that card
+marks it as yours; cards you never touch keep the AI's authorship, which is what lets your director
+see how much of a section has actually been reviewed.
+
+A card tagged **Not yet graded** has no grade at all — the analysis run never scored that student.
+This is not the same as a zero, and saving will not create a grade for them. To grade them, set
+their questions yourself.
+
+## Saving, publishing, and marking a section reviewed
+
+Three separate actions, deliberately:
+
+| Action | What it does | Who sees it |
+|---|---|---|
+| **Save draft** | Stores your scores and feedback, unpublished. | Only staff. |
+| **Finalize & publish** | Releases scores and feedback. | **Students, immediately.** |
+| **Mark section reviewed** | Records that you have been through the proposed grades and made your changes. | Your director. Publishes nothing. |
+
+Publishing tells you how many grades it will write and which sections they span — check that line
+if you have the section filter set wide, because "All sections" means the whole course.
+
+**Mark section reviewed** is separate from publishing on purpose: you can finish reviewing without
+releasing anything, and your director can see who is done before grades go out. If grades in a
+section change after you sign off, the marker reads *reviewed, then changed* — sign off again once
+you are happy.
+
+## Your worklists
+
+Two collapsible lists sit above the grading view, and both stay hidden when they are empty.
+
+- **Extensions ready to grade** — students whose extension has now passed and whose work is in, but
+  is not yet published. The analysis run happens *before* these students submit, so nobody has
+  proposed grades for them: **grade these by hand.** Do not re-run the analysis for a whole
+  assignment to catch a few late submissions.
+- **Past due and not finalized** — across *every* assignment in the course, not just the one on
+  screen. Students still inside an extension are not counted; they appear in the first list when
+  their own deadline passes.
+
 ## Extensions
 
 A per-student extension overrides the deadline for that student on that assignment, and takes
 precedence over everything else.
+
+Granting one **requires a reason**. Your course director sees every extension in the course on
+their own page, grouped by who granted it and with a count — the reason is what makes that count a
+conversation rather than a number.
+
+**Remove** erases an extension, and is meant for a genuine mistake such as granting it to the wrong
+cadet. It stops working once the student has submitted under it: withdrawing a deadline after the
+work is in would only turn an on-time submission into a late one. If you need to pull an extension
+back rather than correct an error, that is your director's call — they revoke it, which keeps it on
+the record with their reason attached.
 
 Otherwise each section carries its own deadline — 2359 the night before that section meets — set
 per section on the assignment rather than inferred from the section's name. An assignment may also

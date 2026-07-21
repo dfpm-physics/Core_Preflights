@@ -10,6 +10,101 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-21 — Matthew Recker via Claude
 
+### Added — extension governance, grading worklists, and a review attestation
+
+**Migration `supabase/migrations/app/007_extension_governance_and_review.sql` — APPLIED to the
+live database on 2026-07-21.** Adds three columns and two constraints to `app.extensions`, one
+new table (`app.review_signoffs`), and two trigger functions. `site/app/js/db-schema.js` was
+regenerated afterwards, as the System > Data entry below requires.
+
+**Asked for:** a way for course directors to see every extension granted in a course and who
+approved it, with the explicit intent that the remedy is a conversation with the instructor
+rather than a revocation.
+
+**Three bugs found while scoping it, all in the Grade view's save path. Fix these first or the
+feature cannot work:**
+
+1. **`source` was destroyed by the first save.** `gradeRows()` hardcoded `source:'instructor'`,
+   `graded_by:<caller>`, `graded_at:<now>` for *every* row in the loaded scope. One click of
+   *Save draft* therefore relabelled every AI suggestion in the section as instructor-authored,
+   including cards nobody had scrolled to — erasing the only column that could answer "has a
+   human looked at this?". A row is now marked `instructor` only when that student's card was
+   actually edited; otherwise the prior `source`/`graded_by`/`graded_at` ride through unchanged.
+   **Caught before it did damage:** all 64 live grades were still `ai_suggested` and unfinalized,
+   so no provenance was lost. After a real grading run this would have been unrecoverable.
+2. **Finalize invented grades.** `buildGradeData()` defaults a submitted-but-ungraded student to
+   `full`, and every row in scope was written — so *Finalize & publish* handed full credit to
+   every student the AI never scored, course-wide for a director who had selected "All sections".
+   A student with no existing grade **and** no edit is now skipped entirely, the card says
+   "Not yet graded", and the confirm prompt states the row count and the affected sections.
+3. **`preflight-analyze` would clobber an instructor's draft.** The skill guarded
+   `is_finalized = true` but not `is_finalized = false, source = 'instructor'` — an unpublished
+   afternoon of human grading looked identical to an AI suggestion on a re-run. Guard added
+   (`.ai/skills/preflight-analyze/SKILL.md`). It depends on fix 1 and says so.
+
+**Extensions (migration 007).**
+
+- `reason` is now **NOT NULL** with a non-blank CHECK, and the grant dialog captures it. It was
+  nullable and the UI never sent it, so every row would have been blank — a per-instructor count
+  with no reasons cannot start the conversation the report exists to start. Safe to tighten
+  because the table held zero rows.
+- **Revocation is soft, director-only, and refused once the work is in.** Soft, because a hard
+  `DELETE` hides the event from the person whose behaviour the report is meant to surface. 
+  Director-only, enforced in the trigger rather than the UI, so an instructor cannot quietly
+  withdraw their own grant to keep it off the report. Refused after a committed submission
+  because withdrawing a deadline retroactively converts a good-faith on-time submission into a
+  late one — and the same guard covers `DELETE`, or the rule would hold for only one verb.
+- `granted_by` was recorded since 005 and displayed nowhere; it is now the report's main axis.
+
+**New page `site/app/faculty/extensions.html`** (director-gated, in the nav). Per-instructor
+counts ranked descending so an outlier surfaces itself, then a grouped table with cadet, section,
+assignment, original vs extended deadline, reason, and revoke/reinstate. **No DDL was needed for
+the read side:** a director's `staff_assignments` row carries `section_id IS NULL`, so
+`app.staff_sections()` already returns every section of the offering.
+
+**Two worklists on the Grade tab.** *Extensions ready to grade* (this assignment) and *Past due
+and not finalized* (**across all assignments** — a backlog visible one assignment at a time is
+not a backlog). These are the mechanism that stops late work being lost: `preflight-analyze` runs
+once, after the section deadline, so a student on an extension submits into silence unless
+something remembers them. Nothing auto-grades; per the decision taken, those few are graded by
+hand, and the skill now says not to re-run a whole assignment to catch them.
+
+**Review sign-off (`app.review_signoffs`).** "I have read the proposed grades and comments for
+this section and made my changes" — deliberately **not** `is_finalized`, which publishes to
+students. Conflating them cost both directions: an instructor could not finish reviewing without
+releasing, and a director could not tell a reviewed section from an unreviewed one until grades
+were already out. One row per (offering, section); a trigger refuses an attestation attributed to
+anyone but the caller, mirroring migration 006's unlock rule. **Staleness is derived, not stored:**
+`grades_touch` maintains `grades.updated_at`, so a sign-off stops holding exactly when a grade
+moves under it, and the pill reads "reviewed, then changed".
+
+**Verification.** 257/257 in `tests/app-schema/` (was 244 before; +13, and the hardcoded base-table
+count moved 20 → 21). Migration 007 was exercised against the live schema inside a rolled-back
+transaction first — 13 checks covering both CHECKs, both refusal paths of the withdrawal guard,
+and the sign-off uniqueness — then applied and re-verified. `test-imports.mjs` linked every new
+import and the new page's inline module.
+
+**Not verified, and needing a human:**
+
+- **The director-only revoke branch has never executed.** An operator connection has
+  `current_uid() = NULL` and is bypassed by design, and the browser harness has only a test
+  *student* account — no faculty login — so the `uid IS NOT NULL` + non-director path is
+  reasoned-about, not proven. Exercise it with a real instructor login before relying on it.
+- **No visual browser check.** Per CORE.md §2 this was Node-only: syntax, linking, and schema.
+  Nothing rendered a page. The new page, the two queues, the sign-off bar and the extension
+  dialog all need `python -m http.server 8000` and a look.
+- **`prep_app_owner` is still LOGIN-enabled and must be re-sealed** —
+  `ALTER ROLE prep_app_owner NOLOGIN;` **as `postgres`**. It was *already* unsealed when this
+  work started, contradicting CORE.md §0's claim that it "cannot connect at all"; the documented
+  gate has not been in force for some time. Neither `prep_app_owner` nor `claude_code_recker`
+  holds `CREATEROLE`, so no agent can re-seal it — verified by attempting it
+  ("permission denied to alter role"). Secondary: all three `prep_app_*` roles carry `BYPASSRLS`,
+  which is worth a second look for one described as "SELECT only".
+- **Not pushed.** `main` is live and the deployed site predates the `reason` NOT NULL constraint,
+  so granting an extension on the *currently published* page would fail until this ships. The
+  window is harmless today — zero extensions exist and the term has not started — but it should
+  not be left open.
+
 ### Added — System > Data: a generic table browser over schema `app`
 
 **Frontend + one read-only script. No migration, no DDL, no live DB write from the feature

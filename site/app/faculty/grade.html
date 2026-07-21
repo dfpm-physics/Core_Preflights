@@ -30,6 +30,26 @@
       </div>
     </div>
 
+    <!-- Worklists. Collapsed by default so the grading view stays the focus, but the counts
+         are visible without opening them — an empty queue should cost nothing to ignore. -->
+    <details class="queue-card" id="q-ext" hidden>
+      <summary>
+        <span class="queue-dot warn"></span>
+        <span class="queue-title">Extensions ready to grade</span>
+        <span class="queue-count" id="q-ext-count">0</span>
+      </summary>
+      <div class="queue-body" id="q-ext-body"></div>
+    </details>
+
+    <details class="queue-card" id="q-past" hidden>
+      <summary>
+        <span class="queue-dot late"></span>
+        <span class="queue-title">Past due and not finalized</span>
+        <span class="queue-count" id="q-past-count">0</span>
+      </summary>
+      <div class="queue-body" id="q-past-body"></div>
+    </details>
+
     <div id="grade-container">
       <div class="muted">Select an assignment to begin grading.</div>
     </div>
@@ -40,21 +60,46 @@
     <div class="grade-actions" id="grade-actions" style="display:none">
       <button class="btn btn-primary" id="save-btn">Save draft</button>
       <button class="btn btn-secondary" id="finalize-btn">Finalize &amp; publish</button>
+      <!-- Separate from publishing on purpose: an instructor must be able to finish reviewing
+           without releasing grades, and a director must be able to see who is done before
+           anything goes out. See migration 007. -->
+      <button class="btn btn-secondary" id="signoff-btn">Mark section reviewed</button>
       <span id="save-status" class="muted" style="font-size:0.85em"></span>
       <span class="grow"></span>
       <span class="muted" style="font-size:0.78em">Yellow = full credit flagged for review · click a credit chip to cycle</span>
     </div>
+    <div class="signoff-bar" id="signoff-bar" hidden></div>
   </main>
 
   <div class="modal-backdrop" id="ext-modal">
-    <div class="modal" style="max-width:420px">
-      <div class="modal-head"><h2>Grant extension</h2><button class="modal-close" data-close>×</button></div>
+    <div class="modal" style="max-width:460px">
+      <div class="modal-head"><h2 id="ext-heading">Grant extension</h2><button class="modal-close" data-close>×</button></div>
       <p class="muted" style="font-size:0.88em;margin-bottom:14px" id="ext-name"></p>
       <div class="field"><label for="ext-due">New due date &amp; time</label>
         <input type="datetime-local" id="ext-due"></div>
+      <div class="field"><label for="ext-reason">Reason <span class="req">required</span></label>
+        <input type="text" id="ext-reason" maxlength="200"
+               placeholder="e.g. Cadet was on a scheduled team trip.">
+        <div class="field-hint">Your course director sees this alongside a count of the extensions you have granted.</div>
+      </div>
       <div class="error-msg" id="ext-error" style="min-height:1em"></div>
       <div class="row" style="gap:10px;margin-top:8px">
         <button class="btn btn-primary" id="ext-save">Save extension</button>
+        <button class="btn btn-secondary" data-close>Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="signoff-modal">
+    <div class="modal" style="max-width:460px">
+      <div class="modal-head"><h2>Mark section reviewed</h2><button class="modal-close" data-close>×</button></div>
+      <p class="muted" style="font-size:0.88em;margin-bottom:14px" id="signoff-scope"></p>
+      <div class="field"><label for="signoff-note">Note <span class="muted">(optional)</span></label>
+        <input type="text" id="signoff-note" maxlength="200"
+               placeholder="Anything the director should know."></div>
+      <div class="error-msg" id="signoff-error" style="min-height:1em"></div>
+      <div class="row" style="gap:10px;margin-top:8px">
+        <button class="btn btn-primary" id="signoff-save">Mark reviewed</button>
         <button class="btn btn-secondary" data-close>Cancel</button>
       </div>
     </div>
@@ -64,7 +109,7 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, lastFirst, fmtDate, runPage } from '../js/util.js';
+    import { esc, lastFirst, fmtDate, fmtDateTime, runPage } from '../js/util.js';
     // Questions now live in the written activity's content, not on the assignment row.
     import { questionsOf } from '../js/schema.js';
     import * as G from '../js/faculty-grade.js';
@@ -75,9 +120,9 @@
     // ── State ──
     let gradeData = {}, current = null, extensionMap = {}, scoreMap = {}, responseMap = {};
     // `current` is now an assignment OFFERING (shapeOffering), not an assignment row.
-    let currentStudents = [], enrollmentOf = {}, questions = [];
+    let currentStudents = [], enrollmentOf = {}, questions = [], submissionMap = {};
     let maxTotal = 0, extSid = null;
-    let cachedMy = [], cachedAll = [];
+    let cachedMy = [], cachedAll = [], signoffs = {};
 
     const asgnSel = () => document.getElementById('asgn');
     const secSel  = () => document.getElementById('section');
@@ -94,7 +139,10 @@
       wireLamps();
       document.getElementById('save-btn').addEventListener('click', doSave);
       document.getElementById('finalize-btn').addEventListener('click', doFinalize);
+      document.getElementById('signoff-btn').addEventListener('click', openSignoff);
       wireExtModal();
+      wireSignoffModal();
+      wireQueues();
       await populate(false);
     }
 
@@ -136,7 +184,8 @@
       const data = await G.loadGradingData(ctx, asgnId, resolveSectionIds());
       if (!data.offering) { container().innerHTML = `<div class="alert alert-error">Assignment not found.</div>`; actions.style.display = 'none'; return; }
       current = data.offering; responseMap = data.responseMap; scoreMap = data.gradeMap; extensionMap = data.extensionMap;
-      currentStudents = data.students;
+      currentStudents = data.students; submissionMap = data.submissionMap;
+      signoffs = await G.loadSignoffs(ctx, asgnId, resolveSectionIds());
       // Enrolment is the key for every per-student write now (grades, extensions), so keep
       // the map the click handlers need — they only ever have a student id to hand.
       enrollmentOf = Object.fromEntries(data.students.map(s => [s.student_id, s.enrollment_id]));
@@ -150,6 +199,8 @@
       gradeData = G.buildGradeData(current, data.students, responseMap, scoreMap);
       render(data.students);
       actions.style.display = 'flex';
+      renderSignoffBar();
+      renderQueues();
     }
 
     const LABEL = { full: '✓ Full credit', warn: '⚠ Full credit — review', zero: '✗ No credit' };
@@ -169,10 +220,20 @@
         const total = studentTotal(sid);
         const nm = esc(lastFirst(st.name));
 
+        // A student with no grade row at all is NOT the same as one scored zero. Saving no
+        // longer invents a grade for them (faculty-grade.js gradeRows rule 2), so the card
+        // has to say so — otherwise "not yet graded" is indistinguishable from "graded 0".
+        const prior = scoreMap[sid];
+        const provenance = !prior
+          ? `<span class="tag tag-ungraded">Not yet graded</span>`
+          : prior.source === 'ai_suggested'
+            ? `<span class="tag tag-ai">AI suggested</span>` : '';
+
         const headExtras = `
           ${finalized ? `<span class="tag" style="background:var(--alert-ok-bg);color:var(--alert-ok-fg)">✅ Finalized</span>
             <button class="btn btn-ghost btn-sm" data-act="reopen" data-sid="${sid}" data-name="${nm}">Reopen</button>` : ''}
-          ${ext ? `<span class="ext-chip">📅 ${esc(fmtDate(ext))}</span>
+          ${provenance}
+          ${ext ? `<span class="ext-chip" title="${esc(ext.reason)}">📅 ${esc(fmtDate(ext.due))}</span>
             <button class="btn btn-ghost btn-sm" data-act="ext" data-sid="${sid}" data-name="${nm}">Edit</button>
             <button class="btn btn-ghost btn-sm" data-act="ext-remove" data-sid="${sid}" data-name="${nm}">Remove</button>`
             : `<button class="btn btn-ghost btn-sm" data-act="ext" data-sid="${sid}" data-name="${nm}">Grant extension</button>`}`;
@@ -309,16 +370,38 @@
     // ── Save / finalize / reopen ──
     async function doSave() {
       const st = document.getElementById('save-status'); st.textContent = 'Saving…';
-      const { error } = await G.saveScores(ctx, current, currentStudents, gradeData);
-      st.textContent = error ? '⚠ Save failed: ' + error.message : '✓ Saved draft';
-      setTimeout(() => { st.textContent = ''; }, 3000);
+      const { error, skipped } = await G.saveScores(ctx, current, currentStudents, gradeData, scoreMap);
+      st.textContent = error ? '⚠ Save failed: ' + error.message
+        : skipped ? 'Nothing to save — no grades exist yet and nothing was edited.'
+        : '✓ Saved draft';
+      setTimeout(() => { st.textContent = ''; }, 4000);
+      if (!error && !skipped) loadView();
     }
+
+    /**
+     * Publishing is irreversible from the student's side, so the prompt states the real
+     * blast radius: how many rows, and across which sections. It used to say neither, while
+     * writing every student in the loaded scope — which for a director who had selected
+     * "All sections (entire course)" meant the whole course in one click.
+     */
     async function doFinalize() {
-      if (!confirm('Finalize grades? Students will see their scores and feedback immediately.')) return;
+      const n = G.writableCount(ctx, current, currentStudents, gradeData, scoreMap);
+      if (!n) { flash('Nothing to publish — no grades exist yet and nothing was edited.'); return; }
+      const secs = [...new Set(currentStudents.map(s => ctx.sectionCodeOf(s.section_id)))].sort();
+      const scope = secs.length === 1 ? `section ${secs[0]}` : `${secs.length} sections (${secs.join(', ')})`;
+      if (!confirm(
+        `Publish ${n} grade${n === 1 ? '' : 's'} across ${scope}?\n\n` +
+        `Students will see their scores and feedback immediately.`)) return;
       const st = document.getElementById('save-status'); st.textContent = 'Publishing…';
-      const { error } = await G.finalizeScores(ctx, current, currentStudents, gradeData);
-      st.textContent = error ? '⚠ Finalize failed' : '✅ Published to students';
+      const { error } = await G.finalizeScores(ctx, current, currentStudents, gradeData, scoreMap);
+      st.textContent = error ? '⚠ Finalize failed: ' + error.message : `✅ Published ${n} to students`;
       setTimeout(loadView, 1200);
+    }
+
+    function flash(msg) {
+      const st = document.getElementById('save-status');
+      st.textContent = msg;
+      setTimeout(() => { st.textContent = ''; }, 4000);
     }
     async function reopen(sid, name) {
       if (!confirm(`Reopen grades for ${name}? Their scores are hidden until you re-finalize.`)) return;
@@ -327,17 +410,90 @@
       loadView();
     }
 
+    /* ── Worklists ─────────────────────────────────────────────────────────────
+     * These answer "what do I owe", which the assignment-at-a-time view never could. The
+     * extensions queue is the mechanism that stops late work being lost: preflight-analyze
+     * runs once, after the section deadline, so a student on an extension submits into
+     * silence unless something remembers them. Nothing here grades automatically — it is a
+     * reminder, and the instructor grades those few by hand.
+     */
+    async function renderQueues() {
+      // Extension queue — scoped to the assignment on screen.
+      const q = G.extensionsToGrade(current, currentStudents, extensionMap, scoreMap, submissionMap);
+      const qEl = document.getElementById('q-ext');
+      document.getElementById('q-ext-count').textContent = q.length;
+      qEl.hidden = q.length === 0;
+      if (q.length) {
+        document.getElementById('q-ext-body').innerHTML = `
+          <p class="queue-note">Their extension has passed and the work is in, but nothing is
+          published yet. These are graded by hand — the AI run happened before they submitted.</p>
+          <ul class="queue-list">` + q.map(r => `
+            <li><a href="#gc-${r.student.student_id}" data-act="jump" data-sid="${r.student.student_id}">
+              ${esc(lastFirst(r.student.name))}</a>
+              <span class="tag">Sec ${esc(ctx.sectionCodeOf(r.student.section_id))}</span>
+              <span class="muted">was due ${esc(fmtDateTime(r.extension.due))}</span>
+              <span class="tag ${r.state === 'ungraded' ? 'tag-ungraded' : 'tag-ai'}">${
+                r.state === 'ungraded' ? 'no grade yet'
+                : r.state === 'ai-only' ? 'AI suggested, unreviewed' : 'draft saved'}</span>
+              <span class="queue-why">${esc(r.extension.reason)}</span></li>`).join('') + `</ul>`;
+      }
+
+      // Past-due queue — deliberately across ALL assignments in the offering, not just this
+      // one, because a backlog you can only see one assignment at a time is not a backlog.
+      const past = await G.pastDueUngraded(ctx, resolveSectionIds());
+      const pEl = document.getElementById('q-past');
+      const totalOutstanding = past.reduce((n, r) => n + r.outstanding, 0);
+      document.getElementById('q-past-count').textContent = totalOutstanding;
+      pEl.hidden = past.length === 0;
+      if (past.length) {
+        document.getElementById('q-past-body').innerHTML = `
+          <p class="queue-note">Submitted, past the student's own deadline, not yet finalized.
+          Students still inside an extension are not counted here.</p>
+          <ul class="queue-list">` + past.map(r => `
+            <li><a href="#" data-act="goto-asgn" data-oid="${esc(r.offeringId)}">${esc(r.title)}</a>
+              <span class="muted">due ${esc(fmtDate(r.dueAt))}</span>
+              <span class="tag">${r.outstanding} outstanding</span>
+              ${r.ungraded ? `<span class="tag tag-ungraded">${r.ungraded} with no grade</span>` : ''}
+              ${r.waiting ? `<span class="tag muted">${r.waiting} still on extension</span>` : ''}
+            </li>`).join('') + `</ul>`;
+      }
+    }
+
     // ── Extension modal ──
     function wireExtModal() {
       const m = document.getElementById('ext-modal');
       m.addEventListener('click', (e) => { if (e.target.id === 'ext-modal' || e.target.dataset.close !== undefined) m.classList.remove('open'); });
       document.getElementById('ext-save').addEventListener('click', saveExt);
     }
+
+    function wireSignoffModal() {
+      const m = document.getElementById('signoff-modal');
+      m.addEventListener('click', (e) => { if (e.target.id === 'signoff-modal' || e.target.dataset.close !== undefined) m.classList.remove('open'); });
+      document.getElementById('signoff-save').addEventListener('click', saveSignoff);
+    }
+
+    function wireQueues() {
+      document.getElementById('main').addEventListener('click', (e) => {
+        const el = e.target.closest('[data-act="jump"], [data-act="goto-asgn"]');
+        if (!el) return;
+        e.preventDefault();
+        if (el.dataset.act === 'jump') {
+          const card = document.getElementById(`gc-${el.dataset.sid}`);
+          if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.classList.add('flash'); setTimeout(() => card.classList.remove('flash'), 1600); }
+        } else {
+          asgnSel().value = el.dataset.oid;
+          loadView();
+        }
+      });
+    }
     function openExt(sid, name) {
       extSid = sid;
+      const ext = extensionMap[sid];
+      document.getElementById('ext-heading').textContent = ext ? 'Edit extension' : 'Grant extension';
       document.getElementById('ext-name').textContent = name;
       document.getElementById('ext-error').textContent = '';
-      const existing = extensionMap[sid] || current?.dueAt;
+      document.getElementById('ext-reason').value = ext?.reason || '';
+      const existing = ext?.due || current?.dueAt;
       const inp = document.getElementById('ext-due');
       if (existing) {
         const d = new Date(existing), pad = n => String(n).padStart(2, '0');
@@ -347,17 +503,81 @@
     }
     async function saveExt() {
       const val = document.getElementById('ext-due').value;
+      const reason = document.getElementById('ext-reason').value.trim();
       const err = document.getElementById('ext-error');
       if (!val) { err.textContent = 'Please select a date and time.'; return; }
-      const { error } = await G.setExtension(ctx, current.offeringId, enrollmentOf[extSid], new Date(val).toISOString());
+      // Enforced by a NOT NULL + CHECK in migration 007 too; caught here so the operator
+      // gets a sentence instead of a Postgres constraint name.
+      if (!reason) { err.textContent = 'A reason is required — your director sees it on the extensions report.'; return; }
+      const { error } = await G.setExtension(
+        ctx, current.offeringId, enrollmentOf[extSid], new Date(val).toISOString(), reason);
       if (error) { err.textContent = 'Save failed: ' + error.message; return; }
       document.getElementById('ext-modal').classList.remove('open');
       loadView();
     }
     async function removeExt(sid, name) {
-      if (!confirm(`Remove extension for ${name}? They revert to the original due date.`)) return;
+      if (!confirm(`Remove the extension for ${name}?\n\nThey revert to the original due date. ` +
+                   `This erases the record of it — if you are pulling one back rather than ` +
+                   `correcting a mistake, your director should revoke it instead.`)) return;
       const { error } = await G.removeExtension(current.offeringId, enrollmentOf[sid]);
-      if (error) { alert('Failed to remove extension: ' + error.message); return; }
+      if (error) {
+        // The DB refuses this once the student has committed work under the extension.
+        alert(/already submitted under it/i.test(error.message)
+          ? `${name} has already submitted under this extension, so it cannot be removed.\n\n` +
+            `Withdrawing it now would only turn an on-time submission into a late one. Grade the work.`
+          : 'Failed to remove extension: ' + error.message);
+        return;
+      }
+      loadView();
+    }
+
+    // ── Review sign-off ──
+    function currentSectionIds() { return [...new Set(currentStudents.map(s => s.section_id))]; }
+
+    function renderSignoffBar() {
+      const bar = document.getElementById('signoff-bar');
+      const ids = currentSectionIds();
+      if (!ids.length) { bar.hidden = true; return; }
+      bar.hidden = false;
+      bar.innerHTML = ids.map(id => {
+        const s = signoffs[id];
+        const code = esc(ctx.sectionCodeOf(id));
+        if (!s) return `<span class="signoff-pill none">${code} · not reviewed</span>`;
+        // Grades that moved after the attestation retire it — derived, never stored.
+        const updates = currentStudents
+          .filter(st => st.section_id === id)
+          .map(st => scoreMap[st.student_id]?.updatedAt)
+          .filter(Boolean);
+        const stale = G.signoffStale(s, updates);
+        return `<span class="signoff-pill ${stale ? 'stale' : 'done'}"
+          title="${esc(s.note || '')}">${code} · ${stale ? 'reviewed, then changed' : 'reviewed'}
+          by ${esc(s.reviewedByName)} ${esc(fmtDate(s.reviewedAt))}</span>`;
+      }).join('');
+    }
+
+    function openSignoff() {
+      const ids = currentSectionIds();
+      if (!ids.length) { flash('Nothing to review.'); return; }
+      const codes = ids.map(id => ctx.sectionCodeOf(id)).sort();
+      document.getElementById('signoff-scope').textContent =
+        `You are attesting that you have read the proposed grades and comments for ` +
+        `${codes.length === 1 ? `section ${codes[0]}` : `${codes.length} sections (${codes.join(', ')})`} ` +
+        `and made any changes you want. This does not publish anything to students.`;
+      document.getElementById('signoff-note').value = '';
+      document.getElementById('signoff-error').textContent = '';
+      document.getElementById('signoff-modal').classList.add('open');
+    }
+
+    async function saveSignoff() {
+      const note = document.getElementById('signoff-note').value.trim();
+      const err = document.getElementById('signoff-error');
+      const ids = currentSectionIds();
+      const results = await Promise.all(
+        ids.map(id => G.signOffSection(ctx, current.offeringId, id, note || null)));
+      const bad = results.find(r => r.error);
+      if (bad) { err.textContent = 'Could not record it: ' + bad.error.message; return; }
+      document.getElementById('signoff-modal').classList.remove('open');
+      flash(`✓ Marked reviewed (${ids.length} section${ids.length === 1 ? '' : 's'})`);
       loadView();
     }
   </script>

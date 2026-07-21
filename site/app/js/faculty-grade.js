@@ -21,7 +21,7 @@
 import { db } from './supabase.js';
 import { lastFirst } from './util.js';
 import {
-  OFFERING_SELECT, GRADE_SELECT, SUBMISSION_SELECT,
+  OFFERING_SELECT, GRADE_SELECT, SUBMISSION_SELECT, EXTENSION_SELECT,
   shapeOffering, shapeSubmission, questionsOf, effectiveDue,
 } from './schema.js';
 
@@ -95,8 +95,11 @@ export async function loadGradingData(ctx, offeringId, sectionIds) {
       .eq('assignment_offering_id', offeringId).in('enrollment_id', enrollmentIds),
     db.from('grades').select(GRADE_SELECT)
       .eq('assignment_offering_id', offeringId).in('enrollment_id', enrollmentIds),
-    db.from('extensions').select('enrollment_id, extended_due_at')
-      .eq('assignment_offering_id', offeringId).in('enrollment_id', enrollmentIds),
+    // Active extensions only. A revoked row still exists (007 keeps it so the director's
+    // report can count it) but it must not move anybody's deadline.
+    db.from('extensions').select(EXTENSION_SELECT)
+      .eq('assignment_offering_id', offeringId).in('enrollment_id', enrollmentIds)
+      .is('revoked_at', null),
   ]);
 
   const responseMap = {}, submissionMap = {}, gradeMap = {}, extensionMap = {};
@@ -120,21 +123,45 @@ export async function loadGradingData(ctx, offeringId, sectionIds) {
       finalized: g.is_finalized,
       effort: g.effort,
       pointsEarned: g.points_earned == null ? null : Number(g.points_earned),
+      // Carried so a save can PRESERVE them for a student nobody edited. Writing the
+      // current user over every row was what erased the ai_suggested/instructor
+      // distinction the moment anyone clicked Save. See gradeRows().
       source: g.source,
+      gradedBy: g.graded_by,
+      gradedAt: g.graded_at,
+      updatedAt: g.updated_at,
     };
   });
 
   (exts.data || []).forEach(e => {
     const sid = studentOf[e.enrollment_id];
-    if (sid) extensionMap[sid] = e.extended_due_at;
+    if (sid) extensionMap[sid] = shapeExtension(e);
   });
 
   return { offering, students, responseMap, gradeMap, extensionMap, submissionMap };
 }
 
+/** One extensions row, flattened. `due` is the field effectiveDue() wants. */
+export function shapeExtension(e) {
+  if (!e) return null;
+  return {
+    id: e.id,
+    enrollmentId: e.enrollment_id,
+    offeringId: e.assignment_offering_id,
+    due: e.extended_due_at,
+    reason: e.reason || '',
+    grantedBy: e.granted_by,
+    grantedAt: e.created_at,
+    revokedAt: e.revoked_at || null,
+    revokedBy: e.revoked_by || null,
+    revokedReason: e.revoked_reason || '',
+    get isRevoked() { return !!e.revoked_at; },
+  };
+}
+
 /** The deadline that applies to one student in the grading view. */
 export function dueForStudent(offering, student, extensionMap) {
-  return effectiveDue(offering, student.section_id, extensionMap[student.student_id]);
+  return effectiveDue(offering, student.section_id, extensionMap[student.student_id]?.due || null);
 }
 
 /**
@@ -167,12 +194,42 @@ export function buildGradeData(offering, students, responseMap, gradeMap) {
   return gradeData;
 }
 
-/** Rows for a grades upsert. Shared by save and finalize so they cannot diverge. */
-function gradeRows(ctx, offering, students, gradeData, isFinalized) {
+/** Did the instructor actually touch this student's card in this sitting? */
+function wasEdited(qMap, questions) {
+  return questions.some(q => qMap?.[q.id]?.modified);
+}
+
+/**
+ * Rows for a grades upsert. Shared by save and finalize so they cannot diverge.
+ *
+ * TWO RULES HERE ARE LOAD-BEARING, and both were bugs before migration 007's review work:
+ *
+ * 1. PROVENANCE IS PRESERVED, NOT STAMPED. This used to hardcode source:'instructor',
+ *    graded_by:<caller>, graded_at:<now> for EVERY row in scope. One click of Save draft
+ *    therefore relabelled every AI suggestion in the section as instructor-authored,
+ *    including cards nobody had scrolled to — which destroyed the only column that could
+ *    answer "has a human looked at this?". A row is marked instructor-authored only when
+ *    that student's card was actually edited; otherwise the prior values ride through
+ *    unchanged. (They must be sent explicitly: a PostgREST upsert builds its column list
+ *    from the payload keys, so omitting them is not the same as leaving them alone.)
+ *
+ * 2. AN UNGRADED STUDENT IS NOT INVENTED. buildGradeData() defaults a submitted-but-
+ *    ungraded student to `full`, so writing every row meant Finalize & publish handed full
+ *    credit to every student the AI never scored — and a director who had picked "All
+ *    sections" did it course-wide. A student with no existing grade AND no edit is now
+ *    skipped entirely, which is also what makes the "past due, not graded" queue truthful.
+ */
+function gradeRows(ctx, offering, students, gradeData, isFinalized, gradeMap = {}) {
   const questions = questionsOf(offering.written);
   const enrollmentOf = Object.fromEntries(students.map(s => [s.student_id, s.enrollment_id]));
+  const now = new Date().toISOString();
 
   return Object.entries(gradeData).map(([sid, qMap]) => {
+    const prior = gradeMap[sid];
+    const edited = wasEdited(qMap, questions);
+    // Rule 2 — nothing to say about this student, so say nothing.
+    if (!prior && !edited) return null;
+
     const questionScores = {};
     let total = 0;
     questions.forEach(q => {
@@ -196,27 +253,34 @@ function gradeRows(ctx, offering, students, gradeData, isFinalized) {
       question_scores: questionScores,
       points_earned: earned,
       points_possible: possible,
-      source: 'instructor',
+      // Rule 1
+      source: edited ? 'instructor' : (prior?.source || 'ai_suggested'),
       is_finalized: isFinalized,
-      graded_by: ctx.user.id,
-      graded_at: new Date().toISOString(),
+      graded_by: edited ? ctx.user.id : (prior?.gradedBy ?? ctx.user.id),
+      graded_at: edited ? now : (prior?.gradedAt ?? now),
     };
-  }).filter(r => r.enrollment_id);
+  }).filter(r => r && r.enrollment_id);
+}
+
+/** How many rows a save/finalize would actually write — for an honest confirm prompt. */
+export function writableCount(ctx, offering, students, gradeData, gradeMap = {}) {
+  return gradeRows(ctx, offering, students, gradeData, false, gradeMap).length;
 }
 
 /** Upsert all scores as a draft (is_finalized:false). */
-export function saveScores(ctx, offering, students, gradeData) {
-  return db.from('grades').upsert(
-    gradeRows(ctx, offering, students, gradeData, false),
-    { onConflict: 'enrollment_id,assignment_offering_id' });
+export function saveScores(ctx, offering, students, gradeData, gradeMap = {}) {
+  const rows = gradeRows(ctx, offering, students, gradeData, false, gradeMap);
+  if (!rows.length) return Promise.resolve({ data: [], error: null, skipped: true });
+  return db.from('grades').upsert(rows, { onConflict: 'enrollment_id,assignment_offering_id' });
 }
 
 /**
  * Save then publish. Finalizing is what makes a grade visible to the student
  * (grades_own_finalized), so it is also the moment worth recording in the audit log.
  */
-export async function finalizeScores(ctx, offering, students, gradeData) {
-  const rows = gradeRows(ctx, offering, students, gradeData, true);
+export async function finalizeScores(ctx, offering, students, gradeData, gradeMap = {}) {
+  const rows = gradeRows(ctx, offering, students, gradeData, true, gradeMap);
+  if (!rows.length) return { data: [], error: null, skipped: true };
   const res = await db.from('grades').upsert(rows, { onConflict: 'enrollment_id,assignment_offering_id' })
     .select('id');
   if (res.error) return res;
@@ -246,23 +310,264 @@ export async function reopenScore(ctx, offeringId, enrollmentId) {
   return res;
 }
 
-/* ── Extensions (migration 005) ──────────────────────────────────────────────
+/* ── Extensions (migrations 005 + 007) ───────────────────────────────────────
  * Keyed on the enrolment, like everything else per-student. `granted_by` is recorded so an
  * extension is attributable the same way an unlock is.
+ *
+ * Three verbs, and the difference between them is the whole governance model:
+ *   setExtension    — grant or amend. Any staff of the section. `reason` is REQUIRED (007):
+ *                     the director's report counts these per instructor, and a count with a
+ *                     blank reason column cannot start the conversation it exists to start.
+ *   removeExtension — the granter's undo, for a genuine mistake. Erases the row, so it is
+ *                     refused by the DB once the student has committed work under it.
+ *   revokeExtension — the director's override. Soft: the row stays and keeps counting.
+ *                     Also refused after a committed submission, and the trigger rejects it
+ *                     from anyone who does not direct the offering.
  */
-export function setExtension(ctx, offeringId, enrollmentId, iso, reason = null) {
+export function setExtension(ctx, offeringId, enrollmentId, iso, reason) {
+  const why = String(reason || '').trim();
+  if (!why) return Promise.resolve({ error: { message: 'A reason is required to grant an extension.' } });
   return db.from('extensions').upsert({
     enrollment_id: enrollmentId,
     assignment_offering_id: offeringId,
     extended_due_at: iso,
-    reason,
+    reason: why,
     granted_by: ctx.user.id,
+    // Amending a revoked extension reinstates it — the UNIQUE key means there is only ever
+    // one row per (enrolment, offering), so this is the reinstatement path too.
+    revoked_at: null, revoked_by: null, revoked_reason: null,
   }, { onConflict: 'enrollment_id,assignment_offering_id' });
 }
 
 export function removeExtension(offeringId, enrollmentId) {
   return db.from('extensions').delete()
     .eq('assignment_offering_id', offeringId).eq('enrollment_id', enrollmentId);
+}
+
+/** Director override. Soft by design — see the 007 header. */
+export function revokeExtension(ctx, extensionId, reason) {
+  const why = String(reason || '').trim();
+  if (!why) return Promise.resolve({ error: { message: 'A reason is required to revoke an extension.' } });
+  return db.from('extensions').update({
+    revoked_at: new Date().toISOString(),
+    revoked_by: ctx.user.id,
+    revoked_reason: why,
+  }).eq('id', extensionId).is('revoked_at', null);
+}
+
+/** Undo a revocation. The row's original grant details are untouched by revocation. */
+export function reinstateExtension(extensionId) {
+  return db.from('extensions').update({
+    revoked_at: null, revoked_by: null, revoked_reason: null,
+  }).eq('id', extensionId);
+}
+
+/**
+ * Every extension in the current course offering, for the director's report.
+ *
+ * No DDL was needed to make this visible: a director's staff_assignments row carries
+ * section_id IS NULL, so app.staff_sections() already returns every section of the offering
+ * and extensions_staff_read admits the rows. The `.in()` below narrows, it does not secure.
+ *
+ * Revoked rows ARE included — the report's job is to count what was granted, and a revoked
+ * extension that vanished would quietly flatter whoever granted it.
+ */
+export async function courseExtensions(ctx, sectionIds) {
+  const scope = (sectionIds && sectionIds.length) ? sectionIds : null;
+  if (!scope) return [];
+
+  const { data: enrolRows } = await db.from('enrollments')
+    .select('id, student_id, section_id, students!inner(student_id, name)')
+    .in('section_id', scope);
+  const byEnrolment = Object.fromEntries((enrolRows || []).map(e => [e.id, e]));
+  const enrolmentIds = Object.keys(byEnrolment);
+  if (!enrolmentIds.length) return [];
+
+  const [exts, offerings, staff] = await Promise.all([
+    db.from('extensions').select(EXTENSION_SELECT)
+      .in('enrollment_id', enrolmentIds).order('created_at', { ascending: false }),
+    db.from('assignment_offerings')
+      .select('id, due_at, points_possible, assignments!inner(slug, title)')
+      .eq('course_offering_id', ctx.currentOffering),
+    db.from('instructors').select('id, name'),
+  ]);
+
+  const offeringOf = Object.fromEntries((offerings.data || []).map(o => [o.id, o]));
+  const nameOf = Object.fromEntries((staff.data || []).map(i => [i.id, i.name]));
+
+  return (exts.data || []).map(row => {
+    const x = shapeExtension(row);
+    const e = byEnrolment[x.enrollmentId];
+    const o = offeringOf[x.offeringId];
+    return {
+      ...x,
+      studentId: e?.student_id ?? null,
+      studentName: e?.students?.name || String(e?.student_id ?? ''),
+      sectionId: e?.section_id ?? null,
+      assignmentTitle: o?.assignments?.title || '—',
+      assignmentSlug: o?.assignments?.slug || '',
+      originalDue: o?.due_at || null,
+      grantedByName: nameOf[x.grantedBy] || (x.grantedBy ? 'Unknown instructor' : '—'),
+      revokedByName: nameOf[x.revokedBy] || null,
+    };
+  }).filter(r => r.offeringId in offeringOf);   // other offerings' rows are not this report
+}
+
+/* ── Review sign-off (migration 007) ─────────────────────────────────────────
+ * "I have read the AI's proposed grades and comments for this section and made my changes."
+ * Deliberately NOT is_finalized, which publishes to students.
+ */
+export async function loadSignoffs(ctx, offeringId, sectionIds) {
+  if (!offeringId || !sectionIds?.length) return {};
+  const [signoffs, staff] = await Promise.all([
+    db.from('review_signoffs')
+      .select('id, assignment_offering_id, section_id, reviewed_by, reviewed_at, note')
+      .eq('assignment_offering_id', offeringId).in('section_id', sectionIds),
+    db.from('instructors').select('id, name'),
+  ]);
+  const nameOf = Object.fromEntries((staff.data || []).map(i => [i.id, i.name]));
+  return Object.fromEntries((signoffs.data || []).map(s => [s.section_id, {
+    id: s.id,
+    sectionId: s.section_id,
+    reviewedAt: s.reviewed_at,
+    reviewedBy: s.reviewed_by,
+    reviewedByName: nameOf[s.reviewed_by] || 'Unknown instructor',
+    note: s.note || '',
+  }]));
+}
+
+/**
+ * Sign off one section. reviewed_by MUST be the caller: review_signoffs_require_self()
+ * rejects an attestation naming anyone else, for the same reason 006 rejects a
+ * misattributed unlock.
+ */
+export function signOffSection(ctx, offeringId, sectionId, note = null) {
+  return db.from('review_signoffs').upsert({
+    assignment_offering_id: offeringId,
+    section_id: sectionId,
+    reviewed_by: ctx.user.id,
+    reviewed_at: new Date().toISOString(),
+    note: note || null,
+  }, { onConflict: 'assignment_offering_id,section_id' });
+}
+
+export function clearSignoff(offeringId, sectionId) {
+  return db.from('review_signoffs').delete()
+    .eq('assignment_offering_id', offeringId).eq('section_id', sectionId);
+}
+
+/**
+ * A sign-off stops holding once the grades move under it.
+ *
+ * Derived rather than stored (see the 007 header): grades_touch maintains grades.updated_at,
+ * so "stale" is exactly `some grade in this section changed after the attestation`.
+ */
+export function signoffStale(signoff, gradeUpdatedISOs) {
+  if (!signoff?.reviewedAt) return false;
+  const at = new Date(signoff.reviewedAt).getTime();
+  return (gradeUpdatedISOs || []).some(iso => iso && new Date(iso).getTime() > at);
+}
+
+/* ── Worklists ───────────────────────────────────────────────────────────────
+ * The queues answer the question the Grade tab could not: not "how do I grade THIS
+ * assignment", but "what do I owe". They are the mechanism that stops a late submission
+ * from being lost — `preflight-analyze` runs once, after the section deadline, so a student
+ * on an extension submits into silence unless something remembers them.
+ *
+ * Both are pure reads over existing tables; no DDL, and no new denormalised state to drift.
+ */
+
+/** Students whose extension has now expired and whose work is still not finalized. */
+export function extensionsToGrade(offering, students, extensionMap, gradeMap, submissionMap, now = new Date()) {
+  return students.map(st => {
+    const sid = st.student_id;
+    const ext = extensionMap[sid];
+    if (!ext || ext.isRevoked) return null;
+    if (new Date(ext.due) > now) return null;              // still has time
+    const sub = submissionMap[sid];
+    if (!sub) return null;                                  // nothing came in
+    const g = gradeMap[sid];
+    if (g?.finalized) return null;                          // already published
+    return {
+      student: st, extension: ext, submission: sub, grade: g || null,
+      state: !g ? 'ungraded' : (g.source === 'ai_suggested' ? 'ai-only' : 'draft'),
+    };
+  }).filter(Boolean);
+}
+
+/**
+ * Assignments in this offering whose deadline has passed and which still hold unfinalized
+ * work. Cross-assignment on purpose — the Grade tab is otherwise strictly one-at-a-time,
+ * which is exactly why nothing ever surfaced the backlog.
+ *
+ * Deliberately counts only students who SUBMITTED. A non-submitter is a roster question, not
+ * a grading backlog, and mixing the two makes the number too big to act on.
+ */
+export async function pastDueUngraded(ctx, sectionIds, now = new Date()) {
+  if (!ctx.currentOffering || !sectionIds?.length) return [];
+
+  const { data: enrolRows } = await db.from('enrollments')
+    .select('id, section_id').in('section_id', sectionIds).eq('status', 'active');
+  const enrolmentIds = (enrolRows || []).map(e => e.id);
+  const sectionOf = Object.fromEntries((enrolRows || []).map(e => [e.id, e.section_id]));
+  if (!enrolmentIds.length) return [];
+
+  const { data: offerings } = await db.from('assignment_offerings')
+    .select('id, due_at, position, is_published, assignments!inner(slug, title),' +
+            'assignment_due_dates(section_id, due_at)')
+    .eq('course_offering_id', ctx.currentOffering).eq('is_published', true);
+
+  const offeringIds = (offerings || []).map(o => o.id);
+  if (!offeringIds.length) return [];
+
+  const [subs, grds, exts] = await Promise.all([
+    db.from('submissions').select('enrollment_id, assignment_offering_id, status')
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrolmentIds),
+    db.from('grades').select('enrollment_id, assignment_offering_id, is_finalized')
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrolmentIds),
+    db.from('extensions').select('enrollment_id, assignment_offering_id, extended_due_at')
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrolmentIds)
+      .is('revoked_at', null),
+  ]);
+
+  const key = (e, o) => `${e}|${o}`;
+  const finalized = new Set((grds.data || [])
+    .filter(g => g.is_finalized).map(g => key(g.enrollment_id, g.assignment_offering_id)));
+  const graded = new Set((grds.data || []).map(g => key(g.enrollment_id, g.assignment_offering_id)));
+  const extBy = Object.fromEntries((exts.data || [])
+    .map(x => [key(x.enrollment_id, x.assignment_offering_id), x.extended_due_at]));
+
+  const rows = [];
+  for (const o of offerings) {
+    const dueBySection = Object.fromEntries(
+      (o.assignment_due_dates || []).map(d => [d.section_id, d.due_at]));
+    const shaped = { dueAt: o.due_at, dueBySection };
+
+    let outstanding = 0, ungraded = 0, waiting = 0;
+    for (const s of (subs.data || []).filter(x => x.assignment_offering_id === o.id)) {
+      const k = key(s.enrollment_id, o.id);
+      if (finalized.has(k)) continue;
+      // A student still inside an extension is not a backlog item yet — they show up in the
+      // extensions queue when their own clock runs out.
+      const { isPast } = effectiveDue(shaped, sectionOf[s.enrollment_id], extBy[k] || null, now);
+      if (!isPast) { waiting++; continue; }
+      outstanding++;
+      if (!graded.has(k)) ungraded++;
+    }
+    if (outstanding > 0) {
+      rows.push({
+        offeringId: o.id,
+        title: o.assignments?.title || o.assignments?.slug || '—',
+        slug: o.assignments?.slug || '',
+        dueAt: o.due_at,
+        position: o.position ?? 0,
+        outstanding,      // submitted, past their own deadline, not finalized
+        ungraded,         // of those, with no grade row at all
+        waiting,          // still inside an extension; shown for context, not as backlog
+      });
+    }
+  }
+  return rows.sort((a, b) => new Date(a.dueAt || 0) - new Date(b.dueAt || 0));
 }
 
 /**

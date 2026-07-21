@@ -161,12 +161,35 @@ One semester's run, and the people in it:
 | `offering_activities` | Which activities are live this semester, and which carries credit |
 | `assignment_due_dates` | Per-section deadline overrides |
 | `extensions` | Per-student deadline overrides, attached to their enrolment |
+| `review_signoffs` | One instructor attestation per section per assignment: "I have reviewed this" |
 
 ### Which deadline applies
 
 Three sources, highest first: a student's **extension**, then their section's entry in
 **assignment_due_dates**, then the offering's own `due_at`. A section with no entry of its own
 falls back to the offering; an assignment with no `due_at` and no section entry has no deadline.
+
+A **revoked** extension does not count as an extension — the row survives revocation so it still
+appears on the director's extensions report, but the deadline reverts to the section's.
+
+### extensions
+
+| Field | Holds |
+|---|---|
+| `extended_due_at` | The replacement deadline. Not an offset — it replaces the computed one outright |
+| `reason` | Why it was granted. **Required**, and shown to the director alongside a per-instructor count |
+| `granted_by` | The instructor who granted it |
+| `revoked_at` / `revoked_by` / `revoked_reason` | Set together when a director revokes it, or all empty |
+
+### review_signoffs
+
+Records that an instructor has read the proposed grades and comments for one section of one
+assignment and made their changes. **This is not the same as finalizing** — finalizing publishes
+to students, a sign-off publishes nothing. One row per section per assignment.
+
+A sign-off is not stored as still-valid or expired; it is compared against the grades themselves.
+If any grade in that section changed after the attestation, the site reports it as *reviewed, then
+changed*, so a stored marker can never disagree with the grades it claims to cover.
 
 ### assignment_offerings
 
@@ -339,6 +362,15 @@ These are enforced by the database, not by the site, so they hold no matter what
   and an unlock cannot be attributed to a colleague who did not perform it.
 - **A frozen snapshot cannot be edited.** Correcting one requires clearing the seal first, as a
   separate deliberate step.
+- **An extension must say why it was granted.** A blank or missing reason is rejected.
+- **An extension cannot be withdrawn once the student has submitted under it** — neither by
+  revoking it nor by deleting it. Withdrawing a deadline after the work is in would only turn an
+  on-time submission into a late one.
+- **Only a course director may revoke an extension.** An instructor may delete one they granted in
+  error, but cannot revoke — otherwise the person whose totals the report tracks could remove
+  entries from it.
+- **A review sign-off cannot be attributed to someone else.** It is recorded in the name of
+  whoever performs it, for the same reason an unlock is.
 
 ## Reading the data directly
 

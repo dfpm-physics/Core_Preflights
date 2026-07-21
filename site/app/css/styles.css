@@ -825,7 +825,87 @@ tr:last-child td { border-bottom: none; }
 .tag.blue  { background: var(--mc-sel-bg); color: var(--blue-lt); border-color: transparent; }
 .tag.gold  { background: var(--feedback-bg); color: var(--feedback-fg); border-color: transparent; }
 .tag.green { background: var(--alert-ok-bg); color: var(--alert-ok-fg); border-color: transparent; }
+/* Grade-card provenance. "Not yet graded" must not read as "graded zero" — since migration
+   007 a save no longer invents a grade row for an untouched student, so the absence is real
+   information and has to look different from a score. */
+.tag-ungraded { background: var(--alert-warn-bg); color: var(--alert-warn-fg); border-color: transparent; }
+.tag-ai       { background: var(--alert-info-bg); color: var(--alert-info-fg); border-color: transparent; }
 .hidden { display: none !important; }
+
+/* ============================================================= *
+ *  Grade worklists + review sign-off (migration 007)            *
+ * ============================================================= */
+/* Collapsed by default: the count is the whole point, and an empty queue should cost
+   nothing to ignore. The <details> element carries the open/closed state natively. */
+.queue-card {
+  border: 1px solid var(--border); border-radius: 10px; background: var(--card);
+  margin-bottom: 12px; overflow: hidden;
+}
+.queue-card > summary {
+  display: flex; align-items: center; gap: 10px; padding: 11px 14px;
+  cursor: pointer; font-size: 0.9em; list-style: none;
+}
+.queue-card > summary::-webkit-details-marker { display: none; }
+.queue-card > summary::after {
+  content: '▸'; margin-left: auto; color: var(--muted); transition: transform 0.15s;
+}
+.queue-card[open] > summary::after { transform: rotate(90deg); }
+.queue-title { font-weight: 700; }
+.queue-count {
+  font-size: 0.78em; font-weight: 800; padding: 1px 9px; border-radius: 999px;
+  background: var(--surface-hover); color: var(--muted); border: 1px solid var(--border);
+}
+.queue-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.queue-dot.warn { background: var(--gold); }
+.queue-dot.late { background: var(--red); }
+.queue-body { padding: 0 14px 14px; border-top: 1px solid var(--border); }
+.queue-note { font-size: 0.82em; color: var(--muted); margin: 10px 0; }
+.queue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.queue-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.86em; }
+.queue-list a { font-weight: 600; color: var(--blue-lt); text-decoration: none; }
+.queue-list a:hover { text-decoration: underline; }
+.queue-why { color: var(--muted); font-style: italic; flex-basis: 100%; font-size: 0.94em; }
+
+.signoff-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.signoff-pill {
+  font-size: 0.76em; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-hover); color: var(--muted);
+}
+.signoff-pill.done  { background: var(--alert-ok-bg);   color: var(--alert-ok-fg);   border-color: transparent; }
+/* "Reviewed, then changed": the attestation is derived-stale, not cleared, so it keeps the
+   reviewer's name while warning the claim no longer covers the current grades. */
+.signoff-pill.stale { background: var(--alert-warn-bg); color: var(--alert-warn-fg); border-color: transparent; }
+
+/* Jump target from a queue row. */
+@keyframes cardFlash { 0%, 100% { box-shadow: none; } 30% { box-shadow: 0 0 0 3px var(--blue-lt); } }
+.grade-card.flash { animation: cardFlash 1.5s ease-in-out; }
+
+.req { font-size: 0.82em; font-weight: 700; color: var(--red); text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* ============================================================= *
+ *  Extensions report (faculty/extensions.html)                  *
+ * ============================================================= */
+.ext-rank { display: flex; flex-direction: column; gap: 7px; }
+.ext-rank-row { display: grid; grid-template-columns: minmax(120px, 200px) 1fr auto auto; align-items: center; gap: 10px; font-size: 0.88em; }
+.ext-rank-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ext-rank-bar { height: 8px; border-radius: 999px; background: var(--surface-sunken); overflow: hidden; }
+.ext-rank-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--blue-lt); }
+.ext-rank-n { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; }
+
+/* Wide, so it scrolls inside its own box rather than making the page scroll sideways. */
+.ext-table { display: flex; flex-direction: column; overflow-x: auto; }
+.ext-row {
+  display: grid; gap: 10px; align-items: center; padding: 7px 0;
+  grid-template-columns: minmax(130px,1.3fr) 52px minmax(120px,1.2fr) 96px 128px minmax(150px,1.6fr) auto;
+  border-top: 1px solid var(--border); font-size: 0.85em; min-width: 780px;
+}
+.ext-row.ext-head { border-top: none; font-size: 0.74em; font-weight: 700; text-transform: uppercase;
+                    letter-spacing: 0.05em; color: var(--muted); padding-bottom: 4px; }
+.ext-row.revoked > span:not(.ext-act):not(.ext-revnote) { opacity: 0.55; text-decoration: line-through; }
+.ext-reason { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ext-act { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+.ext-revnote { grid-column: 1 / -1; font-size: 0.92em; color: var(--alert-warn-fg);
+               background: var(--alert-warn-bg); border-radius: 6px; padding: 5px 9px; margin-top: 2px; }
 
 /* ============================================================= *
  *  Help centre (student/help.html, faculty/help.html)           *

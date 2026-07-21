@@ -64,6 +64,15 @@ exist.
 more. Suggested scores are invisible to students until an instructor reviews and finalizes them,
 and an instructor can overwrite any of it.
 
+**The traffic is one-way: a re-run never overwrites a person's work.** It skips any grade an
+instructor has finalized, and any grade an instructor has edited — including one saved as a draft
+and not yet published. An afternoon of adjusted scores and rewritten comments cannot be reverted by
+running the analysis again.
+
+Students who submit late under an extension are not picked up by a re-run, because the run happened
+before they submitted. They are listed for their instructor to grade by hand instead; re-running a
+whole assignment to catch a few late submissions is explicitly not the way.
+
 ## When AI writes to the live system
 
 There is one production database and one live site, shared by everyone. Agents operating on it

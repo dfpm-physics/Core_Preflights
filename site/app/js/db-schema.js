@@ -10,7 +10,7 @@
 //
 // tests/app-schema/test-db-schema.mjs fails when this file drifts from live.
 //
-// Source: scripts/app/gen_db_schema.py · schema `app` · 20 tables
+// Source: scripts/app/gen_db_schema.py · schema `app` · 21 tables
 // Shape per table: { name, comment, rls, primaryKey[], labelColumn, columns[], foreignKeys[],
 //                    enums{col:[values]}, policyCommands[], writable }
 //
@@ -1097,11 +1097,11 @@ export const DB_SCHEMA = {
           "name": "reason",
           "type": "text",
           "udt": "text",
-          "nullable": true,
+          "nullable": false,
           "default": null,
           "maxLength": null,
           "generated": false,
-          "comment": null,
+          "comment": "Why the extra time was granted. Required: the director-facing extensions report exists to start a conversation about volume, and a blank reason column cannot start one.",
           "pk": false
         },
         {
@@ -1136,6 +1136,39 @@ export const DB_SCHEMA = {
           "generated": false,
           "comment": null,
           "pk": false
+        },
+        {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Soft revocation. The row stays so the extension still counts as granted — hiding it would defeat the report it is counted in.",
+          "pk": false
+        },
+        {
+          "name": "revoked_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "The director who revoked it. ON DELETE SET NULL, like granted_by.",
+          "pk": false
+        },
+        {
+          "name": "revoked_reason",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
         }
       ],
       "foreignKeys": [
@@ -1165,6 +1198,17 @@ export const DB_SCHEMA = {
           "name": "extensions_granted_by_fkey",
           "columns": [
             "granted_by"
+          ],
+          "refTable": "instructors",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        },
+        {
+          "name": "extensions_revoked_by_fkey",
+          "columns": [
+            "revoked_by"
           ],
           "refTable": "instructors",
           "refColumns": [
@@ -1697,6 +1741,146 @@ export const DB_SCHEMA = {
           "practice"
         ]
       },
+      "policyCommands": [
+        "ALL",
+        "SELECT"
+      ],
+      "writable": true
+    },
+    "review_signoffs": {
+      "name": "review_signoffs",
+      "comment": "One instructor attestation per (assignment offering, section): the AI-suggested grades and comments have been read and adjusted. Deliberately NOT the same fact as grades.is_finalized, which publishes to students — an instructor must be able to finish reviewing without releasing, and a director must be able to see who is done before anything is released.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "assignment_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "section_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "reviewed_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Who attested. A trigger refuses a sign-off attributed to anyone but the caller, for the same reason migration 006 refuses a misattributed unlock: an attestation naming someone who did not perform it is worse than none.",
+          "pk": false
+        },
+        {
+          "name": "reviewed_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": "Also the staleness clock: the sign-off no longer holds once any grade in this (offering, section) has grades.updated_at > this value. Derived at read time on purpose — a stored counter could disagree with the rows it summarises.",
+          "pk": false
+        },
+        {
+          "name": "note",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "review_signoffs_assignment_offering_id_fkey",
+          "columns": [
+            "assignment_offering_id"
+          ],
+          "refTable": "assignment_offerings",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "review_signoffs_reviewed_by_fkey",
+          "columns": [
+            "reviewed_by"
+          ],
+          "refTable": "instructors",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        },
+        {
+          "name": "review_signoffs_section_id_fkey",
+          "columns": [
+            "section_id"
+          ],
+          "refTable": "sections",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        }
+      ],
+      "enums": {},
       "policyCommands": [
         "ALL",
         "SELECT"

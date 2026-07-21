@@ -35,9 +35,18 @@ export const SUBMISSION_SELECT =
   'unlocked_by,unlocked_at,updated_at,' +
   'submission_activities(id,activity_id,content,report_markdown,payload_bytes,is_final,updated_at)';
 
+// updated_at is carried because it is the staleness clock for a review sign-off
+// (migration 007): an attestation stops holding once a grade moves under it.
 export const GRADE_SELECT =
   'id,enrollment_id,assignment_offering_id,submission_id,points_earned,points_possible,' +
-  'effort,question_scores,diagnostic,source,is_finalized,graded_by,graded_at';
+  'effort,question_scores,diagnostic,source,is_finalized,graded_by,graded_at,updated_at';
+
+/** A per-student deadline override, with its grant and revocation provenance (migration 007).
+ *  ALWAYS pair this with `.is('revoked_at', null)` when computing a deadline — see the note
+ *  on effectiveDue(). Fetch revoked rows only where the point is to report on them. */
+export const EXTENSION_SELECT =
+  'id,enrollment_id,assignment_offering_id,extended_due_at,reason,granted_by,created_at,' +
+  'revoked_at,revoked_by,revoked_reason';
 
 /** Faculty view of submissions/grades: reach through the enrolment to the person. */
 export const ENROLLMENT_JOIN = 'enrollments!inner(id,student_id,section_id,students(student_id,name))';
@@ -185,9 +194,14 @@ export function questionPoints(activity) {
  * that went with it: the meeting pattern is now data on the section, and the override is
  * a row keyed by section, so nothing has to be inferred from a section code any more.
  *
+ * A REVOKED extension is not an extension. Since migration 007 the row survives revocation
+ * (so the director's report can still count it), which means the caller — not this function —
+ * is responsible for not passing a revoked row's date in. Every query that feeds a deadline
+ * filters `revoked_at IS NULL`; see EXTENSION_SELECT.
+ *
  * @param {object} offering  a shapeOffering() result
  * @param {string|null} sectionId
- * @param {string|null} extensionISO
+ * @param {string|null} extensionISO  an ACTIVE extension's date, or null
  * @param {Date} [now]  injected so tests are not clock-dependent
  * @returns {{ due: Date|null, isPast: boolean, source: 'extension'|'section'|'offering'|'none' }}
  */

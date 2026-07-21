@@ -47,6 +47,11 @@ const FACULTY_LINKS = [
   { key: 'grade',        label: 'Grade',        href: 'grade.html',             icon: 'grades',        emoji: '✅' },
   { key: 'roster',       label: 'Roster',       href: 'roster.html',            icon: 'roster',        emoji: '🧑‍🎓', directorOnly: true },
   { key: 'lessons',      label: 'Lessons',      href: 'lessons.html',           icon: 'assignments',   emoji: '📚' },
+  // Extensions is its own destination rather than a panel inside Admin because it is a
+  // recurring review, not a one-off administrative action: the director reads it to see how
+  // many extensions each instructor is granting and then goes and talks to them. Burying a
+  // number someone is meant to check every few weeks inside an export page hides it.
+  { key: 'extensions',   label: 'Extensions',   href: 'extensions.html',        icon: 'assignments',   emoji: '📅', directorOnly: true },
   { key: 'admin',        label: 'Admin',        href: 'admin.html',             icon: 'settings',      emoji: '⚙️', directorOnly: true },
   { key: 'system',       label: 'System',       href: 'system.html',            icon: 'settings',      emoji: '🛠️', adminOnly: true },
 ];

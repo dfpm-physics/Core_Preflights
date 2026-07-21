@@ -27,9 +27,9 @@ section('db-schema.js — generated catalogue');
 check('catalogue is non-empty', TABLE_NAMES.length > 0);
 eq('TABLE_NAMES matches DB_SCHEMA keys', TABLE_NAMES.length, Object.keys(DB_SCHEMA).length);
 
-// 20 base tables as of migration 006 (+005 extensions). A change here is not automatically a
+// 21 base tables as of migration 007 (+review_signoffs). A change here is not automatically a
 // failure — it means a migration landed and the catalogue needs regenerating and this count bumping.
-eq('20 base tables (views excluded)', TABLE_NAMES.length, 20);
+eq('21 base tables (views excluded)', TABLE_NAMES.length, 21);
 
 let missingCols = [], badPk = [], danglingFk = [];
 for (const name of TABLE_NAMES) {
@@ -125,6 +125,28 @@ check('RLS is enabled on every table', !noRls.length, noRls.join(', '));
 // labelColumn drives FK display and the delete confirmation token.
 const noLabel = TABLE_NAMES.filter(n => !tableMeta(n).labelColumn);
 check('every table has a label column for FK display', !noLabel.length, noLabel.join(', '));
+
+/* ── 2b. Migration 007 — extension governance + review sign-off ──────────── */
+// Catalogue-level only. These prove the columns and the table are really there and RLS is on;
+// they do NOT exercise the two triggers, which need a signed-in director the harness has no
+// account for. See the CHANGELOG note on what remains unverified.
+
+const extCols = (tableMeta('extensions')?.columns || []).map(c => c.name);
+for (const c of ['reason', 'revoked_at', 'revoked_by', 'revoked_reason', 'granted_by']) {
+  check(`extensions.${c} exists`, extCols.includes(c), extCols.join(', '));
+}
+
+// reason NOT NULL is what stops the director's report filling with blank rows.
+const reasonCol = (tableMeta('extensions')?.columns || []).find(c => c.name === 'reason');
+check('extensions.reason is NOT NULL', reasonCol && reasonCol.nullable === false,
+      `nullable=${reasonCol?.nullable}`);
+
+check('review_signoffs is in the catalogue', TABLE_NAMES.includes('review_signoffs'));
+const rsCols = (tableMeta('review_signoffs')?.columns || []).map(c => c.name);
+for (const c of ['assignment_offering_id', 'section_id', 'reviewed_by', 'reviewed_at', 'note']) {
+  check(`review_signoffs.${c} exists`, rsCols.includes(c), rsCols.join(', '));
+}
+check('review_signoffs has RLS enabled', !!tableMeta('review_signoffs')?.rls);
 
 /* ── 3. Drift against the live database ──────────────────────────────────── */
 
