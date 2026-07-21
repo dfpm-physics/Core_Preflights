@@ -14,7 +14,8 @@ legacy site page (`site/admin.html`) and are reached via the **Admin ↗** link 
 ```
 app/
   index.html            Router — resolves role, forwards to the right dashboard
-  login.html            Unified login (cadet ID → @usafa.edu, or instructor email)
+  login.html            Unified login — email address only, students and staff alike
+  reset.html            Explains in-person password recovery (PREP has no SMTP)
   student/              dashboard · assignments (submit/review) · interactions · help
   faculty/              dashboard · grade · report · roster (+sections) · interactions · help
   help/                 Help content: Markdown docs + MANIFEST.json (see help/README.md)
@@ -44,9 +45,10 @@ From the **repo root** (so the legacy pages resolve too):
 python -m http.server 8000
 ```
 
-Then open <http://localhost:8000/site/app/>. Log in as a student (cadet ID + last-6 password)
-or an instructor (email + password). The session persists across reloads and navigation;
-sign out from the user menu.
+Then open <http://localhost:8000/site/app/>. Log in with an email address and password —
+students and instructors use the same form. A student's address comes from the roster; cadets
+provisioned before 2026-07-21 still have the older fabricated `<cadet ID>@usafa.edu` one. The
+session persists across reloads and navigation; sign out from the user menu.
 
 > **No Node dependency here.** The portal is plain ES modules + CSS the browser runs as-is — no build
 > step, bundler, or transpiler, and nothing under `site/` needs Node to serve or deploy. **Verify by

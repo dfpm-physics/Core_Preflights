@@ -79,13 +79,18 @@ export async function bootstrap(opts = {}) {
   if (opts.require && role !== opts.require) { go(roleHome(role)); return; }
 
   // ── Forced password rotation ──────────────────────────────────────────────
-  // Set by the `set-password` edge function when a system admin types a password for someone
-  // by hand. That administrator knows the password, so it cannot be carried into normal use:
-  // every page bounces here until the user picks their own. The flag lives on the auth user
-  // (user_metadata) rather than in a table because schema `app` DDL is sealed — see
-  // PLAN-2026-07-20-ACCOUNTS.md §3. Until the edge function ships, nothing sets it and this
-  // is inert. The account page is exempt, or the redirect would loop.
-  if (user.user_metadata?.must_change_password && !/\/account\.html$/.test(location.pathname)) {
+  // Set by `provision-students` (a new account) and `reset-student-password` (a staff reset).
+  // Both leave the user on the default derived from their cadet ID — a value on the roster and,
+  // in a squadron, effectively public. So it cannot be carried into normal use: every page
+  // bounces here until the user picks their own.
+  //
+  // The flag lives on the auth user rather than in a table because schema `app` DDL is sealed
+  // (PLAN-2026-07-20-ACCOUNTS.md §3). It reads BOTH metadata bags: `app_metadata` is where it
+  // lives now — service-role-only, so the user cannot clear it themselves — and `user_metadata`
+  // is the pre-2026-07-21 location, honoured until every account flagged there has rotated.
+  // The account page is exempt, or the redirect would loop.
+  if ((user.app_metadata?.must_change_password || user.user_metadata?.must_change_password)
+      && !/\/account\.html$/.test(location.pathname)) {
     go(`${APP_ROOT}${role === 'faculty' ? 'faculty' : 'student'}/account.html?rotate=1`);
     return;
   }

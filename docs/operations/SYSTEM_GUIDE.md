@@ -69,6 +69,14 @@ Any logged-in instructor can change their own password without contacting the co
 
 ## Adding Students (Roster Upload)
 
+> **This section describes the admin panel that is live today (`site/admin.html`, schema `public`),
+> and it is accurate for it.** The PREP v2 app (`site/app/`, schema `app`) replaced this whole
+> procedure on 2026-07-21 and takes the **registrar's export** instead of a hand-made three-column
+> CSV — real email addresses, squadron, majors, and advisor, with a per-student review step for
+> returning cadets, and no password reset by email. None of that is live until the cutover
+> ([`PREP-V2-CUTOVER.md`](PREP-V2-CUTOVER.md)); at that point everything below is superseded in one
+> go. See the 2026-07-21 entry in [`../../CHANGELOG.md`](../../CHANGELOG.md) for the new model.
+
 Students are uploaded via CSV at the start of each semester.
 
 **CSV format** (no header row needed, but including one is fine):

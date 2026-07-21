@@ -39,6 +39,13 @@ Tests sign in as **`3009999999` — "ZZ Test Cadet"**, a deliberate test row at 
 valid cadet-ID range, using the documented default password scheme (last six digits of the
 ID). No real cadet's account is touched.
 
+> **This account is grandfathered, not typical.** It was provisioned before 2026-07-21, so its
+> auth email is the old fabricated `3009999999@usafa.edu` (hardcoded in `harness.mjs`) rather
+> than a real address from the registrar export. Two things follow: do not read it as an example
+> of how accounts are created now, and **do not reset its password** — a reset sets the
+> forced-rotation flag, after which every live suite fails at sign-in until someone completes a
+> password change by hand.
+
 Writes made by the end-to-end tests are confined to that account's own rows and are cleaned
 up afterwards. If a run is interrupted, `node cleanup.mjs` removes any residue.
 

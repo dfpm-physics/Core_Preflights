@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-07-20",
+  "updated": "2026-07-21",
   "tiers": ["student", "instructor", "director", "admin"],
   "docs": [
     {
@@ -23,6 +23,13 @@
       "title": "Grading in PREP",
       "summary": "The Grade tab, the 3-state colors, and finalizing AI-suggested scores.",
       "file": "instructor-grading.md"
+    },
+    {
+      "id": "accounts",
+      "tier": "instructor",
+      "title": "Student accounts and passwords",
+      "summary": "Resetting a locked-out cadet, why you cannot choose their password, and uploading a roster.",
+      "file": "instructor-accounts.md"
     },
     {
       "id": "course-structure",

@@ -24,10 +24,10 @@
 
       <form id="login-form" autocomplete="on">
         <div class="field">
-          <label for="identifier">Cadet ID or instructor email</label>
-          <input id="identifier" type="text" inputmode="email" autocomplete="username"
-                 placeholder="e.g. 1234567 or first.last@afacademy.af.edu" required>
-          <div class="field-hint">Cadets: enter your ID (we'll add <code>@usafa.edu</code>). Instructors: use your email.</div>
+          <label for="identifier">Email address</label>
+          <input id="identifier" type="email" inputmode="email" autocomplete="username"
+                 placeholder="first.last@afacademy.af.edu" required>
+          <div class="field-hint">Use the email address your account was created with.</div>
         </div>
         <div class="field">
           <label for="password">Password</label>
@@ -36,8 +36,8 @@
         <button id="submit" class="btn btn-primary btn-block" type="submit">Sign in</button>
       </form>
 
-      <div class="login-foot">Cadets' default password is the last 6 digits of the cadet ID.<br>
-        <a href="reset.html">Forgot your password?</a></div>
+      <div class="login-foot">Forgot your password? Cadets: ask your instructor to reset it.
+        Instructors: ask a system admin.</div>
     </div>
     <div class="physics-strip" aria-hidden="true">
       <img src="media/icons/ic-atom.png"   alt="" onerror="this.style.display='none'">
@@ -77,19 +77,32 @@
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       errEl.style.display = 'none';
-      const raw = document.getElementById('identifier').value.trim();
+      const email = document.getElementById('identifier').value.trim();
       const pw  = document.getElementById('password').value;
-      if (!raw || !pw) { showError('Enter your ID/email and password.'); return; }
+      if (!email || !pw) { showError('Enter your email address and password.'); return; }
 
-      const email = raw.includes('@') ? raw : `${raw}@usafa.edu`;
+      // No more "bare cadet ID gets @usafa.edu appended". That convenience existed because the
+      // address WAS the cadet ID — provisioning fabricated <cadet_id>@usafa.edu. Accounts now
+      // carry the real address from the registrar export, so there is nothing to derive, and
+      // guessing a domain here would just produce a confusing failure for every new cadet.
+      // Cadets provisioned before 2026-07-21 still sign in with the old fabricated address,
+      // which they type in full like any other.
+      if (!email.includes('@')) {
+        showError('Enter your full email address, including the part after the @.');
+        return;
+      }
+
       const btn = document.getElementById('submit');
       btn.disabled = true; btn.innerHTML = '<span class="spinner on-dark"></span> Signing in…';
 
       const { error } = await db.auth.signInWithPassword({ email, password: pw });
       if (error) {
         btn.disabled = false; btn.textContent = 'Sign in';
+        // One message for every auth failure, on purpose: distinguishing "no such account" from
+        // "wrong password" turns this form into a roster oracle, which is the legacy bug
+        // site/index.html shipped and account.js warns against porting.
         showError(/invalid login/i.test(error.message)
-          ? 'Incorrect ID/email or password. Cadets: default password is the last 6 digits of your ID.'
+          ? 'Incorrect email or password.'
           : 'Sign-in failed: ' + error.message);
         return;
       }

@@ -12,7 +12,22 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //   students.section_id       -> enrollments (a student may hold several)
 //
 // The admin client is pinned to schema `app`; `public` is no longer touched by this function.
-// The email/password convention is unchanged: <cadetId>@usafa.edu, password = last 6 digits.
+//
+// ── 2026-07-21: THE SIGN-IN ADDRESS IS NO LONGER INVENTED ────────────────────────────────────
+// This function used to mint `<cadetId>@usafa.edu` because the roster CSV carried no address.
+// That string was never a real mailbox, which is why every password-recovery path built on top
+// of it silently recovered nobody. The registrar export carries a real `Email` column, migration
+// 008 stores it, and provisioning now uses it.
+//
+// A cadet with no stored address is SKIPPED rather than given a fabricated one. Refusing is the
+// point: falling back would recreate the unreachable-mailbox problem one account at a time, and
+// the fix — re-import the roster — is something the operator can actually do. The error names
+// them so it is actionable.
+//
+// The password convention is unchanged (last 6 digits of the cadet ID), but new accounts are now
+// FLAGGED `must_change_password`, so that shared-knowledge default survives exactly one sign-in.
+// The flag lives in `app_metadata`, which is service-role-only — in `user_metadata` the student
+// could clear it from a browser console and keep the default forever.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -103,7 +118,7 @@ serve(async (req) => {
     // person may be enrolled in another course this function has no business provisioning.
     const { data: enrolments, error: enrErr } = await supabaseAdmin
       .from("enrollments")
-      .select("student_id, students!inner(student_id, auth_user_id)")
+      .select("student_id, students!inner(student_id, name, email, auth_user_id)")
       .in("section_id", sectionIds)
       .eq("status", "active")
       .is("students.auth_user_id", null);
@@ -112,21 +127,40 @@ serve(async (req) => {
     if (!enrolments?.length) return ok({ success: true, count: 0, errors: [] });
 
     // One person may hold several enrolments in the same offering; provision them once.
-    const studentIds = [...new Set(enrolments.map((e: { student_id: number }) => e.student_id))];
+    type Row = { student_id: number; students: { name: string; email: string | null } };
+    const byId = new Map<number, { name: string; email: string | null }>();
+    for (const e of enrolments as unknown as Row[]) {
+      if (!byId.has(e.student_id)) {
+        byId.set(e.student_id, { name: e.students?.name ?? "", email: e.students?.email ?? null });
+      }
+    }
 
     // Provision serially to avoid rate limiting.
     let count = 0;
+    let skippedNoEmail = 0;
     const errors: string[] = [];
 
-    for (const studentId of studentIds) {
+    for (const [studentId, person] of byId) {
       const studentIdStr = String(studentId);
-      const email = studentIdStr + "@usafa.edu";
+      const email = (person.email || "").trim();
       const password = studentIdStr.slice(-6); // last 6 digits
+
+      if (!email) {
+        // No fabricated fallback — see the header note. Naming the cadet and the remedy makes
+        // this a task rather than a mystery.
+        skippedNoEmail++;
+        errors.push(
+          `${studentId}${person.name ? ` (${person.name})` : ""}: no email address on file — ` +
+          `re-import the roster with the registrar's Email column, then provision again.`
+        );
+        continue;
+      }
 
       const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
-        email_confirm: true,
+        email_confirm: true,          // no mail is sent; nothing here can receive one
+        app_metadata: { must_change_password: true },
       });
 
       if (createErr) {
@@ -150,7 +184,7 @@ serve(async (req) => {
       count++;
     }
 
-    return ok({ success: true, count, errors });
+    return ok({ success: true, count, errors, skipped_no_email: skippedNoEmail });
 
   } catch (err) {
     return ok({ error: "Unexpected error: " + (err as Error).message });

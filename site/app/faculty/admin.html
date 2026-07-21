@@ -118,7 +118,7 @@
           <td>${scope}</td>
           <td style="text-align:right;white-space:nowrap">
             ${s.implicit ? '' : `<button class="btn btn-ghost btn-sm" data-sections="${esc(s.instructorId)}">Sections</button>`}
-            <button class="btn btn-ghost btn-sm" data-reset="${esc(s.instructorId)}">Send reset</button>
+            <button class="btn btn-ghost btn-sm" data-reset="${esc(s.instructorId)}">Password help</button>
             ${canRemove
               ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" data-remove="${esc(s.instructorId)}">Remove</button>`
               : `<button class="btn btn-ghost btn-sm" disabled title="${isMe ? 'You cannot remove yourself' : 'Only a system admin can change another system admin'}">Remove</button>`}
@@ -192,27 +192,26 @@
         renderStaff();
       }));
 
+      // The old "Send reset" button is gone — PREP has no SMTP, so it reported success while
+      // delivering nothing. What remains explains where staff recovery actually lives, because
+      // a director looking for this button needs an answer, not a missing control.
       panel.querySelectorAll('[data-reset]').forEach(b => b.addEventListener('click', () => {
         const who = cache.staff.find(s => s.instructorId === b.dataset.reset);
-        openModal('Send reset email',
-          `<p style="font-size:0.94em;margin-bottom:14px">Email a six-digit reset code to
-             <strong>${esc(who.name)}</strong>?</p>
-           <div class="alert alert-info">This is the same code they could request themselves.
-             <strong>You will not see or set their password</strong> — they choose it from the code,
-             which expires in about 15 minutes.</div>
-           <div class="field"><label for="rs-email">Send to</label>
-             <input id="rs-email" type="email" placeholder="name@usafa.edu">
-             <div class="field-hint">Their sign-in address. PREP does not store a separate contact
-               address, so confirm this is the one they use.</div></div>`,
-          'Send code',
-          async () => {
-            const email = document.getElementById('rs-email').value.trim();
-            if (!email) return 'Enter their sign-in email.';
-            const { error } = await A.sendResetEmail(email);
-            if (error) return error.message;
-            status(`✓ Reset code sent to ${email}`, 'var(--green)');
-            return null;
-          });
+        openModal('Password help',
+          `<p style="font-size:0.94em;margin-bottom:14px">PREP cannot email a reset code to
+             <strong>${esc(who.name)}</strong> — it has no mail server, so the old button
+             delivered nothing.</p>
+           <div class="alert alert-info">An <strong>instructor</strong> account has no cadet ID,
+             so there is no default password to restore. Resetting one means somebody choosing
+             another person's password, and whoever does that holds working credentials for an
+             account that finalizes grades. That is a system-admin action, taken in the Supabase
+             dashboard, and it is not delegated here.</div>
+           <p class="muted" style="font-size:0.88em">Cadets are different: their default is
+             derived from their cadet ID, so any instructor can reset a student from the
+             <strong>Roster</strong> page without learning anything they did not already know.</p>`,
+          // No handler: confirming just dismisses. openModal writes okLabel into the button's
+          // textContent, so this needs a real string rather than null.
+          'Close', null);
       }));
 
       panel.querySelectorAll('[data-sections]').forEach(b => b.addEventListener('click', () => {

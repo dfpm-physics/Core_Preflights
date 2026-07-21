@@ -5,18 +5,25 @@
 // a copy in each role directory. The logic lives here once.
 //
 // ── THE PASSWORD MODEL ───────────────────────────────────────────────────────────
-// Three flows, deliberately different in who learns the password:
+// Two flows, and the absence of a third is the design:
 //
-//   A  change      the user knows the old one and picks the new one          (here)
-//   B  reset       the user proves control of their mailbox with a code      (here + reset.html)
-//   C  send reset  a director triggers B for someone else                    (edge function)
-//   D  set         a system admin types a password for someone else          (edge function)
+//   A  change         the user knows the old one and picks the new one    (here)
+//   B  reset-to-default  a staff member restores the default for someone  (reset-student-password)
 //
-// A and B are the only ones a user can run for themselves, and are the only ones in this file.
-// C is safe to delegate because the sender never learns the password. D is not, which is why it
-// is system-admin-only AND flags the account — see mustChangePassword() below.
+// THERE IS NO EMAIL RECOVERY, AND THERE CANNOT BE ONE. PREP has no SMTP, and until 2026-07-21
+// every cadet's address was FABRICATED by the provisioning script as <cadet_id>@usafa.edu — a
+// string no mail server has ever accepted. The reset-by-emailed-code flow that used to live in
+// this file (requestReset/completeReset + reset.html) was therefore complete, tested, and
+// incapable of recovering a single account. It was removed rather than left in place, because a
+// recovery path that looks like it works is worse than none: a locked-out cadet follows it,
+// waits for mail that will never arrive, and does not ask the person who can actually help.
 //
-// Design record: site/app/PLAN-2026-07-20-ACCOUNTS.md
+// Recovery is in-person instead. A cadet asks an instructor, who resets them to the default —
+// last 6 digits of the cadet ID — from the roster page. The instructor never chooses or sees a
+// password, and the account is flagged so the cadet must pick their own on the next sign-in.
+//
+// Design record: site/app/PLAN-2026-07-20-ACCOUNTS.md (tiers C and D there describe the email
+// world this replaced; the "send reset email" tier no longer exists).
 
 import { db } from './supabase.js';
 
@@ -116,78 +123,51 @@ async function facultyIdentity(ctx) {
  * ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Change the signed-in user's password, verifying the current one first.
+ * Change the signed-in user's password.
  *
- * Supabase's updateUser() does NOT check the existing password — it trusts the session. That
- * means an unlocked, unattended browser is enough to take an account over. So we re-authenticate
- * with the typed current password before changing anything. A failed sign-in attempt does not
- * disturb the existing session, so a wrong guess is safe.
+ * Goes through the `set-own-password` edge function rather than `auth.updateUser()`, for one
+ * reason: the forced-rotation flag lives in `app_metadata`, which a browser session cannot
+ * write. If the browser changed the password directly, a flagged user would change it, stay
+ * flagged, and be bounced back to this page on every navigation forever.
+ *
+ * The function also re-verifies the current password server-side — `updateUser` does NOT check
+ * it, so an unlocked unattended browser in a lab would otherwise be enough to take an account
+ * over. It skips that check for an account under forced rotation, where the user may genuinely
+ * not know the password an instructor just set for them.
+ *
+ * @param {string|null} currentPw  may be null when the user is under forced rotation
  */
-export async function changePassword(email, currentPw, newPw) {
-  const check = await db.auth.signInWithPassword({ email, password: currentPw });
-  if (check.error) return { error: { message: 'That is not your current password.' } };
-
-  const { error } = await db.auth.updateUser({ password: newPw });
-  if (error) return { error };
-  return { error: null };
+export async function changePassword(currentPw, newPw) {
+  const { data, error } = await db.functions.invoke('set-own-password', {
+    body: { current_password: currentPw ?? null, new_password: newPw },
+  });
+  if (error) return { error: { message: error.message } };
+  if (data?.error) return { error: { message: data.error } };
+  return { error: null, wasForced: data?.was_forced === true };
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
- * B — reset by emailed code (signed out)
+ * Forced rotation after a staff reset-to-default
  * ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Send a recovery code. Always resolves as if it worked.
+ * Is this account still on a password somebody else knows?
  *
- * Never reveal whether an address exists. Legacy did the opposite — site/index.html ran a second
- * query purely to say "ID not found" versus "incorrect password", which turned the login form
- * into a roster oracle and restated the default-password rule to an anonymous caller. The error
- * is swallowed on purpose; the caller shows one message either way.
+ * Set by `reset-student-password` (a staff reset) and by `provision-students` (a brand-new
+ * account), both of which leave the user on the default derived from their cadet ID — a value
+ * printed on the roster and, in a squadron, effectively public.
  *
- * The email carries a SIX-DIGIT CODE, not a link, which requires the Supabase recovery template
- * to use {{ .Token }} rather than {{ .ConfirmationURL }}. Cadets read mail on a phone and act on
- * a lab desktop; a link only authenticates the device that opened it, and mail scanners that
- * pre-fetch links silently burn single-use tokens.
- */
-export async function requestReset(email) {
-  try { await db.auth.resetPasswordForEmail(email); } catch (_) { /* see above */ }
-  return { error: null };
-}
-
-/** Exchange a recovery code for a session, then set the new password. */
-export async function completeReset(email, code, newPw) {
-  const { error: vErr } = await db.auth.verifyOtp({ email, token: code, type: 'recovery' });
-  if (vErr) {
-    return { error: { message: 'That code is not valid, or it has expired. Request a new one.' } };
-  }
-  const { error } = await db.auth.updateUser({ password: newPw });
-  if (error) return { error };
-  await clearMustChange();          // a self-service reset also satisfies a forced rotation
-  return { error: null };
-}
-
-/* ══════════════════════════════════════════════════════════════════════════════
- * D (read side) — forced rotation after an admin-set password
- * ════════════════════════════════════════════════════════════════════════════ */
-
-/**
- * Did an administrator set this password by hand?
- *
- * Stored on the auth user rather than in a table on purpose: schema `app` DDL is sealed
- * (prep_app_owner is NOLOGIN and unsealing is a coordinated human action under CORE.md §0),
- * while user_metadata is writable from the Admin API the edge function already holds. So this
- * costs no migration.
- *
- * The WRITE side belongs to the not-yet-built `set-password` edge function. Reading it here is
- * harmless until then — the flag is simply never set.
+ * READS BOTH LOCATIONS ON PURPOSE. The flag now lives in `app_metadata`, which only the service
+ * role can write; it previously lived in `user_metadata`, which the user's own session can write
+ * — meaning a cadet could have cleared it from a browser console and kept the default password,
+ * the exact state the flag exists to prevent. Accounts flagged before the move still carry the
+ * old copy, so both are honoured until every one of them has rotated. `set-own-password` clears
+ * both, so this pair converges on its own and the `user_metadata` read can be deleted once no
+ * flagged accounts predate 2026-07-21.
  */
 export function mustChangePassword(user) {
-  return user?.user_metadata?.must_change_password === true;
-}
-
-/** Clear the flag once the user has chosen their own password. */
-export function clearMustChange() {
-  return db.auth.updateUser({ data: { must_change_password: false } });
+  return user?.app_metadata?.must_change_password === true
+      || user?.user_metadata?.must_change_password === true;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -247,9 +227,19 @@ export async function renderAccount(ctx, root) {
   const isFaculty = ctx.role === 'faculty';
   const sel = (v, want) => (v === want ? ' selected' : '');
 
+  // auth.js redirects here with ?rotate=1 when the account is flagged. Explaining WHY beats a
+  // bare "change your password" — someone who just had a password read to them by an instructor
+  // needs to know this is the expected next step and not a fault.
+  const rotate = mustChangePassword(ctx.user);
+
   root.innerHTML = `
     <div class="page-head"><h1>Account</h1>
       <div class="sub">${esc(id.name)} · ${esc(id.roleLabel)}</div></div>
+
+    ${rotate ? `<div class="alert alert-warn">
+      <strong>Choose a new password to continue.</strong>
+      Your account is on its default password — the last 6 digits of your ID — which means
+      someone else knows it. Pick your own below and the rest of PREP unlocks.</div>` : ''}
 
     <div class="card">
       <div class="card-title">Who you are</div>
@@ -264,8 +254,8 @@ export async function renderAccount(ctx, root) {
     <div class="card">
       <div class="card-title">Change password</div>
       <div class="card-meta">You stay signed in here. Other devices are signed out.</div>
-      <div class="field"><label for="pw-cur">Current password</label>
-        <input type="password" id="pw-cur" autocomplete="current-password"></div>
+      ${rotate ? '' : `<div class="field"><label for="pw-cur">Current password</label>
+        <input type="password" id="pw-cur" autocomplete="current-password"></div>`}
       <div class="field"><label for="pw-new">New password</label>
         <input type="password" id="pw-new" autocomplete="new-password">
         <div class="pwbar" id="pwbar"><span></span></div>
@@ -277,7 +267,9 @@ export async function renderAccount(ctx, root) {
         <span id="pw-status" style="font-size:0.85em"></span>
       </div>
       <div class="muted" style="font-size:0.82em;margin-top:10px">Forgot your current one?
-        <a href="../reset.html">Reset it by email</a>.</div>
+        ${ctx.role === 'student'
+          ? 'Ask your instructor to reset it. They can put it back to the default — the last 6 digits of your ID — but cannot look up or choose a password for you.'
+          : 'Ask a system admin to reset it. PREP cannot send recovery email.'}</div>
     </div>
 
     <div class="card">
@@ -323,19 +315,35 @@ function wireAccount(ctx, root) {
 
   $('pw-save')?.addEventListener('click', async () => {
     const status = $('pw-status'), btn = $('pw-save');
-    const cur = $('pw-cur').value, next = pwNew.value, cf = $('pw-cf').value;
+    // The current-password field is absent under forced rotation — the user may not know the
+    // password an instructor just set for them, and the server skips the check in that case.
+    const curField = $('pw-cur');
+    const cur = curField ? curField.value : null;
+    const next = pwNew.value, cf = $('pw-cf').value;
     const problem = passwordProblem(next, cf);
-    if (!cur) { status.style.color = 'var(--red)'; status.textContent = 'Enter your current password.'; return; }
+    if (curField && !cur) { status.style.color = 'var(--red)'; status.textContent = 'Enter your current password.'; return; }
     if (problem) { status.style.color = 'var(--red)'; status.textContent = problem; return; }
 
     btn.disabled = true; status.style.color = 'var(--muted)'; status.textContent = 'Updating…';
-    const { error } = await changePassword(ctx.user.email, cur, next);
+    const { error, wasForced } = await changePassword(cur, next);
     btn.disabled = false;
     if (error) { status.style.color = 'var(--red)'; status.textContent = '⚠ ' + error.message; return; }
-    await clearMustChange();
+
     status.style.color = 'var(--green)'; status.textContent = '✓ Password updated';
-    $('pw-cur').value = pwNew.value = $('pw-cf').value = '';
+    if (curField) curField.value = '';
+    pwNew.value = $('pw-cf').value = '';
     bar.className = 'pwbar';
+
+    // The rotation flag is on the JWT, and bootstrap() re-reads it on every page load — so a
+    // user who was flagged is still flagged in this tab's session and would be bounced back
+    // here on the next click. Reload to pick up the cleared flag and let them through.
+    // Both role directories hold account.html beside dashboard.html, so one relative path
+    // serves either.
+    if (wasForced) {
+      status.textContent = '✓ Password updated — taking you to PREP…';
+      await db.auth.refreshSession();
+      setTimeout(() => location.replace('dashboard.html'), 900);
+    }
   });
 
   $('pf-theme')?.addEventListener('change', (e) => setTheme(e.target.value));

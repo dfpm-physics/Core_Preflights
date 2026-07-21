@@ -20,7 +20,13 @@ lesson interactions at USAFA. Replaces GradeScope for two courses: Physics 110 a
 
 - **Frontend**: Static HTML/CSS/JS hosted on GitHub Pages (no build step)
 - **Backend**: Supabase (PostgreSQL + Auth + REST API)
-- **Auth**: Supabase Auth for both instructors (email/password) and students (cadetID@usafa.edu / last-6-digits default password)
+- **Auth**: Supabase Auth for both instructors and students, email/password. A student's sign-in
+  address is the **real address from the registrar export** (`app.students.email`); their first
+  password is the last 6 digits of their cadet ID and they are forced to change it on first
+  sign-in. **There is no password reset by email — PREP has no SMTP.** A locked-out cadet asks any
+  instructor of their section, who restores the default from the Roster page; instructors cannot
+  view or choose a password. *(Cadets provisioned before 2026-07-21 still sign in with the
+  fabricated `cadetID@usafa.edu` address that predates the registrar import.)*
 - **Analysis**: `preflight-analyze` shared AI skill (see `.ai/skills/preflight-analyze/`)
 
 > **No Node dependency or build step in the shipped site — do not introduce one** (full rule in
@@ -142,7 +148,9 @@ Deployed to Supabase (`supabase/functions/`). All verify the caller's JWT and au
 |---|---|
 | `create-instructor` | Creates Supabase Auth user + `instructors` row + `instructor_course_access` row; handles all three roles; rolls back on partial failure |
 | `remove-instructor` | Removes course access or clears `is_global_admin`; only SAs can remove other SAs |
-| `provision-students` | Bulk-creates Supabase Auth accounts for all students in a course where `auth_user_id IS NULL`; email = `studentId@usafa.edu`, password = last 6 digits of ID; runs serially; continues on individual failures; returns `{ success, count, errors }` |
+| `provision-students` | Bulk-creates Supabase Auth accounts for enrolled students where `auth_user_id IS NULL`; **email = the real address in `students.email`** (a student without one is skipped, not given a fabricated address), password = last 6 digits of the cadet ID, and the account is flagged `must_change_password`; runs serially; continues on individual failures; returns `{ success, count, errors, skipped_no_email }` |
+| `reset-student-password` | Puts one cadet back on the default password (last 6 digits of their cadet ID) and flags them for forced rotation. **Accepts no password parameter and rejects a request carrying one** — the value is derived, so an instructor cannot choose a credential and then sign in as the student. Any staff member of the offering may call it; the target must be reachable through an enrolment in that offering |
+| `set-own-password` | Change your own password. Exists because the forced-rotation flag lives in `app_metadata`, which a browser session cannot write — a direct `auth.updateUser()` would leave a rotated user flagged forever. Re-verifies the current password server-side (`updateUser` does not), skipping that check only under forced rotation |
 
 ## Section Naming Convention
 

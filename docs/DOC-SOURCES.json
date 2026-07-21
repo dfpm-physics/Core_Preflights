@@ -25,7 +25,11 @@
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
         "site/app/js/student-lessons.js",
-        "site/app/js/auth.js"
+        "site/app/js/auth.js",
+        "site/app/js/account.js",
+        "site/app/login.html",
+        "site/app/reset.html",
+        "supabase/functions/provision-students/index.ts"
       ],
       "note": "Sign-in model and roster/auth rules from PROJECT.md; the 2359-night-before due date rule from CORE.md section 2; what the Lessons and Dashboard pages actually show from the student modules."
     },
@@ -85,7 +89,7 @@
       "doc": "site/app/help/README.md",
       "kind": "reference",
       "tier": null,
-      "reviewed": "2026-07-20",
+      "reviewed": "2026-07-21",
       "sources": [
         "site/app/js/help.js",
         "site/app/help/MANIFEST.json"
@@ -99,7 +103,9 @@
       "reviewed": "2026-07-21",
       "sources": [
         ".ai/instructions/PROJECT.md",
-        ".ai/instructions/CORE.md"
+        ".ai/instructions/CORE.md",
+        "site/app/js/faculty-roster.js",
+        "site/app/js/roster-import.js"
       ],
       "note": "Course-director and system operating guide. Roles, edge functions, and admin procedures are defined in PROJECT.md and must agree."
     },
@@ -159,6 +165,22 @@
         "supabase/migrations/app/006_submission_lock_hardening.sql"
       ],
       "note": "Every table and field transcribed from the app-schema migrations and verified against information_schema on the live database. Owns the enforced-rules list and the exact accepted values. Inline SVG depends on the .sf-* classes in styles.css. Omits RLS policy predicates - help docs are world-readable at every tier."
+    },
+    {
+      "doc": "site/app/help/instructor-accounts.md",
+      "kind": "help",
+      "tier": "instructor",
+      "reviewed": "2026-07-21",
+      "sources": [
+        ".ai/instructions/PROJECT.md",
+        "site/app/js/roster-import.js",
+        "site/app/js/faculty-roster.js",
+        "site/app/faculty/roster.html",
+        "supabase/functions/reset-student-password/index.ts",
+        "supabase/functions/provision-students/index.ts",
+        "site/app/js/account.js"
+      ],
+      "why": "The only documentation of the in-person password-reset workflow, which replaced email recovery on 2026-07-21, and of the registrar roster-export format. If reset-student-password's authorization or the importer's required columns change, this page misdirects an instructor standing in front of a locked-out cadet."
     }
   ]
 }

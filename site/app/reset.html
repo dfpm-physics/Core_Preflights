@@ -3,15 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reset password · PREP</title>
+  <title>Forgot your password? · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
   <link rel="stylesheet" href="css/styles.css">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/config.js"></script>
 </head>
 <body>
-  <!-- Signed-OUT page, so it sits beside login.html at the app root rather than under a role
-       directory — bootstrap() would bounce an anonymous visitor straight back to login. -->
+  <!--
+    This page used to be a working three-step reset-by-emailed-code flow. It was removed on
+    2026-07-21, and what replaced it is an explanation rather than a 404.
+
+    WHY THE FLOW WENT AWAY
+      PREP has no SMTP, and until that date every cadet's sign-in address was FABRICATED by the
+      provisioning script as <cadet_id>@usafa.edu — a string no mail server has ever accepted.
+      The flow was complete, tested, and structurally incapable of recovering a single account.
+      A recovery path that looks like it works is worse than none: a locked-out cadet follows
+      it, waits for mail that cannot arrive, and does not ask the person who can actually help.
+
+    WHY THIS FILE STILL EXISTS
+      The old login page linked here for a year, and browsers and bookmarks remember. Someone
+      arriving at this URL is, by definition, locked out — sending them to a 404 is the worst
+      possible moment to say nothing. This page tells them exactly who to ask.
+
+    No supabase-js, no config.js, no module script: there is nothing here to authenticate and
+    nothing to submit. Deliberately the only page in the app with no JS at all.
+  -->
   <button class="theme-toggle login-theme-toggle" data-theme-toggle><span data-theme-icon>🌙</span></button>
 
   <div class="id-screen">
@@ -20,105 +35,37 @@
       <h1>PREP</h1>
       <p style="font-size:0.8em;color:var(--muted);margin:-4px 0 4px;letter-spacing:0.01em">Pre-lesson Readiness Engagement Platform</p>
 
-      <!-- STEP 1 — request a code -->
-      <section id="step-request">
-        <h2 style="font-size:1.05em;margin:18px 0 6px">Reset your password</h2>
-        <p class="muted" style="font-size:0.88em;margin-bottom:16px">We will email you a six-digit code.</p>
-        <div class="field">
-          <label for="rq-email">Your sign-in email</label>
-          <input id="rq-email" type="email" autocomplete="username" placeholder="you@usafa.edu">
-          <div class="field-hint">Cadets: your cadet ID followed by <code>@usafa.edu</code>.</div>
-        </div>
-        <div id="rq-error" class="alert alert-error" style="display:none"></div>
-        <button class="btn btn-primary btn-block" id="rq-send">Email me a code</button>
-        <div class="login-foot"><a href="login.html">Back to sign in</a></div>
-      </section>
+      <h2 style="font-size:1.05em;margin:18px 0 6px">Forgot your password?</h2>
+      <p class="muted" style="font-size:0.9em;margin-bottom:16px">
+        PREP cannot email you a reset link — it has no mail server. Password resets happen in
+        person instead.
+      </p>
 
-      <!-- STEP 2 — enter the code and choose a password -->
-      <section id="step-verify" style="display:none">
-        <h2 style="font-size:1.05em;margin:18px 0 6px">Enter your code</h2>
-        <p class="muted" style="font-size:0.88em;margin-bottom:16px" id="vf-sent"></p>
-        <div class="field">
-          <label for="vf-code">Six-digit code</label>
-          <input id="vf-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"
-                 placeholder="000000" style="font-size:1.4em;font-weight:700;text-align:center;letter-spacing:0.28em">
-          <div class="field-hint">Codes are single-use and expire after about 15 minutes.</div>
-        </div>
-        <div class="field">
-          <label for="vf-new">New password</label>
-          <input id="vf-new" type="password" autocomplete="new-password">
-          <div class="pwbar" id="pwbar"><span></span></div>
-          <div class="field-hint">At least 8 characters. Longer beats complicated.</div>
-        </div>
-        <div class="field">
-          <label for="vf-cf">Confirm new password</label>
-          <input id="vf-cf" type="password" autocomplete="new-password">
-        </div>
-        <div id="vf-error" class="alert alert-error" style="display:none"></div>
-        <button class="btn btn-primary btn-block" id="vf-save">Set new password</button>
-        <div class="login-foot"><a href="#" id="vf-again">Send a new code</a></div>
-      </section>
+      <div class="alert alert-info" style="text-align:left">
+        <strong>Cadets:</strong> ask any instructor who teaches your section. They can put your
+        password back to the default — the last 6 digits of your cadet ID — and you will choose
+        a new one the moment you sign in. They cannot look up your current password or pick a
+        new one for you.
+      </div>
 
-      <!-- STEP 3 — done -->
-      <section id="step-done" style="display:none">
-        <div class="alert alert-success" style="margin-top:18px">Your password has been changed.</div>
-        <a class="btn btn-primary btn-block" href="login.html">Sign in</a>
-      </section>
+      <div class="alert alert-info" style="text-align:left">
+        <strong>Instructors:</strong> ask a system admin to reset your account.
+      </div>
+
+      <p class="muted" style="font-size:0.85em;margin-top:14px">
+        Already know your password and just want to change it? Sign in first, then open
+        <strong>Account</strong> from the menu.
+      </p>
+
+      <div class="login-foot"><a href="login.html">Back to sign in</a></div>
     </div>
   </div>
 
   <script type="module">
+    // Theme toggle only — the one behaviour on this page. Imported directly rather than through
+    // auth.js, which would redirect an anonymous visitor to login.html and defeat the point.
     import { initTheme } from './js/theme.js';
     initTheme();
-  </script>
-  <script type="module">
-    import { requestReset, completeReset, passwordProblem, passwordStrength } from './js/account.js';
-
-    const $ = (id) => document.getElementById(id);
-    const show = (which) => ['request', 'verify', 'done']
-      .forEach(s => $('step-' + s).style.display = s === which ? '' : 'none');
-    const fail = (el, msg) => { el.textContent = msg; el.style.display = ''; };
-
-    let email = '';
-
-    $('rq-send').addEventListener('click', async () => {
-      const err = $('rq-error'); err.style.display = 'none';
-      email = $('rq-email').value.trim();
-      if (!email) { fail(err, 'Enter your sign-in email.'); return; }
-
-      const btn = $('rq-send');
-      btn.disabled = true; btn.innerHTML = '<span class="spinner on-dark"></span> Sending…';
-      await requestReset(email);
-      btn.disabled = false; btn.textContent = 'Email me a code';
-
-      // Deliberately unconditional: this page must not reveal whether an account exists.
-      $('vf-sent').textContent = `Sent to ${email} — if an account exists for it.`;
-      show('verify');
-      $('vf-code').focus();
-    });
-
-    const pw = $('vf-new'), bar = $('pwbar');
-    pw.addEventListener('input', () => {
-      const s = passwordStrength(pw.value);
-      bar.className = 'pwbar' + (s >= 3 ? ' s3' : s === 2 ? ' s2' : s === 1 ? ' s1' : '');
-    });
-
-    $('vf-save').addEventListener('click', async () => {
-      const err = $('vf-error'); err.style.display = 'none';
-      const code = $('vf-code').value.trim();
-      if (!/^\d{6}$/.test(code)) { fail(err, 'Enter the six-digit code from the email.'); return; }
-      const problem = passwordProblem(pw.value, $('vf-cf').value);
-      if (problem) { fail(err, problem); return; }
-
-      const btn = $('vf-save');
-      btn.disabled = true; btn.innerHTML = '<span class="spinner on-dark"></span> Setting…';
-      const { error } = await completeReset(email, code, pw.value);
-      btn.disabled = false; btn.textContent = 'Set new password';
-      if (error) { fail(err, error.message); return; }
-      show('done');
-    });
-
-    $('vf-again').addEventListener('click', (e) => { e.preventDefault(); show('request'); });
   </script>
 </body>
 </html>

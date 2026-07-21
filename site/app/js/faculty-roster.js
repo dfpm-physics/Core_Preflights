@@ -48,7 +48,8 @@ export async function loadRoster(ctx) {
   if (!sectionIds.length) return { students: [], sections, total: 0, unprovisioned: 0 };
 
   const { data } = await db.from('enrollments')
-    .select('id, status, student_id, section_id, students!inner(student_id, name, auth_user_id)')
+    .select('id, status, student_id, section_id, ' +
+            'students!inner(student_id, name, email, squadron, auth_user_id)')
     .in('section_id', sectionIds);
 
   const students = (data || [])
@@ -57,6 +58,8 @@ export async function loadRoster(ctx) {
       status: e.status,
       student_id: e.student_id,
       name: e.students?.name || String(e.student_id),
+      email: e.students?.email || null,
+      squadron: e.students?.squadron || null,
       auth_user_id: e.students?.auth_user_id || null,
       section_id: e.section_id,
       section_code: byId[e.section_id]?.code || '—',
@@ -109,72 +112,205 @@ export function updateStudentSection(enrollmentId, sectionId) {
   return db.from('enrollments').update({ section_id: sectionId }).eq('id', enrollmentId);
 }
 
-/**
- * Parse a roster CSV (columns: student_id, name, section). Pure — returns {rows, errors}.
- * `knownSections` maps an upper-cased section code to its row; pass the offering's sections
- * so an unknown code is reported by name.
+/* ── Roster import ───────────────────────────────────────────────────────────
+ * Parsing and reconciliation moved to roster-import.js, which is pure and unit-tested
+ * (tests/app-schema/test-roster-import.mjs). What remains here is the part that touches the
+ * database: fetching the students an import might collide with, and committing the result.
  */
-export function parseRosterCsv(text, knownSections = null) {
-  const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean);
-  if (!lines.length) return { rows: [], errors: ['The file is empty.'] };
-  const headers = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
-  const idIdx = headers.indexOf('student_id'), nameIdx = headers.indexOf('name'), sectIdx = headers.indexOf('section');
-  if (idIdx < 0 || nameIdx < 0 || sectIdx < 0) {
-    return { rows: [], errors: ['CSV must have columns: student_id, name, section'] };
+
+/**
+ * Fetch the `students` rows an import could conflict with, by cadet ID.
+ *
+ * Chunked because a roster is a few hundred cadets and PostgREST puts the `in.()` list in the
+ * query string, which proxies truncate somewhere north of a few kilobytes. 200 ids is roughly
+ * 2 KB and leaves headroom.
+ *
+ * Note what this can and cannot see: RLS lets a director read a student row only through an
+ * enrolment in an offering they direct (students_read_staff), so a cadet who exists in the
+ * database but has never been in one of your sections comes back EMPTY here and is staged as
+ * new. The upsert then updates them anyway. That is the correct outcome — the alternative is
+ * showing one director another director's roster — but it means "fresh" honestly means "not
+ * visible to you", and an overwrite can still touch a row you were never shown.
+ */
+export async function loadExistingStudents(studentIds) {
+  const ids = [...new Set(studentIds.map(Number))];
+  const out = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await db.from('students')
+      .select('student_id, name, email, squadron, sex, major_1, major_2, major_3, advisor_name')
+      .in('student_id', ids.slice(i, i + 200));
+    if (error) return { students: [], error };
+    out.push(...(data || []));
   }
+  return { students: out, error: null };
+}
 
-  const rows = [], errors = [];
-  lines.slice(1).forEach((line, li) => {
-    const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-    const sid = parseInt(cols[idIdx], 10);
-    const name = cols[nameIdx];
-    const code = (cols[sectIdx] || '').toUpperCase();
-    const row = li + 2;
+/** Which of these cadets already hold an enrolment in this offering. */
+export async function loadEnrolledIds(ctx) {
+  const { sections } = await loadOfferingSections(ctx);
+  if (!sections.length) return new Set();
+  const { data } = await db.from('enrollments')
+    .select('student_id').in('section_id', sections.map(s => s.id));
+  return new Set((data || []).map(e => Number(e.student_id)));
+}
 
-    // Mirrors the students_cadet_id_range CHECK, so a bad id is caught before the round trip.
-    if (isNaN(sid) || sid < 3000000000 || sid > 3009999999) {
-      errors.push(`Row ${row}: invalid student_id "${cols[idIdx]}"`);
-    } else if (!name) {
-      errors.push(`Row ${row}: missing name`);
-    } else if (!code) {
-      errors.push(`Row ${row}: missing section`);
-    } else if (knownSections && !knownSections[code]) {
-      errors.push(`Row ${row}: section "${cols[sectIdx]}" does not exist in this course — ` +
-                  `create it first, or fix the spelling. Known: ${Object.keys(knownSections).join(', ') || 'none'}`);
-    } else {
-      rows.push({ student_id: sid, name, section_code: code });
-    }
-  });
-  return { rows, errors };
+/** Create any sections the file referenced that the offering does not have yet. */
+export async function createSections(ctx, codes) {
+  if (!codes.length) return { created: 0, error: null };
+  const { error } = await db.from('sections').insert(codes.map(code => ({
+    course_offering_id: ctx.currentOffering,
+    code: code.toUpperCase(),
+    meeting_days: [],
+    period: null,
+  })));
+  return { created: error ? 0 : codes.length, error };
 }
 
 /**
- * Commit an imported roster: upsert the people, then their enrolments.
+ * Commit a reviewed roster import.
  *
- * Two steps because they are two different things now. `students` is the person and may
- * already exist from another course or an earlier term — upserting by student_id updates the
- * name without disturbing auth_user_id. `enrollments` places them in a section of THIS
- * offering; ON CONFLICT DO NOTHING makes a re-import idempotent instead of resurrecting a
- * dropped enrolment or duplicating work.
+ * @param {object} ctx
+ * @param {Array}  fresh      rows for cadets we have not seen — always written in full
+ * @param {Array}  conflicts  reconciled conflicts, each carrying the operator's `resolution`
+ * @param {object} meta       { filename } for the audit row
+ *
+ * THREE WRITES, IN THIS ORDER, AND THE ORDER MATTERS.
+ *
+ *   1. INSERT the people we do not have. Never an upsert: an insert that collides tells us
+ *      the reconciliation was computed against a roster that has since changed (another
+ *      director importing the same cadet in a parallel session — CORE.md §0 is a convention,
+ *      not a lock). Failing loudly there is better than silently overwriting a row the
+ *      operator was never shown and never approved.
+ *   2. UPDATE only the conflicts explicitly resolved as `overwrite`, one statement each. A
+ *      bulk upsert cannot express "these ten yes, those thirty no" without also re-writing the
+ *      thirty, which is exactly the data loss `attach` exists to prevent.
+ *   3. UPSERT enrolments for everyone in the file regardless of resolution, because being in
+ *      the file IS the enrolment claim. ignoreDuplicates keeps a re-import idempotent rather
+ *      than resurrecting a dropped enrolment.
+ *
+ * This is deliberately NOT a transaction, because PostgREST has no way to express one from the
+ * browser. A failure part-way leaves people created but not enrolled — recoverable by simply
+ * re-importing the same file, which is why step 1 is the only step that can fail hard and why
+ * step 3 is idempotent. The audit row is written last and records what actually landed.
  */
-export async function commitRoster(ctx, rows) {
+export async function commitRoster(ctx, fresh, conflicts, meta = {}) {
   const { byCode } = await loadOfferingSections(ctx);
-  const unknown = [...new Set(rows.map(r => r.section_code).filter(c => !byCode[c]))];
+  const all = [...fresh, ...conflicts.map(c => c.row)];
+
+  const unknown = [...new Set(all.map(r => r.section_code).filter(c => !byCode[c]))];
   if (unknown.length) {
-    return { error: { message: `Unknown section(s) for this course: ${unknown.join(', ')}` } };
+    return { error: { message: `Unknown section(s) for this course: ${unknown.join(', ')}. ` +
+                               `Create them first, then re-run the import.` } };
   }
 
-  const people = [...new Map(rows.map(r => [r.student_id, { student_id: r.student_id, name: r.name }])).values()];
-  const { error: sErr } = await db.from('students').upsert(people, { onConflict: 'student_id' });
-  if (sErr) return { error: sErr };
+  const FIELDS = ['name', 'email', 'squadron', 'sex', 'major_1', 'major_2', 'major_3', 'advisor_name'];
+  const pick = (row) => Object.fromEntries(FIELDS.map(f => [f, row[f] ?? null]));
 
-  const enrolments = rows.map(r => ({
+  // 1 — the people we do not have.
+  const freshPeople = [...new Map(
+    fresh.map(r => [r.student_id, { student_id: r.student_id, ...pick(r) }])
+  ).values()];
+
+  let created = 0, invisible = 0;
+  if (freshPeople.length) {
+    const { data, error } = await db.from('students')
+      .upsert(freshPeople, { onConflict: 'student_id', ignoreDuplicates: true })
+      .select('student_id');
+    if (error) return { error };
+    created = (data || []).length;
+    invisible = freshPeople.length - created;
+  }
+
+  // 2 — the conflicts the operator chose to refresh.
+  const toOverwrite = conflicts.filter(c => c.resolution === 'overwrite');
+  for (const c of toOverwrite) {
+    const { error } = await db.from('students')
+      .update(pick(c.row)).eq('student_id', c.row.student_id);
+    if (error) {
+      return { error: { message: `Updating ${c.row.name} (${c.row.student_id}) failed: ${error.message}` } };
+    }
+  }
+
+  // 3 — enrolments for everyone named in the file.
+  const enrolments = all.map(r => ({
     student_id: r.student_id,
     section_id: byCode[r.section_code].id,
     status: 'active',
   }));
-  return db.from('enrollments').upsert(enrolments, {
+  const { error: eErr } = await db.from('enrollments').upsert(enrolments, {
     onConflict: 'student_id,section_id', ignoreDuplicates: true,
+  });
+  if (eErr) return { error: eErr };
+
+  // `created` is what the database actually inserted, not what we asked it to. The two differ
+  // when a "fresh" cadet already existed but was invisible to this director — RLS only exposes
+  // a student through an enrolment in an offering you direct, so someone who has only ever
+  // taken another course reads as new here. ON CONFLICT DO NOTHING leaves their record intact
+  // and step 3 still enrols them, which is exactly the `attach` outcome. Recording the attempt
+  // count instead would put a number in the audit trail that never happened.
+  const counts = {
+    students_created: created,
+    students_updated: toOverwrite.length,
+    students_untouched: (conflicts.length - toOverwrite.length) + invisible,
+    enrollments_created: enrolments.length,
+  };
+
+  // The audit row is best-effort on purpose. The roster landed; failing the whole import
+  // because the log did not is the wrong trade, and the operator would have no way to act on
+  // it. Surfaced as a warning instead.
+  const { error: aErr } = await db.from('roster_imports').insert({
+    course_offering_id: ctx.currentOffering,
+    imported_by: ctx.user?.id || null,
+    filename: meta.filename || null,
+    rows_in_file: meta.rowsInFile ?? all.length,
+    rows_matched: all.length,
+    sections_created: meta.sectionsCreated || 0,
+    notes: invisible
+      ? `${invisible} cadet(s) already existed outside this director's visibility and were ` +
+        `enrolled without changing their record.`
+      : null,
+    ...counts,
+  });
+
+  return { error: null, counts, invisible, auditWarning: aErr ? aErr.message : null };
+}
+
+/**
+ * Turn a primary-key collision into the sentence that explains what actually happened.
+ *
+ * Two different situations produce it, and the operator cannot tell them apart from the raw
+ * PostgREST message:
+ *
+ *   1. Another director imported the same cadet while this one was reviewing. CORE.md §0
+ *      coordination is a convention, not a lock.
+ *   2. The cadet already exists but is INVISIBLE to this director — students_read_staff only
+ *      exposes a student through an enrolment in an offering you direct, so someone who has
+ *      only ever taken another course reads as new here and collides on insert.
+ *
+ * (2) is the common one at the start of a term and is not an error in any meaningful sense.
+ * Both have the same remedy, and in neither case was anything overwritten.
+ */
+function duplicateHint(error) {
+  if (/duplicate key|already exists|23505/i.test(error.message || '')) {
+    return 'Some of these cadets already have a record — either from a course you do not ' +
+           'teach, or added by someone else while you were reviewing. Nothing was ' +
+           'overwritten and nothing was lost. Re-upload the file: they will show up as ' +
+           'returning students so you can choose what to keep.';
+  }
+  return error.message;
+}
+
+/**
+ * Reset one student's password to the default (last 6 digits of their cadet ID).
+ *
+ * Goes through an edge function rather than the browser because setting someone else's
+ * password needs the Admin API and the service-role key, which must never reach a client. The
+ * function derives the password itself — the caller cannot choose one, by construction, so an
+ * instructor has no way to set a password they then know.
+ */
+export function resetStudentPassword(ctx, studentId) {
+  return db.functions.invoke('reset-student-password', {
+    body: { course_offering_id: ctx.currentOffering, student_id: studentId },
   });
 }
 

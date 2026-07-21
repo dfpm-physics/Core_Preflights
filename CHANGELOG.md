@@ -8,6 +8,257 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-21 — Matthew Recker via Claude
+
+### Data — restored the archived Lesson 02 faculty interactive runs into schema `app`
+
+**Live `app` database write (data only, no DDL). The Lesson 02 rollup is now a mixed cohort.**
+
+Schema `app` held 64 *written* preflight-02 submissions and **zero interactive ones**, so
+`/lesson-aggregate` could only ever describe one modality for that lesson. The interactive
+activity was wired correctly — it just had no work behind it.
+
+The missing work existed: in June 2026 faculty worked the Lesson 02 Claude artifact end-to-end
+*as if they were students*, producing 8 real schema-1 reports. Those were exported to the POC
+archive and then wiped by the Fall 2026 database reset. As of this change,
+`public.preflight_interaction_reports` is empty (0 rows) and the only surviving copies were
+[`scripts/fall2026/poc-archive/reports_lesson-02-electric-charge-and-coulombs-law.json`](scripts/fall2026/poc-archive/reports_lesson-02-electric-charge-and-coulombs-law.json)
+(8 rows, full `report_data`) and the 6-row `preflight_interaction_reports_backup_20260623`
+table (markdown only, no structured data).
+
+**New script** [`scripts/app_migration/seed_faculty_interactive_lesson02.py`](scripts/app_migration/seed_faculty_interactive_lesson02.py)
+— dry-run by default, idempotent, single transaction, runs as `prep_app_dml`. Applied with
+`--commit` after a clean dry run.
+
+What it wrote to the phys-215 / fall-2026 `preflight-02` offering:
+
+| Rows | Table |
+|---|---|
+| 8 | `app.students` — new synthetic cadets `3000980000`–`3000980007` |
+| 8 | `app.enrollments` — two per section across M1A, M3A, T1A, T3A |
+| 8 | `app.submissions` — `status='draft'`, `chosen_activity_id` NULL |
+| 8 | `app.submission_activities` — interactive activity, `is_final=true` |
+| 0 | `app.grades` — deliberate |
+
+**Report content is byte-for-byte unmodified** — the effort scores, misconception findings,
+objective ratings and reading reflections are the faculty runs' own. **Only the student identity
+is synthetic**, because the original cadet IDs (`3000100001`–`3000100020`) were deleted from
+`students` in both schemas by the reset and `app.enrollments` requires a live student. Every row
+carries `content.source_provenance` recording the archive path, the original cadet ID, the
+original interaction slug and a `restored_by` tag, so the re-identification is auditable and
+reversible.
+
+Three judgment calls worth knowing:
+
+- **The slug changed on purpose.** The archive is filed under
+  `lesson-02-electric-charge-**and**-coulombs-law`; the activity that survived into `app` is
+  `lesson-02-electric-charge-coulombs-law` (no "and"), because `migrate_public_to_app.py` dropped
+  the "-and-" variant as claimed by no lesson. The reports are attached to the surviving
+  activity — the one the Fall 2026 artifact will post to. Original slug kept in provenance.
+- **Submissions are left `draft` with no `chosen_activity_id`.** The interactive activity is
+  `grading_role='practice'` on this offering, and the `submissions_gradable` trigger refuses a
+  `chosen_activity_id` that is not `graded`. This is exactly what `site/app/js/student-data.js`
+  writes for a practice activity, so the rows match production. `/lesson-aggregate` does not
+  filter on status.
+- **No `grades` rows.** The activity is practice and these students did no written work, so a
+  grade row would misrepresent them. The aggregator falls back to `content.effort`, which the
+  archived reports carry.
+
+**Verified** by independent read-back (all 8 rows, content and provenance intact) and by running
+`lesson_aggregate.py pull`: `8 interactive, 64 written (mixed cohort)`, `missing_report_data: 0`,
+and every one of the four sections reports `mixed: True` at 2 interactive / 16 written.
+
+*Unrelated pre-existing snag surfaced while verifying:* `lesson_aggregate.py pull --lesson
+preflight-02` fails with "scheduled in more than one active offering" because phys-110 and
+phys-215 both have an assignment slugged `preflight-02` after de-prefixing, and the resolver
+matches on assignment slug without scoping by course. The globally-unique activity slug works.
+Not fixed here.
+
+### Changed — real email identity, registrar roster import, and the end of email password reset
+
+**Frontend + two new edge functions + one migration file. Nothing applied to the live database
+yet; nothing deployed.** See "What is NOT done" at the end — this entry describes code that has
+landed in the repo, not a system that has cut over.
+
+**The root fact this fixes.** A cadet's sign-in address was *fabricated*. `provision-students`
+minted `<cadet_id>@usafa.edu` because the roster CSV carried only `student_id, name, section` and
+there was nothing else to use. That string is not a mailbox. Every password-recovery path in the
+app was therefore built on an address that cannot receive mail — the reset-by-emailed-code flow in
+`site/app/reset.html` was complete, tested, and structurally incapable of recovering a single
+account. The registrar export we already receive carries a real `Email` column, so the address
+stops being invented, and the recovery model changes to match what the system can actually do.
+
+**Roster import now reads the registrar export.**
+[`site/app/js/roster-import.js`](site/app/js/roster-import.js) is new and pure — parsing,
+validation, and conflict reconciliation, no network, no DOM — with 60+ cases in
+[`tests/app-schema/test-roster-import.mjs`](tests/app-schema/test-roster-import.mjs).
+- **Real RFC-4180 field parsing.** `Cadet Name` arrives as `Doe, Jane M.`, so the old
+  `split(',')` shifted every column after it and mis-assigned data silently. This was a
+  correctness bug waiting to happen the first time the new format was used, not a nicety.
+- **Header aliasing** on a normalised key, so `Cadet EMPLID` / `cadet_emplid` / `Cadet Emplid`
+  all match, and the legacy three-column files still import.
+- **Course filtering.** The export spans every course the registrar's query returned; rows for
+  other subjects are excluded by `Subject` + `Course Number` against the offering's course code,
+  and every excluded row is *shown with its reason* rather than dropped quietly.
+- **Name normalisation.** Registrar order is `Last, First`; `students.name` is stored `First Last`
+  because `lastFirst()` flips it for display everywhere. Storing it verbatim would have visibly
+  broken sorting on every roster, grade, and report page.
+- **Captured columns:** email, squadron, sex, majors 1–3, advisor. Minors, GPAs, sport, and the
+  rest are read past and not stored.
+
+**Duplicate students get a per-row review UI.** A returning cadet is a *conflict*, not an error.
+The import previews old-vs-new values field by field and the operator chooses **Keep existing**
+(enrol them, change nothing) or **Use the file** per student, with bulk controls. Default is
+**Keep existing** — the only resolution that cannot destroy data, because a stale export would
+otherwise silently revert a correction somebody made by hand. Note the option that was
+*requested but is not buildable*: "create a new separate account" for the same cadet. `student_id`
+is the primary key of `app.students`, so one cadet ID is one row by construction; offering it
+would have meant a surrogate-key restructure touching enrollments, submissions, grades, and every
+RLS helper. Confirmed with Matthew before dropping it.
+
+**Password model, replacing three flows with two.**
+| | Before | Now |
+|---|---|---|
+| Change your own | Account page | Account page, via `set-own-password` |
+| Forgot it (student) | Emailed 6-digit code (never delivered) | Ask any instructor of your section → reset to default |
+| Forgot it (staff) | "Send reset" button (never delivered) | System admin, in the Supabase dashboard |
+
+- **`reset-student-password`** (new edge function) takes **no password parameter and cannot be
+  given one** — it *rejects* a request carrying `password` rather than ignoring it. The value is
+  derived from the cadet ID. That is the entire argument for letting an instructor hold this
+  power: the default is on the roster in front of them, so the reset reveals nothing they did not
+  already know, and they cannot choose a credential and then sign in as the student. Scoped to
+  staff of the offering, and the target must be reached through an enrolment in it.
+- **`set-own-password`** (new edge function) exists because the forced-rotation flag moved to
+  `app_metadata`. **This closes a real hole:** the flag previously lived in `user_metadata`, which
+  the user's own anon session can write — a cadet could clear it from a browser console and keep
+  the shared-knowledge default forever, which is the exact state the flag exists to end.
+  `app_metadata` is service-role-only, which in turn means a browser can no longer clear the flag
+  after a legitimate password change, hence the function. Both halves had to land together.
+  It also re-verifies the current password server-side (`updateUser` does not), skipping that
+  check only under forced rotation, where the user may genuinely not know the password an
+  instructor just set.
+- **`provision-students`** now uses the stored address and **skips** a cadet who has none rather
+  than fabricating one — falling back would recreate the unreachable-mailbox problem one account
+  at a time. New accounts are flagged for forced rotation.
+- **Login is email-only.** The bare-cadet-ID convenience existed *because* the address was the
+  cadet ID; with real addresses there is nothing to derive. Pre-2026-07-21 cadets still sign in
+  with their old fabricated address, typed in full.
+- **`site/app/reset.html` is now an explainer, not a 404.** Anyone reaching that URL is by
+  definition locked out; the old login page linked there for a year and bookmarks remember. It
+  names who to ask.
+
+**Migration `app/008_student_identity.sql`** adds the seven identity columns (all nullable — 64
+Fall 2026 students already exist without them, and `email` must stay nullable permanently since a
+cadet can be enrolled and graded before anyone has their address), a partial unique index on
+`lower(email)`, a shape CHECK, and `app.roster_imports` — an audit row per upload, because roster
+uploads are frequent live mutations performed in a browser by people not running an agent, which
+`CHANGELOG.md` structurally cannot record.
+
+**`students.email` is deliberately NOT authoritative for sign-in; `auth.users.email` is.** They
+agree for accounts provisioned after this and disagree for the 64 that predate it. Nothing here
+rewrites an existing auth user: a roster upload is routine, performed on a file the uploader has
+not necessarily proofread, and must never change how 64 people log in as a side effect. Migrating
+those addresses is a separate, deliberate operator action that does not exist yet.
+
+**Also fixed along the way:** `doRemove()` in the roster page referenced an undefined `sid` and
+threw before its confirm, so **Remove was dead**; the upload card claimed "sections are created
+automatically" when the code had started rejecting unknown sections, so a **first import into an
+empty offering failed every row** — there is now an inline "create these sections and re-check"
+offer.
+
+**Migration `app/008` was APPLIED to the live database on 2026-07-21** (see the applied-migration
+note below). The rest of this entry is repo code that is still undeployed.
+
+**Verification — read this before trusting the above.** Node-only, and per CORE.md §2 that means
+parts of this are unproven:
+- 60+ new unit tests pass (parsing, aliasing, name flipping, course filtering, in-file duplicate
+  detection, reconciliation, tab-separated input). The whole offline suite passes.
+- `node --check` clean on every changed module and every changed page's inline module script.
+- `test-imports.mjs`: all 236 named imports across `site/app/` resolve; no identifier used
+  without import.
+- **NOT verified:** nothing has been exercised in a browser, against the live database, or with a
+  real registrar file. The two new edge functions have never run — they are not deployed. The
+  migration has not been applied.
+
+**What is NOT done, and what the next operator must do:**
+1. ~~Apply `app/008_student_identity.sql`.~~ **Done — see below.**
+2. ~~Deploy the two new edge functions and redeploy `provision-students`.~~ **Done — see below.**
+3. **Verify in a browser** — import a real registrar export into a scratch offering, walk the
+   conflict UI, reset a test cadet, confirm the forced rotation redirects and then releases.
+4. **Decide about the 81 existing cadets.** They keep fabricated sign-in addresses until someone
+   builds the explicit migrate-login-emails action. `site/app/help/` should not promise otherwise.
+5. **Staff password recovery is a known gap** — deliberately not filled with a button that hands
+   out working credentials for an account that finalizes grades. Tier D in
+   `PLAN-2026-07-20-ACCOUNTS.md` is still unbuilt.
+
+### Applied — migration `app/008_student_identity.sql` to the live database
+
+**Live DDL on schema `app`.** Run by Matthew Recker (via Claude) against
+`shzvpmlnqfmzfmuxkowi` as `prep_app_owner`, which Matthew had unsealed beforehand.
+
+**Coordination (CORE.md §0):** `pg_stat_activity` showed no other agent or operator session —
+only Supabase infrastructure roles (`supabase_admin`, `authenticator`, `pgbouncer`), with zero
+active queries. Applied with `statement_timeout=120s` and `lock_timeout=15s` so a stuck lock would
+fail fast rather than block a live database. The file carries its own `BEGIN`/`COMMIT` and was
+executed verbatim — the repo and the database cannot disagree about what ran.
+
+**What landed:** the seven identity columns on `app.students` (all nullable), the partial unique
+index `students_email_lower_idx` on `lower(email)`, the `students_email_shape` CHECK, and
+`app.roster_imports` with RLS enabled and both policies.
+
+**Verified after the fact, not assumed.** Constraints were probed by *attempting violations* in
+rolled-back transactions rather than by reading the catalog: a malformed address is rejected, a
+well-formed one accepted, a case-variant duplicate (`dup@` vs `DUP@`) is blocked, and all 81
+existing NULL-email rows coexist under the partial index. Row counts unchanged — students 81,
+enrollments 81, grades 64, submissions 72 — no student gained an email, `roster_imports` is empty.
+`NOTIFY pgrst, 'reload schema'` was sent and confirmed live by a negative control: the new columns
+resolve over REST while a bogus column still 400s. **Anon sees nothing** on `roster_imports`,
+`students`, or `grades`.
+
+**`prep_app_owner` is still unsealed** — re-sealing needs `ALTER ROLE prep_app_owner NOLOGIN;` as
+`postgres`, which that role cannot do to itself. A human must close the gate.
+
+**Two pre-existing test failures found while verifying, neither caused by this migration** — both
+mean their suite currently guards nothing and should be fixed:
+- `supabase/admin/app_invariant_test.py` dies in fixture setup inserting a random uuid into
+  `instructors`, which has carried `instructors_id_fkey → auth.users(id)` since the post-bootstrap
+  step in `app_schema_bootstrap.sql` §6. The fixture needs a real auth user.
+- `supabase/admin/app_rls_test.py` gets 21 passes then dies inserting an `extensions` row with no
+  `reason` — migration `007` made that column NOT NULL and the test was never updated.
+
+`app_tier_check.py` passes fully: owner/dml/read privilege boundaries intact, and all three tiers
+still correctly denied on schema `public`.
+
+### Deployed — three edge functions to the live project
+
+`supabase functions deploy` (CLI 2.109.1 via `npx`) against `shzvpmlnqfmzfmuxkowi`:
+
+| Function | Version | |
+|---|---|---|
+| `set-own-password` | v1 | new |
+| `reset-student-password` | v1 | new |
+| `provision-students` | v6 | redeploy — real email + `must_change_password` |
+
+All three report `status: ACTIVE`, `verify_jwt: true`. Smoke-tested live against the deployed
+endpoints rather than assumed from a successful upload:
+- **`reset-student-password` refuses a `password` parameter** — the security property the whole
+  design rests on, confirmed working in production, not just in the source.
+- Unauthenticated calls to both new functions are rejected at the gateway.
+- Argument validation fires (`course_offering_id is required`; the 8-character minimum).
+- `provision-students` still returns the pre-v2 migration hint for a legacy `course_id` caller.
+
+**Still unverified:** no function has been exercised on a *successful* path — no password has
+actually been reset or changed, because that needs a signed-in session and a real cadet. The
+browser walkthrough in item 3 above is what would close that.
+
+*Note for the next operator:* the Supabase CLI is not on `PATH` in a plain shell and `npx` fails
+with `'"node"' is not recognized` until Node is added — the stale-`PATH` gotcha in CORE.md §2.
+`export PATH="/c/Program Files/nodejs:$PATH"` first. Nothing on the site's deploy path depends on
+this; it is developer tooling only.
+
+---
+
 ## 2026-07-21 — Casey via Claude
 
 ### Ran — `/preflight-analyze` for phys-215 `preflight-02` on schema `app` (Fall 2026)

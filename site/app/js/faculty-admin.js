@@ -136,20 +136,26 @@ export async function setStaffSections(ctx, instructorId, role, sectionIds) {
   })));
 }
 
-/**
- * Trigger the password-reset email for someone else — director and up.
+/* ── Staff password recovery: removed, not relocated ──────────────────────────
  *
- * Safe to delegate precisely because the caller never learns the password: this sends the same
- * six-digit code the user could request themselves, and they choose the new password from it.
+ * `sendResetEmail()` used to live here and called Supabase's public recovery endpoint. It was
+ * deleted on 2026-07-21 because PREP has no SMTP: the mail it triggered was never delivered,
+ * and the button reported success regardless. It also took the target address as free text
+ * typed by the operator, so it would happily send a recovery mail for any address at all.
  *
- * This calls Supabase's public recovery endpoint directly, which works today with no backend.
- * The tradeoff is that it is neither attributed nor rate-limited beyond Supabase's own defaults.
- * PLAN-2026-07-20-ACCOUNTS.md §3 proposes moving it behind a `reset-password` edge function for
- * exactly those two properties; the call site here does not change when that lands.
+ * There is deliberately NO replacement here. Students are covered by
+ * `reset-student-password` (any staff member of the offering, default password only), because
+ * the default is derived from a cadet ID the instructor is already looking at — the reset
+ * reveals nothing.
+ *
+ * That argument does not carry over to instructors. An instructor account has no cadet ID and
+ * therefore no derivable default, so any staff reset would mean one person CHOOSING another
+ * person's password — and an instructor who knows a colleague's password is indistinguishable,
+ * at the database level, from that colleague, including for grade finalization. Until the
+ * system-admin-only tier in PLAN-2026-07-20-ACCOUNTS.md §3 (tier D) is built, staff recovery
+ * is a Supabase-dashboard action by a system admin. That is a real gap, and it is a smaller one
+ * than a button that hands out working credentials for a grader account.
  */
-export function sendResetEmail(email) {
-  return db.auth.resetPasswordForEmail(email);
-}
 
 /* ══════════════════════════════════════════════════════════════════════════════
  * Export

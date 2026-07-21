@@ -11,6 +11,13 @@ Then: roster import, section creation, section→instructor assignment, and stud
 provisioning (bulk-creates auth accounts for everyone in the course who lacks one — it runs
 serially and reports per-student failures rather than aborting).
 
+**Provisioning depends on the roster carrying real email addresses.** A cadet's login is the
+address on their roster row, taken from the registrar's export; anyone imported without one is
+skipped rather than given a fabricated address, and the count is reported back. New accounts start
+on the last six digits of the cadet ID and are forced to change it at first sign-in. There is no
+password reset by email anywhere in PREP — see
+[Student accounts and passwords](help.html?doc=accounts).
+
 ## Deploys
 
 The site is static, served by GitHub Pages from `main`. **Pushing to `main` changes the production

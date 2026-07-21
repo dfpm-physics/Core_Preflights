@@ -114,8 +114,10 @@ Everything above is reversible by dropping schema `app`. This phase changes the 
 
 ## Verify the cutover
 
-- Sign in as a student (cadet ID + last-6 password) and as an instructor; confirm dashboards,
-  lessons, submission, and grading read the migrated data.
+- Sign in as a student (**email address** + last-6 password — the bare-cadet-ID form was removed
+  on 2026-07-21) and as an instructor; confirm dashboards, lessons, submission, and grading read
+  the migrated data. A student migrated from `public` has no `students.email`, so expect to use
+  their pre-existing `<cadet ID>@usafa.edu` auth address until a roster re-import backfills one.
 - Confirm a launched artifact still posts to its slug and the report saves.
 - Confirm the frozen URLs resolve unchanged.
 
