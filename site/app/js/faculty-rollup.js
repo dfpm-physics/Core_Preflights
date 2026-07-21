@@ -25,6 +25,17 @@
 // WHAT REMAINS: completion tracking per lesson × section, the per-student report viewer, and the
 // cohort AI panels — three things that still have no other home.
 //
+// ── IT IS NOT AN INTERACTIVE-ONLY PAGE ANY MORE (2026-07-21) ────────────────────────
+// It was, and the name `faculty-interactions.js` said so. But a lesson can be worked two ways
+// and BOTH paths now produce the two numbers this file summarizes — effort and understanding.
+// The written path's live in `grades.diagnostic` (`q2_effort` / `q3_understanding`, written by
+// /preflight-analyze) rather than in a schema:1 report; see the "Learner signals" note in
+// schema.js for where each one comes from and why effort is one measurement across both.
+//
+// So: a written-only lesson gets a rollup, a mixed lesson's rollup describes everyone, and the
+// three things that genuinely require an artifact — the markdown report viewer, misconception
+// trends, and the AI corpus — stay interactive-only and say so where they are empty.
+//
 // WHAT MOVED
 //   interactions (own table)      ->  activities WHERE modality='interactive'
 //   interactions.artifact_url     ->  activities.content.artifact_url
@@ -61,6 +72,7 @@ import { db } from './supabase.js';
 import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT,
   shapeOffering, shapeSubmission, artifactUrlOf, chunked,
+  int05, writtenSignals, effortSignal, FREE_RESPONSE_KEY, FREE_RESPONSE_LABEL,
 } from './schema.js';
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -68,8 +80,13 @@ import {
  * ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Every scheduled lesson in ctx.currentOffering that HAS an interactive activity, with
- * completion broken down by section, plus the section rosters the report viewer needs.
+ * Every scheduled lesson in ctx.currentOffering that can be worked at all — interactive,
+ * written, or both — with completion broken down by section, plus the section rosters the
+ * report viewer needs.
+ *
+ * Was "…that HAS an interactive activity" until 2026-07-21. Both modalities now produce the
+ * effort and understanding the rollup summarizes, so restricting the list to one of them hid
+ * whole lessons and, on mixed lessons, half of every cohort.
  *
  * Scope comes from ctx.sectionIds, which auth.js resolved from staff_sections() — the same
  * predicate RLS uses. The legacy version re-derived scope here by querying
@@ -99,8 +116,13 @@ export async function loadManager(ctx) {
       : Promise.resolve({ data: [] }),
   ]);
 
+  // Every scheduled lesson, whichever way it can be worked. This used to be
+  // `.filter(o => o.interactive)` — "this page is only about interactive work" — which meant a
+  // question-only lesson had no rollup at all, and a mixed lesson's rollup silently described
+  // only the half of the cohort that took the artifact. Both modalities now produce effort and
+  // understanding (schema.js, "Learner signals"), so the filter was hiding real data.
   const offerings = (offeringRows || []).map(shapeOffering).filter(Boolean)
-    .filter(o => o.interactive);                 // this page is only about interactive work
+    .filter(o => o.interactive || o.written);
 
   const enrolments = enrolRows || [];
   const studentOf = Object.fromEntries(enrolments.map(e => [e.id, e.student_id]));
@@ -119,14 +141,18 @@ export async function loadManager(ctx) {
     submissions.push(...(data || []).map(shapeSubmission));
   }
 
-  // "Done" = a submission_activities row exists for that lesson's interactive activity, which
-  // is the direct successor of "a preflight_interaction_reports row exists".
+  // "Done" = a submission_activities row exists for EITHER of that lesson's activities. The old
+  // rule counted only the interactive one, so on a mixed lesson every student who answered the
+  // questions read as "not done" — the completion ring and the numbers underneath it were
+  // describing different cohorts. A student who did both counts once (it is a Set of people).
   const doneByOffering = {};      // offeringId -> Set(student_id)
   const doneKey = {};             // `${offeringId}|${sectionId}` -> count
-  const interactiveOf = Object.fromEntries(offerings.map(o => [o.offeringId, o.interactive.id]));
+  const activityIdsOf = Object.fromEntries(offerings.map(o => [
+    o.offeringId, [o.interactive?.id, o.written?.id].filter(Boolean),
+  ]));
   submissions.forEach(s => {
-    const actId = interactiveOf[s.offeringId];
-    if (!actId || !s.activities?.[actId]) return;
+    const actIds = activityIdsOf[s.offeringId] || [];
+    if (!actIds.some(id => s.activities?.[id])) return;
     const sid = studentOf[s.enrollmentId], sec = sectionOf[s.enrollmentId];
     if (sid == null) return;
     (doneByOffering[s.offeringId] ||= new Set()).add(sid);
@@ -140,21 +166,26 @@ export async function loadManager(ctx) {
       done += d; total += n;
       return { sectionId: secId, code: ctx.sectionCodeOf(secId), done: d, total: n };
     });
+    // A written-only lesson has no artifact, no frozen slug and no interactive activity id.
+    // Those three fields are therefore nullable now; every consumer must treat them as
+    // "this lesson may not have an artifact" rather than assuming one exists.
     return {
       id: o.offeringId,                        // the page's key — see the header note
       offeringId: o.offeringId,
       assignmentId: o.assignmentId,
-      activityId: o.interactive.id,
-      slug: o.interactive.slug,                // the FROZEN artifact `#i=` slug
+      activityId: o.interactive?.id || null,
+      writtenActivityId: o.written?.id || null,
+      slug: o.interactive?.slug || null,       // the FROZEN artifact `#i=` slug, when there is one
       assignmentSlug: o.slug,
-      title: o.interactive.title || o.title,
-      description: o.interactive.content?.description || o.description || null,
-      artifact_url: artifactUrlOf(o.interactive),
+      title: o.interactive?.title || o.title,
+      description: o.interactive?.content?.description || o.description || null,
+      artifact_url: artifactUrlOf(o.interactive),   // already null-safe on a written-only lesson
       is_published: o.isPublished,
-      gradingRole: o.interactive.gradingRole,  // graded here, or practice beside the questions
+      gradingRole: o.interactive?.gradingRole || o.written?.gradingRole || null,
       pointsPossible: o.pointsPossible,
       due_at: o.dueAt,
       dueBySection: o.dueBySection,
+      hasInteractive: !!o.interactive,
       hasWritten: !!o.written,
       isChoice: o.isChoice,
       count: (doneByOffering[o.offeringId] || new Set()).size,
@@ -188,12 +219,28 @@ export async function loadManager(ctx) {
  * Report data
  * ════════════════════════════════════════════════════════════════════════════ */
 
-/** The interactive activity id for one offering, or null. Small helper used by every read below. */
-async function interactiveActivityOf(offeringId) {
+/** Both activity ids for one offering, either of which may be null. Used by the reads that
+ *  summarize the whole cohort and so must not care how a given student worked the lesson. */
+async function activitiesOf(offeringId) {
   const { data } = await db.from('assignment_offerings')
     .select(OFFERING_SELECT).eq('id', offeringId).maybeSingle();
   const offering = shapeOffering(data);
-  return offering?.interactive ? { offering, activityId: offering.interactive.id } : null;
+  if (!offering) return null;
+  return {
+    offering,
+    interactiveId: offering.interactive?.id || null,
+    writtenId: offering.written?.id || null,
+  };
+}
+
+/** The interactive activity id for one offering, or null. Narrows activitiesOf() for the reads
+ *  that are genuinely artifact-specific — the markdown report viewer and the corpus builder,
+ *  neither of which a written submission can satisfy (there is no report to show or to feed to
+ *  the analysis AI). Returning null here is what makes those two degrade rather than break on a
+ *  question-only lesson. */
+async function interactiveActivityOf(offeringId) {
+  const found = await activitiesOf(offeringId);
+  return found?.interactiveId ? { offering: found.offering, activityId: found.interactiveId } : null;
 }
 
 /** One student's report markdown for a lesson (the caller sanitizes before rendering — the
@@ -219,7 +266,8 @@ export async function loadReport(offeringId, studentId) {
 }
 
 /**
- * The graded columns + structured blob for every in-scope report of one lesson.
+ * The graded columns + structured blob for every in-scope student who worked one lesson —
+ * BY EITHER PATH.
  *
  * Where the numbers now live is the substantive change. `preflight_interaction_reports` carried
  * effort and score ON the report row, so a student's write set their own grade. In v2 a student
@@ -227,13 +275,20 @@ export async function loadReport(offeringId, studentId) {
  * cannot write at all. So effort is read from the grade first and falls back to the schema:1
  * payload the artifact sent — which is a claim, not a grade, until a grader confirms it.
  *
+ * The second change: this used to return only students with an interactive
+ * `submission_activities` row, so on a mixed lesson every summary downstream described the
+ * artifact-takers and quietly omitted everyone who answered the questions. A student is
+ * included here if they engaged with EITHER activity; `path` says which, and `understanding`
+ * carries the written free-response diagnostic that has no interactive equivalent.
+ *
  * RLS scopes which rows come back, so passing the full roster's ids is safe.
- * @returns {Promise<Array<{student_id, effort, score, report_data, report_markdown, updated_at}>>}
+ * @returns {Promise<Array<{student_id, enrollment_id, path, effort, effortSource, understanding,
+ *                          score, report_data, report_markdown, updated_at}>>}
  */
 export async function loadInteractionData(offeringId, studentIds) {
   if (!studentIds?.length) return [];
-  const found = await interactiveActivityOf(offeringId);
-  if (!found) return [];
+  const found = await activitiesOf(offeringId);
+  if (!found || (!found.interactiveId && !found.writtenId)) return [];
 
   const enrolments = [];
   for (const ids of chunked(studentIds)) {
@@ -259,18 +314,35 @@ export async function loadInteractionData(offeringId, studentIds) {
 
   const out = [];
   submissions.forEach(s => {
-    const work = s.activities?.[found.activityId];
-    if (!work) return;
+    const interactiveWork = found.interactiveId ? s.activities?.[found.interactiveId] : null;
+    const writtenWork     = found.writtenId     ? s.activities?.[found.writtenId]     : null;
+    if (!interactiveWork && !writtenWork) return;
+
     const grade = gradeBy[s.enrollmentId] || null;
-    const claimed = Number.isInteger(work.content?.effort) ? work.content.effort : null;
+    const reportData = interactiveWork?.content || null;
+    const { effort, source } = effortSignal(grade, reportData);
+    const { understanding } = writtenSignals(grade);
+
+    // A student who did both is reported once, tagged 'both'. Their effort resolves through the
+    // same precedence as anyone else's, so doing the questions as practice beside a graded
+    // artifact cannot double-count them into the distribution.
+    const path = interactiveWork && writtenWork ? 'both'
+               : interactiveWork ? 'interactive'
+               : 'written';
+
     out.push({
       student_id: studentOf[s.enrollmentId],
       enrollment_id: s.enrollmentId,
-      effort: grade?.effort ?? claimed,
+      path,
+      effort,
+      effortSource: source,
+      // The written free-response measure. Null on a pure interactive row — that path resolves
+      // understanding per objective instead, and the two are not interchangeable.
+      understanding: writtenWork ? understanding : null,
       score: grade?.points_earned == null ? null : Number(grade.points_earned),
-      report_data: work.content || null,
-      report_markdown: work.reportMarkdown || null,
-      updated_at: work.updatedAt,
+      report_data: reportData,
+      report_markdown: interactiveWork?.reportMarkdown || null,
+      updated_at: interactiveWork?.updatedAt || writtenWork?.updatedAt || null,
     });
   });
   return out;
@@ -329,9 +401,8 @@ export async function loadAnalysis(offeringId) {
 // not change shape when it moved from preflight_interaction_reports.report_data to
 // submission_activities.content — and neither did any of the maths below.
 
-// Defensive coercion — report_data is LLM-produced and occasionally imperfect (contract §7):
-// keep only valid 0–5 ints; everything else becomes null and drops out of means.
-const int05 = v => (Number.isInteger(v) && v >= 0 && v <= 5) ? v : null;
+// int05 — the defensive 0–5 coercion — moved to schema.js when the written path started
+// feeding these summaries, so both modalities' numbers are cleaned by one definition.
 const num   = v => (typeof v === 'number' && isFinite(v)) ? v : null;
 const mean  = xs => { const a = xs.filter(n => n != null); return a.length ? a.reduce((s, n) => s + n, 0) / a.length : null; };
 
@@ -350,12 +421,29 @@ const pointsForEffort = (e, possible) =>
 export function summarizeReports(rows, possible = 2) {
   const list = (rows || []).map(r => ({
     effort: int05(r?.effort),
+    // The written free-response understanding. Distinct from the interactive path's
+    // per-objective understanding — see the "Learner signals" note in schema.js.
+    frUnderstanding: int05(r?.understanding),
+    path:   r?.path || (r?.report_data ? 'interactive' : 'written'),
     score:  num(r?.score),
     d:      (r?.report_data && typeof r.report_data === 'object') ? r.report_data : {},
   }));
   const n = list.length;
 
-  // ── Effort & points (GRADED). The grade column is authoritative; fall back to the payload.
+  // ── How this cohort worked the lesson. Every panel below is only interpretable against this:
+  //    "avg effort 3.8" means something different when it is 40 artifacts vs 40 question sets vs
+  //    a 50/50 split, and the UI says which.
+  const paths = { interactive: 0, written: 0, both: 0 };
+  list.forEach(({ path }) => { if (path in paths) paths[path]++; });
+  const interactiveN = paths.interactive + paths.both;
+  const writtenN     = paths.written + paths.both;
+
+  // ── Effort & points (GRADED). ONE distribution across both modalities.
+  //    Q2 of a written preflight is the same reading-reflection prompt the artifact scores, on
+  //    the same 0–5 engagement rubric, so these are one population rather than two that happen
+  //    to share a scale. loadInteractionData has already resolved each row's effort through the
+  //    grade → diagnostic → claim precedence; the payload fallback here only catches a row
+  //    assembled by an older caller.
   const effortHist = [0, 0, 0, 0, 0, 0];
   let effortNA = 0;
   const efforts = [], points = [];
@@ -371,11 +459,21 @@ export function summarizeReports(rows, possible = 2) {
   const messages  = list.map(({ d }) => Number.isInteger(d.message_count) ? d.message_count : null);
 
   // ── Understanding (DIAGNOSTIC — never contributes to points).
-  const overall = list.map(({ d }) => int05(d.overall_understanding));
+  //    The headline number folds both paths: a student's interactive overall_understanding, or
+  //    their written free-response understanding when they have no interactive one. Without the
+  //    fallback a question-only cohort reports no understanding at all, which is the case this
+  //    whole change exists to fix. `from` records the split so the UI never implies the two
+  //    measures are the same instrument.
+  const overall = list.map(({ d, frUnderstanding }) => int05(d.overall_understanding) ?? frUnderstanding);
   const self    = list.map(({ d }) => int05(d.self_rated_understanding));
   const overallAvg = mean(overall), selfAvg = mean(self);
   const overallHist = [0, 0, 0, 0, 0, 0];
   overall.forEach(u => { if (u != null) overallHist[u]++; });
+  const understandingFrom = {
+    interactive: list.filter(({ d }) => int05(d.overall_understanding) != null).length,
+    written:     list.filter(({ d, frUnderstanding }) =>
+                   int05(d.overall_understanding) == null && frUnderstanding != null).length,
+  };
 
   // ── Objectives — group by key, average understanding/confidence + a 0–5 distribution.
   const objMap = {};
@@ -387,8 +485,29 @@ export function summarizeReports(rows, possible = 2) {
     const c = int05(o.confidence);    if (c != null) m.c.push(c);
   }));
   const objectives = Object.values(objMap)
-    .map(m => ({ key: m.key, label: m.label, assessed: m.u.length, understanding: mean(m.u), confidence: mean(m.c), dist: m.hist }))
+    .map(m => ({ key: m.key, label: m.label, assessed: m.u.length, understanding: mean(m.u),
+                 confidence: mean(m.c), dist: m.hist, source: 'interactive' }))
     .sort((a, b) => (a.understanding ?? 99) - (b.understanding ?? 99));   // weakest first
+
+  // ── The written path's contribution to that list: ONE synthetic objective.
+  //    The free-response question measures understanding on the same 0–5 scale the artifact
+  //    uses per objective, so it belongs in the same breakdown and reads the same way. What it
+  //    deliberately does NOT do is claim to decompose — the analysis produces one number for
+  //    the question, not a per-objective resolution, so it appears as a single row labelled
+  //    "Free response" rather than being spread across the authored objectives. (Teasing real
+  //    objectives out of the free-response answer is the future version of this; it would slot
+  //    in here by replacing this one entry with several.)
+  const frHist = [0, 0, 0, 0, 0, 0];
+  const frVals = [];
+  list.forEach(({ frUnderstanding: u }) => { if (u != null) { frHist[u]++; frVals.push(u); } });
+  if (frVals.length) {
+    const fr = { key: FREE_RESPONSE_KEY, label: FREE_RESPONSE_LABEL, assessed: frVals.length,
+                 understanding: mean(frVals), confidence: null, dist: frHist, source: 'written' };
+    // Re-sorted rather than pushed: the list is "weakest first", and the whole point of the row
+    // is that it competes with the objectives for the reader's attention on the same terms.
+    objectives.push(fr);
+    objectives.sort((a, b) => (a.understanding ?? 99) - (b.understanding ?? 99));
+  }
 
   // ── Misconceptions — count by id (the AI pass later clusters novel ones by description).
   const mcMap = {};
@@ -427,8 +546,28 @@ export function summarizeReports(rows, possible = 2) {
     if (d.flags?.notable === true) flags.notable++;
   });
 
+  // ── Can the radar be drawn, and if not, why not?
+  //    Decided here rather than in the view so every consumer gives the same answer and the
+  //    "unavailable" case carries a REASON. A radar needs ≥3 axes to enclose an area; a
+  //    question-only cohort produces exactly one understanding measure, so its chart is not
+  //    empty-because-nobody-worked — it is structurally unavailable, and saying so is the
+  //    difference between an explanation and a blank panel that reads like a bug.
+  const radarAxes = objectives.filter(o => o.understanding != null);
+  const radar = {
+    axes: radarAxes,
+    available: radarAxes.length >= 3,
+    reason: radarAxes.length >= 3 ? null
+          : n === 0 ? 'no-data'
+          : radarAxes.every(o => o.source === 'written') ? 'written-only'
+          : 'too-few-objectives',
+    axisCount: radarAxes.length,
+  };
+
   return {
     n,
+    // Provenance for every number below it. `interactive`/`written` count PEOPLE, and a student
+    // who did both is counted in each (plus once in `both`), so they do not sum to n.
+    paths: { ...paths, interactiveN, writtenN, mixed: interactiveN > 0 && writtenN > 0 },
     effort: {
       hist: effortHist, notAssessed: effortNA, avg: mean(efforts),
       pointsTotal: points.reduce((s, p) => s + p, 0), pointsMax: n * possible,
@@ -436,8 +575,9 @@ export function summarizeReports(rows, possible = 2) {
     completed, completedPct: n ? Math.round((completed / n) * 100) : 0,
     durationAvg: mean(durations), messageAvg: mean(messages),
     understanding: { overall: overallAvg, self: selfAvg, dist: overallHist,
-      gap: (overallAvg != null && selfAvg != null) ? selfAvg - overallAvg : null },
-    objectives, misconceptions,
+      gap: (overallAvg != null && selfAvg != null) ? selfAvg - overallAvg : null,
+      from: understandingFrom },
+    objectives, radar, misconceptions,
     reflection: { meaningful: reflMeaningful, assessed: reflAssessed,
       capped: reflAssessed - reflMeaningful, engagement: mean(reflEng), sentiment, topics },
     honor, flags,

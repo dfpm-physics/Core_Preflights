@@ -252,11 +252,39 @@
         <div class="eff-x">${counts.map((_, i) => `<span>${i}</span>`).join('')}</div></div>`;
     }
 
+    // Why the radar could not be drawn. The summary decides this (summarizeReports → s.radar) so
+    // the reason is computed once next to the data; this only phrases it.
+    //
+    // The written-only case is the one worth spelling out. A question set yields exactly ONE
+    // understanding measure — the free-response question — and a radar needs three axes to
+    // enclose an area. So the chart is not missing because nobody worked the lesson; it is
+    // structurally unavailable for this cohort, and the understanding IS reported, just in the
+    // breakdown below. A bare empty panel here reads as a broken chart and gets reported as a bug.
+    function radarUnavailable(radar, paths) {
+      const body = {
+        'no-data': `No submissions in this scope yet.`,
+        'written-only': `Not available for this lesson — everyone worked the question set, which
+          measures understanding on one free-response question rather than per objective. That
+          score is in <b>Understanding by objective</b> below, as <b>Free response</b>.`,
+        'too-few-objectives': `Needs at least 3 assessed objectives — this scope has
+          ${radar.axisCount}. The per-objective scores are below.`,
+      }[radar.reason] || `Radar unavailable for this scope.`;
+      const hint = radar.reason === 'written-only' && paths?.interactiveN === 0
+        ? `<div class="radar-na-hint">Axes appear once students take the interactive path.</div>` : '';
+      return `<div class="radar-na"><div class="radar-na-ic" aria-hidden="true">◌</div>
+        <div class="radar-na-txt">${body}</div>${hint}</div>`;
+    }
+
     // Radar of understanding across objectives — single-letter axis labels (A,B,C…). Needs ≥3.
     // Each hit circle carries the objective label + mean for the hover tooltip.
-    function radarSVG(objectives) {
+    //
+    // On a mixed cohort the written path contributes one extra axis, "Free response", alongside
+    // the interactive objectives: it is the same 0–5 understanding measure, so it plots on the
+    // same scale and is directly comparable. It arrives already in `objectives` (summarizeReports
+    // appends it), which is why nothing here special-cases it.
+    function radarSVG(objectives, radar, paths) {
       const objs = objectives.filter(o => o.understanding != null).map(o => ({ letter: o.letter, m: o.understanding, label: o.label }));
-      if (objs.length < 3) return `<div class="muted" style="padding:24px;text-align:center">Radar needs ≥3 assessed objectives.</div>`;
+      if (objs.length < 3) return radarUnavailable(radar || { reason: 'too-few-objectives', axisCount: objs.length }, paths);
       const N = objs.length, cx = 150, cy = 150, R = 96, LBL = 5.42;   // LBL = label-ring radius (just outside the grid)
       const ang = i => (-Math.PI / 2) + (i * 2 * Math.PI / N);
       const pt = (i, rv) => [cx + Math.cos(ang(i)) * R * (rv / 5), cy + Math.sin(ang(i)) * R * (rv / 5)];
@@ -521,14 +549,19 @@
     function aggregateHTML(s, rows, roster, analysis) {
       if (!s.n) return `<div class="summary-placeholder">No reports submitted in this scope yet — the summary appears once students submit.</div>`;
 
-      const radar = radarSVG(s.objectives);
+      const radar = radarSVG(s.objectives, s.radar, s.paths);
+      // How this cohort worked the lesson. Every number in the rollup is read against it — the
+      // effort distribution in particular is now ONE population across both paths.
+      const mixNote = s.paths?.interactiveN && s.paths?.writtenN
+        ? `· ${s.paths.interactiveN} interactive + ${s.paths.writtenN} questions`
+        : s.paths?.writtenN ? '· question set' : '· interactive';
       const row2 = `<div class="lr-sec sum-row2">
         <div class="sum-cell">
-          <div class="lr-eyebrow">Effort distribution <span class="dim">${s.effort.avg == null ? '' : '· ' + f1(s.effort.avg) + ' / 5 avg'}</span></div>
+          <div class="lr-eyebrow">Effort distribution <span class="dim">${s.effort.avg == null ? '' : '· ' + f1(s.effort.avg) + ' / 5 avg'} ${mixNote}</span></div>
           ${effortChart(s.effort)}
         </div>
         <div class="sum-cell">
-          <div class="lr-eyebrow">Objective understanding <span class="dim">· dashed line marks threshold</span></div>
+          <div class="lr-eyebrow">Objective understanding <span class="dim">${s.radar?.available ? '· dashed line marks threshold' : ''}</span></div>
           <div class="radar-wrap">${radar}<div class="radar-tip"></div></div>
         </div>
       </div>`;
@@ -551,14 +584,27 @@
         </div>
       </div>`;
 
-      const objRows = s.objectives.map(o => `<div class="obj-row">
+      // The written path's free-response understanding is charted here exactly like an
+      // objective — same 0–5 KDE, same weakest-first ordering, so it competes for attention on
+      // equal terms. It carries a small "questions" tag only so nobody reads it as an authored
+      // objective: it is one score for one question, not a resolved learning objective. (When
+      // the analysis can tease actual objectives out of the free-response answer, this row is
+      // what gets replaced by several — nothing else here has to change.)
+      const objRows = s.objectives.map(o => {
+        const isFR = o.source === 'written';
+        return `<div class="obj-row${isFR ? ' obj-row-fr' : ''}">
         <div class="obj-row-head">
-          <span class="nm"><b class="ol-key sm">${o.letter}</b>${esc(o.label)}</span>
+          <span class="nm"><b class="ol-key sm">${o.letter}</b>${esc(o.label)}${
+            isFR ? `<span class="obj-src" title="From the written question set — one free-response question, not a per-objective breakdown">questions</span>` : ''}</span>
           <span class="mu">${o.understanding == null ? 'n/a' : f1(o.understanding) + '/5'} · ${o.assessed} assessed</span></div>
         ${lrFine5(o.dist)}
-      </div>`).join('');
+      </div>`;
+      }).join('');
+      const objMix = s.objectives.some(o => o.source === 'written') && s.objectives.some(o => o.source === 'interactive')
+        ? '· weakest first · interactive objectives + the written free response'
+        : '· weakest first';
       const objSec = s.objectives.length ? `<div class="lr-sec obj-box">
-        <div class="lr-eyebrow">Understanding by objective <span class="dim">· weakest first</span></div>${objRows}</div>` : '';
+        <div class="lr-eyebrow">Understanding by objective <span class="dim">${objMix}</span></div>${objRows}</div>` : '';
 
       return row2 + aiSec + mcSec + objSec + responsesSection(rows, roster, analysis, reportScope !== 'all');
     }

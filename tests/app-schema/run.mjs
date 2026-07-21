@@ -49,14 +49,18 @@ for (const s of OFFLINE) {
   catch (e) { console.log(`\n!! suite ${s} threw: ${e.stack || e.message}`); process.exitCode = 1; }
 }
 
-/* ── test-imports runs in its own process, deliberately ──────────────────────
- * It imports every module in the app tree, and site/app/js/supabase.js captures window.db
- * once at import time. Running it in-process would leave every later suite bound to the
- * unauthenticated client it used, so the end-to-end tests would fail at bootstrap for a
- * reason unrelated to the code under test. Isolating it keeps the module registry clean.
+/* ── Suites that import app modules run in their own process, deliberately ───
+ * site/app/js/supabase.js captures window.db once at import time. Running these in-process
+ * would leave every later suite bound to the unauthenticated client they used, so the
+ * end-to-end tests would fail at bootstrap for a reason unrelated to the code under test.
+ * Isolating them keeps the module registry clean.
+ *
+ *   test-imports  imports every module in the app tree
+ *   test-rollup   imports faculty-rollup.js for summarizeReports (pure, but the module's
+ *                 supabase.js import still binds a client)
  */
-{
-  const r = spawnSync(process.execPath, [resolve(import.meta.dirname, 'test-imports.mjs')],
+for (const suite of ['test-imports.mjs', 'test-rollup.mjs']) {
+  const r = spawnSync(process.execPath, [resolve(import.meta.dirname, suite)],
                       { encoding: 'utf8' });
   process.stdout.write(r.stdout || '');
   if (r.status !== 0) {

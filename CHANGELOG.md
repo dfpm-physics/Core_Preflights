@@ -10,6 +10,61 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-21 — Matthew Recker via Claude
 
+### Changed — faculty summaries now describe BOTH ways a lesson can be worked
+
+**Frontend + tests only (`site/app/`, `tests/`). No migration, no schema change, no DB write.**
+The dashboard and the lesson rollup summarized only the interactive path. A student who worked
+the question set contributed nothing to any number: they have no schema:1 report, and
+`grades.effort` is NULL on that path (written offerings are `grading_mode='points'`, and
+`/preflight-analyze` refuses to run against an effort-graded one because the trigger would
+overwrite `points_earned`). Their effort lives in `grades.diagnostic.q2_effort` and their
+understanding in `.q3_understanding`, and nothing read either.
+
+The visible consequence was worse than a missing panel: on a mixed lesson the effort mean, the
+histogram and the section averages silently described only the artifact takers while the
+completion ring counted everyone, so two numbers side by side were measuring different cohorts.
+A question-only lesson had no rollup at all — `faculty-rollup.js` filtered the lesson list to
+offerings with an interactive activity.
+
+**Effort is now one distribution across both modalities.** Q2 of a written preflight *is* the
+reading reflection the artifact scores, and `QUESTION-DIAGNOSTICS.md` grades it by adapting the
+same engagement rubric (`INTERACTION-DATA-CONTRACT.md` §5.2). They are one population on one
+scale, not two that happen to share a range. `schema.js` gained `effortSignal()` — grade →
+written diagnostic → the artifact's claimed effort, in that precedence, with the claim last
+because a student's own artifact writes it — and `writtenSignals()`, which unpacks the q2/q3
+pair and returns nulls on an interactive grade whose `diagnostic` holds the schema:1 payload
+instead. Every consumer resolves effort through one definition now.
+
+**Understanding could not be merged the same way, and is not.** The interactive path resolves
+understanding per objective; the written path produces one number for one free-response
+question. So it appears as a single synthetic objective, `Free response`, in the weakest-first
+breakdown — same 0–5 KDE, same ordering, competing for attention on equal terms, tagged
+`questions` so nobody reads it as an authored objective. On a mixed cohort it also becomes an
+extra radar axis, which is legitimate because it is the same 0–5 measure. (Teasing real
+objectives out of the free-response answer is the future version; it replaces this one row with
+several and nothing else has to change.) The headline understanding average folds in
+`q3_understanding` where a student has no interactive score, and reports the split as
+`understanding.from` so the UI never implies the two are the same instrument.
+
+**A written-only cohort cannot have a radar, and now says so.** One free-response score is one
+axis; a radar needs three to enclose an area. `summarizeReports` decides availability and
+returns a *reason* (`no-data` / `written-only` / `too-few-objectives`), and the rollup renders
+an explanation in the chart's place. A blank panel there reads as a broken chart and gets
+reported as a bug. Misconception trends get the same treatment on the dashboard: a question set
+produces none, which is not the same as none being found.
+
+Completion counting was fixed alongside it — "done" is now a `submission_activities` row for
+*either* activity, so the ring and the numbers under it describe the same people.
+
+**Verified:** `tests/app-schema/test-rollup.mjs` is new — 60 assertions over `writtenSignals`,
+`effortSignal` and `summarizeReports`, covering the merged effort distribution, the free-response
+objective, the understanding split, and each radar-unavailable reason. Full suite green (215 +
+60). The faculty dashboard was driven headlessly (Playwright, via the sandbox, which imports the
+real render module) in both the mixed and written-only cases, and the new rollup panels were
+rendered against the shipped stylesheet in light and dark. **The lesson rollup page itself was
+not exercised against live data** — it needs a director login — so `report.html`'s wiring of the
+new `s.radar` / `o.source` fields is proven by unit test and by markup rendering, not end to end.
+
 ### Changed — Grade tab filters by status lamps instead of an "Only flagged" checkbox
 
 **Frontend only (`site/app/`). No migration, no schema change, no DB write.** The Grade tab

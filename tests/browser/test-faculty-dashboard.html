@@ -98,12 +98,27 @@
                    : rel === 0 ? s.dil - 0.28 + r() * 0.30
                    : rel === 1 ? 0.05 + r() * 0.11 : r() * 0.05;
           const done = Math.round(s.n * clamp(base, 0, 1));
+          // A lesson can be worked two ways, so the mock cohort is mixed. Lesson 5 is written-only
+          // — the case that has no radar and no misconception trends, and whose panels have to
+          // say WHY rather than render empty. Everywhere else a minority take the question set.
+          const writtenOnly = L.id === LESSONS[4]?.[0];
           for (let k = 0; k < done; k++) {
             const eff = clamp(Math.round(2.4 + s.dil * 2.2 + (r() - 0.5) * 2), 0, 5);
             const und = clamp(Math.round(1.8 + s.dil * 2.0 + (r() - 0.5) * 2), 0, 5);
+            const written = writtenOnly || r() < 0.22;
+            if (written) {
+              // The written path: effort and understanding only — no schema:1 report, hence no
+              // misconceptions and no flags. effort is grades.diagnostic.q2_effort, unpacked by
+              // loadInteractionData; understanding is q3_understanding.
+              rows.push({ student_id: hash(s.id + L.id + k), sectionId: s.id, path: 'written',
+                effort: eff, understanding: und, score: eff >= 3 ? 2 : eff >= 1 ? 1 : 0,
+                report_data: null, hasWritten: true, workedPath: 'written' });
+              continue;
+            }
             const mlist = (MISC[L.id] || []).filter(() => r() < 0.28)
               .map(([id, label, severity]) => ({ id, label, description: label, severity }));
-            rows.push({ student_id: hash(s.id + L.id + k), sectionId: s.id, effort: eff,
+            rows.push({ student_id: hash(s.id + L.id + k), sectionId: s.id, path: 'interactive',
+              effort: eff, understanding: null,
               score: eff >= 3 ? 2 : eff >= 1 ? 1 : 0,
               report_data: { schema: 1, effort: eff, overall_understanding: und, misconceptions: mlist,
                 flags: { needs_follow_up: eff <= 2 || und <= 1 } } });

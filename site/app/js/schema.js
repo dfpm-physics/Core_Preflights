@@ -313,6 +313,79 @@ export function answeredCount(answers, questions) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
+ * Learner signals — the two numbers BOTH modalities produce
+ * ════════════════════════════════════════════════════════════════════════════ */
+//
+// A lesson can be worked two ways, and until now only the interactive path fed the summaries.
+// That was never a design decision — it is just where the code started. Both paths in fact
+// emit the same two 0–5 measures, and this section is the one place that says where each
+// lives so no page has to re-derive it:
+//
+//                        EFFORT (graded)              UNDERSTANDING (diagnostic)
+//   interactive   grades.effort, else the artifact's  report_data.overall_understanding
+//                 claimed report_data.effort          + report_data.objectives[].understanding
+//   written       grades.diagnostic.q2_effort         grades.diagnostic.q3_understanding
+//
+// EFFORT IS THE SAME MEASUREMENT ON BOTH SIDES. Q2 of a written preflight *is* the reading
+// reflection, and QUESTION-DIAGNOSTICS.md scores it by adapting the same engagement rubric
+// (INTERACTION-DATA-CONTRACT §5.2) the artifact applies. So the two are one population and
+// summing them into a single distribution is the honest reading, not a convenience.
+//
+// UNDERSTANDING IS NOT. The interactive path resolves understanding per objective; the
+// written path produces one number for one free-response question. We therefore carry the
+// written value as a single synthetic objective (below) rather than pretending it decomposes.
+
+/** Defensive 0–5 coercion. `report_data` is LLM-produced and occasionally imperfect
+ *  (INTERACTION-DATA-CONTRACT §7); anything that is not a clean 0–5 int becomes null and
+ *  drops out of every mean rather than skewing it. */
+export const int05 = v => (Number.isInteger(v) && v >= 0 && v <= 5) ? v : null;
+
+/** The synthetic objective the written free-response question contributes. Kept as a key that
+ *  cannot collide with an authored objective key, with the label the faculty UI shows. */
+export const FREE_RESPONSE_KEY = '__free_response__';
+export const FREE_RESPONSE_LABEL = 'Free response';
+
+/**
+ * The written path's two diagnostics, pulled off a `grades` row.
+ *
+ * `grades.diagnostic` is polymorphic by modality: for an interactive grade it holds the frozen
+ * schema:1 payload (overall_understanding, objectives[], …), for a written one the pair
+ * `{q2_effort, q3_understanding}` that /preflight-analyze writes. Both keys are simply absent
+ * on an interactive grade, so this is safe to call on any grade row — it returns nulls rather
+ * than needing the caller to know which kind it holds.
+ *
+ * Note that written offerings are `grading_mode='points'` (the skill refuses to run against an
+ * effort-graded one, because the trigger would overwrite `points_earned`). So `grades.effort`
+ * is NULL on the written path and this diagnostic is the *only* place its effort exists.
+ *
+ * @returns {{ effort: number|null, understanding: number|null }}
+ */
+export function writtenSignals(grade) {
+  const d = grade?.diagnostic;
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return { effort: null, understanding: null };
+  return { effort: int05(d.q2_effort), understanding: int05(d.q3_understanding) };
+}
+
+/**
+ * One student's effort for a lesson, whichever way they worked it, with its provenance.
+ *
+ * Precedence is "what a human graded" → "what the analysis produced" → "what the artifact
+ * claimed". The claim ranks last on purpose: a student's own artifact writes it, so it is
+ * evidence until a grader confirms it, not a grade.
+ *
+ * @returns {{ effort: number|null, source: 'grade'|'diagnostic'|'claimed'|null }}
+ */
+export function effortSignal(grade, reportData) {
+  const graded = int05(grade?.effort);
+  if (graded != null) return { effort: graded, source: 'grade' };
+  const { effort: diag } = writtenSignals(grade);
+  if (diag != null) return { effort: diag, source: 'diagnostic' };
+  const claimed = int05(reportData?.effort);
+  if (claimed != null) return { effort: claimed, source: 'claimed' };
+  return { effort: null, source: null };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
  * Misc
  * ════════════════════════════════════════════════════════════════════════════ */
 

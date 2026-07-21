@@ -1047,6 +1047,16 @@ tr:last-child td { border-bottom: none; }
 .radar-tip .rt-l { display: block; font-weight: 600; color: var(--text); }
 .radar-tip .rt-m { display: block; margin-top: 3px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
+/* Radar unavailable — a stated reason where the chart would be, so an absent radar reads as an
+   explanation rather than a chart that failed to draw. Sized to hold the radar's place in the
+   two-up row so the panel doesn't collapse when the cohort is written-only. */
+.radar-na { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 9px; text-align: center; padding: 26px 20px; min-height: 190px; max-width: 300px; }
+.radar-na-ic  { font-size: 1.7em; line-height: 1; color: var(--muted); opacity: 0.55; }
+.radar-na-txt { font-size: 0.82em; line-height: 1.5; color: var(--muted); }
+.radar-na-txt b { color: var(--text-soft); font-weight: 600; }
+.radar-na-hint { font-size: 0.74em; color: var(--muted); opacity: 0.75; font-style: italic; }
+
 /* AI aggregator placeholders */
 .ai-box { flex: 1; display: flex; flex-direction: column; gap: 10px; }
 .ai-tbd { font-size: 0.85em; color: var(--muted); }
@@ -1094,6 +1104,10 @@ tr:last-child td { border-bottom: none; }
 .obj-row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; }
 .obj-row-head .nm { font-size: 0.88em; font-weight: 600; color: var(--text-soft); display: flex; align-items: center; gap: 6px; min-width: 0; }
 .obj-row-head .mu { font-size: 0.76em; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The written free-response row. Same chart, same ordering — the tag is the only difference,
+   because it is one score for one question rather than a resolved objective. */
+.obj-src { flex: none; font-size: 0.66em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; cursor: help; }
 
 /* header flag pills — compact count + icon; hover reveals detail, click opens the student list */
 .fpill { position: relative; display: inline-flex; align-items: center; gap: 4px; font: inherit; font-size: 0.72em; font-weight: 700;

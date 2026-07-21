@@ -51,6 +51,12 @@ const activeIdx = () => MODEL.lessons.findIndex(l => l.id === MODEL.activeId);
 const lessonIdx = (id) => MODEL.lessons.findIndex(l => l.id === id);
 
 // Aggregate one lesson across a set of sections → the spotlight / KPI numbers.
+//
+// `paths` rides along on every aggregate because these numbers changed meaning when the written
+// path started feeding them. Effort is now one distribution over both modalities (Q2 of a
+// written preflight is the same reading reflection the artifact scores — see schema.js), so
+// "avg effort 3.8" is a claim about everyone who worked the lesson, not just the artifact
+// takers. The UI has to be able to say which, or the reader cannot calibrate it.
 function aggregateScope(lessonId, secs) {
   const ids = new Set(secs.map(s => s.id));
   const rows = (MODEL.rowsByLesson[lessonId] || []).filter(r => ids.has(r.sectionId));
@@ -60,7 +66,7 @@ function aggregateScope(lessonId, secs) {
   return {
     done, total, pct: total ? done / total : 0,
     effort: s.effort.avg, und: s.understanding.overall, flags: s.flags.needs_follow_up,
-    dist: s.effort.hist,
+    dist: s.effort.hist, paths: s.paths, undFrom: s.understanding.from,
     mis: s.misconceptions.map(m => ({ label: m.label, sev: m.major > 0 ? 'major' : 'minor', cnt: m.count })),
   };
 }
@@ -72,7 +78,19 @@ function cellFor(sectionId, lessonId) {
   const total = MODEL.sectionSize[sectionId] || 0;
   const done = rows.length;
   return { done, total, pct: total ? done / total : 0,
-    effort: s.effort.avg, und: s.understanding.overall, flags: s.flags.needs_follow_up };
+    effort: s.effort.avg, und: s.understanding.overall, flags: s.flags.needs_follow_up,
+    paths: s.paths };
+}
+
+/* How a cohort worked the lesson, in as few words as a tile sub-line allows. Returns '' when
+   there is nothing to disambiguate (no work yet, or a single-modality lesson doing the obvious
+   thing) — a label that always fires is a label nobody reads. */
+function pathNote(paths) {
+  if (!paths) return '';
+  const { interactiveN: i = 0, writtenN: w = 0 } = paths;
+  if (!i && !w) return '';
+  if (i && w) return `${i} interactive + ${w} questions`;
+  return w ? 'question set only' : '';
 }
 
 const f1 = v => (v == null ? '—' : v.toFixed(1));
@@ -167,9 +185,13 @@ function statTiles(a, ctx) {
     : `Lesson ${L} · ${a.done}/${a.total} · not yet due · early submissions`;
   return `<div class="stat-grid">
     ${tile('blue',  'completion', '📨', Math.round(a.pct * 100) + '%', compLabel, compSub)}
-    ${tile('gold',  'bolt',       '⚡', f1(a.effort), 'Avg effort (graded)', `engagement · ${scopeLabel}`)}
+    ${tile('gold',  'bolt',       '⚡', f1(a.effort), 'Avg effort (graded)',
+           pathNote(a.paths) || `engagement · ${scopeLabel}`)}
     ${tile('red',   'warning',    '🚩', a.flags, 'Flagged for follow-up', 'low engagement or major gap')}
-    ${tile('green', 'analytics',  '🧭', f1(a.und), 'Avg understanding', 'diagnostic · not graded')}
+    ${tile('green', 'analytics',  '🧭', f1(a.und), 'Avg understanding',
+           a.undFrom?.written && a.undFrom?.interactive ? 'diagnostic · both paths'
+           : a.undFrom?.written ? 'diagnostic · free response'
+           : 'diagnostic · not graded')}
   </div>`;
 }
 
@@ -202,7 +224,8 @@ function spotlight(a, ctx) {
     : lowData
       ? `<div class="empty-note">Only ${a.done} early submission${a.done === 1 ? '' : 's'} — too soon for a reliable distribution.</div>`
       : `<div class="eff-wrap">
-           <div class="eff-mean">class mean <b>${f1(a.effort)}</b> · engagement</div>
+           <div class="eff-mean">class mean <b>${f1(a.effort)}</b> · engagement${
+             pathNote(a.paths) ? ` <span class="muted">· ${esc(pathNote(a.paths))}</span>` : ''}</div>
            <div class="eff-bars">${bars}</div>
            <div class="eff-x">${[0, 1, 2, 3, 4, 5].map(s => `<span>${s}</span>`).join('')}</div>
          </div>`;
@@ -212,12 +235,19 @@ function spotlight(a, ctx) {
       <span class="mis-dot ${m.sev}"></span>
       <span class="mis-label">${esc(m.label)}</span>
       <span class="mis-cnt">${m.cnt}</span></div>`).join('');
+  // A written-only cohort produces no misconceptions at all — the analysis resolves them from
+  // the interactive transcript, and there is no equivalent pass over a question set. Say that,
+  // rather than "none flagged", which reads as a clean bill of health.
+  const writtenOnly = a.paths && a.paths.writtenN > 0 && a.paths.interactiveN === 0;
   const misBody = noData
     ? `<div class="empty-note">Trends appear once students submit.</div>`
-    : lowData
-      ? `<div class="empty-note">Trends appear once more students submit.</div>`
-      : (a.mis.length ? `<div class="mis-list">${mis}</div>` : `<div class="empty-note">No common misconceptions flagged.</div>`)
-        + (a.flags ? `<div class="callout">🚩 <span><b>${a.flags}</b> student${a.flags === 1 ? '' : 's'} flagged for follow-up</span></div>` : '');
+    : writtenOnly
+      ? `<div class="empty-note">No misconception trends on this lesson — everyone worked the
+         question set, and misconceptions are surfaced from the interactive transcript.</div>`
+      : lowData
+        ? `<div class="empty-note">Trends appear once more students submit.</div>`
+        : (a.mis.length ? `<div class="mis-list">${mis}</div>` : `<div class="empty-note">No common misconceptions flagged.</div>`)
+          + (a.flags ? `<div class="callout">🚩 <span><b>${a.flags}</b> student${a.flags === 1 ? '' : 's'} flagged for follow-up</span></div>` : '');
 
   const eyebrowTxt = st === 'today' ? 'Active preflight · due before next class'
     : st === 'past' ? 'Past lesson · already covered in class' : 'Upcoming preflight · not yet due';

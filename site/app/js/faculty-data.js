@@ -16,6 +16,7 @@ import { db } from './supabase.js';
 import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT,
   shapeOffering, shapeSubmission, effectiveDue, deriveStatus, lessonNumber, chunked,
+  effortSignal, writtenSignals,
 } from './schema.js';
 
 /**
@@ -146,10 +147,19 @@ export async function loadFacultyDashboard(ctx) {
     const grade = gradeBy[gradeKey(s.enrollmentId, s.offeringId)] || null;
     const { isPast } = effectiveDue(offering, sectionId, null);
 
-    // The interactive report's schema:1 payload — where effort now lives (a student cannot
-    // write a grades row, so the receiver stores it on the submission).
+    // The interactive report's schema:1 payload — where the artifact's claimed effort lives (a
+    // student cannot write a grades row, so the receiver stores it on the submission).
     const interactiveWork = offering?.interactive ? s.activities?.[offering.interactive.id] : null;
+    const writtenWork     = offering?.written     ? s.activities?.[offering.written.id]     : null;
     const reportData = interactiveWork?.content || null;
+
+    // Effort resolves the same way for both paths — grade, then the analysis diagnostic
+    // (`q2_effort`, the only place a written preflight's effort exists), then the artifact's
+    // claim. Before this, a written student's effort was always null: they scored nothing in
+    // `grades.effort` and had no report_data, so they fell into "not assessed" and vanished
+    // from the effort tile, the histogram and every section average.
+    const { effort, source: effortSource } = effortSignal(grade, reportData);
+    const { understanding: frUnderstanding } = writtenSignals(grade);
 
     bucket.push({
       student_id: studentOf[s.enrollmentId],
@@ -157,11 +167,19 @@ export async function loadFacultyDashboard(ctx) {
       sectionId,
       status: deriveStatus({ submission: s, grade, isPast }),
       chosenModality: offering?.activities.find(a => a.id === s.chosenActivityId)?.modality || null,
-      effort: grade?.effort ?? (Number.isInteger(reportData?.effort) ? reportData.effort : null),
+      effort,
+      effortSource,
       points: grade?.points_earned == null ? null : Number(grade.points_earned),
       isFinalized: !!grade?.is_finalized,
       report_data: reportData,
+      // Free-response understanding, present only when they answered the questions.
+      understanding: writtenWork ? frUnderstanding : null,
       hasReport: !!interactiveWork,
+      hasWritten: !!writtenWork,
+      // Which path this student actually took, independent of what the offering allows.
+      workedPath: interactiveWork && writtenWork ? 'both'
+                : interactiveWork ? 'interactive'
+                : writtenWork ? 'written' : null,
     });
   });
 
