@@ -170,6 +170,55 @@ export function questionsOf(activity) {
   const q = activity?.content?.questions;
   return Array.isArray(q) ? q : [];
 }
+
+/* ── The two pinned questions, and how to find them when nobody marked them ────
+ *
+ * `role` is the durable contract (LESSON-UNIFICATION.md §11) and faculty/lessons.html writes it
+ * on every newly authored lesson. It was added AFTER the Fall 2026 preflights were built, though:
+ * build_fall_preflights.py emits `{id, type, text, points}` with no role, and a read of the live
+ * database on 2026-07-21 found **0 of 74** written activities carrying any role at all. A
+ * role-only lookup therefore returns null for every lesson in the term.
+ *
+ * So: role, then the prompt text, then position. Text matching is normally a smell; here it is
+ * anchored to a prompt the builder pins verbatim and a director does not hand-edit. The id
+ * fallback is last and deliberately weakest — position is the first thing an edit changes.
+ *
+ * This mirrors `_pinned_question_id` in supabase/admin/lesson_aggregate.py, needle for needle.
+ * The two engines must agree: the aggregator quotes reflections the browser also renders, and a
+ * disagreement would show different students in the prose than in the panel. Both suites assert
+ * the same cases so they cannot drift.
+ */
+const PINNED_TEXT_MATCH = {
+  reading_time: 'how much time did you spend reading',
+  reading_reflection: 'confusing or most interesting',
+};
+const PINNED_FALLBACK_ID = { reading_time: 'q1', reading_reflection: 'q2' };
+
+/**
+ * The question id for a pinned role — by role, else by prompt text, else by position.
+ *
+ * @returns {{id: string|null, how: 'role'|'text'|'position'|null}} `how` names the signal that
+ *   identified it, so a caller can tell a positional guess from a declared contract.
+ */
+export function pinnedQuestion(activity, role) {
+  const questions = questionsOf(activity).filter(q => q && typeof q === 'object');
+
+  const byRole = questions.find(q => q.role === role && q.id);
+  if (byRole) return { id: byRole.id, how: 'role' };
+
+  const needle = PINNED_TEXT_MATCH[role];
+  if (needle) {
+    const byText = questions.find(q => String(q.text || '').toLowerCase().includes(needle) && q.id);
+    if (byText) return { id: byText.id, how: 'text' };
+  }
+
+  const want = PINNED_FALLBACK_ID[role];
+  const byPos = questions.find(q => q.id === want);
+  return byPos ? { id: byPos.id, how: 'position' } : { id: null, how: null };
+}
+
+/** Which written question IS the reading reflection. See pinnedQuestion. */
+export const reflectionQuestionId = activity => pinnedQuestion(activity, 'reading_reflection').id;
 export function artifactUrlOf(activity) { return activity?.content?.artifact_url || null; }
 export function readingLinkOf(activity) { return activity?.content?.reading_link || null; }
 

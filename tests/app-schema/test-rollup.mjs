@@ -16,7 +16,7 @@
 import { check, eq, section, installBrowser, summary } from './harness.mjs';
 import {
   writtenSignals, writtenReport, effortSignal, FREE_RESPONSE_KEY, FREE_RESPONSE_LABEL, int05,
-  minutes, median,
+  minutes, median, pinnedQuestion, reflectionQuestionId,
 } from '../../site/app/js/schema.js';
 
 installBrowser();
@@ -392,6 +392,114 @@ ANALYSIS_ROWS = [{ ...byQuestionRow('r-both', 'Roth'),
 const both = await loadAnalysis('off-1');
 eq('a conforming row yields its breakdown', (both[BY_QUESTION_KEY] || []).length, 1);
 eq('…and its cohort panels', both.__all__?.misconception_trends, 'Scalar sums.');
+
+/* ── Finding the reading reflection when nobody marked it ──────────────────── */
+section('pinnedQuestion — must agree with lesson_aggregate.py, case for case');
+
+// Same fixtures as aggregate_summarize_test.py. The aggregator quotes reflections the browser
+// also renders; if these two resolvers disagree, the prose cites students the panel never shows.
+const act = questions => ({ content: { questions } });
+
+// 0 of 74 live written activities carry ANY role, so the text fallback is load-bearing this term.
+const LIVE_SHAPE = act([
+  { id: 'q1', type: 'free_response', points: 0,
+    text: 'How much time did you spend reading the book in preparation for this lesson?' },
+  { id: 'q2', type: 'free_response', points: 1,
+    text: 'What did you find most confusing or most interesting about the reading? Be specific.' },
+  { id: 'q3', type: 'free_response', points: 1, text: 'Can an object have a velocity…' },
+]);
+eq('live Fall shape: reading time found by text',
+   pinnedQuestion(LIVE_SHAPE, 'reading_time'), { id: 'q1', how: 'text' });
+eq('live Fall shape: reflection found by text',
+   pinnedQuestion(LIVE_SHAPE, 'reading_reflection'), { id: 'q2', how: 'text' });
+
+const ROLED = act([
+  { id: 'qA', role: 'reading_reflection', text: 'anything' },
+  { id: 'qB', role: 'reading_time', text: 'anything' },
+]);
+eq('an explicit role wins over position',
+   pinnedQuestion(ROLED, 'reading_time'), { id: 'qB', how: 'role' });
+eq('…and over text', pinnedQuestion(ROLED, 'reading_reflection'), { id: 'qA', how: 'role' });
+
+const REORDERED = act([
+  { id: 'q2', points: 1, text: 'What did you find most confusing or most interesting?' },
+  { id: 'q1', points: 0, text: 'How much time did you spend reading the book?' },
+]);
+eq('text matching survives reordering',
+   pinnedQuestion(REORDERED, 'reading_time'), { id: 'q1', how: 'text' });
+
+const UNRECOGNIZABLE = act([{ id: 'q1', text: 'Something else entirely' },
+                            { id: 'q2', text: 'Also unrelated' }]);
+eq('falls back to position, and says so',
+   pinnedQuestion(UNRECOGNIZABLE, 'reading_reflection'), { id: 'q2', how: 'position' });
+eq('…and gives up rather than guessing when even position is absent',
+   pinnedQuestion(act([{ id: 'zz', text: 'nope' }]), 'reading_reflection'), { id: null, how: null });
+eq('an interactive activity has no questions and resolves to null',
+   reflectionQuestionId({ content: { artifact_url: 'https://claude.ai/x' } }), null);
+eq('a missing activity does not throw', reflectionQuestionId(null), null);
+
+/* ── The payload shape the writer ACTUALLY produces ────────────────────────── */
+section('loadAnalysis — payload.scopes, as lesson_aggregate.py writes it');
+
+// `cohortRow` above (kind:'cohort', panels at the top level) is a shape NO producer emits. The
+// real writer stores payload.scopes keyed by section uuid plus '__all__' (SKILL.md, "Why the
+// per-section rows became one row with scopes inside it"). Because the fixture encoded the wrong
+// shape, this reader could look for `by_section`, pass every assertion, and still render "coming
+// soon" on every scope of every real run. Assert against the producer, not against a paraphrase.
+const readinessRow = {
+  id: 'r-real', scope: 'assignment_offering', scope_id: 'off-1', audience_id: null,
+  kind: 'readiness', generated_at: '2026-07-21T18:14:21Z',
+  payload: {
+    kind: 'readiness', axis: 'objective', generated_by: 'lesson-aggregate@2026-07-21',
+    activity_slug: 'lesson-02-electric-charge-coulombs-law', assignment_slug: 'preflight-02',
+    scopes: {
+      'sec-uuid-1': {
+        section_id: 'sec-uuid-1', section_code: 'M1A',
+        readiness_summary: 'M1A is the strongest section.',
+        misconception_trends: 'One protons-move case.',
+        selected_quotes: [{ student_id: 3000990009, section_id: 'sec-uuid-1' }],
+        meta: { n: 16, generated_by: 'lesson-aggregate@2026-07-21' },
+      },
+      __all__: {
+        section_id: null, section_code: '__all__',
+        readiness_summary: 'Cohort is engaged.',
+        misconception_trends: 'Two halves of one gap.',
+        selected_quotes: [],
+        meta: { n: 64, generated_by: 'lesson-aggregate@2026-07-21' },
+      },
+    },
+  },
+};
+
+ANALYSIS_ROWS = [readinessRow];
+const real = await loadAnalysis('off-1');
+eq('a real lesson-aggregate row exposes its whole-course panels',
+   real.__all__?.readiness_summary, 'Cohort is engaged.');
+eq('…and its whole-course trends', real.__all__?.misconception_trends, 'Two halves of one gap.');
+eq('…and its per-section panels, keyed by section uuid',
+   real['sec-uuid-1']?.readiness_summary, 'M1A is the strongest section.');
+eq('…and the per-section trends', real['sec-uuid-1']?.misconception_trends, 'One protons-move case.');
+eq('…and the AI-selected quotes the rollup resolves to live text',
+   real['sec-uuid-1']?.selected_quotes[0].student_id, 3000990009);
+eq('…with no quotes on the whole-course scope', real.__all__?.selected_quotes, []);
+eq('…and meta.n, which drives the staleness hint', real.__all__?.meta?.n, 64);
+
+// Both producers write this offering, exactly as they do live.
+ANALYSIS_ROWS = [byQuestionRow('r1', 'Roth'), readinessRow, byQuestionRow('r2', 'Hardy')];
+const bothProducers = await loadAnalysis('off-1');
+eq('scopes panels survive alongside by_question rows',
+   bothProducers.__all__?.readiness_summary, 'Cohort is engaged.');
+eq('…and the breakdowns are still separated out',
+   (bothProducers[BY_QUESTION_KEY] || []).length, 2);
+
+// The older top-level shape must keep loading.
+ANALYSIS_ROWS = [{ ...readinessRow, payload: {
+  by_section: { 'sec-uuid-1': { readiness_summary: 'Legacy section.' } },
+  readiness_summary: 'Legacy course.' } }];
+const legacy = await loadAnalysis('off-1');
+eq('a by_section row still loads its sections',
+   legacy['sec-uuid-1']?.readiness_summary, 'Legacy section.');
+eq('…and its top-level whole-course panels', legacy.__all__?.readiness_summary, 'Legacy course.');
 
 ANALYSIS_ROWS = [];
 eq('no rows is an empty map, not a throw', await loadAnalysis('off-1'), {});

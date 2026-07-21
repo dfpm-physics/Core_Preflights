@@ -260,17 +260,39 @@ Lists the scopes just written with `n`, quote count, and a `STALE` flag (stored 
 fingerprint — should be blank right after a run). Spot-check one section's prose against a couple
 of that section's reports.
 
-> **The faculty rollup does NOT display this yet.** `site/app/js/faculty-data.js` already *loads*
-> the rows (`loadAnalysisReports()` filters `scope='assignment_offering'` on the offering id), but
-> nothing renders them yet — that wiring is a **separate, deferred task** (see below). `status` is
-> the verification surface for now.
+> **The faculty rollup DOES display this (since 2026-07-21).** `site/app/faculty/report.html`
+> renders the readiness summary, the misconception-trend prose, and the per-section showcase
+> quotes; `loadAnalysis()` in `site/app/js/faculty-rollup.js` selects the scope. `status` remains
+> the fastest verification surface, but it is no longer the only one.
+>
+> **It was silently broken until then, and the failure mode is worth knowing.** `loadAnalysis()`
+> read `payload.by_section`; this script writes `payload.scopes`. Nothing errored — every panel
+> just resolved to `null` and the page fell back to its "coming soon" placeholders, so a
+> successful run with a clean `status` still displayed nothing. If a panel is empty after a run,
+> check that producer and consumer agree on the payload key before re-running anything.
 
 ---
 
-## Deferred — UI wiring (not part of this skill)
+## Deferred — the rest of the UI wiring
 
-When the rollup is wired to consume `analysis_reports` (additive, graceful-degradation —
-no row → today's placeholders), honor these rules so the teaching UX stays right:
+Most of this landed 2026-07-21. **What is still NOT implemented:**
+
+- **An instructor's "All sections" must never read the `__all__` scope** — it should be the live
+  union of *their own* sections' scopes. `currentAnalysis()` in `report.html` currently returns
+  `__all__` for any viewer whose scope is "all", so an instructor sees the whole-course synthesis.
+  This is a UI rule, not a database one (see the RLS caveat below), so nothing else enforces it.
+- **`/preflight-analyze`'s `by_question` breakdown is still keyed per instructor**
+  (`audience_id` = the instructor, `payload.sections` naming their sections), and the rollup
+  renders every block it receives with an "instructor · sections" header, ignoring the section
+  selector. **Decided 2026-07-21, not yet built:** that skill should mirror this one —
+  `audience_id = NULL` and a `payload.scopes` map keyed by section uuid plus `__all__`, each scope
+  carrying its own `items{q1…}` — so one payload convention serves both producers and the rollup
+  can show a course-level view and a per-section view with no instructor axis at all. It requires
+  a `/preflight-analyze` contract change **and** a re-run over the offering: today's bullets are
+  computed per instructor over all of their sections at once (e.g. one row covering M1A **and**
+  M3A), so there is no per-section decomposition stored to split.
+
+The rules below still govern anything further:
 
 - **Readiness summary / misconception trends:** load this offering's row and pick the scope. For a
   director's "All sections" view, use `payload.scopes["__all__"]`; for a single section, that

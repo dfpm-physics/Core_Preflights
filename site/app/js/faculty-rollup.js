@@ -73,7 +73,7 @@ import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT,
   shapeOffering, shapeSubmission, artifactUrlOf, chunked,
   int05, writtenSignals, writtenReport, effortSignal, FREE_RESPONSE_KEY, FREE_RESPONSE_LABEL,
-  minutes, median, READING_BUCKETS,
+  minutes, median, READING_BUCKETS, reflectionQuestionId,
 } from './schema.js';
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -290,6 +290,8 @@ export async function loadInteractionData(offeringId, studentIds) {
   if (!studentIds?.length) return [];
   const found = await activitiesOf(offeringId);
   if (!found || (!found.interactiveId && !found.writtenId)) return [];
+  // Resolved once per lesson, not per student: which written question is the reading reflection.
+  const reflectionQid = reflectionQuestionId(found.offering?.written);
 
   const enrolments = [];
   for (const ids of chunked(studentIds)) {
@@ -330,7 +332,29 @@ export async function loadInteractionData(offeringId, studentIds) {
     // failure the by_question breakdown had. Writing to the database is not the same as it
     // being used.
     const written = writtenReport(grade);
-    const reportData = interactiveWork?.content || written || null;
+    let reportData = interactiveWork?.content || written || null;
+
+    // …and the one field the bridge has to reconstitute rather than pass through.
+    //
+    // WRITTEN-SCHEMA1.md deliberately does NOT copy the reflection text into `grades.diagnostic`
+    // — it would duplicate an answer the submission already stores — so a written student's
+    // schema:1 carries the JUDGMENT (`{engagement, meaningful}`) and no `text`. The interactive
+    // payload carries both. Consumers that read `reading_reflection.text` therefore found it on
+    // one path and not the other: report.html resolves showcase quotes AND its random reflection
+    // sample through that field, so a question-set cohort rendered an empty responses panel with
+    // no error — the AI picked real students and none of them could be resolved to a quote.
+    //
+    // Lifting the answer here restores the "one shape, two producers" contract at the point the
+    // shapes are already being unified, so nothing downstream has to know where the text lived.
+    if (written && !interactiveWork?.content && reflectionQid) {
+      const answer = writtenWork?.content?.[reflectionQid];
+      if (typeof answer === 'string' && answer.trim()) {
+        reportData = {
+          ...written,
+          reading_reflection: { ...(written.reading_reflection || {}), text: answer.trim() },
+        };
+      }
+    }
 
     const { effort, source } = effortSignal(grade, reportData);
     const { understanding } = writtenSignals(grade);
@@ -432,10 +456,28 @@ export async function loadAnalysis(offeringId) {
       if (!p.readiness_summary && !p.misconception_trends && !p.selected_quotes) return;
     }
 
-    // Either one row carrying a by_section map, or a row that IS one scope's panels.
-    if (p.by_section && typeof p.by_section === 'object') {
-      Object.entries(p.by_section).forEach(([sid, obj]) => { out[sid] = panels(obj, sid); });
-      if (p.readiness_summary || p.misconception_trends) out.__all__ = panels(p, '__all__');
+    // Either one row carrying a map of per-scope panels, or a row that IS one scope's panels.
+    //
+    // `scopes` is the key lesson_aggregate.py actually writes — keyed by section uuid plus
+    // '__all__' for the whole course (SKILL.md, "Why the per-section rows became one row with
+    // scopes inside it"). `by_section` is the name this reader was built against and that no
+    // producer has ever emitted; it stays accepted so a hand-written row still loads.
+    //
+    // Reading only `by_section` meant every real /lesson-aggregate row fell through to the
+    // single-scope branch below, where the top level has no panels — so readiness_summary,
+    // misconception_trends and selected_quotes all resolved to null and the rollup showed its
+    // "coming soon" placeholders on every scope. The analysis was written to the database and
+    // displayed nowhere, which is the same failure mode the by_question breakdown had.
+    const scopeMap = (p.scopes && typeof p.scopes === 'object') ? p.scopes
+                   : (p.by_section && typeof p.by_section === 'object') ? p.by_section : null;
+    if (scopeMap) {
+      Object.entries(scopeMap).forEach(([sid, obj]) => { out[sid] = panels(obj, sid); });
+      // The whole-course entry rides inside `scopes` under the '__all__' key; the older
+      // by_section shape carried it at the top level instead. Never let that fallback clobber a
+      // real one the map already supplied.
+      if (!out.__all__ && (p.readiness_summary || p.misconception_trends)) {
+        out.__all__ = panels(p, '__all__');
+      }
     } else {
       const sid = p.section_id || '__all__';
       out[sid] = panels(p, sid);

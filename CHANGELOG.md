@@ -10,6 +10,108 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-21 — Matthew Recker via Claude
 
+### Fixed — showcase quotes were unresolvable on the written path
+
+**Frontend only. No migration, no DB write.** With the panel bug below fixed, the AI-picked quotes
+still rendered nothing on a question-set cohort — and so did the *random* reflection sample, i.e.
+the entire Student Responses panel, with no error.
+
+`reflOf()` in [`site/app/faculty/report.html`](site/app/faculty/report.html) resolves quote text
+from `report_data.reading_reflection.text`. On the written path `report_data` is
+`grades.diagnostic`, and `WRITTEN-SCHEMA1.md` **deliberately** omits the text there — it would
+duplicate an answer `submission_activities.content` already stores. So the written payload carries
+the judgment (`{engagement, meaningful}`) and no text, while the artifact's carries both. The AI
+picked real students; none of them could be resolved to a quote.
+
+The bridge in `loadInteractionData()` now lifts the answer at the reading-reflection question and
+merges it into `reading_reflection.text`, restoring "one shape, two producers" at the point the
+shapes are already unified — no consumer has to know where the text lived, and nothing new is
+stored. Both the submission content and the question definitions were already loaded, so this adds
+no query.
+
+**New `pinnedQuestion()` in `site/app/js/schema.js`**, a port of `_pinned_question_id` from
+`lesson_aggregate.py` — role, then prompt text, then position. It is a port and not a shortcut
+because the aggregator quotes reflections the browser also renders: if the two resolvers disagreed,
+the prose would cite students the panel never shows. Both suites now assert the same fixtures. The
+text fallback is load-bearing today — **0 of 74** live written activities carry a `role`, and the
+live `phys-215-preflight-02-written` resolves to `q2` by text, confirmed against the database.
+
+**Verified on real rows, not fixtures:** three live students' stored answers + diagnostics replayed
+through the resolver and the bridge expression go from `text=MISSING` to a quotable reflection.
+`tests/app-schema/test-rollup.mjs` 119 → 128 assertions; full suite 257 + 128 green.
+**Still unverified in a browser** — the rollup needs a faculty login this harness does not have, so
+the render path past `currentAnalysis()` and `buildResponses()` remains unproven (CORE.md §2).
+
+### Fixed — the rollup read `payload.by_section`; the writer has always written `payload.scopes`
+
+**Every AI panel `/lesson-aggregate` produces was invisible.** `loadAnalysis()` in
+[`site/app/js/faculty-rollup.js`](site/app/js/faculty-rollup.js) looked for `payload.by_section`, a
+key **no producer has ever emitted**. `lesson_aggregate.py` writes `payload.scopes`, keyed by
+section uuid plus `__all__` (its own SKILL.md documents this under "Why the per-section rows became
+one row with scopes inside it"). With `by_section` absent, every real row fell through to the
+single-scope branch, which reads the panels off the payload's **top level** — where they do not
+exist. `readiness_summary`, `misconception_trends` and `selected_quotes` all resolved to `null`, so
+the rollup rendered its "coming soon" placeholders on every scope of every lesson.
+
+The reader now prefers `scopes` and still accepts `by_section`, and a whole-course entry supplied
+inside the map is never clobbered by the top-level fallback.
+
+**Why 108 assertions didn't catch it:** the suite's `cohortRow` fixture used `kind: 'cohort'` with
+the panels at the top level — a shape nothing writes. The test encoded the reader's assumption
+rather than the writer's output, so both agreed with each other and neither agreed with the
+database. `tests/app-schema/test-rollup.mjs` now asserts against the real writer shape (a
+`kind='readiness'` row with `payload.scopes`), including per-section panels, whole-course panels,
+quote payloads, `meta.n`, coexistence with `by_question` rows, and the legacy `by_section` path.
+108 → 119 assertions; full suite 257 + 119 green.
+
+**Verified against live data, not only the fixture:** the four stored `analysis_reports` rows for
+offering `eb5fc51c` were dumped and replayed through the real `loadAnalysis()`, which now resolves
+all five scopes (M1A/M3A/T1A/T3A + `__all__`) with their prose, 3 quotes per section, 0 on
+`__all__`, and correct `meta.n`. **Not yet confirmed in a browser** — this was a Node-only check
+(CORE.md §2), so the rendering path in `report.html` past `currentAnalysis()` is still unproven.
+
+### Operations — first `/lesson-aggregate` run over a written-only cohort (phys-215 preflight-02)
+
+**Live DB write to `app.analysis_reports` — one row, offering `eb5fc51c` (phys-215 / fall-2026 /
+preflight-02), `kind='readiness'`, 5 scopes (M1A, M3A, T1A, T3A, `__all__`).** No grades, no
+submissions, and no schema touched. Verified with `status`: 5 scopes, n=16/16/16/16/64, 3 quotes
+per section, 0 on `__all__`, no `STALE` flag.
+
+**This is the first run that proves the unified rollup end-to-end.** The cohort is
+`0 interactive, 64 written` — every misconception, reading-time figure, and understanding score in
+the analysis came from `grades.diagnostic` via the new `writtenReport()` bridge. Before the
+same-day change above, this lesson would have aggregated to nothing: no student took the artifact.
+Cohort totals: effort 4.47/5, understanding 4.08/5, reading median 35m (all 64 stated, none under
+15m), `charge-created` ×3 (5%), `protons-move` ×2 (3%), 8 reflection-capped, 15 needs-follow-up.
+
+**The cohort is the seeded instructor-training fixture, not real student work** — ids
+`3000990000`–`3000990071` from [`scripts/training/seed_training_preflight02.py`](scripts/training/seed_training_preflight02.py),
+which is explicitly disposable (`--clean --commit`). Every scope's prose says so in its first line.
+`preflight-02` is currently the only assignment in the system with any submissions at all. **When
+the real Fall 2026 roster lands, the fixture is deleted and this analysis must be regenerated** —
+`status` will flag all five scopes `STALE` on its own once the underlying rows change, which is the
+designed signal to re-run.
+
+**Two things found on the way, neither fixed here:**
+
+1. **`pull`'s multi-offering error misdiagnoses a cross-course slug collision.**
+   `--lesson preflight-02` aborts with *"scheduled in more than one active offering (fall-2026) —
+   deactivate the stale course_offering before aggregating."* Nothing is stale: `preflight-02` is an
+   assignment slug shared by **phys-110 and phys-215**, both legitimately active in fall-2026
+   ([`lesson_aggregate.py:456-459`](supabase/admin/lesson_aggregate.py#L456-L459) reports the term
+   set, which is identical, rather than the course). Following the advice would have deactivated a
+   live phys-110 offering. The activity slugs *are* course-prefixed, so
+   `--lesson phys-215-preflight-02-written` resolves cleanly — that is the workaround used here. The
+   fix is for the message to name the courses and suggest the activity slug when the terms match.
+2. **`prep_app_owner` is still unsealed.** `app_tier_check.py` shows it connecting with CREATE/DROP
+   in `app`; CORE.md §0 requires it `NOLOGIN` between schema changes, and the migration-007 entry
+   below already flagged the re-seal as outstanding. Still needs `ALTER ROLE prep_app_owner NOLOGIN;`
+   as `postgres`.
+
+Read-only steps (`app_tier_check`, `interaction_reports stats`, `pull`, `status`) plus the two-stage
+`write-analysis --dry-run` → commit. Student-identifying scratch files (reflection text, ids) stayed
+in the session scratchpad, never under the repo tree, per the skill's rule 7.
+
 ### Added — extension governance, grading worklists, and a review attestation
 
 **Migration `supabase/migrations/app/007_extension_governance_and_review.sql` — APPLIED to the
