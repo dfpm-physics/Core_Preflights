@@ -15,7 +15,8 @@ serially and reports per-student failures rather than aborting).
 
 The site is static, served by GitHub Pages from `main`. **Pushing to `main` changes the production
 site** after a one-to-two minute rebuild. Editing a file locally changes nothing until it is
-committed *and* pushed. There is no build step and no Node dependency — do not add one.
+committed *and* pushed. There is no build step, and the site itself has no Node dependency — do not
+add one. (Optional developer tooling may use Node locally; nothing on the deploy path may need it.)
 
 ## Migrations
 

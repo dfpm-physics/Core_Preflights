@@ -69,8 +69,9 @@ push to `main`:
    `.ai/instructions/PROJECT.md`, and `docs/operations/SYSTEM_GUIDE.md`.
 2. Create the two config files from their `.template`s (CORE.md §3). Get the service key / DB creds
    from the course director out-of-band — never from the repo.
-3. Confirm the environment: Python available, no Node dependency or build step, and textbook PDFs
-   present at `textbook_base_path` if you'll grade.
+3. Confirm the environment: Python available; the shipped site needs no Node and no build step, and
+   Node itself may or may not be installed on your machine (CORE.md §2); textbook PDFs present at
+   `textbook_base_path` if you'll grade.
 4. Before any DB mutation, re-read the safety floor above (and CORE.md §0). For destructive ops,
    snapshot first.
 5. Do the work using the runbooks in `.ai/skills/` and the scripts in `scripts/`. Keep scripts

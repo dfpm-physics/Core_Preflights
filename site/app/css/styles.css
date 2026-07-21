@@ -69,6 +69,12 @@
   --alert-warn-bg:  #fff8c5; --alert-warn-fg:  #7d4e00; --alert-warn-bd:  #d4a72c;
   --feedback-bg:    #fff8c5; --feedback-fg:    #7d4e00;
 
+  /* status lamps (grade filter): unlit shell + the halo each colour casts when lit */
+  --lamp-off-bg: #eaeef2; --lamp-off-bd: #d0d7de;
+  --lamp-glow-ok:    rgba(74, 194, 107, 0.55);
+  --lamp-glow-warn:  rgba(212, 167, 44, 0.60);
+  --lamp-glow-error: rgba(207, 34, 46, 0.45);
+
   --shadow-sm: 0 1px 4px rgba(0,0,0,0.06);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.10);
   --shadow-lg: 0 12px 32px rgba(0,0,0,0.16);
@@ -123,6 +129,11 @@
   --alert-info-bg:  #121d2f; --alert-info-fg:  #4493f8; --alert-info-bd:  #1f6feb;
   --alert-warn-bg:  #272115; --alert-warn-fg:  #d29922; --alert-warn-bd:  #9e6a03;
   --feedback-bg:    #272115; --feedback-fg:    #d29922;
+
+  --lamp-off-bg: #21262d; --lamp-off-bd: #30363d;
+  --lamp-glow-ok:    rgba(63, 185, 80, 0.55);
+  --lamp-glow-warn:  rgba(210, 153, 34, 0.55);
+  --lamp-glow-error: rgba(248, 81, 73, 0.50);
 
   --shadow-sm: 0 1px 4px rgba(0,0,0,0.4);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
@@ -846,6 +857,45 @@ tr:last-child td { border-bottom: none; }
 .toolbar .field.grow { flex: 1; min-width: 200px; }
 .check-inline { display: inline-flex; align-items: center; gap: 8px; font-size: 0.86em; font-weight: 600; color: var(--text); cursor: pointer; user-select: none; white-space: nowrap; }
 .check-inline input { width: auto; }
+
+/* Status lamps — a traffic light that filters answers by credit state. Lit means that colour's
+   answers are shown; clicking dims the lamp and hides them. Colour is never the only signal:
+   each lamp carries its live count and an aria-pressed state, so the filter still reads in
+   greyscale and to a screen reader. */
+.lamp-filter { display: flex; flex-direction: column; gap: 5px; }
+.lamp-row { display: flex; align-items: center; gap: 8px; }
+.lamp {
+  width: 38px; height: 38px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--lamp-off-bd); background: var(--lamp-off-bg); color: var(--muted);
+  font-family: inherit; font-size: 0.74em; font-weight: 700; font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: background 0.18s, color 0.18s, border-color 0.18s, box-shadow 0.18s, transform 0.06s;
+}
+.lamp:hover { transform: translateY(-1px); }
+.lamp:active { transform: scale(0.94); }
+.lamp:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.lamp[aria-pressed="false"] { opacity: 0.7; }
+.lamp[aria-pressed="false"]:hover { opacity: 1; }
+
+.lamp[data-lamp="full"][aria-pressed="true"] {
+  background: var(--alert-ok-bg); color: var(--alert-ok-fg); border-color: var(--alert-ok-bd);
+  box-shadow: 0 0 0 1px var(--alert-ok-bd), 0 0 14px 3px var(--lamp-glow-ok), inset 0 1px 3px rgba(255,255,255,0.3);
+}
+.lamp[data-lamp="warn"][aria-pressed="true"] {
+  background: var(--alert-warn-bg); color: var(--alert-warn-fg); border-color: var(--alert-warn-bd);
+  box-shadow: 0 0 0 1px var(--alert-warn-bd), 0 0 14px 3px var(--lamp-glow-warn), inset 0 1px 3px rgba(255,255,255,0.3);
+}
+.lamp[data-lamp="zero"][aria-pressed="true"] {
+  background: var(--alert-error-bg); color: var(--alert-error-fg); border-color: var(--alert-error-bd);
+  box-shadow: 0 0 0 1px var(--alert-error-bd), 0 0 14px 3px var(--lamp-glow-error), inset 0 1px 3px rgba(255,255,255,0.3);
+}
+
+.filter-empty { padding: 22px; text-align: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lamp { transition: none; }
+  .lamp:hover, .lamp:active { transform: none; }
+}
 
 .grade-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); margin-bottom: 18px; overflow: hidden; }
 .grade-card.finalized { border-color: var(--green); }

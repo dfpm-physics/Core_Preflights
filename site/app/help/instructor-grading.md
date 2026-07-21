@@ -23,6 +23,18 @@ Each question carries one of three states. Select a question's state to cycle th
 
 Yellow awards full credit on purpose. Preflights grade pre-class engagement, not mastery.
 
+## Filtering by color
+
+Three lamps above the list — green, yellow, red — control which answers you see. A lit lamp shows
+that state's answers; select it to dim the lamp and hide them. Each lamp also shows how many answers
+are currently in its state.
+
+All three start lit. Dim green and yellow to work only the red answers, or dim green alone to review
+just what the AI flagged. A student drops off the list once every one of their answers is hidden.
+
+Changing a question's state re-files it under the lamps straight away, so an answer you resolve can
+disappear from the view you are working in — that is the filter keeping up, not a lost grade.
+
 ## AI-suggested scores
 
 Scores written by the analysis run arrive **unfinalized**. They are a first pass, not a decision:

@@ -17,11 +17,24 @@
     <div class="toolbar">
       <div class="field grow"><label for="asgn">Assignment</label><select id="asgn"></select></div>
       <div class="field"><label for="section">Section</label><select id="section"></select></div>
-      <label class="check-inline"><input type="checkbox" id="flag-filter"> Only flagged</label>
+      <div class="field lamp-filter">
+        <label id="lamp-label">Show answers</label>
+        <div class="lamp-row" role="group" aria-labelledby="lamp-label" id="lamps">
+          <button type="button" class="lamp" data-lamp="full" aria-pressed="true"
+                  title="Full credit" aria-label="Full credit"><span data-count>0</span></button>
+          <button type="button" class="lamp" data-lamp="warn" aria-pressed="true"
+                  title="Flagged for review" aria-label="Flagged for review"><span data-count>0</span></button>
+          <button type="button" class="lamp" data-lamp="zero" aria-pressed="true"
+                  title="No credit" aria-label="No credit"><span data-count>0</span></button>
+        </div>
+      </div>
     </div>
 
     <div id="grade-container">
       <div class="muted">Select an assignment to begin grading.</div>
+    </div>
+    <div class="filter-empty muted" id="filter-empty" style="display:none">
+      No answers match the lit lamps. Click a lamp to bring those answers back.
     </div>
 
     <div class="grade-actions" id="grade-actions" style="display:none">
@@ -78,7 +91,7 @@
       container().addEventListener('input', onInput);
       asgnSel().addEventListener('change', loadView);
       secSel().addEventListener('change', loadView);
-      document.getElementById('flag-filter').addEventListener('change', applyFlagFilter);
+      wireLamps();
       document.getElementById('save-btn').addEventListener('click', doSave);
       document.getElementById('finalize-btn').addEventListener('click', doFinalize);
       wireExtModal();
@@ -195,7 +208,7 @@
           <div class="gc-body">${rows}</div>
         </div>`;
       }).join('');
-      applyFlagFilter();
+      applyFilters();
     }
 
     // ── Events ──
@@ -237,20 +250,60 @@
       }
       const tot = document.getElementById(`tot-${sid}`);
       if (tot) tot.textContent = `${studentTotal(sid).toFixed(2)} / ${maxTotal.toFixed(2)} pts`;
-      applyFlagFilter();
+      applyFilters();
     }
 
-    function applyFlagFilter() {
-      const on = document.getElementById('flag-filter').checked;
-      document.querySelectorAll('.grade-card').forEach(card => {
-        let flagged = false;
-        card.querySelectorAll('.grade-q').forEach(row => {
-          const s = row.dataset.status;
-          if (s === 'warn' || s === 'zero') flagged = true;
-          row.style.display = on && s === 'full' ? 'none' : '';
-        });
-        card.style.display = on && !flagged ? 'none' : '';
+    // ── Status-lamp filter ──
+    // The lamps are a traffic light: lit means "show answers with this status", dark means hide
+    // them. Filtering is pure DOM work against `.grade-q[data-status]` — no refetch — but it has
+    // to run after every render AND every credit toggle, or the view drifts out of step with the
+    // lamps. `data-status` is the only hook present on both the finalized and editable branches.
+    const lampOn = { full: true, warn: true, zero: true };
+    const LAMP_NAME = { full: 'Full credit', warn: 'Flagged for review', zero: 'No credit' };
+
+    function wireLamps() {
+      document.getElementById('lamps').addEventListener('click', (e) => {
+        const btn = e.target.closest('.lamp');
+        if (!btn) return;
+        const k = btn.dataset.lamp;
+        lampOn[k] = !lampOn[k];
+        btn.setAttribute('aria-pressed', String(lampOn[k]));
+        applyFilters();
       });
+    }
+
+    function applyFilters() {
+      const counts = { full: 0, warn: 0, zero: 0 };
+      let anyRows = false, shownCards = 0;
+
+      document.querySelectorAll('.grade-card').forEach(card => {
+        const rows = card.querySelectorAll('.grade-q');
+        if (rows.length) anyRows = true;
+        let shown = 0;
+        rows.forEach(row => {
+          const s = row.dataset.status;
+          if (counts[s] !== undefined) counts[s]++;
+          const show = lampOn[s] !== false;
+          row.style.display = show ? '' : 'none';
+          if (show) shown++;
+        });
+        // A card with no gradable rows at all (every question worth 0 pts) wasn't filtered out
+        // by the lamps — keep it visible instead of silently dropping the student.
+        const visible = rows.length ? shown > 0 : true;
+        card.style.display = visible ? '' : 'none';
+        if (visible) shownCards++;
+      });
+
+      // The count is the button's only text, so it would otherwise BE the accessible name
+      // ("0, pressed"). Keep an explicit label carrying both the colour's meaning and the count.
+      for (const [k, n] of Object.entries(counts)) {
+        const btn = document.querySelector(`.lamp[data-lamp="${k}"]`);
+        if (!btn) continue;
+        btn.querySelector('[data-count]').textContent = n;
+        btn.setAttribute('aria-label', `${LAMP_NAME[k]} — ${n} answer${n === 1 ? '' : 's'}`);
+      }
+      document.getElementById('filter-empty').style.display =
+        (anyRows && shownCards === 0) ? '' : 'none';
     }
 
     // ── Save / finalize / reopen ──

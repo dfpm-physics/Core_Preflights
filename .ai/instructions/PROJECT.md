@@ -23,9 +23,11 @@ lesson interactions at USAFA. Replaces GradeScope for two courses: Physics 110 a
 - **Auth**: Supabase Auth for both instructors (email/password) and students (cadetID@usafa.edu / last-6-digits default password)
 - **Analysis**: `preflight-analyze` shared AI skill (see `.ai/skills/preflight-analyze/`)
 
-> **No Node dependency or build step — do not introduce one** (full rule in [`CORE.md`](CORE.md) §2,
-> including how to verify changes in a browser with `python -m http.server 8000`). The frontend is
-> hand-authored ES modules + plain CSS the browser runs directly.
+> **No Node dependency or build step in the shipped site — do not introduce one** (full rule in
+> [`CORE.md`](CORE.md) §2, including how to verify changes in a browser with
+> `python -m http.server 8000`). The frontend is hand-authored ES modules + plain CSS the browser
+> runs directly. Node may be installed locally as *optional* developer tooling and is guaranteed on
+> no machine but the course director's; see CORE.md §2 before relying on it.
 
 ## Hosting & Infrastructure
 

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-07-20",
+  "updated": "2026-07-21",
   "_comment": [
     "Dependency index for documents that MUST STAY CURRENT. Each entry names the authoritative",
     "sources a document was derived from, and the date it was last checked against them.",
@@ -20,7 +20,7 @@
       "doc": "site/app/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-07-20",
+      "reviewed": "2026-07-21",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -33,7 +33,7 @@
       "doc": "site/app/help/ai-and-your-work.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-07-20",
+      "reviewed": "2026-07-21",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -46,7 +46,7 @@
       "doc": "site/app/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-07-20",
+      "reviewed": "2026-07-21",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -59,7 +59,7 @@
       "doc": "site/app/help/director-ai-rules.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-07-20",
+      "reviewed": "2026-07-21",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -73,7 +73,7 @@
       "doc": "site/app/help/admin-system-operations.md",
       "kind": "help",
       "tier": "admin",
-      "reviewed": "2026-07-20",
+      "reviewed": "2026-07-21",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -96,7 +96,7 @@
       "doc": "docs/operations/SYSTEM_GUIDE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-07-20",
+      "reviewed": "2026-07-21",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md"
@@ -107,7 +107,7 @@
       "doc": "docs/operations/PREP-V2-CUTOVER.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-07-20",
+      "reviewed": "2026-07-21",
       "sources": [
         "supabase/admin/app_schema_bootstrap.sql",
         "scripts/app_migration/migrate_public_to_app.py",
@@ -121,7 +121,7 @@
       "doc": ".ai/skills/docs-author/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-07-20",
+      "reviewed": "2026-07-21",
       "sources": [
         "site/app/help/README.md",
         "site/app/js/help.js",
@@ -134,7 +134,7 @@
       "doc": "site/app/help/director-course-structure.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-07-20",
+      "reviewed": "2026-07-21",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/003_term_calendar.sql",
@@ -148,7 +148,7 @@
       "doc": "site/app/help/director-schema-reference.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-07-20",
+      "reviewed": "2026-07-21",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/002_rls.sql",

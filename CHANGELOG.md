@@ -8,6 +8,80 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-21 — Matthew Recker via Claude
+
+### Changed — Grade tab filters by status lamps instead of an "Only flagged" checkbox
+
+**Frontend only (`site/app/`). No migration, no schema change, no DB write.** The Grade tab
+toolbar now carries a three-lamp traffic light — green (full credit), yellow (flagged for
+review), red (no credit). A lit lamp shows that status's answers and glows in its own colour;
+clicking dims the lamp and hides those answers. All three start lit, so the default view is
+unchanged from before.
+
+**Replaces the "Only flagged" checkbox rather than joining it.** That checkbox was exactly the
+state "green off, yellow and red lit", so keeping both would have left two filters writing
+`row.style.display` on the same elements and fighting each other. The lamps are a strict
+superset: red-only isolates the no-credit answers, yellow-only works the AI-flagged review
+queue, green-only spot-checks what was auto-passed.
+
+Filtering stays pure DOM work against `.grade-q[data-status]` — no refetch — and runs after
+every render *and* every credit-chip toggle, so cycling a chip re-files the answer under the
+lamps immediately. `data-status` is the hook because it is the only attribute present on both
+the finalized and editable branches of the renderer; the `.credit-toggle[data-qid]` attributes
+exist only on unfinalized rows and would have silently skipped every finalized student.
+
+**Colour is never the only signal.** Each lamp shows a live count of answers in that state and
+carries `aria-pressed` plus an `aria-label` naming the status and the count, so the filter reads
+in greyscale and to a screen reader. Lit/unlit is also distinguished by glow and opacity, not
+hue alone. New `--lamp-off-*` and `--lamp-glow-*` tokens are defined in both themes; the lit
+colours reuse the existing `--alert-ok/warn/error` trio rather than introducing new ones.
+
+Files: `site/app/faculty/grade.html`, `site/app/css/styles.css`. `site/app/help/instructor-grading.md`
+gains a "Filtering by color" section — it is the instructor-facing Grade tab page, and it documented
+the section filter and the 3-state colours but would have omitted the new control.
+
+**Verification — appearance and filter logic confirmed; live-page wiring not.** This machine had no
+browser automation at the time (no `chromium-cli`, no Playwright) and the real page sits behind
+faculty auth, so the agent could not open it. Instead the human confirmed a throwaway harness that
+loaded the **real** `styles.css` and ran a **verbatim copy** of `applyFilters`/`wireLamps` against
+synthetic cards: lit/unlit/glow in both themes, show-hide, the live counts, the all-dark empty state,
+and a credit-chip cycle re-filing an answer under the lamps. That proves the CSS and the filter
+algorithm.
+
+It does **not** prove the integration inside `grade.html` — that `wireLamps()` is reached from
+`init()`, that `render()` calls `applyFilters()`, or the behaviour against real data and finalized
+students. Those paths are still unexercised. Static checks that did run: HTML tag balance, CSS brace
+balance, every custom property used by a lamp rule defined in *both* light and dark themes, no
+dangling references to the removed `flag-filter`/`applyFlagFilter`, and lamp set == status set. Node
+became available later the same day (see below), so a headless pass over the real page is now
+possible and has not been run.
+
+### Docs — corrected the environment rule: Node *may* be available, guaranteed on no other machine
+
+**Documentation only. No code, no schema, no data.** Node is now installed on the course director's
+machine (`C:\Program Files\nodejs`, v24.18.0). CORE.md §2 claimed "nothing here uses them — no
+bundler, transpiler, `node --check`, eslint, or jest", which was **already stale** before this:
+`tests/app-schema/` has been an optional Node harness running the shipped modules against the live
+database since 2026-07-18. The rule now separates the two things that were conflated:
+
+- **The shipped site** still has no Node dependency and no build step, and must not gain one. That
+  part is unchanged and remains non-negotiable.
+- **Node is optional developer tooling** that may or may not exist on a given machine, and is
+  **guaranteed on none but the course director's.** Three constraints keep it optional: nothing on
+  the deploy path may require it; a Node-only check is never a change's sole verification (and must
+  be declared in this file if it was, because the next operator may have no Node); and
+  `package.json`/`node_modules/` stay confined to the tool's own gitignored folder.
+
+Also recorded a gotcha that cost time today: an agent session started **before** Node was installed
+inherits a stale `PATH` and reports `node: not found` even though it is present — check
+`C:\Program Files\nodejs\node.exe` directly, or restart the session.
+
+Files: `.ai/instructions/CORE.md` (§2, §7), `.ai/instructions/PROJECT.md`, `AGENTS.md` (quickstart),
+`site/app/README.md`, `site/app/help/admin-system-operations.md`. Per CORE.md §5 the CORE/PROJECT
+edit flagged ten derived documents; each was re-read against its sources and its `reviewed` date
+bumped in `docs/DOC-SOURCES.json`. `site/app/help/README.md` was **not** flagged and was left at its
+old date rather than bumped, since bumping it would attest to a review that did not happen.
+
 ## 2026-07-20 — Matthew Recker via Claude
 
 ### Added — account page, password flows, and the native course-administration page

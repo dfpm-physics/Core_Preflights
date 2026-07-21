@@ -96,10 +96,26 @@ Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
 
 ## 2. Environment constraints (read before running anything)
 
-- **The project has no Node dependency or build step. Do not introduce one.** (Node/npm may be
-  installed on a given machine, but nothing here uses them — no bundler, transpiler, `node --check`,
-  eslint, or jest.) The frontend is hand-authored ES modules + plain CSS the browser runs directly.
-  **Verify UI changes in a browser:** `python -m http.server 8000` from the repo root, open
+- **The shipped site has no Node dependency and no build step. Do not introduce one.** The frontend
+  is hand-authored ES modules + plain CSS the browser runs directly — nothing compiled, bundled, or
+  transpiled, and no `package.json` anywhere under `site/`.
+- **Node may be available locally. Never assume it is.** It is installed on the course director's
+  machine (`C:\Program Files\nodejs`, v24.18.0 as of 2026-07-21) and is **not guaranteed on any
+  other machine** — a teammate's clone, a fresh container, or CI may have none. Treat it as
+  *optional developer tooling*, exactly the way `tests/app-schema/` already does: useful for running
+  the shipped modules under test, a `node --check` syntax pass, or driving a headless browser to
+  verify UI that would otherwise go unverified. Three rules keep it optional:
+  - **Nothing on the deploy path may require it.** Delete every Node artifact and the site must be
+    unchanged.
+  - **A Node-only check is never the sole verification of a change.** If it is all you ran, say so
+    in `CHANGELOG.md` — the next operator may have no Node and needs to know what is still unproven.
+  - **Confine `package.json` and `node_modules/` to the tool's own folder**, gitignored, as
+    `tests/app-schema/` does. No root-level manifest.
+
+  *Gotcha:* an agent session that started **before** Node was installed inherits a stale `PATH` and
+  reports `node: not found` even though it is present. Check `C:\Program Files\nodejs\node.exe`
+  directly before concluding it is absent, or restart the session.
+- **Verify UI changes in a browser:** `python -m http.server 8000` from the repo root, open
   `http://localhost:8000/site/` and `http://localhost:8000/site/app/`. Do not add a build step.
 - **Tooling is Python** using only the **standard library** (`urllib`, `json`, `zoneinfo`) against
   the Supabase REST API — see `scripts/`. Heavier DB work uses `psycopg2` in a gitignored `.venv/`
@@ -246,8 +262,9 @@ The full table catalog, JSONB shapes, roles, and edge functions are in
    `.ai/instructions/PROJECT.md`, and `docs/operations/SYSTEM_GUIDE.md`.
 2. Create the two config files from their `.template`s (§3). Get the service key / DB creds from the
    course director out-of-band — never from the repo.
-3. Confirm the environment: Python available, no Node dependency or build step, and textbook PDFs
-   present at `textbook_base_path` if you'll grade.
+3. Confirm the environment: Python available; the shipped site needs no Node and no build step, and
+   Node itself may or may not be installed on your machine (§2); textbook PDFs present at
+   `textbook_base_path` if you'll grade.
 4. Before any DB mutation, re-read §0. For destructive ops, snapshot first.
 5. Do the work using the runbooks in §4 and the scripts in `scripts/`. Keep scripts idempotent +
    dry-run-by-default.

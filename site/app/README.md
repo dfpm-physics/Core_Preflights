@@ -48,10 +48,12 @@ Then open <http://localhost:8000/site/app/>. Log in as a student (cadet ID + las
 or an instructor (email + password). The session persists across reloads and navigation;
 sign out from the user menu.
 
-> **No Node dependency here.** There is no build step, bundler, transpiler, eslint, or jest for this
-> project. Node/npm may exist on a given machine, but the portal is plain ES modules + CSS the browser
-> runs as-is. **Verify by loading the page in a browser** (the Python server above) against Supabase —
-> there is no JS lint/test/typecheck pass to run.
+> **No Node dependency here.** The portal is plain ES modules + CSS the browser runs as-is — no build
+> step, bundler, or transpiler, and nothing under `site/` needs Node to serve or deploy. **Verify by
+> loading the page in a browser** (the Python server above) against Supabase. Node may or may not be
+> installed on a given machine and is guaranteed on none (CORE.md §2); where it is present, the
+> optional `tests/app-schema/` harness runs these shipped modules against the live database. That is
+> developer tooling, not part of the site.
 
 ## Deployment layout
 
