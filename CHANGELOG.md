@@ -8,6 +8,34 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-21 — Casey via Claude
+
+### Ran — `/preflight-analyze` for phys-215 `preflight-02` on schema `app` (Fall 2026)
+
+**Live database write to schema `app` (grades + analysis_reports). No repo/site code change.**
+First run of the rewritten, `app`-targeted skill against this offering — the earlier grades on it
+predated the `schema:1` per-student assessment, and this run adds it.
+
+**What was written** (all `source=ai_suggested`, `is_finalized=false` — instructors still finalize):
+- **64 grades** upserted on `enrollment_id` for the written activity of offering
+  `eb5fc51c…` ("Lesson 02 Preflight — Electric Charge, Coulombic Force"). 73 enrolled, 64 submitted
+  (all committed), 9 missing. No grade was clobbered — all 64 prior rows were unfinalized AI
+  suggestions, so the never-clobber guard (finalized / `source=instructor`) skipped none.
+- **Grade distribution:** Q3 42 full / 20 warn (full credit) / 2 zero (blank); Q2 56 full / 8 warn.
+  Yellow carries full credit throughout (liberal posture).
+- **Hidden diagnostics + the new `schema:1` payload** in `grades.diagnostic`: `q3_understanding`
+  {5:42, 4:2, 3:12, 2:1, 1:5, 0:2}; whole-attempt `effort` {5:49, 4:4, 3:3, 2:8} (the 8 twos are
+  dismissive reading reflections, capped by the meaningful-gate); `reading_minutes` parsed from Q1
+  for all 64; structured `misconceptions[]` — `protons-move` ×2, `charge-created` ×3.
+- **3 `analysis_reports`** (`kind=by_question`, one per instructor `audience_id`): Casey Pellizzari
+  (M1A, M3A; n=32), Tyler Jones (T1A; n=16), Matthew Recker (T3A; n=16).
+
+**Grounding:** OpenStax Vol. 2 §5.1–5.2 (pp. 170–177) read for RAG; Q3 key is electron transfer
+glass→silk with charge conserved. **Verification:** exact read-back of all 64 grades matched the
+written payload (0 mismatches); diagnostics in range, effort cap honored, no `text`/`honor` keys.
+
+---
+
 ## 2026-07-21 — Matthew Recker via Claude
 
 ### Fixed — showcase quotes were unresolvable on the written path
