@@ -235,15 +235,20 @@ function spotlight(a, ctx) {
       <span class="mis-dot ${m.sev}"></span>
       <span class="mis-label">${esc(m.label)}</span>
       <span class="mis-cnt">${m.cnt}</span></div>`).join('');
-  // A written-only cohort produces no misconceptions at all — the analysis resolves them from
-  // the interactive transcript, and there is no equivalent pass over a question set. Say that,
-  // rather than "none flagged", which reads as a clean bill of health.
+  // A written-only cohort has no COUNTED misconceptions — those come from the structured
+  // misconceptions[] the artifact sends, per student. /preflight-analyze does look for
+  // misconceptions on the written path (it is one of that skill's main jobs), but it writes them
+  // as prose bullets per instructor per question into analysis_reports, which this tile cannot
+  // count and the full rollup renders instead. Point there rather than implying none were found —
+  // and never let this read as "no misconceptions", which would be a clean bill of health nobody
+  // earned.
   const writtenOnly = a.paths && a.paths.writtenN > 0 && a.paths.interactiveN === 0;
   const misBody = noData
     ? `<div class="empty-note">Trends appear once students submit.</div>`
     : writtenOnly
-      ? `<div class="empty-note">No misconception trends on this lesson — everyone worked the
-         question set, and misconceptions are surfaced from the interactive transcript.</div>`
+      ? `<div class="empty-note">Everyone worked the question set, so there are no counted
+         misconceptions here. The written analysis reports them per question —
+         <a href="report.html?i=${encodeURIComponent(L.id)}">open the full rollup</a>.</div>`
       : lowData
         ? `<div class="empty-note">Trends appear once more students submit.</div>`
         : (a.mis.length ? `<div class="mis-list">${mis}</div>` : `<div class="empty-note">No common misconceptions flagged.</div>`)

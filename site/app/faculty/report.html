@@ -574,9 +574,37 @@
       </div>`;
 
       const trends = analysis && analysis.misconception_trends;
+      // The written path's misconception findings. /preflight-analyze DOES look for them — it is
+      // one of that skill's headline jobs, against the taxonomy in PROJECT.md — but it emits them
+      // as prose bullets per instructor per question (analysis_reports, kind='by_question'), not
+      // as the structured per-student misconceptions[] the artifact sends. So they cannot feed the
+      // counted bars above; they are rendered as what they are, underneath. Until this they were
+      // written to the database and displayed nowhere.
+      const byQ = reportAnalysis?.[I.BY_QUESTION_KEY] || [];
+      const qSec = byQ.length ? `<div style="margin-top:18px">
+          <div class="lr-eyebrow">By question <span class="dim">· from the written preflight analysis${
+            byQ.length > 1 ? ` · ${byQ.length} instructors` : ''}</span></div>
+          ${byQ.map(r => {
+            const rows = Object.entries(r.items || {})
+              .sort(([a], [b]) => String(a).localeCompare(String(b)))
+              .map(([qid, item]) => {
+                const bullets = String(item?.summary || '').split('\n').map(t => t.trim()).filter(Boolean);
+                if (!bullets.length) return '';
+                return `<div class="bq-q"><div class="bq-qid">${esc(qid.toUpperCase())}</div>
+                  <ul class="bq-list">${bullets.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
+              }).join('');
+            if (!rows) return '';
+            const who = [r.instructor_name, (r.sections || []).map(x => x.code).filter(Boolean).join(', ')]
+              .filter(Boolean).join(' · ');
+            return `<div class="bq-block">${who ? `<div class="bq-who">${esc(who)}</div>` : ''}${rows}</div>`;
+          }).join('')}
+        </div>` : '';
       const mcSec = `<div class="lr-sec fw-panel">
         <div class="lr-eyebrow">Misconceptions <span class="dim">· share of submitted students, most common first</span></div>
-        ${mcBars(s.misconceptions, s.n)}
+        ${s.misconceptions.length || !byQ.length ? mcBars(s.misconceptions, s.n)
+          : `<div class="muted" style="font-size:.84em">No counted misconceptions — those come from the
+             interactive transcript, and this scope's findings are in the per-question analysis below.</div>`}
+        ${qSec}
         <div style="margin-top:16px">
           <div class="lr-eyebrow">Trends across the class <span class="dim">${trends ? aiGenNote(analysis, s.n) : '· AI generated · coming soon'}</span></div>
           ${trends ? aiProse(analysis.misconception_trends)

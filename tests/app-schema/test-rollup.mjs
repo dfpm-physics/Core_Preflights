@@ -13,14 +13,25 @@
 // requires window.db. Hence the shim below — and hence run.mjs spawning this suite in its own
 // process, so the client binding cannot leak into the live suites.
 
-import { check, eq, section, installBrowser, makeClient, summary } from './harness.mjs';
+import { check, eq, section, installBrowser, summary } from './harness.mjs';
 import {
   writtenSignals, effortSignal, FREE_RESPONSE_KEY, FREE_RESPONSE_LABEL, int05,
 } from '../../site/app/js/schema.js';
 
 installBrowser();
-globalThis.window.db = makeClient();          // never queried — summarizeReports does no I/O
-const { summarizeReports } = await import('../../site/app/js/faculty-rollup.js');
+
+// A stub client, installed BEFORE the import because supabase.js captures window.db at module
+// load. summarizeReports is pure and never touches it; loadAnalysis is the one function here
+// that queries, and what it must do with the rows it gets back is exactly what we are testing.
+let ANALYSIS_ROWS = [];
+const chain = () => {
+  const c = { select: () => c, eq: () => c, then: (res) => res({ data: ANALYSIS_ROWS, error: null }) };
+  return c;
+};
+globalThis.window.db = { from: () => chain() };
+
+const { summarizeReports, loadAnalysis, BY_QUESTION_KEY } =
+  await import('../../site/app/js/faculty-rollup.js');
 
 /* ── Row builders, named for the path they represent ───────────────────────── */
 
@@ -203,9 +214,74 @@ check('…but still listed in the breakdown', unscored.objectives.some(o => o.ke
 /* ── The written path produces no interactive-only artefacts ───────────────── */
 section('summarizeReports — what the written path does NOT produce');
 
-eq('no misconceptions from a question set', writtenOnly.misconceptions.length, 0);
+// "No COUNTED misconceptions" — not "no misconceptions". /preflight-analyze does look for them
+// on the written path; it writes them as per-question prose into analysis_reports rather than as
+// the structured per-student misconceptions[] this counter folds. loadAnalysis (below) is what
+// surfaces them.
+eq('no counted misconceptions from a question set', writtenOnly.misconceptions.length, 0);
 eq('no flags from a question set', writtenOnly.flags, { needs_follow_up: 0, notable: 0 });
 eq('no reflection metadata from a question set', writtenOnly.reflection.assessed, 0);
 eq('points still accrue for written students', writtenOnly.effort.pointsTotal > 0, true);
+
+/* ── loadAnalysis: two skills write this table and `kind` separates them ───── */
+section('loadAnalysis — by_question rows must not corrupt the panel map');
+
+const cohortRow = {
+  id: 'r-cohort', scope: 'assignment_offering', scope_id: 'off-1', audience_id: null,
+  kind: 'cohort', generated_at: '2026-07-20T00:00:00Z',
+  payload: { readiness_summary: 'Class is ready.', misconception_trends: 'Fading.',
+             selected_quotes: ['q'], section_id: null },
+};
+const byQuestionRow = (id, who) => ({
+  id, scope: 'assignment_offering', scope_id: 'off-1', audience_id: who,
+  kind: 'by_question', generated_at: '2026-07-21T00:00:00Z',
+  payload: {
+    instructor_name: who, day_filter: 'M', sections: [{ id: 's1', code: 'M1A' }],
+    breakdown: { axis: 'question', items: {
+      q2: { summary: 'Reading reflection engaged\nTwo blanks' },
+      q3: { summary: 'scalar-sum: adds magnitudes without direction — ~6 students\nStrong answers named the vector sum' },
+    } },
+    meta: { n: 20 },
+  },
+});
+
+// The regression: three instructors' by_question rows plus a real cohort row.
+ANALYSIS_ROWS = [byQuestionRow('r1', 'Roth'), cohortRow, byQuestionRow('r2', 'Hardy'),
+                 byQuestionRow('r3', 'Jones')];
+const map = await loadAnalysis('off-1');
+
+eq('the cohort row survives three by_question rows (they used to overwrite it)',
+   map.__all__?.readiness_summary, 'Class is ready.');
+eq('…with its trends intact', map.__all__?.misconception_trends, 'Fading.');
+eq('every by_question row is kept, not collapsed onto one key',
+   (map[BY_QUESTION_KEY] || []).length, 3);
+eq('…under a key that is not a section and not __all__',
+   BY_QUESTION_KEY === '__all__' || /^[0-9a-f-]{36}$/.test(BY_QUESTION_KEY), false);
+eq('…carrying the per-question bullets',
+   map[BY_QUESTION_KEY][0].items.q3.summary.split('\n').length, 2);
+eq('…and who they are about', map[BY_QUESTION_KEY][0].instructor_name, 'Roth');
+eq('…and which sections they cover', map[BY_QUESTION_KEY][0].sections[0].code, 'M1A');
+
+ANALYSIS_ROWS = [byQuestionRow('r1', 'Roth')];
+const onlyQ = await loadAnalysis('off-1');
+eq('a by_question row alone does not invent an all-null cohort panel', onlyQ.__all__, undefined);
+eq('…but its breakdown is still returned', (onlyQ[BY_QUESTION_KEY] || []).length, 1);
+
+// A row predating the `kind` column, recognized by payload shape instead.
+ANALYSIS_ROWS = [{ ...byQuestionRow('r-old', 'Legacy'), kind: null }];
+eq('a by_question payload with no kind is still routed by its axis',
+   (await loadAnalysis('off-1'))[BY_QUESTION_KEY]?.length, 1);
+
+// ROLLUP-AGREEMENT §6 says /preflight-analyze SHOULD also write the cohort panels. When it does,
+// the row must land in both places rather than being consumed by the breakdown branch.
+ANALYSIS_ROWS = [{ ...byQuestionRow('r-both', 'Roth'),
+                   payload: { ...byQuestionRow('r-both', 'Roth').payload,
+                              readiness_summary: 'Ready.', misconception_trends: 'Scalar sums.' } }];
+const both = await loadAnalysis('off-1');
+eq('a conforming row yields its breakdown', (both[BY_QUESTION_KEY] || []).length, 1);
+eq('…and its cohort panels', both.__all__?.misconception_trends, 'Scalar sums.');
+
+ANALYSIS_ROWS = [];
+eq('no rows is an empty map, not a throw', await loadAnalysis('off-1'), {});
 
 process.exitCode = summary() ? 0 : 1;

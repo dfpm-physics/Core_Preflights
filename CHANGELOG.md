@@ -56,14 +56,54 @@ produces none, which is not the same as none being found.
 Completion counting was fixed alongside it — "done" is now a `submission_activities` row for
 *either* activity, so the ring and the numbers under it describe the same people.
 
-**Verified:** `tests/app-schema/test-rollup.mjs` is new — 60 assertions over `writtenSignals`,
-`effortSignal` and `summarizeReports`, covering the merged effort distribution, the free-response
-objective, the understanding split, and each radar-unavailable reason. Full suite green (215 +
-60). The faculty dashboard was driven headlessly (Playwright, via the sandbox, which imports the
-real render module) in both the mixed and written-only cases, and the new rollup panels were
-rendered against the shipped stylesheet in light and dark. **The lesson rollup page itself was
-not exercised against live data** — it needs a director login — so `report.html`'s wiring of the
-new `s.radar` / `o.source` fields is proven by unit test and by markup rendering, not end to end.
+### Fixed — `by_question` analysis rows silently overwrote the cohort AI panels
+
+Found while checking a claim in the change above. **Two skills write `analysis_reports` and
+`kind` is what separates them** (`docs/decisions/ROLLUP-AGREEMENT.md` §6): `/preflight-analyze`
+writes one `kind='by_question'` row **per instructor** carrying the written preflight's
+per-question analysis, and `/interaction-aggregate` writes the cohort section panels.
+`loadAnalysis()` ignored `kind` entirely. A `by_question` payload has neither `by_section` nor
+`section_id`, so every one of them fell through to `out['__all__']` — each instructor's row
+overwriting the last with four nulls, and clobbering a genuine cohort row if one existed.
+
+Latent until now only because written-only lessons had no rollup to load it from; the change
+above made it reachable. Rows are now routed by `kind` (falling back to `breakdown.axis` so a
+row written before the column was set still lands correctly), and a row that carries *both* a
+breakdown and cohort panels — which §6 says a conforming `/preflight-analyze` run should — is
+recorded in both places instead of being consumed by one branch.
+
+### Added — the written preflight's per-question analysis is now rendered
+
+It was being written to the database and displayed nowhere: nothing in `site/app/` read
+`payload.breakdown` at all. The lesson rollup now shows those bullets under **By question**,
+grouped per instructor, styled deliberately unlike the counted misconception bars above them
+because they carry approximate counts inside the sentence rather than a measured share.
+
+**This corrects a wrong claim in the first entry above.** `/preflight-analyze` *does* look for
+misconceptions on the written path — it is one of that skill's headline jobs, against the
+taxonomy in `PROJECT.md`, and Step 8 requires a bullet per distinct misconception with a count.
+What it does *not* produce is the structured per-student `misconceptions[]` the artifact sends,
+so those findings cannot feed the counted bar chart. The dashboard tile said "misconceptions are
+surfaced from the interactive transcript", which reads as *none were found* — a clean bill of
+health nobody earned. It now says there are no **counted** misconceptions and links to the
+rollup where the written findings actually are.
+
+**Known gap, not fixed here:** ROLLUP-AGREEMENT §6 says `/preflight-analyze` must also write
+`readiness_summary`, `misconception_trends` and `selected_quotes`, but the payload in its
+`SKILL.md` Step 8 omits all three. Until that skill is updated, a written lesson's "Trends across
+the class" panel stays on the coming-soon placeholder even though the analysis exists. The
+reader code already handles the conforming shape, so only the skill needs to change.
+
+**Verified:** `tests/app-schema/test-rollup.mjs` is new — 73 assertions over `writtenSignals`,
+`effortSignal`, `summarizeReports` and `loadAnalysis`, covering the merged effort distribution,
+the free-response objective, the understanding split, each radar-unavailable reason, and the
+`by_question` routing above (that suite fails against the pre-fix `loadAnalysis`). Full suite
+green (215 + 73). The faculty dashboard was driven headlessly (Playwright, via the sandbox,
+which imports the real render module) in both the mixed and written-only cases, and the new
+rollup panels were rendered against the shipped stylesheet in light and dark. **The lesson
+rollup page itself was not exercised against live data** — it needs a director login — so
+`report.html`'s wiring of `s.radar`, `o.source` and the new By-question section is proven by
+unit test, a parse check, and markup rendering, not end to end.
 
 ### Changed — Grade tab filters by status lamps instead of an "Only flagged" checkbox
 

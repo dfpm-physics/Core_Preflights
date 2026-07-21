@@ -348,6 +348,10 @@ export async function loadInteractionData(offeringId, studentIds) {
   return out;
 }
 
+/** The reserved key under which loadAnalysis returns the per-question breakdowns. Not a section
+ *  id and not '__all__', so it can never collide with a scope the viewer indexes by. */
+export const BY_QUESTION_KEY = '__by_question__';
+
 /**
  * Cohort AI synthesis for one lesson — the free-text panels the rollup shows as placeholders
  * until the /interaction-aggregate skill has run: readiness summary, misconception-trend prose,
@@ -358,11 +362,26 @@ export async function loadInteractionData(offeringId, studentIds) {
  * per-section breakdown therefore rides INSIDE the payload rather than in the row key, and this
  * function flattens it back to the map the viewer expects.
  *
- * RLS still scopes the result: an instructor never receives a whole-course row, so their "All
- * sections" view falls back to the live placeholders instead of a cross-section summary.
+ * ── TWO SKILLS WRITE THIS TABLE, AND `kind` IS WHAT SEPARATES THEM ──────────────────
+ * `kind='by_question'` rows come from /preflight-analyze: one per INSTRUCTOR, carrying the
+ * written preflight's per-question analysis — including its misconception findings — as
+ * `payload.breakdown.items[qid].summary` bullet strings. `kind='cohort'`-shaped rows come from
+ * /interaction-aggregate and carry the section panels. See docs/decisions/ROLLUP-AGREEMENT.md §6.
  *
- * @returns {Promise<Record<string, {section_id, readiness_summary, misconception_trends, selected_quotes, meta, generated_at}>>}
- *   keyed by section id, with '__all__' for the whole-course row.
+ * This function used to ignore `kind` entirely, and a by_question payload has neither
+ * `by_section` nor `section_id` — so every one of them fell through to `out['__all__']`, each
+ * instructor's row overwriting the last with four nulls, and clobbering a genuine cohort row if
+ * one existed. It was latent only because written-only lessons had no rollup to load it from.
+ * The breakdowns are now separated out and returned under BY_QUESTION_KEY instead of corrupting
+ * the panel map.
+ *
+ * RLS still scopes the result: an instructor never receives a whole-course row, so their "All
+ * sections" view falls back to the live placeholders instead of a cross-section summary. It also
+ * means an instructor sees only THEIR OWN by_question row (audience_id = them), which is the
+ * intended reach — the bullets are written per instructor, over their own sections.
+ *
+ * @returns {Promise<Record<string, object>>} keyed by section id, with '__all__' for the
+ *   whole-course row and BY_QUESTION_KEY for the array of per-instructor question breakdowns.
  */
 export async function loadAnalysis(offeringId) {
   const { data } = await db.from('analysis_reports')
@@ -370,6 +389,7 @@ export async function loadAnalysis(offeringId) {
     .eq('scope', 'assignment_offering').eq('scope_id', offeringId);
 
   const out = {};
+  const byQuestion = [];
   (data || []).forEach(row => {
     const p = row.payload || {};
     const panels = (obj, sectionId) => ({
@@ -380,6 +400,26 @@ export async function loadAnalysis(offeringId) {
       meta: obj?.meta ?? null,
       generated_at: row.generated_at,
     });
+
+    // The written path's per-question breakdown. Recognized by `kind` first and by the payload
+    // shape as a fallback, so a row written before `kind` was set still routes correctly.
+    const items = p.breakdown?.items;
+    if (row.kind === 'by_question' || (p.breakdown?.axis === 'question' && items)) {
+      byQuestion.push({
+        audience_id: row.audience_id,
+        instructor_name: p.instructor_name || null,
+        sections: Array.isArray(p.sections) ? p.sections : [],
+        day_filter: p.day_filter ?? null,
+        items: items && typeof items === 'object' ? items : {},
+        meta: p.meta || null,
+        generated_at: row.generated_at,
+      });
+      // A by_question row ALSO carries the cohort panels when the skill writes them
+      // (ROLLUP-AGREEMENT §6 requires readiness_summary / misconception_trends), so fall
+      // through rather than returning — but only if it actually has any.
+      if (!p.readiness_summary && !p.misconception_trends && !p.selected_quotes) return;
+    }
+
     // Either one row carrying a by_section map, or a row that IS one scope's panels.
     if (p.by_section && typeof p.by_section === 'object') {
       Object.entries(p.by_section).forEach(([sid, obj]) => { out[sid] = panels(obj, sid); });
@@ -389,6 +429,7 @@ export async function loadAnalysis(offeringId) {
       out[sid] = panels(p, sid);
     }
   });
+  if (byQuestion.length) out[BY_QUESTION_KEY] = byQuestion;
   return out;
 }
 
