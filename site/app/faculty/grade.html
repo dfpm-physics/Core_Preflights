@@ -26,6 +26,12 @@
                   title="Flagged for review" aria-label="Flagged for review"><span data-count>0</span></button>
           <button type="button" class="lamp" data-lamp="zero" aria-pressed="true"
                   title="No credit" aria-label="No credit"><span data-count>0</span></button>
+          <!-- One-click triage, rebuilt from the legacy Grade tab's "Show flagged only"
+               (LEGACY-AUDIT-2026-07-20.md §2.3) — the thing that makes reviewing a whole
+               section of AI suggestions tractable. The lamps could already express it in two
+               clicks; this makes it one, and one click back. -->
+          <button type="button" class="tbtn lamp-only" id="flagged-only"
+                  title="Show only answers flagged for review or given no credit">Flagged only</button>
         </div>
       </div>
       <!-- Hidden entirely when nothing is late, so the common case gains no clutter. -->
@@ -346,6 +352,18 @@
         const k = btn.dataset.lamp;
         lampOn[k] = !lampOn[k];
         btn.setAttribute('aria-pressed', String(lampOn[k]));
+        applyFilters();
+      });
+
+      // Toggles between "flagged only" (full off, warn+zero on) and all three lit. Deliberately
+      // not a third state: the lamps remain the source of truth, and this only drives them.
+      document.getElementById('flagged-only')?.addEventListener('click', (e) => {
+        const on = !(lampOn.full === false && lampOn.warn && lampOn.zero);
+        lampOn.full = !on; lampOn.warn = true; lampOn.zero = true;
+        e.currentTarget.classList.toggle('on', on);
+        e.currentTarget.textContent = on ? 'Show all' : 'Flagged only';
+        document.querySelectorAll('.lamp[data-lamp]').forEach(b =>
+          b.setAttribute('aria-pressed', String(lampOn[b.dataset.lamp] !== false)));
         applyFilters();
       });
 

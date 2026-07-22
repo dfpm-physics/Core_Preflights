@@ -84,9 +84,23 @@ def main():
     cur.execute("INSERT INTO sections (course_offering_id,code,meeting_days,period) "
                 "VALUES (%s,'M1A','{M}',1) RETURNING id", (co,))
     section = cur.fetchone()[0]
-    cur.execute("INSERT INTO instructors (id,name) VALUES (gen_random_uuid(),'Test Instructor') "
-                "RETURNING id")
-    instructor = cur.fetchone()[0]
+    # instructors.id is a FOREIGN KEY to auth.users(id) — added by the bootstrap as `postgres`,
+    # because `postgres` cannot delegate REFERENCES on auth.users to the app owner (see
+    # PREP-V2-CUTOVER.md Phase 1 step 3). So a random uuid cannot be inserted here, and
+    # prep_app_dml cannot create an auth user to make one valid. That is what left this whole
+    # suite dead from the day 008 landed: it crashed in fixture setup, so NONE of the invariants
+    # below were being checked.
+    #
+    # Borrow a real instructor's id instead. Nothing is written to that account and the entire
+    # fixture is rolled back at the end; the id is used only as the `unlocked_by` attribution on a
+    # throwaway submission. Falling back to a fresh auth user is not an option for this tier, and
+    # skipping the unlock tests would silently drop two of the invariants.
+    cur.execute("SELECT id FROM instructors ORDER BY created_at LIMIT 1")
+    row = cur.fetchone()
+    if not row:
+        sys.exit("No instructors exist to borrow an id from — this suite needs one real staff row "
+                 "because instructors.id references auth.users and this tier cannot create one.")
+    instructor = row[0]
     cur.execute("INSERT INTO students (student_id,name) VALUES (3000000001,'Test Cadet')")
     cur.execute("INSERT INTO enrollments (student_id,section_id) VALUES (3000000001,%s) RETURNING id",
                 (section,))

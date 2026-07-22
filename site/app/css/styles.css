@@ -1097,10 +1097,20 @@ tr:last-child td { border-bottom: none; }
 .ai-secnote strong { color: var(--blue-lt); }
 .ai-scope-warn { font-size: 0.82em; color: var(--muted); margin-top: 10px; font-style: italic; }
 
+/* "Did not submit" table on the rollup. Rebuilt from the legacy Report tab, which promotion
+   deletes — made copyable and pointed at the Grade page, per the audit's recommendation. */
+.dns-tbl { font-size: 0.9em; }
+.dns-tbl td, .dns-tbl th { padding: 6px 10px; }
+.dns-id { font-variant-numeric: tabular-nums; color: var(--muted); }
+a.tbtn { text-decoration: none; display: inline-flex; align-items: center; }
+
 /* Late-submission badge on a grade card, and the filter that narrows to them.
    Amber rather than red: arriving late is a fact the grader should see, not a verdict. Whether it
    costs credit is the instructor's call, and several late submissions are legitimately accepted by
    hand (see the extension workflow). */
+.lamp-only { margin-left: 8px; font-size: 0.82em; }
+.lamp-only.on { background: var(--alert-warn-bg); color: var(--alert-warn-fg); border-color: var(--alert-warn-fg); }
+
 .tag-late { background: var(--alert-warn-bg); color: var(--alert-warn-fg); font-weight: 700; }
 .late-toggle.on { background: var(--alert-warn-bg); color: var(--alert-warn-fg); border-color: var(--alert-warn-fg); }
 .late-toggle[hidden] { display: none; }

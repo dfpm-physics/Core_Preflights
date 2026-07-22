@@ -8,6 +8,80 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-22 — Casey via Claude — ⚠️ UNCOMMITTED, AWAITING REVIEW
+
+> **Everything in this entry is in the working tree only.** The director asked that work past the
+> lesson-cycle run not be committed until they return and agree. Nothing below is pushed; the live
+> site is unchanged by it.
+
+### Fixed — both `app` schema test suites were dead; they now pass (P0.3)
+
+They died in fixture setup, so **neither had guarded anything since the migrations that broke them.**
+Now **22/22 invariant checks and 35/35 RLS enforcement checks.**
+
+- **`app_invariant_test.py`** inserted a random uuid into `instructors`, which carries an FK to
+  `auth.users` created by `postgres` directly (the app owner cannot be delegated `REFERENCES` on
+  `auth.users` — PREP-V2-CUTOVER Phase 1 step 3). `prep_app_dml` cannot create an auth user to
+  satisfy it. It now borrows an existing instructor's id: nothing is written to that account, the id
+  serves only as `unlocked_by` attribution, and the fixture rolls back.
+- **`app_rls_test.py`** omitted `reason` on three `extensions` inserts, NOT NULL since `007`. The
+  crash was the visible half. **The dangerous half was silent:** two of those inserts are *expected
+  to be denied*, so they were rejected by the constraint before RLS was consulted and reported
+  "correctly denied" while proving nothing about the policy. A crash is loud; a false pass is not.
+  Added a check that a blank reason is refused.
+
+### Added — the three legacy surfaces promotion would have deleted (P0.6)
+
+- **"Did not submit" panel** on the rollup. Did not exist in `site/app/` at all. Sorted by section
+  then name, **copyable** as tab-separated text for a spreadsheet, and linking to the Grade page
+  where an extension is granted — the audit's recommendation was to rebuild it *actionable*, since
+  the legacy version was inert HTML. Renders only when someone is missing.
+- **"Flagged only"** one-click triage on the Grade tab, driving the existing lamps rather than
+  becoming a competing third state.
+- **Copy-for-slides** was already rebuilt as the rollup's quote panel — **but had inherited the exact
+  flaw the audit warned about.** Of the legacy version: *"anonymity is cosmetic: names are in the DOM
+  at `display:none`… If this is rebuilt, do not render names that are not meant to be shown."* The
+  new panel had reproduced it — `data-name` on every card plus a `hidden` attribution div — so a
+  panel whose whole purpose is being **projected in a classroom** kept every student's name one
+  devtools inspection, Ctrl+F, select-all or screen-reader pass away. Names are now not rendered at
+  all unless the toggle is on; toggling re-renders (preserving the selection) instead of unhiding.
+
+### Added — `scripts/promote_app.py`, the cutover's one-way step (P0.1) — NOT RUN
+
+Dry-run by default. Refuses on a dirty tree, a non-`main` branch, divergence from `origin/main`, or
+a missing frozen-contract source. **It moves the tree and does not commit or push** — pushing *is*
+the cutover (CORE.md §5) and stays a human act.
+
+Writing it surfaced three things that a hand-run `git mv` would have got wrong:
+
+- **It must move file-by-file.** Four targets already exist in `site/` (`css/styles.css`,
+  `js/config.js`, and both frozen contract stubs). `git mv` of a directory onto an existing directory
+  **nests** it — `site/app/student` → `site/student/student` — which would leave the stub in place
+  and the real receiver one level too deep. That is a **silent 404 on the URL every deployed artifact
+  posts to**, and unrecoverable without rebuilding every artifact by hand. The script plans 98
+  individual moves and asserts both frozen paths are covered before it will run.
+- **`site/app/*.md` must not be promoted.** Seven internal design notes are already world-readable at
+  `site/app/*.md`; promoting them puts a file named `LEGACY-AUDIT` beside the student login page.
+  They route to `docs/app/` instead. `help/*.md` and `media/icons/ICONS.md` stay, since the app
+  serves them. **`docs/DOC-SOURCES.json` references some of the moved files and must be updated in
+  the same commit.**
+- **The move is otherwise safe.** Relative paths inside the tree survive because it moves as a unit;
+  `legacyUrl()` — the one helper pointing at the deleted pages — has **zero live callers**.
+
+### Verification for everything above
+
+`tests/app-schema` full run **exit 0** · `app_invariant_test.py` **22/22** · `app_rls_test.py`
+**35/35** · `aggregate_summarize_test.py` ALL PASS · `node --check` clean.
+
+**`test-imports.mjs` caught a genuine bug in the new Did-not-submit panel** — it called `lastFirst()`
+in `report.html` without importing it, which would have thrown at runtime on every rollup. That suite
+exists for exactly this and earned its place.
+
+**Not seen in a browser.** No faculty login is available to this harness (CORE.md §2). The
+did-not-submit panel, the flagged-only toggle and the names re-render are all visual and unverified.
+
+---
+
 ## 2026-07-22 — Casey via Claude
 
 ### Fixed — four bugs in the rollup rework, every one found by actually running it

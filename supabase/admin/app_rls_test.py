@@ -313,16 +313,25 @@ def main():
             check("CAN create a roster entry", False, str(e).strip().splitlines()[0])
         cur.execute("ROLLBACK TO SAVEPOINT d")
 
-    # ---------------- extensions (migration 005) ----------------
+    # ---------------- extensions (migration 005, governance tightened by 007) ----------------
+    #
+    # `reason` is NOT NULL with a non-blank CHECK since 007_extension_governance_and_review.sql
+    # (:79-82). Every insert below must supply one — including the two that are EXPECTED TO BE
+    # DENIED. Without it those two were rejected by the constraint before RLS was ever consulted,
+    # so they reported "correctly denied" while testing nothing about the policy. That is the more
+    # dangerous half of this suite having been broken: a crash is loud, a false pass is not.
+    REASON = "fixture — RLS suite"
     cur.execute("RESET ROLE")
-    cur.execute("""INSERT INTO extensions (enrollment_id,assignment_offering_id,extended_due_at,granted_by)
-                   VALUES (%s,%s,now() + interval '3 days',%s)""", (enr_a, ao, teacher_uid))
+    cur.execute("""INSERT INTO extensions (enrollment_id,assignment_offering_id,extended_due_at,
+                                           granted_by,reason)
+                   VALUES (%s,%s,now() + interval '3 days',%s,%s)""",
+                (enr_a, ao, teacher_uid, REASON))
     with Persona(cur, student_a_uid, "student A — extensions") as p:
         check("sees their own extension",
               p.count(f"SELECT count(*) FROM extensions WHERE {IN_FIXTURE}", (ao,)) == 1)
         p.denied("CANNOT grant themselves an extension",
-                 """INSERT INTO extensions (enrollment_id,assignment_offering_id,extended_due_at)
-                    VALUES (%s,%s,now() + interval '30 days')""", (enr_b, ao))
+                 """INSERT INTO extensions (enrollment_id,assignment_offering_id,extended_due_at,reason)
+                    VALUES (%s,%s,now() + interval '30 days',%s)""", (enr_b, ao, REASON))
     with Persona(cur, teacher_uid, "teacher — extensions") as p:
         check("sees the extension for their section",
               p.count(f"SELECT count(*) FROM extensions WHERE {IN_FIXTURE}", (ao,)) == 1)
@@ -330,8 +339,14 @@ def main():
                   "UPDATE extensions SET extended_due_at = now() + interval '5 days' "
                   "WHERE enrollment_id=%s", (enr_a,))
         p.denied("CANNOT grant an extension outside their sections",
-                 """INSERT INTO extensions (enrollment_id,assignment_offering_id,extended_due_at)
-                    VALUES (%s,%s,now() + interval '5 days')""", (enr_b, ao))
+                 """INSERT INTO extensions (enrollment_id,assignment_offering_id,extended_due_at,reason)
+                    VALUES (%s,%s,now() + interval '5 days',%s)""", (enr_b, ao, REASON))
+        # 007 also made the reason itself enforceable. A blank one must be refused whoever asks,
+        # which is a constraint check rather than an RLS one — but it belongs here, because the
+        # governance it implements is what the policies above are for.
+        p.denied("CANNOT grant an extension with a blank reason",
+                 """INSERT INTO extensions (enrollment_id,assignment_offering_id,extended_due_at,reason)
+                    VALUES (%s,%s,now() + interval '5 days','   ')""", (enr_a, ao))
 
     cur.execute("RESET ROLE")
     conn.rollback()

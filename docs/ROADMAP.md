@@ -41,7 +41,36 @@ answer no — they are needed within weeks, not on day one.
 
 ## 1. P0 — Ship-blocking for 2026-08-10
 
-### P0.1 — Complete the v2 cutover (Phase 4) · **L**
+### P0.1 — Complete the v2 cutover (Phase 4) · **PREPARED, NOT EXECUTED** (2026-07-22)
+
+**`scripts/promote_app.py` now exists** — dry-run by default, refuses on a dirty tree, a non-`main`
+branch, divergence from `origin/main`, or a missing frozen-contract source. It moves the tree and
+**does not commit or push**, because pushing *is* the cutover (CORE.md §5) and that stays a human
+act. Run it, review `git status`, run the verification checklist, then commit and push yourself.
+
+**Three things the preparation established that were not obvious:**
+
+- **The move is safe.** Relative paths inside the tree survive, because the whole tree moves together
+  and keeps its internal shape (`../css/styles.css` resolves correctly before and after).
+  `legacyUrl()` — the one helper that pointed at the pages being deleted — has **zero live callers**;
+  `nav.js` says so in a comment. The only references into `site/app/` from outside are the two
+  forwarding stubs, which are exactly what gets overwritten.
+- **It must move file-by-file, not directory-by-directory.** Four targets already exist in `site/`
+  (`css/styles.css`, `js/config.js`, and both frozen stubs). `git mv` of a directory onto an existing
+  directory **nests** it — `site/app/student` → `site/student/student` — which would leave the stub
+  in place and the real receiver one level too deep: a silent 404 on the URL every deployed artifact
+  posts to. The script plans 98 individual file moves and asserts both frozen paths are covered
+  before it will run.
+- **`site/app/*.md` should not be promoted to `site/`.** Seven internal design notes (the plans, the
+  legacy audit, the admin inventory) are already world-readable at `site/app/*.md`; promoting them
+  would put a file named `LEGACY-AUDIT` beside the student login page. They route to `docs/app/`
+  instead — same repo, out of the published tree. `help/*.md` and `media/icons/ICONS.md` correctly
+  stay, since the app serves them. **`docs/DOC-SOURCES.json` references some of the moved files and
+  must be updated in the same commit.**
+
+Remaining, and deliberately left for a human: run it, verify in a browser, commit, push.
+
+<details><summary>Original scoping</summary>
 
 Phases 1–3 are effectively done (the `app` chain 007–009 is applied, `site/app/` reads `app`), but
 the runbook was never refreshed and Phase 4 has not run. Remaining: promote the app tree onto the
@@ -55,22 +84,29 @@ frozen contract URLs, delete the legacy root pages, push.
 - **Also:** refresh `PREP-V2-CUTOVER.md:3`, the three `PREP-V2-*` doc status headers, and
   `CORE.md:38` — all still claim `app` is unwired.
 
+</details>
+
 ### P0.2 — Seal `prep_app_owner` · **S**
 
 `ALTER ROLE prep_app_owner NOLOGIN;` as `postgres`. Flagged three separate times in CHANGELOG and
 never closed. **Human-only** — no agent role holds `CREATEROLE`. Do this *after* P0.1, since the
 cutover may still need DDL.
 
-### P0.3 — Revive the two dead DB test suites · **M**
+### P0.3 — Revive the two dead DB test suites · ✅ **DONE 2026-07-22 (uncommitted)**
 
-Both currently die in setup and therefore **guard nothing**:
+Both died in fixture setup and therefore guarded nothing. Both now pass — **22/22 invariant checks,
+35/35 RLS enforcement checks.**
 
-- `app_invariant_test.py` — fixture inserts a random uuid into `instructors`, which has an FK to
-  `auth.users`. Needs a real auth user in the fixture.
-- `app_rls_test.py` — inserts an `extensions` row with no `reason`; migration `007` made it NOT NULL.
-
-These are the only automated proof that RLS holds. Shipping a term with them red means the four
-July 2026 audit findings are unverified.
+- **`app_invariant_test.py`** — the fixture inserted a random uuid into `instructors`, which carries
+  an FK to `auth.users` that `postgres` added directly (the app owner cannot be delegated
+  `REFERENCES` on `auth.users`). `prep_app_dml` cannot create an auth user to satisfy it. Now
+  **borrows an existing instructor's id** — nothing is written to that account, the id is used only
+  as `unlocked_by` attribution, and the whole fixture is rolled back.
+- **`app_rls_test.py`** — three `extensions` inserts lacked `reason`, NOT NULL since `007`. The
+  crash was the visible half; **the dangerous half was silent.** Two of those inserts are
+  *expected to be denied*, so they were being rejected by the constraint before RLS was ever
+  consulted and reported "correctly denied" while testing nothing about the policy. A crash is
+  loud; a false pass is not. Also added a check that a blank reason is refused.
 
 ### P0.4 — Instructors can read the `__all__` whole-course scope · ✅ **RESOLVED 2026-07-22 — by a different decision**
 
@@ -115,17 +151,22 @@ but **have not been looked at**, and each is a visual change that only an eye ca
 - **KDE tuner** (P0.10) — absent from a plain rollup, present with `?kde=1` as a director, absent
   with `?kde=1` as an instructor.
 
-### P0.6 — Decide the four surfaces promotion deletes · **S** (decision) + **M** (rebuild)
+### P0.6 — The four surfaces promotion deletes · ✅ **DONE 2026-07-22 (uncommitted)**
 
-From [`LEGACY-AUDIT-2026-07-20.md`](../site/app/LEGACY-AUDIT-2026-07-20.md): *"Anything not decided
-before then is not deferred; it is gone."*
-
-| Surface | Recommendation |
+| Surface | Outcome |
 |---|---|
-| Report tab copy-for-slides (Show names / copy / anonymise) | Rebuild — folds into the rollup |
-| "Did Not Submit (N)" table | Rebuild, and make it actionable (see P1.6) |
-| "Show flagged only" toggle on Grade | Rebuild — small |
-| `site/review.html` (credential-free grade viewer) | **Delete.** A re-enable away from a FERPA problem |
+| Report tab copy-for-slides | **Already rebuilt** as the rollup's `.sr-*` panel — but it had **inherited the exact flaw the audit warned about** (below). Fixed. |
+| "Did Not Submit (N)" table | **Built** — did not exist in `site/app/` at all. Now a rollup panel, sorted by section then name, **copyable** (tab-separated for a spreadsheet), and linking to the Grade page where an extension is granted. Renders only when someone is missing. |
+| "Show flagged only" toggle on Grade | **Built** — one-click, driving the existing lamps (`full` off, `warn`+`zero` on) rather than becoming a competing third state. |
+| `site/review.html` | **Deleted by the promotion script** (`scripts/promote_app.py` `LEGACY`), per the audit: a re-enable away from a FERPA problem. |
+
+**The copy-for-slides privacy flaw, carried forward and now fixed.** The audit said of the legacy
+version: *"anonymity is cosmetic: names are in the DOM at `display:none`… If this is rebuilt, do not
+render names that are not meant to be shown."* The rollup panel had reproduced exactly that —
+`data-name` on every card plus a `hidden` attribution div — so a panel whose entire purpose is being
+**projected in a classroom** kept every student's name one devtools inspection, Ctrl+F, select-all or
+screen-reader pass away. Names are now not rendered at all unless the toggle is on; switching it
+re-renders (preserving the selection) rather than unhiding.
 
 ### P0.7 — Remove every email-reset reference · ✅ **RESOLVED 2026-07-22 — mostly a non-issue**
 

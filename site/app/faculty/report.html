@@ -73,7 +73,7 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc } from '../js/util.js';
+    import { esc, lastFirst } from '../js/util.js';
     import * as I from '../js/faculty-rollup.js';
 
     // Live bandwidth knobs for the objective-understanding histogram KDE (lrFine5). These are the
@@ -641,12 +641,25 @@
       while (out.length < n && p.length) out.push(p.splice(Math.floor(Math.random() * p.length), 1)[0]);
       return out;
     }
+    // A hidden name is NOT an absent name — so when names are off, the name is not rendered at all.
+    //
+    // The legacy Report tab kept attribution in the DOM at display:none and the audit flagged it
+    // explicitly: "If this is rebuilt, do not render names that are not meant to be shown"
+    // (LEGACY-AUDIT-2026-07-20.md §2.1). This panel had inherited the same shape — `data-name` plus
+    // a `hidden` .att div — which matters because its whole purpose is being projected in a
+    // classroom: devtools, Ctrl+F, select-all and a screen reader all defeat `hidden`.
+    //
+    // Toggling names now re-renders (drawResponses) rather than unhiding, so the name only ever
+    // enters the document when the instructor has actually asked for it.
     function srCard(q, isAI, namesOn) {
-      return `<div class="sr-quote${isAI ? ' ai' : ''}" data-text="${esc(q.text)}" data-name="${esc(q.name)}" data-sec="${esc(q.section)}">
+      const attr = namesOn
+        ? ` data-name="${esc(q.name)}" data-sec="${esc(q.section)}"`
+        : ` data-sec="${esc(q.section)}"`;
+      return `<div class="sr-quote${isAI ? ' ai' : ''}" data-text="${esc(q.text)}"${attr}>
         <span class="ck" aria-hidden="true"></span>
         <div class="body">${isAI ? '<span class="sr-badge">AI pick</span>' : ''}
           <div class="qt">${esc(q.text)}</div>
-          <div class="att"${namesOn ? '' : ' hidden'}>— ${esc(q.name)} · ${esc(q.section)}</div>
+          ${namesOn ? `<div class="att">— ${esc(q.name)} · ${esc(q.section)}</div>` : ''}
         </div>
       </div>`;
     }
@@ -688,13 +701,21 @@
         <div class="sr-quotes" id="sr-list"></div>
       </div>`;
     }
-    function drawResponses() {
+    // Selection is keyed on the quote TEXT, not on DOM identity, so it survives a re-render —
+    // which the names toggle now performs (see srCard on why hiding is not enough).
+    function drawResponses(keepSelected) {
       const list = document.getElementById('sr-list'); if (!list || !respState) return;
+      const sel = keepSelected
+        ? new Set([...list.querySelectorAll('.sr-quote.sel')].map(c => c.dataset.text))
+        : null;
       // AI picks stay pinned on top in both modes — "show all" widens the sample, it does not
       // discard the argued-for showcase quotes or reorder them into the crowd.
       const body = respState.showAll ? respState.pool : respState.sample;
       list.innerHTML = respState.ai.map(q => srCard(q, true, respState.namesOn)).join('')
         + body.map(q => srCard(q, false, respState.namesOn)).join('');
+      if (sel) list.querySelectorAll('.sr-quote').forEach(c => {
+        if (sel.has(c.dataset.text)) c.classList.add('sel');
+      });
       const note = document.getElementById('sr-note');
       if (note) {
         const aiN = respState.ai.length;
@@ -714,7 +735,8 @@
       namesBtn?.addEventListener('click', () => {
         respState.namesOn = !respState.namesOn;
         namesBtn.setAttribute('aria-pressed', respState.namesOn); namesBtn.classList.toggle('on', respState.namesOn);
-        document.querySelectorAll('#sr-list .att').forEach(a => { a.hidden = !respState.namesOn; });
+        // Re-render rather than unhide (see srCard), preserving what the instructor had selected.
+        drawResponses(true);
       });
       const allBtn = document.getElementById('sr-all');
       allBtn?.addEventListener('click', () => {
@@ -735,6 +757,54 @@
         const text = sel.map(c => respState.namesOn ? `"${c.dataset.text}"\n— ${c.dataset.name} (${c.dataset.sec})` : `"${c.dataset.text}"`).join('\n\n');
         try { await navigator.clipboard.writeText(text); const old = btn.textContent; btn.textContent = '✓ Copied'; setTimeout(() => { btn.textContent = old; }, 1200); }
         catch (e) { btn.textContent = 'Copy blocked'; setTimeout(() => { const n = document.querySelectorAll('#sr-list .sr-quote.sel').length; btn.textContent = n ? `Copy selected (${n})` : 'Copy selected'; }, 1400); }
+      });
+    }
+
+    // ── Did not submit ──
+    //
+    // Rebuilt from the legacy Report tab, which promotion deletes (LEGACY-AUDIT-2026-07-20.md §2.2).
+    // The legacy version was inert HTML — no sort, no export, no click-through — and the audit's
+    // recommendation was to rebuild it ACTIONABLE, because the list exists to drive follow-up.
+    // So: copyable, and it points at the page where an extension is granted.
+    //
+    // Renders only when someone has not submitted; an empty list is not a panel worth drawing.
+    let dnsState = null;
+    function notSubmittedSection(roster) {
+      const it = vm.interactions.find(x => x.id === reportInteraction);
+      const done = new Set(it?.doneStudentIds || []);
+      const missing = roster.filter(st => !done.has(st.student_id))
+        .sort((a, b) => String(a.section).localeCompare(String(b.section))
+                     || lastFirst(a.name).localeCompare(lastFirst(b.name)));
+      dnsState = missing;
+      if (!missing.length) return '';
+      const rows = missing.map(st => `<tr>
+          <td>${esc(lastFirst(st.name))}</td>
+          <td><span class="tag">${esc(st.section)}</span></td>
+          <td class="dns-id">${esc(String(st.student_id))}</td>
+        </tr>`).join('');
+      return `<div class="lr-sec fw-panel" id="dns-sec">
+        <div class="lr-eyebrow">Did not submit
+          <span class="dim">· ${missing.length} of ${roster.length} in this scope</span></div>
+        <div class="sr-controls">
+          <button class="tbtn" id="dns-copy" type="button">Copy list</button>
+          <span class="spacer"></span>
+          <a class="tbtn" href="grade.html">Grant an extension in Grade ›</a>
+        </div>
+        <div class="table-wrap" style="margin-top:10px"><table class="dns-tbl">
+          <thead><tr><th>Name</th><th>Section</th><th>Cadet ID</th></tr></thead>
+          <tbody>${rows}</tbody></table></div>
+      </div>`;
+    }
+    function wireNotSubmitted() {
+      const btn = document.getElementById('dns-copy');
+      if (!btn || !dnsState) return;
+      btn.addEventListener('click', async () => {
+        const text = dnsState.map(st => `${lastFirst(st.name)}\t${st.section}\t${st.student_id}`).join('\n');
+        try {
+          await navigator.clipboard.writeText(text);
+          const old = btn.textContent; btn.textContent = '✓ Copied';
+          setTimeout(() => { btn.textContent = old; }, 1200);
+        } catch (e) { btn.textContent = 'Copy blocked'; setTimeout(() => { btn.textContent = 'Copy list'; }, 1400); }
       });
     }
 
@@ -841,7 +911,9 @@
       const objSec = s.objectives.length ? `<div class="lr-sec obj-box">
         <div class="lr-eyebrow">Understanding by objective <span class="dim">${objMix}</span></div>${objRows}</div>` : '';
 
-      return row2 + rtSec + aiSec + mcSec + objSec + responsesSection(rows, roster, analysis, singleSectionScope());
+      return row2 + rtSec + aiSec + mcSec + objSec
+           + responsesSection(rows, roster, analysis, singleSectionScope())
+           + notSubmittedSection(roster);
     }
 
     // ── Flags: header pills → flagged-students list → one student summary → full report ──
@@ -885,6 +957,7 @@
       });
       wireMisconceptionPops();
       wireResponses();
+      wireNotSubmitted();
     }
 
     // Misconception detail popovers. Hover is handled entirely in CSS (:hover on the row); this
