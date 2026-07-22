@@ -10,6 +10,125 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-22 — Casey via Claude
 
+### Added — `docs/ROADMAP.md`, and the first seven items closed out of it
+
+**New living roadmap** consolidating a repo-wide sweep for outstanding work with the course
+director's feature requests, banded P0–P3 against the **2026-08-10 term open**. Unlike
+`docs/decisions/`, it is refreshed rather than superseded. It records five decisions on the record
+(§6) and thirteen proposed additions awaiting a call (§7).
+
+**Two verification findings reshaped it before any code was written:**
+
+- **The gradebook's blocking question was already answered by the schema.** Points and effort do not
+  need reconciling: `assignment_offerings.points_possible` defaults to **2**, both Fall builders
+  write Q1 `0` / Q2 `1` / Q3 `1`, and the effort trigger yields `≥3 → 2`, `1–2 → 1`. Full effort is
+  2 points; effort capped at 2 by a non-meaningful reflection is 1. Both modalities already land in
+  `points_earned` against the same ceiling, so no normalization layer is needed.
+- **Late submissions were visible but indistinguishable.** `committed_at` was fetched and shaped all
+  along, and compared to a deadline in exactly zero places in the faculty UI.
+
+### Fixed — a late submission is now visible on the grade card
+
+New `submissionLateness()` and `lateBy()` in `js/schema.js`, beside `effectiveDue()` — which answers
+a *different* question (is the deadline behind us **now**, which is what the backlog queues ask)
+rather than *did this arrive late*. An amber `⏰ N days late` chip sits next to the extension chip
+on the grade card, plus a **Late only** filter that ANDs with the status lamps and hides itself
+entirely when nothing is late.
+
+**Extensions are honoured** — a student granted until Friday who submitted Thursday is not badged.
+That is the case the feature turns on. Amber rather than red is deliberate: arriving late is a fact
+the grader should see, not a verdict, and late work is routinely accepted by hand on purpose.
+
+*Verified:* 16/16 in a dedicated logic harness (on-time · 4-days-late · inside-extension ·
+past-extension · M/T section override both directions · draft · no-deadline · 30s clock-skew grace ·
+unparseable timestamp · label boundaries · an `effectiveDue` regression guard).
+
+### Fixed — staff table rows were ragged, and only for other people
+
+Your own row rendered a `.score-badge` (~20px) while every other row carried a `<select>` inheriting
+the global form rule at ~40px, with no `td select` override anywhere — so the one row you always
+look at was the odd one out, and `width: 100%` stretched the Role column. Your row now renders **the
+same select, disabled**: same box, no special case, and it states "you cannot change your own role"
+in the place the role is changed. New `.staff-tbl` CSS gives every role cell a `min-height` so the
+text-only *implicit* global-admin rows match too. Handler scoped to `:not([disabled])`.
+
+### Changed — student responses are now 3 AI picks **+ 5** random, not 5 total
+
+`responsesSection()` capped the panel at ~5 cards via `Math.max(0, 5 - ai.length)`, so every AI pick
+displaced a random one — a well-analysed section showed the *least* unfiltered student writing.
+The random sample is now a fixed 5 independent of the AI count. `/lesson-aggregate`'s
+`selected_quotes` moves from "2-3 each" to **exactly 3**, updated in all four places it was stated,
+with a note that emitting fewer now shrinks the showcase and that padding to 3 with a weak pick is
+wrong.
+
+### Changed — the KDE tuner is behind `?kde=1`
+
+`mountKdeTuner()` was mounted for every director on every rollup, where a floating panel of
+unexplained sliders reads as product rather than dev tool. Now requires `?kde=1` **and** director
+role. Code untouched — it is the only thing that regenerates the KDE const line. A query param
+rather than a stored preference, so nobody can switch it on, forget, and file it as a bug later.
+
+### Fixed — five stale documents, one of which would have misled the gradebook build
+
+- **`PROJECT.md`** documented `scores.question_scores` with each question at `max: 5` — the retired
+  15-point shape on the retired `public` table. Corrected to `grades.question_scores` at 0/1/1, with
+  the offering ceiling and the zero-point-question rule stated, **and an explicit warning not to
+  "correct" the 0–5 effort/understanding diagnostics alongside it.** Those are a different layer and
+  are current. Getting this wrong in either direction breaks the gradebook.
+- **`LESSON-UNIFICATION.md`** got the supersession banner owed since 2026-07-21, naming
+  `PREP-V2-DATA-MODEL.md` as its replacement and warning that its open phases describe a path not
+  taken — migration `021` implements it and is deliberately never applied.
+- **`COURSE-ADMIN-INVENTORY.md`** §2D claimed *"only system admins can add/remove the `system_admin`
+  role."* **That guard never existed** — legacy `create-instructor` read the flag as a second
+  global-admin marker, so a course director could create system admins. Corrected with the reason,
+  since the risk is documentary: an operator reading it would conclude the legacy behaviour was safe
+  and restore it. Staff management and Export marked ported (both shipped 2026-07-20); the
+  extensions note now points at `app/007` instead of the never-applied `021`.
+- **`site/app/README.md`** still said two director features blocked promotion. Both shipped.
+- **`tests/browser/test-admin.html`** rendered "Send reset email" with no supersession marker, unlike
+  its sibling `test-account.html` which deliberately archives the same flow behind one. Given the
+  matching banner; its "Password operations" card relabelled `Planned` → `Superseded`.
+
+**Deleted:** `site/app/student/interactions.html`, orphaned since the nav rework — nothing links to
+it and its `active: 'interactions'` key no longer exists. `loadInteractionStatuses` was **kept**:
+still exercised by `tests/app-schema/test-student.mjs`.
+
+**Discovered while doing it:** `faculty/interactions.html` was already deleted on 2026-07-20, but
+several docs still describe it as present and load-bearing ("cannot be deleted until that moves").
+Anything reasoning from those will reach wrong conclusions about what promotion still costs. Logged
+in the roadmap.
+
+### Not done, deliberately — the email-reset cleanup was mostly a bad idea
+
+Investigating "remove all reference to email reset" found the references are almost all **denials**
+of it, which is documentation, not debt:
+
+- **`site/app/reset.html` kept.** It is not a reset flow; it is the page telling a locked-out person
+  there is no email reset and who to ask. The login page linked there for a year, so bookmarks still
+  point at it, and a 404 is the worst possible answer at the moment someone is locked out.
+- **Its `DOC-SOURCES.json` entry kept** — a correct dependency, not a stale one.
+- **Help-doc mentions kept** — every one is a denial, correctly phrased.
+- **`tests/browser/test-account.html` kept** — already banner-marked as a deliberate design record.
+
+Exactly one artifact still presented the removed feature as available (`test-admin.html`, above),
+and only that one changed.
+
+**`check_doc_sources.py` is red — 11 documents — and was left that way.** The flags are dominated by
+a `CORE.md` edit earlier the same day, not by this batch. They were **not** cleared by bulk-bumping
+`reviewed` dates, which is exactly the failure the mechanism exists to prevent. Confirmed harmless
+for the gradebook work: no help doc states a points value, so the `question_scores` correction did
+not invalidate any of them.
+
+**Verification for everything above:** `node --check` clean on all three edited inline HTML modules
+and five JS modules; the 16-case lateness harness; and the full `tests/app-schema` suite green at
+**339 passed, 0 failed** against the live database. **None of the four visual changes has been seen
+in a browser** — no faculty login is available to this harness (CORE.md §2: a Node-only check is
+never the sole verification). The specific things to look at are enumerated in ROADMAP P0.5.
+
+---
+
+## 2026-07-22 — Casey via Claude
+
 ### Fixed — lesson editor showed 5 questions instead of 3 (and would have saved 5)
 
 **Frontend only (`site/app/faculty/lessons.html`). No database or lesson-content change — the stored

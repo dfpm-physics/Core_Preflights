@@ -5,7 +5,7 @@ description: >
   artifact, the written question set, or a mix. Reads the per-student schema:1 assessment plus the
   graded question answers across the cohort and writes every class-level AI panel the faculty
   rollup shows: a readiness summary (including the common threads across Q2/Q3), misconception
-  trends, a one-line teaching recommendation, and 2-3 AI-picked reading-reflection quotes — one
+  trends, a one-line teaching recommendation, and 3 AI-picked reading-reflection quotes — one
   scope per section PLUS a whole-course scope, with the course scope synthesized FROM the section
   scopes. Supports day-scoped runs (--day M / --day T) so a lesson with split deadlines is
   aggregated once per day track without re-reading the first day's cohort.
@@ -32,7 +32,7 @@ description: >
 >    viewer selected: "across the course" or "in M1A".
 > 3. **Misconception recommendation** — one teaching action, rendered as its own line beneath the
 >    trends prose so it is not buried in the paragraph.
-> 4. **Showcase quotes** — 2-3 of the most interesting reading-reflection comments, per section.
+> 4. **Showcase quotes** — the 3 most interesting reading-reflection comments, per section.
 >
 > It does **not** touch grades and does **not** recompute the numeric charts — those stay live in
 > the browser. It only writes the AI layer to `app.analysis_reports`.
@@ -306,8 +306,8 @@ Applies to **every** lesson type, interactive included — it is a teaching acti
 artifact. It is also the one field allowed on `__all__`, where quotes are forbidden: a
 whole-course "what to cover" is exactly where it matters.
 
-### selected_quotes — per-section scopes ONLY (2-3 each)
-Pick the **2-3 most interesting reading-reflection comments** for that section, as
+### selected_quotes — per-section scopes ONLY (exactly 3 each)
+Pick the **3 most interesting reading-reflection comments** for that section, as
 `[{student_id, section_id}]` (the rollup resolves the verbatim text + name live). Selection
 criteria:
 - **Meaningful** (`reflection.meaningful` not false) and genuinely engaged with the reading.
@@ -318,7 +318,12 @@ criteria:
   prefer a set that is not all from one path.
 - **Representative of a common theme** OR **genuinely illuminating** — a real connection across
   topics, a sharp question, a vivid articulation an instructor could read aloud to spark discussion.
-- **Diverse** — don't pick 2-3 that all say the same thing.
+- **Diverse** — don't pick 3 that all say the same thing.
+
+**Emit exactly 3** where the section has 3 qualifying reflections. The rollup renders these
+alongside a **fixed 5-card random sample** (not a remainder — see `report.html` `responsesSection`),
+so emitting fewer shrinks the showcase without widening anything else. Fewer than 3 is correct only
+when the section genuinely has fewer qualifying reflections; never pad with a weak pick to reach 3.
 - **Nothing that singles a student out negatively** or exposes sensitive personal detail.
 
 **The `__all__` (whole-course) scope carries NO quotes** — set `selected_quotes: []`. Quotes are a

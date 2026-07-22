@@ -88,15 +88,30 @@ Three tiers, enforced in `site/admin.html` via `isDirectorForCurrent()`:
 
 ## JSONB Structures
 
-**`scores.question_scores`** — written by `/preflight-analyze`, read by Grade tab:
+**`grades.question_scores`** — written by `/preflight-analyze`, read by Grade tab:
 ```json
 {
-  "q1": { "score": 5, "max": 5, "feedback": "",                          "status": "full" },
-  "q2": { "score": 5, "max": 5, "feedback": "While we gave you credit…", "status": "warn" },
-  "q3": { "score": 0, "max": 5, "feedback": "No answer provided.",        "status": "zero" }
+  "q1": { "score": 0, "max": 0, "feedback": "",                          "status": "full" },
+  "q2": { "score": 1, "max": 1, "feedback": "While we gave you credit…", "status": "warn" },
+  "q3": { "score": 0, "max": 1, "feedback": "No answer provided.",        "status": "zero" }
 }
 ```
 `status` drives the 3-state color toggle: `"full"` = green, `"warn"` = yellow (full credit but flagged), `"zero"` = red.
+
+**A written preflight is worth 2 points, not 15.** `max` is copied from the question's own
+`points` (`faculty-grade.js:239`), and both Fall 2026 builders write **Q1 `0` · Q2 `1` · Q3 `1`**
+(`build_fall_preflights.py:216,235-236`; `build_110_preflights.py:219,236-237`) — Q1 is the
+zero-point reading-time reflection, Q2 the reading reflection, Q3 the JiTT free response. The
+offering caps the total independently: `app.assignment_offerings.points_possible` defaults to `2`
+and `faculty-grade.js:245-248` clamps the sum to it.
+
+Zero-point questions are **scored but never rendered** — `grade.html:207,215` filters them out of
+the grading UI while `faculty-grade.js:235-243` still writes them into `question_scores`. See
+CORE.md §2 on Q1 privacy.
+
+> **Do not confuse this 2-point *grade* with the 0–5 *diagnostics* below.** They are different
+> layers and both are current. The retired shape — each question worth `max: 5`, on the legacy
+> `public.scores` table — is gone; the 0–5 effort and understanding scales are not.
 
 **`grades.diagnostic`** (jsonb) — everything `/preflight-analyze` learns about a student that is
 **not** a grade. Two layers, both hidden from students:

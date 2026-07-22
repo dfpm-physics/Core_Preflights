@@ -5,9 +5,9 @@ light/dark mode, and a dashboard landing page tailored to **students** vs **facu
 (instructor/director/admin). Static HTML/CSS/JS — no build step. **No database changes.**
 
 Dashboards, navigation, theming, auth, the AI lesson interactions, and the faculty
-**Grade**, **Report**, and **Roster/Sections** tools all live here natively. The remaining
-director tools (assignment builder / instructor management / export) still live on the
-legacy site page (`site/admin.html`) and are reached via the **Admin ↗** link until ported.
+**Grade**, **Report**, **Roster/Sections**, and **Course Admin** (Staff · Sections · Export)
+tools all live here natively. As of 2026-07-20 no director tool requires the legacy
+`site/admin.html`.
 
 ## Structure
 
@@ -76,26 +76,34 @@ go-live and need no edit — which is the whole reason the stub paths mirror the
 At the repository root, only `index.html` (entry navigation) and `404.html` (missing-page
 forwarding) remain — GitHub Pages publishes from the root, so those two cannot move.
 
-## Not yet ported
+## Port status
 
-*Verified 2026-07-16. Full detail: [`COURSE-ADMIN-INVENTORY.md`](COURSE-ADMIN-INVENTORY.md) ·
-build plan: [`PLAN-2026-07-16-ADMIN.md`](PLAN-2026-07-16-ADMIN.md).*
+*Verified 2026-07-22. Full detail: [`COURSE-ADMIN-INVENTORY.md`](COURSE-ADMIN-INVENTORY.md) ·
+build plan: [`PLAN-2026-07-16-ADMIN.md`](PLAN-2026-07-16-ADMIN.md) · outstanding work:
+[`../../docs/ROADMAP.md`](../../docs/ROADMAP.md).*
 
-Two director features still live only on the legacy `admin.html` (reached via the **Admin ↗** nav
-link), and **promotion deletes that page** — so both must be built natively before the app tree moves
-up, or the course loses them:
+**The two features that blocked promotion have shipped** (2026-07-20), both into
+[`faculty/admin.html`](faculty/admin.html):
 
-- **Instructor / staff management** — add, change role, remove. Zero code in `site/app/`; the
-  `create-instructor` / `remove-instructor` edge functions already exist and are unchanged.
-- **Export** — Blackboard grades CSV and the full JSON backup.
+- **Instructor / staff management** — Staff tab. ✅
+- **Export** — Blackboard grades CSV and the full JSON backup, now director-gated and
+  course-scoped. ✅
+
+So **no director tool depends on the legacy `admin.html` any more**, and promotion deleting that
+page no longer costs the course a feature. Four *undocumented* legacy surfaces would still be lost —
+they are enumerated with recommendations in
+[`LEGACY-AUDIT-2026-07-20.md`](LEGACY-AUDIT-2026-07-20.md) §2 and tracked as ROADMAP P0.6.
 
 **The assignment builder *did* mostly port** — into the **lesson creator**
 ([`faculty/lessons.html`](faculty/lessons.html)), where a preflight is a component of a lesson rather
-than a standalone item. Missing there: **duplicate**, and standalone (non-lesson) authoring.
+than a standalone item. Still missing there: **duplicate**, and standalone (non-lesson) authoring.
 
 **`js/faculty-report.js` is intentionally dormant** — it is the ported query layer for the legacy
 by-question Report tab, which will be **merged into the lesson rollup summary** rather than shipped as
 its own page. Nothing imports it yet. **Don't delete it as dead code.**
 
-Faculty section-scoping is enforced in client JS (mirroring the existing app), not RLS — true
-isolation would require new DB policies. Migration 021 begins that repair, but is **not yet applied**.
+Faculty section-scoping is enforced in client JS, not RLS — true isolation would require new DB
+policies. ⚠️ *Corrected 2026-07-22:* this previously pointed at migration 021 as the in-progress
+repair. **021 is deliberately never applied** (CORE.md §5) — it implements the superseded
+lesson-unification model. The real repair is schema `app`'s own RLS
+(`migrations/app/002_rls.sql`), and what remains UI-only is tracked as ROADMAP P3.9.

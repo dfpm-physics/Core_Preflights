@@ -270,6 +270,46 @@ export function effectiveDue(offering, sectionId, extensionISO, now = new Date()
   return { due, isPast: due < now, source };
 }
 
+/**
+ * Was this submission handed in after the deadline that applied to THAT student?
+ *
+ * effectiveDue() answers "is the deadline behind us *now*", which is the question the backlog
+ * queues ask. Grading asks a different one: "did this arrive late", comparing the commit time to
+ * the deadline rather than the clock to the deadline. Without it a grader cannot tell a punctual
+ * submission from one that landed four days after everyone else's, and silently gives both full
+ * credit — `committed_at` was fetched and shaped all along, but nothing ever compared it.
+ *
+ * Extensions are honoured, because they are the whole point: a student who was granted until
+ * Friday and submitted Thursday is NOT late, and must not be badged as if they were.
+ *
+ * @param {object} offering  a shapeOffering() result
+ * @param {string|null} sectionId
+ * @param {string|null} extensionISO  an ACTIVE extension's date, or null (see effectiveDue)
+ * @param {string|null} committedAt   submissions.committed_at
+ * @param {number} [graceMs]  tolerance for clock skew; a submission inside it is not late
+ * @returns {{ late: boolean, due: Date|null, at: Date|null, ms: number }} ms = how late, if late
+ */
+export function submissionLateness(offering, sectionId, extensionISO, committedAt, graceMs = 60000) {
+  const none = { late: false, due: null, at: null, ms: 0 };
+  if (!committedAt) return none;                       // draft — nothing was handed in
+  const { due } = effectiveDue(offering, sectionId, extensionISO);
+  if (!due) return none;                               // no deadline set → nothing can be late
+  const at = new Date(committedAt);
+  if (isNaN(at)) return none;
+  const ms = at - due;
+  return { late: ms > graceMs, due, at, ms };
+}
+
+/** "4 days late" / "3 hours late" / "12 minutes late" — for a submissionLateness() result. */
+export function lateBy(ms) {
+  const min = Math.floor(ms / 60000);
+  if (min < 60) return `${Math.max(1, min)} min late`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} late`;
+  const d = Math.floor(hr / 24);
+  return `${d} day${d === 1 ? '' : 's'} late`;
+}
+
 /** Has this offering opened yet? `opens_at` empty means always open. */
 export function isOpen(offering, now = new Date()) {
   if (!offering?.opensAt) return true;

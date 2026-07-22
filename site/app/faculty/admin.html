@@ -93,15 +93,23 @@
 
       const rows = staff.map(s => {
         const isMe = s.instructorId === meId;
-        const roleCell = s.implicit
-          ? `<span class="muted" style="font-size:0.8em">implicit — no staff row</span>`
-          : isMe
-          ? `<span class="score-badge full">${A.ROLE_LABEL[s.role] || '—'}</span>
-             <span class="muted" style="font-size:0.75em"> (you)</span>`
-          : `<select data-role-for="${esc(s.instructorId)}">
-               ${Object.entries(A.ROLE_LABEL).map(([v, l]) =>
-                 `<option value="${v}"${v === s.role ? ' selected' : ''}>${l}</option>`).join('')}
-             </select>`;
+        // Your own row renders the SAME <select>, disabled, rather than a badge. Previously it was a
+        // .score-badge (~20px) while every other row carried a full-height select (~40px), so the one
+        // row you always look at was the odd one out and the table read as broken. A disabled select
+        // is also the more honest control: it says "you cannot change your own role" in the place
+        // where the role is changed, instead of silently rendering a different kind of cell.
+        const roleOptions = (dis) =>
+          `<select data-role-for="${esc(s.instructorId)}"${dis ? ' disabled title="You cannot change your own role"' : ''}>
+             ${Object.entries(A.ROLE_LABEL).map(([v, l]) =>
+               `<option value="${v}"${v === s.role ? ' selected' : ''}>${l}</option>`).join('')}
+           </select>`;
+        const roleCell = `<div class="role-cell">${
+          s.implicit
+            ? `<span class="muted" style="font-size:0.8em">implicit — no staff row</span>`
+            : isMe
+            ? roleOptions(true) + `<span class="muted" style="font-size:0.75em">(you)</span>`
+            : roleOptions(false)
+        }</div>`;
 
         const scope = s.implicit ? `<span class="score-badge pending">every offering</span>`
           : s.wide ? `<span class="score-badge pending">All sections</span>`
@@ -135,7 +143,7 @@
             </div>
             <button class="btn btn-primary btn-sm" id="add-btn">+ Add staff</button>
           </div>
-          <div class="table-wrap" style="margin-top:16px"><table>
+          <div class="table-wrap" style="margin-top:16px"><table class="staff-tbl">
             <thead><tr><th>Name</th><th>Role</th><th>Sections</th><th></th></tr></thead>
             <tbody>${rows}</tbody></table></div>
           <div id="staff-status" class="muted" style="font-size:0.82em;min-height:1.2em;margin-top:12px"></div>
@@ -172,7 +180,10 @@
         if (colour !== 'var(--red)') setTimeout(() => { el.textContent = ''; }, 3000);
       };
 
-      panel.querySelectorAll('[data-role-for]').forEach(sel => sel.addEventListener('change', async () => {
+      // :not([disabled]) skips your own row's select. A disabled control cannot fire `change`, so
+      // this is belt-and-braces — but it keeps the intent readable and survives someone flipping the
+      // attribute off in devtools. The real gate is setRole()'s authorization, not the DOM.
+      panel.querySelectorAll('[data-role-for]:not([disabled])').forEach(sel => sel.addEventListener('change', async () => {
         status('Saving…');
         const { error } = await A.setRole(ctx, sel.dataset.roleFor, sel.value);
         if (error) return status('⚠ ' + error.message, 'var(--red)');

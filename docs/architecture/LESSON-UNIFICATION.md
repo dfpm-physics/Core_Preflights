@@ -1,7 +1,22 @@
 # Lesson Unification — joining preflight assignments and lesson interactions
 
-*Design doc. Authored 2026-06-25 by Matthew Recker (via Claude). Status: **proposed** — not
-yet built. Companion to [`INTERACTION-DATA-CONTRACT.md`](../contracts/INTERACTION-DATA-CONTRACT.md),
+> **⚠️ SUPERSEDED — read [`PREP-V2-DATA-MODEL.md`](PREP-V2-DATA-MODEL.md) instead.**
+>
+> The lesson-unification model described here was **replaced** by the PREP v2 redesign in schema
+> `app`, which reaches the same goal — one lesson carrying a written and/or interactive path,
+> graded on one scale, rolled up in one report — through a different structure
+> (`assignments` → `activities` → `assignment_offerings`). See also
+> [`../decisions/PREP-V2-SCHEMA.md`](../decisions/PREP-V2-SCHEMA.md).
+>
+> **`supabase/migrations/021_lesson_finalize_and_extensions.sql` implements this doc and is
+> deliberately never applied** (CORE.md §5). Do not apply it, and do not treat the open phases
+> below as pending work — they describe a path not taken. This file is kept as a point-in-time
+> record of the reasoning, several parts of which (the research design in §1, the modality
+> comparison) carried forward into v2 unchanged.
+
+*Design doc. Authored 2026-06-25 by Matthew Recker (via Claude). Status: **superseded**
+2026-07-22 by the PREP v2 `app` schema — was "proposed, not yet built". Companion to
+[`INTERACTION-DATA-CONTRACT.md`](../contracts/INTERACTION-DATA-CONTRACT.md),
 [`INTERACTION-AGGREGATION.md`](../decisions/INTERACTION-AGGREGATION.md), and
 [`CHANGELOG.md`](../../CHANGELOG.md).*
 

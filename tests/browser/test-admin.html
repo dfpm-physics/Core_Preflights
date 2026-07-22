@@ -101,6 +101,18 @@
       spec: <a href="../../site/app/PLAN-2026-07-16-ADMIN.md">PLAN-2026-07-16-ADMIN.md</a> §4</span>
   </div>
 
+  <!-- Kept as the design record of the emailed-code flow, NOT as a picture of the system.
+       The "Send reset email" control below no longer exists anywhere in PREP. Same marker
+       convention as test-account.html, which archives the cadet-facing half of the same flow. -->
+  <div class="sandbox-strip" style="color:var(--alert-warn-fg)">
+    <span class="pill" style="background:var(--alert-warn-bg);color:var(--alert-warn-fg)">Superseded 2026-07-21</span>
+    <span><strong>Send reset email</strong> was removed: PREP has no SMTP, and cadet addresses were
+      fabricated, so that flow could never deliver. The live Staff tab shows a <strong>Password
+      help</strong> explainer instead (<code>site/app/faculty/admin.html</code>), and recovery is in
+      person — an instructor resets a cadet to the derived default from the Roster page
+      (<code>reset-student-password</code>). Staff recovery is a known gap, not a shipped flow.</span>
+  </div>
+
   <main class="page-wide" id="main"></main>
 
   <!-- Generic modal — body swapped by openModal() (static; opens for looks, saves nothing) -->
@@ -772,8 +784,10 @@
         </div>
 
         <div class="card">
-          <div class="card-title">Password operations<span class="tier new">Planned</span></div>
-          <div class="card-meta">Two tiers, deliberately. Spec:
+          <div class="card-title">Password operations<span class="tier new">Superseded</span></div>
+          <div class="card-meta">Two tiers, deliberately — <strong>neither shipped as designed.</strong>
+            The email tier was removed 2026-07-21 (no SMTP); the system-admin set-password tier
+            remains unbuilt. Spec:
             <a href="../../site/app/PLAN-2026-07-20-ACCOUNTS.md">PLAN-2026-07-20-ACCOUNTS.md</a>.</div>
           <div class="idrow"><span class="k"><strong>Send reset email</strong> — director and up
             <span class="why" style="display:block;font-weight:400;font-size:0.84em;color:var(--muted)">

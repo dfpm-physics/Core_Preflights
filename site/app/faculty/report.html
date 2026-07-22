@@ -82,8 +82,18 @@
     const KDE = { H0: 0.49, HMIN: 0.30, HMAX: 0.45 };
 
     const ctx = await bootstrap({ require: 'faculty' });
-    // Mount the live tuner for directors and global admins only (hidden from instructors).
-    if (!ctx) { /* redirected */ } else { init(); if (ctx.isDirectorForCurrent?.()) mountKdeTuner(); }
+    // Mount the live tuner only when a director explicitly asks for it with ?kde=1.
+    //
+    // It was previously mounted for every director on every rollup, where it reads as part of the
+    // product rather than the dev tool it is — a floating panel of unexplained sliders over a page
+    // instructors are meant to read. Hidden, not deleted: it is the only way to retune the KDE
+    // constants, and nothing else regenerates that const line.
+    //
+    // Deliberately a query param and not an account preference: this leaves no persisted state, so
+    // a director cannot switch it on, forget, and file the panel as a bug three weeks later.
+    const kdeTunerRequested = new URLSearchParams(location.search).get('kde') === '1';
+    if (!ctx) { /* redirected */ }
+    else { init(); if (kdeTunerRequested && ctx.isDirectorForCurrent?.()) mountKdeTuner(); }
 
     let vm = null, reportInteraction = null;
     // Structured report data for the open lesson: rows = null while loading, [] once loaded.
@@ -386,8 +396,12 @@
 
     // Director-only floating KDE tuner. Sliders mutate the live KDE knobs and re-render the rollup
     // so the objective histograms update instantly; "Copy" grabs the const line to paste into the
-    // KDE object above. Gated to directors/admins at the call site. Self-contained — delete this
-    // function, its call site, and the KDE object to remove the feature entirely.
+    // KDE object above. Self-contained — delete this function, its call site, and the KDE object to
+    // remove the feature entirely.
+    //
+    // REACHED BY ?kde=1 ONLY, and still director-gated on top of that (see the call site). If you
+    // are looking for it because the histograms need retuning, open the rollup as
+    // report.html?i=<slug>&kde=1.
     function mountKdeTuner() {
       const knobs = [
         ['H0',   0.05, 1.50, 0.01, 'lone-point width'],
@@ -526,10 +540,19 @@
       if (!singleScope) { respState = null; return ''; }
       const { ai, pool } = buildResponses(rows, roster, analysis);
       if (!ai.length && !pool.length) { respState = null; return ''; }
-      const randN = Math.max(0, 5 - ai.length);   // keep ~5 cards total once AI picks are prepended
+      // 3 AI picks + 5 ADDITIONAL random — the random count is fixed, not a remainder.
+      //
+      // This previously read `Math.max(0, 5 - ai.length)`, capping the panel at ~5 cards total, so
+      // every AI pick displaced a random one. That inverted the intent: the AI picks are the
+      // aggregator's argued-for showcase quotes, and the random sample exists to show what the rest
+      // of the section actually wrote. Letting the first shrink the second meant a well-analysed
+      // section showed the least unfiltered student writing. The aggregator emits exactly 3 picks
+      // (lesson-aggregate SKILL.md), so the panel is 8 cards where the pool allows.
+      const RANDOM_N = 5;
+      const randN = Math.min(RANDOM_N, pool.length);
       respState = { ai, pool, randN, sample: sampleN(pool, randN), namesOn: false };
       const aiNote = ai.length ? `${ai.length} AI pick${ai.length === 1 ? '' : 's'}${randN ? ' + ' : ''}` : '';
-      const randNote = randN ? `${Math.min(randN, pool.length)} random` : '';
+      const randNote = randN ? `${randN} random` : '';
       return `<div class="lr-sec fw-panel" id="sr-sec">
         <div class="lr-eyebrow">Student responses <span class="dim">· ${aiNote}${randNote} · select to copy for slides</span></div>
         <div class="sr-controls">

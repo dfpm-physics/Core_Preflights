@@ -90,6 +90,20 @@ have never been exercised against the live database by a signed-in human.
 This is one session, not eight — a director walkthrough in light and dark mode as all three role
 tiers. Everything else in P0 should land first so the pass covers the shipped state.
 
+**Added 2026-07-22** — the four frontend fixes shipped that day are logic-verified and syntax-clean
+but **have not been looked at**, and each is a visual change that only an eye can confirm:
+
+- **Staff table** (P0.11) — rows equal height; your own row a disabled select; Role column no longer
+  stretched. Check as a director *and* as a global admin, whose row renders the third variant
+  (`implicit — no staff row`).
+- **Late chip + Late-only filter** (P0.12) — needs a genuinely late submission and one covered by an
+  extension, to confirm the second is *not* badged. Confirm the toggle is invisible when nothing is
+  late.
+- **Student responses** (P0.9) — 3 AI + 5 random = 8 cards, and the Shuffle control still reshuffles
+  only the random 5.
+- **KDE tuner** (P0.10) — absent from a plain rollup, present with `?kde=1` as a director, absent
+  with `?kde=1` as an instructor.
+
 ### P0.6 — Decide the four surfaces promotion deletes · **S** (decision) + **M** (rebuild)
 
 From [`LEGACY-AUDIT-2026-07-20.md`](../site/app/LEGACY-AUDIT-2026-07-20.md): *"Anything not decided
@@ -102,20 +116,28 @@ before then is not deferred; it is gone."*
 | "Show flagged only" toggle on Grade | Rebuild — small |
 | `site/review.html` (credential-free grade viewer) | **Delete.** A re-enable away from a FERPA problem |
 
-### P0.7 — Remove every email-reset reference · **S**
+### P0.7 — Remove every email-reset reference · ✅ **RESOLVED 2026-07-22 — mostly a non-issue**
 
-*Requested.* Email reset was removed 2026-07-21 but traces remain and actively mislead:
+*Requested. On inspection this item was largely wrong, and acting on it as written would have made
+the system worse. Recorded in full so it is not "fixed" again later.*
 
-- `site/app/reset.html` — orphaned explainer page, nothing links to it. **Delete.**
-- `docs/DOC-SOURCES.json:31` — still lists `reset.html` as a doc source.
-- `tests/browser/test-admin.html` and `test-account.html` — still render a "Send reset email" button
-  and a six-digit-code modal. These fixtures no longer match the app, so they test a world that
-  does not exist.
-- Help docs: `instructor-accounts.md`, `student-getting-started.md`, `admin-system-operations.md`.
-- `docs/operations/SYSTEM_GUIDE.md`, `supabase/SETUP.md`, `site/app/README.md:18`.
+**What the sweep called a problem, and what it actually is:**
 
-Leave the tombstone comments in `account.js:7-26` and `faculty-admin.js:139-158` — they explain *why*
-there is no email recovery, which is the thing a future operator will otherwise try to re-add.
+| Flagged | Verdict |
+|---|---|
+| `site/app/reset.html` — "orphaned, delete it" | **KEPT.** It is not an email-reset flow; it is the page that tells a locked-out person there *is* no email reset and who to ask instead. Its own header explains why it outlived the flow: the login page linked there for a year, so bookmarks and history still point at it, and a 404 is the worst possible answer at the moment someone is locked out. Deleting it would remove the one thing that redirects them correctly. |
+| `DOC-SOURCES.json` listing `reset.html` as a source | **KEPT.** A correct dependency — `student-getting-started.md` was written from that page. Not a stale entry. |
+| Help docs mentioning reset | **KEPT.** Every mention is a *denial* ("PREP cannot email you a reset link", "there is no reset link to send"). They are the tombstones, correctly phrased. |
+| `tests/browser/test-account.html` | **KEPT.** Already carries a "Superseded 2026-07-21" banner and a comment reading *"Kept as the design record of the emailed-code flow, NOT as a picture of the system."* Deliberate archive. |
+| `tests/browser/test-admin.html` | **FIXED** — the one real defect. It rendered "Send reset email" with **no** supersession marker, unlike its sibling. Given the same banner, and its "Password operations" card relabelled `Planned` → `Superseded` (the email tier was removed; the system-admin tier was never built). |
+
+**The general lesson, worth keeping:** a reference to a removed feature is not automatically debt.
+A *denial* of it is documentation. Only an artifact that still presents the removed feature as
+available needed changing, and exactly one did.
+
+Left alone deliberately: the tombstone comments in `account.js:7-26` and `faculty-admin.js:139-158`,
+which explain *why* there is no email recovery — the thing a future operator will otherwise try to
+re-add.
 
 ### P0.8 — AI prose is far too long · **M** · *skill work, no schema change*
 
@@ -136,36 +158,69 @@ Cap by characters, not by instruction — an instruction to "be brief" is not a 
 **Falsification:** show a director three rollups without telling them which are new. If they cannot
 pick the rewritten ones, or still describe them as "AI-sounding", the caps were not the problem.
 
-### P0.9 — Student responses: 3 AI picks + 5 random · **S**
+### P0.9 — Student responses: 3 AI picks + 5 random · ✅ **DONE 2026-07-22**
 
-*Requested.* Currently `buildResponses()` (`report.html:481-507`) shows AI picks plus a random
-sample with no fixed counts. Set it to exactly 3 AI-selected + 5 additional random, drawn from the
-pool excluding the 3 already shown. The aggregator already emits 2–3 quotes per section
-(`SKILL.md:309`) — bump it to exactly 3.
+*Requested.* The panel capped itself at ~5 cards **total** via `randN = Math.max(0, 5 - ai.length)`,
+so every AI pick displaced a random one — meaning a well-analysed section showed the *least*
+unfiltered student writing. Inverted: the random sample is now a fixed 5, independent of the AI
+count, bounded only by the pool. The panel is 8 cards where the section has the material.
 
-**Note:** quotes render on single-section scope only; `__all__` carries none by design.
+- `report.html` `responsesSection()` — `RANDOM_N = 5`, `randN = Math.min(RANDOM_N, pool.length)`.
+  The eyebrow note and Shuffle control follow the real count.
+- `.ai/skills/lesson-aggregate/SKILL.md` — `selected_quotes` changed from "2-3 each" to **exactly
+  3**, in all four places it was stated, with an explicit note that emitting fewer now shrinks the
+  showcase without widening anything else, and that padding to 3 with a weak pick is wrong.
 
-### P0.10 — Hide the histogram smoothing tuner, keep the code · **S**
+**Unchanged by design:** quotes render on single-section scope only; `__all__` carries none.
 
-*Requested.* `mountKdeTuner()` (`report.html:391-432`) is a director-only floating dev tool. Gate it
-behind a flag rather than deleting it — it is self-contained and is the only way to retune the KDE
-constants. A `?kde=1` query param or a hidden account preference both work; prefer the query param
-so it leaves no persisted state.
+### P0.10 — Hide the histogram smoothing tuner, keep the code · ✅ **DONE 2026-07-22**
 
-### P0.11 — Staff table row heights · **S**
+*Requested.* `mountKdeTuner()` was mounted for **every** director on **every** rollup, where a
+floating panel of unexplained sliders reads as part of the product rather than the dev tool it is.
 
-*Requested, and confirmed.* `admin.html:94-104`: the current user's row renders the role as a
-`.score-badge` span (~20px), everyone else gets a `<select>` that inherits the global form rule
-`padding: 10px 14px` at `font-size: 0.95em` (~40px). There is no `td select` override in
-`styles.css`. The select also inherits `width: 100%`, stretching the Role column.
+Now reached by **`?kde=1` only**, still director-gated on top of that. Code untouched and fully
+working — it is the only thing that regenerates the KDE const line. To retune:
+`report.html?i=<slug>&kde=1`.
 
-Fix: add a compact in-table select variant (the pattern already exists at `styles.css:1050` for
-`.sec-assign select`) and set an explicit row height so badge rows and select rows match. Consider
-rendering the current user's row as a disabled select rather than a badge — same box, no special
-case, and it reads as "you cannot change your own role" instead of looking like a different kind of
-row.
+Deliberately a query param rather than an account preference: it leaves no persisted state, so a
+director cannot switch it on, forget, and file the panel as a bug three weeks later.
 
-### P0.12 — A late submission is invisible on the grade card · **S** · *new, verified*
+### P0.11 — Staff table row heights · ✅ **DONE 2026-07-22**
+
+*Requested, and confirmed as diagnosed.* Your own row rendered a `.score-badge` (~20px); every other
+row carried a `<select>` inheriting the global form rule `padding: 10px 14px` at `0.95em` (~40px)
+plus `width: 100%`. No `td select` override existed. Result: the one row you always look at was the
+odd one out, and the Role column stretched.
+
+Both halves fixed:
+
+- **`admin.html`** — your own row now renders the **same `<select>`, disabled**, instead of a badge.
+  Same box, no special case, and it states "you cannot change your own role" in the place the role
+  is changed. The change handler is scoped `[data-role-for]:not([disabled])`.
+- **`styles.css`** — new `.staff-tbl` block: `vertical-align: middle`, a `.role-cell` flex box with
+  `min-height: 30px` so the text-only *implicit* rows still occupy a select-sized cell, and a
+  compact in-table select (`width: auto; min-width: 128px; padding: 5px 8px`) following the existing
+  `.sec-assign select` house pattern.
+
+### P0.12 — A late submission is invisible on the grade card · ✅ **DONE 2026-07-22**
+
+**Shipped:** a new `submissionLateness()` + `lateBy()` pair in `schema.js` (beside `effectiveDue`,
+which answers a different question — clock-vs-deadline, not commit-vs-deadline), an amber `⏰ N days
+late` chip on the grade card beside the extension chip, and a **Late only** filter that ANDs with
+the status lamps and hides itself entirely when nothing is late.
+
+**Extensions are honoured** — a student granted until Friday who submitted Thursday is not badged.
+That is the case the whole feature turns on, and it is covered by the harness below.
+
+Amber, not red: arriving late is a fact the grader should see, not a verdict. Whether it costs
+credit stays the instructor's call, and late work is routinely accepted by hand on purpose.
+
+*Verified:* 16/16 in a dedicated logic harness (on-time · 4-days-late · inside-extension ·
+past-extension · M/T section override both ways · draft · no-deadline · 30s clock-skew grace ·
+unparseable timestamp · label boundaries · `effectiveDue` regression guard), plus the full
+`tests/app-schema` suite green at 339/0. **Not yet seen in a browser** — folded into P0.5.
+
+<details><summary>Original diagnosis (kept for context)</summary>
 
 *The director asked "don't these show up in the Grade tab?" — they do, but you cannot tell which
 ones are late.*
@@ -189,6 +244,8 @@ an instructor silently gives full credit to work that arrived four days late.
 
 *(Note: the assignment-level `pastDueUngraded()` queue at `faculty-grade.js:506-571` already counts
 these correctly. The gap is purely per-submission visibility once you open the assignment.)*
+
+</details>
 
 ---
 
@@ -675,16 +732,18 @@ nearly free — but it is polish. Last.
 
 ## 5. C — Cleanup and debt
 
+**Cleared 2026-07-22:** `PROJECT.md`'s `question_scores` example (now `grades.question_scores` at
+0/1/1, with an explicit warning not to "correct" the 0–5 diagnostics alongside it) ·
+`LESSON-UNIFICATION.md` supersession banner · `COURSE-ADMIN-INVENTORY.md` §2D and its stale
+port-status rows · `site/app/README.md` "Not yet ported" · `student/interactions.html` deleted.
+
 | Item | Where | Note |
 |---|---|---|
-| **`PROJECT.md`'s `question_scores` example shows the retired 15-point shape** | `.ai/instructions/PROJECT.md:91-98` | Shows `scores.question_scores` at `max: 5` per question. Current is `grades.question_scores` at 0/1/1. **Fix that block only** — the 0–5 effort/understanding diagnostics documented further down the same file are current and must not be "corrected". **Before P1.1** |
+| ⚠️ **`check_doc_sources.py` is red — 11 documents flagged** | run it | **Pre-existing, not caused by the 2026-07-22 batch.** Dominated by a `CORE.md` edit earlier that day plus the skills touched by it. Deliberately *not* cleared by bulk-bumping `reviewed` dates — that is precisely the failure the mechanism exists to prevent. Clearing it properly means reading each of the 11 against its sources; it overlaps the help-doc stub expansion below, so do them together. **Verified harmless for the gradebook:** no help doc states a points value, so the `question_scores` correction did not invalidate any of them |
 | `lesson_aggregate.py` misdiagnoses a cross-course slug collision as a stale offering | `supabase/admin/lesson_aggregate.py:456-459` | Following its advice would have deactivated a live phys-110 offering |
 | All three `prep_app_*` roles carry `BYPASSRLS`, including the SELECT-only read role | CHANGELOG:704 | The read role should not bypass RLS |
 | `main` predates the `extensions.reason` NOT NULL constraint | CHANGELOG:706-709 | Harmless today (zero extensions); resolved by P0.1 |
 | Edge functions never exercised on a successful path | CHANGELOG:473-475 | Covered by P0.5 |
-| `LESSON-UNIFICATION.md` never got its owed supersession banner | CHANGELOG:2019-2020 | Doc still reads as a live plan |
-| Stale port-status rows in `COURSE-ADMIN-INVENTORY.md`, `site/app/README.md` | PLAN-2026-07-16-ADMIN.md:165-170 | Several claim work that shipped |
-| `COURSE-ADMIN-INVENTORY.md` §2D describes a system-admin guard that never existed | LEGACY-AUDIT:45-48 | Risk: a future operator "restores" unsafe behavior |
 | Remove `scripts/training/seed_training_preflight02.py` data | script header | **Before the real roster upload** — ordering matters |
 | Five help docs still carry the "Starter stub" blockquote | docs-author SKILL.md:155-160 | `ai-and-your-work.md` needs director review before term |
 | `$PREP_CONFIG` neutralization (decided, not executed) | CORE.md:162-165 | One coordinated PR across every script + skill + doc |
@@ -697,8 +756,7 @@ nearly free — but it is polish. Last.
 | No lesson duplicate/clone | `site/app/README.md:94` | Reuse works; making a *variant* does not. Feeds P3.4 |
 | Tier D system-admin password reset — mocked, unbuilt | PLAN-2026-07-20-ACCOUNTS.md:3 | Decide whether it stays a known gap |
 | 81 cadets keep fabricated `<id>@usafa.edu` addresses | CHANGELOG:411-412 | Needs a decision plus a migrate-login-emails action |
-| `student/interactions.html` still present, no longer linked | STUDENT-LESSON-VIEW.md:264 | Retire |
-| Pending: is `faculty/interactions.html` deleted once the rollup absorbs its panels? | CHANGELOG:1352-1353 | Decision |
+| ~~Is `faculty/interactions.html` deleted once the rollup absorbs its panels?~~ | CHANGELOG:1352-1353 | ✅ **Answered — it already was**, on 2026-07-20 (`nav.js:22`). Discovered 2026-07-22 while retiring the *student* page. Several docs still describe it as present and load-bearing (`COURSE-ADMIN-INVENTORY.md` §2E "cannot be deleted until that moves", `PLAN-2026-07-16-ADMIN.md` T2.1) — **worth a sweep**, since anything reasoning from those will reach wrong conclusions about what promotion still costs |
 
 ---
 
@@ -760,10 +818,14 @@ P2.1 for file exchange.
 
 ## 7. What I would do first
 
-If the next working session picks up one thing: **P0.1 (cutover) and P0.3 (test suites) together.**
-The suites are the only proof that the schema the cutover promotes is safe, and they are currently
-red. Everything else in P0 is small and can be batched into a single pass afterward, ending with
-P0.5's browser verification so it covers the shipped state rather than an intermediate one.
+**Done 2026-07-22:** the docs batch, plus P0.9 / P0.10 / P0.11 / P0.12 — the four small frontend
+fixes — and P0.7 closed as largely a non-issue. Seven roadmap items cleared without touching the
+database or the cutover.
+
+**Next: P0.1 (cutover) and P0.3 (test suites) together.** The suites are the only proof that the
+schema the cutover promotes is safe, and they are still red — note this is the `supabase/admin/`
+pair (`app_invariant_test.py`, `app_rls_test.py`), *not* `tests/app-schema`, which passes 339/0.
+Then **P0.5's browser pass**, which now also covers the four fixes above.
 
 **P1.1's blocker is gone** — the 2-point scale is already uniform across both modalities, so the
 gradebook is now a rendering-and-performance problem rather than a grading-policy one. Fix the stale

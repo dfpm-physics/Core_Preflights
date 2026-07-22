@@ -108,9 +108,21 @@ filters by section client-side. Legacy did the same; it will not scale.
 | List staff | roster of current-course instructors + system admins | — (read `instructor_course_access`, `instructors`) | `loadInstructorsTab` :2237 |
 
 Guards: cannot edit/remove **yourself**; system-admin rows are non-editable except via the edge
-function path; only system admins can add/remove the `system_admin` role.
+function path.
 
-**Port status:** ❌ still legacy-only.
+> **⚠️ Correction (2026-07-22).** This section previously claimed *"only system admins can add/remove
+> the `system_admin` role."* **That guard never existed in the legacy code.** The old
+> `create-instructor` read the flag as a second global-admin marker, so **a legacy course director
+> could create system admins.** Its rewrite says so in its own header: *"That is fixed here, not
+> merely ported."* Both edge functions now check `is_global_admin`
+> (`create-instructor/index.ts:98`, `remove-instructor/index.ts:95`).
+>
+> Recorded because the risk is documentary: an operator reading the old wording would conclude the
+> legacy behaviour was safe and "restore" it. See
+> [`LEGACY-AUDIT-2026-07-20.md`](LEGACY-AUDIT-2026-07-20.md) §1.
+
+**Port status: ✅ ported 2026-07-20** — `faculty/admin.html` **Staff** tab
+(`js/faculty-admin.js`). Supersedes the earlier "❌ still legacy-only".
 
 ### E. Lesson-interaction management  *(legacy: `interactions-admin.html`)*
 Catalog of Claude-artifact lessons (iPREP).
@@ -161,7 +173,9 @@ Same button an instructor sees, but the director gets whole-course scope.
   `js/faculty-report.js`, which **nothing imports**. It is **intentionally dormant**: the by-question
   view will be merged into the lesson rollup summary rather than shipped standalone. **Do not delete
   it** — it is the query layer that merge will reuse.
-- **Export** ❌ not ported. See §4 and `PLAN-2026-07-16-ADMIN.md` Tier 1.
+- **Export** ✅ **ported 2026-07-20** (was "❌ not ported") — `faculty/admin.html` **Export** tab,
+  `buildBackup()` / CSV in `js/faculty-admin.js`. It is director-gated and course-scoped, which fixes
+  the three legacy defects listed under "Still open" below.
 
 ---
 
@@ -230,11 +244,14 @@ they aren't mistaken for missing page features.
 
 **Still open:**
 
-- **Extensions gating** — still open to any grader, in both generations. Note migration 021 adds real
-  RLS here; align with it rather than duplicating the rule in client JS.
-- **Full JSON backup** — must become director-gated when ported. It is currently unscoped by *role*
-  **and** by *course*, and it orders `assignments` by `due_date`, **a column that no longer exists**
-  (it is `due_date_m` / `due_date_t`) — so the legacy query would fail if copied as-is.
+- **Extensions gating** — still open to any grader. ⚠️ *Corrected 2026-07-22:* this previously said
+  to align with migration 021's RLS. **021 is deliberately never applied** (CORE.md §5) — it
+  implements the superseded lesson-unification model. The live governance is
+  `migrations/app/007_extension_governance_and_review.sql`; align with that.
+- ~~**Full JSON backup**~~ — ✅ **resolved 2026-07-20** by the native Export tab, which is
+  director-gated, course-scoped, and does not touch the dropped `due_date` column. *(Known
+  remaining gap, tracked in `docs/ROADMAP.md` P2.2: it omits `analysis_reports`, `sections`,
+  `submission_activities`, and `staff_assignments`.)*
 - **Section create/rename/retire** — sections still only ever appear as a side effect of roster upload.
 - **Course-level settings** (course create/rename, term/semester config) — no home in either generation.
 - **`system_admin` badge color** — legacy used a hardcoded purple with no token in `DESIGN.md`.
