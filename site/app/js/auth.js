@@ -156,6 +156,17 @@ async function resolveFacultyOfferings(ctx) {
       termStarts: o.terms?.starts_on,
       role: 'director',
     }));
+    // A global admin's AUTHORITY comes from the flag, not from staff rows — that is what the
+    // branch above is for and it is unchanged. But authority is not the same question as "which
+    // sections do I personally teach", and a global admin very often teaches: the course director
+    // holds is_global_admin AND a section-scoped staff row.
+    //
+    // Leaving ctx.staff empty here made taughtSectionIds() return nothing, so the rollup's
+    // "My sections" scope silently disappeared for exactly the people most likely to want it.
+    // Load the rows for that question alone; nothing downstream derives permission from them.
+    const { data: staff } = await db.from('staff_assignments')
+      .select(STAFF_SELECT).eq('instructor_id', instr.id);
+    ctx.staff = staff || [];
   } else {
     const { data: staff } = await db.from('staff_assignments')
       .select(STAFF_SELECT).eq('instructor_id', instr.id);

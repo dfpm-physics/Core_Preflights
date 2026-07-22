@@ -640,4 +640,34 @@ eq('duplicates collapse',
      { course_offering_id: 'o1', section_id: 's1' }] }), ['s1']);
 eq('no staff at all does not throw', taughtSectionIds({ currentOffering: 'o1' }), []);
 
+section('rollup scope options + default — mirrors report.html scopeOptions()/defaultScope()');
+
+// These mirror report.html exactly. Kept here because the rules are no longer obvious: the option
+// is hidden at one section (it would duplicate that section's own tab) and the default moves.
+const scopeOptions = (mine, allSecs) =>
+  [...(mine.length > 1 ? ['mine'] : []), 'all', ...allSecs];
+const defaultScope = (mine) =>
+  mine.length > 1 ? 'mine' : mine.length === 1 ? mine[0] : 'all';
+
+const FOUR = ['s1', 's2', 's3', 's4'];
+// Teaches two of four — the course-director case that prompted this.
+eq('two sections: My sections is offered, after the course rollup',
+   scopeOptions(['s1', 's2'], FOUR), ['mine', 'all', 's1', 's2', 's3', 's4']);
+eq('…and is the default', defaultScope(['s1', 's2']), 'mine');
+// Exactly one — the option would duplicate that section's own tab, so it is not offered.
+eq('one section: My sections is NOT offered', scopeOptions(['s3'], FOUR), ['all', ...FOUR]);
+eq('…and that section is the default', defaultScope(['s3']), 's3');
+// Staffs the offering but teaches none of it (a director with only an offering-wide row).
+eq('no taught sections: only the rollup and the sections', scopeOptions([], FOUR), ['all', ...FOUR]);
+eq('…and the course rollup is the default', defaultScope([]), 'all');
+// Teaches everything: 'mine' and 'all' cover the same students but are NOT the same scope — one is
+// the union of section reads, the other the course-level synthesis — so both stay on offer.
+eq('teaches all four: both are still offered',
+   scopeOptions(FOUR, FOUR), ['mine', 'all', ...FOUR]);
+eq('…defaulting to My sections, not the rollup', defaultScope(FOUR), 'mine');
+// The course rollup is never the default for anyone who teaches — reaching other sections is
+// deliberate, not where you land.
+eq('the rollup is never the default while you teach anything',
+   [['s1'], ['s1', 's2'], FOUR].every(m => defaultScope(m) !== 'all'), true);
+
 process.exitCode = summary() ? 0 : 1;

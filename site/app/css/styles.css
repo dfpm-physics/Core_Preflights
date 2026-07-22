@@ -1092,6 +1092,11 @@ tr:last-child td { border-bottom: none; }
 
 /* Per-section departures under the instructor-scoped readiness summary. The section code is bold
    because it is the scanning target — a reader looks for their own section, not the prose. */
+/* Names the sections a combined readiness summary was written over, so an instructor can verify
+   none of theirs was omitted. Deterministic — read from stored section_codes, never from the prose. */
+.ai-combined { font-size: 0.82em; color: var(--muted); margin-bottom: 8px; }
+.ai-combined strong { color: var(--blue-lt); font-weight: 700; }
+
 .ai-secnotes { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
 .ai-secnote { font-size: 0.88em; line-height: 1.5; margin: 0 0 6px; color: var(--text); }
 .ai-secnote strong { color: var(--blue-lt); }

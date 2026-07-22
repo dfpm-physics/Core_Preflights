@@ -8,11 +8,55 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
-## 2026-07-22 — Casey via Claude — ⚠️ UNCOMMITTED, AWAITING REVIEW
+## 2026-07-22 — Casey via Claude
 
-> **Everything in this entry is in the working tree only.** The director asked that work past the
-> lesson-cycle run not be committed until they return and agree. Nothing below is pushed; the live
-> site is unchanged by it.
+### Fixed — "My sections" was invisible to global admins, and the scope order/defaults were wrong
+
+Reported from the rollup: no **My sections** option. **The cause was not being a director** — it was
+being a *global admin*. `resolveFacultyOfferings()` short-circuits for `is_global_admin` and never
+loaded `ctx.staff`, on the reasoning that an admin implicitly staffs everything and has "staff rows
+it will never have". But authority and *teaching assignment* are different questions, and a global
+admin very often teaches: the course director holds the flag **and** a section-scoped staff row. With
+`ctx.staff` empty, `taughtSectionIds()` returned nothing and the scope disappeared for exactly the
+people most likely to want it. The rows are now loaded for that question alone; nothing derives
+permission from them.
+
+**Scope list reordered and re-defaulted**, per the director:
+
+| | Shown | Default |
+|---|---|---|
+| **Course rollup** | always, and listed first | **never**, while you teach anything |
+| **My sections** | only when you teach **more than one** | when you teach more than one |
+| a single section | always | when you teach exactly one |
+
+Reaching other sections is deliberate rather than where you land — a director wants that insight but
+is primarily reading their own sections on this page. **My sections** is hidden at exactly one
+section because it would duplicate that section's own tab.
+
+**"All sections" is renamed "Course rollup."** It is the course-level synthesis, not a union of the
+section tabs beside it, and the old label read as the latter.
+
+**A combined summary now names the sections it covers** — "Combining **M1A** + **M3A** · 36
+students" — read from the stored `section_codes`, never from the prose. An instructor needs to verify
+no section of theirs was omitted, and that check has to be deterministic; an AI sentence saying "both
+sections" is not evidence. Rendered as chrome, so it costs the 1200-char summary no words.
+
+Doing that exposed a latent instance of the failure `panels()` documents in its own comment:
+`section_codes` was written by the aggregator and **absent from the reader's whitelist**, so it was
+stored and displayable nowhere. Added.
+
+**No skill changed, so no re-aggregation was needed** — all four fixes are display-only and the data
+they read (`section_codes`, `section_notes`) was already written by the 2026-07-22 run. Re-running
+`/lesson-cycle` would have produced byte-identical output.
+
+*Verified:* 9 new tests pinning the option list and default across four staffing shapes (teaches
+two-of-four, exactly one, none, all) — `test-rollup.mjs` **169 passed, 0 failed**; full
+`tests/app-schema` run exit 0; `app_invariant_test.py` 22/22; `app_rls_test.py` 35/35. **Not seen in
+a browser.**
+
+---
+
+## 2026-07-22 — Casey via Claude
 
 ### Fixed — both `app` schema test suites were dead; they now pass (P0.3)
 

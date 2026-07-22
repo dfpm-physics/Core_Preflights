@@ -170,8 +170,7 @@
       const taught = new Set(I.taughtSectionIds(ctx));
       myScopeSectionIds = vm.sections.filter(s => taught.has(String(s.id))).map(s => s.id);
 
-      reportScope = (section && vm.sections.some(s => s.id === section)) ? section
-                  : myScopeSectionIds.length ? 'mine' : 'all';
+      reportScope = (section && vm.sections.some(s => s.id === section)) ? section : defaultScope();
 
       reportRows = null; reportByStudent = {}; reportAnalysis = null;   // null → summary shows "computing…"
       renderScope();
@@ -241,6 +240,7 @@
         ...(own || {}),
         readiness_summary: instr?.readiness_summary ?? own?.readiness_summary ?? null,
         section_notes: instr?.section_notes ?? null,
+        section_codes: instr?.section_codes ?? null,
         instructor_name: instr?.instructor_name ?? null,
         // Keep the section's own meta (n, fingerprint) — the summary is borrowed, the numbers are not.
         meta: own?.meta ?? instr?.meta ?? null,
@@ -249,16 +249,26 @@
 
     // Adaptive section scope: a segmented control when there are few options, a dropdown when many.
     //
-    //   My sections  — the sections you teach, combined. DEFAULT. Omitted when you teach none, or
-    //                  when you teach all of them anyway (it would duplicate "All sections").
-    //   All sections — the whole course. Still offered to everyone, deliberately: see the note in
-    //                  aiSec() about what an instructor sees when the numbers they can load are
-    //                  narrower than the cohort the summary describes.
-    //   <code>       — one section.
+    //   Course rollup — the whole course. FIRST in the list but never the default: a director
+    //                   wants insight into other sections, and should reach it deliberately rather
+    //                   than land on it. (Renamed from "All sections" 2026-07-22 — it is the
+    //                   course-level synthesis, not a union of the sections beside it, and the old
+    //                   label read as the latter.)
+    //   My sections   — the sections you teach, combined. Shown ONLY when you teach more than one;
+    //                   with exactly one it would duplicate that section's own tab.
+    //   <code>        — one section.
+    //
+    // Default: My sections when you teach several, your single section when you teach one, and the
+    // course rollup only when you teach none of it.
     function scopeOptions() {
       const secs = vm.sections;
-      const showMine = myScopeSectionIds.length > 0 && myScopeSectionIds.length < secs.length;
-      return [...(showMine ? ['mine'] : []), 'all', ...secs.map(s => s.id)];
+      return [...(myScopeSectionIds.length > 1 ? ['mine'] : []), 'all', ...secs.map(s => s.id)];
+    }
+
+    function defaultScope() {
+      if (myScopeSectionIds.length > 1) return 'mine';
+      if (myScopeSectionIds.length === 1) return myScopeSectionIds[0];
+      return 'all';
     }
 
     function renderScope() {
@@ -267,7 +277,7 @@
       // A section id is a uuid in schema `app`; the CODE ('M1A') is what a human reads.
       // The uuid stays the VALUE everywhere (scope keys, comparisons) — only labels change.
       const codeOf = id => (vm.sections.find(s => s.id === id)?.code) || id;
-      const label = v => v === 'mine' ? 'My sections' : v === 'all' ? 'All sections' : codeOf(v);
+      const label = v => v === 'mine' ? 'My sections' : v === 'all' ? 'Course rollup' : codeOf(v);
       const countOf = v => v === 'mine' ? myScopeSectionIds.length
                          : v === 'all' ? secs.length
                          : (secs.find(s => s.id === v)?.students.length ?? 0);
@@ -861,18 +871,28 @@
       const notesHTML = shownNotes.length ? `<div class="ai-secnotes">`
         + shownNotes.map(nt => `<p class="ai-secnote"><strong>${esc(codeFor(nt))}</strong> — ${esc(nt.note || '')}</p>`).join('')
         + `</div>` : '';
+
+      // Name the sections the summary was written over, from the STORED section_codes rather than
+      // from the prose. An instructor reading a combined summary needs to verify none of their
+      // sections was left out, and that is a check that has to be deterministic — an AI sentence
+      // saying "both sections" is not evidence. Rendered as chrome so it costs the summary no words.
+      const combined = (analysis?.section_codes || []).filter(Boolean);
+      const combinedBar = (readiness && !oneSec && combined.length > 1)
+        ? `<div class="ai-combined">Combining <strong>${combined.map(esc).join('</strong> + <strong>')}</strong>
+             <span class="dim">· ${analysis?.meta?.n ?? s.n} students</span></div>` : '';
+
       const whoNote = analysis?.instructor_name && !oneSec
         ? ` · ${esc(analysis.instructor_name)}'s sections` : '';
-      // An instructor viewing "All sections" reads a summary written over the whole course while
-      // the numbers above it come from only the rows they can load. Saying so is the honest fix:
-      // the alternative is silently pairing whole-course prose with a partial cohort.
+      // Reading the course rollup shows a summary written over the whole course while the numbers
+      // above it come from only the rows the viewer can load. Saying so is the honest fix; the
+      // alternative is silently pairing whole-course prose with a partial cohort.
       const allMeta = analysis?.meta?.n;
       const scopeMismatch = reportScope === 'all' && Number.isInteger(allMeta) && allMeta > s.n
         ? `<p class="ai-scope-warn">This summary covers the whole course (${allMeta} students). The charts above
              show only the ${s.n} you have access to.</p>` : '';
       const aiSec = `<div class="lr-sec fw-panel">
         <div class="lr-eyebrow">AI readiness summary <span class="dim">${readiness ? aiGenNote(analysis, s.n) + whoNote : '· coming soon'}</span></div>
-        ${readiness ? aiProse(analysis.readiness_summary) + notesHTML + scopeMismatch
+        ${readiness ? combinedBar + aiProse(analysis.readiness_summary) + notesHTML + scopeMismatch
           : aiPlaceholder('A short read on how ready the class is for this lesson — engagement, where understanding is solid vs. shaky, and what to cover in class — will be generated here once the lesson has been aggregated.')}
       </div>`;
 

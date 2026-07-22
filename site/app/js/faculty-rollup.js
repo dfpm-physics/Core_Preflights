@@ -444,6 +444,11 @@ export async function loadAnalysis(offeringId) {
       instructor_id: obj?.instructor_id ?? null,
       instructor_name: obj?.instructor_name ?? null,
       section_ids: Array.isArray(obj?.section_ids) ? obj.section_ids : null,
+      // The human-readable codes for those ids. The rollup names them above a combined summary so
+      // an instructor can verify no section of theirs was left out — a check that must not depend
+      // on the AI prose mentioning them. Omitting it here is the exact failure this whitelist
+      // documents: the writer stores it and nothing ever shows it.
+      section_codes: Array.isArray(obj?.section_codes) ? obj.section_codes : null,
       section_notes: Array.isArray(obj?.section_notes) ? obj.section_notes : null,
       meta: obj?.meta ?? null,
       generated_at: row.generated_at,
