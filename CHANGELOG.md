@@ -8,6 +8,127 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-22 — Matthew Recker via Claude (fifth batch — P1.1, P1.2, P1.4)
+
+Three roadmap items that are one feature in practice: a grid, the page you reach by clicking a name
+in it, and the thing you do on that page. Scoped in
+[`site/app/PLAN-2026-07-22-GRADEBOOK.md`](site/app/PLAN-2026-07-22-GRADEBOOK.md).
+
+### Schema — `011_ei_sessions.sql`, **applied** to `app`
+
+Extra-instruction logging (P1.4). Keyed on `enrollment_id` — which makes the RLS predicate
+byte-identical to the reviewed one already on `extensions` and `grades`, the practical reason for
+the choice as much as the modelling one.
+
+**Four decisions recorded in the migration header, because each is the kind that reads as an
+oversight later:**
+
+- **No unique constraint.** EI is repeatable; the same cadet may come twice in a week. `extensions`
+  keeps one only because PostgREST upsert needs a conflict target (007:49-56), and these are plain
+  inserts. A unique key here would silently swallow the second visit.
+- **`batch_id`.** Six cadets after one class are one event. Without a shared id, fixing a mistyped
+  duration is six edits and "how many sessions did I hold" has no answer. NULL for a single log, so
+  `batch_id IS NOT NULL` keeps meaning "this was a group sitting".
+- **No self-attribution trigger**, unlike `review_signoffs`. A director logging on behalf of the
+  colleague who ran the session is a real case, and an EI row confers nothing and costs the student
+  nothing. Revisit if EI attendance ever feeds a grade.
+- **No student read policy at all** — director's decision, ROADMAP §6 Q3. This is the `extensions`
+  block *minus* `extensions_own`, and the absence **is** the enforcement. It matters because `notes`
+  holds an instructor's candid read of a cadet.
+
+No `GRANT`s, following the convention `008_student_identity.sql:147-149` states: default privileges
+already cover a table the owner creates. 009 and 010 drifted from that; 009's `GRANT SELECT` is
+actively misleading, since it reads as a read-only restriction while INSERT/UPDATE/DELETE were
+already granted — the table is protected by the missing write policy, not by the grant.
+
+### P1.1 — Gradebook · `faculty/gradebook.html` + `js/faculty-gradebook.js`
+
+Sticky student column, sticky header row, shortcode column headers (`preflight-02` → `PF02`), a
+totals column, and bulk EI logging. Ungated in the nav, like Grade — an instructor sees their own
+sections and RLS enforces it.
+
+- **Five cell states, and only one renders blank.** graded · draft (AI suggestion, unconfirmed) ·
+  ungraded (work arrived) · missing (past due, nothing) · pending (not due). A blank that could mean
+  either "not due" or "never handed in" is the defect that makes a gradebook untrustworthy.
+- **A lesson counts toward the percentage only once its deadline has passed.** Without that rule
+  every cadet reads 0% on day one because 39 lessons they cannot yet have done are already counted
+  against them. Missing counts zero-out-of-full; pending is not in the sum at all.
+- **Zero is its own band.** Missing work and failing work are different facts and must not share a
+  colour. The six bands bind to the `--d0…--d5` data-viz ramp, deliberately **not** the
+  full/warn/zero triad — that palette is a contract with `question_scores[].status`
+  (DESIGN.md:237-243) and a 65% total must not read as a flagged answer.
+- **Deliberately narrow selects.** Not `OFFERING_SELECT` (which pulls every question of every
+  lesson), not `GRADE_SELECT` (`question_scores`/`diagnostic`), not `SUBMISSION_SELECT` (every
+  report blob). P3.7 asks for a performance budget before the grid is built rather than after.
+- **Extensions are honoured.** `faculty-data.js:148` hardcodes `null` for the extension argument to
+  `effectiveDue`, so its status calls a student overdue who holds an active one. On a dashboard tile
+  that is a rounding error; on a gradebook it is a red cell against a cadet who did nothing wrong.
+  This follows `faculty-grade.js` instead.
+
+### P1.2 — Per-student detail · `faculty/student.html` + `js/faculty-student.js`
+
+Reached by clicking a name in the gradebook or the roster; no nav entry, like `report.html`. Keyed
+on the enrolment, which is what every policy keys on. Stat tiles, per-lesson table, the student's
+actual work, misconceptions folded across the term, EI history, and an advising note.
+
+- **The two layers sit side by side here and nowhere else.** Points are the grade; the 0–5 effort
+  and understanding columns are diagnostics, styled quieter and never added to the total. The
+  gradebook deals only in points because a grid cell cannot explain itself; this page can.
+- **Misconceptions folded across the term** — the one view in PREP that answers "is this student
+  repeatedly wrong about the *same* thing". Uses the rollup's own `canonMisconceptionId()`, so
+  `scalar-sum` / `Scalar-Sum` / `scalar sum` fold here exactly as they do on the cohort view.
+- **The advising note** (djGradebookProject's Comment Card): grade, section comparison, missing work
+  *named with due dates*, understanding average, recurring sticking points, EI count, plus a
+  free-text box and Copy. Plain text on purpose — it is going into an email, and what the instructor
+  sees before copying is exactly what they get.
+- **`backTarget()` allowlists.** `document.referrer` is attacker-controllable, so a back link built
+  from it unvalidated is an open redirect. It returns a bare relative filename from a six-entry
+  list, never the referrer itself.
+- **Q1 stays hidden**, matching `grade.html:207,215` and CORE.md §2 — and filtered by the points
+  *property*, not by position, which is the defect LEGACY-AUDIT:102-108 flags.
+- **The class comparison loads after first paint** and is dropped silently if it fails. It is a much
+  wider read than the rest of the page, and the page is useful without it.
+
+### P1.4 — EI logging, single and bulk · `js/faculty-ei.js`
+
+Both paths in one pass, per the roadmap: a design where bulk is a bolt-on "will be abandoned by week
+three", because the common event is several cadets at once, most days.
+
+- **Single** — on the student page, prefilled with today, the current local time floored to 5
+  minutes, and 30 minutes. Editable, and editable again afterwards.
+- **Bulk** — on the gradebook, a mode that turns the name column into checkboxes. Pick a
+  time once, tick who was there, log. One `batch_id`.
+- **Writes are sequential and failures are per student**, copied from the P1.12 extension batch:
+  "logged 4 of 6, failed: Smith, Jones" is actionable; one rejected promise is not.
+- **Times store UTC, render local.** Both conversions are pure functions with a round-trip test —
+  a session logged an hour off still looks fine, which is why it needs a test rather than a review.
+- **Editing does not re-attribute.** An edit corrects the record of a session; it does not silently
+  change who held it.
+
+### Verification
+
+| Layer | Result |
+|---|---|
+| `tests/app-schema` full run | **exit 0**, 0 failures — 339 in-process + 190/82/73/56/28/22/19/12 spawned |
+| `app_invariant_test.py` | **33/33** (was 22 — 11 new for `ei_sessions`) |
+| `app_rls_test.py` | **45/45** (was 35 — 10 new, incl. *a student cannot read their own EI log*) |
+| `app_tier_check.py` | all tiers pass |
+| Browser boot check | 10/10 — both new pages plus three existing, light and dark, no console errors |
+
+New suites: `test-gradebook.mjs` **73/0**, `test-ei.mjs` **82/0**, `test-student-detail.mjs`
+**56/0**. Two existing guards fired and were correct: `test-db-schema.mjs`'s table count (24 → 25)
+and `system-prefs.js`'s curated-column list, which now covers `ei_sessions` — with `notes`
+deliberately excluded from the generic table browser.
+
+**Not yet verified, and it is the real gap:** neither page has been seen rendered by a signed-in
+faculty user. The boot check proves every module parses, evaluates and redirects cleanly in both
+themes, but it cannot prove the grid *looks* right, and no assertion here has run against real
+Fall 2026 data. There is also **no EI data and no late work in the term yet** (the active preflight
+is due Aug 9), so bulk logging and the late chip are exercised by fixtures and the logic harness
+only. This needs a `tests/browser-harness/pass.mjs` run with the test faculty credentials — the same
+gap P0.5 closed for the previous batch, and it should be closed the same way before P0.2 deletes
+that account.
+
 ## 2026-07-22 — Matthew Recker via Claude (fourth batch — P1.3, P1.5, P1.6/P1.15, P1.7)
 
 ### Schema — `010_user_preferences.sql`, **applied** to `app`

@@ -120,7 +120,7 @@
             <thead><tr><th>Student ID</th><th>Name</th><th>Email</th><th>Sqdn</th><th>Section</th><th style="text-align:center">Auth</th><th></th></tr></thead>
             <tbody>${students.map(s => `<tr>
               <td>${s.student_id}</td>
-              <td>${esc(lastFirst(s.name))}</td>
+              <td><a href="student.html?e=${encodeURIComponent(s.enrollment_id)}">${esc(lastFirst(s.name))}</a></td>
               <td class="muted" style="font-size:0.9em">${s.email ? esc(s.email) : '<span title="No address on file — this cadet predates the registrar import.">—</span>'}</td>
               <td>${esc(s.squadron || '—')}</td>
               <td>${esc(s.section_code)}</td>

@@ -20,6 +20,7 @@ than asserted:
   8. an unlock must name who performed it; an attributed unlock releases the lock
   9. flipping grading_role mid-term redirects NEW choices without breaking existing rows
      (the "if the interactive breaks, kick everyone over to the questions" case)
+ 10. ei_sessions is repeatable, bounded, batch-groupable, and dies with its enrolment
 
 Usage:
   .venv/Scripts/python supabase/admin/app_invariant_test.py
@@ -259,6 +260,79 @@ def main():
                                           chosen_activity_id,status)
                  VALUES (%s,%s,%s,'draft')""", (e2, ao, a_written))
     cur.execute("ROLLBACK TO SAVEPOINT flip")
+
+    print("\n--- 10. ei_sessions (migration 011) ---")
+    cur.execute("SAVEPOINT ei")
+
+    # A second enrolment, for the batch check. Group 9 built one, but inside its own savepoint,
+    # which has already been rolled back — so this block owns its fixture rather than reaching
+    # for a name that no longer resolves to a row.
+    cur.execute("INSERT INTO students (student_id,name) VALUES (3000000003,'Third Cadet')")
+    cur.execute("INSERT INTO enrollments (student_id,section_id) VALUES (3000000003,%s) RETURNING id",
+                (section,))
+    ei_e2 = cur.fetchone()[0]
+
+    # The whole point of the table: the same cadet may come back. `extensions` refuses a second
+    # row for the same (enrolment, offering); this must NOT, or the second visit is swallowed.
+    cur.execute("""INSERT INTO ei_sessions (enrollment_id,instructor_id,started_at,duration_minutes)
+                   VALUES (%s,%s,now(),30) RETURNING id""", (enrollment, instructor))
+    ei_1 = cur.fetchone()[0]
+    expect_ok(cur, "a SECOND session for the same enrolment is allowed (EI is repeatable)",
+              """INSERT INTO ei_sessions (enrollment_id,instructor_id,started_at,duration_minutes)
+                 VALUES (%s,%s,now(),45)""", (enrollment, instructor))
+
+    cur.execute("SELECT duration_minutes FROM ei_sessions WHERE id=%s", (ei_1,))
+    check("duration defaults to 30 minutes", cur.fetchone()[0] == 30)
+
+    # started_at has no default ON PURPOSE (see the migration header) — logging after the fact is
+    # the common case and a default would let a mistake pass as a fact. Prove the omission holds.
+    expect_error(cur, "started_at is required — there is no now() default to hide a mistake",
+                 "INSERT INTO ei_sessions (enrollment_id,instructor_id) VALUES (%s,%s)",
+                 (enrollment, instructor))
+
+    # The typo guard, both ends.
+    expect_error(cur, "a zero-minute session is refused",
+                 """INSERT INTO ei_sessions (enrollment_id,started_at,duration_minutes)
+                    VALUES (%s,now(),0)""", (enrollment,))
+    expect_error(cur, "a session longer than 8 hours is refused (stray digit)",
+                 """INSERT INTO ei_sessions (enrollment_id,started_at,duration_minutes)
+                    VALUES (%s,now(),481)""", (enrollment,))
+    expect_ok(cur, "480 minutes is allowed — the bound is a typo guard, not a policy",
+              """INSERT INTO ei_sessions (enrollment_id,started_at,duration_minutes)
+                 VALUES (%s,now(),480)""", (enrollment,))
+
+    expect_error(cur, "a note longer than 4000 chars is refused",
+                 """INSERT INTO ei_sessions (enrollment_id,started_at,notes)
+                    VALUES (%s,now(),%s)""", (enrollment, "x" * 4001))
+
+    # One bulk log = one batch_id across several enrolments, so a wrong duration is one edit.
+    cur.execute("""INSERT INTO ei_sessions (enrollment_id,instructor_id,started_at,batch_id)
+                   VALUES (%s,%s,now(),gen_random_uuid()) RETURNING batch_id""",
+                (enrollment, instructor))
+    batch = cur.fetchone()[0]
+    cur.execute("""INSERT INTO ei_sessions (enrollment_id,instructor_id,started_at,batch_id)
+                   VALUES (%s,%s,now(),%s)""", (ei_e2, instructor, batch))
+    cur.execute("UPDATE ei_sessions SET duration_minutes=20 WHERE batch_id=%s", (batch,))
+    check("a batch is correctable as one unit", cur.rowcount == 2)
+
+    # An instructor leaving must not erase the record that the sessions happened.
+    cur.execute("SELECT confdeltype FROM pg_constraint WHERE conname='ei_sessions_instructor_id_fkey'")
+    check("instructor_id is ON DELETE SET NULL, so departing staff do not erase history",
+          cur.fetchone()[0] == "n")
+
+    # …but the rows are the cadet's term record, so they go when the enrolment does.
+    cur.execute("SELECT confdeltype FROM pg_constraint WHERE conname='ei_sessions_enrollment_id_fkey'")
+    check("enrollment_id is ON DELETE CASCADE, so a dropped enrolment takes its log",
+          cur.fetchone()[0] == "c")
+
+    # ROADMAP Q3: students cannot read their own. Enforcement is the ABSENCE of a student policy,
+    # so assert the absence structurally — app_rls_test.py proves the behaviour.
+    cur.execute("""SELECT count(*) FROM pg_policies
+                    WHERE schemaname='app' AND tablename='ei_sessions'""")
+    check("ei_sessions carries exactly the two staff policies and no student policy",
+          cur.fetchone()[0] == 2)
+
+    cur.execute("ROLLBACK TO SAVEPOINT ei")
 
     conn.rollback()
     cur.execute("SELECT count(*) FROM app.courses WHERE code='__t-215'")

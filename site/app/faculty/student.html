@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+</head>
+<body>
+  <header id="topnav"></header>
+  <main class="page-wide" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Loading…</span></div>
+  </main>
+
+  <div class="modal-backdrop" id="ei-modal">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head"><h2 id="ei-title">Log extra instruction</h2><button class="modal-close" data-close>×</button></div>
+      <div id="ei-who" class="muted" style="font-size:.86em;margin-bottom:14px"></div>
+      <div class="row wrap" style="gap:12px">
+        <div class="field grow"><label for="ei-when">Date and time</label>
+          <input id="ei-when" type="datetime-local">
+          <div class="field-hint">Your local time. Stored in UTC.</div></div>
+        <div class="field" style="min-width:140px"><label for="ei-dur">Minutes</label>
+          <input id="ei-dur" type="number" min="1" max="480" step="5" value="30"></div>
+      </div>
+      <div class="field"><label for="ei-notes">Notes <span class="muted">(optional)</span></label>
+        <textarea id="ei-notes" rows="3" placeholder="What you covered, what to follow up on…"></textarea>
+        <div class="field-hint">Staff only — students cannot see their EI log or these notes.</div></div>
+      <div class="error-msg" id="ei-error" style="min-height:1em"></div>
+      <div class="row" style="gap:10px">
+        <button class="btn btn-primary" id="ei-save">Log session</button>
+        <button class="btn btn-secondary" data-close>Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { runPage, esc, lastFirst, fmtDate, fmtDateTime } from '../js/util.js';
+    import * as S from '../js/faculty-student.js';
+    import * as EI from '../js/faculty-ei.js';
+    import { CELL } from '../js/faculty-gradebook.js';
+
+    const ctx = await bootstrap({ require: 'faculty' });
+    runPage(ctx, init);
+
+    const params = new URLSearchParams(location.search);
+    const enrollmentId = params.get('e');
+    // Captured at load: navigating within the page (opening a modal) does not change
+    // document.referrer, but a later render must not re-read a value that has gone stale.
+    const back = S.backTarget(document.referrer);
+
+    let vm = null, rows = [], totals = null, classStats = null, editingId = null;
+
+    async function init() {
+      initTheme();
+      renderNav(ctx, { active: '' });
+      wireEiModal();
+      await load();
+    }
+
+    async function load() {
+      const root = document.getElementById('main');
+      root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
+
+      const res = await S.loadStudentDetail(ctx, enrollmentId);
+      if (res.noCourse)   return fail('No course access.');
+      if (res.notFound)   return fail('That student is not in any section you can see.');
+      if (res.otherCourse) return fail('That student is enrolled in a different course. Switch course from the user menu.');
+      if (res.error)      return fail('Could not load: ' + res.error.message);
+
+      vm = res;
+      rows = S.lessonRows(res);
+      totals = S.studentTotals(rows);
+      render();
+
+      // Cohort context arrives after first paint. It is a much wider read than the rest of this
+      // page and the page is useful without it, so it must never gate the render.
+      S.loadClassContext(ctx, res.enrollment.sectionId).then(cs => {
+        classStats = cs?.section || null;
+        const host = document.getElementById('sd-compare');
+        if (host && classStats) host.outerHTML = compareCard();
+        const ta = document.getElementById('sd-comment-text');
+        if (ta && !ta.dataset.touched) ta.value = buildComment();
+      });
+    }
+
+    function fail(msg) {
+      document.getElementById('main').innerHTML =
+        `<div class="page-head"><h1>Student</h1></div>
+         <div class="alert alert-warn">${esc(msg)}</div>
+         <a class="btn btn-secondary btn-sm" href="${esc(back)}">← Back</a>`;
+    }
+
+    /* ── render ────────────────────────────────────────────────────────── */
+    function render() {
+      const st = vm.student, en = vm.enrollment;
+      document.title = `${st.name || en.studentId} · PREP`;
+
+      document.getElementById('main').innerHTML = `
+        <div class="sd-head">
+          <div class="grow">
+            <div class="sd-back"><a href="${esc(back)}">← Back</a></div>
+            <div class="page-head" style="margin-bottom:6px"><h1>${esc(st.name || String(en.studentId))}</h1></div>
+            <div class="sd-meta">
+              <span>${esc(String(en.studentId))}</span>
+              <span>Section <strong>${esc(en.sectionCode)}</strong></span>
+              ${st.squadron ? `<span>CS ${esc(st.squadron)}</span>` : ''}
+              ${st.email ? `<span>${esc(st.email)}</span>` : '<span title="No address on file — predates the registrar import.">no email on file</span>'}
+              ${st.auth_user_id ? '' : '<span class="tag gold">no sign-in yet</span>'}
+              ${en.status !== 'active' ? `<span class="tag danger">${esc(en.status)}</span>` : ''}
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" id="ei-add">＋ Log extra instruction</button>
+        </div>
+
+        <div class="stat-grid" style="margin-bottom:20px">
+          ${statTile('Points to date', totals.pct == null ? '—' : `${Math.round(totals.pct * 100)}%`,
+                     `${totals.earned} of ${totals.possible} · ${totals.counted} lesson(s) due`, 'blue')}
+          ${statTile('Missing', String(rows.filter(r => r.cell.state === CELL.MISSING).length),
+                     'past due, nothing submitted', 'red')}
+          ${statTile('Awaiting grading', String(rows.filter(r => r.cell.state === CELL.UNGRADED).length),
+                     'submitted, not yet scored', 'amber')}
+          <div id="sd-compare"></div>
+        </div>
+
+        ${lessonTable()}
+        ${misconceptionCard()}
+        ${eiCard()}
+        ${commentCardHTML()}`;
+
+      document.getElementById('ei-add').addEventListener('click', () => openEi(null));
+      document.querySelectorAll('[data-ei-edit]').forEach(b =>
+        b.addEventListener('click', () => openEi(b.dataset.eiEdit)));
+      document.querySelectorAll('[data-ei-del]').forEach(b =>
+        b.addEventListener('click', () => removeEi(b.dataset.eiDel)));
+      document.getElementById('sd-copy')?.addEventListener('click', copyComment);
+      document.getElementById('sd-comment-text')?.addEventListener('input', e => {
+        e.target.dataset.touched = '1';   // stop the async class-context fill from clobbering edits
+      });
+    }
+
+    function statTile(label, num, sub, accent) {
+      return `<div class="stat-tile accent-${accent}"><div class="stat-body">
+        <div class="stat-num">${esc(num)}</div>
+        <div class="stat-label">${esc(label)}</div>
+        <div class="stat-sub">${esc(sub)}</div></div></div>`;
+    }
+
+    function compareCard() {
+      if (!classStats || totals.pct == null || classStats.median == null) return '<div id="sd-compare"></div>';
+      const d = Math.round((totals.pct - classStats.median) * 100);
+      const word = d > 1 ? `+${d} pts vs section` : d < -1 ? `${d} pts vs section` : 'level with section';
+      return `<div id="sd-compare" class="stat-tile accent-${d < -5 ? 'red' : d > 5 ? 'green' : 'blue'}">
+        <div class="stat-body"><div class="stat-num">${Math.round(classStats.median * 100)}%</div>
+        <div class="stat-label">Section median</div>
+        <div class="stat-sub">${esc(word)}</div></div></div>`;
+    }
+
+    function lessonTable() {
+      if (!rows.length) return `<div class="card"><div class="empty-state"><div class="es-ic">📚</div>
+        <h3>No published lessons</h3><p>Nothing has been scheduled in this course yet.</p></div></div>`;
+
+      const body = rows.map(r => `<tr>
+        <td class="sd-code" title="${esc(r.title)}">${esc(r.code)}</td>
+        <td>${esc(r.title)}
+          ${r.late ? `<span class="tag-late" style="margin-left:6px">⏰ ${esc(r.lateLabel)}</span>` : ''}
+          ${r.extended ? '<span class="ext-chip" style="margin-left:6px">extended</span>' : ''}
+          ${work(r)}</td>
+        <td class="sd-num muted" style="font-size:.8em">${r.due ? esc(fmtDate(new Date(r.due))) : '—'}</td>
+        <td class="sd-num">${statusChip(r)}</td>
+        <td class="sd-num">${r.cell.points == null ? '<span class="muted">—</span>'
+            : `${r.cell.points}<span class="muted">/${r.cell.possible}</span>`}</td>
+        <td class="sd-num">${r.effort == null ? '<span class="muted">—</span>' : `<span class="sd-dial" title="Engagement, 0–5. A measurement, not a grade.">${r.effort}/5</span>`}</td>
+        <td class="sd-num">${r.understanding == null ? '<span class="muted">—</span>' : `<span class="sd-dial" title="Demonstrated understanding, 0–5. A measurement, not a grade.">${r.understanding}/5</span>`}</td>
+      </tr>`).join('');
+
+      return `<div class="card"><div class="card-title">Lessons</div>
+        <div class="card-meta">Points are the grade. The two 0–5 columns are diagnostics — they are never added to the total.</div>
+        <div class="table-wrap"><table class="sd-lessons">
+          <thead><tr><th></th><th>Lesson</th><th>Due</th><th>Status</th><th>Points</th>
+            <th title="Engagement, 0–5">Effort</th><th title="Demonstrated understanding, 0–5">Underst.</th></tr></thead>
+          <tbody>${body}</tbody></table></div></div>`;
+    }
+
+    function statusChip(r) {
+      switch (r.cell.state) {
+        case CELL.GRADED:   return '<span class="score-badge full">graded</span>';
+        case CELL.DRAFT:    return '<span class="tag-ai">AI suggestion</span>';
+        case CELL.UNGRADED: return '<span class="score-badge pending">ungraded</span>';
+        case CELL.MISSING:  return '<span class="score-badge zero">missing</span>';
+        default:            return '<span class="muted" style="font-size:.8em">not due</span>';
+      }
+    }
+
+    // Q1 is zero-point and stays hidden here exactly as it does on the Grade tab
+    // (grade.html:207,215; CORE.md §2). visibleQuestions() is the filter.
+    function work(r) {
+      const qs = S.visibleQuestions(r.writtenQuestions);
+      const answers = r.writtenAnswers || {};
+      const hasWritten = qs.some(q => answers[q.id]);
+      if (!hasWritten && !r.reportMarkdown) return '';
+      const qa = qs.filter(q => answers[q.id]).map(q => `<div class="sd-qa">
+          <div class="sd-q">${esc(q.prompt || q.text || q.id)}</div>
+          <div class="sd-a">${esc(String(answers[q.id]))}</div></div>`).join('');
+      return `<details class="sd-work"><summary>Show work</summary>${qa}
+        ${r.reportMarkdown ? `<div class="sd-qa"><div class="sd-q">Interactive lesson report</div>
+          <div class="sd-a">${esc(r.reportMarkdown.slice(0, 4000))}</div></div>` : ''}</details>`;
+    }
+
+    function misconceptionCard() {
+      const mc = S.foldMisconceptions(rows);
+      if (!mc.length) return '';
+      return `<div class="card"><div class="card-title">Sticking points across the term</div>
+        <div class="card-meta">Folded from every graded lesson. Repeats first — a misconception seen three times is the conversation.</div>
+        <div class="sd-mc">${mc.map(m => `<div class="sd-mc-row">
+          <div class="sd-mc-n">${m.count}×</div>
+          <div class="sd-mc-body"><strong>${esc(m.description || m.id)}</strong>
+            <div class="sd-mc-where">${esc(m.lessons.map(l => l.code).join(' · '))}</div></div>
+        </div>`).join('')}</div></div>`;
+    }
+
+    function eiCard() {
+      const sum = EI.summarizeEi(vm.ei);
+      const list = vm.ei.length ? vm.ei.map(s => `<div class="sd-ei-row">
+          <span class="sd-ei-when">${esc(fmtDateTime(new Date(s.started_at)))}</span>
+          <span>${esc(EI.fmtDuration(s.duration_minutes))}</span>
+          <span class="sd-ei-note">${esc(s.notes || '')}
+            ${s.batch_id ? '<span class="sd-ei-batch">· group session</span>' : ''}</span>
+          <span class="muted" style="font-size:.78em">${esc(s.instructors?.name || '')}</span>
+          <button class="btn btn-ghost btn-sm" data-ei-edit="${esc(s.id)}">Edit</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--red)" data-ei-del="${esc(s.id)}">Delete</button>
+        </div>`).join('')
+        : `<div class="muted" style="font-size:.88em">No sessions logged.</div>`;
+
+      return `<div class="card"><div class="card-title">Extra instruction</div>
+        <div class="card-meta">${sum.total} session(s) · ${EI.fmtDuration(sum.totalMinutes)} total.
+          Staff only — this cadet cannot see any of it.</div>
+        ${vm.eiError ? `<div class="alert alert-warn">Could not load EI: ${esc(vm.eiError.message)}</div>` : list}</div>`;
+    }
+
+    function buildComment() {
+      return S.commentCard({
+        student: vm.student, enrollment: vm.enrollment, totals, rows, ei: vm.ei, classStats,
+        freeText: '',
+      });
+    }
+
+    function commentCardHTML() {
+      return `<div class="card sd-comment"><div class="card-title">Advising note</div>
+        <div class="card-meta">Assembled from this page. Edit freely, then copy it into an email — it is plain text on purpose.</div>
+        <textarea id="sd-comment-text" spellcheck="true">${esc(buildComment())}</textarea>
+        <div class="row" style="gap:10px;margin-top:12px">
+          <button class="btn btn-secondary btn-sm" id="sd-copy">Copy to clipboard</button>
+          <span id="sd-copy-status" class="muted" style="font-size:.82em"></span></div></div>`;
+    }
+
+    async function copyComment() {
+      const txt = document.getElementById('sd-comment-text').value;
+      const st = document.getElementById('sd-copy-status');
+      try {
+        await navigator.clipboard.writeText(txt);
+        st.style.color = 'var(--green)'; st.textContent = '✓ Copied';
+      } catch {
+        // clipboard is origin- and gesture-gated and fails on plain http; select the text so the
+        // operator can still Ctrl+C rather than being told "copy failed" with no way forward.
+        document.getElementById('sd-comment-text').select();
+        st.style.color = 'var(--muted)'; st.textContent = 'Selected — press Ctrl+C';
+      }
+      setTimeout(() => { st.textContent = ''; }, 3000);
+    }
+
+    /* ── EI ────────────────────────────────────────────────────────────── */
+    function wireEiModal() {
+      const m = document.getElementById('ei-modal');
+      m.addEventListener('click', e => {
+        if (e.target === m || e.target.dataset.close !== undefined) m.classList.remove('open');
+      });
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && m.classList.contains('open')) m.classList.remove('open');
+      });
+      document.getElementById('ei-save').addEventListener('click', saveEi);
+    }
+
+    function openEi(id) {
+      editingId = id || null;
+      const row = id ? vm.ei.find(s => s.id === id) : null;
+      document.getElementById('ei-title').textContent = row ? 'Edit session' : 'Log extra instruction';
+      document.getElementById('ei-who').innerHTML = `<strong>${esc(vm.student.name || '')}</strong> · ${esc(vm.enrollment.sectionCode)}`;
+      document.getElementById('ei-when').value = row ? EI.fromUtcISO(row.started_at) : EI.localInputValue(new Date());
+      document.getElementById('ei-dur').value = row ? row.duration_minutes : EI.DEFAULT_DURATION;
+      document.getElementById('ei-notes').value = row?.notes || '';
+      document.getElementById('ei-error').textContent = '';
+      document.getElementById('ei-save').textContent = row ? 'Save changes' : 'Log session';
+      document.getElementById('ei-modal').classList.add('open');
+      document.getElementById('ei-when').focus();
+    }
+
+    async function saveEi() {
+      const err = document.getElementById('ei-error');
+      const btn = document.getElementById('ei-save');
+      const payload = {
+        enrollmentIds: [vm.enrollment.enrollmentId],
+        instructorId: ctx.instructorRow?.id || null,
+        startedAt: document.getElementById('ei-when').value,
+        durationMinutes: document.getElementById('ei-dur').value,
+        notes: document.getElementById('ei-notes').value,
+      };
+      const problem = EI.validateEi(payload);
+      if (problem) { err.textContent = problem; return; }
+
+      btn.disabled = true;
+      const label = btn.textContent;
+      btn.innerHTML = '<span class="spinner on-dark"></span> Saving…';
+
+      let error = null;
+      if (editingId) {
+        const [row] = EI.eiRows(payload);
+        // instructor_id is NOT patched — an edit corrects the record of a session, it does not
+        // reassign who held it. Changing that silently would rewrite attribution on a typo fix.
+        ({ error } = await EI.updateEi(editingId, {
+          started_at: row.started_at, duration_minutes: row.duration_minutes, notes: row.notes,
+        }));
+      } else {
+        const res = await EI.logEi(EI.eiRows(payload));
+        error = res.failed[0]?.error || null;
+      }
+
+      btn.disabled = false; btn.textContent = label;
+      if (error) { err.textContent = 'Save failed: ' + error.message; return; }
+      document.getElementById('ei-modal').classList.remove('open');
+      await load();
+    }
+
+    async function removeEi(id) {
+      if (!confirm('Delete this EI session? This cannot be undone.')) return;
+      const { error } = await EI.deleteEi(id);
+      if (error) { alert('Could not delete: ' + error.message); return; }
+      await load();
+    }
+  </script>
+</body>
+</html>

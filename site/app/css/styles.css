@@ -1794,3 +1794,105 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 .pwbar.s1 span { width: 40%;  background: var(--red); }
 .pwbar.s2 span { width: 70%;  background: var(--gold); }
 .pwbar.s3 span { width: 100%; background: var(--green); }
+
+/* =============================================================
+ *  Gradebook grid + per-student detail  (roadmap P1.1 / P1.2 / P1.4)
+ *
+ *  The grid is the densest surface in PREP and the only one where scrolling in two axes is
+ *  normal, so it gets three things the other tables do not: a sticky student column, a sticky
+ *  header row, and a fixed narrow column width driven by the shortcode headers.
+ *
+ *  COLOUR NOTE. The totals column uses the --d0..--d5 DISTRIBUTION ramp, not the
+ *  full/warn/zero green-amber-red triad. That triad is a contract with
+ *  question_scores[].status (DESIGN.md:237-243) and reusing it for a percentage scale would
+ *  make a 65% total read as a flagged answer. Zero is its own band (--d0) so that missing
+ *  work and failing work never share a colour.
+ * ============================================================= */
+
+.gb-wrap { max-height: calc(100vh - 320px); overflow: auto; position: relative; }
+.gb { border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
+
+/* Three sticky layers. The corner cell must outrank both or it is overlapped by whichever
+   neighbour scrolls under it, which reads as a rendering bug. */
+.gb thead th { position: sticky; top: 0; z-index: 2; }
+.gb .gb-name, .gb .gb-pick { position: sticky; background: var(--card); z-index: 1; }
+.gb .gb-pick { left: 0; width: 34px; text-align: center; }
+.gb .gb-name { left: 0; min-width: 190px; }
+.gb thead .gb-name, .gb thead .gb-pick { z-index: 3; background: var(--th-bg); }
+/* When the pick column is present the name column sits beside it, not under it. */
+.gb .gb-pick + .gb-name { left: 34px; }
+.gb tr:hover .gb-name, .gb tr:hover .gb-pick { background: var(--surface-hover); }
+
+.gb th, .gb td { border-bottom: 1px solid var(--border); }
+.gb .gb-name a { color: var(--blue); text-decoration: none; font-weight: 600; }
+.gb .gb-name a:hover { text-decoration: underline; }
+.gb .gb-sec { color: var(--muted); font-size: 0.86em; white-space: nowrap; }
+
+/* ~5rem is what makes 40 lessons fit at all; the full title lives on title= and aria-label. */
+.gb .gb-col { width: 4.6rem; min-width: 4.6rem; text-align: center; font-size: 0.78em;
+  letter-spacing: 0.02em; padding: 8px 4px; }
+.gb .gb-cell { text-align: center; padding: 7px 4px; font-size: 0.9em; }
+
+.gb .gb-missing  { color: var(--red); font-weight: 700; }
+.gb .gb-ungraded { color: var(--muted); font-weight: 700; }
+.gb .gb-draft    { color: var(--text-soft); font-style: italic; }
+.gb .gb-draft sup { color: var(--gold); font-style: normal; }
+.gb .gb-pending  { background: repeating-linear-gradient(135deg,
+  transparent, transparent 5px, var(--surface-sunken) 5px, var(--surface-sunken) 6px); }
+
+.gb .gb-total { position: sticky; right: 0; background: var(--card); text-align: right;
+  white-space: nowrap; min-width: 92px; border-left: 1px solid var(--border); }
+.gb thead .gb-total { background: var(--th-bg); z-index: 3; }
+.gb .gb-frac { display: block; font-size: 0.72em; color: var(--muted); font-weight: 400; }
+/* A 4px rail rather than a fill: a saturated background behind every total would dominate a
+   screen whose subject is the cells, and it keeps the number readable in both themes. */
+.gb .gb-total[class*="band-"] { border-right: 4px solid var(--border); }
+.gb .band-d0 { border-right-color: var(--d0); }
+.gb .band-d1 { border-right-color: var(--d1); }
+.gb .band-d2 { border-right-color: var(--d2); }
+.gb .band-d3 { border-right-color: var(--d3); }
+.gb .band-d4 { border-right-color: var(--d4); }
+.gb .band-d5 { border-right-color: var(--d5); }
+
+.gb-legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 12px;
+  font-size: 0.78em; color: var(--text-soft); }
+.gb-legend .gb-key { display: inline-block; min-width: 1.4em; text-align: center; font-weight: 700; }
+
+/* ── Per-student detail ──────────────────────────────────────────────────── */
+.sd-head { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; margin-bottom: 18px; }
+.sd-back { font-size: 0.84em; }
+.sd-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.84em; color: var(--muted); }
+
+.sd-lessons td { vertical-align: middle; }
+.sd-lessons .sd-code { font-weight: 700; font-size: 0.8em; color: var(--blue); white-space: nowrap; }
+.sd-num { text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The 0-5 diagnostics. Deliberately quieter than the points column beside them: they are a
+   measurement, not a grade, and must not read as one. */
+.sd-dial { display: inline-block; min-width: 2.6em; padding: 1px 6px; border-radius: var(--radius-sm);
+  background: var(--surface-sunken); font-size: 0.8em; color: var(--text-soft); }
+
+.sd-work { margin-top: 6px; }
+.sd-work summary { cursor: pointer; font-size: 0.84em; color: var(--blue); }
+.sd-qa { border-left: 3px solid var(--border); padding: 4px 0 4px 12px; margin: 10px 0; }
+.sd-q { font-size: 0.8em; color: var(--muted); margin-bottom: 3px; }
+.sd-a { font-size: 0.88em; white-space: pre-wrap; }
+
+.sd-mc { display: flex; flex-direction: column; gap: 8px; }
+.sd-mc-row { display: flex; gap: 10px; align-items: baseline; padding: 8px 10px;
+  border: 1px solid var(--border); border-left: 3px solid var(--gold);
+  border-radius: var(--radius-sm); background: var(--surface-sunken); }
+.sd-mc-n { font-weight: 800; color: var(--gold); min-width: 2.2em; }
+.sd-mc-body { flex: 1; }
+.sd-mc-where { font-size: 0.76em; color: var(--muted); margin-top: 2px; }
+
+.sd-ei-row { display: flex; gap: 12px; align-items: baseline; padding: 8px 0;
+  border-bottom: 1px solid var(--border); font-size: 0.88em; }
+.sd-ei-row:last-child { border-bottom: none; }
+.sd-ei-when { font-weight: 600; white-space: nowrap; }
+.sd-ei-note { color: var(--text-soft); flex: 1; }
+.sd-ei-batch { font-size: 0.72em; color: var(--muted); }
+
+/* Plain text on purpose — it is going into an email, and what the instructor sees before they
+   copy it is exactly what they get. That is the property that makes them trust it. */
+.sd-comment textarea { font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.82em; line-height: 1.5; min-height: 200px; }

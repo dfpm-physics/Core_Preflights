@@ -348,6 +348,58 @@ def main():
                  """INSERT INTO extensions (enrollment_id,assignment_offering_id,extended_due_at,reason)
                     VALUES (%s,%s,now() + interval '5 days','   ')""", (enr_a, ao))
 
+    # ---------------- ei_sessions (migration 011) ----------------
+    #
+    # The decision this block exists to keep: ROADMAP §6 Q3 — a student may NOT read their own EI
+    # log. Unlike every other rule in this suite, that one is enforced by the ABSENCE of a policy,
+    # and an absence is exactly the kind of thing a later migration adds back by accident while
+    # "making the table consistent with extensions". The first check below is the guard.
+    #
+    # It matters because `notes` holds an instructor's candid read of a cadet. A student read path
+    # would disclose it, and there would be nothing in the schema objecting.
+    #
+    # Scoped on enrolment, not IN_FIXTURE — ei_sessions has no assignment_offering_id, because a
+    # session is about a student and not about one lesson.
+    EI_IN_FIXTURE = "enrollment_id IN (%s,%s)"
+    cur.execute("RESET ROLE")
+    cur.execute("""INSERT INTO ei_sessions (enrollment_id,instructor_id,started_at,duration_minutes,notes)
+                   VALUES (%s,%s,now(),30,'fixture — candid note the cadet must not read')""",
+                (enr_a, teacher_uid))
+    cur.execute("""INSERT INTO ei_sessions (enrollment_id,instructor_id,started_at,duration_minutes)
+                   VALUES (%s,%s,now(),30)""", (enr_b, director_uid))
+
+    with Persona(cur, student_a_uid, "student A — ei_sessions") as p:
+        check("CANNOT see their OWN EI session (ROADMAP Q3 — the whole point of this table)",
+              p.count(f"SELECT count(*) FROM ei_sessions WHERE {EI_IN_FIXTURE}", (enr_a, enr_b)) == 0)
+        p.denied("CANNOT log an EI session for themselves",
+                 """INSERT INTO ei_sessions (enrollment_id,started_at,duration_minutes)
+                    VALUES (%s,now(),30)""", (enr_a,))
+        p.denied("CANNOT delete an EI session written about them",
+                 "DELETE FROM ei_sessions WHERE enrollment_id=%s", (enr_a,))
+
+    with Persona(cur, teacher_uid, "teacher — ei_sessions") as p:
+        check("sees the EI session for their own section, and ONLY that one",
+              p.count(f"SELECT count(*) FROM ei_sessions WHERE {EI_IN_FIXTURE}", (enr_a, enr_b)) == 1)
+        p.allowed("CAN log an EI session for a student in their own section",
+                  """INSERT INTO ei_sessions (enrollment_id,instructor_id,started_at,duration_minutes)
+                     VALUES (%s,%s,now(),30)""", (enr_a, teacher_uid))
+        p.allowed("CAN correct a session in their own section",
+                  "UPDATE ei_sessions SET duration_minutes=45 WHERE enrollment_id=%s", (enr_a,))
+        p.denied("CANNOT log an EI session outside their sections",
+                 """INSERT INTO ei_sessions (enrollment_id,started_at,duration_minutes)
+                    VALUES (%s,now(),30)""", (enr_b,))
+        # Section scope, not offering scope: an instructor must not read a colleague's notes on a
+        # cadet they do not teach, even inside the same course.
+        p.denied("CANNOT alter a session in a section they do not teach",
+                 "UPDATE ei_sessions SET duration_minutes=1 WHERE enrollment_id=%s", (enr_b,))
+
+    with Persona(cur, director_uid, "director — ei_sessions") as p:
+        check("sees EI sessions across the whole offering",
+              p.count(f"SELECT count(*) FROM ei_sessions WHERE {EI_IN_FIXTURE}", (enr_a, enr_b)) >= 2)
+        p.allowed("CAN log an EI session for any section of their offering",
+                  """INSERT INTO ei_sessions (enrollment_id,instructor_id,started_at,duration_minutes)
+                     VALUES (%s,%s,now(),30)""", (enr_b, director_uid))
+
     cur.execute("RESET ROLE")
     conn.rollback()
     cur.execute("SELECT count(*) FROM app.courses WHERE code='__r-215'")

@@ -10,7 +10,7 @@
 //
 // tests/app-schema/test-db-schema.mjs fails when this file drifts from live.
 //
-// Source: scripts/app/gen_db_schema.py · schema `app` · 24 tables
+// Source: scripts/app/gen_db_schema.py · schema `app` · 25 tables
 // Shape per table: { name, comment, rls, primaryKey[], labelColumn, columns[], foreignKeys[],
 //                    enums{col:[values]}, policyCommands[], writable }
 //
@@ -1126,6 +1126,146 @@ export const DB_SCHEMA = {
         }
       ],
       "foreignKeys": [],
+      "enums": {},
+      "policyCommands": [
+        "ALL",
+        "SELECT"
+      ],
+      "writable": true
+    },
+    "ei_sessions": {
+      "name": "ei_sessions",
+      "comment": "Extra-instruction sessions, one row per student per sitting, keyed on the enrolment so a record belongs to a student's place in a section in a term. STAFF-ONLY: there is no student read policy and that absence is deliberate (ROADMAP Q3) — `notes` may hold an instructor's candid assessment. Repeatable by design: no unique key. A bulk log shares one batch_id.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "enrollment_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "instructor_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Who held the session. Not forced to equal the caller: a director may log on behalf of the colleague who ran it. Revisit that if EI attendance ever becomes an input to a grade.",
+          "pk": false
+        },
+        {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Session start in UTC. Rendered in America/Denver by the client. No default — logging after the fact is the common case and a default would disguise a mistake as a fact.",
+          "pk": false
+        },
+        {
+          "name": "duration_minutes",
+          "type": "smallint",
+          "udt": "int2",
+          "nullable": false,
+          "default": "30",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "batch_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Shared uuid for every row logged in one bulk action; NULL for a single session. A grouping token, not an entity — it carries no foreign key.",
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "ei_sessions_enrollment_id_fkey",
+          "columns": [
+            "enrollment_id"
+          ],
+          "refTable": "enrollments",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "ei_sessions_instructor_id_fkey",
+          "columns": [
+            "instructor_id"
+          ],
+          "refTable": "instructors",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        }
+      ],
       "enums": {},
       "policyCommands": [
         "ALL",

@@ -46,6 +46,13 @@ const STUDENT_LINKS = [
 const FACULTY_LINKS = [
   { key: 'dashboard',    label: 'Dashboard',    href: 'dashboard.html',         icon: 'dashboard',     emoji: '🏠' },
   { key: 'grade',        label: 'Grade',        href: 'grade.html',             icon: 'grades',        emoji: '✅' },
+  // Ungated, like Grade and for the same reason: an instructor sees their own sections, resolved
+  // from ctx.sectionIds and enforced by RLS. It is not a director surface — "how is my section
+  // doing across the term" is the ordinary question this answers.
+  //
+  // student.html is deliberately ABSENT from this list. It is a drill-down reached by clicking a
+  // name, exactly as report.html is, and a nav entry for it would have nothing to point at.
+  { key: 'gradebook',    label: 'Gradebook',    href: 'gradebook.html',         icon: 'progress',      emoji: '📊' },
   { key: 'roster',       label: 'Roster',       href: 'roster.html',            icon: 'roster',        emoji: '🧑‍🎓', directorOnly: true },
   { key: 'lessons',      label: 'Lessons',      href: 'lessons.html',           icon: 'assignments',   emoji: '📚' },
   // Extensions is its own destination rather than a panel inside Admin because it is a

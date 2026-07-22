@@ -120,6 +120,12 @@ export const CURATED_COLUMNS = {
   extensions:            ['enrollment_id', 'assignment_offering_id', 'extended_due_at', 'reason',
                           'revoked_at'],
   review_signoffs:       ['assignment_offering_id', 'section_id', 'reviewed_by', 'reviewed_at'],
+  // `notes` is deliberately NOT here. It holds an instructor's candid read of a cadet, it is the
+  // reason ei_sessions has no student read policy at all (011 header; ROADMAP Q3), and a generic
+  // table browser is the wrong place to surface it — the per-student page shows it in the context
+  // that makes it meaningful. The column is one click away for anyone who genuinely needs it.
+  ei_sessions:           ['enrollment_id', 'instructor_id', 'started_at', 'duration_minutes',
+                          'batch_id'],
   // The counts are the audit-relevant part of an import — they record which conflict resolution
   // the operator chose, which is the only step that discards data.
   roster_imports:        ['course_offering_id', 'imported_by', 'filename', 'created_at'],

@@ -1,8 +1,9 @@
 PREP stores course data in four layers. The top two exist so that content can outlive the semester
 it was written for: a preflight is defined once and scheduled many times, rather than copied.
 
-The diagram shows every table in those four layers. Blue marks the four that carry the spine of the
-system — an assignment is defined, scheduled, worked, and graded.
+The diagram shows the tables in those four layers. Blue marks the four that carry the spine of the
+system — an assignment is defined, scheduled, worked, and graded. Two later additions to delivery,
+`review_signoffs` and `ei_sessions`, are described below but not drawn.
 
 Three tables sit outside the layers because they describe the *system* rather than the coursework:
 `grade_events` and `analysis_runs` are audit trails, and `user_preferences` holds one row of view
@@ -166,6 +167,7 @@ One semester's run, and the people in it:
 | `assignment_due_dates` | Per-section deadline overrides |
 | `extensions` | Per-student deadline overrides, attached to their enrolment |
 | `review_signoffs` | One instructor attestation per section per assignment: "I have reviewed this" |
+| `ei_sessions` | A log of extra instruction — one row per student per sitting |
 
 ### Which deadline applies
 
@@ -194,6 +196,45 @@ to students, a sign-off publishes nothing. One row per section per assignment.
 A sign-off is not stored as still-valid or expired; it is compared against the grades themselves.
 If any grade in that section changed after the attestation, the site reports it as *reviewed, then
 changed*, so a stored marker can never disagree with the grades it claims to cover.
+
+### ei_sessions
+
+One row per student per sitting of extra instruction. Attached to the **enrolment**, exactly as
+grades and extensions are, so a session belongs to a student's place in a section in one semester —
+a cadet repeating the course does not inherit the previous term's log.
+
+| Field | Holds |
+|---|---|
+| `enrollment_id` | Which student, in which section, in which semester. Deleting the enrolment deletes its sessions with it |
+| `instructor_id` | Who held it. Left empty rather than deleted if that instructor's record is removed, so the record that the session happened survives them |
+| `started_at` | When the session began. **No default** — see below |
+| `duration_minutes` | How long it ran. Defaults to 30, and must be between 1 and 480 |
+| `notes` | Free text, up to 4000 characters. Optional |
+| `batch_id` | Groups every row written by one bulk log. Empty for a single session |
+
+**Extra instruction is repeatable, so there is no one-per-student rule here.** The same cadet may
+come twice in a week, or twice in a day, and each visit is its own row. Nothing merges them, and
+logging a second session never overwrites the first.
+
+**`started_at` deliberately has no default.** The ordinary case is logging a session after it
+happened, and a database default would record the moment somebody typed it as the moment it took
+place. The page prefills the current time instead — a prefill that is visible and editable, which a
+default is not.
+
+**A bulk log shares one `batch_id`.** Six cadets who stayed behind after one class are a single
+event: the shared value makes that sitting countable and correctable as a unit rather than as six
+unrelated rows. It is empty for a single session, and it points at nothing — it is a grouping label,
+not a record of its own.
+
+**Staff of the section can read and write these; students cannot see their own.** That absence is
+the point, not an omission — unlike an extension, which the student it belongs to can see. It is
+what makes `notes` safe to use for a candid read of how a cadet is doing. Opening this to students
+later would be a safe change; it starts closed because closing it again, after cadets had already
+read what was written about them, would not be.
+
+`instructor_id` is not forced to be whoever typed the entry, unlike a review sign-off or an unlock.
+A director logging a session on a colleague's behalf is a real case, and an EI row confers nothing
+and costs the student nothing — so the legitimate case wins.
 
 ### assignment_offerings
 
@@ -402,6 +443,8 @@ These are enforced by the database, not by the site, so they hold no matter what
   entries from it.
 - **A review sign-off cannot be attributed to someone else.** It is recorded in the name of
   whoever performs it, for the same reason an unlock is.
+- **An extra-instruction session must say when it started**, and cannot be recorded as lasting zero
+  minutes or more than eight hours. The ceiling is a guard against a stray digit, not a policy.
 
 ## Reading the data directly
 

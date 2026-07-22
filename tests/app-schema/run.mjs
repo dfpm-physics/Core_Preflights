@@ -67,9 +67,16 @@ for (const s of OFFLINE) {
 //                 scenario to reset its module-level caches; both would leak in-process
 //   test-prefs   installBrowser() plus a live signed-in session; prefs.js binds window.db at
 //                 import time, so it must not share a process with the later suites
+//   test-gradebook  imports faculty-gradebook.js for the grid arithmetic (pure, but the module's
+//                 supabase.js import still binds a client)
+//   test-ei      same for faculty-ei.js — the UTC round trip and the batch counting
+//   test-student-detail  imports faculty-student.js, which pulls in faculty-rollup.js and
+//                 faculty-gradebook.js. NOT test-student.mjs, which is the LIVE suite about the
+//                 student-facing portal — different page, opposite audience, easy to confuse.
 for (const suite of ['test-imports.mjs', 'test-rollup.mjs', 'test-system-prefs.mjs',
                      'test-run-banner.mjs', 'test-help-status.mjs', 'test-prefs.mjs',
-                     'test-tasks.mjs']) {
+                     'test-tasks.mjs', 'test-gradebook.mjs', 'test-ei.mjs',
+                     'test-student-detail.mjs']) {
   const r = spawnSync(process.execPath, [resolve(import.meta.dirname, suite)],
                       { encoding: 'utf8' });
   process.stdout.write(r.stdout || '');

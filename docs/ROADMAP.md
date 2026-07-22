@@ -128,108 +128,22 @@ likely reason the second account would not authenticate with a correctly copy-pa
 
 ## 2. P1 — First weeks of term
 
-### P1.1 — Gradebook view · **L** · *unblocked — the scale question is already answered by the data*
+### P1.8 — EI stats on the dashboard · **S** · *unblocked 2026-07-22 — and mostly written already*
 
-*Requested.* Still the largest item here, but **materially smaller than first scoped.** The
-open question that was going to block it turned out to be already resolved in the schema:
+*Requested.* ~~Depends on P1.4.~~ **P1.4 landed**, and with it the hard half of this item:
+`summarizeEi()` in `js/faculty-ei.js` already returns exactly `get_ei_stats()`'s scope — `total`,
+`uniqueStudents`, `totalMinutes`, `recent` (the last five) — as a **pure** function, so this is a
+render against an existing shape rather than a second query.
 
-**Both modalities already land on the same 2-point grade — by two different mechanisms.** Keep the
-two layers straight; conflating them is how this gets built wrong:
+One number in it is worth keeping when you build the tile: **`sittings` counts a batch as one
+session however many cadets were in it.** Counting rows would tell a director they held 40 sessions
+in a week when they held nine, which is the exact kind of inflated number that gets a dashboard
+ignored.
 
-- **Measurement is 0–5 and is very much live.** `q2_effort` and `q3_understanding` are 0–5 integers
-  in `grades.diagnostic` (`preflight-analyze/SKILL.md:319-320`); the schema:1 payload carries
-  `effort` 0–5 (clamped to 2 when the reading reflection is not meaningful) and
-  `overall_understanding` 0–5 (`SKILL.md:569-570`). The interactive artifact emits effort on the same
-  0–5 scale.
-- **The grade is 2 points**, reached two ways:
-
-| Modality | `grading_mode` | How points are set | Result |
-|---|---|---|---|
-| Interactive lesson | `effort` | DB trigger `001_core_model.sql:579-584`: `effort ≥3 → possible` · `≥1 → possible/2` · `else 0` | Full effort **2**; capped effort (clamped to 2) **1** |
-| Written preflight | `points` | `question_scores` — Q1 `points: 0`, Q2 reflection `1`, Q3 free response `1` (`build_fall_preflights.py:216,235-236`; identical in `build_110_preflights.py:219,236-237`) | Reflection **1** + free response **1** = **2** |
-
-On the written path `effort` is **diagnostic only and must not be written to `grades.effort`** —
-those offerings are `grading_mode='points'` and the trigger would seize `points_earned`
-(`WRITTEN-SCHEMA1.md:118-121`).
-
-Offering ceiling for both: `points_possible numeric(6,2) NOT NULL DEFAULT 2`
-(`001_core_model.sql:255`).
-
-**So no normalization layer is needed.** Both paths write `grades.points_earned` against the same
-`points_possible`, so the gradebook sums them directly and is correct by construction. The 0–5
-scales stay available underneath for the per-student view (P1.2) and the rollup histograms (P1.5).
-
-⚠️ **`PROJECT.md:91-98` will mislead whoever builds this** — it shows `scores.question_scores` with
-q1/q2/q3 each `"max": 5`, i.e. 15 points per preflight. **Only that per-question points shape is
-retired** (both Fall builders now write 0/1/1); the 0–5 effort and understanding scales documented
-elsewhere in the same file are current. Fix the example block, leave the diagnostics section alone
-(see §5).
-
-Design notes, with `djGradebookProject` mined for what is worth taking:
-
-- **Shortcodes as column headers** (`PF01`, `HW03`) keep columns ~5rem wide. Derive a short form from
-  the lesson slug.
-- **Percentage → semantic class**, six bands, one function driving all color everywhere
-  (`helpers.py:286` + `style.css:779-808`). The key idea worth stealing: **zero is its own band**
-  (missing work) distinct from merely failing. PREP's 3-state (`full`/`warn`/`zero`) already covers
-  per-question color; the band scale is for the *totals* columns.
-- **`is_bonus`** (numerator only) and **`include_prog`** — two booleans that avoid needing a weighting
-  engine at all. PREP has no weighting today, and these two flags may be sufficient forever.
-- Its own grid is the **weakest** part of that project — no sticky columns, no virtualization,
-  DataTables pagination. Do not copy it.
-
-PREP should do better on two points: **sticky student-name column + sticky header row** (essential
-past ~8 lessons), and a **bounded fetch** — `loadRoster` already fetches every student in the
-database and filters client-side (`faculty-roster.js:11`), which a gradebook makes untenable.
-
-Depends on: P1.2 (name click target), P1.3 (settings persistence, for column prefs).
-
-### P1.2 — Per-student detail page · **L**
-
-*Requested.* Reached by clicking a name in the gradebook. Shows completion, effort levels,
-understanding levels, free-response answers, interactive reports, and whatever assignment types come
-later.
-
-`djGradebookProject`'s `student_view.html` is a strong template — three stat cards (identity /
-performance / class comparison), performance-by-category bars, missing-work table, all-assignments
-table. Two ideas there are worth taking wholesale:
-
-- **The Comment Card** — an auto-assembled advising blurb (grade, per-category breakdown, missing
-  work with due dates, EI attendance and dates, plus a free-text box) with a **Copy to Clipboard**
-  button. Instructors paste it into an email or an advising system. This is exactly the "copy for
-  slides" muscle the Report tab already has (P0.6), pointed at one student.
-- **`back_url` from the referrer** — "Done" returns you wherever you came from, so the page works
-  equally as a gradebook drill-down and a roster drill-down.
-
-**FERPA note:** this page concentrates everything about one cadet on one screen. Instructor access
-must be section-scoped in **RLS**, not just in the UI.
-
-### P1.4 — EI (Extra Instruction) logging, single and bulk · **M**
-
-*Requested.* On the student detail page, a button opens a modal prefilled with **today's date, the
-current local time, and a 30-minute duration**, editable before confirming.
-
-**Bulk logging is core to this item, not an add-on.** The director's actual use case is the ~20
-minutes at the end of every class when students hang around to ask questions — so the common event
-is *several students at once, most days*, not a scheduled one-on-one. A design that only logs one
-student at a time will be abandoned by week three. Build the roster-multi-select path in the same
-pass: pick a date/time/duration once, tick the students who were there, log.
-
-`djGradebookProject`'s `EIVisit` model is deliberately minimal — `date_time`, `notes`, FKs — and its
-interaction pattern is the good part: **log-now-with-one-click, correct-later-in-a-modal**, with
-row-click opening the edit modal.
-
-Proposed shape — `app.ei_sessions`: enrolment (or student + offering), staff id, `started_at`,
-`duration_minutes`, `notes`, `created_at`. **RLS: staff of the offering only — students cannot read
-their own** (director's decision; additive to open later, breaking to close).
-
-Timezone: reuse the `zoneinfo` America/Denver handling from
-`scripts/fall2026/build_fall_preflights.py`. Store UTC, render local.
-
-### P1.8 — EI stats on the dashboard · **S**
-
-*Requested.* Depends on P1.4. `djGradebookProject`'s `get_ei_stats()` is the right scope: total
-visits, unique students, and the last five — two big numbers and a mini-table, nothing more.
+Remaining: register a source in `faculty-tasks.js`'s `SOURCES` registry (P1.6 built it so that
+adding one is an entry, not a rewrite) and render two big numbers plus a mini-table. Note the
+registry's own rule applies — **a source returning zero renders nothing**, and most instructors will
+have zero EI logged in week one.
 
 ### P1.9 — Move enrollment out of Roster into its own tab · **M**
 
@@ -585,6 +499,8 @@ port-status rows · `site/app/README.md` "Not yet ported" · `student/interactio
 | ⚠️ **`check_doc_sources.py` is red — 7 documents flagged** | run it | **Pre-existing, not caused by the 2026-07-22 batches.** Dominated by a `CORE.md` edit earlier that day plus the skills touched by it. *(Was 11; the docs batch cleared four.)* Deliberately *not* cleared by bulk-bumping `reviewed` dates — that is precisely the failure the mechanism exists to prevent. Clearing it properly means reading each of the 7 against its sources; it overlaps the help-doc stub expansion below, so do them together. **Verified harmless for the gradebook:** no help doc states a points value, so the `question_scores` correction did not invalidate any of them |
 | ~~`lesson_aggregate.py` misdiagnoses a cross-course slug collision as a stale offering~~ | `supabase/admin/lesson_aggregate.py` `_ambiguous_slug_message` | ✅ **FIXED 2026-07-22.** The message now splits the two cases: same-term/different-course lists each course with its course-scoped activity slug and says *do not deactivate either one*; different-term keeps the deactivation advice, which is correct only there. Covered by `aggregate_summarize_test.py` |
 | ~~`status --lesson` cannot report a question-only lesson~~ | `supabase/admin/lesson_aggregate.py` `cmd_status` | ✅ **FIXED 2026-07-22 — and it was worse than recorded.** The join was *inner*, so written-only offerings were absent from the **unfiltered** listing too, not merely unfilterable. Since most of a term is written-only, `/lesson-cycle`'s verify step was reporting "No analysis_reports rows yet" for lessons that had aggregated fine. Now keyed on the assignment, with activities resolved by offering id so a shared slug cannot abort the listing. **Not yet run against the live DB** — needs a connection |
+| ⚠️ **The dashboard ignores extensions when computing status** | `faculty-data.js:148` | Found while building P1.1. It calls `effectiveDue(offering, sectionId, **null**)` — the extension argument hardcoded — so a student holding an active extension can show as `overdue`/`pending` on the dashboard. `faculty-grade.js` and the new `faculty-gradebook.js` both do it correctly; this is the one caller that does not. **S**, and it needs a test, not just a fix |
+| Scope control is now copied in **three** places | `report.html` `renderScope()` · `faculty-dashboard.js` `scopeControl()` · `gradebook.html` | `faculty-dashboard.js:230-241` said extraction becomes worth arguing for at the third caller. It has arrived. Deliberately **not** done in the P1.1 pass: refactoring two shipped, browser-verified surfaces in the same change that adds a third is how you break all three at once. Extract into a shared module as its own change, with the existing suites green before and after |
 | All three `prep_app_*` roles carry `BYPASSRLS`, including the SELECT-only read role | CHANGELOG:704 | The read role should not bypass RLS |
 | `main` predates the `extensions.reason` NOT NULL constraint | CHANGELOG:706-709 | Harmless today (zero extensions); resolved by P0.1 |
 | Edge functions never exercised on a successful path | CHANGELOG:473-475 | Covered by P0.5 |
@@ -696,9 +612,31 @@ between "prepared" and "run it".
 account. Deleting the auth user is enough — `instructors` cascades from `auth.users` — but do the
 stray unconfirmed users at the same time.
 
-**P1.1's blocker is gone** — the 2-point scale is already uniform across both modalities, so the
-gradebook is now a rendering-and-performance problem rather than a grading-policy one. Fix the stale
-`PROJECT.md` shape (§5) before anyone starts it.
+**Also 2026-07-22 (fifth batch): P1.1 · P1.2 · P1.4 — the gradebook, the per-student page, and EI
+logging.** Built together because they are one feature: a grid, the page you reach by clicking a
+name in it, and the thing you do there. Building them separately would have meant writing the same
+loader three times.
+
+Three things that pass forward:
+
+- **The scale question really was already answered.** Both modalities land on `points_earned`
+  against the same `points_possible`, so no normalization layer was written and none is needed.
+- **A grid needs a due-date-aware denominator.** Counting a not-yet-due lesson against a cadet makes
+  every student read 0% in week one. This is the same rule P3.2 flags on the WebAssign importer, and
+  it is the single most load-bearing decision in the gradebook.
+- **Reading the code found a bug the roadmap did not know about** — `faculty-data.js:148` ignores
+  extensions when computing dashboard status. Filed in §5. That is now the *third* batch in a row
+  where a §5 row or an adjacent file turned out worse than recorded once read against the code;
+  treat a roadmap entry as a lead, not a spec.
+
+**P1.8 is unblocked and is now nearly free** — `summarizeEi()` already computes exactly what its
+dashboard tile needs, as a pure function.
+
+**The one thing still owed on this batch:** neither new page has been seen rendered by a signed-in
+faculty user. Every logic layer is green (821 assertions, three DB suites, a both-themes boot check)
+but that is not the same claim. **Run `tests/browser-harness/pass.mjs` before P0.2 deletes the test
+faculty account** — after that it needs a human in the Supabase dashboard again, which is what made
+P0.5 take three attempts.
 
 **Start P2.1 (Blackboard) during P1.** Its risk is entirely in round-trip testing with a real file,
 and that lead time cannot be compressed at term end.
@@ -964,6 +902,206 @@ collapses whitespace, so `scalar sum` was reported as a "variant" of the id it n
 ---
 
 ### P1 — first weeks of term
+
+#### P1.1 — Gradebook view · ✅ **DONE 2026-07-22**
+
+`faculty/gradebook.html` + `js/faculty-gradebook.js`. Sticky student column, sticky header row,
+shortcode headers (`preflight-02` → `PF02`), totals column, and the bulk-EI entry point. Ungated in
+the nav, like Grade — an instructor sees their own sections and RLS is what enforces it.
+
+**The scale question really was already answered.** Both modalities land on `grades.points_earned`
+against the same `points_possible`, so totals sum directly and no normalization layer was written.
+
+**Four decisions worth not re-litigating:**
+
+- **Five cell states, and only one renders blank.** graded · draft (AI suggestion, unconfirmed) ·
+  ungraded (work arrived) · missing (past due, nothing) · pending (not due). A blank that could mean
+  either "not due" or "never handed in" is the defect that makes a gradebook untrustworthy.
+- **A lesson counts toward the percentage only once its deadline has passed.** This is the
+  due-date-aware rule P3.2 flags on the WebAssign importer, and it matters more here: without it
+  every cadet reads 0% on day one because 39 lessons they cannot yet have done are counted against
+  them. Missing counts zero-out-of-full; pending is not in the sum at all; a term with nothing due
+  yet yields `pct === null`, not `0`.
+- **Zero is its own band, and the bands are NOT the status triad.** `--d0…--d5` (the data-viz ramp),
+  not green/amber/red — that palette is a contract with `question_scores[].status`
+  (DESIGN.md:237-243) and a 65% total must not read as a flagged answer.
+- **Narrow selects, not the shared ones.** `OFFERING_SELECT` pulls every question of every lesson;
+  `GRADE_SELECT` pulls `question_scores` and `diagnostic`; `SUBMISSION_SELECT` pulls every report
+  blob. A grid renders none of it. This is P3.7's performance budget applied before the grid rather
+  than after — though note P3.7 itself is **not** closed: `loadRoster` still fetches every student.
+
+⚠️ **A bug found while building, and left in place deliberately:** `faculty-data.js:148` passes
+`null` as the extension argument to `effectiveDue`, so the *dashboard's* status can call a student
+overdue who holds an active extension. The gradebook does not copy it. Fixing the dashboard is a
+separate, testable change and is filed in §5.
+
+*Verified:* `test-gradebook.mjs` **73/0** · full suite exit 0 · boots clean in light and dark.
+**Not seen rendered by a signed-in user** — see the note under P1.4.
+
+#### P1.2 — Per-student detail page · ✅ **DONE 2026-07-22**
+
+`faculty/student.html?e=<enrolment>` + `js/faculty-student.js`. Reached from the gradebook or the
+roster; no nav entry, like `report.html`. Keyed on the **enrolment**, because that is what every RLS
+policy keys on — a cadet id would have to be resolved to one before anything could be read anyway.
+
+- **This is where the two layers sit side by side, and the only place they should.** Points are the
+  grade; the 0–5 effort and understanding columns are diagnostics, styled quieter and never summed.
+  The grid deals only in points because a cell cannot explain itself; this page can.
+- **Misconceptions folded across the term** — the one view in PREP that answers *is this student
+  repeatedly wrong about the same thing?* Uses the rollup's own `canonMisconceptionId()`, so the
+  two pages cannot disagree about what is one bucket.
+- **The advising note**, taken wholesale from `djGradebookProject`: grade, section comparison,
+  missing work **named with due dates**, understanding average, recurring sticking points, EI count,
+  free text, Copy. Plain text on purpose — it is going into an email.
+- **`backTarget()` allowlists rather than same-origin-checks.** `document.referrer` is
+  attacker-controllable; it returns a bare relative filename from a six-entry list, never the
+  referrer itself.
+- **Q1 stays hidden**, filtered by the points *property* rather than by position — which is exactly
+  the defect LEGACY-AUDIT:102-108 flags as still open elsewhere.
+
+**On the FERPA requirement:** the entry asked for section-scoping in RLS rather than the UI. That
+was **verified, not added** — `students`, `enrollments`, `grades`, `submissions`,
+`submission_activities` and `ei_sessions` all already gate on `staff_sections()`, and
+`app_rls_test.py` pins it per persona. "Not found" and "not yours" deliberately return the same
+message, since telling an instructor a cadet exists but belongs to someone else is itself a
+disclosure.
+
+*Verified:* `test-student-detail.mjs` **56/0** · full suite exit 0 · boots clean in light and dark.
+
+#### P1.4 — EI logging, single and bulk · ✅ **DONE 2026-07-22**
+
+Migration `011_ei_sessions.sql` (**applied**) + `js/faculty-ei.js` + a modal on each of the two new
+pages. Both paths shipped in one pass, per this item's own instruction that a bulk-as-bolt-on design
+"will be abandoned by week three".
+
+**Schema decisions, each recorded in the migration header because each reads as an oversight
+later:** keyed on `enrollment_id` (makes the RLS predicate byte-identical to the reviewed one on
+`extensions`) · **no unique constraint**, because EI is repeatable and a unique key would silently
+swallow the second visit · **`batch_id`**, so one sitting is one correctable unit and "how many
+sessions did I hold" has an answer · **no self-attribution trigger**, unlike `review_signoffs`,
+because a director logging for the colleague who ran it is a real case and an EI row confers
+nothing · **no student read policy at all**, per §6 Q3 — the absence *is* the enforcement, and it
+matters because `notes` holds an instructor's candid read of a cadet.
+
+- **Writes are sequential, failures per student.** "Logged 4 of 6, failed: Smith, Jones" is
+  actionable; one rejected promise is not. Copied from the P1.12 extension batch.
+- **UTC stored, local rendered**, with both conversions pure and round-trip tested — a session
+  logged an hour off still looks fine, which is why it needs a test rather than a review.
+- **Editing does not re-attribute.** An edit corrects the record; it does not change who held it.
+
+*Verified:* `app_invariant_test.py` **33/33** (11 new) · `app_rls_test.py` **45/45** (10 new,
+including *a student cannot read their own EI log*) · `test-ei.mjs` **82/0**.
+
+> ⚠️ **The one real gap across all three.** Neither page has been **seen rendered by a signed-in
+> faculty user**. A boot check proves every module parses, evaluates and redirects cleanly in both
+> themes, and every assertion above is real — but none of it proves the grid *looks* right, and none
+> ran against live Fall 2026 data. There is also **no EI data and no late work in the term yet**
+> (the active preflight is due Aug 9), so bulk logging and the late chip are exercised by fixtures
+> only. This wants a `tests/browser-harness/pass.mjs` run with the test faculty credentials —
+> the same gap P0.5 closed for the previous batch, and it should close the same way **before P0.2
+> deletes that account.**
+
+<details><summary>Original scoping — P1.1, P1.2, P1.4</summary>
+
+**P1.1 — Gradebook view · L · *unblocked — the scale question is already answered by the data***
+
+*Requested.* Still the largest item here, but **materially smaller than first scoped.** The
+open question that was going to block it turned out to be already resolved in the schema:
+
+**Both modalities already land on the same 2-point grade — by two different mechanisms.** Keep the
+two layers straight; conflating them is how this gets built wrong:
+
+- **Measurement is 0–5 and is very much live.** `q2_effort` and `q3_understanding` are 0–5 integers
+  in `grades.diagnostic` (`preflight-analyze/SKILL.md:319-320`); the schema:1 payload carries
+  `effort` 0–5 (clamped to 2 when the reading reflection is not meaningful) and
+  `overall_understanding` 0–5 (`SKILL.md:569-570`). The interactive artifact emits effort on the same
+  0–5 scale.
+- **The grade is 2 points**, reached two ways:
+
+| Modality | `grading_mode` | How points are set | Result |
+|---|---|---|---|
+| Interactive lesson | `effort` | DB trigger `001_core_model.sql:579-584`: `effort ≥3 → possible` · `≥1 → possible/2` · `else 0` | Full effort **2**; capped effort (clamped to 2) **1** |
+| Written preflight | `points` | `question_scores` — Q1 `points: 0`, Q2 reflection `1`, Q3 free response `1` (`build_fall_preflights.py:216,235-236`; identical in `build_110_preflights.py:219,236-237`) | Reflection **1** + free response **1** = **2** |
+
+On the written path `effort` is **diagnostic only and must not be written to `grades.effort`** —
+those offerings are `grading_mode='points'` and the trigger would seize `points_earned`
+(`WRITTEN-SCHEMA1.md:118-121`).
+
+Offering ceiling for both: `points_possible numeric(6,2) NOT NULL DEFAULT 2`
+(`001_core_model.sql:255`).
+
+**So no normalization layer is needed.** Both paths write `grades.points_earned` against the same
+`points_possible`, so the gradebook sums them directly and is correct by construction. The 0–5
+scales stay available underneath for the per-student view (P1.2) and the rollup histograms (P1.5).
+
+⚠️ **`PROJECT.md:91-98` will mislead whoever builds this** — it shows `scores.question_scores` with
+q1/q2/q3 each `"max": 5`, i.e. 15 points per preflight. **Only that per-question points shape is
+retired** (both Fall builders now write 0/1/1); the 0–5 effort and understanding scales documented
+elsewhere in the same file are current. Fix the example block, leave the diagnostics section alone
+(see §5).
+
+Design notes, with `djGradebookProject` mined for what is worth taking:
+
+- **Shortcodes as column headers** (`PF01`, `HW03`) keep columns ~5rem wide. Derive a short form from
+  the lesson slug.
+- **Percentage → semantic class**, six bands, one function driving all color everywhere
+  (`helpers.py:286` + `style.css:779-808`). The key idea worth stealing: **zero is its own band**
+  (missing work) distinct from merely failing. PREP's 3-state (`full`/`warn`/`zero`) already covers
+  per-question color; the band scale is for the *totals* columns.
+- **`is_bonus`** (numerator only) and **`include_prog`** — two booleans that avoid needing a weighting
+  engine at all. PREP has no weighting today, and these two flags may be sufficient forever.
+- Its own grid is the **weakest** part of that project — no sticky columns, no virtualization,
+  DataTables pagination. Do not copy it.
+
+PREP should do better on two points: **sticky student-name column + sticky header row** (essential
+past ~8 lessons), and a **bounded fetch** — `loadRoster` already fetches every student in the
+database and filters client-side (`faculty-roster.js:11`), which a gradebook makes untenable.
+
+Depends on: P1.2 (name click target), P1.3 (settings persistence, for column prefs).
+
+**P1.2 — Per-student detail page · L**
+
+*Requested.* Reached by clicking a name in the gradebook. Shows completion, effort levels,
+understanding levels, free-response answers, interactive reports, and whatever assignment types come
+later.
+
+`djGradebookProject`'s `student_view.html` is a strong template — three stat cards (identity /
+performance / class comparison), performance-by-category bars, missing-work table, all-assignments
+table. Two ideas there are worth taking wholesale:
+
+- **The Comment Card** — an auto-assembled advising blurb (grade, per-category breakdown, missing
+  work with due dates, EI attendance and dates, plus a free-text box) with a **Copy to Clipboard**
+  button. Instructors paste it into an email or an advising system. This is exactly the "copy for
+  slides" muscle the Report tab already has (P0.6), pointed at one student.
+- **`back_url` from the referrer** — "Done" returns you wherever you came from, so the page works
+  equally as a gradebook drill-down and a roster drill-down.
+
+**FERPA note:** this page concentrates everything about one cadet on one screen. Instructor access
+must be section-scoped in **RLS**, not just in the UI.
+
+**P1.4 — EI (Extra Instruction) logging, single and bulk · M**
+
+*Requested.* On the student detail page, a button opens a modal prefilled with **today's date, the
+current local time, and a 30-minute duration**, editable before confirming.
+
+**Bulk logging is core to this item, not an add-on.** The director's actual use case is the ~20
+minutes at the end of every class when students hang around to ask questions — so the common event
+is *several students at once, most days*, not a scheduled one-on-one. A design that only logs one
+student at a time will be abandoned by week three. Build the roster-multi-select path in the same
+pass: pick a date/time/duration once, tick the students who were there, log.
+
+`djGradebookProject`'s `EIVisit` model is deliberately minimal — `date_time`, `notes`, FKs — and its
+interaction pattern is the good part: **log-now-with-one-click, correct-later-in-a-modal**, with
+row-click opening the edit modal.
+
+Proposed shape — `app.ei_sessions`: enrolment (or student + offering), staff id, `started_at`,
+`duration_minutes`, `notes`, `created_at`. **RLS: staff of the offering only — students cannot read
+their own** (director's decision; additive to open later, breaking to close).
+
+Timezone: reuse the `zoneinfo` America/Denver handling from
+`scripts/fall2026/build_fall_preflights.py`. Store UTC, render local.
+
+</details>
 
 #### P1.3 — Persist user and account settings · ✅ **DONE 2026-07-22**
 

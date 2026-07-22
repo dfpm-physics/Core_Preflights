@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gradebook · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+</head>
+<body>
+  <header id="topnav"></header>
+  <main class="page-wide" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Loading the gradebook…</span></div>
+  </main>
+
+  <!-- Bulk EI logging. Static markup, wired once in init() — re-binding on every render would fire
+       Save once per render (the trap report.html:155-157 documents). -->
+  <div class="modal-backdrop" id="ei-modal">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head"><h2 id="ei-title">Log extra instruction</h2><button class="modal-close" data-close>×</button></div>
+      <div id="ei-who" class="muted" style="font-size:.86em;margin-bottom:14px"></div>
+      <div class="row wrap" style="gap:12px">
+        <div class="field grow"><label for="ei-when">Date and time</label>
+          <input id="ei-when" type="datetime-local">
+          <div class="field-hint">Your local time. Stored in UTC.</div></div>
+        <div class="field" style="min-width:140px"><label for="ei-dur">Minutes</label>
+          <input id="ei-dur" type="number" min="1" max="480" step="5" value="30"></div>
+      </div>
+      <div class="field"><label for="ei-notes">Notes <span class="muted">(optional)</span></label>
+        <textarea id="ei-notes" rows="3" placeholder="What you covered, what to follow up on…"></textarea>
+        <div class="field-hint">Staff only — students cannot see their EI log or these notes.</div></div>
+      <div class="error-msg" id="ei-error" style="min-height:1em"></div>
+      <div class="row" style="gap:10px">
+        <button class="btn btn-primary" id="ei-save">Log session</button>
+        <button class="btn btn-secondary" data-close>Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { runPage, esc, lastFirst, fmtDate, pct } from '../js/util.js';
+    import { taughtSectionIds } from '../js/faculty-rollup.js';
+    import { getPref, setPref } from '../js/prefs.js';
+    import * as GB from '../js/faculty-gradebook.js';
+    import * as EI from '../js/faculty-ei.js';
+
+    const ctx = await bootstrap({ require: 'faculty' });
+    runPage(ctx, init);
+
+    const SEG_MAX = 5;
+    let vm = null;                 // the loaded model
+    let matrix = null;             // buildMatrix() output
+    let scope = null;              // 'all' | 'mine' | <section uuid>
+    let eiMode = false;            // bulk-log selection mode
+    let picked = new Set();        // enrolment ids ticked in eiMode
+
+    async function init() {
+      initTheme();
+      renderNav(ctx, { active: 'gradebook', onCourseChange: () => { scope = null; load(); } });
+      wireEiModal();
+      await load();
+    }
+
+    /* ── scope ──────────────────────────────────────────────────────────────
+     * The rollup's renderScope() shape, copied rather than imported — the third caller of this
+     * pattern (faculty-dashboard.js:230-241 predicted it). Extraction is now genuinely overdue and
+     * is filed as a §5 cleanup rather than done here, because refactoring two shipped, browser-
+     * verified surfaces in the same pass that adds a third is how you break all three at once.
+     */
+    function mySections() {
+      const mine = taughtSectionIds(ctx);
+      return mine.length ? mine : (ctx.sectionIds || []);
+    }
+    function scopeOptions() {
+      const all = ctx.sectionIds || [];
+      const mine = taughtSectionIds(ctx);
+      const showMine = mine.length > 0 && mine.length < all.length;
+      return ['all', ...(showMine ? ['mine'] : []), ...all];
+    }
+    function defaultScope() {
+      const mine = taughtSectionIds(ctx), all = ctx.sectionIds || [];
+      if (mine.length && mine.length < all.length) return 'mine';
+      if (mine.length === 1) return mine[0];
+      return 'all';
+    }
+    function resolveSections() {
+      if (scope === 'all') return ctx.sectionIds || [];
+      if (scope === 'mine') return mySections();
+      return scope ? [scope] : (ctx.sectionIds || []);
+    }
+    function scopeControl() {
+      const opts = scopeOptions();
+      if (!opts.includes(scope)) scope = defaultScope();
+      const label = v => v === 'all' ? 'All sections' : v === 'mine' ? 'My sections' : ctx.sectionCodeOf(v);
+      if (opts.length <= SEG_MAX) {
+        return `<div class="seg" id="gb-scope" role="group" aria-label="Section scope">`
+          + opts.map(v => `<button data-scope="${esc(v)}" aria-pressed="${scope === v}">${esc(label(v))}</button>`).join('')
+          + `</div>`;
+      }
+      return `<select id="gb-scope-sel" class="scope-sel" aria-label="Section scope">`
+        + opts.map(v => `<option value="${esc(v)}" ${scope === v ? 'selected' : ''}>${esc(label(v))}</option>`).join('')
+        + `</select>`;
+    }
+
+    /* ── load ──────────────────────────────────────────────────────────── */
+    async function load() {
+      const root = document.getElementById('main');
+      root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading the gradebook…</span></div>`;
+      if (!scope) scope = getPref('cp.gradebook.scope') || defaultScope();
+      const res = await GB.loadGradebook(ctx, resolveSections());
+      if (res.noCourse) { root.innerHTML = `<div class="alert alert-warn">No course access.</div>`; return; }
+      if (res.error) { root.innerHTML = `<div class="alert alert-error">Could not load: ${esc(res.error.message)}</div>`; return; }
+      vm = res;
+      matrix = GB.buildMatrix(res);
+      render();
+    }
+
+    /* ── render ────────────────────────────────────────────────────────── */
+    function render() {
+      const root = document.getElementById('main');
+      const { columns, rows, stats } = matrix;
+
+      root.innerHTML = `
+        <div class="page-head">
+          <h1>Gradebook</h1>
+          <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))} — ${rows.length} student${rows.length === 1 ? '' : 's'} · ${columns.length} lesson${columns.length === 1 ? '' : 's'} published.</div>
+        </div>
+        <div class="row wrap" style="gap:12px;align-items:center;margin-bottom:16px">
+          ${scopeControl()}
+          <div class="grow"></div>
+          <button class="btn ${eiMode ? 'btn-primary' : 'btn-secondary'} btn-sm" id="ei-toggle">
+            ${eiMode ? 'Cancel EI logging' : '＋ Log extra instruction'}</button>
+          ${eiMode ? `<button class="btn btn-primary btn-sm" id="ei-open" ${picked.size ? '' : 'disabled'}>Log ${picked.size} student${picked.size === 1 ? '' : 's'}…</button>` : ''}
+        </div>
+        ${eiMode ? `<div class="alert alert-info" style="margin-bottom:14px">Tick everyone who came to EI, then choose a time once. One sitting is logged as one batch, so a mistyped duration is a single correction.</div>` : ''}
+        ${rows.length ? grid(columns, rows, stats) : emptyState()}
+        ${rows.length ? legend(stats) : ''}`;
+
+      // Delegated where the list is hot; the container survives every re-render.
+      root.querySelector('#gb-scope')?.addEventListener('click', e => {
+        const b = e.target.closest('button'); if (!b) return;
+        scope = b.dataset.scope; setPref('cp.gradebook.scope', scope); load();
+      });
+      root.querySelector('#gb-scope-sel')?.addEventListener('change', e => {
+        scope = e.target.value; setPref('cp.gradebook.scope', scope); load();
+      });
+      root.querySelector('#ei-toggle')?.addEventListener('click', () => {
+        eiMode = !eiMode; picked.clear(); render();
+      });
+      root.querySelector('#ei-open')?.addEventListener('click', openEi);
+      root.querySelector('#gb-all')?.addEventListener('change', e => {
+        if (e.target.checked) rows.forEach(r => picked.add(r.enrollmentId)); else picked.clear();
+        render();
+      });
+      root.querySelectorAll('[data-pick]').forEach(cb => cb.addEventListener('change', () => {
+        const id = cb.dataset.pick;
+        if (cb.checked) picked.add(id); else picked.delete(id);
+        // Targeted update rather than a re-render: re-rendering a 40-column grid on every tick
+        // is visibly slow and loses scroll position mid-selection.
+        const btn = document.getElementById('ei-open');
+        if (btn) { btn.disabled = !picked.size; btn.textContent = `Log ${picked.size} student${picked.size === 1 ? '' : 's'}…`; }
+        const all = document.getElementById('gb-all');
+        if (all) all.checked = picked.size === rows.length;
+      }));
+    }
+
+    function emptyState() {
+      return `<div class="empty-state"><div class="es-ic">📊</div><h3>Nothing to show yet</h3>
+        <p>${(ctx.sectionIds || []).length ? 'No active students in this scope.' : 'No sections are assigned to you in this course.'}</p></div>`;
+    }
+
+    function grid(columns, rows, stats) {
+      const head = `<tr>
+        ${eiMode ? `<th class="gb-pick"><input type="checkbox" id="gb-all" aria-label="Select all students" style="width:auto;margin:0"></th>` : ''}
+        <th class="gb-name">Student</th>
+        <th class="gb-sec">Sec</th>
+        ${columns.map(c => `<th class="gb-col" title="${esc(c.title)}${c.dueAt ? ` — due ${fmtDate(new Date(c.dueAt))}` : ''}">
+            <span aria-label="${esc(c.title)}">${esc(c.code)}</span></th>`).join('')}
+        <th class="gb-total">Total</th></tr>`;
+
+      const body = rows.map(r => `<tr>
+        ${eiMode ? `<td class="gb-pick"><input type="checkbox" data-pick="${esc(r.enrollmentId)}" ${picked.has(r.enrollmentId) ? 'checked' : ''} aria-label="Select ${esc(lastFirst(r.name))}" style="width:auto;margin:0"></td>` : ''}
+        <td class="gb-name"><a href="student.html?e=${encodeURIComponent(r.enrollmentId)}">${esc(lastFirst(r.name))}</a></td>
+        <td class="gb-sec">${esc(ctx.sectionCodeOf(r.sectionId) || '')}</td>
+        ${r.cells.map((c, i) => cellHTML(c, columns[i], r)).join('')}
+        <td class="gb-total ${r.band ? 'band-' + r.band.key : ''}">
+          ${r.totals.pct == null ? '<span class="muted">—</span>'
+            : `<strong>${Math.round(r.totals.pct * 100)}%</strong><span class="gb-frac">${r.totals.earned}/${r.totals.possible}</span>`}
+        </td></tr>`).join('');
+
+      return `<div class="table-wrap gb-wrap"><table class="gb"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+    }
+
+    // Five states, five distinct renderings. PENDING is the ONLY one that renders as nothing —
+    // a blank that could mean either "not due" or "never handed in" is the defect that makes a
+    // gradebook untrustworthy.
+    function cellHTML(c, col, row) {
+      const t = `${col.title}${col.dueAt ? ` — due ${fmtDate(new Date(col.dueAt))}` : ''}`;
+      const late = c.late ? ' ⏰' : '';
+      switch (c.state) {
+        case GB.CELL.GRADED:
+          return `<td class="gb-cell" title="${esc(t)}">${c.points}${late}</td>`;
+        case GB.CELL.DRAFT:
+          return `<td class="gb-cell gb-draft" title="${esc(t)} — suggested, not finalized">${c.points}<sup>?</sup>${late}</td>`;
+        case GB.CELL.UNGRADED:
+          return `<td class="gb-cell gb-ungraded" title="${esc(t)} — submitted, not yet graded">·${late}</td>`;
+        case GB.CELL.MISSING:
+          return `<td class="gb-cell gb-missing" title="${esc(t)} — nothing submitted">—</td>`;
+        default:
+          return `<td class="gb-cell gb-pending" title="${esc(t)} — not due yet"></td>`;
+      }
+    }
+
+    function legend(stats) {
+      return `<div class="gb-legend">
+        <span><b class="gb-key gb-missing">—</b> not submitted</span>
+        <span><b class="gb-key gb-ungraded">·</b> submitted, ungraded</span>
+        <span><b class="gb-key gb-draft">2<sup>?</sup></b> AI suggestion, not finalized</span>
+        <span><b class="gb-key">⏰</b> arrived late</span>
+        <span class="muted">Blank = not due yet, and not counted.</span>
+        <span class="grow"></span>
+        <span class="muted">Median ${stats.median == null ? '—' : Math.round(stats.median * 100) + '%'}
+          · ${stats.missing} missing · ${stats.ungraded} awaiting grading</span>
+      </div>`;
+    }
+
+    /* ── EI modal ──────────────────────────────────────────────────────── */
+    function wireEiModal() {
+      const m = document.getElementById('ei-modal');
+      m.addEventListener('click', e => {
+        if (e.target === m || e.target.dataset.close !== undefined) m.classList.remove('open');
+      });
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && m.classList.contains('open')) m.classList.remove('open');
+      });
+      document.getElementById('ei-save').addEventListener('click', saveEi);
+    }
+
+    function openEi() {
+      const names = matrix.rows.filter(r => picked.has(r.enrollmentId)).map(r => lastFirst(r.name));
+      document.getElementById('ei-who').innerHTML =
+        `<strong>${names.length} student${names.length === 1 ? '' : 's'}</strong>: ${esc(names.join(', '))}`;
+      document.getElementById('ei-when').value = EI.localInputValue(new Date());
+      document.getElementById('ei-dur').value = EI.DEFAULT_DURATION;
+      document.getElementById('ei-notes').value = '';
+      document.getElementById('ei-error').textContent = '';
+      document.getElementById('ei-modal').classList.add('open');
+      document.getElementById('ei-when').focus();
+    }
+
+    async function saveEi() {
+      const err = document.getElementById('ei-error');
+      const btn = document.getElementById('ei-save');
+      const payload = {
+        enrollmentIds: [...picked],
+        instructorId: ctx.instructorRow?.id || null,
+        startedAt: document.getElementById('ei-when').value,
+        durationMinutes: document.getElementById('ei-dur').value,
+        notes: document.getElementById('ei-notes').value,
+      };
+      const problem = EI.validateEi(payload);
+      if (problem) { err.textContent = problem; return; }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner on-dark"></span> Logging…';
+      const { written, failed } = await EI.logEi(EI.eiRows(payload));
+      btn.disabled = false;
+      btn.textContent = 'Log session';
+
+      if (failed.length) {
+        // Per-student, which is the whole reason the writes are sequential: "4 of 6 logged" is
+        // actionable, "the request failed" is not.
+        const names = failed.map(f => {
+          const r = matrix.rows.find(x => x.enrollmentId === f.enrollmentId);
+          return r ? lastFirst(r.name) : f.enrollmentId;
+        });
+        err.textContent = `Logged ${written} of ${written + failed.length}. Failed: ${names.join(', ')}.`;
+        return;
+      }
+      document.getElementById('ei-modal').classList.remove('open');
+      eiMode = false; picked.clear();
+      render();
+    }
+  </script>
+</body>
+</html>
