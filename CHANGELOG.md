@@ -8,6 +8,41 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-22 — Casey via Claude
+
+### Fixed — lesson editor showed 5 questions instead of 3 (and would have saved 5)
+
+**Frontend only (`site/app/faculty/lessons.html`). No database or lesson-content change — the stored
+data was always correct.** Reported from the Lessons tab: editing any lesson, and its **Preview**,
+showed **5 questions** where every lesson has 3.
+
+**Root cause.** `ensureDefaultQuestions()` decided whether the two pinned questions (Q1 reading-time,
+Q2 reading-reflection) already existed by checking **`q.role`** only. The Fall builder
+(`build_fall_preflights.py`) created every question **without a `role`** — verified live: 222/222
+questions carry no role. So the check always failed and the editor **injected a second reading-time
+and a second reflection question** on top of the real q1/q2, yielding 5 with those two duplicated.
+The displayed "Q3" and "Q4" were the injected duplicates, which is why deleting them *looked* right —
+but the stored data was never wrong, and there is no q4/q5 to delete.
+
+**Also a latent data-corruption bug, caught before it bit.** On **Save**, `model.questions` (5) is
+written to `activities.content.questions`, so one edit-and-save would have permanently corrupted a
+lesson to 5. All 74 lessons were still clean at 3, so nothing had been saved through the buggy path.
+
+**Fix.** `ensureDefaultQuestions()` now finds an existing pinned question by **role → prompt text →
+position (q1/q2)** — the same resolution `schema.js` `pinnedQuestion()` and the analysis skills
+already use — and **stamps the role onto the existing question** instead of adding a duplicate. A
+brand-new lesson still gets its two defaults created; a subsequent save now writes a clean,
+role-tagged 3-question lesson (additive — `role` is what every other consumer already expects).
+
+**Verification.** A logic harness over the exact edited code passes 10/10: existing lesson stays 3
+with roles stamped and the JiTT question untouched; new lesson creates exactly 2 defaults; idempotent
+on repeat calls; lab-worded lesson resolves Q2 by position; already-tagged lesson unchanged. `node
+--check` on the file's inline module: syntax OK. **Not yet verified with a live faculty login** — no
+faculty credentials in this session (CORE.md §2), so the rendered editor and Preview were not seen
+with 3 questions; the deterministic logic and the data are both confirmed.
+
+---
+
 ## 2026-07-21 — Matthew Recker via Claude
 
 ### Added — `worklist`: how a run picks its lesson, and why the two paths differ

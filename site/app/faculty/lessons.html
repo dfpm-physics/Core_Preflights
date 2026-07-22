@@ -521,20 +521,36 @@
     // diagnostic (0 pts, names hidden) and Q2 is the shared reading reflection (the meaningful-gate,
     // identical to the interaction).
     const roleRank = (q) => q.role === 'reading_time' ? 0 : q.role === 'reading_reflection' ? 1 : 2;
+    // Find an already-present pinned question the same way schema.js pinnedQuestion() does:
+    // by role, then by prompt text, then by position (q1/q2). The Fall builder created these two
+    // WITHOUT a `role`, so a role-only check does not see them and injects duplicates — that is the
+    // "5 questions on edit/preview" bug. Match here so an existing lesson keeps its 3 questions.
+    const PINNED_NEEDLE   = { reading_time: 'how much time did you spend reading',
+                              reading_reflection: 'confusing or most interesting' };
+    const PINNED_FALLBACK = { reading_time: 'q1', reading_reflection: 'q2' };
+    function findPinnedQuestion(role) {
+      const needle = PINNED_NEEDLE[role];
+      return model.questions.find(q => q.role === role)
+          || model.questions.find(q => (q.text || '').toLowerCase().includes(needle))
+          || model.questions.find(q => q.id === PINNED_FALLBACK[role]);
+    }
     function ensureDefaultQuestions() {
       if (!model.written.include) return;
-      if (!model.questions.some(q => q.role === 'reading_reflection')) {
-        model.questions.push({
-          id: nextQid(), type: 'free_response', text: READING_REFLECTION_TEXT, points: 1,
-          expected_response: READING_REFLECTION_GUIDANCE, role: 'reading_reflection', figure_url: '',
-        });
-      }
-      if (!model.questions.some(q => q.role === 'reading_time')) {
-        model.questions.unshift({
-          id: nextQid(), type: 'free_response', text: READING_TIME_TEXT, points: 0,
-          student_note: READING_TIME_NOTE, role: 'reading_time', figure_url: '',
-        });
-      }
+      // Adopt the existing reflection (stamping its role so it renders pinned and is not duplicated),
+      // or create it when authoring a brand-new lesson.
+      const refl = findPinnedQuestion('reading_reflection');
+      if (refl) refl.role = 'reading_reflection';
+      else model.questions.push({
+        id: nextQid(), type: 'free_response', text: READING_REFLECTION_TEXT, points: 1,
+        expected_response: READING_REFLECTION_GUIDANCE, role: 'reading_reflection', figure_url: '',
+      });
+      // Same for the reading-time diagnostic.
+      const rt = findPinnedQuestion('reading_time');
+      if (rt) rt.role = 'reading_time';
+      else model.questions.unshift({
+        id: nextQid(), type: 'free_response', text: READING_TIME_TEXT, points: 0,
+        student_note: READING_TIME_NOTE, role: 'reading_time', figure_url: '',
+      });
       model.questions.sort((a, b) => roleRank(a) - roleRank(b));   // stable: time, reflection, rest
     }
 
