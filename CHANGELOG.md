@@ -37,9 +37,9 @@ role-tagged 3-question lesson (additive — `role` is what every other consumer 
 **Verification.** A logic harness over the exact edited code passes 10/10: existing lesson stays 3
 with roles stamped and the JiTT question untouched; new lesson creates exactly 2 defaults; idempotent
 on repeat calls; lab-worded lesson resolves Q2 by position; already-tagged lesson unchanged. `node
---check` on the file's inline module: syntax OK. **Not yet verified with a live faculty login** — no
-faculty credentials in this session (CORE.md §2), so the rendered editor and Preview were not seen
-with 3 questions; the deterministic logic and the data are both confirmed.
+--check` on the file's inline module: syntax OK. **Confirmed in the browser by the course director**
+— the editor and its Preview now show 3 questions. (The automated harness cannot log in as faculty,
+so this final rendered check was human; the deterministic logic and the data were confirmed here.)
 
 ---
 
