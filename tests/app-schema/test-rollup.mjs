@@ -32,8 +32,14 @@ const chain = () => {
 };
 globalThis.window.db = { from: () => chain() };
 
-const { summarizeReports, loadAnalysis } =
+const { summarizeReports, loadAnalysis: loadAnalysisRaw, canonMisconceptionId, taughtSectionIds } =
   await import('../../site/app/js/faculty-rollup.js');
+
+// loadAnalysis returned a bare scope map until 2026-07-22, when it grew two offering-level
+// siblings (`aliases`, `glossary`) and started returning { scopes, aliases, glossary }. Every
+// assertion below was written against the scope map and still tests exactly what it did before,
+// so they read it through this shim rather than being rewritten to say `.scopes` 8 times.
+const loadAnalysis = async (id) => (await loadAnalysisRaw(id)).scopes;
 
 /* ── Row builders, named for the path they represent ───────────────────────── */
 
@@ -512,5 +518,126 @@ eq('…and its top-level whole-course panels', legacy.__all__?.readiness_summary
 
 ANALYSIS_ROWS = [];
 eq('no rows is an empty map, not a throw', await loadAnalysis('off-1'), {});
+
+/* ── Misconception id canonicalization + the persisted alias fold ───────────── */
+section('canonMisconceptionId — variants must not split one misconception into several bars');
+
+// Both producers may coin ids (contract §5.4), and every counting site keys on the exact string.
+// Reading-reflection topics have always been trimmed+lowercased; ids never were, so `scalar-sum`,
+// `Scalar-Sum` and `scalar-sum ` rendered as three bars of one misconception.
+eq('trims surrounding whitespace', canonMisconceptionId('  scalar-sum '), 'scalar-sum');
+eq('lowercases', canonMisconceptionId('Scalar-Sum'), 'scalar-sum');
+eq('collapses internal whitespace to hyphens', canonMisconceptionId('scalar sum'), 'scalar-sum');
+eq('empty stays empty (caller drops it)', canonMisconceptionId('   '), '');
+eq('null does not throw', canonMisconceptionId(null), '');
+// The alias map is what /lesson-aggregate persists so its clustering reaches the bars.
+const AL = { 'adds-magnitudes': 'scalar-sum' };
+eq('an alias folds a coined variant onto its canonical id',
+   canonMisconceptionId('Adds-Magnitudes', AL), 'scalar-sum');
+eq('a non-aliased id passes through', canonMisconceptionId('forces-cancel', AL), 'forces-cancel');
+// A hand-edited map could contain a cycle; one hop means it terminates instead of hanging.
+eq('a self-referential alias terminates',
+   canonMisconceptionId('a', { a: 'b', b: 'a' }), 'b');
+
+section('summarizeReports — misconceptions carry their own explanation');
+
+let mcSeq = 0;
+const mcRow = (id, extra = {}) => ({
+  student_id: 9000 + (mcSeq++), path: 'interactive', effort: 4, understanding: null,
+  report_data: { schema: 1, effort: 4, objectives: [], misconceptions: [
+    { id, label: 'Scalar sum of forces', description: 'Adds magnitudes, ignores direction.',
+      severity: 'major', evidence: `I added 3N and 5N to get 8N (${mcSeq})`, ...extra }] },
+});
+const mcSum = summarizeReports([mcRow('scalar-sum'), mcRow('Scalar-Sum '), mcRow('adds-magnitudes')],
+  2, { aliases: { 'adds-magnitudes': 'scalar-sum' } });
+eq('three id variants collapse to ONE bar', mcSum.misconceptions.length, 1);
+eq('…counting all three students', mcSum.misconceptions[0].count, 3);
+eq('…and all three as major', mcSum.misconceptions[0].major, 3);
+eq('description survives to the cohort bar (it used to be dropped here)',
+   mcSum.misconceptions[0].description, 'Adds magnitudes, ignores direction.');
+eq('evidence surfaces as an example, capped at 2',
+   mcSum.misconceptions[0].examples.length, 2);
+// Only a GENUINE fold is a variant. `Scalar-Sum ` normalizes to the canonical id and is the same
+// id spelled differently, so it must not appear; `adds-magnitudes` folded via the alias map and
+// must. Reporting the former would fill the popover with noise on every bar.
+eq('an alias-folded id is reported so the merge is visible, not silent',
+   mcSum.misconceptions[0].variants.includes('adds-magnitudes'), true);
+eq('…but a mere casing/spacing difference is not a variant',
+   mcSum.misconceptions[0].variants.includes('Scalar-Sum'), false);
+eq('…so exactly one variant is listed', mcSum.misconceptions[0].variants.length, 1);
+
+// The longest description wins — producers write one per student and the fuller one is the better
+// tooltip. Deterministic regardless of row order.
+const longer = summarizeReports([
+  mcRow('scalar-sum', { description: 'Short.' }),
+  mcRow('scalar-sum', { description: 'A much longer and more useful explanation of the error.' }),
+], 2);
+eq('the fullest description wins',
+   longer.misconceptions[0].description, 'A much longer and more useful explanation of the error.');
+
+// The glossary backfills only where the raw rows carried nothing.
+const noDesc = summarizeReports(
+  [{ student_id: 9500, path: 'interactive', effort: 3, understanding: null,
+     report_data: { schema: 1, effort: 3, objectives: [], misconceptions: [{ id: 'units', label: 'units' }] } }],
+  2, { glossary: { units: { label: 'Unit errors', description: 'Drops or mixes units.' } } });
+eq('glossary backfills a missing description', noDesc.misconceptions[0].description, 'Drops or mixes units.');
+eq('…and a better label', noDesc.misconceptions[0].label, 'Unit errors');
+
+section('loadAnalysis — instructor scopes and the offering-level alias map');
+
+ANALYSIS_ROWS = [{
+  id: 'r-instr', scope: 'assignment_offering', scope_id: 'off-1', audience_id: null,
+  kind: 'readiness', generated_at: '2026-07-22T00:00:00Z',
+  payload: {
+    scopes: {
+      'sec-uuid-1': { section_id: 'sec-uuid-1', section_code: 'M1A',
+                      misconception_recommendation: 'Re-derive the vector sum.', selected_quotes: [] },
+      'instr:u-1': { instructor_id: 'u-1', instructor_name: 'Roth',
+                     section_ids: ['sec-uuid-1', 'sec-uuid-2'],
+                     readiness_summary: 'Both sections are ready.',
+                     section_notes: [{ section_id: 'sec-uuid-2', section_code: 'M3B',
+                                       note: 'Weaker on superposition.' }] },
+      __all__: { section_id: null, section_code: '__all__', readiness_summary: 'Course is ready.' },
+    },
+    misconception_aliases: { 'Adds-Magnitudes': 'scalar-sum', 'bad': '' },
+    misconception_glossary: { 'Scalar-Sum': { label: 'Scalar sum', description: 'Ignores direction.' } },
+  },
+}];
+const withInstr = await loadAnalysisRaw('off-1');
+eq('an instructor scope loads under its instr: key',
+   withInstr.scopes['instr:u-1']?.readiness_summary, 'Both sections are ready.');
+eq('…carrying the sections it covers',
+   withInstr.scopes['instr:u-1']?.section_ids, ['sec-uuid-1', 'sec-uuid-2']);
+eq('…and its per-section departures',
+   withInstr.scopes['instr:u-1']?.section_notes?.[0]?.section_code, 'M3B');
+eq('the section scope keeps its OWN recommendation',
+   withInstr.scopes['sec-uuid-1']?.misconception_recommendation, 'Re-derive the vector sum.');
+eq('aliases are lowercased on the way in', withInstr.aliases['adds-magnitudes'], 'scalar-sum');
+eq('an alias with an empty target is dropped, not stored', 'bad' in withInstr.aliases, false);
+eq('glossary keys are lowercased too', withInstr.glossary['scalar-sum']?.label, 'Scalar sum');
+
+ANALYSIS_ROWS = [];
+const bare = await loadAnalysisRaw('off-1');
+eq('no rows still yields the three-part shape', Object.keys(bare).sort(), ['aliases', 'glossary', 'scopes']);
+
+section('taughtSectionIds — an offering-wide staff row is visibility, not a teaching assignment');
+
+eq('section-scoped rows are the teaching assignments',
+   taughtSectionIds({ currentOffering: 'o1', staff: [
+     { course_offering_id: 'o1', section_id: 's1' },
+     { course_offering_id: 'o1', section_id: 's2' }] }).sort(), ['s1', 's2']);
+eq('a director\'s offering-wide row (section_id NULL) grants no taught section',
+   taughtSectionIds({ currentOffering: 'o1', staff: [{ course_offering_id: 'o1', section_id: null }] }), []);
+eq('another offering\'s rows are ignored',
+   taughtSectionIds({ currentOffering: 'o1', staff: [{ course_offering_id: 'o2', section_id: 's9' }] }), []);
+eq('a director who also teaches gets only the section they teach',
+   taughtSectionIds({ currentOffering: 'o1', staff: [
+     { course_offering_id: 'o1', section_id: null },
+     { course_offering_id: 'o1', section_id: 's1' }] }), ['s1']);
+eq('duplicates collapse',
+   taughtSectionIds({ currentOffering: 'o1', staff: [
+     { course_offering_id: 'o1', section_id: 's1' },
+     { course_offering_id: 'o1', section_id: 's1' }] }), ['s1']);
+eq('no staff at all does not throw', taughtSectionIds({ currentOffering: 'o1' }), []);
 
 process.exitCode = summary() ? 0 : 1;

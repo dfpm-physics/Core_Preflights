@@ -246,10 +246,12 @@ Each run:
 7. Writes suggested scores, diagnostics and that assessment to Supabase (`is_finalized = false`) for every submitted student
 8. Prints a per-section run summary in the terminal or chat — submitted, missing, skipped, average score
 
-The cohort-level panels on the lesson rollup — readiness summary, misconception trends, showcase
-quotes — are **not** written by this run. They come from a separate lesson-aggregation run made
-once after the deadline across the whole class, covering students who took the interactive lesson
-and students who answered the question set together. Splitting them is deliberate: grading runs
+The cohort-level panels on the lesson rollup — the readiness summary (written per instructor across
+the sections they teach), the teaching recommendation under the misconception bars, and the showcase
+quotes — are **not** written by this run. They come from a separate lesson-aggregation run made once
+after the deadline across the whole class, covering students who took the interactive lesson and
+students who answered the question set together. *(A separate misconception-trends paragraph was
+retired 2026-07-22 — the bars now carry each misconception's own description and student evidence.)* Splitting them is deliberate: grading runs
 per day (M, then T), and a cohort summary written over one day's students would describe half a
 class.
 

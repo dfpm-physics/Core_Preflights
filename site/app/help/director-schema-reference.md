@@ -313,7 +313,7 @@ One table holds everything the AI workflows produce for faculty:
 
 | Table | Holds |
 |---|---|
-| `analysis_reports` | Cohort summaries — readiness, misconception trends, showcase quotes |
+| `analysis_reports` | Cohort summaries — readiness (per instructor), teaching recommendations, showcase quotes, and the misconception-label reconciliation |
 
 ### analysis_reports
 

@@ -10,6 +10,95 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-22 — Casey via Claude
 
+### Changed — the lesson rollup: scoping, self-explaining misconceptions, and a durable misconception bucket
+
+Requested ahead of the v2 cutover. Several changes sharing one payload contract, so they land
+together. **Additive to `analysis_reports.payload` (jsonb) — no migration, no DDL.**
+
+**Where misconceptions come from, and why they were fragmenting.** They are identified
+**per student at analysis time** — `/preflight-analyze` for written, the artifact for interactive —
+never at aggregation. Nothing validated the ids: no table, no enum, no CHECK, no code path. The
+taxonomy in `PROJECT.md` covers **3 lessons out of ~74** and reaches the model only via `CLAUDE.md`
+auto-inlining, so under any harness that ignores `@`-imports it is silently absent. Both producers
+are explicitly licensed to coin new ids, and both counting sites keyed on the **exact string** — so
+`scalar-sum`, `Scalar-Sum` and `scalar sum` rendered as three bars of one misconception. (Reading-
+reflection topics had been `.trim().toLowerCase()`-ed since day one, one block away; ids never were.)
+
+Worse, `/lesson-aggregate` **was** told to "fold novel ones into known buckets" — but the payload had
+nowhere to record a fold. The mapping was computed, written as English, and thrown away; the bars it
+sat under never reflected it, and the work was redone from scratch every run.
+
+Four fixes:
+
+- **Canonicalization at both counting sites** — `canonMisconceptionId()` in `faculty-rollup.js`,
+  mirrored in `lesson_aggregate.py`. If those two ever drift, the prose cites a prevalence the panel
+  beside it does not show, so a JS↔Python parity block now guards them together.
+- **`/preflight-analyze` matches before it coins** — a four-step order whose first step is *query the
+  ids already recorded against this assignment, across every offering and term*. That bucket is
+  self-maintaining and is the answer to "can it match an existing misconception before inventing
+  one". Matching is semantic, not textual; coining more than two or three per lesson is called out
+  as a signal to re-check.
+- **The fold is persisted** — new offering-level `misconception_aliases` (variant → canonical) and
+  `misconception_glossary`, merged across day-scoped runs like scopes are, applied by the browser at
+  render time. Deliberately not applied in the Python summarizer: those are the run's own inputs, and
+  folding them would hide from the model the variants it is being asked to reconcile.
+- **`description` and `evidence` survive to the cohort view.** Both producers emitted them, the
+  aggregator consumed them, and both counting sites dropped them right before the bars — which is
+  exactly why a bar could read `Scalar sum of forces — 57%` and tell a reader nothing.
+
+**Every misconception bar now explains itself.** Hover or click for a popover with the description,
+up to two verbatim unattributed student quotes, any coined ids that folded onto it, and the canonical
+id. The row is a real `<button>` with `aria-expanded` — hover alone is unreachable by keyboard and
+unusable on a tablet — and Escape closes it.
+
+**The readiness summary is now written per INSTRUCTOR**, across every section they teach, with
+per-section departures as structured `section_notes[]` (rendered with the section code bold, not
+model-authored markdown). Two sections of one lesson taught by one person previously got two
+isolated paragraphs, each written as though the other did not exist, so nothing said whether a gap
+was that instructor's cohort or that one section. A single-section view borrows its instructor's
+summary and keeps its own numbers, quotes and recommendation.
+
+**Scope selector reworked.** New **"My sections"** — the sections you personally teach, combined —
+is the **default for everyone**; opening a rollup on the whole course meant most readers' first view
+averaged over cohorts they do not teach. `taughtSectionIds()` counts section-scoped staff rows only:
+a director's offering-wide row (`section_id` NULL) grants sight of every section but is not a
+teaching assignment. Teach none → falls back to All sections; teach all → the option is hidden
+rather than duplicating All sections.
+
+**"Show all N" on student responses** — swaps the 5-card random sample for the whole pool, AI picks
+still pinned on top. Reading every reflection previously meant opening students one at a time.
+
+**Retired: `misconception_trends`.** Not written, not rendered. It restated the bars in prose, and
+now that each bar carries its own description and evidence it had nothing left to add — while still
+costing an AI panel and a "coming soon" placeholder under fully-populated bars. Still accepted by the
+writer so a replayed file does not fail; historical rows keep it.
+
+**Prose caps are now enforced by the writer, not requested in prose.** `readiness_summary` 8000 →
+**1200** (2–3 sentences), `section_notes[].note` 400, `misconception_recommendation` unchanged at
+1200 but now the *only* prose in its panel. The skill additionally bans the specific tells — no
+`Overall,` / `It's worth noting` openers, no three-item parallel lists, no restating the question
+back, no hedging stacks, "name the physics" over "gaps in conceptual understanding".
+
+**An instructor viewing All sections is now told when the numbers are narrower than the summary.**
+`meta.n` (true course-wide count) is compared to the rows actually summarized; a mismatch renders an
+explicit line. Whole-course prose previously sat silently above a partial cohort. This supersedes the
+roadmap's P0.4 recommendation — the course director chose to keep All sections visible to everyone,
+which is theirs to decide; what changed is that it is no longer the default and no longer silent.
+
+**Verification.** `test-rollup.mjs` **160 passed, 0 failed** (30 new: canonicalization, alias folds,
+glossary backfill, instructor scopes, `taughtSectionIds`) · `aggregate_summarize_test.py` **ALL
+PASS** including the new parity block · full `tests/app-schema` run **exit 0** (339 in-process,
+subprocess suites green) · `node --check` clean on every edited module.
+
+**Two real bugs were caught by the parity tests, not by review:** the variant list compared only
+lowercase while the id also collapses whitespace, so `scalar sum` was reported as a "variant" of the
+id it normalizes to — in both languages. Fixed to compare fully-normalized forms, so only a genuine
+alias fold is listed.
+
+**Not seen in a browser** — no faculty login is available to this harness (CORE.md §2). The popover,
+the new scope control, the section notes and the show-all toggle are all visual and unverified;
+ROADMAP P0.5 enumerates what to look at.
+
 ### Added — `docs/ROADMAP.md`, and the first seven items closed out of it
 
 **New living roadmap** consolidating a repo-wide sweep for outstanding work with the course

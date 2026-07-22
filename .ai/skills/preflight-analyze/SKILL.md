@@ -407,11 +407,47 @@ the same misconception must carry the same id or they will not aggregate.
 | `induction-polarization` | Induction/polarization confusion | Conflating charging by induction vs. conduction; misidentifying which charges move |
 | `circular-reasoning` | Circular reasoning | Restating the question as the answer; tautological explanations |
 
-**Prefer a per-preflight id where one exists.** `.ai/instructions/PROJECT.md` § "Known
-Misconception Patterns" carries assignment-specific tables (`scalar-sum`, `forces-cancel`,
-`wavelength-confusion`, `shielding`, …) with the exact correction to give the student. Those are
-more precise than the generic ids above and are the first place to look; fall back to this table,
-and coin a new kebab-case id only when neither fits.
+#### Match before you coin — the misconception bucket
+
+**Nothing validates a misconception id.** No table, no enum, no CHECK constraint, no code path.
+Every counting site keys on the exact string, so an id you invent that means the same thing as one
+already in use becomes its own bar at a fraction of the real prevalence, and the finding is split
+in two. The taxonomy covers three lessons out of ~74, so for most lessons the tables above will not
+have your answer and the pressure to coin is constant.
+
+**Resolve in this order, and only reach the next step when the previous one genuinely does not fit:**
+
+1. **The bucket already in use for THIS assignment.** Before emitting anything, fetch the ids
+   already recorded against this assignment — across every offering and term, not just this one:
+
+   ```
+   GET {SUPA_URL}/rest/v1/grades?select=diagnostic&assignment_offering_id=in.(<every offering of this assignment>)
+   ```
+
+   Collect `diagnostic.misconceptions[].id` plus each entry's `label`/`description`. That set is the
+   bucket. It is self-maintaining — it grows as lessons are analyzed — and it is the single most
+   effective thing you can do to keep a lesson's bars stable across runs and across terms.
+   *(On the interactive path the same ids also live in `submission_activities.content`; include them
+   when the lesson has an artifact.)*
+2. **The per-preflight table** in `.ai/instructions/PROJECT.md` § "Known Misconception Patterns"
+   (`scalar-sum`, `forces-cancel`, `wavelength-confusion`, `shielding`, …). More precise than the
+   generic ids, and it carries the exact correction to give the student.
+3. **The generic table above.**
+4. **Coin a new kebab-case id** — lowercase, hyphen-separated, no spaces. Give it a `label` and a
+   `description` good enough that `/lesson-aggregate` can later fold it into a bucket or promote it.
+
+**Matching is semantic, not textual.** "Adds the magnitudes without direction" and "treats forces as
+scalars" are one misconception with two phrasings; reuse the existing id. Two errors that merely
+co-occur are not one error — do not collapse them to keep the list short.
+
+**Normalization is automatic, so do not rely on it.** Both counting sites lowercase, trim, and
+convert whitespace to hyphens, so `Scalar-Sum` and `scalar sum` already fold onto `scalar-sum`. That
+protects against typos, not against synonyms — it will never merge `adds-magnitudes` with
+`scalar-sum`. Only step 1 does that.
+
+**If you coin more than two or three new ids for one lesson, stop and re-check step 1.** That is
+almost always a sign you are re-describing misconceptions the bucket already holds, and it is the
+failure mode this section exists to prevent.
 
 If `REFERENCE_TEXT` was loaded in Step 3, cross-reference student answers against the textbook content to identify factual errors more accurately.
 

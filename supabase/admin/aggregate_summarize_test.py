@@ -5,6 +5,7 @@ required to cite the same figures the browser's bars show (ROLLUP-AGREEMENT §2 
 This checks the cross-modality behaviour added 2026-07-21 against the same cases the JS suite
 asserts in tests/app-schema/test-rollup.mjs.
 """
+import itertools
 import sys
 from pathlib import Path
 sys.path.insert(0, r"c:\01 -- AI Projects\Socratic Instruction\Core_Preflights\supabase\admin")
@@ -270,6 +271,44 @@ want("…and is kept out of the zero bucket", ungraded["q3"]["zero"], 0)
 inter = summarize([interactive(4, 5), interactive(3, 4)], 2)["questions"]
 want("an interactive-only cohort yields an EMPTY questions block", inter, {})
 want("…which is falsy, so the skill's gate works", bool(inter), False)
+
+print("\n=== misconception ids canonicalize — MUST match canonMisconceptionId() in JS ===")
+
+# Both producers may coin ids (contract §5.4) and both counting sites key on the string, so
+# `scalar-sum`, `Scalar-Sum` and `scalar sum` used to be three entries here and three bars in the
+# browser. These assertions mirror the ones in tests/app-schema/test-rollup.mjs one for one: if the
+# two normalizers ever drift, the aggregator's prose cites a prevalence the panel does not show.
+_ev = itertools.cycle(("I added 3N and 5N", "just summed them", "8N total", "added the numbers"))
+def mrow(mid, desc="Adds magnitudes, ignores direction.", ev=None, sev="major"):
+    return written(4, 3, 3, misc=[{"id": mid, "label": "Scalar sum of forces",
+                                   "description": desc, "severity": sev,
+                                   "evidence": ev if ev is not None else next(_ev)}])
+
+canon = summarize([mrow("scalar-sum"), mrow("Scalar-Sum "), mrow("scalar sum")], 2)["misconceptions"]
+want("three id spellings collapse to ONE entry", len(canon), 1)
+want("…under the canonical id", canon[0]["id"], "scalar-sum")
+want("…counting all three", canon[0]["count"], 3)
+want("…all three major", canon[0]["major"], 3)
+# Casing and spacing are the SAME id, not variants — listing them would be popover noise. Only a
+# genuinely different id folded by the alias map is a variant, and that fold happens in the browser.
+want("mere casing/spacing differences are NOT reported as variants", canon[0]["variants"], [])
+
+# description + evidence now survive to the cohort entry; they used to be dropped here and in JS,
+# which is why a bar could not explain itself.
+want("description survives", canon[0]["description"], "Adds magnitudes, ignores direction.")
+want("evidence from different students surfaces as examples, capped at 2",
+     len(canon[0]["examples"]), 2)
+want("…deduplicated, not repeated",
+     len(summarize([mrow("m1", ev="same"), mrow("m1", ev="same")], 2)["misconceptions"][0]["examples"]), 1)
+
+longest = summarize([mrow("scalar-sum", desc="Short."),
+                     mrow("scalar-sum", desc="A much longer and more useful explanation.")],
+                    2)["misconceptions"]
+want("the fullest description wins (same rule as JS)",
+     longest[0]["description"], "A much longer and more useful explanation.")
+
+blank = summarize([mrow("   ")], 2)["misconceptions"]
+want("a whitespace-only id is dropped, not counted as a bar", blank, [])
 
 print(f"\n{'ALL PASS' if not fails else str(len(fails)) + ' FAILED'}")
 for f in fails:

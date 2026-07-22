@@ -37,16 +37,30 @@ an interactive lesson is. Per-student values are never displayed individually.
 
 ## Lesson aggregation
 
-Run **after a day track's deadline**. It reads the per-student assessments and produces every AI
-panel on the lesson rollup: the readiness summary (including the common threads across the reading
-reflection and the graded physics question), misconception trends written for whichever scope you
-are viewing, a one-line teaching recommendation beneath them, and the showcase quotes.
+Run **after a day track's deadline**. It reads the per-student assessments and produces the AI text
+on the lesson rollup: a short readiness summary, a one-line teaching recommendation under the
+misconception bars, and the showcase quotes.
+
+**The readiness summary is written per instructor**, covering every section you teach at once, with
+any section that genuinely differs called out beneath it by name. Two sections of the same lesson
+used to get two separate summaries written as though the other did not exist, so nothing told you
+whether a gap was your whole cohort or one section. Viewing a single section shows its own numbers,
+quotes and recommendation, with your summary above them.
+
+It is deliberately **two or three sentences**. What the class can do, what it cannot, what to cover
+first — the charts directly above it already carry the numbers.
 
 **Sections are summarized first, then the course.** The whole-course view is written from the
 section summaries rather than by re-reading everyone, which is what makes the second run cheap: on
 M-day it summarizes the M sections, on T-day the T sections, and only then does it write the
 course-level view covering all of them. A course-wide summary is never written over a partial
 cohort — if a section has not been aggregated yet, the whole-course panel simply waits.
+
+**It also reconciles misconceptions.** Both the artifact and the grading run may invent a label for
+a misunderstanding that does not fit the known list, so the same misunderstanding can arrive under
+two names and split into two bars. Aggregation records which invented labels mean the same thing,
+and the rollup merges them from then on — the popover on a merged bar lists the other names it
+absorbed.
 
 **It covers both ways a lesson can be worked.** Students who took the interactive artifact and
 students who answered the question set are summarized together, because both now produce the same

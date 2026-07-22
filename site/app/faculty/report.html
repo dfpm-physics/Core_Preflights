@@ -98,9 +98,13 @@
     let vm = null, reportInteraction = null;
     // Structured report data for the open lesson: rows = null while loading, [] once loaded.
     let reportRows = null, reportByStudent = {};
-    // Cohort AI analysis (interaction_analysis) keyed by scope ('__all__' = whole-course); null
-    // while loading. Absent/empty → the rollup keeps today's "coming soon" placeholders.
+    // Cohort AI analysis keyed by scope — a section uuid, 'instr:<uuid>', or '__all__'; null while
+    // loading. Absent/empty → the rollup keeps today's "coming soon" placeholders.
     let reportAnalysis = null;
+    // Offering-level, not per scope. `reportAliases` folds coined misconception-id variants onto a
+    // canonical id (the clustering /lesson-aggregate used to do in prose and throw away);
+    // `reportGlossary` backfills a label/description for ids whose raw rows carried none.
+    let reportAliases = null, reportGlossary = null;
 
     function init() {
       initTheme();
@@ -145,14 +149,29 @@
     // radar tiles, AI placeholders, per-objective rows, and a student-responses panel. Every numeric
     // aggregate comes from summarizeReports — no AI.
     const f1 = x => x == null ? '—' : (Number.isInteger(x) ? String(x) : x.toFixed(1));
-    let reportScope = 'all';
+    // Scope values: 'mine' (the sections you teach — the DEFAULT for everyone), 'all' (the whole
+    // course), or a section uuid. 'mine' was added 2026-07-22 and made the default: opening a
+    // rollup on the whole course meant most readers' first view averaged over cohorts they do not
+    // teach, which is the wrong default for the people who use this page most.
+    let reportScope = 'mine';
+    let myScopeSectionIds = [];              // resolved per lesson in showReport()
     const SEG_MAX = 5;                       // ≤ this many scope options → segmented control, else dropdown
 
     function showReport(interactionId, title, section) {
       reportInteraction = interactionId;
       const it = vm.interactions.find(x => x.id === interactionId);
       document.getElementById('rm-title').textContent = title || it?.title || 'Lesson report';
-      reportScope = (section && vm.sections.some(s => s.id === section)) ? section : 'all';
+
+      // Sections you personally teach, intersected with what this rollup actually loaded. A
+      // director holds an offering-wide staff row that grants sight of every section but is not a
+      // teaching assignment, so taughtSectionIds() excludes it — see its docstring. Empty means
+      // "staffs the offering but teaches no section of it", and 'mine' then falls back to 'all'
+      // rather than rendering an empty rollup.
+      const taught = new Set(I.taughtSectionIds(ctx));
+      myScopeSectionIds = vm.sections.filter(s => taught.has(String(s.id))).map(s => s.id);
+
+      reportScope = (section && vm.sections.some(s => s.id === section)) ? section
+                  : myScopeSectionIds.length ? 'mine' : 'all';
 
       reportRows = null; reportByStudent = {}; reportAnalysis = null;   // null → summary shows "computing…"
       renderScope();
@@ -169,30 +188,89 @@
       });
       // Pull the cohort AI synthesis once (one row per scope). Loads independently of the numeric
       // data — whichever resolves first renders; the AI panels degrade gracefully until this lands.
-      I.loadAnalysis(interactionId).then(map => {
+      I.loadAnalysis(interactionId).then(res => {
         if (reportInteraction !== interactionId) return;
-        reportAnalysis = map;
+        reportAnalysis = res.scopes;
+        reportAliases = res.aliases;
+        reportGlossary = res.glossary;
         renderAggregate();
       });
     }
 
-    // The AI analysis row for the current scope: the '__all__' whole-course row for "All sections",
-    // else the chosen section's row. null until loaded or when no row exists for the scope (an
-    // instructor's "All sections" never matches '__all__' under RLS, so it stays on placeholders).
-    function currentAnalysis() {
+    /**
+     * The AI panels for the current scope.
+     *
+     * Two things are resolved separately, because since 2026-07-22 they live on different scopes:
+     *
+     *  - readiness_summary comes from the INSTRUCTOR scope ('instr:<uuid>'), written across all the
+     *    sections that instructor teaches with per-section departures listed under it. A single
+     *    section therefore shows its own numbers, its own quotes and its own recommendation, but
+     *    its instructor's summary — which is what makes two sections of the same lesson comparable
+     *    instead of each getting an isolated paragraph.
+     *  - everything else comes from the scope actually selected.
+     *
+     * 'mine' prefers the viewer's own instructor scope and falls back to '__all__' when they teach
+     * nothing. 'all' is always the whole-course row.
+     */
+    function myInstructorKey() { return ctx?.user?.id ? `instr:${ctx.user.id}` : null; }
+
+    function instructorScopeFor(sectionId) {
       if (!reportAnalysis) return null;
-      return reportAnalysis[reportScope === 'all' ? '__all__' : reportScope] || null;
+      // The instructor scope that claims this section. Falls back to the viewer's own scope, which
+      // is the common case: you are usually looking at a section you teach.
+      const owning = Object.entries(reportAnalysis).find(([k, v]) =>
+        k.startsWith('instr:') && Array.isArray(v.section_ids) && v.section_ids.map(String).includes(String(sectionId)));
+      if (owning) return owning[1];
+      const mine = myInstructorKey();
+      return (mine && reportAnalysis[mine]) || null;
     }
 
-    // Adaptive section scope: a segmented control when there are few sections, a dropdown when many.
-    // "All sections" = the whole-scope average.
+    function currentAnalysis() {
+      if (!reportAnalysis) return null;
+      const mineKey = myInstructorKey();
+      if (reportScope === 'mine') {
+        return (mineKey && reportAnalysis[mineKey]) || reportAnalysis.__all__ || null;
+      }
+      if (reportScope === 'all') return reportAnalysis.__all__ || null;
+
+      // A single section: its own panels, but the summary from whoever teaches it.
+      const own = reportAnalysis[reportScope] || null;
+      const instr = instructorScopeFor(reportScope);
+      if (!own && !instr) return null;
+      return {
+        ...(own || {}),
+        readiness_summary: instr?.readiness_summary ?? own?.readiness_summary ?? null,
+        section_notes: instr?.section_notes ?? null,
+        instructor_name: instr?.instructor_name ?? null,
+        // Keep the section's own meta (n, fingerprint) — the summary is borrowed, the numbers are not.
+        meta: own?.meta ?? instr?.meta ?? null,
+      };
+    }
+
+    // Adaptive section scope: a segmented control when there are few options, a dropdown when many.
+    //
+    //   My sections  — the sections you teach, combined. DEFAULT. Omitted when you teach none, or
+    //                  when you teach all of them anyway (it would duplicate "All sections").
+    //   All sections — the whole course. Still offered to everyone, deliberately: see the note in
+    //                  aiSec() about what an instructor sees when the numbers they can load are
+    //                  narrower than the cohort the summary describes.
+    //   <code>       — one section.
+    function scopeOptions() {
+      const secs = vm.sections;
+      const showMine = myScopeSectionIds.length > 0 && myScopeSectionIds.length < secs.length;
+      return [...(showMine ? ['mine'] : []), 'all', ...secs.map(s => s.id)];
+    }
+
     function renderScope() {
       const host = document.getElementById('rm-scope');
-      const secs = vm.sections, opts = ['all', ...secs.map(s => s.id)];
+      const secs = vm.sections, opts = scopeOptions();
       // A section id is a uuid in schema `app`; the CODE ('M1A') is what a human reads.
       // The uuid stays the VALUE everywhere (scope keys, comparisons) — only labels change.
       const codeOf = id => (vm.sections.find(s => s.id === id)?.code) || id;
-      const label = v => v === 'all' ? 'All sections' : codeOf(v);
+      const label = v => v === 'mine' ? 'My sections' : v === 'all' ? 'All sections' : codeOf(v);
+      const countOf = v => v === 'mine' ? myScopeSectionIds.length
+                         : v === 'all' ? secs.length
+                         : (secs.find(s => s.id === v)?.students.length ?? 0);
       if (opts.length <= SEG_MAX) {
         host.innerHTML = `<div class="seg" role="group" aria-label="Section">`
           + opts.map(v => `<button data-scope="${esc(v)}" aria-pressed="${reportScope === v}">${esc(label(v))}</button>`).join('') + `</div>`;
@@ -200,8 +278,10 @@
           const b = e.target.closest('button'); if (b) { reportScope = b.dataset.scope; renderScope(); renderAggregate(); }
         });
       } else {
-        host.innerHTML = `<select aria-label="Section"><option value="all" ${reportScope === 'all' ? 'selected' : ''}>All sections (${secs.length})</option>`
-          + secs.map(s => `<option value="${esc(s.id)}" ${reportScope === s.id ? 'selected' : ''}>${esc(s.code || s.id)} (${s.students.length})</option>`).join('') + `</select>`;
+        host.innerHTML = `<select aria-label="Section">`
+          + opts.map(v => `<option value="${esc(v)}" ${reportScope === v ? 'selected' : ''}>`
+              + `${esc(label(v))}${v === 'mine' || v === 'all' ? ` (${countOf(v)} section${countOf(v) === 1 ? '' : 's'})` : ` (${countOf(v)})`}</option>`).join('')
+          + `</select>`;
         host.querySelector('select').addEventListener('change', e => { reportScope = e.target.value; renderAggregate(); });
       }
     }
@@ -209,8 +289,17 @@
     // Roster for the chosen scope. `section` is tagged with the section CODE, not its id:
     // it is only ever rendered (quote attribution, roster rows), never compared.
     function rosterInScope() {
-      const src = reportScope === 'all' ? vm.sections : vm.sections.filter(s => s.id === reportScope);
+      const src = reportScope === 'all' ? vm.sections
+                : reportScope === 'mine' ? vm.sections.filter(s => myScopeSectionIds.includes(s.id))
+                : vm.sections.filter(s => s.id === reportScope);
       return src.flatMap(s => s.students.map(st => ({ ...st, section: s.code || s.id })));
+    }
+
+    // Does this scope cover exactly one section? Drives the quotes panel and the trend heading.
+    function singleSectionScope() {
+      return reportScope !== 'all' && reportScope !== 'mine' ? reportScope
+           : (reportScope === 'mine' && myScopeSectionIds.length === 1) ? myScopeSectionIds[0]
+           : null;
     }
 
     // Completion "Submitted" badge — submitted = a report row exists for the student (doneStudentIds).
@@ -238,7 +327,8 @@
       }
       const ids = new Set(roster.map(st => String(st.student_id)));
       const rows = reportRows.filter(r => ids.has(String(r.student_id)));
-      const s = I.summarizeReports(rows);
+      const s = I.summarizeReports(rows, undefined,
+        { aliases: reportAliases, glossary: reportGlossary });
       s.objectives.forEach((o, i) => o.letter = String.fromCharCode(65 + i));   // A, B, C… (weakest first)
       el.innerHTML = aggregateHTML(s, rows, roster, currentAnalysis());
       renderFlagBar(s);
@@ -471,17 +561,44 @@
 
     // Misconception prevalence — real bars from report_data: the share of submitted students who
     // showed each misconception (most common first). Color intensifies with prevalence; the "major"
-    // count is noted. The AI trend narrative (clustering, spreading/fading) sits below as a TBD.
+    // count is noted.
+    //
+    // Each bar now EXPLAINS ITSELF. A label like "Scalar sum of forces" at 57% told a reader
+    // nothing about what the students actually got wrong, and the description and evidence that
+    // would have said so were collected by both producers, handed to the aggregator, and then
+    // dropped before they ever reached this function. They survive now, and surface as a popover on
+    // hover and on click/focus.
+    //
+    // Hover alone would be unreachable by keyboard and unusable on a tablet, so the row is a real
+    // <button> with aria-expanded: hover reveals it, click pins it, Escape closes. Nothing here is
+    // load-bearing for the numbers — a misconception with no description still renders its bar.
     function mcBars(misconceptions, n) {
       if (!misconceptions.length) return `<div class="muted" style="font-size:.85em">No misconceptions recorded in this scope.</div>`;
-      return misconceptions.slice(0, 8).map(m => {
+      return misconceptions.slice(0, 8).map((m, i) => {
         const p = n ? Math.round(m.count / n * 100) : 0;
         const col = p >= 50 ? 'var(--red)' : p >= 25 ? 'var(--gold)' : 'var(--blue-lt)';
         const major = m.major ? ` · ${m.major} major` : '';
-        return `<div class="progress-row" style="margin-bottom:10px">
-          <span class="pr-label">${esc(m.label)}</span>
+        const hasDetail = !!(m.description || (m.examples && m.examples.length));
+        const examples = (m.examples || []).map(x =>
+          `<li class="mc-ex">“${esc(x)}”</li>`).join('');
+        // Variants are shown only when the alias fold actually merged something, so a director can
+        // see that two coined ids were treated as one rather than wondering where a bar went.
+        const variants = (m.variants || []).length
+          ? `<div class="mc-pop-variants">Also recorded as ${m.variants.map(v => `<code>${esc(v)}</code>`).join(', ')}</div>` : '';
+        const pop = hasDetail ? `<div class="mc-pop" role="tooltip" id="mcpop-${i}">
+            <div class="mc-pop-title">${esc(m.label)}</div>
+            ${m.description ? `<p class="mc-pop-desc">${esc(m.description)}</p>` : ''}
+            ${examples ? `<div class="mc-pop-lab">What students wrote</div><ul class="mc-pop-ex">${examples}</ul>` : ''}
+            ${variants}
+            <div class="mc-pop-id"><code>${esc(m.id)}</code></div>
+          </div>` : '';
+        return `<div class="progress-row mc-row${hasDetail ? ' has-pop' : ''}" style="margin-bottom:10px">
+          ${hasDetail
+            ? `<button type="button" class="pr-label mc-label" aria-expanded="false" aria-describedby="mcpop-${i}">${esc(m.label)}<span class="mc-info" aria-hidden="true">?</span></button>`
+            : `<span class="pr-label">${esc(m.label)}</span>`}
           <span class="pr-count">${m.count}/${n} · ${p}%${major}</span>
           <div class="pr-track"><div class="pr-fill" style="width:${Math.max(p, 3)}%;background:${col}"></div></div>
+          ${pop}
         </div>`;
       }).join('');
     }
@@ -536,6 +653,7 @@
     // The student-responses / showcase panel is a per-section teaching tool: it renders only on a
     // single-section scope (`singleScope`). The "All sections" view shows no quote panel — AI picks
     // are per-section and an instructor's union must never surface a cross-section quote.
+    // ("My sections" counts as single-section when you teach exactly one — see singleSectionScope.)
     function responsesSection(rows, roster, analysis, singleScope) {
       if (!singleScope) { respState = null; return ''; }
       const { ai, pool } = buildResponses(rows, roster, analysis);
@@ -550,14 +668,20 @@
       // (lesson-aggregate SKILL.md), so the panel is 8 cards where the pool allows.
       const RANDOM_N = 5;
       const randN = Math.min(RANDOM_N, pool.length);
-      respState = { ai, pool, randN, sample: sampleN(pool, randN), namesOn: false };
+      // `showAll` switches the random sample for the ENTIRE pool, AI picks still pinned on top.
+      // The sampled view is the teaching default (8 cards fit on a screen and in a class); reading
+      // every reflection is a different task — grading, or looking for someone specific — and used
+      // to require opening each student individually.
+      respState = { ai, pool, randN, sample: sampleN(pool, randN), namesOn: false, showAll: false };
+      const total = ai.length + pool.length;
       const aiNote = ai.length ? `${ai.length} AI pick${ai.length === 1 ? '' : 's'}${randN ? ' + ' : ''}` : '';
       const randNote = randN ? `${randN} random` : '';
       return `<div class="lr-sec fw-panel" id="sr-sec">
-        <div class="lr-eyebrow">Student responses <span class="dim">· ${aiNote}${randNote} · select to copy for slides</span></div>
+        <div class="lr-eyebrow">Student responses <span class="dim" id="sr-note">· ${aiNote}${randNote} · select to copy for slides</span></div>
         <div class="sr-controls">
           <button class="switch" id="sr-names" type="button" aria-pressed="false"><span class="track"><span class="knob"></span></span>Show names</button>
           <span class="spacer"></span>
+          ${pool.length > randN ? `<button class="tbtn" id="sr-all" type="button" aria-pressed="false">Show all ${total}</button>` : ''}
           ${randN > 0 && pool.length > randN ? `<button class="tbtn" id="sr-shuffle" type="button">↻ Shuffle random</button>` : ''}
           <button class="tbtn" id="sr-copy" type="button">Copy selected</button>
         </div>
@@ -566,8 +690,18 @@
     }
     function drawResponses() {
       const list = document.getElementById('sr-list'); if (!list || !respState) return;
+      // AI picks stay pinned on top in both modes — "show all" widens the sample, it does not
+      // discard the argued-for showcase quotes or reorder them into the crowd.
+      const body = respState.showAll ? respState.pool : respState.sample;
       list.innerHTML = respState.ai.map(q => srCard(q, true, respState.namesOn)).join('')
-        + respState.sample.map(q => srCard(q, false, respState.namesOn)).join('');
+        + body.map(q => srCard(q, false, respState.namesOn)).join('');
+      const note = document.getElementById('sr-note');
+      if (note) {
+        const aiN = respState.ai.length;
+        note.textContent = respState.showAll
+          ? `· ${aiN} AI pick${aiN === 1 ? '' : 's'} + all ${respState.pool.length} responses · select to copy for slides`
+          : `· ${aiN ? `${aiN} AI pick${aiN === 1 ? '' : 's'}${respState.randN ? ' + ' : ''}` : ''}${respState.randN ? `${respState.randN} random` : ''} · select to copy for slides`;
+      }
       const copyBtn = document.getElementById('sr-copy');
       const updateCopy = () => { const n = list.querySelectorAll('.sr-quote.sel').length; copyBtn.textContent = n ? `Copy selected (${n})` : 'Copy selected'; };
       list.querySelectorAll('.sr-quote').forEach(c => c.addEventListener('click', () => { c.classList.toggle('sel'); updateCopy(); }));
@@ -581,6 +715,18 @@
         respState.namesOn = !respState.namesOn;
         namesBtn.setAttribute('aria-pressed', respState.namesOn); namesBtn.classList.toggle('on', respState.namesOn);
         document.querySelectorAll('#sr-list .att').forEach(a => { a.hidden = !respState.namesOn; });
+      });
+      const allBtn = document.getElementById('sr-all');
+      allBtn?.addEventListener('click', () => {
+        respState.showAll = !respState.showAll;
+        allBtn.setAttribute('aria-pressed', String(respState.showAll));
+        allBtn.classList.toggle('on', respState.showAll);
+        allBtn.textContent = respState.showAll
+          ? `Show sample` : `Show all ${respState.ai.length + respState.pool.length}`;
+        // Shuffling a full listing is meaningless — hide it rather than leave a dead control.
+        const sh = document.getElementById('sr-shuffle');
+        if (sh) sh.hidden = respState.showAll;
+        drawResponses();
       });
       document.getElementById('sr-shuffle')?.addEventListener('click', () => { respState.sample = sampleN(respState.pool, respState.randN); drawResponses(); });
       document.getElementById('sr-copy')?.addEventListener('click', async () => {
@@ -629,28 +775,48 @@
         </div>
       </div>`;
 
+      // ── AI readiness summary ──
+      // Written per INSTRUCTOR across every section they teach, not per section. Two sections of
+      // the same lesson taught by one person got two isolated paragraphs that could not be compared;
+      // one summary plus an explicit list of where a section departed from it says more in less
+      // space. A single section therefore shows its instructor's summary (currentAnalysis() borrows
+      // it) while keeping its own numbers, quotes and recommendation.
       const readiness = analysis && analysis.readiness_summary;
+      const notes = (analysis && Array.isArray(analysis.section_notes)) ? analysis.section_notes : [];
+      // On a single section, only that section's departure is relevant — the others describe
+      // cohorts the reader did not select.
+      const oneSec = singleSectionScope();
+      const shownNotes = oneSec ? notes.filter(nt => String(nt?.section_id) === String(oneSec)) : notes;
+      const codeFor = nt => nt?.section_code || (vm.sections.find(x => x.id === nt?.section_id)?.code) || 'Section';
+      const notesHTML = shownNotes.length ? `<div class="ai-secnotes">`
+        + shownNotes.map(nt => `<p class="ai-secnote"><strong>${esc(codeFor(nt))}</strong> — ${esc(nt.note || '')}</p>`).join('')
+        + `</div>` : '';
+      const whoNote = analysis?.instructor_name && !oneSec
+        ? ` · ${esc(analysis.instructor_name)}'s sections` : '';
+      // An instructor viewing "All sections" reads a summary written over the whole course while
+      // the numbers above it come from only the rows they can load. Saying so is the honest fix:
+      // the alternative is silently pairing whole-course prose with a partial cohort.
+      const allMeta = analysis?.meta?.n;
+      const scopeMismatch = reportScope === 'all' && Number.isInteger(allMeta) && allMeta > s.n
+        ? `<p class="ai-scope-warn">This summary covers the whole course (${allMeta} students). The charts above
+             show only the ${s.n} you have access to.</p>` : '';
       const aiSec = `<div class="lr-sec fw-panel">
-        <div class="lr-eyebrow">AI readiness summary <span class="dim">${readiness ? aiGenNote(analysis, s.n) : '· coming soon'}</span></div>
-        ${readiness ? aiProse(analysis.readiness_summary)
-          : aiPlaceholder('A short read on how ready the class is for this lesson — engagement, where understanding is solid vs. shaky, and what to cover in class — will be generated here once the analysis aggregator is built.')}
+        <div class="lr-eyebrow">AI readiness summary <span class="dim">${readiness ? aiGenNote(analysis, s.n) + whoNote : '· coming soon'}</span></div>
+        ${readiness ? aiProse(analysis.readiness_summary) + notesHTML + scopeMismatch
+          : aiPlaceholder('A short read on how ready the class is for this lesson — engagement, where understanding is solid vs. shaky, and what to cover in class — will be generated here once the lesson has been aggregated.')}
       </div>`;
 
-      const trends = analysis && analysis.misconception_trends;
+      // ── Misconceptions ──
+      // The trends paragraph that used to sit here was removed 2026-07-22. It restated the bars in
+      // prose, and now that each bar carries its own description and student evidence it had nothing
+      // left to add — while still costing a full AI panel and a "coming soon" placeholder under
+      // fully-populated bars. The one-line recommendation is what survives, because it is the only
+      // part that told an instructor to DO something.
       const reco = analysis && analysis.misconception_recommendation;
-      // The trends panel is written for the scope you are looking at, so it says which one that
-      // is. The old "across the class" was ambiguous on a page with a section selector.
-      const trendScope = reportScope === 'all' ? 'across the course'
-                       : `in ${(vm.sections.find(x => x.id === reportScope)?.code) || 'this section'}`;
       const mcSec = `<div class="lr-sec fw-panel">
-        <div class="lr-eyebrow">Misconceptions <span class="dim">· share of submitted students, most common first</span></div>
+        <div class="lr-eyebrow">Misconceptions <span class="dim">· share of submitted students, most common first · select one for detail</span></div>
         ${mcBars(s.misconceptions, s.n)}
-        <div style="margin-top:16px">
-          <div class="lr-eyebrow">Trends ${esc(trendScope)} <span class="dim">${trends ? aiGenNote(analysis, s.n) : '· AI generated · coming soon'}</span></div>
-          ${trends ? aiProse(analysis.misconception_trends)
-            : aiPlaceholder('Which misconceptions are spreading or fading and how they cluster by section will be summarized here once the lesson has been aggregated.')}
-          ${reco ? `<p class="ai-reco"><span class="ai-reco-lab">Recommendation</span>${esc(reco)}</p>` : ''}
-        </div>
+        ${reco ? `<p class="ai-reco"><span class="ai-reco-lab">Recommendation</span>${esc(reco)}</p>` : ''}
       </div>`;
 
       // The written path's free-response understanding is charted here exactly like an
@@ -675,7 +841,7 @@
       const objSec = s.objectives.length ? `<div class="lr-sec obj-box">
         <div class="lr-eyebrow">Understanding by objective <span class="dim">${objMix}</span></div>${objRows}</div>` : '';
 
-      return row2 + rtSec + aiSec + mcSec + objSec + responsesSection(rows, roster, analysis, reportScope !== 'all');
+      return row2 + rtSec + aiSec + mcSec + objSec + responsesSection(rows, roster, analysis, singleSectionScope());
     }
 
     // ── Flags: header pills → flagged-students list → one student summary → full report ──
@@ -717,7 +883,36 @@
         });
         h.addEventListener('mouseleave', () => { rtip.style.display = 'none'; });
       });
+      wireMisconceptionPops();
       wireResponses();
+    }
+
+    // Misconception detail popovers. Hover is handled entirely in CSS (:hover on the row); this
+    // adds the click/keyboard path, because hover alone is unreachable by keyboard and unusable on
+    // a touch screen. Clicking pins one open; clicking it again, opening another, pressing Escape,
+    // or clicking outside closes it.
+    function wireMisconceptionPops() {
+      const rows = [...document.querySelectorAll('#rm-aggregate .mc-row.has-pop')];
+      if (!rows.length) return;
+      const closeAll = (except) => rows.forEach(r => {
+        if (r === except) return;
+        r.classList.remove('pin');
+        r.querySelector('.mc-label')?.setAttribute('aria-expanded', 'false');
+      });
+      rows.forEach(row => {
+        const btn = row.querySelector('.mc-label');
+        btn?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const open = !row.classList.contains('pin');
+          closeAll(row);
+          row.classList.toggle('pin', open);
+          btn.setAttribute('aria-expanded', String(open));
+        });
+      });
+      // One listener per render, not per row. Re-registering on every renderAggregate is harmless
+      // because the previous DOM (and its listeners) is discarded with innerHTML.
+      document.addEventListener('click', () => closeAll(null));
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAll(null); });
     }
 
     // The students (in scope) whose submitted report fired a given flag.

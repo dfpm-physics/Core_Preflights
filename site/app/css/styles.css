@@ -1060,6 +1060,43 @@ tr:last-child td { border-bottom: none; }
 .staff-tbl select { width: auto; min-width: 128px; font-size: 0.85em; padding: 5px 8px; }
 .staff-tbl select:disabled { opacity: 1; color: var(--text); background: var(--surface-hover, var(--bg)); cursor: default; }
 
+/* ── Misconception detail popover (rollup) ──
+   Each bar explains itself: description + a couple of unattributed student quotes. Hover is pure
+   CSS; .pin is the click/keyboard path added by wireMisconceptionPops(). The row is the
+   positioning context, and the popover is taken out of flow so opening one never reflows the bars
+   underneath it. */
+.mc-row { position: relative; }
+.mc-label { background: none; border: none; padding: 0; font: inherit; color: inherit;
+  text-align: left; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; width: auto; }
+.mc-label:hover, .mc-label:focus-visible { color: var(--blue-lt); }
+.mc-info { display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; border-radius: 999px; background: var(--border); color: var(--muted);
+  font-size: 0.68em; font-weight: 800; line-height: 1; flex: none; }
+.mc-label:hover .mc-info, .mc-label:focus-visible .mc-info { background: var(--blue-lt); color: #fff; }
+
+.mc-pop { position: absolute; z-index: 30; left: 0; top: calc(100% + 6px); width: min(420px, 92vw);
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow-md); padding: 12px 14px;
+  opacity: 0; visibility: hidden; transform: translateY(-3px); transition: opacity .12s, transform .12s, visibility .12s; }
+.mc-row.has-pop:hover .mc-pop, .mc-row.pin .mc-pop,
+.mc-row.has-pop:focus-within .mc-pop { opacity: 1; visibility: visible; transform: translateY(0); }
+.mc-pop-title { font-weight: 800; font-size: 0.9em; margin-bottom: 5px; }
+.mc-pop-desc { font-size: 0.86em; line-height: 1.45; color: var(--text); margin: 0 0 8px; }
+.mc-pop-lab { font-size: 0.7em; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 4px; }
+.mc-pop-ex { margin: 0 0 8px; padding-left: 16px; }
+.mc-ex { font-size: 0.84em; line-height: 1.4; color: var(--muted); font-style: italic; margin-bottom: 3px; }
+.mc-pop-variants { font-size: 0.76em; color: var(--muted); margin-bottom: 6px; }
+.mc-pop-id { font-size: 0.72em; color: var(--muted); border-top: 1px solid var(--border); padding-top: 6px; }
+.mc-pop code { font-size: 0.95em; background: var(--surface-hover, var(--bg)); padding: 1px 5px; border-radius: 4px; }
+
+/* Per-section departures under the instructor-scoped readiness summary. The section code is bold
+   because it is the scanning target — a reader looks for their own section, not the prose. */
+.ai-secnotes { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+.ai-secnote { font-size: 0.88em; line-height: 1.5; margin: 0 0 6px; color: var(--text); }
+.ai-secnote strong { color: var(--blue-lt); }
+.ai-scope-warn { font-size: 0.82em; color: var(--muted); margin-top: 10px; font-style: italic; }
+
 /* Late-submission badge on a grade card, and the filter that narrows to them.
    Amber rather than red: arriving late is a fact the grader should see, not a verdict. Whether it
    costs credit is the instructor's call, and several late submissions are legitimately accepted by

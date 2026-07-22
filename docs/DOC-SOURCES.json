@@ -51,7 +51,7 @@
       "doc": "site/app/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-07-21",
+      "reviewed": "2026-07-22",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -64,7 +64,7 @@
       "doc": "site/app/help/director-ai-rules.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-07-21",
+      "reviewed": "2026-07-22",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -102,7 +102,7 @@
       "doc": "docs/operations/SYSTEM_GUIDE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-07-21",
+      "reviewed": "2026-07-22",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -156,7 +156,7 @@
       "doc": "site/app/help/director-schema-reference.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-07-21",
+      "reviewed": "2026-07-22",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/002_rls.sql",

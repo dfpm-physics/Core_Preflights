@@ -209,26 +209,74 @@ non-empty, `__all__` is not writable: `pull` sets `scopes.__all__.write` to `fal
 
 ## Step 3 — Write the analysis (per scope)
 
-Produce a JSON array of `{activity_slug, section_id, readiness_summary, misconception_trends,
-misconception_recommendation, selected_quotes}` — one entry per **in-day** scope in the pull file,
-plus `__all__` when `coverage.complete` is true. Optionally carry `day` (and, on `__all__`,
-`coverage`) so the stored scope records which run wrote it.
+**There are three kinds of scope, and they carry different fields.** This split landed 2026-07-22;
+writing the wrong field on the wrong scope is now a validation error, not a silent no-op.
+
+| `section_id` value | Scope | Carries |
+|---|---|---|
+| a section uuid, or its code (`"M1A"`) | one section | `misconception_recommendation`, `selected_quotes` |
+| `"instr:<instructor_uuid>"` | one instructor, across every section they teach | `readiness_summary`, `section_notes[]` |
+| `"__all__"` | the whole course | `readiness_summary`, `misconception_recommendation` |
+
+Produce a JSON array with one entry per **in-day** section scope, one per **instructor** who
+teaches an in-day section, plus `__all__` when `coverage.complete` is true. Optionally carry `day`
+(and, on `__all__`, `coverage`) so the stored scope records which run wrote it.
+
+The instructors and their sections are in the pull file's `instructors[]` block:
+`{instructor_id, instructor_name, section_ids, section_codes, section_ids_in_day}`. Write an
+instructor scope only when `section_ids_in_day` is non-empty — an instructor whose sections all
+belong to the other day track is that run's business, and the writer merges the two.
 
 **Do not send an entry for a `prior_scopes[]` section.** Those are already written; re-sending
 them costs a rewrite you did not intend and, if you invent quotes for them, fails validation.
 
-`section_id` accepts the **section uuid** or its **code** (`"M1A"`), or the string `"__all__"`.
+**Why the readiness summary is per instructor, not per section.** Two sections of one lesson taught
+by one person used to get two isolated paragraphs, each written as though the other did not exist —
+so nothing said whether a gap was that instructor's cohort or that one section. One summary across
+their sections, with departures named per section, answers that in less space. A single-section
+view borrows its instructor's summary and keeps its own numbers, quotes and recommendation.
 
 **Ground the prose in the precomputed `numbers`; do not recompute them.** Cite the figures already
 in the file (e.g. "8/14 showed force-superposition", "avg effort 3.4/5") so the narrative agrees
-with the live bars. Keep each prose field to a short paragraph or a few bullets, Markdown-light
-(it's rendered with the existing sanitizer). Each ≤ 8000 chars.
+with the live bars. Markdown-light (it's rendered with the existing sanitizer).
 
-### readiness_summary — every scope
-A short read for a faculty member opening the rollup before class: overall engagement, where
-understanding is solid vs. shaky (lean on the weakest objectives + the self-vs-assessed gap),
-notable flags (reflection-capped, honor, needs-follow-up counts), and **what to cover first in
-class**.
+**Every prose field is short now, and the caps are enforced by the writer:**
+
+| Field | Cap | Shape |
+|---|---|---|
+| `readiness_summary` | **1200** | 2–3 sentences |
+| `section_notes[].note` | **400** each, ≤ 12 notes | one sentence |
+| `misconception_recommendation` | **1200** | one imperative sentence, single paragraph |
+
+The old 8000-char allowance produced multi-paragraph panels that read as machine-written and buried
+the one instruction a reader needed. Length is the main tell; brevity is the fix, and it is enforced
+rather than requested.
+
+### readiness_summary — INSTRUCTOR scopes and `__all__` only · **HARD CAP 1200 chars**
+
+**Two to three sentences. Not a paragraph, not bullets, not an essay.** The writer rejects anything
+over 1200 characters, and that ceiling is a backstop, not a target — aim for well under it.
+
+What a faculty member opening the rollup before class actually needs: **what the class can do, what
+it can't, and what to cover first.** Nothing else. The numbers are already on the page in charts
+directly above this text; your job is the read, not the recitation.
+
+**Write like a colleague leaving a note, not like an AI writing a summary.** Specific bans, because
+these are the tells:
+
+- No `Overall,` / `In summary,` / `It's worth noting that` / `Notably,` openers.
+- No three-item parallel lists ("engagement was strong, understanding was mixed, and flags were
+  low"). Pick the one that matters.
+- No restating the question back ("This section's readiness for the lesson on polarizers…").
+- No hedging stacks ("appears to suggest that some students may possibly…"). Say it or don't.
+- Do not narrate what you are about to say. Say it.
+- Name the physics. "Shaky on superposition" beats "gaps in conceptual understanding."
+
+Lean on the weakest objectives, the self-vs-assessed gap, and `numbers.reading` where it exists.
+Mention a flag count (reflection-capped, honor, needs-follow-up) only when it is actionable.
+
+**Falsification:** if a reader could not act differently on Monday having read it, it is too vague;
+if they must read twice to find the instruction, it is too long.
 
 **For `__all__`, synthesize from PROSE, cite from `numbers`.** Write it from the section summaries
 you just wrote plus every `prior_scopes[].readiness_summary` — on a day-scoped run you have not
@@ -276,31 +324,88 @@ prose that reads them. Fold them into the readiness summary instead.
 Close with the one thing worth doing about it in class — that is the "what to cover first" the
 panel is read for.
 
-### misconception_trends — every scope
-Cluster the free-text `misconceptions[].description`/`evidence`: which recur, fold novel/variant
-ones into known buckets (taxonomy ids in `.ai/instructions/PROJECT.md` / the contract), note section concentration and
-which look like genuine class-wide gaps vs. one-off slips. This prose sits **under** the live
-prevalence bars — don't restate the bars, add the *why/pattern*. For `__all__`, note cross-section
-spread (a misconception in every section vs. isolated to one).
+### section_notes — INSTRUCTOR scopes only
 
-**On a mixed cohort, say whether a misconception is path-specific.** Both paths now emit
-`misconceptions[]` against the same taxonomy, so they aggregate together — but a misconception
-that appears only among question-set takers, or only in artifact transcripts, is a finding in
-itself (it may reflect what each path surfaces rather than what students believe). Check the
-`path` on the report rows before claiming a pattern is class-wide. The written path's entries
-come from `/preflight-analyze`'s reading of the answers; the interactive path's from the
-transcript, which sees reasoning the written answers never show.
+Where one of that instructor's sections **departs** from the summary above. A list of
+`{section_id, note}`, at most one per section, each ≤ 400 chars, rendered under the summary with the
+section code in bold.
 
-**Write for the scope you were given.** The panel is headed "Trends across the course" on the
-All-sections view and "Trends in M1A" on a section view, so a section's prose should read as being
-about that section — not a course summary repeated four times. **Keep it short.** This sits under
-the live bars and is read in the minute before class: a few sentences, not an essay.
+**Only write a note when there is a real difference worth acting on** — a misconception concentrated
+in one section, a markedly weaker objective, a reading-time collapse in one cohort and not the
+other. An instructor whose sections look alike gets **no notes at all**, and that is the correct and
+common outcome. A note per section restating the summary is noise, and it is exactly what the
+per-section summaries used to produce.
 
-### misconception_recommendation — every scope (one line)
-One concrete teaching action, ≤ 1200 chars, **a single paragraph with no blank lines** (the writer
-rejects them — it renders as one line under the trends prose). It is the answer to "so what do I
-do Monday?", separated out precisely because it used to get buried at the end of the trend
-paragraph where nobody acted on it.
+Omit the field, or send `[]`, when nothing departs. `section_id` accepts a uuid or a code.
+
+### ~~misconception_trends~~ — RETIRED 2026-07-22. Do not write it.
+
+The prevalence bars now carry each misconception's own `description` and a couple of verbatim
+student `evidence` quotes, surfaced in a popover — so the reader can see what a misconception *is*
+and what students actually wrote, which is what this paragraph existed to tell them. Restating the
+bars in prose beside the bars added nothing and cost a full AI panel.
+
+**The clustering work did not go away — it became data.** See `misconception_aliases` below.
+
+The field is still accepted by the writer so a replayed file does not fail, and historical rows keep
+it. Nothing renders it. Do not spend tokens on it.
+
+### misconception_aliases — offering-level, sent ONCE per run
+
+**This is where the clustering you used to describe in prose now goes.**
+
+`/preflight-analyze` and the artifact both may coin a misconception id when nothing in the taxonomy
+fits (contract §5.4). Both counting sites key on the id, so a coined variant becomes its own bar and
+the same misunderstanding shows up two or three times at a third of its real prevalence. You were
+already told to "fold novel ones into known buckets" — but there was nowhere to put the fold, so it
+was written as English and thrown away, and the bars it sat under never changed.
+
+Send a flat map of **variant id → canonical id** on any one item in the array (it is offering-level,
+not per scope; the writer merges it across runs):
+
+```json
+"misconception_aliases": { "adds-magnitudes": "scalar-sum", "forces-cancel-out": "forces-cancel" }
+```
+
+Rules:
+
+- **Read `numbers.misconceptions[]`**, which now carries each id's `label`, `description`, `examples`
+  (verbatim student evidence) and `count`. That is enough to tell a genuine duplicate from two
+  different errors that sound alike.
+- **Fold onto a taxonomy id where one exists** (`.ai/instructions/PROJECT.md` § Known Misconception
+  Patterns, then the generic table in `/preflight-analyze`'s SKILL.md). Folding a taxonomy id onto a
+  coined one is backwards.
+- **Only fold what is genuinely the same misunderstanding.** Two errors that co-occur are not one
+  error. When unsure, leave them apart — a split bar is recoverable, a wrong merge hides a finding.
+- Casing and whitespace are already normalized on both sides; you never need an alias for
+  `Scalar-Sum` → `scalar-sum`.
+- Never map an id to itself or to an empty string. Both are dropped.
+
+### misconception_glossary — offering-level, optional
+
+`{ "<canonical-id>": {"label": "…", "description": "…"} }`. Only needed for an id whose producers
+left `description` empty — the browser prefers the per-student description and falls back to this.
+One clear sentence explaining what the student believes that is wrong. Skip ids that already explain
+themselves.
+
+**Do not fold a path-specific misconception into a general one.** Both paths emit
+`misconceptions[]` against the same taxonomy, so they aggregate together — but one that appears
+only among question-set takers, or only in artifact transcripts, may reflect what each path
+*surfaces* rather than what students believe. Check the `path` on the report rows before merging.
+The written path's entries come from `/preflight-analyze`'s reading of the answers; the interactive
+path's from the transcript, which sees reasoning the written answers never show. If the split looks
+real, say so in the recommendation rather than hiding it behind an alias.
+
+### misconception_recommendation — section scopes and `__all__` (one line)
+
+**One imperative sentence.** ≤ 1200 chars, **a single paragraph with no blank lines** (the writer
+rejects them — it renders as one line beneath the bars). Now that the trends paragraph is gone,
+this is the *only* prose in the Misconceptions panel, so it carries the whole "so what do I do
+Monday?" load.
+
+Write the action, not the analysis. **"Re-derive the two-charge superposition on the board before
+the lab"** — not "Students would benefit from additional practice with superposition concepts."
+Name the physics and name the move. Nothing above it will explain it for you.
 
 Applies to **every** lesson type, interactive included — it is a teaching action, not a question
 artifact. It is also the one field allowed on `__all__`, where quotes are forbidden: a

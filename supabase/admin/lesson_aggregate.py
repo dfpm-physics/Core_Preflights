@@ -92,6 +92,7 @@ import argparse
 import hashlib
 import io
 import json
+import re
 import sys
 from collections import defaultdict
 from datetime import date
@@ -112,13 +113,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from app_tier_check import load, connect  # noqa: E402
 
 ALL = "__all__"                 # whole-course sentinel key inside payload.scopes
+INSTR = "instr:"                # instructor-scope key prefix inside payload.scopes
 KIND = "readiness"              # analysis_reports.kind this skill owns (ROLLUP-AGREEMENT §6)
 SCOPE = "assignment_offering"
 MAX_PROSE = 8000                # ROLLUP-AGREEMENT §7
-MAX_QUOTES = 5                  # expect 2-3; a hard ceiling so a bad run can't flood the row
+MAX_QUOTES = 5                  # expect exactly 3; a hard ceiling so a bad run can't flood the row
 # The recommendation gets its OWN cap, deliberately not MAX_PROSE. The UI renders it as a single
-# line under the trends prose; reusing an 8000-char limit invites a second essay in that slot.
+# line; reusing an 8000-char limit invites a second essay in that slot.
 MAX_RECO = 1200                 # ROLLUP-AGREEMENT §7
+# The readiness summary moved to instructor scope on 2026-07-22 and was cut to 2-3 sentences at the
+# same time. 1200 matches the recommendation: enough for three real sentences, not enough for the
+# multi-paragraph essay the 8000 cap invited. Per-section departures are separate `section_notes`,
+# so length pressure has somewhere structured to go instead of inflating the summary.
+MAX_SUMMARY = 1200
+MAX_NOTE = 400                  # one per-section departure line
+MAX_NOTES = 12                  # a note per section an instructor teaches, with headroom
+MAX_ALIASES = 200               # misconception variant -> canonical, offering-wide
 # Per-answer truncation for the graded free-response text lifted into the pull file. Long enough
 # for a full preflight answer, short enough that a 20-section course does not blow the context.
 MAX_ANSWER = 1500
@@ -385,15 +395,44 @@ def summarize(rows, points_possible):
         key=lambda x: (x["understanding"] if x["understanding"] is not None else 99),  # weakest first
     )
 
-    # Misconceptions — count by id (the model clusters novel ones by description).
+    # Misconceptions — counted by CANONICAL id, carrying description and a couple of examples.
+    #
+    # MUST match canonMisconceptionId() in site/app/js/faculty-rollup.js. Both producers may coin
+    # ids (contract §5.4) and both counting sites key on the string, so `scalar-sum`, `Scalar-Sum`
+    # and `scalar sum` used to be three separate entries here and three separate bars in the
+    # browser. If these two normalizers ever disagree, the prose cites a prevalence the panel
+    # beside it does not show.
+    #
+    # The alias fold (variant -> canonical) is NOT applied here: it is what the model produces THIS
+    # run, so applying it to the run's own inputs would hide from the model exactly the variants it
+    # is being asked to reconcile. The browser applies it at render time, after it is stored.
     mc = {}
     for it in items:
         for m in (it["d"].get("misconceptions") or []):
             if not isinstance(m, dict) or not m.get("id"):
                 continue
-            e = mc.setdefault(m["id"], {"id": m["id"], "label": m.get("label") or m["id"], "count": 0, "major": 0})
+            mid = re.sub(r"\s+", "-", str(m["id"]).strip().lower())
+            if not mid:
+                continue
+            e = mc.setdefault(mid, {"id": mid, "label": m.get("label") or mid, "count": 0,
+                                    "major": 0, "description": "", "examples": [], "variants": []})
             if (not e["label"] or e["label"] == e["id"]) and m.get("label"):
                 e["label"] = m["label"]
+            # Longest description wins — deterministic, and the fuller one is the better glossary
+            # entry. Matches the browser's rule exactly.
+            desc = str(m.get("description") or "").strip()
+            if len(desc) > len(e["description"]):
+                e["description"] = desc
+            ev = str(m.get("evidence") or "").strip()
+            if ev and len(e["examples"]) < 2 and ev not in e["examples"]:
+                e["examples"].append(ev)
+            # A "variant" means a genuinely DIFFERENT id that folded onto this one, not the same id
+            # cased or spaced differently. Compare the fully-normalized form: `Scalar-Sum` and
+            # `scalar sum` both normalize to `scalar-sum` and are the same id, so reporting them
+            # would be noise in the popover.
+            raw = str(m.get("id") or "").strip()
+            if raw and re.sub(r"\s+", "-", raw.lower()) != mid and raw not in e["variants"]:
+                e["variants"].append(raw)
             e["count"] += 1
             if m.get("severity") == "major":
                 e["major"] += 1
@@ -672,6 +711,43 @@ def _sections(conn, course_offering_id):
     return {str(i): c for i, c in rows}, {c: str(i) for i, c in rows}
 
 
+def _instructors(conn, course_offering_id):
+    """Who teaches which section of this offering — the basis for the instructor scopes.
+
+    The readiness summary is written per INSTRUCTOR across every section they teach (with
+    per-section departures listed separately), so the model needs this mapping to know which
+    sections belong together. Two sections of one lesson taught by one person previously got two
+    isolated paragraphs that could not be compared.
+
+    ONLY section-scoped staff rows count. A director's offering-wide row carries `section_id` NULL,
+    which grants sight of every section but is not a teaching assignment — the same rule
+    taughtSectionIds() applies in the browser, and the two must agree or a director's "My sections"
+    would resolve to a scope nobody wrote. A director who also teaches holds a section-scoped row
+    for that section and is picked up here through it.
+    """
+    cur = conn.cursor()
+    cur.execute(
+        """
+        select sa.instructor_id,
+               coalesce(nullif(trim(i.name), ''), i.email, sa.instructor_id::text) as name,
+               sa.section_id, s.code
+          from staff_assignments sa
+          join instructors i on i.id = sa.instructor_id
+          join sections s on s.id = sa.section_id
+         where sa.course_offering_id = %s and sa.section_id is not null
+         order by name, s.code
+        """,
+        (course_offering_id,),
+    )
+    out = {}
+    for iid, name, sid, code in cur.fetchall():
+        e = out.setdefault(str(iid), {"instructor_id": str(iid), "instructor_name": name,
+                                      "section_ids": [], "section_codes": []})
+        e["section_ids"].append(str(sid))
+        e["section_codes"].append(code)
+    return out
+
+
 def _load_reports(conn, offering_id, interactive_id, written_id, refl_qid=None,
                   response_qids=()):
     """All work on one LESSON, by either path, joined to the enrolment's section and its grade.
@@ -929,6 +1005,20 @@ def cmd_pull(args, conn):
         "day": day,
         "coverage": coverage,
         "reflection_question_id": refl_qid,
+        # Who teaches what — the basis for the instructor scopes the readiness summary is now
+        # written against. Each entry's sections are the ones one summary must cover together,
+        # with departures called out per section rather than inflating the summary.
+        #
+        # `in_day` marks the sections actually aggregated this run: an instructor whose sections
+        # span both day tracks gets a summary written from the day in scope, and the writer merges
+        # it with what the other day's run stored. Sections not in `section_ids_in_day` are still
+        # listed so the model can see the instructor has more, and not claim to cover them.
+        "instructors": [
+            {**e,
+             "section_ids_in_day": [sid for sid in e["section_ids"]
+                                    if sid in {s["section_id"] for s in scopes if s.get("in_day")}]}
+            for e in _instructors(conn, meta["offering_id"]).values()
+        ],
         # The graded concept questions, with their prompt and expected answer. Present only on a
         # lesson that HAS a written activity — its absence is what gates the whole per-question
         # half of the readiness summary, so an interactive-only lesson is untouched by it.
@@ -1174,20 +1264,63 @@ def cmd_write(args, conn):
             errored += 1
             continue
 
-        # Operators may name a section by uuid or by code ('M1A'); '__all__' is the whole course.
+        # Three kinds of scope key:
+        #   '<uuid>' / '<code>'  one section
+        #   '__all__'            the whole course
+        #   'instr:<uuid>'       one instructor, across every section they teach (2026-07-22)
         sec = str(sec)
-        if sec != ALL:
+        is_instr = sec.startswith(INSTR)
+        if is_instr:
+            iid = sec[len(INSTR):].strip()
+            known = _instructors(conn, c["meta"]["course_offering_id"])
+            if iid not in known:
+                print(f"  [err ] {tag}: no instructor {iid!r} teaches a section of this offering")
+                errored += 1
+                continue
+        elif sec != ALL:
             sec = c["section_id"].get(sec, sec)
             if sec not in c["section_code"]:
-                print(f"  [err ] {tag}: not a section of this offering (or '{ALL}')")
+                print(f"  [err ] {tag}: not a section of this offering (or '{ALL}' or '{INSTR}<uuid>')")
                 errored += 1
                 continue
 
         bad = False
-        for fld, val in (("readiness_summary", rs), ("misconception_trends", mt)):
-            if val is not None and (not isinstance(val, str) or len(val) > MAX_PROSE):
-                print(f"  [err ] {tag}: {fld} must be a string ≤ {MAX_PROSE} chars")
+        # The summary got its own, much smaller cap when it moved to instructor scope and was cut
+        # to 2-3 sentences. `misconception_trends` is DEPRECATED — no longer written or rendered —
+        # but still accepted at the old cap so a hand-authored or replayed file does not fail.
+        if rs is not None and (not isinstance(rs, str) or len(rs) > MAX_SUMMARY):
+            print(f"  [err ] {tag}: readiness_summary must be a string ≤ {MAX_SUMMARY} chars "
+                  f"(it renders as 2-3 sentences; per-section detail belongs in section_notes)")
+            bad = True
+        if mt is not None and (not isinstance(mt, str) or len(mt) > MAX_PROSE):
+            print(f"  [err ] {tag}: misconception_trends must be a string ≤ {MAX_PROSE} chars")
+            bad = True
+
+        # Per-section departures from the instructor's summary. Structured rather than markdown so
+        # the UI can bold the section code without trusting model-authored markup, and so a note
+        # can be filtered to the section actually being viewed.
+        notes = it.get("section_notes") or []
+        if notes and not is_instr:
+            print(f"  [err ] {tag}: section_notes belong on an '{INSTR}<uuid>' scope only")
+            bad = True
+        if not isinstance(notes, list) or len(notes) > MAX_NOTES:
+            print(f"  [err ] {tag}: section_notes must be a list of ≤ {MAX_NOTES}")
+            bad = True
+            notes = []
+        clean_notes = []
+        for nt in notes:
+            nsid = str(nt.get("section_id") or "") if isinstance(nt, dict) else ""
+            nsid = c["section_id"].get(nsid, nsid)
+            note = str(nt.get("note") or "").strip() if isinstance(nt, dict) else ""
+            if nsid not in c["section_code"]:
+                print(f"  [err ] {tag}: section_notes entry names {nsid!r}, not a section here")
                 bad = True
+            elif not note or len(note) > MAX_NOTE:
+                print(f"  [err ] {tag}: each section_note must be 1..{MAX_NOTE} chars")
+                bad = True
+            else:
+                clean_notes.append({"section_id": nsid, "section_code": c["section_code"][nsid],
+                                    "note": note})
         # The recommendation has its own, much smaller cap, and must be ONE paragraph — the UI
         # renders it as a single line under the trends prose. Reject a multi-paragraph value
         # rather than silently reflowing it: this file refuses to guess elsewhere too.
@@ -1201,9 +1334,10 @@ def cmd_write(args, conn):
                 bad = True
         # Quotes: '__all__' carries none; per-section quotes must reference a real report whose
         # student is actually in that section (no cross-section picks).
-        if sec == ALL:
+        if sec == ALL or is_instr:
             if quotes:
-                print(f"  [err ] {tag}: the whole-course '{ALL}' scope must not carry quotes")
+                print(f"  [err ] {tag}: the '{sec if sec == ALL else INSTR + '…'}' scope must not "
+                      f"carry quotes — they are per-section")
                 bad = True
         else:
             if not isinstance(quotes, list) or len(quotes) > MAX_QUOTES:
@@ -1220,8 +1354,16 @@ def cmd_write(args, conn):
             errored += 1
             continue
 
-        # Re-derive n + fingerprint from the live rows so they can't drift from reality.
-        rows = c["rows"] if sec == ALL else [r for r in c["rows"] if r["section_id"] == sec]
+        # Re-derive n + fingerprint from the live rows so they can't drift from reality. An
+        # instructor scope's n is the population its summary describes: every student in the
+        # sections that instructor teaches.
+        if sec == ALL:
+            rows = c["rows"]
+        elif is_instr:
+            own = set(known[sec[len(INSTR):].strip()]["section_ids"])
+            rows = [r for r in c["rows"] if str(r["section_id"]) in own]
+        else:
+            rows = [r for r in c["rows"] if r["section_id"] == sec]
         scope_meta = dict(it.get("meta") or {})
         scope_meta.update({"n": len(rows),
                            "generated_by": f"lesson-aggregate@{date.today().isoformat()}",
@@ -1234,22 +1376,63 @@ def cmd_write(args, conn):
             scope_meta["coverage"] = it["coverage"]
         oid = str(c["meta"]["offering_id"])
         bucket = pending.setdefault(oid, {"ctx": c, "scopes": {}})
-        bucket["scopes"][sec] = {
-            "section_id": None if sec == ALL else sec,
-            "section_code": ALL if sec == ALL else c["section_code"][sec],
-            "readiness_summary": rs,
-            "misconception_trends": mt,
-            # Allowed on '__all__', unlike quotes: a whole-course "what to cover Monday" is
-            # exactly where a teaching action matters most.
-            "misconception_recommendation": reco,
-            "selected_quotes": [] if sec == ALL
-                               else [{"student_id": q["student_id"], "section_id": sec} for q in quotes],
-            "meta": scope_meta,
-        }
+        if is_instr:
+            e = known[sec[len(INSTR):].strip()]
+            bucket["scopes"][sec] = {
+                "instructor_id": e["instructor_id"],
+                "instructor_name": e["instructor_name"],
+                "section_ids": e["section_ids"],
+                "section_codes": e["section_codes"],
+                "readiness_summary": rs,
+                "section_notes": clean_notes,
+                "meta": scope_meta,
+            }
+        else:
+            bucket["scopes"][sec] = {
+                "section_id": None if sec == ALL else sec,
+                "section_code": ALL if sec == ALL else c["section_code"][sec],
+                "readiness_summary": rs,
+                # DEPRECATED 2026-07-22 — no longer written or rendered. Stored when supplied so a
+                # replayed file loses nothing; the UI ignores it.
+                "misconception_trends": mt,
+                # Allowed on '__all__', unlike quotes: a whole-course "what to cover Monday" is
+                # exactly where a teaching action matters most.
+                "misconception_recommendation": reco,
+                "selected_quotes": [] if sec == ALL
+                                   else [{"student_id": q["student_id"], "section_id": sec} for q in quotes],
+                "meta": scope_meta,
+            }
+        s = bucket["scopes"][sec]
         print(f"  [{'dry' if args.dry_run else 'ok '}] {tag}: n={scope_meta['n']} "
-              f"quotes={len(bucket['scopes'][sec]['selected_quotes'])} "
-              f"readiness={'y' if rs else '-'} trends={'y' if mt else '-'} "
-              f"reco={'y' if reco else '-'}")
+              + (f"sections={len(s.get('section_ids') or [])} notes={len(clean_notes)} "
+                 f"readiness={'y' if rs else '-'}"
+                 if is_instr else
+                 f"quotes={len(s['selected_quotes'])} readiness={'y' if rs else '-'} "
+                 f"reco={'y' if reco else '-'}"))
+
+        # Offering-level, not per scope: one misconception means one thing everywhere, so folding
+        # it per scope would let two sections' bars disagree. Carried on any item and merged below.
+        aliases = it.get("misconception_aliases")
+        if isinstance(aliases, dict):
+            if len(aliases) > MAX_ALIASES:
+                print(f"  [warn] {tag}: {len(aliases)} aliases exceeds {MAX_ALIASES} — truncating")
+            norm = {}
+            for k, v in list(aliases.items())[:MAX_ALIASES]:
+                kk = re.sub(r"\s+", "-", str(k or "").strip().lower())
+                vv = re.sub(r"\s+", "-", str(v or "").strip().lower())
+                # A self-alias is a no-op; an empty target would erase an id at render time.
+                if kk and vv and kk != vv:
+                    norm[kk] = vv
+            bucket.setdefault("aliases", {}).update(norm)
+        glossary = it.get("misconception_glossary")
+        if isinstance(glossary, dict):
+            gnorm = {}
+            for k, g in glossary.items():
+                kk = re.sub(r"\s+", "-", str(k or "").strip().lower())
+                if kk and isinstance(g, dict):
+                    gnorm[kk] = {"label": (g.get("label") or None),
+                                 "description": (g.get("description") or None)}
+            bucket.setdefault("glossary", {}).update(gnorm)
 
     # One row per offering. MERGE into any existing payload so scopes written by an earlier run
     # (e.g. the M-day pass) survive this one — the per-scope independence the old per-section
@@ -1260,6 +1443,12 @@ def cmd_write(args, conn):
         payload = _existing_payload(conn, oid)
         scopes = dict(payload.get("scopes") or {})
         scopes.update(bucket["scopes"])
+        # Alias + glossary maps MERGE with what is stored, like scopes do. A day-scoped run sees
+        # only its own day's misconceptions, so replacing would drop the other day's fold.
+        aliases = dict(payload.get("misconception_aliases") or {})
+        aliases.update(bucket.get("aliases") or {})
+        glossary = dict(payload.get("misconception_glossary") or {})
+        glossary.update(bucket.get("glossary") or {})
         payload.update({
             "kind": KIND,
             "axis": "objective",                      # ROLLUP-AGREEMENT §5 — interactive lessons
@@ -1267,6 +1456,11 @@ def cmd_write(args, conn):
             "assignment_slug": c["meta"]["assignment_slug"],
             "generated_by": f"lesson-aggregate@{date.today().isoformat()}",
             "scopes": scopes,
+            # Offering-level. The clustering the model does was previously expressed only in prose
+            # and discarded; storing it here is what lets the browser fold coined id variants onto
+            # a canonical id at render time, so the bars finally reflect the reconciliation.
+            "misconception_aliases": aliases,
+            "misconception_glossary": glossary,
         })
         try:
             cur.execute("""

@@ -421,20 +421,51 @@ export async function loadAnalysis(offeringId) {
     .eq('scope', 'assignment_offering').eq('scope_id', offeringId);
 
   const out = {};
+  const aliases = {};
+  const glossary = {};
   (data || []).forEach(row => {
     const p = row.payload || {};
     const panels = (obj, sectionId) => ({
       section_id: sectionId,
       readiness_summary: obj?.readiness_summary ?? null,
+      // DEPRECATED 2026-07-22 — the trends paragraph is no longer written or rendered; the
+      // Misconceptions panel is now bars (which explain themselves via description/evidence) plus
+      // the one-line recommendation. Still read so historical rows do not lose data, and still
+      // accepted by the writer. Nothing in the UI displays it.
       misconception_trends: obj?.misconception_trends ?? null,
       // A sibling of the trends prose, not part of it: the UI renders it as its own line, and the
       // writer caps it separately so it stays one. Forgetting to list it here is how a stored
       // field ends up displayed nowhere — the exact failure this function had with `scopes`.
       misconception_recommendation: obj?.misconception_recommendation ?? null,
       selected_quotes: obj?.selected_quotes ?? null,
+      // Instructor-scope fields ('instr:<uuid>' keys). The readiness summary is now written per
+      // INSTRUCTOR across all the sections they teach, with per-section departures called out
+      // separately so the summary itself stays short. Null on section and '__all__' scopes.
+      instructor_id: obj?.instructor_id ?? null,
+      instructor_name: obj?.instructor_name ?? null,
+      section_ids: Array.isArray(obj?.section_ids) ? obj.section_ids : null,
+      section_notes: Array.isArray(obj?.section_notes) ? obj.section_notes : null,
       meta: obj?.meta ?? null,
       generated_at: row.generated_at,
     });
+
+    // Offering-level, NOT per scope: the same misconception means the same thing in every section,
+    // so folding it per scope would let one section's bars disagree with another's. Merged across
+    // rows rather than replaced, for the same reason scopes merge — a day-scoped run must not drop
+    // what the other day's run learned.
+    if (p.misconception_aliases && typeof p.misconception_aliases === 'object') {
+      Object.entries(p.misconception_aliases).forEach(([from, to]) => {
+        const f = String(from || '').trim().toLowerCase();
+        const t = String(to || '').trim().toLowerCase();
+        if (f && t && f !== t) aliases[f] = t;
+      });
+    }
+    if (p.misconception_glossary && typeof p.misconception_glossary === 'object') {
+      Object.entries(p.misconception_glossary).forEach(([id, g]) => {
+        const k = String(id || '').trim().toLowerCase();
+        if (k && g && typeof g === 'object') glossary[k] = { label: g.label || null, description: g.description || null };
+      });
+    }
 
     // Retired `by_question` rows, still present in the database. Skip them: they carry no scope
     // map, so the branch below would file one under '__all__' with null panels and overwrite a
@@ -469,7 +500,26 @@ export async function loadAnalysis(offeringId) {
       out[sid] = panels(p, sid);
     }
   });
-  return out;
+  return { scopes: out, aliases, glossary };
+}
+
+/**
+ * The sections the viewer personally TEACHES in the current offering.
+ *
+ * Distinct from `ctx.sectionIds`, which is what they may SEE — for a director those are all
+ * sections, and for a global admin they are every section in the offering. "My sections" has to
+ * mean the narrower thing or the default scope would be meaningless for exactly the people who
+ * have more than one section to choose between.
+ *
+ * A director's offering-wide staff row carries `section_id` NULL (auth.js documents this as the
+ * gotcha: NULL means all sections, not none). That row grants visibility, not a teaching
+ * assignment, so it is deliberately NOT counted here — a director who teaches M1A also holds a
+ * section-scoped row for it. A director who teaches nothing gets an empty list, and the caller
+ * falls back to the whole course.
+ */
+export function taughtSectionIds(ctx) {
+  const rows = (ctx?.staff || []).filter(sa => sa.course_offering_id === ctx.currentOffering);
+  return [...new Set(rows.map(sa => sa.section_id).filter(Boolean).map(String))];
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -498,7 +548,30 @@ const pointsForEffort = (e, possible) =>
  *                  legacy hardcoding assumed. Passing it makes the points total correct for a
  *                  lesson worth anything else — which the v2 model now allows per term.
  */
-export function summarizeReports(rows, possible = 2) {
+/**
+ * Canonicalize a misconception id.
+ *
+ * Both producers are explicitly licensed to coin new ids (contract §5.4: "May be a new key the
+ * artifact coins"), and every counting site keys on the exact string — so `scalar-sum`,
+ * `Scalar-Sum` and `scalar-sum ` counted as three separate bars. Reading-reflection topics have
+ * always been trimmed and lowercased one block below; misconception ids never were. This closes
+ * that gap, and then applies the alias map /lesson-aggregate persists so the clustering it does in
+ * prose finally reaches the bars it sits under.
+ *
+ * @param {string} id
+ * @param {Record<string,string>} [aliases]  variant id -> canonical id, from the payload
+ */
+export function canonMisconceptionId(id, aliases) {
+  const k = String(id || '').trim().toLowerCase().replace(/\s+/g, '-');
+  if (!k) return '';
+  const to = aliases && aliases[k];
+  // One hop only. A cycle or a chain in a hand-edited map must not hang the render.
+  return (typeof to === 'string' && to.trim()) ? to.trim().toLowerCase() : k;
+}
+
+export function summarizeReports(rows, possible = 2, opts = {}) {
+  const mcAliases = opts.aliases || null;
+  const mcGlossary = opts.glossary || null;
   const list = (rows || []).map(r => ({
     effort: int05(r?.effort),
     // The written free-response understanding. Distinct from the interactive path's
@@ -619,15 +692,54 @@ export function summarizeReports(rows, possible = 2) {
     objectives.sort((a, b) => (a.understanding ?? 99) - (b.understanding ?? 99));
   }
 
-  // ── Misconceptions — count by id (the AI pass later clusters novel ones by description).
+  // ── Misconceptions — counted by CANONICAL id, and now carrying enough to explain themselves.
+  //
+  // Two long-standing losses fixed here:
+  //  1. Ids were keyed by exact string while both producers may coin their own, so casing and
+  //     whitespace variants split one misconception across several bars. canonMisconceptionId()
+  //     normalizes, then applies the alias map /lesson-aggregate persists.
+  //  2. `description` and `evidence` were collected by both producers, passed to the aggregator,
+  //     and then dropped right here — so the cohort bars showed a label and a percentage with no
+  //     way to find out what the misconception actually was. They now survive.
   const mcMap = {};
   list.forEach(({ d }) => (Array.isArray(d.misconceptions) ? d.misconceptions : []).forEach(mc => {
     if (!mc || typeof mc !== 'object' || !mc.id) return;
-    const m = (mcMap[mc.id] ||= { id: mc.id, label: mc.label || mc.id, count: 0, major: 0 });
+    const id = canonMisconceptionId(mc.id, mcAliases);
+    if (!id) return;
+    const m = (mcMap[id] ||= {
+      id, label: mc.label || id, count: 0, major: 0,
+      description: '', examples: [], variants: new Set(),
+    });
+    // First non-empty label wins, but an id-as-label is always replaced by a real one.
     if ((!m.label || m.label === m.id) && mc.label) m.label = mc.label;
+    // Longest description wins: the producers write these per student, and the fuller one is the
+    // more useful tooltip. Cheap, deterministic, and independent of row order.
+    const desc = String(mc.description || '').trim();
+    if (desc.length > m.description.length) m.description = desc;
+    // `evidence` is a one-clause quote from a student's answer. It was emitted by both producers,
+    // passed to the aggregator, and rendered NOWHERE in the entire UI until now. Two per
+    // misconception is enough to make an abstract label concrete, and they stay unattributed.
+    const ev = String(mc.evidence || '').trim();
+    if (ev && m.examples.length < 2 && !m.examples.includes(ev)) m.examples.push(ev);
+    // A "variant" is a genuinely DIFFERENT id that folded onto this one (via the alias map), not
+    // the same id cased or spaced differently — `Scalar-Sum` and `scalar sum` both normalize to
+    // `scalar-sum`, and listing those in the popover would be noise. Compare the normalized form,
+    // WITHOUT aliases, so only a real fold shows up.
+    const raw = String(mc.id || '').trim();
+    if (raw && canonMisconceptionId(raw) !== id) m.variants.add(raw);
     m.count++; if (mc.severity === 'major') m.major++;
   }));
-  const misconceptions = Object.values(mcMap).sort((a, b) => b.count - a.count || b.major - a.major);
+  // A glossary entry from the payload backfills a description the raw rows never carried — which
+  // is the case for any misconception whose producers left `description` empty.
+  const misconceptions = Object.values(mcMap).map(m => {
+    const g = mcGlossary && mcGlossary[m.id];
+    return {
+      ...m,
+      label: (g && g.label) || m.label,
+      description: m.description || (g && g.description) || '',
+      variants: [...m.variants],
+    };
+  }).sort((a, b) => b.count - a.count || b.major - a.major);
 
   // ── Reading reflection (DIAGNOSTIC + the effort gate).
   let reflMeaningful = 0, reflAssessed = 0;

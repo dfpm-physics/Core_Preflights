@@ -72,14 +72,25 @@ Both currently die in setup and therefore **guard nothing**:
 These are the only automated proof that RLS holds. Shipping a term with them red means the four
 July 2026 audit findings are unverified.
 
-### P0.4 — Instructors can read the `__all__` whole-course scope · **S** · *privacy*
+### P0.4 — Instructors can read the `__all__` whole-course scope · ✅ **RESOLVED 2026-07-22 — by a different decision**
 
-`currentAnalysis()` in `faculty/report.html:172-175` maps scope `'all'` → the `'__all__'` AI row for
-any viewer. An instructor selecting "All sections" therefore reads the whole-course synthesis, which
-the skill contract says is director-only. RLS does **not** enforce this — `analysis_reports` admits
-any staff member, so this is a UI rule with nothing behind it.
+The original recommendation was to stop an instructor's "All sections" from reading `__all__`. **The
+course director decided otherwise: All Sections stays visible to everyone**, and is simply no longer
+the default. That is their call to make — the whole-course read is useful context, and the panel was
+never a privacy boundary in the sense the sweep implied (RLS grants `analysis_reports` to any staff
+member of the offering regardless).
 
-Fix the UI rule now; consider whether it should be an RLS policy (see P3.9).
+What actually shipped removes the *harm* without removing the *view*:
+
+- **"My sections" is the new default scope for everyone**, so nobody's first view is a cohort they
+  do not teach. That alone resolves the practical complaint.
+- **The readiness summary moved to instructor scope**, so what an instructor reads by default is
+  written about their own sections.
+- **When "All sections" is selected and the viewer cannot load the whole roster, the panel says so**
+  — `meta.n` (the true course-wide count) is compared to the rows actually summarized, and a mismatch
+  renders an explicit line. Previously whole-course prose sat silently above partial numbers.
+
+Still true, and still worth a deliberate decision: none of this is enforced in the database. See P3.9.
 
 ### P0.5 — Verification pass in a browser · **M**
 
@@ -139,24 +150,30 @@ Left alone deliberately: the tombstone comments in `account.js:7-26` and `facult
 which explain *why* there is no email recovery — the thing a future operator will otherwise try to
 re-add.
 
-### P0.8 — AI prose is far too long · **M** · *skill work, no schema change*
+### P0.8 — AI prose is far too long · ✅ **DONE 2026-07-22**
 
-*Requested.* The rollup reads as machine-written to anyone fluent in AI text patterns, and length is
-the main tell. Three panels, all produced by `.ai/skills/lesson-aggregate/SKILL.md`:
+*Requested.* Length was the main tell. Resolved harder than scoped — one of the three panels was
+deleted rather than shortened.
 
-| Panel | Now | Target |
+| Panel | Was | Now |
 |---|---|---|
-| `readiness_summary` | Multi-paragraph | **2–3 sentences.** What the class can do, what it can't, nothing else |
-| `misconception_trends` | Paragraphs | **2–3 sentences**, naming the specific misconception |
-| `misconception_recommendation` | Runs long despite "one line" in the contract | **One imperative sentence.** Enforce a hard character cap in the skill |
+| `readiness_summary` | ≤ 8000 chars, multi-paragraph | **≤ 1200, 2–3 sentences**, enforced by the writer |
+| `misconception_trends` | ≤ 8000 chars, paragraphs | **Retired.** Not written, not rendered |
+| `misconception_recommendation` | ran long despite "one line" | **One imperative sentence**, ≤ 1200, single-paragraph check |
+| `section_notes[].note` *(new)* | — | ≤ 400 each, ≤ 12 |
 
-This is a prompt-and-cap change in the skill, not a data-model change — the payload shape is
-unchanged, so old rows keep rendering. **Write explicit banned patterns** into the skill: no
-"it's worth noting", no "Overall,", no three-item parallel lists, no restating the question back.
-Cap by characters, not by instruction — an instruction to "be brief" is not a constraint.
+**Trends went away rather than shrinking** because the bars beneath it now carry each
+misconception's own description and student evidence (P0.13) — so the paragraph restating them had
+nothing left to say, while still costing an AI panel and a "coming soon" placeholder under
+fully-populated bars.
 
-**Falsification:** show a director three rollups without telling them which are new. If they cannot
-pick the rewritten ones, or still describe them as "AI-sounding", the caps were not the problem.
+**Caps are enforced in `lesson_aggregate.py`, not requested in prose** — an instruction to "be
+brief" is not a constraint. The skill also now bans the specific tells: no `Overall,` /
+`It's worth noting` openers, no three-item parallel lists, no restating the question back, no
+hedging stacks, and "name the physics" over "gaps in conceptual understanding".
+
+**Falsification (unchanged, and still owed):** show a director three rollups without saying which
+are new. If they cannot pick the rewritten ones, the caps were not the problem.
 
 ### P0.9 — Student responses: 3 AI picks + 5 random · ✅ **DONE 2026-07-22**
 
@@ -246,6 +263,56 @@ an instructor silently gives full credit to work that arrived four days late.
 these correctly. The gap is purely per-submission visibility once you open the assignment.)*
 
 </details>
+
+### P0.13 — Rollup rework: scopes, self-explaining misconceptions, misconception bucketing · ✅ **DONE 2026-07-22**
+
+*Requested mid-stream, ahead of the P0.1 cutover. Groups several changes that share one payload
+contract.*
+
+**Display**
+- **"My sections" scope, default for everyone** — the sections you personally teach, combined.
+  `taughtSectionIds()` reads section-scoped staff rows only; a director's offering-wide row grants
+  sight of every section but is not a teaching assignment, so it does not count. Teach none → falls
+  back to All sections; teach all → the option is hidden as a duplicate.
+- **All sections** stays available to everyone, no longer the default (see P0.4).
+- **A single section shows its own numbers, quotes and recommendation, but its instructor's summary.**
+- **Every misconception bar explains itself** — hover or click for a popover carrying the
+  misconception's description, up to two verbatim (unattributed) student quotes, any coined ids that
+  folded onto it, and the canonical id. Keyboard- and touch-reachable: the row is a real `<button>`
+  with `aria-expanded`, Escape closes.
+- **"Show all N" toggle** on student responses — swaps the 5-card random sample for the entire pool,
+  AI picks still pinned on top. Reading every reflection previously meant opening students one at a
+  time.
+
+**Skill / data**
+- **The readiness summary is written per instructor**, across every section they teach, with
+  per-section departures as structured `section_notes[]` rendered with the section code in bold.
+  Two sections taught by one person used to get two isolated paragraphs that could not be compared.
+- **Misconception ids are canonicalized** at both counting sites — `canonMisconceptionId()` in JS and
+  the mirrored `re.sub` in `lesson_aggregate.py`. `scalar-sum`, `Scalar-Sum` and `scalar sum` were
+  three separate bars; reading-reflection topics had been trimmed and lowercased since day one while
+  ids never were.
+- **The clustering is finally persisted.** `/lesson-aggregate` was told to "fold novel ones into
+  known buckets" but had nowhere to put the fold, so it was written as prose and discarded — the bars
+  it sat under never changed and the work was redone every run. New offering-level
+  `misconception_aliases` (variant → canonical) and `misconception_glossary` maps, merged across
+  day-scoped runs, applied by the browser at render time.
+- **`/preflight-analyze` matches before it coins.** A four-step resolution order, the first step
+  being *query the ids already recorded against this assignment across every offering and term* —
+  a self-maintaining bucket that grows as lessons are analyzed. Nothing validates a misconception
+  id anywhere in the system, and the taxonomy covers 3 lessons of ~74, so the pressure to invent was
+  constant and unchecked.
+- **`description` and `evidence` survive to the cohort view.** Both producers emitted them, the
+  aggregator received them, and both counting sites dropped them — which is why a bar could show
+  `57%` and nothing about what the misconception was.
+
+*Verified:* `test-rollup.mjs` 160/0 (30 new, covering canonicalization, alias folds, glossary
+backfill, instructor scopes, and `taughtSectionIds`) · `aggregate_summarize_test.py` ALL PASS with a
+new JS↔Python parity block · full `tests/app-schema` run exit 0. **Two real bugs were caught by
+those parity tests**, not by review: the variant list compared only lowercase while the id also
+collapses whitespace, so `scalar sum` was reported as a "variant" of the id it normalizes to.
+
+**Not yet seen in a browser** — folded into P0.5.
 
 ---
 

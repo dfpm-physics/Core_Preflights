@@ -101,11 +101,25 @@ carry a default deadline used by any section without one of its own.
 
 ## The Report tab
 
-The report summarizes how a lesson went for a section you teach — how ready the class is, which
-misconceptions showed up and how they cluster, one recommended thing to cover, and a few
-reading-reflection quotes worth reading aloud. Use the section selector at the top: everything on
-the page, prose included, is written for the scope you pick. It is intended as a five-minute read
-before you teach the lesson.
+The report summarizes how a lesson went — how ready the class is, which misconceptions showed up,
+one recommended thing to cover, and a few reading-reflection quotes worth reading aloud. It is
+intended as a five-minute read before you teach the lesson.
+
+**It opens on "My sections"** — your own sections combined. "All sections" covers the whole course
+and is still there if you want the wider picture; when you pick it, the charts show only the
+students you have access to, and the page says so if that is fewer than the summary describes.
+Picking a single section shows that section's own numbers, quotes and recommendation.
+
+**The readiness summary covers all the sections you teach at once**, with any section that genuinely
+differs named beneath it — so you can see whether something is your whole cohort or just one class.
+
+**Select a misconception to see what it means.** Each bar opens a panel with a plain-language
+description of the misunderstanding and a couple of things students actually wrote, unattributed. A
+label and a percentage on their own rarely tell you what went wrong.
+
+**Show all** on the responses panel switches from the sample to every reflection in the section,
+with the AI's picks still at the top — useful when you are looking for a particular student rather
+than something to read aloud.
 
 It appears once the lesson has been graded *and* aggregated, which happens after the deadline for
 that section — so a section whose deadline has not passed yet will still show placeholders.

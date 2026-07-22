@@ -145,17 +145,24 @@ no code change.
 Same shape as the contract (§5.4): `{ id, label, description, severity?, evidence?,
 objective_key? }`.
 
-- **Prefer taxonomy ids** from the per-preflight tables in `.ai/instructions/PROJECT.md`
-  ("Known Misconception Patterns"). Those ids are what the rollup counts, so reusing them is what
-  makes a misconception trackable across lessons and across modalities.
-- Coin a new kebab-case id only for something genuinely absent from the taxonomy, and give it a
-  `label` and `description` good enough that a later clustering pass can fold it in.
+- **Match before you coin.** Full four-step resolution order in `SKILL.md` § "Match before you coin
+  — the misconception bucket": the ids already recorded against this assignment (query them), then
+  the per-preflight tables in `.ai/instructions/PROJECT.md`, then the generic table, and only then a
+  new id. Nothing validates these ids, and every counting site keys on the exact string — a synonym
+  you invent splits one finding into two bars at half the real prevalence.
+- Coin a new kebab-case id only for something genuinely absent, lowercase and hyphen-separated, and
+  give it a `label` and `description` good enough that `/lesson-aggregate` can fold or promote it.
 - One entry per **distinct** misconception the student showed — not one per question, and never a
   duplicate id within a student.
-- `evidence` is a short quote or paraphrase from that student's answer. Keep it to one clause.
+- **`description` and `evidence` are now rendered, not just stored.** Both surface in the rollup's
+  misconception popover — the description explains what the misconception *is*, and up to two
+  students' `evidence` quotes show what it looks like in their own words, unattributed. Until
+  2026-07-22 both were dropped before the cohort bars, so a bar showed a label and a percentage and
+  nothing else. Write them for a faculty reader who has thirty seconds before class: one clear
+  sentence for the description, one clause of real student wording for the evidence.
 
 These entries are what the rollup counts into its prevalence bars and what `/lesson-aggregate`
-clusters into the cohort trends. They are the finding's only route out of this skill.
+reconciles into canonical buckets. They are the finding's only route out of this skill.
 
 ### `reading_reflection` — the judgment, NOT the text
 
