@@ -555,6 +555,60 @@ def _fingerprint(scope_rows):
     return hashlib.sha1(json.dumps(basis, default=str).encode("utf-8")).hexdigest()[:16]
 
 
+def _offering_activity_ids(conn, offering_id):
+    """Both activity ids for an offering, either of which may be None.
+
+    Keyed on the offering id rather than a slug because callers that already hold the offering
+    (anything reading `analysis_reports.scope_id`) must not be forced back through slug
+    resolution — a slug shared by two courses would abort the whole command via
+    `_ambiguous_slug_message`, even though the offering was never in doubt.
+    """
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("""
+        select max(case when act.modality = 'interactive' then act.id::text end) as interactive_id,
+               max(case when act.modality = 'written'     then act.id::text end) as written_id
+          from offering_activities oa
+          join activities act on act.id = oa.activity_id
+         where oa.assignment_offering_id = %s
+    """, (offering_id,))
+    return cur.fetchone() or {"interactive_id": None, "written_id": None}
+
+
+def _ambiguous_slug_message(slug, rows):
+    """Explain WHICH offerings a slug matched, and what to do about it.
+
+    Two very different situations reach here and the remedy is opposite in each, so the message
+    must not guess:
+
+    * **Same term, different courses.** `preflight-02` is an assignment slug in BOTH phys-110 and
+      phys-215 and both are live. Nothing is stale. The remedy is to name the course-scoped
+      ACTIVITY slug instead. The message this replaced said "deactivate the stale course_offering"
+      unconditionally — an operator who followed it would have taken a live course offline, which
+      is why this is spelled out rather than left to judgement.
+    * **Different terms.** One of them plausibly IS a finished term left active, and deactivating
+      it is the right call — but only the human knows which.
+    """
+    courses = {r["course_code"] for r in rows}
+    terms = {r["term_code"] for r in rows}
+    lines = [f"'{slug}' matches {len(rows)} active offerings — I will not guess which you meant:", ""]
+    for r in sorted(rows, key=lambda x: (x["course_code"], x["term_code"])):
+        # The course-scoped activity slug is the disambiguator: written is `<course>-<slug>-written`,
+        # interactive is the frozen artifact key. Either resolves to exactly one offering.
+        alt = r["written_slug"] or r["interactive_slug"]
+        lines.append(f"  · {r['course_code']} / {r['term_code']}"
+                     + (f"   →   --lesson {alt}" if alt else "   (no activity slug to disambiguate)"))
+    lines.append("")
+    if len(courses) > 1 and len(terms) == 1:
+        lines.append("Same term, different courses — BOTH ARE LIVE. This is not a stale offering; "
+                     "do not deactivate either one. Re-run with one of the course-scoped activity "
+                     "slugs above.")
+    else:
+        lines.append("If one of these terms is over, deactivate its course_offering "
+                     "(course_offerings.is_active = false) and re-run. Otherwise re-run with one "
+                     "of the activity slugs above.")
+    return "\n".join(lines)
+
+
 def _lesson_meta(conn, slug):
     """The LESSON — one assignment offering — plus both activity ids, either of which may be None.
 
@@ -600,9 +654,7 @@ def _lesson_meta(conn, slug):
     if not rows:
         return None
     if len(rows) > 1:
-        terms = ", ".join(sorted({r["term_code"] for r in rows}))
-        sys.exit(f"'{slug}' is scheduled in more than one active offering ({terms}) — "
-                 f"deactivate the stale course_offering before aggregating.")
+        sys.exit(_ambiguous_slug_message(slug, rows))
     m = rows[0]
     # Back-compat aliases: the pull file has always carried these names.
     m["activity_id"] = m["interactive_id"]
@@ -1520,15 +1572,32 @@ def cmd_write(args, conn):
 # ── status ─────────────────────────────────────────────────────────────────────────────
 def cmd_status(args, conn):
     cur = conn.cursor(cursor_factory=RealDictCursor)
+    # Identity is the ASSIGNMENT (the lesson), not its interactive activity. This used to inner-join
+    # `activities` on modality='interactive', which silently dropped every written-only offering —
+    # not just from `--lesson` filtering but from the UNFILTERED listing too. Since the migration
+    # gives every assignment a `written` activity and an `interactive` one only where a claimed
+    # artifact existed, most of a term is written-only, and the verify step of /lesson-cycle was
+    # answering "No analysis_reports rows yet" for lessons that had aggregated correctly. A false
+    # negative on the check that exists to catch a failed write is worse than no check.
+    #
+    # The filter still accepts either slug, matching _lesson_meta's documented contract.
     cur.execute("""
-        select ar.scope_id, ar.payload, ar.generated_at, act.slug as activity_slug
-          from analysis_reports ar
+        select ar.scope_id, ar.payload, ar.generated_at,
+               a.slug as lesson_slug, c.code as course_code
+          from analysis_reports    ar
           join assignment_offerings ao on ao.id = ar.scope_id
-          join offering_activities  oa on oa.assignment_offering_id = ao.id
-          join activities          act on act.id = oa.activity_id and act.modality = 'interactive'
+          join assignments          a  on a.id  = ao.assignment_id
+          join course_offerings     co on co.id = ao.course_offering_id
+          join courses              c  on c.id  = co.course_id
          where ar.scope = %(scope)s and ar.kind = %(kind)s and ar.audience_id is null
-           and (%(activity)s is null or act.slug = %(activity)s)
-         order by act.slug
+           and (%(activity)s is null
+                or a.slug = %(activity)s
+                or exists (select 1
+                             from offering_activities oa
+                             join activities act on act.id = oa.activity_id
+                            where oa.assignment_offering_id = ao.id
+                              and act.slug = %(activity)s))
+         order by c.code, a.slug
     """, {"scope": SCOPE, "kind": KIND, "activity": args.activity})
     rows = cur.fetchall()
     if not rows:
@@ -1538,12 +1607,19 @@ def cmd_status(args, conn):
 
     day = (getattr(args, "day", None) or "").strip().upper() or None
 
-    print(f"{'activity / section':50} {'day':>4} {'n':>3} {'quotes':>6} {'reco':>4} {'stale':>5}  generated_at")
+    # A lesson slug is only unique within a course (`preflight-02` exists in both), so qualify it
+    # when the listing spans more than one — and stay unqualified when it does not, to keep the
+    # common single-course listing readable.
+    multi_course = len({r["course_code"] for r in rows}) > 1
+
+    print(f"{'lesson / section':50} {'day':>4} {'n':>3} {'quotes':>6} {'reco':>4} {'stale':>5}  generated_at")
     print("-" * 110)
     for r in rows:
-        meta = _lesson_meta(conn, r["activity_slug"])
-        live = (_load_reports(conn, meta["offering_id"], meta["interactive_id"], meta["written_id"])
-                if meta else [])
+        # Resolved by offering id, not by slug: the row already names its offering, and a slug
+        # shared across courses would abort the entire status listing.
+        acts = _offering_activity_ids(conn, r["scope_id"])
+        live = _load_reports(conn, r["scope_id"], acts["interactive_id"], acts["written_id"])
+        lesson_label = f"{r['course_code']}/{r['lesson_slug']}" if multi_course else r["lesson_slug"]
         by_section_days = {x["section_id"]: x.get("meeting_days") for x in live}
         scopes = (r["payload"] or {}).get("scopes") or {}
         # '__all__' last, matching the pull order.
@@ -1575,8 +1651,8 @@ def cmd_status(args, conn):
             stale = "STALE" if stored and stored != _fingerprint(scope_rows) else ""
             name = (", ".join(sc.get("section_codes") or []) or key) if is_instr_scope \
                    else (sc.get("section_code") or key)
-            label = f"{r['activity_slug']} / " + (f"{sc.get('instructor_name') or 'instructor'} [{name}]"
-                                                  if is_instr_scope else name)
+            label = f"{lesson_label} / " + (f"{sc.get('instructor_name') or 'instructor'} [{name}]"
+                                            if is_instr_scope else name)
             # An instructor scope carries the readiness summary; a section scope carries the
             # recommendation. Show whichever that scope is responsible for, or the column reads
             # '-' for every instructor row and looks like nothing was written.

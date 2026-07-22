@@ -32,7 +32,8 @@ const chain = () => {
 };
 globalThis.window.db = { from: () => chain() };
 
-const { summarizeReports, loadAnalysis: loadAnalysisRaw, canonMisconceptionId, taughtSectionIds } =
+const { summarizeReports, loadAnalysis: loadAnalysisRaw, canonMisconceptionId, taughtSectionIds,
+        residualFlags } =
   await import('../../site/app/js/faculty-rollup.js');
 
 // loadAnalysis returned a bare scope map until 2026-07-22, when it grew two offering-level
@@ -227,7 +228,8 @@ section('summarizeReports — what the written path does NOT produce');
 // the structured per-student misconceptions[] this counter folds. loadAnalysis (below) is what
 // surfaces them.
 eq('no counted misconceptions from a question set', writtenOnly.misconceptions.length, 0);
-eq('no flags from a question set', writtenOnly.flags, { needs_follow_up: 0, notable: 0 });
+eq('no flags from a question set', writtenOnly.flags,
+   { needs_follow_up: 0, notable: 0, other: [], otherStudents: 0 });
 eq('no reflection metadata from a question set', writtenOnly.reflection.assessed, 0);
 eq('points still accrue for written students', writtenOnly.effort.pointsTotal > 0, true);
 
@@ -700,5 +702,52 @@ eq('the rollup is never the default while you teach anything',
 // content disagree; renderScope falls back to defaultScope() when it does not.
 eq('hiding others never removes a section the viewer teaches',
    scopeOptions(['s3'], FOUR).includes('s3'), true);
+
+/* ── Residual (unrecognized) flags — P1.13 ─────────────────────────────────── */
+section('residualFlags — a flag nobody planned for is a discovery, not a silent loss');
+
+// `flags` is in the frozen schema:1 contract but its VALUES are not enumerated, so both producers
+// coin keys freely. Before this, every key outside the hard-coded whitelist was dropped at every
+// surface and counted nowhere.
+eq('a recognized key is not residual', residualFlags({ needs_follow_up: true, notable: true }), []);
+eq('`note` is recognized too — it has its own render path', residualFlags({ note: 'hello' }), []);
+eq('a novel boolean surfaces with no detail', residualFlags({ off_topic: true }), [['off_topic', '']]);
+eq('a novel string surfaces with its detail',
+   residualFlags({ tone: 'frustrated' }), [['tone', 'frustrated']]);
+eq('a novel number is stringified', residualFlags({ retries: 3 }), [['retries', '3']]);
+eq('a structured value survives as JSON rather than [object Object]',
+   residualFlags({ ctx: { a: 1 } }), [['ctx', '{"a":1}']]);
+
+// The distinction that keeps the container signal rather than noise: a producer writing
+// `{suspected_ai: false}` on every student has RAISED nothing.
+eq('an explicitly cleared flag is not raised', residualFlags({ suspected_ai: false }), []);
+eq('null and empty string are likewise not raised', residualFlags({ a: null, b: '' }), []);
+eq('recognized and residual keys coexist',
+   residualFlags({ notable: true, off_topic: true }), [['off_topic', '']]);
+
+// Defensive: report_data is an untrusted payload from a URL hash.
+eq('a missing flags object is not an error', residualFlags(undefined), []);
+eq('a non-object flags value is not an error', residualFlags('nope'), []);
+eq('an array is not treated as a flag bag', residualFlags(['a']), []);
+
+section('residual flags reach the cohort summary');
+
+const rf = (id, flags) => ({ student_id: id, path: 'written', effort: 3,
+                             report_data: { ...s1, flags } });
+const residualCohort = summarizeReports([
+  rf(1, { needs_follow_up: true, off_topic: true }),
+  rf(2, { off_topic: true, tone: 'frustrated' }),
+  rf(3, { notable: true }),
+], 2);
+
+eq('per-key counts, commonest first',
+   residualCohort.flags.other, [{ key: 'off_topic', count: 2 }, { key: 'tone', count: 1 }]);
+// Per-STUDENT, not the sum of per-key counts — the pill opens a student list, so a student
+// carrying two residual flags must count once or the header disagrees with the modal.
+eq('student count is per student, not per flag', residualCohort.flags.otherStudents, 2);
+// The whole point of keeping them separate: a residual flag must not inflate a styled pill that
+// asserts a meaning the system has not agreed to.
+eq('residuals do not leak into the recognized tallies',
+   [residualCohort.flags.needs_follow_up, residualCohort.flags.notable], [1, 1]);
 
 process.exitCode = summary() ? 0 : 1;

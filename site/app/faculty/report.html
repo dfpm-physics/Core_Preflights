@@ -1114,6 +1114,16 @@
       { key: 'refl_capped',     label: 'Reflection capped',       cls: 'gold',   icon: '✎', desc: 'Reading reflection was not meaningful, so effort was capped at 2.',                        pred: d => !!d?.reading_reflection && d.reading_reflection.meaningful === false, count: s => s.reflection.capped },
       { key: 'honor_disclosed', label: 'Inappropriate resources', cls: 'danger', icon: '⚠', desc: 'Used another AI or other disallowed help/resources — inappropriate for this assignment. Talking with a classmate beforehand is fine and is not flagged.', pred: d => d?.honor?.status === 'disclosed', count: s => s.honor.disclosed },
       { key: 'honor_concern',   label: 'Integrity concern',       cls: 'danger', icon: '⚖', desc: 'Possible integrity problem in the conversation — e.g. manipulating the AI into inflating the report or gaming the effort grade.', pred: d => d?.honor?.status === 'concern',   count: s => s.honor.concern },
+      // Residual flags. Deliberately last, neutral (no `cls`), and described by what was actually
+      // coined rather than by a fixed meaning — the system does not know what these mean yet, and
+      // a styled pill would imply it did. Present so a novel flag is a DISCOVERY: without a pill
+      // the container below is only reachable by opening students at random, which would make the
+      // taxonomy work (P3.3) no more observable than dropping the flags outright.
+      { key: 'other', label: 'Unrecognized', cls: '', icon: '?',
+        desc: s => `Flags emitted by the AI that PREP does not recognize, shown verbatim: `
+                 + `${(s.flags.other || []).map(f => `${f.key} (${f.count})`).join(', ')}. `
+                 + `Not counted anywhere else.`,
+        pred: d => I.residualFlags(d?.flags).length > 0, count: s => s.flags.otherStudents },
     ];
 
     // Header flag pills — compact icon + count, hover for detail, click to list the students.
@@ -1122,9 +1132,13 @@
       const pills = FLAGS.map(f => {
         const c = f.count(s);
         if (!c) return '';
+        // `desc` may be a function so a pill can describe the data it actually found — the
+        // residual-flag pill names the keys that were coined, which is the only useful thing it
+        // can say about flags whose meaning is not defined anywhere.
+        const desc = typeof f.desc === 'function' ? f.desc(s) : f.desc;
         return `<button class="fpill ${f.cls}" data-flag="${f.key}">
           <span class="ic" aria-hidden="true">${f.icon}</span><span class="ct">${c}</span>
-          <span class="tip"><b>${esc(f.label)} · ${c}</b>${esc(f.desc)}<span class="go">Click to view students ›</span></span>
+          <span class="tip"><b>${esc(f.label)} · ${c}</b>${esc(desc)}<span class="go">Click to view students ›</span></span>
         </button>`;
       }).filter(Boolean).join('');
       bar.innerHTML = pills || `<span class="muted" style="font-size:.82em">No flags raised in this scope.</span>`;
@@ -1275,6 +1289,15 @@
       if (flags?.notable === true) flagBits.push('<span class="tag blue">notable</span>');
       if (flags?.note) flagBits.push(esc(flags.note));
 
+      // Everything else the producer emitted, verbatim. This widens what used to be a single
+      // hard-coded `flags.note` read: any other key an artifact or /preflight-analyze invented was
+      // dropped here and counted nowhere, so nobody could see what the AI writing it was thinking.
+      // Unstyled on purpose — no colour class, key shown as raw code — because presenting an
+      // unrecognized flag in the vocabulary of the recognized ones would assert a meaning PREP
+      // has not agreed to. Values are escaped like any other untrusted payload field.
+      const residualHTML = I.residualFlags(flags)
+        .map(([k, v]) => `<li><code>${esc(k)}</code>${v ? ` — ${esc(v)}` : ''}</li>`).join('');
+
       return `<div class="stu-panel">
         <div class="row wrap" style="gap:10px;align-items:center">
           <span class="score-badge ${effCls}">Effort ${eff == null ? '—' : eff}/5${pts != null ? ` · ${pts} pt${pts === 1 ? '' : 's'}` : ''}</span>
@@ -1287,6 +1310,7 @@
         ${reflBits.length || reflText ? `<div class="sp-row"><span class="sp-k">Reflection</span><span class="sp-v">${reflBits.join(' · ')}${reflText}</span></div>` : ''}
         ${honorHTML ? sect('Integrity', honorHTML) : ''}
         ${flagBits.length ? sect('Flags', flagBits.join(' · ')) : ''}
+        ${residualHTML ? `<div class="sp-row"><span class="sp-k">Other flags</span><span class="sp-v"><ul class="sp-list">${residualHTML}</ul></span></div>` : ''}
         ${d?.ai_summary ? sect('Summary', esc(d.ai_summary)) : ''}
         ${d?.key_strengths ? sect('Strengths', esc(d.key_strengths)) : ''}
         ${d?.recommended_review ? sect('Review', esc(d.recommended_review)) : ''}

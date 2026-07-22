@@ -574,6 +574,34 @@ export function canonMisconceptionId(id, aliases) {
   return (typeof to === 'string' && to.trim()) ? to.trim().toLowerCase() : k;
 }
 
+/**
+ * Flag keys this UI consumes explicitly. `note` is included because it already has its own render
+ * path in the student panel — it is recognized, just not counted.
+ *
+ * Everything else a producer emits is a RESIDUAL flag. `flags` is a field in the frozen schema:1
+ * contract but its VALUES are not enumerated, so the artifact and /preflight-analyze both coin
+ * keys freely; until the taxonomy exists (P3.3) a novel key was dropped at every surface, silently.
+ * Director's decision (ROADMAP Q4): surface them with their detail — never drop, never error.
+ */
+export const KNOWN_FLAG_KEYS = new Set(['needs_follow_up', 'notable', 'note']);
+
+/**
+ * One student's residual flags as `[key, detail]` pairs, detail `''` for a bare `true`.
+ *
+ * A `false`/null/empty value is a flag the producer explicitly CLEARED, not one it raised, and is
+ * dropped — otherwise every student carrying `{suspected_ai: false}` would surface as flagged and
+ * the container would be noise instead of signal.
+ *
+ * @param {unknown} flags  the raw `flags` object from a schema:1 payload
+ * @returns {Array<[string,string]>}
+ */
+export function residualFlags(flags) {
+  if (!flags || typeof flags !== 'object' || Array.isArray(flags)) return [];
+  return Object.entries(flags)
+    .filter(([k, v]) => !KNOWN_FLAG_KEYS.has(k) && v !== false && v != null && v !== '')
+    .map(([k, v]) => [k, v === true ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v))]);
+}
+
 export function summarizeReports(rows, possible = 2, opts = {}) {
   const mcAliases = opts.aliases || null;
   const mcGlossary = opts.glossary || null;
@@ -768,10 +796,22 @@ export function summarizeReports(rows, possible = 2, opts = {}) {
   const honor = { none: 0, disclosed: 0, concern: 0 };
   list.forEach(({ d }) => { const s = d.honor?.status; if (s in honor) honor[s]++; });
   const flags = { needs_follow_up: 0, notable: 0 };
+  // Residual flags are tallied but deliberately NOT folded into the two counts above: those drive
+  // styled pills that assert a meaning, and the whole point of a residual flag is that its meaning
+  // is not yet known. Two tallies, because they answer different questions — `other` is per key
+  // (what is being coined out there), `otherStudents` is per student (how many rows the pill opens).
+  const otherMap = {};
+  let otherStudents = 0;
   list.forEach(({ d }) => {
     if (d.flags?.needs_follow_up === true) flags.needs_follow_up++;
     if (d.flags?.notable === true) flags.notable++;
+    const residual = residualFlags(d.flags);
+    if (residual.length) otherStudents++;
+    residual.forEach(([k]) => { otherMap[k] = (otherMap[k] || 0) + 1; });
   });
+  flags.other = Object.entries(otherMap).map(([key, count]) => ({ key, count }))
+    .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+  flags.otherStudents = otherStudents;
 
   // ── Can the radar be drawn, and if not, why not?
   //    Decided here rather than in the view so every consumer gives the same answer and the

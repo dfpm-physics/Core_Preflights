@@ -8,6 +8,131 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-22 — Casey via Claude (third batch)
+
+### Added — the Help centre warns readers off topics that are due for review
+
+`check_doc_sources.py` has been red for a while (7 documents, 5 of them help topics), and the
+backlog is not going to clear today. Until it does, the people reading those pages had no way to
+know — a help doc that has drifted looks exactly like one that has not. The warning is the interim
+answer: it does not fix the docs, it stops them being read as if they were verified.
+
+- **Chip on the index card** and a **warning above the content**, on any topic whose sources moved
+  after its `reviewed` date.
+- **Two voices, by tier.** Staff are shown which source files changed, because they are the people
+  who can act on it. Students are told the page may be out of date, to trust the screen over the
+  page, and to ask an instructor — a path like `.ai/instructions/CORE.md` on a cadet's page reads
+  as a malfunction, not a caveat. The tier check that keeps them apart is one comparison, and it is
+  tested.
+- Neither wording claims the page **is** wrong. The check compares dates, not content; all it
+  establishes is that nobody has re-confirmed the page since the system moved under it.
+
+**How it works, and the part to be careful about.** A browser cannot run `git`, so the verdict
+cannot be computed live. `check_doc_sources.py status --write` generates
+`site/app/help/DOC-STATUS.json` and the Help page reads that. Being a snapshot, it can go stale
+itself — so it stamps the date and commit it was generated at, the banner shows the reader *when
+the check ran* rather than implying it is live, and `check` now prints a reminder when the
+published file disagrees with the live verdict. It is generated from **committed history only**:
+an early version honoured the working tree and flagged a topic purely because `styles.css` was open
+on the machine that ran it, which would have been non-deterministic between operators and about a
+change no reader could see yet.
+
+A missing or malformed status file renders the Help centre exactly as before, with no warning
+anywhere. Help is what a locked-out or confused person reaches for; it failing closed because a
+developer tool did not run would be a worse bug than the staleness it reports.
+
+*Verified:* new `tests/app-schema/test-help-status.mjs`, **22/0**, covering the chip/banner counts
+per viewer tier, the staff-vs-student split (including that no internal source path reaches a
+student page), and four degradation paths — absent file, corrupt JSON, unexpected `stale` shape,
+null entry. Registered in `run.mjs`; full suite exit 0 (339/0 + 190/0 + 22/0 + 12/0). **Not yet
+seen in a browser** — folded into P0.5.
+
+*Not done, deliberately:* nothing was triaged and no `reviewed` date was bumped. More changes are
+expected today, so a bump now would attest to a review that did not happen and would be invalidated
+within hours. The 5 flagged help topics stay flagged, which is the accurate state.
+
+---
+
+## 2026-07-22 — Casey via Claude (second batch)
+
+### Fixed — `lesson_aggregate.py` told the operator to deactivate a live course offering
+
+`_lesson_meta()` refuses to guess when a slug matches more than one active offering, which is right.
+Its message was not: it said *"deactivate the stale course_offering before aggregating"*
+unconditionally, and named only the **term** codes. But the case that actually occurs is
+`preflight-02`, which is an assignment slug in **both phys-110 and phys-215 in the same term, both
+live** — confirmed against the database 2026-07-22. Nothing is stale, and an operator following the
+instruction would have taken a live course offline.
+
+The message now distinguishes the two situations, because the remedy is opposite in each:
+
+- **Same term, different courses** — lists each course with the course-scoped activity slug to re-run
+  with (`--lesson phys-215-preflight-02-written`), states that both are live, and says explicitly
+  *do not deactivate either one*.
+- **Different terms** — keeps the deactivation advice, since a finished term left active genuinely is
+  the likely cause, and names the courses and terms so the human can tell which.
+
+### Fixed — `status` could not see a written-only lesson, including in its unfiltered listing
+
+Recorded on the roadmap as "`status --lesson` cannot report a question-only lesson". It is worse than
+that. `cmd_status` **inner-joined** `activities` on `modality = 'interactive'`, so an offering with no
+interactive activity was dropped from the results entirely — not merely unfilterable, but absent from
+the plain `status` listing too.
+
+`migrate_public_to_app.py` gives every assignment a `written` activity and an `interactive` one only
+where a claimed artifact existed, so **most of a term is written-only**. `status --day <DAY>` is the
+verify step after every write-back in `/lesson-cycle`, and it was answering *"No analysis_reports rows
+yet"* for lessons that had aggregated correctly. A false negative on the check that exists to catch a
+failed write is worse than having no check.
+
+Identity is now the **assignment** (the lesson), which always exists; the `--lesson` filter accepts
+either the assignment or an activity slug, matching `_lesson_meta`'s documented contract. Activities
+are resolved by **offering id** rather than by slug — the row already names its offering, and going
+back through slug resolution would have let a slug shared by two courses abort the whole listing via
+the ambiguity guard above. The lesson column is course-qualified only when the listing spans more
+than one course.
+
+*Verified:* `aggregate_summarize_test.py` ALL PASS, with a new block covering both branches of the
+ambiguity message (including that it never emits a literal `None`, and that the cross-course branch
+omits the deactivation advice entirely). The `status` change is **exercised only by syntax and
+review** — reproducing it needs a live DB connection, so a signed-in run against a written-only
+lesson is still owed.
+
+### Added — unrecognized AI flags are surfaced instead of dropped (roadmap P1.13)
+
+`flags` is a field in the frozen `schema: 1` contract but its **values are not enumerated**, so the
+artifact and `/preflight-analyze` both coin keys freely. Every surface enumerated a hard-coded
+whitelist — the pill bar's five keys, the rollup's two booleans — and the student panel read exactly
+one free-text key, `flags.note`. Any other key either producer emitted was **silently dropped
+everywhere**. Per the director's Q4 decision: never drop, never error, show what the AI was thinking.
+
+- **`residualFlags()`** (`faculty-rollup.js`) returns a student's unrecognized flags as `[key, detail]`
+  pairs. A `false`/null/empty value is a flag the producer explicitly **cleared**, not one it raised,
+  and is dropped — otherwise every student carrying `{suspected_ai: false}` would surface as flagged
+  and the container would be noise rather than signal.
+- **The student summary panel** gains an "Other flags" row rendering `key — detail` verbatim,
+  deliberately **unstyled** (no colour class, key shown as raw code): presenting an unrecognized flag
+  in the vocabulary of the recognized ones would assert a meaning PREP has not agreed to.
+- **A neutral pill** in the flag bar, described by the keys actually coined rather than by a fixed
+  meaning. This goes slightly beyond the roadmap's wording ("uncounted and unstyled"), on the grounds
+  that a container reachable only by opening students at random would make the taxonomy work (P3.3)
+  no more observable than dropping the flags outright. It is counted **per student**, matching the
+  modal it opens, and kept out of the two recognized tallies.
+
+`summarizeReports()` now returns `flags.other` (per key, commonest first) and `flags.otherStudents`
+(per student).
+
+*Verified:* `tests/app-schema/test-rollup.mjs` **190/0** (30 new, covering value coercion, cleared
+flags, untrusted non-object payloads, and the per-key vs per-student split), full `tests/app-schema`
+run exit 0 (339/0 + 190/0 + 12/0). `report.html`'s inline module syntax-checked by extraction.
+**Not yet seen in a browser** — folded into P0.5.
+
+*Deliberately not changed:* `lesson_aggregate.py`'s Python `summarize()` still tallies only the two
+recognized booleans. Teaching the aggregator to write about flags whose meaning is undefined belongs
+with the taxonomy (P3.3), not ahead of it.
+
+---
+
 ## 2026-07-22 — Casey via Claude
 
 ### Added — grant extensions directly from the rollup's "Did not submit" list

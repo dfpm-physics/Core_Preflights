@@ -938,6 +938,25 @@ tr:last-child td { border-bottom: none; }
 .help-doc .md-render th { background: var(--surface-hover); font-weight: 700; }
 .help-doc .md-render blockquote { font-size: 0.95em; }
 
+/* Review-staleness warning (driven by help/DOC-STATUS.json — see check_doc_sources.py).
+   Borrows the .alert-warn tokens, so it themes with everything else and needs no colours of
+   its own. Sized DOWN from a normal alert: it qualifies the page, it is not the page. */
+.help-stale { font-size: 0.84em; line-height: 1.5; }
+.help-stale code {
+  font-size: 0.94em; padding: 1px 5px; border-radius: 4px;
+  background: rgba(0, 0, 0, 0.07); border: 1px solid var(--alert-warn-bd);
+}
+/* The "when was this checked" clause is a caveat on a caveat — present, not competing. */
+.help-stale .hs-when { opacity: 0.75; }
+/* Inline on the card title, so a reader weighs the topic before opening it. */
+.help-stale-chip {
+  display: inline-block; margin-left: 8px; vertical-align: middle;
+  font-size: 0.7em; font-weight: 600; letter-spacing: 0.02em; white-space: nowrap;
+  padding: 2px 7px; border-radius: 999px;
+  background: var(--alert-warn-bg); color: var(--alert-warn-fg);
+  border: 1px solid var(--alert-warn-bd);
+}
+
 /* ============================================================= *
  *  Grading (faculty grade view)                                 *
  * ============================================================= */

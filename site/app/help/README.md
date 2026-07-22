@@ -49,6 +49,40 @@ with a full path from the site root or an absolute URL.
 
 Order within the file is the display order inside each tier group.
 
+## 3. Register it in `docs/DOC-SOURCES.json`
+
+A help doc that disagrees with the system is a bug (`CORE.md` §5), so every topic here is indexed
+against the authoritative sources it was written from, plus a `reviewed` date attesting somebody
+checked it against them. Registering a new topic is part of creating it — see
+`.ai/skills/docs-author/`.
+
+### The "may be out of date" banner
+
+When one of a topic's sources changes after its `reviewed` date, the Help page **tells the reader**:
+a chip on the index card and a warning above the content. Staff are shown which source files moved;
+students are told to trust the screen and ask an instructor, because a path like
+`.ai/instructions/CORE.md` on a cadet's page reads as a malfunction rather than a caveat.
+
+**This is driven by a generated file and does not update itself.** A browser cannot run `git`, so
+`site/app/help/DOC-STATUS.json` carries the verdict, computed on someone's machine and committed:
+
+```
+python scripts/docs/check_doc_sources.py status --write
+```
+
+Run it whenever you run the check, and commit the result alongside whatever made it change — a
+stale status file is a silent all-clear, which is worse than no banner. It is generated from
+committed history only, so your working tree does not affect what readers see. `check` prints a
+reminder when the published file and the live verdict disagree.
+
+Two ways to clear a banner, and only one of them is honest: **re-read the topic against the
+sources that changed**, then either fix it or bump its `reviewed` date. Bumping the date without
+reading is attesting to a review that did not happen, and it is the one failure this whole
+mechanism exists to prevent.
+
+If the file is missing or malformed the Help page renders exactly as it did before, with no
+warning anywhere — help must never fail closed because a developer tool did not run.
+
 ## Tier gating is presentation, not security
 
 These files are static assets on GitHub Pages. **Anyone who knows or guesses the URL can read any

@@ -635,24 +635,32 @@ collapsing into one rejected promise.
 extending every student in a section after a cancelled class, including those who already submitted.
 And `faculty/extensions.html` remains **read + revoke only**; it is the natural home for that.
 
-### P1.13 — Container for unrecognized flags · **S** · *new, director-specified*
+### P1.13 — Container for unrecognized flags · ✅ **DONE 2026-07-22**
 
 *Director's Q4 decision: surface unknown flags in the summary so an instructor can see what the AI
-writing them was thinking.*
+writing them was thinking.* Gap confirmed as scoped — the pill bar's 5-key whitelist, the rollup's
+two booleans, and a single hard-coded `flags.note` read in the student panel.
 
-**Verified gap:** both flag surfaces enumerate a **hardcoded 5-key whitelist** —
-`report.html:659-665` (the pill bar: `notable`, `needs_follow_up`, `refl_capped`, `honor_disclosed`,
-`honor_concern`) and `faculty-rollup.js:653-657` (the rollup counts only two booleans). A novel flag
-key emitted by the artifact or by `/preflight-analyze` is **silently dropped everywhere.**
+- **`residualFlags()`** in `faculty-rollup.js` returns `[key, detail]` pairs for anything outside the
+  recognized set (`needs_follow_up`, `notable`, `note`). A `false`/null/empty value is a flag the
+  producer **cleared**, not raised, and is dropped — otherwise `{suspected_ai: false}` on every
+  student would read as a cohort-wide flag.
+- **"Other flags"** row in the student panel, rendered verbatim and **unstyled** — presenting an
+  unrecognized flag in the vocabulary of the recognized ones would assert a meaning PREP has not
+  agreed to.
+- **A neutral pill**, named by the keys actually coined. *This exceeds the original wording
+  ("uncounted and unstyled")* — a container reachable only by opening students at random would make
+  the taxonomy work no more observable than dropping the flags. Counted per student to match the
+  modal it opens; kept out of the recognized tallies.
+- `summarizeReports()` now returns `flags.other` and `flags.otherStudents`.
 
-The one existing hook is `report.html:794`, which renders `flags.note` as free text inside the
-per-student panel. Widen that from a single `note` key to arbitrary residual keys: anything not in
-the whitelist renders as `key — detail` in an "Other flags" block, uncounted and unstyled, visible
-in the summary section.
+*Verified:* `test-rollup.mjs` **190/0** (30 new) · full `tests/app-schema` exit 0. **Not yet seen in
+a browser** — folded into P0.5.
 
-This is the **cheap half of P3.3** and worth doing first — it makes the taxonomy work observable
-before the taxonomy exists, and it means an artifact emitting a flag nobody planned for is a
-discovery rather than a silent loss.
+Still the **cheap half of P3.3**, and the taxonomy work is now observable before the taxonomy exists.
+Deliberately left: `lesson_aggregate.py`'s Python `summarize()` still tallies only the two recognized
+booleans — teaching the aggregator to write prose about flags whose meaning is undefined belongs with
+P3.3, not ahead of it.
 
 ---
 
@@ -911,9 +919,9 @@ port-status rows · `site/app/README.md` "Not yet ported" · `student/interactio
 
 | Item | Where | Note |
 |---|---|---|
-| ⚠️ **`check_doc_sources.py` is red — 11 documents flagged** | run it | **Pre-existing, not caused by the 2026-07-22 batch.** Dominated by a `CORE.md` edit earlier that day plus the skills touched by it. Deliberately *not* cleared by bulk-bumping `reviewed` dates — that is precisely the failure the mechanism exists to prevent. Clearing it properly means reading each of the 11 against its sources; it overlaps the help-doc stub expansion below, so do them together. **Verified harmless for the gradebook:** no help doc states a points value, so the `question_scores` correction did not invalidate any of them |
-| `lesson_aggregate.py` misdiagnoses a cross-course slug collision as a stale offering | `supabase/admin/lesson_aggregate.py:456-459` | **Confirmed live 2026-07-22** — `preflight-02` exists in both phys-110 and phys-215, and `pull --lesson preflight-02` says "deactivate the stale course_offering" when neither is stale. Following it would have deactivated a live offering. Workaround: pass the course-scoped **activity** slug (`phys-215-preflight-02-written`). Fix: name the courses and suggest the activity slug when the terms match |
-| `status --lesson` cannot report a question-only lesson | `supabase/admin/lesson_aggregate.py` `cmd_status` | Inner-joins `modality='interactive'`, so it accepts only the interactive activity slug. A written-only lesson has none and can never be reported. Found 2026-07-22 |
+| ⚠️ **`check_doc_sources.py` is red — 7 documents flagged** | run it | **Pre-existing, not caused by the 2026-07-22 batches.** Dominated by a `CORE.md` edit earlier that day plus the skills touched by it. *(Was 11; the docs batch cleared four.)* Deliberately *not* cleared by bulk-bumping `reviewed` dates — that is precisely the failure the mechanism exists to prevent. Clearing it properly means reading each of the 7 against its sources; it overlaps the help-doc stub expansion below, so do them together. **Verified harmless for the gradebook:** no help doc states a points value, so the `question_scores` correction did not invalidate any of them |
+| ~~`lesson_aggregate.py` misdiagnoses a cross-course slug collision as a stale offering~~ | `supabase/admin/lesson_aggregate.py` `_ambiguous_slug_message` | ✅ **FIXED 2026-07-22.** The message now splits the two cases: same-term/different-course lists each course with its course-scoped activity slug and says *do not deactivate either one*; different-term keeps the deactivation advice, which is correct only there. Covered by `aggregate_summarize_test.py` |
+| ~~`status --lesson` cannot report a question-only lesson~~ | `supabase/admin/lesson_aggregate.py` `cmd_status` | ✅ **FIXED 2026-07-22 — and it was worse than recorded.** The join was *inner*, so written-only offerings were absent from the **unfiltered** listing too, not merely unfilterable. Since most of a term is written-only, `/lesson-cycle`'s verify step was reporting "No analysis_reports rows yet" for lessons that had aggregated fine. Now keyed on the assignment, with activities resolved by offering id so a shared slug cannot abort the listing. **Not yet run against the live DB** — needs a connection |
 | All three `prep_app_*` roles carry `BYPASSRLS`, including the SELECT-only read role | CHANGELOG:704 | The read role should not bypass RLS |
 | `main` predates the `extensions.reason` NOT NULL constraint | CHANGELOG:706-709 | Harmless today (zero extensions); resolved by P0.1 |
 | Edge functions never exercised on a successful path | CHANGELOG:473-475 | Covered by P0.5 |
@@ -994,6 +1002,12 @@ P2.1 for file exchange.
 **Done 2026-07-22:** the docs batch, plus P0.9 / P0.10 / P0.11 / P0.12 — the four small frontend
 fixes — and P0.7 closed as largely a non-issue. Seven roadmap items cleared without touching the
 database or the cutover.
+
+**Also 2026-07-22 (second batch):** the two `lesson_aggregate.py` cleanup items and **P1.13**. Both
+cleanup items sat in `/lesson-cycle`, which runs from day one — one of them printed an instruction
+that would have taken a live course offering down, and the other silently hid most of a term from the
+verify step. Both were **S** and neither needed the database. Note the pattern: each was *worse than
+the roadmap recorded* once read against the code, so treat a §5 row as a lead, not a spec.
 
 **Next: P0.1 (cutover) and P0.3 (test suites) together.** The suites are the only proof that the
 schema the cutover promotes is safe, and they are still red — note this is the `supabase/admin/`

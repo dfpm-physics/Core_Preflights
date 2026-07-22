@@ -63,8 +63,10 @@ for (const s of OFFLINE) {
  */
 //   test-system-prefs  calls installBrowser() to stub window/localStorage for the persistence
 //                 round-trip; those stubs are global and would leak into later suites
+//   test-help-status  stubs fetch/document/DOMPurify globally and re-imports help.js per
+//                 scenario to reset its module-level caches; both would leak in-process
 for (const suite of ['test-imports.mjs', 'test-rollup.mjs', 'test-system-prefs.mjs',
-                     'test-run-banner.mjs']) {
+                     'test-run-banner.mjs', 'test-help-status.mjs']) {
   const r = spawnSync(process.execPath, [resolve(import.meta.dirname, suite)],
                       { encoding: 'utf8' });
   process.stdout.write(r.stdout || '');
