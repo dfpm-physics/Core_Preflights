@@ -9,26 +9,48 @@ interaction_reports.py, which fills per-student structured content.
 
 Subcommands:
 
-  pull --activity S --out FILE         Dump everything the model needs to write the analysis:
+  pull --lesson S [--day D] --out FILE Dump everything the model needs to write the analysis:
                                        per-section scopes + a whole-course '__all__' scope, each
                                        with a PRECOMPUTED numeric summary (a focused port of the
                                        UI's summarizeReports, so the prose cites the same figures
                                        the bars show) and the per-report free-text fields the AI
-                                       reads (reflection text, misconception descriptions/evidence,
-                                       objectives, narratives). No names, no report_markdown.
+                                       reads (reflection text, graded concept answers, misconception
+                                       descriptions/evidence, objectives). No names, no
+                                       report_markdown. With --day, only that day's sections get a
+                                       full scope; the rest arrive as `prior_scopes` (stored prose
+                                       + fresh numbers, no reports) so the course synthesis can
+                                       fold them in without re-reading their cohort.
 
   write-analysis --in FILE [--dry-run] Merge model-written scopes into the offering's
                                        analysis_reports row. The writer re-derives meta.n +
                                        meta.source_fingerprint from the live rows (authoritative),
                                        resolves section codes to ids, validates that every quote
-                                       references a real report IN THAT section, and enforces
-                                       "no quotes on the '__all__' scope". --dry-run commits
-                                       nothing.
+                                       references a real report IN THAT section, enforces "no
+                                       quotes on the '__all__' scope", and caps
+                                       misconception_recommendation to one short paragraph.
+                                       --dry-run commits nothing.
 
-  status [--activity S]                List existing analysis scopes with n, generated_at, and a
-                                       STALE flag (stored fingerprint vs. recomputed from current
-                                       reports) — the verify step, since the rollup UI does not
-                                       render this yet.
+  status [--lesson S] [--day D]        List existing analysis scopes with n, quote count, whether
+                                       a recommendation is present, and a STALE flag (stored
+                                       fingerprint vs. recomputed from current reports).
+
+THE TWO-RUN CYCLE (why --day exists)
+  The lesson is graded and aggregated after each day track's deadline: run once when M closes,
+  again when T closes. The second run must not re-aggregate M, so --day scopes which sections get
+  a full pass. Sections aggregate FIRST; the whole-course scope is then synthesized from those
+  section scopes plus the current run's, never by re-reading every student.
+
+  But '__all__' NUMBERS are always recomputed over every live row, never recombined from sections.
+  Counts and histograms would sum exactly; reading.median cannot be recovered from stored medians,
+  and every mean here is round(…, 2), so recombining rounded section means drifts invisibly.
+  The browser recomputes the same figures from raw rows for its All-sections bars, and prose that
+  disagrees with the bar beside it is a bug (ROLLUP-AGREEMENT §8). Only PROSE reuses prior scopes.
+
+  '__all__' is therefore written only when every section is represented — this run or a stored one.
+  `pull` reports that as coverage.complete and refuses to pretend otherwise: a whole-course prose
+  covering half the course, with numbers covering all of it, renders in the UI as fresh and
+  authoritative because meta.n would match. Between the two runs, `status` shows '__all__' STALE.
+  That is the feature, not a fault — it is the signal the second pass is owed.
 
 WHERE THE DATA LIVES NOW (PREP v2 — schema `app`)
 
@@ -94,6 +116,12 @@ KIND = "readiness"              # analysis_reports.kind this skill owns (ROLLUP-
 SCOPE = "assignment_offering"
 MAX_PROSE = 8000                # ROLLUP-AGREEMENT §7
 MAX_QUOTES = 5                  # expect 2-3; a hard ceiling so a bad run can't flood the row
+# The recommendation gets its OWN cap, deliberately not MAX_PROSE. The UI renders it as a single
+# line under the trends prose; reusing an 8000-char limit invites a second essay in that slot.
+MAX_RECO = 1200                 # ROLLUP-AGREEMENT §7
+# Per-answer truncation for the graded free-response text lifted into the pull file. Long enough
+# for a full preflight answer, short enough that a 20-section course does not blow the context.
+MAX_ANSWER = 1500
 
 
 def _connect():
@@ -139,6 +167,39 @@ def _mean(xs):
     a = [n for n in xs if n is not None]
     return round(sum(a) / len(a), 2) if a else None
 
+def _meets(meeting_days, day):
+    """Does a section meet on `day`? Pure, so it is testable without a database.
+
+    `sections.meeting_days` is a `text[]` (001_core_model.sql) — `{'M'}`, `{'T'}`, `{'M','W','F'}`.
+    A section with an empty array meets on no named day and is therefore excluded by ANY day
+    filter; `pull` warns when that excludes anyone. A section listing both days is aggregated on
+    both runs, which is correct but worth telling the operator about.
+
+    `day=None` means "no filter" and matches everything.
+    """
+    if not day:
+        return True
+    days = meeting_days if isinstance(meeting_days, (list, tuple)) else []
+    return str(day).strip().upper() in {str(d).strip().upper() for d in days}
+
+
+def _answer(written_content, qid):
+    """One student's answer to one written question, trimmed and capped, or None.
+
+    Two stored shapes have existed: `{answers: {q1: …}}` and a flat `{q1: …}`. Both are handled
+    here rather than inline in the DB loader so the branch is unit-testable.
+    """
+    if not qid or not isinstance(written_content, dict):
+        return None
+    answers = written_content.get("answers")
+    answers = answers if isinstance(answers, dict) else written_content
+    val = answers.get(qid)
+    if not isinstance(val, str) or not val.strip():
+        return None
+    val = val.strip()
+    return val if len(val) <= MAX_ANSWER else val[:MAX_ANSWER] + "…"
+
+
 def _points_for_effort(e, pp):
     """Mirrors app.grades_points_from_effort() / schema.js pointsFromEffort()."""
     if e is None:
@@ -169,9 +230,47 @@ def summarize(rows, points_possible):
             "q3": _int05(r.get("q3_understanding")),
             "path": r.get("path") or ("interactive" if isinstance(d, dict) else "written"),
             "points": _num(r.get("points_earned")),
+            "qs": r.get("question_scores") if isinstance(r.get("question_scores"), dict) else {},
             "d": d if isinstance(d, dict) else {},
         })
     n = len(items)
+
+    # ── Per-question outcome tallies (WRITTEN PATH ONLY).
+    #
+    # This exists so the readiness prose can CITE "23/32 received full credit on Q3" instead of
+    # hand-counting across the report rows. At n > 20 a hand count is wrong often enough that the
+    # prose would disagree with itself, and the grounding rule (ROLLUP-AGREEMENT §8) treats that
+    # as a bug.
+    #
+    # Deliberate divergence from summarizeReports(): this block is Python-only. It is pull-only
+    # prose material, and since the By-question UI panel was deleted there is no browser panel it
+    # could disagree with. aggregate_summarize_test.py pins that intent so nobody "fixes" it by
+    # porting or deleting it.
+    #
+    # `{}` for a cohort with no question_scores at all — an EMPTY DICT, never a dict of zeros.
+    # The skill gates its whole question subsection on this being empty, so a dict of zeros would
+    # make an interactive-only lesson look like a question set everyone failed.
+    questions = {}
+    for it in items:
+        for qid, qs in (it["qs"] or {}).items():
+            if not isinstance(qs, dict):
+                continue
+            q = questions.setdefault(qid, {"n": 0, "full": 0, "warn": 0, "zero": 0,
+                                           "ungraded": 0, "points": [], "max": None})
+            q["n"] += 1
+            status = qs.get("status")
+            if status in ("full", "warn", "zero"):
+                q[status] += 1
+            else:
+                q["ungraded"] += 1          # null status is "not yet graded", never "scored 0"
+            pts, mx = _num(qs.get("score")), _num(qs.get("max"))
+            if pts is not None:
+                q["points"].append(pts)
+            if mx is not None:
+                q["max"] = mx
+    for q in questions.values():
+        q["points_avg"] = _mean(q.pop("points"))
+        q["points_max"] = q.pop("max")
 
     # How this cohort worked the lesson. Every figure below is only interpretable against it —
     # "avg effort 3.8" means something different for 40 artifacts, 40 question sets, or a split.
@@ -351,6 +450,7 @@ def summarize(rows, points_possible):
                                   if _mean(self_rated) is not None and _mean(overall) is not None else None),
                           "from": und_from},
         "objectives": objectives,
+        "questions": questions,
         "misconceptions": misconceptions,
         "reflection": {"meaningful": refl_meaningful, "assessed": refl_assessed,
                        "capped": refl_assessed - refl_meaningful, "engagement": _mean(refl_eng),
@@ -387,9 +487,16 @@ def _ai_inputs(d, row=None):
         "completed": d.get("completed"),
         "overall_understanding": d.get("overall_understanding"),
         "self_rated_understanding": d.get("self_rated_understanding"),
+        # NOT the same instrument as responses[].status below. This is the hidden 0-5 diagnostic;
+        # `status` is the graded 3-state. A `warn` answer earns full credit and can still sit on a
+        # 1/5 understanding — that gap is often the finding. Do not conflate them in prose.
         "free_response_understanding": row.get("q3_understanding"),
         "reading_minutes": d.get("reading_minutes"),
         "objectives": objs, "misconceptions": misc,
+        # The graded concept answers, verbatim. This is the raw material for the "common threads"
+        # half of the readiness summary — what students actually wrote on Q3, not just how it was
+        # scored. Absent entirely on the interactive path.
+        "responses": row.get("responses") or [],
         # Interactive text comes from the payload; written text from the stored answer.
         "reflection": {"text": r.get("text") or row.get("reflection_text"),
                        "meaningful": r.get("meaningful"),
@@ -522,6 +629,40 @@ def _reflection_question_id(written_content):
     return _pinned_question_id(written_content, "reading_reflection")[0]
 
 
+def _graded_response_questions(written_content):
+    """The graded free-response questions — the concept questions, i.e. Q3 on a Fall preflight.
+
+    Identified by EXCLUDING the two pinned questions, not by a role of their own. The comment on
+    `_pinned_question_id` explains why: 0 of 74 live written activities carry any `role`, so a
+    `role == "concept"` lookup would be dead code propped up by a positional guess. Exclusion
+    instead rides on the two pinned lookups, which that same read resolved on 74/74.
+
+    `points > 0` alone is not enough — the reading reflection is also `free_response, points: 1`.
+    The pinned-id exclusion is what separates them, and it is load-bearing.
+
+    Lab lessons are covered: their Q1 ("How much time did you spend reading **the lab
+    instructions**…") still contains the reading_time needle, and their Q2 still contains the
+    reflection needle, so both pinned lookups resolve and the exclusion holds. If that ever stops
+    being true, every reading reflection silently lands in the concept-question analysis — which
+    is why `aggregate_summarize_test.py` asserts the lab wording explicitly.
+
+    Returns [{id, text, points, expected_response, how}] in the activity's own question order.
+    """
+    if not isinstance(written_content, dict):
+        return []
+    pinned = {_pinned_question_id(written_content, "reading_time")[0],
+              _pinned_question_id(written_content, "reading_reflection")[0]}
+    out = []
+    for q in (written_content.get("questions") or []):
+        if not isinstance(q, dict) or not q.get("id") or q["id"] in pinned:
+            continue
+        if q.get("type") != "free_response" or not (_num(q.get("points")) or 0) > 0:
+            continue
+        out.append({"id": q["id"], "text": q.get("text"), "points": _num(q.get("points")),
+                    "expected_response": q.get("expected_response"), "how": "exclusion"})
+    return out
+
+
 def _sections(conn, course_offering_id):
     """id -> code and code -> id for the offering, so operators may name sections either way."""
     cur = conn.cursor()
@@ -531,7 +672,8 @@ def _sections(conn, course_offering_id):
     return {str(i): c for i, c in rows}, {c: str(i) for i, c in rows}
 
 
-def _load_reports(conn, offering_id, interactive_id, written_id, refl_qid=None):
+def _load_reports(conn, offering_id, interactive_id, written_id, refl_qid=None,
+                  response_qids=()):
     """All work on one LESSON, by either path, joined to the enrolment's section and its grade.
 
     The schema:1 assessment lives in a different table depending on how the student worked:
@@ -549,7 +691,8 @@ def _load_reports(conn, offering_id, interactive_id, written_id, refl_qid=None):
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
         select e.student_id, e.id as enrollment_id, sec.id as section_id, sec.code as section_code,
-               g.effort, g.points_earned, g.diagnostic,
+               sec.meeting_days,
+               g.effort, g.points_earned, g.diagnostic, g.question_scores,
                sa_i.content as interactive_content,
                sa_w.content as written_content,
                (sa_i.id is not null) as did_interactive,
@@ -589,16 +732,61 @@ def _load_reports(conn, offering_id, interactive_id, written_id, refl_qid=None):
 
         # Quote source. The written reflection is stored verbatim as the student's ANSWER, not
         # copied into the diagnostic, so it is lifted here rather than read off report_data.
-        r["reflection_text"] = None
-        if refl_qid and isinstance(r["written_content"], dict):
-            answers = r["written_content"].get("answers")
-            answers = answers if isinstance(answers, dict) else r["written_content"]
-            val = answers.get(refl_qid)
-            if isinstance(val, str) and val.strip():
-                r["reflection_text"] = val.strip()
+        r["reflection_text"] = _answer(r["written_content"], refl_qid)
+
+        # The graded concept answers, paired with how each was scored. `feedback` is deliberately
+        # NOT carried: it is per-student prose /preflight-analyze wrote FOR THAT STUDENT, and
+        # letting it into the aggregator's input is how individual feedback gets laundered into
+        # cohort prose. Status + score is what the summary needs.
+        qs = r["question_scores"] if isinstance(r.get("question_scores"), dict) else {}
+        r["responses"] = []
+        for qid in (response_qids or ()):
+            ans = _answer(r["written_content"], qid)
+            one = qs.get(qid) if isinstance(qs.get(qid), dict) else {}
+            if ans is None and not one:
+                continue
+            r["responses"].append({"question_id": qid, "answer": ans,
+                                   "score": _num(one.get("score")), "max": _num(one.get("max")),
+                                   "status": one.get("status")})
+        r["question_scores"] = {
+            qid: {"score": _num(v.get("score")), "max": _num(v.get("max")), "status": v.get("status")}
+            for qid, v in qs.items() if isinstance(v, dict)
+        }
 
         del r["interactive_content"], r["written_content"]
     return rows
+
+
+def _run_start(conn, meta, skill, invoked_by, day):
+    """Open an analysis_runs row. Returns its id.
+
+    Written BEFORE the work, not after: a run that dies mid-way is the case an audit trail exists
+    for, and a row only written on success would lose exactly that one. A row left at
+    status='running' is a crashed or abandoned run, and reads as such.
+    """
+    cur = conn.cursor()
+    cur.execute("""
+        insert into analysis_runs (skill, invoked_by, course_offering_id,
+                                   assignment_offering_id, day_track, status)
+        values (%s, %s, %s, %s, %s, 'running') returning id
+    """, (skill, invoked_by, meta["course_offering_id"], meta["offering_id"], day))
+    rid = cur.fetchone()[0]
+    conn.commit()          # committed on its own so it survives a later rollback
+    return rid
+
+
+def _run_finish(conn, run_id, status, summary=None, detail=None, error=None):
+    """Close an analysis_runs row. Safe to call with run_id=None (nothing was opened)."""
+    if not run_id:
+        return
+    cur = conn.cursor()
+    cur.execute("""
+        update analysis_runs
+           set status = %s, finished_at = now(), summary = %s,
+               detail = coalesce(%s, detail), error = %s
+         where id = %s
+    """, (status, summary, Json(detail) if detail is not None else None, error, run_id))
+    conn.commit()
 
 
 def _existing_payload(conn, offering_id):
@@ -617,10 +805,30 @@ def cmd_pull(args, conn):
         sys.exit(f"No lesson '{args.activity}' in an active offering "
                  f"(tried it as both an assignment slug and an activity slug).")
     refl_qid = _reflection_question_id(meta.get("written_content"))
+    response_qs = _graded_response_questions(meta.get("written_content"))
     reports = _load_reports(conn, meta["offering_id"], meta["interactive_id"],
-                            meta["written_id"], refl_qid)
+                            meta["written_id"], refl_qid,
+                            [q["id"] for q in response_qs])
     if not reports:
         sys.exit(f"No work recorded for '{args.activity}' yet — nothing to aggregate.")
+
+    # ── Day scoping.
+    #
+    # The tool runs once after each day track's deadline. The second run must not re-aggregate the
+    # first day's sections, so `--day` filters WHICH sections get a full scope. It deliberately
+    # does NOT filter the SQL: `_load_reports` fetches the whole offering in one query either way,
+    # and `__all__`'s numbers must stay computed over every live row (see below). The saving being
+    # bought here is the model's context — `reports[]` — not database work.
+    #
+    # Any token is accepted and validated against the meeting_days actually present. Hardcoding
+    # M|T would re-introduce exactly the two-course assumption 001_core_model.sql:189-192 records
+    # as deliberately removed.
+    day = (getattr(args, "day", None) or "").strip().upper() or None
+    present = sorted({str(d).strip().upper()
+                      for r in reports for d in (r.get("meeting_days") or [])})
+    if day and day not in present:
+        sys.exit(f"--day {day} matches no section of this lesson. "
+                 f"Days present: {', '.join(present) or '(none — every section has empty meeting_days)'}")
 
     pp = meta["points_possible"]
     # Missing structure, split by path, because the fix differs: an interactive report without
@@ -634,23 +842,74 @@ def cmd_pull(args, conn):
     for r in reports:
         by_section[r["section_id"]].append(r)
 
-    scopes = []
+    stored_scopes = (_existing_payload(conn, meta["offering_id"]).get("scopes") or {})
+
+    scopes, prior_scopes = [], []
+    covered, from_stored, uncovered, stale_prior = [], [], [], []
     # Per-section scopes carry the full per-report text the model reads + picks quotes from.
+    # A section that does not meet on `--day` is emitted as a PRIOR scope instead: its stored
+    # prose plus freshly computed numbers, and no reports[]. That is what lets the whole-course
+    # synthesis fold in the other day without re-reading its cohort.
     for sec_id in sorted(by_section, key=lambda s: by_section[s][0]["section_code"]):
         rows = by_section[sec_id]
-        scopes.append({
-            "section_id": sec_id, "section_code": rows[0]["section_code"],
-            "is_whole_course": False, "n": len(rows),
-            "source_fingerprint": _fingerprint(rows),
+        code = rows[0]["section_code"]
+        fp = _fingerprint(rows)
+        if _meets(rows[0].get("meeting_days"), day):
+            covered.append(code)
+            scopes.append({
+                "section_id": sec_id, "section_code": code,
+                "is_whole_course": False, "in_day": True, "n": len(rows),
+                "source_fingerprint": fp,
+                "numbers": summarize(rows, pp),
+                "reports": [{"student_id": r["student_id"], "section_id": sec_id,
+                             **_ai_inputs(r["report_data"], r)} for r in rows],
+            })
+            continue
+
+        prior = stored_scopes.get(sec_id) if isinstance(stored_scopes.get(sec_id), dict) else None
+        if not prior or not (prior.get("readiness_summary") or prior.get("misconception_trends")):
+            uncovered.append(code)          # never aggregated, and not in scope this run
+            continue
+        from_stored.append(code)
+        stored_fp = (prior.get("meta") or {}).get("source_fingerprint")
+        if stored_fp and stored_fp != fp:
+            stale_prior.append(code)
+        prior_scopes.append({
+            "section_id": sec_id, "section_code": code, "in_day": False, "n": len(rows),
+            # True when this section's work changed after its prose was written. Re-run THAT day
+            # before folding it into the course scope, or the synthesis quotes a stale section.
+            "stale": bool(stored_fp and stored_fp != fp),
+            "readiness_summary": prior.get("readiness_summary"),
+            "misconception_trends": prior.get("misconception_trends"),
+            "misconception_recommendation": prior.get("misconception_recommendation"),
+            "meta": prior.get("meta"),
             "numbers": summarize(rows, pp),
-            "reports": [{"student_id": r["student_id"], "section_id": sec_id,
-                         **_ai_inputs(r["report_data"], r)} for r in rows],
         })
+
+    # `__all__` is writable only when every section is represented — either aggregated in this run
+    # or carried in from a prior one. A whole-course scope whose PROSE covers half the course but
+    # whose NUMBERS cover all of it disagrees with itself, and the UI cannot tell: aiGenNote()
+    # shows "may be out of date" only when meta.n != scopeN, and here they would be equal. A
+    # half-course synthesis would render as fresh and authoritative. Omitting is free, because the
+    # writer merges and the rollup already falls back to its placeholder.
+    coverage = {"day": day, "sections_total": len(by_section),
+                "this_run": covered, "from_stored": from_stored,
+                "uncovered": uncovered, "stale_prior": stale_prior,
+                "complete": not uncovered}
     # Whole-course scope: numbers only. Prose is synthesized from the per-section reports above;
     # no quotes (the "All sections" view never shows them).
+    #
+    # Its NUMBERS are always computed over every live row, never recombined from the section
+    # scopes. Counts and histograms would sum exactly, but reading.median cannot be recovered from
+    # stored medians, and every mean here is round(…, 2) — recombining rounded section means
+    # drifts invisibly, and understanding.gap doubles it. The browser recomputes these same
+    # figures from raw rows for the All-sections bars, so any drift is prose disagreeing with the
+    # bar beside it. Only the PROSE reuses prior scopes.
     scopes.append({
         "section_id": ALL, "section_code": ALL, "is_whole_course": True, "n": len(reports),
         "source_fingerprint": _fingerprint(reports),
+        "write": coverage["complete"],
+        "coverage": coverage,
         "numbers": summarize(reports, pp),
         "reports": [],
     })
@@ -667,10 +926,19 @@ def cmd_pull(args, conn):
         "modalities": {"interactive": bool(meta["interactive_id"]),
                        "written": bool(meta["written_id"])},
         "paths": whole["numbers"]["paths"],
+        "day": day,
+        "coverage": coverage,
         "reflection_question_id": refl_qid,
+        # The graded concept questions, with their prompt and expected answer. Present only on a
+        # lesson that HAS a written activity — its absence is what gates the whole per-question
+        # half of the readiness summary, so an interactive-only lesson is untouched by it.
+        "questions": [{"id": q["id"], "text": q["text"], "points": q["points"],
+                       "expected_response": q["expected_response"], "how": q["how"]}
+                      for q in response_qs] if meta["written_id"] else [],
         "report_count": len(reports), "missing_report_data": missing,
         "sections": [{"id": s["section_id"], "code": s["section_code"]}
                      for s in scopes if not s["is_whole_course"]],
+        "prior_scopes": prior_scopes,
         "scopes": scopes,
     }
     text = json.dumps(out, ensure_ascii=False, indent=2, default=str)
@@ -680,6 +948,32 @@ def cmd_pull(args, conn):
         p = out["paths"]
         print(f"  paths: {p['interactive_n']} interactive, {p['written_n']} written"
               f"{' (mixed cohort)' if p['mixed'] else ''}")
+        if day:
+            print(f"  day {day}: aggregating {', '.join(covered) or '(none)'}"
+                  + (f" · carrying stored prose for {', '.join(from_stored)}" if from_stored else ""))
+        if response_qs:
+            print("  graded response question(s): "
+                  + ", ".join(f"{q['id']} (by {q['how']})" for q in response_qs))
+        elif meta["written_id"]:
+            print("  ⚠ no graded free-response question identified — the readiness summary will "
+                  "have no concept-question material to draw on.")
+        both_days = sorted({rows[0]["section_code"] for rows in by_section.values()
+                            if len([d for d in (rows[0].get("meeting_days") or [])]) > 1})
+        if day and both_days:
+            print(f"  ⚠ {', '.join(both_days)} meet on more than one day — they are aggregated on "
+                  f"every day-scoped run, and the last one wins.")
+        no_days = sorted({rows[0]["section_code"] for rows in by_section.values()
+                          if not (rows[0].get("meeting_days") or [])})
+        if day and no_days:
+            print(f"  ⚠ {', '.join(no_days)} have empty meeting_days — excluded by any --day "
+                  f"filter, so they will never be aggregated until one is set.")
+        if stale_prior:
+            print(f"  ⚠ stored prose for {', '.join(stale_prior)} is STALE (that section's work "
+                  f"changed since it was written) — re-run those days before the course scope.")
+        if not coverage["complete"]:
+            print(f"  ⚠ '{ALL}' is NOT writable this run — {', '.join(uncovered)} "
+                  f"{'has' if len(uncovered) == 1 else 'have'} never been aggregated. Omit the "
+                  f"'{ALL}' scope; run the remaining day(s) first.")
         if missing_i:
             print(f"  ⚠ {missing_i} interactive report(s) lack structured content — run "
                   f"/interaction-backfill first (they are excluded from means but skew counts).")
@@ -728,6 +1022,7 @@ def cmd_write(args, conn):
         tag = f"{slug}/{sec}"
         rs = it.get("readiness_summary")
         mt = it.get("misconception_trends")
+        reco = it.get("misconception_recommendation")
         quotes = it.get("selected_quotes") or []
 
         if not slug or not sec:
@@ -758,6 +1053,17 @@ def cmd_write(args, conn):
             if val is not None and (not isinstance(val, str) or len(val) > MAX_PROSE):
                 print(f"  [err ] {tag}: {fld} must be a string ≤ {MAX_PROSE} chars")
                 bad = True
+        # The recommendation has its own, much smaller cap, and must be ONE paragraph — the UI
+        # renders it as a single line under the trends prose. Reject a multi-paragraph value
+        # rather than silently reflowing it: this file refuses to guess elsewhere too.
+        if reco is not None:
+            if not isinstance(reco, str) or len(reco) > MAX_RECO:
+                print(f"  [err ] {tag}: misconception_recommendation must be a string ≤ {MAX_RECO} chars")
+                bad = True
+            elif "\n\n" in reco.strip():
+                print(f"  [err ] {tag}: misconception_recommendation must be a single paragraph "
+                      f"(it renders as one line) — found a blank line")
+                bad = True
         # Quotes: '__all__' carries none; per-section quotes must reference a real report whose
         # student is actually in that section (no cross-section picks).
         if sec == ALL:
@@ -785,6 +1091,12 @@ def cmd_write(args, conn):
         scope_meta.update({"n": len(rows),
                            "generated_by": f"lesson-aggregate@{date.today().isoformat()}",
                            "source_fingerprint": _fingerprint(rows)})
+        # Provenance only — which day-scoped run wrote this scope, and (on '__all__') what it
+        # covered. NEVER used to filter rows: n and the fingerprint stay derived from live data.
+        if it.get("day"):
+            scope_meta["day"] = str(it["day"]).strip().upper()
+        if sec == ALL and isinstance(it.get("coverage"), dict):
+            scope_meta["coverage"] = it["coverage"]
         oid = str(c["meta"]["offering_id"])
         bucket = pending.setdefault(oid, {"ctx": c, "scopes": {}})
         bucket["scopes"][sec] = {
@@ -792,13 +1104,17 @@ def cmd_write(args, conn):
             "section_code": ALL if sec == ALL else c["section_code"][sec],
             "readiness_summary": rs,
             "misconception_trends": mt,
+            # Allowed on '__all__', unlike quotes: a whole-course "what to cover Monday" is
+            # exactly where a teaching action matters most.
+            "misconception_recommendation": reco,
             "selected_quotes": [] if sec == ALL
                                else [{"student_id": q["student_id"], "section_id": sec} for q in quotes],
             "meta": scope_meta,
         }
         print(f"  [{'dry' if args.dry_run else 'ok '}] {tag}: n={scope_meta['n']} "
               f"quotes={len(bucket['scopes'][sec]['selected_quotes'])} "
-              f"readiness={'y' if rs else '-'} trends={'y' if mt else '-'}")
+              f"readiness={'y' if rs else '-'} trends={'y' if mt else '-'} "
+              f"reco={'y' if reco else '-'}")
 
     # One row per offering. MERGE into any existing payload so scopes written by an earlier run
     # (e.g. the M-day pass) survive this one — the per-scope independence the old per-section
@@ -826,6 +1142,22 @@ def cmd_write(args, conn):
             """, (SCOPE, oid, KIND, Json(payload)))
             print(f"  [{'dry' if args.dry_run else 'ok '}] offering {oid}: "
                   f"{len(bucket['scopes'])} scope(s) merged into {len(scopes)} stored")
+            # Audit row. Only on a real write — a --dry-run did not happen and must not claim to.
+            # 'partial' when the whole-course scope was not among them: the lesson is aggregated
+            # but not finished, which is a different fact from a clean success.
+            if not args.dry_run:
+                codes = sorted(s.get("section_code") or k for k, s in bucket["scopes"].items())
+                _run_finish(
+                    conn,
+                    _run_start(conn, c["meta"], "lesson-aggregate", args.invoked_by,
+                               (args.day or "").strip().upper() or None),
+                    "success" if ALL in bucket["scopes"] else "partial",
+                    summary=f"Wrote {len(bucket['scopes'])} scope(s): {', '.join(codes)}."
+                            + ("" if ALL in bucket["scopes"] else f" '{ALL}' not written."),
+                    detail={"scopes_written": codes,
+                            "all_scope": "written" if ALL in bucket["scopes"] else "deferred",
+                            "scopes_stored_total": len(scopes)},
+                )
             written += 1
         except Exception as e:  # noqa: BLE001
             conn.rollback()
@@ -859,22 +1191,33 @@ def cmd_status(args, conn):
               else f"No analysis rows for '{args.activity}' yet.")
         return
 
-    print(f"{'activity / section':56} {'n':>3} {'quotes':>6} {'stale':>5}  generated_at")
-    print("-" * 100)
+    day = (getattr(args, "day", None) or "").strip().upper() or None
+
+    print(f"{'activity / section':50} {'day':>4} {'n':>3} {'quotes':>6} {'reco':>4} {'stale':>5}  generated_at")
+    print("-" * 110)
     for r in rows:
         meta = _lesson_meta(conn, r["activity_slug"])
         live = (_load_reports(conn, meta["offering_id"], meta["interactive_id"], meta["written_id"])
                 if meta else [])
+        by_section_days = {x["section_id"]: x.get("meeting_days") for x in live}
         scopes = (r["payload"] or {}).get("scopes") or {}
         # '__all__' last, matching the pull order.
         for key in sorted(scopes, key=lambda k: (k == ALL, scopes[k].get("section_code") or k)):
             sc = scopes[key]
+            # A day-scoped check lists that day's sections plus the course scope, so the M run's
+            # post-check does not flag T scopes that legitimately do not exist yet.
+            if day and key != ALL and not _meets(by_section_days.get(key), day):
+                continue
             scope_rows = live if key == ALL else [x for x in live if x["section_id"] == key]
             stored = (sc.get("meta") or {}).get("source_fingerprint")
             stale = "STALE" if stored and stored != _fingerprint(scope_rows) else ""
             label = f"{r['activity_slug']} / {sc.get('section_code') or key}"
-            print(f"{label:56} {len(scope_rows):>3} {len(sc.get('selected_quotes') or []):>6} "
+            print(f"{label:50} {((sc.get('meta') or {}).get('day') or '-'):>4} {len(scope_rows):>3} "
+                  f"{len(sc.get('selected_quotes') or []):>6} "
+                  f"{('y' if sc.get('misconception_recommendation') else '-'):>4} "
                   f"{stale:>5}  {r['generated_at']}")
+    print(f"\n'{ALL}' showing STALE between two day-scoped runs is EXPECTED — it is the signal "
+          f"that the second pass is still owed. Section scopes should be blank.")
 
 
 def main():
@@ -887,15 +1230,29 @@ def main():
     pl.add_argument("--lesson", "--activity", "--interaction", dest="activity", required=True,
                     help="assignment slug (preferred) or activity slug of the lesson to aggregate")
     pl.add_argument("--out", help="write JSON here (UTF-8) instead of stdout")
+    # No `choices=` on purpose. 001_core_model.sql records that the old ^[MT][135][A-D]$ section
+    # CHECK was deliberately dropped for hardcoding a two-course meeting pattern; baking M|T into
+    # the CLI would put it straight back. Validated against the offering's real meeting_days.
+    pl.add_argument("--day", help="only aggregate sections meeting on this day (e.g. M, T); "
+                                  "other sections are carried in as prior_scopes")
 
     w = sub.add_parser("write-analysis", help="merge model-written scopes into the offering's row")
     w.add_argument("--in", dest="infile", required=True,
-                   help="JSON array of {activity_slug, section_id, readiness_summary, misconception_trends, selected_quotes}")
+                   help="JSON array of {activity_slug, section_id, readiness_summary, "
+                        "misconception_trends, misconception_recommendation, selected_quotes}")
     w.add_argument("--dry-run", action="store_true", help="show changes, commit nothing")
+    w.add_argument("--day", help="record which day track this run covered (audit provenance only; "
+                                 "the input file is what decides which scopes are written)")
+    w.add_argument("--invoked-by", dest="invoked_by", default="human",
+                   choices=["human", "scheduled"],
+                   help="who started this run — recorded in analysis_runs")
+    # Deliberately NO --day here: the input file names its scopes and the writer merges. A flag
+    # would be a second source of truth about which scopes this run touches.
 
     st = sub.add_parser("status", help="list analysis scopes + staleness (the verify step)")
     st.add_argument("--lesson", "--activity", "--interaction", dest="activity",
                     help="limit to one lesson (assignment or activity slug)")
+    st.add_argument("--day", help="limit to sections meeting on this day, plus the course scope")
 
     args = p.parse_args()
     conn = _connect()

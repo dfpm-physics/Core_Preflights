@@ -120,9 +120,16 @@ export const CURATED_COLUMNS = {
   extensions:            ['enrollment_id', 'assignment_offering_id', 'extended_due_at', 'reason',
                           'revoked_at'],
   review_signoffs:       ['assignment_offering_id', 'section_id', 'reviewed_by', 'reviewed_at'],
+  // The counts are the audit-relevant part of an import — they record which conflict resolution
+  // the operator chose, which is the only step that discards data.
+  roster_imports:        ['course_offering_id', 'imported_by', 'filename', 'created_at'],
 
   // Analysis
   analysis_reports:      ['scope', 'scope_id', 'kind', 'generated_at'],
+  // status and invoked_by first: the audit question is almost always "did the overnight run
+  // work, and was anyone watching?"
+  analysis_runs:         ['skill', 'invoked_by', 'status', 'assignment_offering_id',
+                          'day_track', 'started_at', 'summary'],
 };
 
 /* ══════════════════════════════════════════════════════════════════════════════

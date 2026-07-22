@@ -9,7 +9,9 @@ import sys
 from pathlib import Path
 sys.path.insert(0, r"c:\01 -- AI Projects\Socratic Instruction\Core_Preflights\supabase\admin")
 
-from lesson_aggregate import summarize, _pinned_question_id  # noqa: E402 (no connection opened)
+from lesson_aggregate import (  # noqa: E402 (no connection opened)
+    summarize, _pinned_question_id, _meets, _answer, _graded_response_questions, MAX_ANSWER,
+)
 
 fails = []
 
@@ -127,6 +129,69 @@ want("no questions at all -> nothing, not a crash",
      _pinned_question_id({"questions": []}, "reading_time"), (None, None))
 want("no content at all -> nothing", _pinned_question_id(None, "reading_time"), (None, None))
 
+print("\n=== identifying the GRADED concept question(s) by exclusion ===")
+# Q3 is found by excluding the two pinned questions, not by a role of its own. `points > 0` alone
+# would also match the reading reflection, which is free_response points:1 — so the exclusion is
+# what separates them, and these assertions are what prove it.
+FALL = {"questions": [
+    {"id": "q1", "type": "free_response", "points": 0,
+     "text": "How much time did you spend reading the book in preparation for this lesson?"},
+    {"id": "q2", "type": "free_response", "points": 1,
+     "text": "What did you find most confusing or most interesting about the reading? Be specific."},
+    {"id": "q3", "type": "free_response", "points": 1, "expected_response": "Electrons transfer.",
+     "text": "After rubbing a glass rod with silk, a student says the glass gained protons…"},
+]}
+want("the Fall preflight shape yields exactly the concept question",
+     [q["id"] for q in _graded_response_questions(FALL)], ["q3"])
+want("…carrying its prompt and the expected answer (the physics source of truth)",
+     _graded_response_questions(FALL)[0]["expected_response"], "Electrons transfer.")
+
+# The lab variant. Its Q1 says "reading the LAB INSTRUCTIONS" and its Q2 is the same reflection —
+# both still contain the pinned needles, so the exclusion holds. If it ever stops holding, every
+# reading reflection silently lands in the concept-question analysis, which is why this is here.
+LAB = {"questions": [
+    {"id": "q1", "type": "free_response", "points": 0,
+     "text": "How much time did you spend reading the lab instructions in preparation?"},
+    {"id": "q2", "type": "free_response", "points": 1,
+     "text": "What did you find most confusing or most interesting about the reading?"},
+    {"id": "q3", "type": "free_response", "points": 1, "text": "Predict the meter reading…"},
+]}
+want("a LAB lesson still excludes its reflection (needles survive the lab wording)",
+     [q["id"] for q in _graded_response_questions(LAB)], ["q3"])
+
+want("a lesson with two concept questions returns both",
+     [q["id"] for q in _graded_response_questions({"questions": FALL["questions"] + [
+         {"id": "q4", "type": "free_response", "points": 2, "text": "And explain why."}]})],
+     ["q3", "q4"])
+want("multiple choice is not a free-response concept question",
+     [q["id"] for q in _graded_response_questions({"questions": FALL["questions"] + [
+         {"id": "q5", "type": "multiple_choice", "points": 1, "text": "Pick one."}]})], ["q3"])
+want("a zero-point extra question is not treated as graded",
+     [q["id"] for q in _graded_response_questions({"questions": FALL["questions"] + [
+         {"id": "q6", "type": "free_response", "points": 0, "text": "Optional musing."}]})], ["q3"])
+want("an interactive activity has no questions block -> nothing",
+     _graded_response_questions({"artifact_url": "https://claude.ai/x"}), [])
+want("no content at all -> nothing, not a crash", _graded_response_questions(None), [])
+
+print("\n=== _meets: which sections a --day run covers ===")
+want("a section meeting that day matches", _meets(["M"], "M"), True)
+want("…case-insensitively", _meets(["m"], "M"), True)
+want("a section meeting the other day does not", _meets(["T"], "M"), False)
+want("a section meeting BOTH days matches either", _meets(["M", "T"], "T"), True)
+want("empty meeting_days matches no day filter at all", _meets([], "M"), False)
+want("…and neither does a null", _meets(None, "M"), False)
+want("no day filter matches everything, including empty", _meets([], None), True)
+
+print("\n=== _answer: the two stored answer shapes ===")
+want("the nested {answers:{…}} shape", _answer({"answers": {"q3": " hello "}}, "q3"), "hello")
+want("the flat {q3:…} shape", _answer({"q3": "hello"}, "q3"), "hello")
+want("a blank answer is None, not an empty string", _answer({"q3": "   "}, "q3"), None)
+want("a missing question is None", _answer({"q3": "hi"}, "q9"), None)
+want("a non-string answer is None", _answer({"q3": 42}, "q3"), None)
+want("no qid is None", _answer({"q3": "hi"}, None), None)
+_long = _answer({"q3": "x" * (MAX_ANSWER + 500)}, "q3")
+want("an overlong answer is truncated, with an ellipsis", len(_long), MAX_ANSWER + 1)
+
 print("\n=== reading time (Q1) ===")
 
 
@@ -169,6 +234,42 @@ want("one effort entry", sum(both["effort"]["hist"]), 1)
 want("interactive assessment wins over the reflection-only score", both["effort"]["avg"], 4)
 want("understanding from the holistic read", both["understanding"]["overall"], 5)
 want("attributed to interactive", both["understanding"]["from"], {"interactive": 1, "written": 0})
+
+print("\n=== per-question tallies (summarize()['questions']) ===")
+# Python-only ON PURPOSE: summarizeReports() has no equivalent. This block is pull-only prose
+# material, and since the By-question UI panel was deleted there is no browser panel it could
+# disagree with. Do not "fix" the divergence by porting it — that would be a panel nobody reads.
+
+
+def graded(status, score=1.0, qid="q3"):
+    return {"path": "written", "effort": None, "points_earned": score,
+            "q2_effort": 4, "q3_understanding": 3,
+            "question_scores": {qid: {"score": score, "max": 1.0, "status": status}},
+            "report_data": {**S1, "effort": 4, "misconceptions": []}}
+
+
+q = summarize([graded("full"), graded("full"), graded("warn"), graded("zero", 0.0)], 2)["questions"]
+want("every scored student is counted once", q["q3"]["n"], 4)
+want("full credit tallied", q["q3"]["full"], 2)
+want("warn is its own bucket, not folded into full", q["q3"]["warn"], 1)
+want("zero tallied", q["q3"]["zero"], 1)
+want("points averaged over the scored", q["q3"]["points_avg"], 0.75)
+want("the question's max carries through", q["q3"]["points_max"], 1.0)
+
+ungraded = summarize([graded("full"), {"path": "written", "effort": None, "points_earned": None,
+                                       "q2_effort": None, "q3_understanding": None,
+                                       "question_scores": {"q3": {"score": None, "max": 1.0,
+                                                                  "status": None}},
+                                       "report_data": {}}], 2)["questions"]
+want("a null status counts as ungraded, NEVER as a zero", ungraded["q3"]["ungraded"], 1)
+want("…and is kept out of the zero bucket", ungraded["q3"]["zero"], 0)
+
+# The gate the SKILL's whole question subsection hangs on. An empty dict means "no question set";
+# a dict of zeros would read as "a question set everyone failed" and produce prose about a
+# cohort that was never asked anything.
+inter = summarize([interactive(4, 5), interactive(3, 4)], 2)["questions"]
+want("an interactive-only cohort yields an EMPTY questions block", inter, {})
+want("…which is falsy, so the skill's gate works", bool(inter), False)
 
 print(f"\n{'ALL PASS' if not fails else str(len(fails)) + ' FAILED'}")
 for f in fails:

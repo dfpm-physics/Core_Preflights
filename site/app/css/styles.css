@@ -565,6 +565,15 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
 .alert-info    { background-image: url(../media/icons/ic-info.png); }
 .alert-warn    { background-image: url(../media/icons/ic-warning.png); }
 
+/* Automated-run status strip (js/run-banner.js). Sits between the nav and the page so it is
+   unmissable without displacing the page's own heading. Reuses .alert-* for colour and glyph. */
+.run-banners { max-width: var(--page-max, 1200px); margin: 12px auto 0; padding: 0 var(--page-pad, 20px); }
+.run-banner { display: flex; align-items: flex-start; gap: 12px; }
+.run-banner-body { flex: 1; }
+.run-banner-x { flex: none; background: none; border: 0; cursor: pointer; padding: 0 2px;
+  font-size: 1.3em; line-height: 1; color: inherit; opacity: 0.55; }
+.run-banner-x:hover { opacity: 1; }
+
 /* ============================================================= *
  *  Question blocks (ported assignment engine)                   *
  * ============================================================= */
@@ -1150,17 +1159,14 @@ tr:last-child td { border-bottom: none; }
               font-variant-numeric: tabular-nums; font-weight: 600; }
 .rt-note    { margin-top: 6px; font-size: 0.76em; color: var(--muted); font-style: italic; }
 
-/* Per-question written analysis (analysis_reports kind='by_question'). Prose bullets, one block
-   per instructor — deliberately NOT styled like the counted misconception bars above it, because
-   these carry approximate counts inside the sentence rather than a measured share. */
-.bq-block { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
-.bq-block:first-child { margin-top: 0; padding-top: 0; border-top: none; }
-.bq-who { font-size: 0.78em; font-weight: 700; color: var(--text-soft); margin-bottom: 8px; }
-.bq-q { display: flex; gap: 10px; align-items: flex-start; margin-top: 10px; }
-.bq-qid { flex: none; font-size: 0.66em; font-weight: 800; letter-spacing: 0.05em; color: var(--muted);
-  border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; margin-top: 2px; }
-.bq-list { margin: 0; padding-left: 18px; font-size: 0.85em; line-height: 1.55; color: var(--text-soft); }
-.bq-list li { margin: 2px 0; }
+/* The trends recommendation — one teaching action, on its own line under the trend prose. Set
+   apart rather than styled as more prose: it is the line a faculty member acts on, and burying it
+   in the paragraph above is why it was pulled out of that paragraph in the first place. */
+.ai-reco { display: flex; gap: 10px; align-items: baseline; margin: 12px 0 0;
+  padding-top: 10px; border-top: 1px solid var(--border);
+  font-size: 0.88em; line-height: 1.55; color: var(--text); }
+.ai-reco-lab { flex: none; font-size: 0.72em; font-weight: 800; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--muted); }
 
 /* AI aggregator placeholders */
 .ai-box { flex: 1; display: flex; flex-direction: column; gap: 10px; }

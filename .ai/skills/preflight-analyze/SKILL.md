@@ -1,13 +1,16 @@
 ---
 name: preflight-analyze
 description: >
-  Physics preflight assignment analysis skill for USAFA (PREP v2, schema `app`). Use when the user
-  wants to analyze student submissions, generate per-instructor misconception reports, apply
-  auto-grading, write suggested grades plus the per-student schema:1 assessment (effort,
-  understanding, misconceptions, flags) and hidden Q2-effort/Q3-understanding diagnostics to
-  Supabase, or says /preflight-analyze. Also triggers for "analyze preflight", "grade submissions",
-  "check who hasn't submitted", "run analysis on assignment", or "preflight analyze". This skill is
-  run by a Course Director or System Admin, not individual instructors. Optional filter argument:
+  PER-STUDENT grading skill for USAFA physics preflights (PREP v2, schema `app`). Use when the user
+  wants to evaluate student answers, apply auto-grading, write per-question feedback and suggested
+  grades, and assess each student's effort and understanding — the schema:1 assessment (effort,
+  understanding, misconceptions, flags) plus the hidden Q2-effort/Q3-understanding diagnostics — or
+  says /preflight-analyze. Also triggers for "analyze preflight", "grade submissions", "check who
+  hasn't submitted", "run analysis on assignment", or "preflight analyze".
+  It writes ONLY to `grades`. It produces NO cohort or class-level output: readiness summaries,
+  misconception trends and per-question breakdowns all belong to /lesson-aggregate, which runs
+  after the deadline. /lesson-cycle runs this skill and that one back to back.
+  Run by a Course Director or System Admin, not individual instructors. Optional filter argument:
   "M" for M-day sections or "T" for T-day sections.
 ---
 
@@ -23,9 +26,16 @@ You are analyzing student submissions for a physics preflight assignment at USAF
    interactive lesson can be summarized by the same cohort aggregator
    ([`references/WRITTEN-SCHEMA1.md`](references/WRITTEN-SCHEMA1.md))
 6. Write suggested grades back to Supabase (`is_finalized = false`, `source = 'ai_suggested'`)
-7. Print a structured per-instructor report in the conversation
+7. Print a per-section run report in the conversation
 
-This skill is run by a **Course Director or System Admin** — not individual instructors. A single run covers all sections for a given day (M-day or T-day). Results are stored per-instructor and are visible to each instructor in the Report tab.
+**Every one of those is per student.** This skill does not summarize a class, a section, or a
+question. It writes to `grades` and nothing else. The cohort layer — readiness summary,
+misconception trends, the recommendation, showcase quotes — is `/lesson-aggregate`'s, on a
+different clock: grading runs whenever work needs scoring, often split M-day/T-day, while cohort
+prose is written once per section after that section's deadline. `/lesson-cycle` runs both in
+order.
+
+This skill is run by a **Course Director or System Admin** — not individual instructors. A single run covers all sections for a given day (M-day or T-day).
 
 ---
 
@@ -43,12 +53,12 @@ nothing reads. The mapping:
 | the questions | `assignments.questions` | the **written** activity's `activities.content.questions` |
 | the reference PDF | `assignments.reference_pdf` / `.reference_pages` | same keys inside that `content` object |
 | a section | `sections.id = 'M1A'` | `sections.id` uuid + `sections.code`; `sections.meeting_days` (`{M}` / `{T}`) replaces sniffing the code |
-| who teaches it | `sections.instructor_id` | `staff_assignments` with `section_id` set (`section_id IS NULL` = offering-wide, i.e. a director — never a grouping key) |
+| who teaches it | `sections.instructor_id` | *(no longer read by this skill — see Step 4b)* |
 | a student in a course | `students.section_id` | `enrollments (student_id, section_id, status)` |
 | their answers | `responses.answers` | `submissions` → `submission_activities.content` for the written activity |
 | their score | `scores` | `grades` |
 | the diagnostics | `scores.q2_effort` / `.q3_understanding` | `grades.diagnostic` (jsonb) |
-| the class report | `assignments.analysis_report` (jsonb column) | `analysis_reports` (table) |
+| the class report | `assignments.analysis_report` (jsonb column) | `analysis_reports` — **written by `/lesson-aggregate`, never by this skill** |
 
 **Everything per-student keys on `enrollment_id`, not `student_id`.** Get it from `enrollments`.
 That is what stops a section change from silently re-attributing a cadet's history.
@@ -237,20 +247,11 @@ pattern. It is now data, so use it; a course with a `W`/`F` pattern will work wi
 Build `sectionMap[section_id] = { code, meeting_days }` and `SECTION_IDS` = the filtered ids.
 Print: "Filtering to {N} sections in {M-day / T-day}: {codes}".
 
-### 4b. Who teaches each section
+### 4b. (removed 2026-07-21) — instructors are no longer looked up
 
-```
-GET {SUPA_URL}/rest/v1/staff_assignments?select=id,instructor_id,section_id,role,instructors!inner(id,name,is_global_admin)&course_offering_id=eq.{COURSE_OFFERING_ID}
-Headers: READ_HEADERS
-```
-
-- Rows **with** a `section_id` name the instructor of that section — this is the grouping key,
-  replacing the old `sections.instructor_id`.
-- Rows with `section_id = null` are **offering-wide** (that is how a director is recorded). They are
-  authorization, not teaching load: **never group students by them.** A director with no section
-  rows produces no instructor block, which is correct.
-
-Build `sectionMap[section_id].instructor = { id, name }`.
+This step fetched `staff_assignments` for one reason: to group the old per-instructor summaries in
+the retired Step 8. Nothing in this skill groups by instructor any more — grading is per student,
+and the cohort rollup is per **section** and belongs to `/lesson-aggregate`. Skip straight to 4c.
 
 ### 4c. The enrolled students
 
@@ -433,114 +434,63 @@ For each free-response question, produce:
 
 ---
 
-## Step 8 — Write Per-Instructor Summaries to `analysis_reports`
+## Step 8 — Record the run in `app.analysis_runs`
 
-> **You own the by-question breakdown, and nothing else in the rollup (changed 2026-07-21).**
-> `ROLLUP-AGREEMENT.md` §6 originally also assigned this skill the cohort prose —
-> `readiness_summary`, `misconception_trends`, `selected_quotes` — for preflight-only lessons,
-> because no aggregator could read the written path. `/lesson-aggregate` now can: both modalities
-> emit the same `schema: 1` assessment (Step 9), so **one aggregator writes the cohort prose for
-> every lesson type**. Do not write those three fields here.
+Every analysis run is auditable, whether a human typed it or a scheduler fired it. This is the only
+place a completed run is recorded — do **not** write a `CHANGELOG.md` entry for a routine grading
+run (reserve that for schema changes, bulk corrections and one-off repairs).
+
+**Insert this BEFORE the grade write in Step 9**, so a run that dies part-way still leaves a trace:
+
+```
+POST {SUPA_URL}/rest/v1/analysis_runs
+Headers: WRITE_HEADERS + Prefer: return=representation
+Body: { "skill": "preflight-analyze", "invoked_by": "human", "status": "running",
+        "course_offering_id": "{COURSE_OFFERING_ID}",
+        "assignment_offering_id": "{OFFERING_ID}", "day_track": "{DAY_FILTER or null}" }
+```
+
+Keep the returned `id`. **Update it once Step 9 has read back clean:**
+
+```
+PATCH {SUPA_URL}/rest/v1/analysis_runs?id=eq.{RUN_ID}
+Headers: WRITE_HEADERS + Prefer: return=minimal
+Body: { "status": "success", "finished_at": "{ISO}",
+        "summary": "Graded 32 of 36 in M1A, M3A; skipped 4 finalized.",
+        "detail": { "students_in_scope": 36, "graded": 32, "missing": 0,
+                    "skipped_finalized": 4, "skipped_instructor": 0,
+                    "sections": ["M1A", "M3A"] } }
+```
+
+- `invoked_by` is `"scheduled"` when this ran under `/lesson-cycle` from a scheduler, `"human"`
+  otherwise. `actor` is the requesting instructor's `instructors.id` when you know it, else null.
+- `status`: `success` when every in-scope student was graded or deliberately skipped; `partial`
+  when you completed but did less than asked; `skipped` when there was nothing to do; `failed`
+  with `error` set (the message, not a stack trace) when you stopped.
+- **Leaving the row at `running` is the correct outcome of a crash.** Do not tidy it up on a later
+  run — that is the signal an operator needs.
+
+## The old Step 8 is RETIRED (2026-07-21). This skill writes no cohort output.
+
+> **It used to write a per-instructor, per-question breakdown to `analysis_reports`
+> (`kind='by_question'`, `audience_id` = the instructor). That is gone.** The axis was wrong:
+> an instructor is not a unit of analysis, so a single row pooled their M1A *and* M3A and could
+> never be shown on a section view — and `audience_id` bought no privacy either, because
+> `analysis_reports` RLS already grants every `scope='assignment_offering'` row to any staff
+> member of the offering.
 >
-> The reason is cadence, not tidiness. This skill runs when work needs grading, often split
-> M-day/T-day; cohort prose must be written once, after the deadline, over the whole cohort. A
-> readiness summary produced by an M-day run would describe half a class and then be silently
-> replaced by the T-day run. The `kind='by_question'` row you write here is per-instructor and
-> per-question, so the M/T split is harmless to it.
-
-Group students by instructor (using `sectionMap` → `instructor`). For each instructor (within
-filtered set), generate a summary covering **all their sections combined**.
-
-**Aggregate per instructor, never per section.** Pool every response from all of an instructor's sections into one set before computing counts and identifying misconceptions. Do not produce separate summaries, counts, or misconception lists for each section, and do not label bullets by section (e.g., no "M1A: 3 students, M1B: 2 students"). One combined summary per instructor per question is the only output.
-
-### Format per question
-
-Write a **bulleted list** (newline-separated strings, no prose paragraphs). Each bullet should be a single, scannable observation. Target 4–7 bullets per question. Do NOT include `•` or `-` prefix in the stored string — the website adds list styling.
-
-**Include bullets for:**
-- Score distribution: `"X/Y students answered correctly"` or `"X/Y received full credit"`
-- Each distinct misconception with approximate count and a brief description of why it is wrong
-- Any blank/no-engagement responses and their count
-- Vague or low-confidence correct answers (if notable)
-- What strong/exemplary answers included (1 bullet)
-- One instructional recommendation tied to the most common issue
-
-**For auto-graded questions (numerical/MC)**, write 1–2 bullets only: correct rate and the most common wrong answer if any.
-
-### Where it goes now: one row per instructor
-
-`assignments.analysis_report` — a single jsonb column holding a `by_instructor` map — is gone. Its
-replacement is the `analysis_reports` **table**, keyed
-`UNIQUE NULLS NOT DISTINCT (scope, scope_id, audience_id, kind)`. Write one row per instructor:
-
-| column | value |
-|---|---|
-| `scope` | `"assignment_offering"` |
-| `scope_id` | `OFFERING_ID` |
-| `audience_id` | the instructor's `instructors.id` (this is what `audience_id` is for) |
-| `kind` | `"by_question"` — the breakdown axis this skill owns (`ROLLUP-AGREEMENT.md` §6) |
-| `payload` | the object below |
-
-```json
-{
-  "generated_at": "{ISO timestamp}",
-  "day_filter": "M",
-  "instructor_name": "…",
-  "sections": [{ "id": "{section uuid}", "code": "M1A" }],
-  "breakdown": {
-    "axis": "question",
-    "items": {
-      "q1": { "summary": "bullet one\nbullet two\nbullet three" },
-      "q2": { "summary": "…" }
-    }
-  },
-  "meta": { "n": 37, "generated_by": "preflight-analyze@{YYYY-MM-DD}" }
-}
-```
-
-Include `"day_filter": null` when no filter was applied. Each `summary` is a `\n`-joined string of
-bullet text (one bullet per line, no leading `•` or `-`) — the shape `ROLLUP-AGREEMENT.md` §7 fixes
-for `breakdown[].summary`, unchanged from what the old `questions[].summary` held.
-
-> **Why per-instructor rows instead of one merged document.** RLS on `analysis_reports` reads
-> `audience_id = current_uid()` first, so an instructor's own row reaches them directly. It also
-> deletes the merge step: M-day and T-day runs now touch **different rows**, so they cannot
-> overwrite each other and there is nothing to hand-merge.
+> **`/lesson-aggregate` now owns every cohort output**, by section and for the whole course, and
+> folds the per-question material into its `readiness_summary`. It reads the graded answers and
+> `grades.question_scores` directly, so nothing is lost by this skill not summarizing them.
 >
-> The one case that still collides is an instructor who teaches on **both** days: the second run
-> replaces their row, because a per-question summary written over the M cohort cannot be merged
-> with one written over the T cohort. When an instructor spans both days, run the assignment
-> **without** a day filter so their summary covers all their sections at once.
-
-### Writing it
-
-Fetch what already exists for this offering (you need the row ids to update in place):
-
-```
-GET {SUPA_URL}/rest/v1/analysis_reports?select=id,audience_id,payload,generated_at&scope=eq.assignment_offering&scope_id=eq.{OFFERING_ID}&kind=eq.by_question
-Headers: READ_HEADERS
-```
-
-Then, per instructor:
-
-- **Row exists** for that `audience_id` →
-  ```
-  PATCH {SUPA_URL}/rest/v1/analysis_reports?id=eq.{ROW_ID}
-  Headers: WRITE_HEADERS + Prefer: return=minimal
-  Body: { "payload": { … }, "generated_at": "{ISO}" }
-  ```
-- **No row** →
-  ```
-  POST {SUPA_URL}/rest/v1/analysis_reports
-  Headers: WRITE_HEADERS + Prefer: return=minimal
-  Body: { "scope": "assignment_offering", "scope_id": "{OFFERING_ID}",
-          "audience_id": "{instructor uuid}", "kind": "by_question",
-          "payload": { … }, "generated_at": "{ISO}" }
-  ```
-
-Read-then-write rather than an upsert on purpose: the unique key contains a nullable column
-(`audience_id`), and an explicit PATCH-or-POST is unambiguous where `on_conflict` inference is not.
-
+> **What that means for you:** finish at Step 9. Do not write to `analysis_reports` at all. The
+> misconceptions you identify in Step 7 still matter — they leave through
+> `misconceptions[]` in the `schema: 1` payload (Step 9), which is what the rollup counts and what
+> the aggregator clusters. Rows written before the retirement survive in the database and are
+> ignored by the rollup.
+>
+> Ordering is unchanged and still matters: this skill runs first, `/lesson-aggregate` second.
+> `/lesson-cycle` sequences both.
 ---
 
 ## Step 9 — Write Suggested Grades to Supabase
@@ -672,9 +622,10 @@ whether an empty breakdown means "not authored" or "the analysis failed".
 
 ---
 
-## Step 10 — Print the Full Report
+## Step 10 — Print the run report
 
-Print one report block per instructor (all their sections combined), then a combined summary. Use this format:
+Grouped **by section**, not by instructor. The instructor axis went with Step 8; a section is what
+a person actually teaches into, and it is the axis the rollup uses.
 
 ```
 ═══════════════════════════════════════════════════
@@ -683,53 +634,47 @@ Generated: {date}   Term: {TERM_LABEL}
 {DAY_FILTER ? "Scope: M-Day sections only" | "Scope: T-Day sections only" : "Scope: All sections"}
 ═══════════════════════════════════════════════════
 
-## Instructor: {instructor_name} — Sections: {M1A, M3A, ...}
+## Section {CODE}
 
-### Submission Summary
 | Metric | Value |
 |--------|-------|
-| Students in sections | {N} |
+| Students in section | {N} |
 | Submitted (committed) | {N} |
 | Submitted (still draft) | {N} |
 | Took the interactive path | {N} |
 | Missing | {N} |
-| Average score (auto-graded) | {X.X} / {POINTS_POSSIBLE} |
+| Skipped — finalized | {N} |
+| Skipped — instructor-edited draft | {N} |
+| Average score | {X.X} / {POINTS_POSSIBLE} |
 
 ### Missing Students
 | Name | Section | Student ID |
 |------|---------|-----------|
-| ... | ... | ... |
 
 (If none: "All students submitted.")
-
-### Per-Question Analysis
-{output from Step 7 for each free-response question}
-{brief note for auto-graded questions: "Q{N}: Multiple choice — auto-graded. {X}/{total} correct."}
-
-### Raw Responses
-#### Q{N}: {question_text}
-| Student | Section | Score | Answer |
-|---------|---------|-------|--------|
-| {name}  | {section} | {score}/{max} | {first 120 chars of answer...} |
 ```
 
-After all instructors, print:
+Then one combined block:
+
 ```
 ═══════════════════════════════════════════════════
-## Combined Summary{DAY_FILTER ? " — M-Day" | " — T-Day" : ""}
+## Combined{DAY_FILTER ? " — M-Day" | " — T-Day" : ""}
 
-| Instructor | Sections | Submitted | Missing | Avg Score |
-|-----------|---------|-----------|---------|-----------|
-| ...       | ...     | ...       | ...     | ...       |
+| Section | Submitted | Missing | Skipped | Avg Score |
+|---------|-----------|---------|---------|-----------|
 
 **Next steps:**
-- Instructors can review and adjust suggested grades in the Admin panel (Grade tab)
-- Yellow-highlighted scores are AI suggestions awaiting instructor review
-- Click "Finalize & Publish Grades" to make scores visible to students
-- To analyze the other day's sections, run: /preflight-analyze {COURSE_CODE} {ASSIGNMENT_SLUG} {OTHER_DAY}
+- Instructors review and adjust suggested grades in the Grade tab; yellow scores are AI suggestions
+- "Finalize & Publish Grades" makes them visible to students
+- Cohort prose is NOT written by this skill — run /lesson-aggregate (or /lesson-cycle, which runs
+  both) once this day's deadline has passed
+- To grade the other day's sections: /preflight-analyze {COURSE_CODE} {ASSIGNMENT_SLUG} {OTHER_DAY}
 ═══════════════════════════════════════════════════
 ```
 
+**Do not dump raw responses into the report.** The old format printed every student's answer
+inline; that is a large wall of student prose in a transcript that gets pasted around, and the
+Grade tab already shows each answer beside its score.
 ---
 
 ## Error Handling
@@ -759,5 +704,6 @@ After all instructors, print:
 8. **Every request names its schema** — `Accept-Profile: app` on reads, `Content-Profile: app` on writes, decided once in Step 0.
 9. **Key on `enrollment_id`** — never write a grade or read work by `student_id` alone; the enrolment is what carries the section and the term.
 10. **Diagnostics never affect grades** — everything in `grades.diagnostic` (`q2_effort`, `q3_understanding`, and the whole `schema: 1` payload including its `effort`) is diagnostic only. Never use any of it in `question_scores`, `points_earned`, `points_possible`, status, feedback, finalization, or the analysis report, and never render or print individual per-student values. The `effort` inside `diagnostic` is **not** `grades.effort` and must not be written to that column: these offerings are `grading_mode='points'` (Step 2), where points come from `question_scores`.
-11. **Emit structure, not just prose** — the misconceptions you identify in Step 7 must appear BOTH as Step 8's per-instructor bullets and as `misconceptions[]` in Step 9's `schema: 1` payload, using the same taxonomy ids. Prose alone cannot be counted, and the two disagreeing is a bug. See [`references/WRITTEN-SCHEMA1.md`](references/WRITTEN-SCHEMA1.md).
+11. **Emit structure, not prose** — every misconception you identify in Step 7 must leave this skill as an entry in `misconceptions[]` in Step 9's `schema: 1` payload, against a taxonomy id. That structured list is the *only* way a finding reaches anyone: the rollup counts it into the prevalence bars, and `/lesson-aggregate` clusters it into the cohort trends. A misconception you only describe in the run report is a misconception nobody downstream can see. See [`references/WRITTEN-SCHEMA1.md`](references/WRITTEN-SCHEMA1.md).
+12. **Write no cohort output.** Never write `analysis_reports` — not readiness prose, not trends, not a per-question breakdown. That table belongs to `/lesson-aggregate`, which runs after the deadline over a whole section. This skill's blast radius is `grades`, and nothing else.
 12. **Never invent an objective breakdown** — emit `objectives: []` unless the questions carry `objective_key`. Fabricated objectives become axes on the faculty radar.

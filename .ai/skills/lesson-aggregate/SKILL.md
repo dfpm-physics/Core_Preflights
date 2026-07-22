@@ -2,17 +2,21 @@
 name: lesson-aggregate
 description: >
   Cohort/section AGGREGATION tool for a LESSON, whichever way students worked it — the interactive
-  artifact, the written question set, or a mix. Reads the per-student schema:1 assessment across
-  the whole cohort and writes the class-level AI synthesis the faculty rollup shows as "coming
-  soon" placeholders: a readiness summary, misconception trends, and 2-3 AI-picked
-  reading-reflection quotes — one scope per section PLUS a whole-course scope.
+  artifact, the written question set, or a mix. Reads the per-student schema:1 assessment plus the
+  graded question answers across the cohort and writes every class-level AI panel the faculty
+  rollup shows: a readiness summary (including the common threads across Q2/Q3), misconception
+  trends, a one-line teaching recommendation, and 2-3 AI-picked reading-reflection quotes — one
+  scope per section PLUS a whole-course scope, with the course scope synthesized FROM the section
+  scopes. Supports day-scoped runs (--day M / --day T) so a lesson with split deadlines is
+  aggregated once per day track without re-reading the first day's cohort.
   Use when a director wants the lesson rollup's AI panels filled — i.e. "aggregate the lesson",
   "summarize the lesson rollup", "generate the readiness summary / misconception
   trends / showcase quotes for a lesson", or /lesson-aggregate. Writes to the
   app.analysis_reports table. NOT /interaction-backfill and NOT /preflight-analyze, which produce
-  the per-student structured content — that must already be populated (this consumes it). Run
-  AFTER the due date (when submissions are frozen) by a Course Director / System Admin on a
-  machine with the scoped prep_app_dml DB role.
+  the per-student structured content — that must already be populated (this consumes it).
+  /lesson-cycle runs that grading step and this one back to back. Run AFTER the deadline (when
+  submissions are frozen) by a Course Director / System Admin on a machine with the scoped
+  prep_app_dml DB role.
 ---
 
 # Lesson Aggregate — cohort/section analysis for the lesson rollup
@@ -21,9 +25,14 @@ description: >
 > [`INTERACTION-AGGREGATION.md`](../../../docs/decisions/INTERACTION-AGGREGATION.md) spec describes. It turns many
 > per-student structured blobs into the **class-level free-text synthesis** the faculty lesson
 > rollup can't compute from numbers alone:
-> 1. **Readiness summary** — how ready the class is, where understanding is solid vs. shaky, what to cover first.
-> 2. **Misconception trends** — prose under the live prevalence bars (clustering, spreading/fading, by section).
-> 3. **Showcase quotes** — 2-3 of the most interesting reading-reflection comments, per section.
+> 1. **Readiness summary** — how ready the class is, where understanding is solid vs. shaky, what
+>    to cover first, and (written path) the common threads across the reading reflection and the
+>    graded concept question.
+> 2. **Misconception trends** — prose under the live prevalence bars, written for the scope the
+>    viewer selected: "across the course" or "in M1A".
+> 3. **Misconception recommendation** — one teaching action, rendered as its own line beneath the
+>    trends prose so it is not buried in the paragraph.
+> 4. **Showcase quotes** — 2-3 of the most interesting reading-reflection comments, per section.
 >
 > It does **not** touch grades and does **not** recompute the numeric charts — those stay live in
 > the browser. It only writes the AI layer to `app.analysis_reports`.
@@ -43,11 +52,20 @@ serves both:
 question-only lesson gets a full rollup; a mixed lesson's prose describes the whole cohort
 instead of the half that took the artifact.
 
-**Two clocks, two skills — this is why they are not merged.** Grading is per-student and runs
-early and often, sometimes split M-day/T-day. Aggregation is per-cohort and runs once, after the
-deadline, unfiltered — a readiness summary written over half a cohort is worse than none. Keep
-this distinct from `/preflight-analyze` (per-student grading + assessment) and
+**The unit that must never be split is the SECTION, not the course.** A readiness summary written
+over half a *section* describes a class that does not exist. A run scoped to one day track does
+not do that: it aggregates whole sections, and carries the other day's already-written sections in
+as `prior_scopes`. That is what `--day` is for, and it is how the lesson is normally worked — once
+when M-day closes, once when T-day closes.
+
+The whole-course scope is the one thing that genuinely needs every section, so `pull` computes
+`coverage` and tells you whether `__all__` may be written this run. **Never write `__all__` when
+`coverage.complete` is false.**
+
+Keep this distinct from `/preflight-analyze` (per-student grading + assessment) and
 `/interaction-backfill` (repair of interactive assessments), both of which must run first.
+`/lesson-cycle` sequences the grading and this skill for you; run this one directly when you only
+need to re-aggregate.
 
 **Check the cohort before you write.** `pull` reports a `paths` block and warns when structured
 content is missing, split by path — an interactive report without schema:1 needs
@@ -134,7 +152,7 @@ path, `pull` (Step 2) reports what is missing and the fix is a `/preflight-analy
 
 ```
 .venv/Scripts/python supabase/admin/lesson_aggregate.py pull \
-  --lesson <slug> --out <scratch>/agg.json
+  --lesson <slug> [--day M] --out <scratch>/agg.json
 ```
 `--lesson` takes the **assignment slug** (`preflight-08` — the lesson) or an **activity slug**
 (`lesson-08-potential` — the frozen artifact key). Prefer the assignment slug: it names the
@@ -172,10 +190,32 @@ Heed `pull`'s warnings before continuing: missing structured content is reported
 because the remedy differs (`/interaction-backfill` vs. a `/preflight-analyze` run), and a lesson
 whose written activity has no `role: "reading_reflection"` question cannot supply written quotes.
 
+### Reading a day-scoped pull file
+
+With `--day`, the file has three parts instead of one:
+
+| key | what it is | what you do with it |
+|---|---|---|
+| `scopes[]` (`in_day: true`) | this day's sections, with full `numbers` **and** `reports[]` | write their prose and pick their quotes |
+| `prior_scopes[]` | the other day's sections: their **already-written prose**, fresh `numbers`, and **no `reports[]`** | read them as source material for `__all__`. **Do not rewrite them, and never pick quotes for them** — you do not hold their reports, so any `student_id` you supply will be rejected |
+| `coverage` | `this_run`, `from_stored`, `uncovered`, `stale_prior`, `complete` | decides whether you may write `__all__` at all |
+
+`prior_scopes[].stale: true` means that section's work changed after its prose was written — a
+late submission or a regrade. Re-run **that day** before folding it into the course scope, or the
+whole-course synthesis quotes a section that no longer matches its own numbers.
+
+`coverage.uncovered` lists sections that have **never** been aggregated. While that list is
+non-empty, `__all__` is not writable: `pull` sets `scopes.__all__.write` to `false` and says so.
+
 ## Step 3 — Write the analysis (per scope)
 
 Produce a JSON array of `{activity_slug, section_id, readiness_summary, misconception_trends,
-selected_quotes}` — one entry per scope in the pull file (each section + `__all__`).
+misconception_recommendation, selected_quotes}` — one entry per **in-day** scope in the pull file,
+plus `__all__` when `coverage.complete` is true. Optionally carry `day` (and, on `__all__`,
+`coverage`) so the stored scope records which run wrote it.
+
+**Do not send an entry for a `prior_scopes[]` section.** Those are already written; re-sending
+them costs a rewrite you did not intend and, if you invent quotes for them, fails validation.
 
 `section_id` accepts the **section uuid** or its **code** (`"M1A"`), or the string `"__all__"`.
 
@@ -188,8 +228,15 @@ with the live bars. Keep each prose field to a short paragraph or a few bullets,
 A short read for a faculty member opening the rollup before class: overall engagement, where
 understanding is solid vs. shaky (lean on the weakest objectives + the self-vs-assessed gap),
 notable flags (reflection-capped, honor, needs-follow-up counts), and **what to cover first in
-class**. For `__all__`, synthesize across sections (note if one section lags) using the per-section
-reports you already read.
+class**.
+
+**For `__all__`, synthesize from PROSE, cite from `numbers`.** Write it from the section summaries
+you just wrote plus every `prior_scopes[].readiness_summary` — on a day-scoped run you have not
+read the other day's reports, so any claim about those students must come from their stored prose,
+never from your own reading. Every figure you quote comes from `scopes.__all__.numbers`, which is
+computed over the whole cohort. **Never add section numbers together to get a course number:**
+counts would sum, but medians and means do not, and the browser recomputes those same figures from
+raw rows for its All-sections bars.
 
 **Use `numbers.reading` where it exists** — the class's self-reported time on the reading (Q1),
 as a **median** and five buckets. It is often the most actionable number on the page: a median
@@ -200,6 +247,34 @@ design. Correlate it with effort or understanding only if the data actually show
 do not assert the obvious story if the numbers are flat. `not_stated` counts students who answered
 Q1 without naming a duration; only written-path students can appear there, since the interactive
 path never asks the question.
+
+#### Common threads across the graded questions — WRITTEN PATH ONLY
+
+**Skip this entire subsection when the pull file's `questions` block is empty**, and skip it for
+any scope whose `numbers.paths.written_n` is 0. An interactive-only cohort has no question set,
+and nothing here applies to it.
+
+This is the material `/preflight-analyze` used to write as a separate per-instructor "By question"
+panel. That panel is gone: Q1 has its own reading-time panel on the page, and Q2/Q3 belong in the
+prose that reads them. Fold them into the readiness summary instead.
+
+- **Q2 (the reading reflection)** — what students actually engaged with. `reflection.text` on each
+  report row, plus `numbers.reflection` for the meaningful/capped counts. Name the recurring
+  threads ("Coulomb's inverse-square law, charging by friction, conservation of charge"), not a
+  list of individual answers.
+- **The graded concept question(s)** — each report row's `responses[]` carries the verbatim
+  `answer` with the `status` it earned, and the top-level `questions` block carries the prompt and
+  its `expected_response`. Use the expected response as the physics source of truth: describe the
+  gap between it and what the cohort wrote, not merely what the cohort got wrong.
+- **Cite `numbers.questions[qid]`** for the outcome split — `full` / `warn` / `zero` / `ungraded`.
+  Write "23/32 earned full credit on Q3" from that block; do not count report rows by hand, which
+  goes wrong above about twenty students and puts a number in the prose that agrees with nothing.
+- **`status` is not understanding.** A `warn` answer earned full credit and was still flagged as
+  wrong or vague, and a student can sit on `free_response_understanding: 1` with a `warn`. That
+  gap is often the finding. Never present either as the other.
+
+Close with the one thing worth doing about it in class — that is the "what to cover first" the
+panel is read for.
 
 ### misconception_trends — every scope
 Cluster the free-text `misconceptions[].description`/`evidence`: which recur, fold novel/variant
@@ -215,6 +290,21 @@ itself (it may reflect what each path surfaces rather than what students believe
 `path` on the report rows before claiming a pattern is class-wide. The written path's entries
 come from `/preflight-analyze`'s reading of the answers; the interactive path's from the
 transcript, which sees reasoning the written answers never show.
+
+**Write for the scope you were given.** The panel is headed "Trends across the course" on the
+All-sections view and "Trends in M1A" on a section view, so a section's prose should read as being
+about that section — not a course summary repeated four times. **Keep it short.** This sits under
+the live bars and is read in the minute before class: a few sentences, not an essay.
+
+### misconception_recommendation — every scope (one line)
+One concrete teaching action, ≤ 1200 chars, **a single paragraph with no blank lines** (the writer
+rejects them — it renders as one line under the trends prose). It is the answer to "so what do I
+do Monday?", separated out precisely because it used to get buried at the end of the trend
+paragraph where nobody acted on it.
+
+Applies to **every** lesson type, interactive included — it is a teaching action, not a question
+artifact. It is also the one field allowed on `__all__`, where quotes are forbidden: a
+whole-course "what to cover" is exactly where it matters.
 
 ### selected_quotes — per-section scopes ONLY (2-3 each)
 Pick the **2-3 most interesting reading-reflection comments** for that section, as
@@ -237,6 +327,10 @@ two prose panels only. (The writer rejects quotes on the `__all__` scope, and re
 per-section quote whose student isn't actually in that section — so an instructor can never be
 shown a cross-section quote.)
 
+**Never pick quotes for a `prior_scopes[]` section.** A day-scoped pull gives you their prose but
+not their `reports[]`, so you have no student to name and the writer will reject whatever you
+guess. Their quotes were chosen on the run that wrote them and are still stored.
+
 Write the array to a scratch file (e.g. `<scratch>/filled.json`).
 
 ## Step 4 — Write back
@@ -249,16 +343,31 @@ The writer merges your scopes into the offering's `analysis_reports` row (analys
 regeneratable; scopes you didn't send are preserved), **re-derives each scope's `meta.n` +
 `meta.source_fingerprint` from the live rows** (so they can't drift), stamps
 `meta.generated_by = "lesson-aggregate@<date>"`, resolves section codes to ids, validates
-quote membership, and enforces "no quotes on `__all__`". `--dry-run` first, then commit.
+quote membership, enforces "no quotes on `__all__`", and caps
+`misconception_recommendation` to one short paragraph. `--dry-run` first, then commit.
+
+`--day` on `write-analysis` is **audit provenance only** — it records which day track the run
+covered. Your input file still decides which scopes are written; the flag never filters anything.
+Pass `--invoked-by scheduled` when a scheduler started the run rather than a person.
+
+**The writer records the run in `app.analysis_runs`** — one row per offering written, with the
+scopes and whether `__all__` landed (`success`) or was deferred (`partial`). A `--dry-run` records
+nothing, because it did not happen. Do **not** also write a `CHANGELOG.md` entry for a routine
+aggregation; reserve that file for schema changes and one-off repairs.
 
 ## Step 5 — Verify
 
 ```
-.venv/Scripts/python supabase/admin/lesson_aggregate.py status --activity <slug>
+.venv/Scripts/python supabase/admin/lesson_aggregate.py status --lesson <slug> [--day M]
 ```
-Lists the scopes just written with `n`, quote count, and a `STALE` flag (stored vs. recomputed
-fingerprint — should be blank right after a run). Spot-check one section's prose against a couple
-of that section's reports.
+Lists the scopes just written with the day that wrote them, `n`, quote count, whether a
+recommendation is present, and a `STALE` flag (stored vs. recomputed fingerprint). Spot-check one
+section's prose against a couple of that section's reports.
+
+**`__all__` showing STALE between the two day-scoped runs is expected** — its fingerprint covers
+every live row, so the second day's submissions move it. That is the signal the second pass is
+still owed, and it is the only automated one. Section scopes should be blank; a section that shows
+STALE right after its own run means its work changed while you were writing.
 
 > **The faculty rollup DOES display this (since 2026-07-21).** `site/app/faculty/report.html`
 > renders the readiness summary, the misconception-trend prose, and the per-section showcase
@@ -281,16 +390,10 @@ Most of this landed 2026-07-21. **What is still NOT implemented:**
   union of *their own* sections' scopes. `currentAnalysis()` in `report.html` currently returns
   `__all__` for any viewer whose scope is "all", so an instructor sees the whole-course synthesis.
   This is a UI rule, not a database one (see the RLS caveat below), so nothing else enforces it.
-- **`/preflight-analyze`'s `by_question` breakdown is still keyed per instructor**
-  (`audience_id` = the instructor, `payload.sections` naming their sections), and the rollup
-  renders every block it receives with an "instructor · sections" header, ignoring the section
-  selector. **Decided 2026-07-21, not yet built:** that skill should mirror this one —
-  `audience_id = NULL` and a `payload.scopes` map keyed by section uuid plus `__all__`, each scope
-  carrying its own `items{q1…}` — so one payload convention serves both producers and the rollup
-  can show a course-level view and a per-section view with no instructor axis at all. It requires
-  a `/preflight-analyze` contract change **and** a re-run over the offering: today's bullets are
-  computed per instructor over all of their sections at once (e.g. one row covering M1A **and**
-  M3A), so there is no per-section decomposition stored to split.
+**Done 2026-07-21:** `/preflight-analyze`'s per-instructor `by_question` rows are retired. That
+skill is now purely per-student, this one owns every cohort output, and the per-question material
+lives inside `readiness_summary`. Rows written before the retirement survive in the database and
+are ignored by `loadAnalysis()`.
 
 The rules below still govern anything further:
 
@@ -319,15 +422,16 @@ contends with interactive use. Two design rules follow:
   (some courses have 20+ sections). Parallel subagents only buy wall-clock speed, which a midnight cron
   doesn't need — they cost more and bump the concurrency cap.
 - **Day-split runs and the `__all__` scope.** Per-section scopes are independent and the writer
-  merges, so an M-run and a T-run never collide on them. The whole-course `__all__` scope, though, is
-  recomputed over **whatever work exists at run time** (the writer re-derives `n` +
-  `source_fingerprint` from the live rows). If M and T have separate due dates, the earlier run's
-  `__all__` describes only that day until the later run overwrites it with the full course. The later
-  (final) run leaves `__all__` correct.
+  merges, so an M-run and a T-run never collide on them. Pass `--day` so the second run does not
+  re-read the first day's cohort — it arrives as `prior_scopes` instead. The whole-course scope is
+  written **only** on a run where `coverage.complete` is true, i.e. once every section has been
+  aggregated; before that `pull` marks it `write: false` and you omit it. Its numbers are always
+  recomputed over every live row, never summed from sections.
 
 **Health check.** `status` recomputes each scope's fingerprint from the current rows and flags
 `STALE` when they've changed since the analysis was written — a good post-cron assertion, and the
-signal to re-run a scope whose work was resubmitted after aggregation.
+signal to re-run a scope whose work was resubmitted after aggregation. Between two day-scoped runs
+`__all__` is *expected* to read STALE; that is the second pass being owed, not a fault.
 
 ---
 
@@ -340,11 +444,16 @@ signal to re-run a scope whose work was resubmitted after aggregation.
    figures in the precomputed `numbers`; don't fabricate misconceptions, trends, or quotes.
 3. **Numbers stay consistent with the UI.** Cite the `numbers` block verbatim; don't recompute,
    so the prose always agrees with the live bars.
-4. **Per-section quotes from that section only; `__all__` gets none.** Enforced by the writer, but
+4. **Never synthesize `__all__` numbers by adding up sections.** Cite `scopes.__all__.numbers`.
+   Counts would sum; medians and means do not, and the browser recomputes them from raw rows.
+5. **Never write `__all__` when `coverage.complete` is false**, and **never quote — or rewrite — a
+   section you did not pull this run.**
+6. **Per-section quotes from that section only; `__all__` gets none.** Enforced by the writer, but
    produce them correctly so it never trips.
-5. **Mark provenance.** The writer stamps `meta.generated_by = "lesson-aggregate@<date>"`.
-6. **Merge, never replace wholesale.** Send only the scopes you actually rewrote; the writer keeps
+7. **Mark provenance.** The writer stamps `meta.generated_by = "lesson-aggregate@<date>"`; pass
+   `day` so the scope records which run wrote it.
+8. **Merge, never replace wholesale.** Send only the scopes you actually rewrote; the writer keeps
    the others. Do not hand-assemble a payload and PATCH it directly.
-7. **Keep student-identifying scratch files out of the repo** — reflection text and names go to the
-   **scratchpad**, never under the repo tree.
-8. **No DDL — ever.** If `analysis_reports` is missing, hand the migration to the director.
+9. **Keep student-identifying scratch files out of the repo** — reflection text, graded answers and
+   names go to the **scratchpad**, never under the repo tree.
+10. **No DDL — ever.** If `analysis_reports` is missing, hand the migration to the director.

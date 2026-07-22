@@ -11,6 +11,7 @@
 
 import { iconHTML, initials, esc } from './util.js';
 import { updateToggleButtons } from './theme.js';
+import { mountRunBanners } from './run-banner.js';
 
 // All nav-rendering pages live one level deep (student/ , faculty/), so same-role links are
 // bare filenames. The nav no longer links out to the legacy site at all (see FACULTY_LINKS),
@@ -189,6 +190,11 @@ export function renderNav(ctx, opts = {}) {
   wireNav(ctx, mount, onCourseChange);
   updateToggleButtons();
   renderFooter();
+
+  // Status of the unattended analysis runs, for directors and admins. Deliberately NOT awaited:
+  // renderNav is synchronous and every page depends on it, so a slow or failing query must not
+  // hold up the chrome. The strip appears a beat later or not at all.
+  mountRunBanners(ctx);
 }
 
 /* ── Legacy Actions ────────────────────────────────────────────────────────────

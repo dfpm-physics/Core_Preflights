@@ -580,9 +580,17 @@
       const mixNote = s.paths?.interactiveN && s.paths?.writtenN
         ? `· ${s.paths.interactiveN} interactive + ${s.paths.writtenN} questions`
         : s.paths?.writtenN ? '· question set' : '· interactive';
-      // Reading time only appears when someone reported one — an interactive-only cohort never
-      // answers Q1, and an empty panel there would imply the class read nothing.
-      const rtSec = s.reading?.assessed ? `<div class="lr-sec fw-panel">
+      // Reading time. This panel is now Q1's ONLY home — the per-question block that used to
+      // repeat it is gone — so it must appear whenever anyone on the question set could have
+      // answered, not only when someone named a duration. A cohort that all answered Q1 without
+      // stating a number (assessed 0, notStated > 0) previously rendered nothing at all, which
+      // read as "nobody was asked" rather than "nobody said". readingChart's own empty state
+      // carries that distinction.
+      //
+      // Still hidden for an interactive-only cohort: Q1 does not exist on that path, and an empty
+      // panel there would imply the class read nothing.
+      const askedReading = (s.reading?.assessed || 0) + (s.reading?.notStated || 0) > 0;
+      const rtSec = askedReading ? `<div class="lr-sec fw-panel">
           <div class="lr-eyebrow">Time spent reading <span class="dim">· Q1 · ${s.reading.assessed} of ${s.n} reported · anonymous</span></div>
           ${readingChart(s.reading)}
         </div>` : '';
@@ -606,41 +614,19 @@
       </div>`;
 
       const trends = analysis && analysis.misconception_trends;
-      // The written path's misconception findings. /preflight-analyze DOES look for them — it is
-      // one of that skill's headline jobs, against the taxonomy in PROJECT.md — but it emits them
-      // as prose bullets per instructor per question (analysis_reports, kind='by_question'), not
-      // as the structured per-student misconceptions[] the artifact sends. So they cannot feed the
-      // counted bars above; they are rendered as what they are, underneath. Until this they were
-      // written to the database and displayed nowhere.
-      const byQ = reportAnalysis?.[I.BY_QUESTION_KEY] || [];
-      const qSec = byQ.length ? `<div style="margin-top:18px">
-          <div class="lr-eyebrow">By question <span class="dim">· from the written preflight analysis${
-            byQ.length > 1 ? ` · ${byQ.length} instructors` : ''}</span></div>
-          ${byQ.map(r => {
-            const rows = Object.entries(r.items || {})
-              .sort(([a], [b]) => String(a).localeCompare(String(b)))
-              .map(([qid, item]) => {
-                const bullets = String(item?.summary || '').split('\n').map(t => t.trim()).filter(Boolean);
-                if (!bullets.length) return '';
-                return `<div class="bq-q"><div class="bq-qid">${esc(qid.toUpperCase())}</div>
-                  <ul class="bq-list">${bullets.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
-              }).join('');
-            if (!rows) return '';
-            const who = [r.instructor_name, (r.sections || []).map(x => x.code).filter(Boolean).join(', ')]
-              .filter(Boolean).join(' · ');
-            return `<div class="bq-block">${who ? `<div class="bq-who">${esc(who)}</div>` : ''}${rows}</div>`;
-          }).join('')}
-        </div>` : '';
+      const reco = analysis && analysis.misconception_recommendation;
+      // The trends panel is written for the scope you are looking at, so it says which one that
+      // is. The old "across the class" was ambiguous on a page with a section selector.
+      const trendScope = reportScope === 'all' ? 'across the course'
+                       : `in ${(vm.sections.find(x => x.id === reportScope)?.code) || 'this section'}`;
       const mcSec = `<div class="lr-sec fw-panel">
         <div class="lr-eyebrow">Misconceptions <span class="dim">· share of submitted students, most common first</span></div>
-        ${s.misconceptions.length || !byQ.length ? mcBars(s.misconceptions, s.n)
-          : `<div class="muted" style="font-size:.84em">No counted misconceptions — those come from the
-             interactive transcript, and this scope's findings are in the per-question analysis below.</div>`}
-        ${qSec}
+        ${mcBars(s.misconceptions, s.n)}
         <div style="margin-top:16px">
-          <div class="lr-eyebrow">Trends across the class <span class="dim">${trends ? aiGenNote(analysis, s.n) : '· AI generated · coming soon'}</span></div>
+          <div class="lr-eyebrow">Trends ${esc(trendScope)} <span class="dim">${trends ? aiGenNote(analysis, s.n) : '· AI generated · coming soon'}</span></div>
           ${trends ? aiProse(analysis.misconception_trends)
-            : aiPlaceholder('Which misconceptions are spreading or fading and how they cluster by section will be summarized here once the analysis aggregator is built.')}
+            : aiPlaceholder('Which misconceptions are spreading or fading and how they cluster by section will be summarized here once the lesson has been aggregated.')}
+          ${reco ? `<p class="ai-reco"><span class="ai-reco-lab">Recommendation</span>${esc(reco)}</p>` : ''}
         </div>
       </div>`;
 

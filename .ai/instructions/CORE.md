@@ -46,7 +46,12 @@ to `app`; until it does, a change to student-visible behaviour belongs in `publi
   other agent or to humans.** If a fact matters to whoever works next, it must live in the
   **repo** — this file, a design doc, or `CHANGELOG.md`. Do not rely on agent memory for
   anything durable.
-- **Log every state-changing run in `CHANGELOG.md`** (schema, bulk data, roster, publishes).
+- **Log every state-changing run in `CHANGELOG.md`** (schema, bulk data, roster, publishes) —
+  **except routine analysis runs**, which record themselves in `app.analysis_runs` instead. A term
+  is ~40 lessons closed out twice each; 80+ hand-written entries would bury what that file is read
+  for, and an instructor cannot read it anyway. `/preflight-analyze`, `/lesson-aggregate` and
+  `/lesson-cycle` each write a row covering who ran it (human or scheduled), when, what it touched
+  and what it skipped. A schema change, bulk correction or one-off repair still belongs here.
 - **Destructive DB ops are gated:** snapshot to JSON first, verify the snapshot matches live
   counts, then delete with an explicit `--commit`. See `scripts/fall2026/` for the reference
   pattern (`export_poc_snapshot.py` → `clean_poc.py`).
@@ -177,8 +182,9 @@ The canonical domain procedures are agent-neutral Markdown runbooks under `.ai/s
 
 | Runbook (`.ai/skills/<name>/SKILL.md`) | What it does |
 |---|---|
-| `preflight-analyze` | **Per-student.** Fetch responses for an assignment, grade free-response (3-state full/warn/zero, liberal), read reference PDFs for RAG, write suggested `grades` (`is_finalized=false`) + the per-student `schema: 1` assessment into `grades.diagnostic` + a per-instructor `by_question` row in `analysis_reports`. Run whenever work needs grading; may be run per day filter (M/T). |
-| `lesson-aggregate` | **Per-cohort.** AI panels for one lesson — readiness summary, misconception trends, showcase quotes → `analysis_reports`. Modality-blind: folds the `schema: 1` assessment from *both* paths (the artifact's, on the submission; `preflight-analyze`'s, on the grade). Run **after the due date**, once, unfiltered. Renamed from `interaction-aggregate` 2026-07-21. |
+| `lesson-cycle` | **The normal entry point.** Runs `preflight-analyze` then `lesson-aggregate` for one lesson and one day track, after that day's deadline. Adds the checks that only make sense between them (deadline passed, grading produced the assessments aggregation consumes, whole-course scope written only once every section exists). Also the entry point for an unattended scheduled run — the repo schedules nothing itself; see its SKILL.md. |
+| `preflight-analyze` | **Per-student, and nothing else.** Fetch responses for an assignment, grade free-response (3-state full/warn/zero, liberal), read reference PDFs for RAG, write suggested `grades` (`is_finalized=false`) + the per-student `schema: 1` assessment into `grades.diagnostic`. Writes **no** cohort output — its per-instructor `by_question` rows were retired 2026-07-21. Run whenever work needs grading; may be run per day filter (M/T). |
+| `lesson-aggregate` | **Per-cohort, and owns all of it.** Every AI panel for one lesson — readiness summary (including the common threads across the graded questions), misconception trends, the one-line recommendation, showcase quotes → `analysis_reports`. Modality-blind: folds the `schema: 1` assessment from *both* paths (the artifact's, on the submission; `preflight-analyze`'s, on the grade). Aggregates **by section first**, then synthesizes the whole-course scope from those section scopes. Run **after each day track's deadline** with `--day`. Renamed from `interaction-aggregate` 2026-07-21. |
 | `interaction-backfill` | Repair reports missing `report_data` by reconstructing schema-1 from `report_markdown`. Interactive path only — the written path's equivalent is a `preflight-analyze` re-run. |
 | `setup-preflight` | First-time machine setup — writes the config file above. |
 | `docs-author` | Decide whether a concept warrants documentation and which kind, then write it — in-app help docs (`site/app/help/`) or design docs (`docs/`). Read before adding any `.md` to either. |

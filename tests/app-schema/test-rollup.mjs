@@ -19,6 +19,7 @@ import {
   minutes, median, pinnedQuestion, reflectionQuestionId,
 } from '../../site/app/js/schema.js';
 
+
 installBrowser();
 
 // A stub client, installed BEFORE the import because supabase.js captures window.db at module
@@ -31,7 +32,7 @@ const chain = () => {
 };
 globalThis.window.db = { from: () => chain() };
 
-const { summarizeReports, loadAnalysis, BY_QUESTION_KEY } =
+const { summarizeReports, loadAnalysis } =
   await import('../../site/app/js/faculty-rollup.js');
 
 /* ── Row builders, named for the path they represent ───────────────────────── */
@@ -335,8 +336,13 @@ const unassessed = summarizeReports([
 eq('an ungraded submission is not counted as "gave no duration"',
    unassessed.reading.notStated, 0);
 
-/* ── loadAnalysis: two skills write this table and `kind` separates them ───── */
-section('loadAnalysis — by_question rows must not corrupt the panel map');
+/* ── loadAnalysis: retired by_question rows must not corrupt the panel map ─── */
+section('loadAnalysis — retired by_question rows are ignored, not merged');
+
+// /preflight-analyze stopped writing these on 2026-07-21 and the UI block is gone, but the rows
+// SURVIVE in the database. They carry no scope map, so a reader that let one through would file
+// it under '__all__' with null panels and overwrite a real cohort scope — the regression these
+// assertions were written for. Keeping them is the point; deleting them invites it back.
 
 const cohortRow = {
   id: 'r-cohort', scope: 'assignment_offering', scope_id: 'off-1', audience_id: null,
@@ -365,33 +371,17 @@ const map = await loadAnalysis('off-1');
 eq('the cohort row survives three by_question rows (they used to overwrite it)',
    map.__all__?.readiness_summary, 'Class is ready.');
 eq('…with its trends intact', map.__all__?.misconception_trends, 'Fading.');
-eq('every by_question row is kept, not collapsed onto one key',
-   (map[BY_QUESTION_KEY] || []).length, 3);
-eq('…under a key that is not a section and not __all__',
-   BY_QUESTION_KEY === '__all__' || /^[0-9a-f-]{36}$/.test(BY_QUESTION_KEY), false);
-eq('…carrying the per-question bullets',
-   map[BY_QUESTION_KEY][0].items.q3.summary.split('\n').length, 2);
-eq('…and who they are about', map[BY_QUESTION_KEY][0].instructor_name, 'Roth');
-eq('…and which sections they cover', map[BY_QUESTION_KEY][0].sections[0].code, 'M1A');
+eq('retired rows contribute no scope of their own', Object.keys(map).sort(), ['__all__']);
 
 ANALYSIS_ROWS = [byQuestionRow('r1', 'Roth')];
 const onlyQ = await loadAnalysis('off-1');
 eq('a by_question row alone does not invent an all-null cohort panel', onlyQ.__all__, undefined);
-eq('…but its breakdown is still returned', (onlyQ[BY_QUESTION_KEY] || []).length, 1);
+eq('…and yields nothing at all', onlyQ, {});
 
 // A row predating the `kind` column, recognized by payload shape instead.
 ANALYSIS_ROWS = [{ ...byQuestionRow('r-old', 'Legacy'), kind: null }];
-eq('a by_question payload with no kind is still routed by its axis',
-   (await loadAnalysis('off-1'))[BY_QUESTION_KEY]?.length, 1);
-
-// ROLLUP-AGREEMENT §6 says /preflight-analyze SHOULD also write the cohort panels. When it does,
-// the row must land in both places rather than being consumed by the breakdown branch.
-ANALYSIS_ROWS = [{ ...byQuestionRow('r-both', 'Roth'),
-                   payload: { ...byQuestionRow('r-both', 'Roth').payload,
-                              readiness_summary: 'Ready.', misconception_trends: 'Scalar sums.' } }];
-const both = await loadAnalysis('off-1');
-eq('a conforming row yields its breakdown', (both[BY_QUESTION_KEY] || []).length, 1);
-eq('…and its cohort panels', both.__all__?.misconception_trends, 'Scalar sums.');
+eq('a by_question payload with no kind is still recognized by its axis',
+   await loadAnalysis('off-1'), {});
 
 /* ── Finding the reading reflection when nobody marked it ──────────────────── */
 section('pinnedQuestion — must agree with lesson_aggregate.py, case for case');
@@ -457,15 +447,18 @@ const readinessRow = {
         section_id: 'sec-uuid-1', section_code: 'M1A',
         readiness_summary: 'M1A is the strongest section.',
         misconception_trends: 'One protons-move case.',
+        misconception_recommendation: 'Open with what actually moves during friction charging.',
         selected_quotes: [{ student_id: 3000990009, section_id: 'sec-uuid-1' }],
-        meta: { n: 16, generated_by: 'lesson-aggregate@2026-07-21' },
+        meta: { n: 16, generated_by: 'lesson-aggregate@2026-07-21', day: 'M' },
       },
       __all__: {
         section_id: null, section_code: '__all__',
         readiness_summary: 'Cohort is engaged.',
         misconception_trends: 'Two halves of one gap.',
+        misconception_recommendation: 'Spend ten minutes on charge conservation before the lab.',
         selected_quotes: [],
-        meta: { n: 64, generated_by: 'lesson-aggregate@2026-07-21' },
+        meta: { n: 64, generated_by: 'lesson-aggregate@2026-07-21',
+                coverage: { complete: true, this_run: ['T1A'], from_stored: ['M1A'] } },
       },
     },
   },
@@ -484,13 +477,29 @@ eq('…and the AI-selected quotes the rollup resolves to live text',
 eq('…with no quotes on the whole-course scope', real.__all__?.selected_quotes, []);
 eq('…and meta.n, which drives the staleness hint', real.__all__?.meta?.n, 64);
 
+// The tripwire. A field the writer stores and panels() forgets to list is written to the database
+// and displayed nowhere — silently, with no error. That has now happened twice on this table
+// (`scopes` vs `by_section`, and the whole by_question breakdown), so every panel field gets an
+// assertion here the moment it is added to the contract.
+eq('the trends recommendation reaches the renderer, per section',
+   real['sec-uuid-1']?.misconception_recommendation,
+   'Open with what actually moves during friction charging.');
+eq('…and on the whole-course scope, where quotes are forbidden but a recommendation is not',
+   real.__all__?.misconception_recommendation,
+   'Spend ten minutes on charge conservation before the lab.');
+eq('a scope with no recommendation reports null, not undefined',
+   (await loadAnalysis('off-1'))['sec-uuid-1']?.misconception_recommendation !== undefined, true);
+// Day-scoped provenance rides in meta and must survive untouched — status reads it back.
+eq('meta.day survives for a day-scoped section scope', real['sec-uuid-1']?.meta?.day, 'M');
+eq('meta.coverage survives on the course scope', real.__all__?.meta?.coverage?.complete, true);
+
 // Both producers write this offering, exactly as they do live.
 ANALYSIS_ROWS = [byQuestionRow('r1', 'Roth'), readinessRow, byQuestionRow('r2', 'Hardy')];
 const bothProducers = await loadAnalysis('off-1');
-eq('scopes panels survive alongside by_question rows',
+eq('scopes panels survive alongside retired by_question rows',
    bothProducers.__all__?.readiness_summary, 'Cohort is engaged.');
-eq('…and the breakdowns are still separated out',
-   (bothProducers[BY_QUESTION_KEY] || []).length, 2);
+eq('…and the retired rows add no scopes of their own',
+   Object.keys(bothProducers).sort(), ['__all__', 'sec-uuid-1']);
 
 // The older top-level shape must keep loading.
 ANALYSIS_ROWS = [{ ...readinessRow, payload: {

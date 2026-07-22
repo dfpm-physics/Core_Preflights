@@ -10,6 +10,158 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-21 — Matthew Recker via Claude
 
+### Added — `app.analysis_runs` audit trail + a director-facing run-status banner
+
+**Migration `009_analysis_runs.sql` — APPLIED to the live database on 2026-07-22.** One row per
+analysis run, whoever started it: skill, `invoked_by` (`human`/`scheduled`), actor, scope, status,
+timings, a one-line summary, per-skill counts in `detail` (jsonb), and `error`. `db-schema.js`
+regenerated (23 tables).
+
+**Why not `CHANGELOG.md`.** CORE.md §0 asked for a file entry per state-changing run. A term is
+~40 lessons closed out twice each — 80+ hand-written entries that would bury what this file is
+read for, in a medium no instructor can read. CORE.md §0 now carves routine analysis runs out;
+schema changes, bulk corrections and one-off repairs still belong here.
+
+**The row is written before the work, not after.** A run that dies mid-way is the case an audit
+trail exists for, and a row written only on success loses exactly that one. A row still at
+`status='running'` is a crashed or abandoned run and reads as such. There is deliberately **no
+write policy** — only the service tiers write, and they bypass RLS; an audit trail a signed-in
+instructor can append to is not one.
+
+**New `site/app/js/run-banner.js`**, mounted from `renderNav()` so it appears on every faculty
+page. Shows the latest **scheduled** run per offering: success (24h window), a warning for a
+partial pass, an error for a failure or for a run still `running` two hours after it started.
+Dismissals persist in `localStorage`, bounded to the newest 200 ids.
+
+- **Directors see every course they direct, not just the one they are viewing** — a phys-110
+  failure must not hide because they are looking at phys-215. `ctx.courses` already carries one
+  entry per staffed offering with a `role`, and a global admin gets `role:'director'` on all of
+  them, so filtering on that expresses both rules at once. RLS does **not** enforce this:
+  `analysis_runs_read_staff` admits any staff member, so director-only is a UI convention here,
+  like the `__all__` rule on the rollup.
+- **"Until corrected" needs no clearing step.** Only the latest run per offering is read, so a
+  failed Monday stops showing the moment Tuesday succeeds.
+- **`skipped` shows nothing.** It is a correct outcome (deadline not passed, nothing to grade);
+  surfacing it would train directors to ignore the strip.
+
+**One dependency mistake caught by the suite:** importing `supabase.js` at run-banner's module
+scope gave `nav.js` — which every page renders — a hard dependency on a live client just to draw
+the chrome, breaking `test-nav` and `test-legacy-actions`. The client is now imported lazily
+inside the query. Those two suites were right to assert it.
+
+`tests/app-schema/test-run-banner.mjs` (12 assertions) covers the decision rules — the old-failure
+case that must keep showing, the stale-`running` case, and `skipped` staying silent. Full suite
+green: 127 + 12 + Python + 339.
+
+**Still unverified in a browser** (CORE.md §2) — no faculty login available to this harness, so
+the strip's placement and dismissal have not been seen rendered.
+
+### Changed — grading and aggregation split cleanly; new `/lesson-cycle` runs both
+
+**Asked for:** one skill that grades a lesson and then aggregates it, runnable by hand or from a
+scheduler — with the load moved so `/preflight-analyze` does no aggregation at all, and
+`/lesson-aggregate` owns the class *and* per-section rollups including the question-level analysis.
+
+**`/preflight-analyze` is now purely per-student.** Its Step 8 — a per-instructor, per-question
+summary written to `analysis_reports` (`kind='by_question'`, `audience_id` = the instructor) — is
+deleted, along with the `staff_assignments` lookup (Step 4b) that existed only to group it and the
+per-instructor layout of its printed report (Step 10, now per section). Two reasons it had to go:
+
+- **An instructor is not a unit of analysis.** One live row pooled Casey Pellizzari's M1A *and*
+  M3A — "median 30 min across **32 submissions**", "**31/32** received full credit" — so it could
+  never be shown on a section view, and there was no per-section decomposition stored to split.
+- **`audience_id` bought nothing.** `ar_read` (`002_rls.sql:374`) is an OR chain whose
+  `scope='assignment_offering'` clause already grants every such row to any staff member of the
+  offering. It widens access; it never narrows it. The rollup rendering all three instructors'
+  blocks was that assumption failing in production, and a comment in `faculty-rollup.js` asserting
+  the opposite has been corrected.
+
+**`/lesson-aggregate` absorbed the question-level material and learned to run per day track.**
+`pull` gained `--day`, which scopes *which sections get a full pass*; the rest arrive as
+`prior_scopes` — their stored prose plus fresh numbers, no `reports[]` — so the second run
+synthesizes the whole-course scope from section summaries instead of re-reading the first day's
+cohort. That was the explicit ask, and the saving is real but it is **model context, not database
+work**: `_load_reports` is one query over the offering either way.
+
+**Two correctness decisions worth knowing:**
+
+1. **`__all__` numbers are always recomputed over every live row, never recombined from sections.**
+   Counts and histograms would sum exactly, but `reading.median` is unrecoverable from stored
+   medians and every mean is `round(…, 2)`, so recombining rounded section means drifts
+   invisibly — and `understanding.gap` doubles it. The browser recomputes the same figures from raw
+   rows for its All-sections bars, so drift is prose disagreeing with the bar beside it.
+2. **`__all__` is not written at all while coverage is incomplete.** A whole-course prose covering
+   half the course with numbers covering all of it disagrees with itself, and the UI cannot tell:
+   `aiGenNote()` flags staleness only when `meta.n !== scopeN`, which here would be *equal*, so it
+   would render as fresh and authoritative. `pull` reports `coverage.complete` and sets
+   `scopes.__all__.write`. Between the two runs `status` shows `__all__` STALE — that is the signal
+   the second pass is owed, and it is the only automated one.
+
+**New in the pull file:** a `questions` block (the graded concept questions with prompt and
+`expected_response`, identified by *excluding* the two pinned questions — 0 of 74 live activities
+carry a `role`, so a role lookup would be dead code), per-report `responses[]` carrying the
+verbatim graded answer with its 3-state status, and `numbers.questions` tallies so "23/32 earned
+full credit" is a cited figure rather than a hand-count. `question_scores.feedback` is deliberately
+**not** carried — it is prose written for one student, and letting it in is how individual feedback
+gets laundered into cohort text.
+
+**New field `misconception_recommendation`** (ROLLUP-AGREEMENT §7): one teaching action, ≤1200
+chars, single paragraph, rendered as its own line under the trends prose. Its own cap on purpose —
+reusing the 8000-char limit invites a second essay in a slot the UI renders as one line. Allowed on
+`__all__`, unlike quotes.
+
+**Rollup UI.** The By-question block and its `.bq-*` styles are deleted; `BY_QUESTION_KEY` and the
+by_question routing are gone from `loadAnalysis()` (retired rows still in the database are now
+skipped, so they cannot overwrite a real cohort scope). The trends heading is scope-aware —
+"Trends across the course" vs "Trends in M1A". **The reading-time panel now renders whenever Q1 was
+asked**, not only when someone named a duration: it is Q1's only home now, and a cohort that all
+answered without stating a number previously showed nothing at all, which read as "nobody was
+asked" rather than "nobody said".
+
+**New skill [`.ai/skills/lesson-cycle/SKILL.md`](.ai/skills/lesson-cycle/SKILL.md).** Sequences the
+two, adds the checks that only make sense between them (deadline passed; grading actually produced
+the `schema: 1` assessments aggregation consumes; `__all__` only once every section exists), and
+skips the grading half entirely for a lesson with no graded free-response question. Both sub-skills
+remain independently invokable.
+
+**Unattended operation is documented, not built.** No wrapper script and no scheduler artifact —
+the repo has neither today, and CORE.md §2 keeps tooling to stdlib Python. The skill documents the
+`claude -p "/lesson-cycle …"` invocation and Task Scheduler setup. **Two things it deliberately
+does not do:** it does not pretend to satisfy CORE.md §0's coordination gate (an unattended job
+cannot designate an operator; the clean-tree and divergence refusals are a *mitigation*, and the
+skill says so), and **it does not push.** CORE.md §5's standing authorization names
+`/preflight-analyze` and covers that skill's run record only. Widening it to cover a skill that
+also writes cohort analysis is the director's call, not this skill's assumption.
+
+**Live DB change:** the 3 orphaned `kind='by_question'` rows (Casey Pellizzari, Tyler Jones,
+Matthew Recker; offering `eb5fc51c`) were snapshotted to JSON, verified against live counts, then
+deleted with an explicit `--commit`. `analysis_reports` went 4 rows → 1. No DDL, no migration; the
+payload is `jsonb`.
+
+**Verification.** Full suite green — 127 JS rollup assertions, 339 schema/live, and the Python
+engine, which **is now wired into `tests/app-schema/run.mjs`** (it was referenced in two comments
+and run by nothing). New Python cases cover `_meets`, `_answer`'s two stored shapes and truncation,
+the per-question tallies, the empty-vs-zeros gate an interactive cohort depends on, and
+`_graded_response_questions` **against the lab-lesson wording** — that last one matters because a
+lab's Q1 says "reading the lab instructions" and its Q2 is the same reflection, so if either pinned
+needle ever stops matching, every reading reflection silently lands in the concept-question
+analysis. Live: `pull --day M` and `--day T` both verified against phys-215 preflight-02 (`q3`
+resolved by exclusion, `prior_scopes` carrying the other day's stored prose, `coverage.complete`
+true), and `write-analysis --dry-run` confirmed to accept a well-formed scope and reject both a
+multi-paragraph recommendation and quotes on `__all__`.
+
+**Not verified: the browser.** The rollup needs a faculty login this harness lacks, so the deleted
+By-question block, the scope-aware heading, the recommendation line and the always-on reading panel
+are unproven visually (CORE.md §2). That is the one gap between "tests pass" and "it looks right".
+
+**Also picked up, not mine:** migration `008_student_identity.sql` landed mid-session and added
+`roster_imports` to live `app` without its follow-ups. `db-schema.js` has been regenerated (22
+tables), the table-count assertion bumped 21 → 22, and a curated column list added in
+`system-prefs.js`. Combined with the restored interactive runs recorded below, the phys-215
+preflight-02 cohort is now genuinely mixed (8 interactive + 64 written) — **the stored analysis
+from this morning's run describes a cohort that no longer exists and should be regenerated with
+`/lesson-cycle`.**
+
 ### Data — restored the archived Lesson 02 faculty interactive runs into schema `app`
 
 **Live `app` database write (data only, no DDL). The Lesson 02 rollup is now a mixed cohort.**

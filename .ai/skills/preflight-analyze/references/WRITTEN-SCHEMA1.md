@@ -13,10 +13,14 @@ equivalent producer, so every cohort summary that folds `schema: 1` described on
 who took the artifact. This skill is that producer for the written path.
 
 **You already do this analysis.** Step 7 reads every free-response answer and classifies it
-against the misconception taxonomy; Step 8 writes the findings as prose. The work here is to
-*also* emit the structure, so the numbers survive into the rollup instead of being flattened
-into English. `LESSON-UNIFICATION.md` §11 calls this "the work that makes the preflight and the
-interaction commensurable."
+against the misconception taxonomy. The work here is to emit that finding as *structure* rather
+than only as English, so it survives into the rollup and into the cohort aggregation.
+`LESSON-UNIFICATION.md` §11 calls this "the work that makes the preflight and the interaction
+commensurable."
+
+Since 2026-07-21 this is the **only** channel out of the skill for a misconception — the
+per-instructor prose summary that used to carry them (Step 8) is retired. A finding you do not
+record here reaches nobody.
 
 ## Where it goes
 
@@ -150,8 +154,8 @@ objective_key? }`.
   duplicate id within a student.
 - `evidence` is a short quote or paraphrase from that student's answer. Keep it to one clause.
 
-This is the same set of findings Step 8 summarizes; emitting both keeps the prose and the bars
-from disagreeing.
+These entries are what the rollup counts into its prevalence bars and what `/lesson-aggregate`
+clusters into the cohort trends. They are the finding's only route out of this skill.
 
 ### `reading_reflection` — the judgment, NOT the text
 

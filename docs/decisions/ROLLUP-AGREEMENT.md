@@ -119,6 +119,24 @@ it owns, must emit the same prose fields in the same shapes** so the union reads
 > cohort. Everything else in this document — the panel set, field shapes, style, grounding rule —
 > is unchanged. See `CHANGELOG.md` 2026-07-21.
 
+> **Superseded again, later the same day — the `by_question` breakdown is retired outright, and
+> `/preflight-analyze` now writes no cohort output at all.** The note above left it owning
+> `kind='by_question'` rows. Those were keyed **per instructor** (`audience_id`), which is not a
+> unit of analysis: one row covered an instructor's M1A *and* M3A pooled, so it could never be
+> shown on a section view and could not be split, there being no per-section decomposition stored.
+> `audience_id` also bought nothing — RLS `ar_read` is an OR chain whose `scope='assignment_offering'`
+> clause already grants every such row to any staff member of the offering, so it widens access and
+> never narrows it.
+>
+> **`/preflight-analyze` is now purely per-student** (evaluate answers, write feedback, assess
+> effort and understanding). **`/lesson-aggregate` owns every cohort output**, including the
+> per-question material, which it folds into `readiness_summary` rather than storing as its own
+> panel — Q1 already has the reading-time panel, and Q2/Q3 belong in the prose that reads them. It
+> aggregates **by section first, then synthesizes the course scope from those section scopes**, so
+> a second day-scoped run does not re-read the first day's cohort. New field
+> `misconception_recommendation` (§7). A third skill, `/lesson-cycle`, sequences the two.
+> See `CHANGELOG.md` 2026-07-21.
+
 | Lesson type | Breakdown axis | Owner skill | Fields it must write |
 |---|---|---|---|
 | **preflight-only** | question | `/preflight-analyze` | `readiness_summary`, `breakdown(axis=question)`, `misconception_trends`, `selected_quotes`, `flags_note?` |
@@ -138,8 +156,9 @@ All prose is **Markdown-light** (no headings; inline emphasis OK). Bounds match 
 | Field | Type | Limit | Notes |
 |---|---|---|---|
 | `readiness_summary` | TEXT | ≤ 8000 chars | Engagement level, solid vs. shaky understanding (name weakest items), what to cover first. For `'__all__'`, synthesize across sections. |
-| `misconception_trends` | TEXT | ≤ 8000 chars | Sits *under* the live bars — add the *why/pattern/spread*, don't restate counts. Fold novel ones into known buckets. |
-| `breakdown` | JSONB | per-item `summary` is a `\n`-joined bullet string | `{ "axis": "objective"\|"question", "items": { "<key>": { "summary": "bullet\nbullet" } } }`. 4–7 bullets, **no leading `•`/`-`** (UI adds list styling). |
+| `misconception_trends` | TEXT | ≤ 8000 chars | Sits *under* the live bars — add the *why/pattern/spread*, don't restate counts. Fold novel ones into known buckets. Scoped prose: the panel is headed "across the course" or "in <section>" by the viewer's selection, so write for the scope you were given. |
+| `misconception_recommendation` | TEXT | **≤ 1200 chars, single paragraph** | *Added 2026-07-21.* One teaching action, rendered as its own line under the trends prose. Its own cap on purpose — reusing the 8000 limit invites a second essay in a slot the UI renders as one line. **No blank lines**; the writer rejects them rather than normalising. Allowed on `'__all__'` (unlike quotes) — a whole-course "what to cover Monday" is exactly where it matters. Applies to every lesson type, interactive included: it is a teaching action, not a question artifact. |
+| `breakdown` | JSONB | per-item `summary` is a `\n`-joined bullet string | `{ "axis": "objective"\|"question", "items": { "<key>": { "summary": "bullet\nbullet" } } }`. 4–7 bullets, **no leading `•`/`-`** (UI adds list styling). **Retired 2026-07-21 for `axis=question`** — no producer writes it and the UI block is deleted; the per-question material now lives inside `readiness_summary`. The shape is kept here because rows written before that date survive in the database. |
 | `selected_quotes` | JSONB | ≤ 4096 bytes; `[]` on `'__all__'` | `[{student_id, section_id}]` — ids only, **never verbatim text or names** (resolve live from `report_data` + roster so edits stay fresh). 2–3 per section. |
 | `flags_note` | TEXT | ≤ 2000 chars | Optional one-liner context for the flag chips. |
 | `meta` | JSONB | — | `{ n, generated_by: "<skill>@<date>", source_fingerprint }`; fingerprint recomputed server-side on write (staleness check). |

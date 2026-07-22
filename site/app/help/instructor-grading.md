@@ -101,5 +101,11 @@ carry a default deadline used by any section without one of its own.
 
 ## The Report tab
 
-The report summarizes the misconceptions the AI found across *your* sections, grouped by question —
-intended as a five-minute read before you teach the lesson.
+The report summarizes how a lesson went for a section you teach — how ready the class is, which
+misconceptions showed up and how they cluster, one recommended thing to cover, and a few
+reading-reflection quotes worth reading aloud. Use the section selector at the top: everything on
+the page, prose included, is written for the scope you pick. It is intended as a five-minute read
+before you teach the lesson.
+
+It appears once the lesson has been graded *and* aggregated, which happens after the deadline for
+that section — so a section whose deadline has not passed yet will still show placeholders.

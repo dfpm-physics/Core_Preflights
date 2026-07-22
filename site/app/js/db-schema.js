@@ -10,7 +10,7 @@
 //
 // tests/app-schema/test-db-schema.mjs fails when this file drifts from live.
 //
-// Source: scripts/app/gen_db_schema.py · schema `app` · 21 tables
+// Source: scripts/app/gen_db_schema.py · schema `app` · 23 tables
 // Shape per table: { name, comment, rls, primaryKey[], labelColumn, columns[], foreignKeys[],
 //                    enums{col:[values]}, policyCommands[], writable }
 //
@@ -257,6 +257,212 @@ export const DB_SCHEMA = {
           "assignment_offering",
           "section",
           "course_offering"
+        ]
+      },
+      "policyCommands": [
+        "SELECT"
+      ],
+      "writable": false
+    },
+    "analysis_runs": {
+      "name": "analysis_runs",
+      "comment": "One row per AI analysis run (preflight-analyze, lesson-aggregate, lesson-cycle), however it was started. Written at start with status='running' and updated on completion, so a run that died leaves a visible trace. Replaces the CHANGELOG.md-entry-per-run convention for these workflows, which does not scale to ~80 runs a term and cannot be read by an instructor.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "skill",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "invoked_by",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": "'human'::text",
+          "maxLength": null,
+          "generated": false,
+          "comment": "'human' (someone typed the command) or 'scheduled' (a cron/Task Scheduler fired it). The audit question is usually \"was anyone watching?\".",
+          "pk": false
+        },
+        {
+          "name": "actor",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "course_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "assignment_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "day_track",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": "'running'::text",
+          "maxLength": null,
+          "generated": false,
+          "comment": "'running' until the skill finishes. 'partial' means it completed but did less than asked (e.g. the whole-course scope deferred); 'skipped' means it correctly declined to act.",
+          "pk": false
+        },
+        {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "finished_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "summary",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "detail",
+          "type": "jsonb",
+          "udt": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb",
+          "maxLength": null,
+          "generated": false,
+          "comment": "Per-skill counts; shape documented in each SKILL.md. Deliberately jsonb — grading and aggregation report different things and a shared column set would be half-null for both.",
+          "pk": false
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "analysis_runs_actor_fkey",
+          "columns": [
+            "actor"
+          ],
+          "refTable": "instructors",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        },
+        {
+          "name": "analysis_runs_assignment_offering_id_fkey",
+          "columns": [
+            "assignment_offering_id"
+          ],
+          "refTable": "assignment_offerings",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "analysis_runs_course_offering_id_fkey",
+          "columns": [
+            "course_offering_id"
+          ],
+          "refTable": "course_offerings",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        }
+      ],
+      "enums": {
+        "invoked_by": [
+          "human",
+          "scheduled"
+        ],
+        "status": [
+          "running",
+          "success",
+          "partial",
+          "failed",
+          "skipped"
         ]
       },
       "policyCommands": [
@@ -1887,6 +2093,190 @@ export const DB_SCHEMA = {
       ],
       "writable": true
     },
+    "roster_imports": {
+      "name": "roster_imports",
+      "comment": "One row per roster upload: who, when, from which file, and what it changed. Exists because roster uploads are frequent live mutations that cannot be recorded in CHANGELOG.md. The created/updated/untouched split is the audit-relevant part — it records which conflict resolution the operator chose, which is the only step of an import that discards data.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "course_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "imported_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "filename",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "rows_in_file",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "rows_matched",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "students_created",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "students_updated",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "students_untouched",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "enrollments_created",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "sections_created",
+          "type": "integer",
+          "udt": "int4",
+          "nullable": false,
+          "default": "0",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "roster_imports_course_offering_id_fkey",
+          "columns": [
+            "course_offering_id"
+          ],
+          "refTable": "course_offerings",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "cascade"
+        },
+        {
+          "name": "roster_imports_imported_by_fkey",
+          "columns": [
+            "imported_by"
+          ],
+          "refTable": "instructors",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        }
+      ],
+      "enums": {},
+      "policyCommands": [
+        "INSERT",
+        "SELECT"
+      ],
+      "writable": true
+    },
     "sections": {
       "name": "sections",
       "comment": "Section codes are unique per OFFERING, not globally, so two courses can both have an M1A and a code can be reused next term. The old ^[MT][135][A-D]$ CHECK is deliberately gone — it hardcoded a two-course meeting pattern.",
@@ -2166,6 +2556,83 @@ export const DB_SCHEMA = {
           "udt": "timestamptz",
           "nullable": false,
           "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Real address from the registrar export, and the sign-in identity for accounts provisioned after 2026-07-21. NOT authoritative for how an existing user signs in — auth.users.email is. Students provisioned before that date have a fabricated auth email of <cadet_id>@usafa.edu that is deliberately not mirrored here.",
+          "pk": false
+        },
+        {
+          "name": "squadron",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Cadet squadron from the registrar export. Advisory context for instructors; carries no authorization meaning and is not a grouping the grade or roster model knows about.",
+          "pk": false
+        },
+        {
+          "name": "sex",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "major_1",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "major_2",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "major_3",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "advisor_name",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
           "maxLength": null,
           "generated": false,
           "comment": null,

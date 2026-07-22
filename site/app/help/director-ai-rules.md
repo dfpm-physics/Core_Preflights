@@ -2,20 +2,22 @@
 > project reference (`.ai/instructions/PROJECT.md`). Those files remain authoritative — if this page
 > and they ever disagree, they win, and this page is the bug. Review before the semester opens.
 
-Two AI workflows touch course data. Both are run deliberately by a person; neither runs on a
-schedule, and neither can publish a grade on its own.
+Two AI workflows touch course data, and a third simply runs them in order. None can publish a grade
+on its own.
 
 ## Preflight analysis
 
 Run against one assignment and one day (M or T). It fetches the submitted responses, reads the
-relevant textbook sections to ground itself, and writes back:
+relevant textbook sections to ground itself, and writes back **one thing**: a **suggested score and
+feedback per question**, always `is_finalized = false`, plus the hidden per-student assessment
+described below.
 
-- a **suggested score and feedback per question**, always `is_finalized = false`
-- a **per-instructor misconception report**, aggregated across the sections assigned to each
-  instructor, which is what the Report tab renders
+It produces no class-level output at all. It used to also write a per-instructor misconception
+report; that was retired in July 2026, because an instructor is not a unit of analysis — a single
+report pooled all of an instructor's sections, so it could never be shown for one section. Anything
+about the class as a whole now comes from lesson aggregation.
 
-Running M and T separately is safe — each run replaces only its own instructors' entries and leaves
-the other day's intact.
+Running M and T separately is safe: each run only touches the students it graded.
 
 ### The grading rules it follows
 
@@ -35,9 +37,16 @@ an interactive lesson is. Per-student values are never displayed individually.
 
 ## Lesson aggregation
 
-Run **after a lesson's due date**, once, across the whole cohort. It reads the per-student
-assessments and produces section-level panels — readiness summary, misconception trends, showcase
-quotes — for the lesson rollup.
+Run **after a day track's deadline**. It reads the per-student assessments and produces every AI
+panel on the lesson rollup: the readiness summary (including the common threads across the reading
+reflection and the graded physics question), misconception trends written for whichever scope you
+are viewing, a one-line teaching recommendation beneath them, and the showcase quotes.
+
+**Sections are summarized first, then the course.** The whole-course view is written from the
+section summaries rather than by re-reading everyone, which is what makes the second run cheap: on
+M-day it summarizes the M sections, on T-day the T sections, and only then does it write the
+course-level view covering all of them. A course-wide summary is never written over a partial
+cohort — if a section has not been aggregated yet, the whole-course panel simply waits.
 
 **It covers both ways a lesson can be worked.** Students who took the interactive artifact and
 students who answered the question set are summarized together, because both now produce the same
@@ -53,10 +62,20 @@ one set to **points** — which is how every Fall 2026 preflight is currently sc
 analysis run apply the same 0–5 scale when it writes the score. The scale is identical either way;
 only who applies it differs.
 
-**Grading and aggregation are separate runs on purpose.** Grading happens whenever work needs
-scoring, often M-day and T-day separately. Aggregation happens once, after the deadline, over the
-whole class — a readiness summary written over half a cohort would describe a class that does not
-exist.
+**Grading and aggregation are separate steps on purpose.** Grading is per student and happens
+whenever work needs scoring. Aggregation is per section and happens after that section's deadline —
+a readiness summary written over half a *section* would describe a class that does not exist.
+
+## Running both together
+
+There is a third workflow that simply runs the two in order for one lesson and one day: grade
+everything that closed, then summarize it. It adds the checks that only make sense between the two
+steps — that the deadline has actually passed, and that grading produced the assessments the
+summary reads.
+
+This is also the workflow to point a scheduler at if you want the cycle to run unattended after
+each deadline. Nothing schedules itself today; setting that up is a deliberate act, and an
+unattended run deliberately stops short of publishing anything to the live site.
 
 ## The line that does not move
 

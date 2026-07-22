@@ -63,13 +63,38 @@ for (const s of OFFLINE) {
  */
 //   test-system-prefs  calls installBrowser() to stub window/localStorage for the persistence
 //                 round-trip; those stubs are global and would leak into later suites
-for (const suite of ['test-imports.mjs', 'test-rollup.mjs', 'test-system-prefs.mjs']) {
+for (const suite of ['test-imports.mjs', 'test-rollup.mjs', 'test-system-prefs.mjs',
+                     'test-run-banner.mjs']) {
   const r = spawnSync(process.execPath, [resolve(import.meta.dirname, suite)],
                       { encoding: 'utf8' });
   process.stdout.write(r.stdout || '');
   if (r.status !== 0) {
     process.stderr.write(r.stderr || '');
     process.exitCode = 1;
+  }
+}
+
+/* The aggregator's Python engine. It has to agree with summarizeReports() above — the prose it
+ * grounds is required to cite the same figures the browser's bars show — so it runs in the same
+ * command, not by hand. It opens no database connection.
+ *
+ * Skipped, not failed, when the project venv is absent: CORE.md §2 makes the whole Node/Python
+ * tool layer optional, and a teammate without a venv should still get a green JS suite. A skip is
+ * announced loudly enough that nobody mistakes it for a pass. */
+{
+  const py = resolve(import.meta.dirname, '..', '..', '.venv', 'Scripts', 'python.exe');
+  const test = resolve(import.meta.dirname, '..', '..', 'supabase', 'admin',
+                       'aggregate_summarize_test.py');
+  if (!existsSync(py)) {
+    console.log('\n!! SKIPPED aggregate_summarize_test.py — no .venv (see CORE.md §2). '
+              + 'The Python aggregator engine is UNVERIFIED in this run.');
+  } else {
+    const r = spawnSync(py, [test], { encoding: 'utf8' });
+    process.stdout.write(r.stdout || '');
+    if (r.status !== 0) {
+      process.stderr.write(r.stderr || '');
+      process.exitCode = 1;
+    }
   }
 }
 

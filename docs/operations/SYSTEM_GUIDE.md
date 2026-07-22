@@ -170,7 +170,7 @@ then sign in on the submit page to save their report. They can re-submit to over
 
 ## Running Preflight Analysis (`/preflight-analyze`)
 
-The preflight analysis run reads student submissions, checks them for physics misconceptions, writes suggested scores to Supabase, and stores a per-instructor report. It also records a hidden per-student assessment on each submitted student's grade row: the two 0–5 diagnostics (Q2 effort and Q3 physics understanding) plus an overall effort and understanding read, the misconceptions their answers showed, and follow-up flags. None of it affects grades, and student pages neither request nor display any of it. Summary and misconception bullets are aggregated at the instructor level, so each instructor sees one combined summary across all of their sections. **Only Course Directors and System Admins initiate this run** — not individual instructors. A Course Director normally runs it once for all M-day sections and once for all T-day sections after each deadline; instructors then review and finalize their own sections in the Grade tab.
+The preflight analysis run reads student submissions, checks them for physics misconceptions, and writes suggested scores to Supabase. It also records a hidden per-student assessment on each submitted student's grade row: the two 0–5 diagnostics (Q2 effort and Q3 physics understanding) plus an overall effort and understanding read, the misconceptions their answers showed, and follow-up flags. None of it affects grades, and student pages neither request nor display any of it. **It writes nothing at the class level** — the per-instructor report it used to store was retired in July 2026, and everything about a cohort now comes from the separate aggregation run, summarized per section and then per course. **Only Course Directors and System Admins initiate these runs** — not individual instructors. A Course Director normally runs the cycle once after the M-day deadline and once after the T-day deadline; instructors then review and finalize their own sections in the Grade tab.
 
 The runbook lives in `.ai/skills/preflight-analyze/SKILL.md`. Every supported AI follows this same agent-neutral runbook; vendor addenda only adapt tooling.
 
@@ -244,8 +244,7 @@ Each run:
    misconceptions the answers showed, and follow-up flags — in the same structured form an
    interactive lesson produces, so both can be summarized by the same cohort run
 7. Writes suggested scores, diagnostics and that assessment to Supabase (`is_finalized = false`) for every submitted student
-8. Stores the Class Summary & Misconceptions report by instructor, combining all sections assigned to that instructor
-9. Prints a per-instructor breakdown in the terminal or chat
+8. Prints a per-section run summary in the terminal or chat — submitted, missing, skipped, average score
 
 The cohort-level panels on the lesson rollup — readiness summary, misconception trends, showcase
 quotes — are **not** written by this run. They come from a separate lesson-aggregation run made

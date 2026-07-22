@@ -124,21 +124,35 @@ it from their explicit Supabase selects and rendering. Note that `diagnostic.eff
 *(The retired `public` equivalent was the `scores.q2_effort` / `scores.q3_understanding` columns
 added by migration 022. There was no structured-assessment equivalent.)*
 
-**`assignments.analysis_report`** — written by `/preflight-analyze`, read by Report tab:
+**`app.analysis_reports.payload`** — written by `/lesson-aggregate` only, read by the lesson rollup.
+One row per offering (`scope='assignment_offering'`, `audience_id=NULL`, `kind='readiness'`), with
+every scope inside the payload:
 ```json
 {
-  "generated_at": "ISO timestamp",
-  "day_filter": "M",
-  "by_instructor": {
-    "{instructor_uuid}": {
-      "instructor_name": "…",
-      "sections": ["M1A", "M1B"],
-      "questions": { "q1": { "summary": "bullet one\nbullet two\nbullet three" } }
-    }
+  "kind": "readiness",
+  "scopes": {
+    "{section uuid}": {
+      "section_code": "M1A",
+      "readiness_summary": "…",
+      "misconception_trends": "…",
+      "misconception_recommendation": "one teaching action, rendered as its own line",
+      "selected_quotes": [{ "student_id": 3000990009, "section_id": "{section uuid}" }],
+      "meta": { "n": 18, "generated_by": "lesson-aggregate@2026-07-21",
+                "source_fingerprint": "…", "day": "M" }
+    },
+    "__all__": { "…same, but no quotes…": null }
   }
 }
 ```
-`summary` is a `\n`-joined string of bullet text — one bullet per line, no leading `•` or `-`. The Report tab adds list styling. Running M and T separately merges cleanly — each run PATCHes only its own instructor entries and preserves the other day's entries.
+The writer **merges** — scopes it wasn't sent survive — which is what lets an M-day run and a T-day
+run write the same row without colliding. Sections are aggregated first; `__all__` is synthesized
+from those section scopes and is written only once every section has one. Its *numbers*, though,
+are always recomputed over every live row (medians and means do not recombine from sections).
+
+*(The retired `public` equivalent was `assignments.analysis_report`, grouped `by_instructor` with
+per-question bullet summaries. `/preflight-analyze` also wrote `kind='by_question'` rows in `app`
+until 2026-07-21; both are gone — an instructor is not a unit of analysis, and the per-question
+material now lives inside `readiness_summary`.)*
 
 ## Edge Functions
 
@@ -205,23 +219,34 @@ link's `id` must equal the artifact's `#i=` slug. Full spec + builder: `docs/con
   Directors/admins read all reports; instructors read their own sections.
 
 **The cohort aggregator is `/lesson-aggregate`** (renamed from `/interaction-aggregate`
-2026-07-21). It produces the rollup's AI panels — per-section readiness summaries, misconception
-trends, AI-picked showcase quotes — into `app.analysis_reports`, and it is **modality-blind**:
-it reads the `schema: 1` assessment from `submission_activities.content` for artifact takers and
-from `grades.diagnostic` for question-set takers, so a question-only lesson and a mixed cohort
-both get a full rollup. Driven by `supabase/admin/lesson_aggregate.py` (`pull` →
-`write-analysis` → `status`). Original design: `docs/decisions/INTERACTION-AGGREGATION.md`
-(written against the retired `interaction_analysis` table); output contract:
-`docs/decisions/ROLLUP-AGREEMENT.md`. Distinct from `/interaction-backfill`, which only repairs
-per-student `report_data` on the interactive path.
+2026-07-21). It produces **every** AI panel on the rollup — readiness summary, misconception
+trends, the one-line recommendation, AI-picked showcase quotes — into `app.analysis_reports`, and
+it is **modality-blind**: it reads the `schema: 1` assessment from `submission_activities.content`
+for artifact takers and from `grades.diagnostic` for question-set takers, so a question-only lesson
+and a mixed cohort both get a full rollup. It aggregates **per section**, then synthesizes the
+whole-course scope from those section scopes, so a lesson with split deadlines is closed out in two
+cheap day-scoped runs. Driven by `supabase/admin/lesson_aggregate.py`
+(`pull --day` → `write-analysis` → `status`). Original design:
+`docs/decisions/INTERACTION-AGGREGATION.md` (written against the retired `interaction_analysis`
+table); output contract: `docs/decisions/ROLLUP-AGREEMENT.md`. Distinct from
+`/interaction-backfill`, which only repairs per-student `report_data` on the interactive path.
+
+**`/lesson-cycle` is the normal way to run both.** It sequences `/preflight-analyze` then
+`/lesson-aggregate` for one lesson and one day track after that day's deadline, and is the entry
+point for an unattended scheduled run. Nothing in the repo schedules anything — the skill documents
+the `claude -p` invocation and leaves the scheduler to the operator.
 
 ## preflight-analyze Skill
 
-Analyzes student submissions for a given assignment and writes, per student: suggested scores, the
-hidden Q2-effort / Q3-understanding diagnostics, and the `schema: 1` assessment described under
-`grades.diagnostic` above. It also generates the per-instructor by-question misconception report.
-It does **not** write cohort prose — that is `/lesson-aggregate`'s, on a different clock (grading
-runs early and often, often split M/T; aggregation runs once after the deadline).
+Analyzes student submissions for a given assignment and writes, **per student**: suggested scores
+and feedback, the hidden Q2-effort / Q3-understanding diagnostics, and the `schema: 1` assessment
+described under `grades.diagnostic` above. Its blast radius is `grades` and nothing else.
+
+It writes **no** cohort output. Until 2026-07-21 it also produced a per-instructor by-question
+breakdown; that is retired — an instructor is not a unit of analysis, and the material now lives
+inside `/lesson-aggregate`'s readiness summary. The two run on different clocks: grading happens
+whenever work needs scoring, often split M/T, while cohort prose is written once per section after
+that section's deadline.
 
 **First time on a new machine? Run the setup wizard:**
 ```
