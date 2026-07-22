@@ -10,6 +10,67 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-22 — Casey via Claude
 
+### Fixed — four bugs in the rollup rework, every one found by actually running it
+
+The rollup changes below shipped with green unit tests and **still had four defects**, all of which
+needed a live database to surface. Recorded because the pattern matters: the new scope type touched
+code paths no fixture covered.
+
+- **`_instructors()` selected `i.email`, which does not exist.** `app.instructors` is
+  `id, name, is_global_admin` only — the sign-in address lives on `auth.users`, which this role
+  cannot read. Hard crash on the first `pull`.
+- **`_instructors()` was called with `offering_id` where it needed `course_offering_id`.**
+  `staff_assignments` is keyed to the course offering (who staffs the term); `offering_id` is one
+  assignment's run of a lesson. It returned an empty block silently, which would have cost **every
+  instructor scope** with no error at all.
+- **"Has this section been aggregated?" tested for fields section scopes no longer carry.** The
+  check looked for `readiness_summary` or `misconception_trends`; the summary moved to the
+  instructor scope and trends was retired, so a freshly-written section scope read as
+  never-aggregated. Symptom: the T-day run refused to write `__all__` because the M sections it had
+  just written looked untouched. Now also accepts `misconception_recommendation`.
+- **`status` reported every instructor scope as `n=0 STALE`.** It matched scope keys against
+  `section_id`, which an `instr:` key never equals. It now resolves an instructor scope to the
+  sections it names, shows `Name [M1A, M3A]`, and reports the field that scope is actually
+  responsible for (summary for instructor/`__all__`, recommendation for a section) instead of `-`.
+
+**Also observed, pre-existing, not fixed:** `status --lesson` inner-joins `modality = 'interactive'`,
+so it only accepts the *interactive* activity slug and a question-only lesson can never be reported
+at all. Logged in `docs/ROADMAP.md`.
+
+### Ran — `/lesson-cycle` on phys-215 preflight-02 (forced; synthetic training data)
+
+Director-authorised exercise of the rework. **Forced: the 2026-08-10 deadline has not passed**, and
+the run is against the seeded training cohort, not real cadets.
+
+**Grading (Step 2) was correctly a no-op, twice over.** All 64 committed submissions already carry a
+`schema:1` diagnostic; the 8 remaining are `status='draft'`, never committed, and must not be
+graded. Independently, `~/.claude/skills/preflight-analyze/config.json` does not exist on this
+machine, so `/preflight-analyze` could not have run via PostgREST regardless.
+
+**Aggregation ran both day tracks** and wrote 8 scopes: four sections, three **instructor** scopes
+(Casey Pellizzari over M1A+M3A, Tyler Jones over T1A, Matthew Recker over T3A), and `__all__`.
+Recorded in `app.analysis_runs` as `lesson-cycle` / `partial` with the forcing and the skip both
+stated in `detail`.
+
+**Two things the run demonstrated that the tests could not:**
+
+- **The new prose is roughly a fifth the length.** Casey's instructor summary is 387 characters
+  against a 1200 cap; the stored T-day prose it sits beside — written under the old 8000-char
+  allowance — runs to multiple bolded paragraphs. The contrast is visible in the same payload.
+- **The misconception fragmentation is real but was not duplication.** Eight distinct ids appeared
+  across 72 students, most with count 1. On inspection **seven are genuinely different
+  misconceptions and were deliberately left unmerged** — merging them to make the list tidy is
+  exactly the failure the skill warns against. One alias was written:
+  `neutral-no-force` → `neutral=no-force`, folding a coined id onto the existing taxonomy entry in
+  `PROJECT.md`. Easily reversed by deleting that map entry.
+
+**The finding itself** (recorded here only because it is the first real output): across all four
+sections 42 of 64 graded answers earned full credit, and nearly every flagged one fails identically —
+it says charge was transferred and conserved **without naming the electron**. Reading time is not the
+lever; T1A read longest and finished below M1A, which read least. And the points hide it: a flagged
+answer keeps full credit, so T3A's grade book reads near-perfect against nine flagged answers of
+sixteen.
+
 ### Changed — the lesson rollup: scoping, self-explaining misconceptions, and a durable misconception bucket
 
 Requested ahead of the v2 cutover. Several changes sharing one payload contract, so they land

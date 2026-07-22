@@ -728,8 +728,10 @@ def _instructors(conn, course_offering_id):
     cur = conn.cursor()
     cur.execute(
         """
+        -- app.instructors carries id, name, is_global_admin only. There is no email column here:
+        -- the sign-in address lives on auth.users, which this role cannot read.
         select sa.instructor_id,
-               coalesce(nullif(trim(i.name), ''), i.email, sa.instructor_id::text) as name,
+               coalesce(nullif(trim(i.name), ''), sa.instructor_id::text) as name,
                sa.section_id, s.code
           from staff_assignments sa
           join instructors i on i.id = sa.instructor_id
@@ -943,7 +945,17 @@ def cmd_pull(args, conn):
             continue
 
         prior = stored_scopes.get(sec_id) if isinstance(stored_scopes.get(sec_id), dict) else None
-        if not prior or not (prior.get("readiness_summary") or prior.get("misconception_trends")):
+        # "Has this section been aggregated?" — test for ANY prose a section scope can carry.
+        #
+        # This checked only readiness_summary/misconception_trends, which was right until
+        # 2026-07-22: the summary moved to the instructor scope and trends was retired, so a
+        # freshly-written section scope carries NEITHER and read as never-aggregated. The visible
+        # symptom was the T-day run refusing to write '__all__' because the M sections it had
+        # just aggregated looked untouched. Include the recommendation, which is what a section
+        # scope now always carries.
+        if not prior or not (prior.get("readiness_summary")
+                             or prior.get("misconception_trends")
+                             or prior.get("misconception_recommendation")):
             uncovered.append(code)          # never aggregated, and not in scope this run
             continue
         from_stored.append(code)
@@ -1017,7 +1029,11 @@ def cmd_pull(args, conn):
             {**e,
              "section_ids_in_day": [sid for sid in e["section_ids"]
                                     if sid in {s["section_id"] for s in scopes if s.get("in_day")}]}
-            for e in _instructors(conn, meta["offering_id"]).values()
+            # course_offering_id, NOT offering_id: staff_assignments is keyed to the COURSE
+            # offering (who staffs the term), while offering_id is this one assignment's run of
+            # the lesson. Passing the wrong one returns an empty block and silently costs every
+            # instructor scope.
+            for e in _instructors(conn, meta["course_offering_id"]).values()
         ],
         # The graded concept questions, with their prompt and expected answer. Present only on a
         # lesson that HAS a written activity — its absence is what gates the whole per-question
@@ -1533,17 +1549,42 @@ def cmd_status(args, conn):
         # '__all__' last, matching the pull order.
         for key in sorted(scopes, key=lambda k: (k == ALL, scopes[k].get("section_code") or k)):
             sc = scopes[key]
+            # An instructor scope covers the sections it names, not a section of its own. Resolving
+            # it here is what keeps n and the fingerprint meaningful — matching an 'instr:' key
+            # against section_id never succeeds, so it would otherwise report n=0 and STALE on
+            # every run, which reads as a fault rather than a scope of a different shape.
+            is_instr_scope = key.startswith(INSTR)
+            own_sections = [str(s) for s in (sc.get("section_ids") or [])] if is_instr_scope else []
+
             # A day-scoped check lists that day's sections plus the course scope, so the M run's
-            # post-check does not flag T scopes that legitimately do not exist yet.
-            if day and key != ALL and not _meets(by_section_days.get(key), day):
-                continue
-            scope_rows = live if key == ALL else [x for x in live if x["section_id"] == key]
+            # post-check does not flag T scopes that legitimately do not exist yet. An instructor
+            # scope is in scope for the day if ANY section they teach meets that day.
+            if day and key != ALL:
+                meets = (any(_meets(by_section_days.get(s), day) for s in own_sections)
+                         if is_instr_scope else _meets(by_section_days.get(key), day))
+                if not meets:
+                    continue
+
+            if key == ALL:
+                scope_rows = live
+            elif is_instr_scope:
+                scope_rows = [x for x in live if str(x["section_id"]) in set(own_sections)]
+            else:
+                scope_rows = [x for x in live if x["section_id"] == key]
             stored = (sc.get("meta") or {}).get("source_fingerprint")
             stale = "STALE" if stored and stored != _fingerprint(scope_rows) else ""
-            label = f"{r['activity_slug']} / {sc.get('section_code') or key}"
+            name = (", ".join(sc.get("section_codes") or []) or key) if is_instr_scope \
+                   else (sc.get("section_code") or key)
+            label = f"{r['activity_slug']} / " + (f"{sc.get('instructor_name') or 'instructor'} [{name}]"
+                                                  if is_instr_scope else name)
+            # An instructor scope carries the readiness summary; a section scope carries the
+            # recommendation. Show whichever that scope is responsible for, or the column reads
+            # '-' for every instructor row and looks like nothing was written.
+            has = ('y' if sc.get('readiness_summary') else '-') if (is_instr_scope or key == ALL) \
+                  else ('y' if sc.get('misconception_recommendation') else '-')
             print(f"{label:50} {((sc.get('meta') or {}).get('day') or '-'):>4} {len(scope_rows):>3} "
                   f"{len(sc.get('selected_quotes') or []):>6} "
-                  f"{('y' if sc.get('misconception_recommendation') else '-'):>4} "
+                  f"{has:>4} "
                   f"{stale:>5}  {r['generated_at']}")
     print(f"\n'{ALL}' showing STALE between two day-scoped runs is EXPECTED — it is the signal "
           f"that the second pass is still owed. Section scopes should be blank.")
