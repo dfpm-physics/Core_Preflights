@@ -10,6 +10,41 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-21 — Matthew Recker via Claude
 
+### Added — `worklist`: how a run picks its lesson, and why the two paths differ
+
+`/lesson-cycle` took a lesson slug and did nothing else, which is fine typed by hand and useless
+to a scheduler — the slug changes every lesson, so a Task Scheduler entry would re-run the same
+one nightly forever. New `lesson_aggregate.py worklist --course <code> [--day D] [--latest]
+[--json]` answers "what is past due here and has it been analyzed", per **day track**, since a
+lesson's M and T sections close on different days.
+
+**The automated path is deliberately short-sighted.** `--latest` reports only the most recently
+due track and whether to run it. It never walks backwards, and the reason is the extension case:
+a student on an approved extension submits days late, and late submissions are accepted by hand —
+**both are graded manually on purpose.** An older lesson can therefore look "unanalyzed" for
+entirely legitimate reasons, and a scheduler that swept up everything outstanding would re-grade
+those cohorts unattended and overwrite exactly the human judgement that handling them by hand was
+for. One lesson: the one whose deadline just passed.
+
+**The manual path shows the list and asks.** Every past-due track with its deadline, sections,
+submission and assessment counts, and analysis state. It does not default to the newest — a human
+running this by hand usually wants an *older* one, having just graded a late submission. Re-running
+an analyzed lesson is explicitly supported and safe: grading skips finalized and instructor-edited
+rows, aggregation merges per scope.
+
+Extensions are **not** consulted when deciding whether a track is closed. A cycle waits for the
+section deadline, not the last extended student — otherwise one extension holds the whole class's
+rollup hostage.
+
+"Never analyzed" requires **both** no successful run *and* no stored analysis: `analysis_runs` is
+newer than the analyses themselves, so a lesson aggregated before the audit trail existed has a
+real rollup and no run row, and calling that unanalyzed would invite a pointless re-run.
+
+Verified against live data — the query returns one row per lesson per day track with M closing a
+day before T, section grouping, and the submission/assessment/analysis counts correct for
+preflight-02. It currently reports nothing past due for either course, which is right: Fall 2026
+opens 2026-08-10.
+
 ### Added — `app.analysis_runs` audit trail + a director-facing run-status banner
 
 **Migration `009_analysis_runs.sql` — APPLIED to the live database on 2026-07-22.** One row per

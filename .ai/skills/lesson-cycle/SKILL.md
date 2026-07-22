@@ -22,11 +22,14 @@ per-student assessments the aggregator consumes, and that the whole-course scope
 once every section exists.
 
 ```
-/lesson-cycle <course> <assignment-slug> [day]
+/lesson-cycle <course> [assignment-slug] [day]
 ```
 
-`/lesson-cycle phys-215 preflight-02 M` — grade and aggregate the M-day sections.
-`/lesson-cycle phys-215 preflight-02` — no day filter; every section, one pass.
+`/lesson-cycle phys-215` — show what is past due and ask which to run.
+`/lesson-cycle phys-215 preflight-02 M` — that lesson's M-day sections, no prompt.
+
+Named lesson or not, it is always **one** lesson per invocation. The scheduler picks it with
+`worklist --latest`; a human picks it from the list. Nothing ever processes a queue.
 
 Both sub-skills remain independently invokable. Run `/preflight-analyze` alone when you want to
 grade mid-week without touching the rollup; run `/lesson-aggregate` alone to re-aggregate after a
@@ -64,19 +67,49 @@ class. `pull` warns about that, but by then you have already spent the run.
 3. **Announce the scope** before writing anything: course, lesson, day track, section codes, and
    how many students are in scope.
 
-## Step 1 — Confirm the deadline has passed
+## Step 1 — Choose the lesson. The two paths differ here, and the difference matters.
 
-Resolve the offering and read the effective deadline for each section in scope
-(`assignment_offerings.due_at`, overridden by `assignment_due_dates`, overridden per student by a
-non-revoked `extensions` row — `schema.js effectiveDue()` is the definition).
+```
+.venv/Scripts/python supabase/admin/lesson_aggregate.py worklist --course <code> [--day D] [--latest] [--json]
+```
 
-**If any section in scope is still open, stop.** Grading an open section produces suggestions
-against work students are still editing, and aggregating one describes a cohort that is still
-arriving. Report which section is open and when it closes.
+### Automated (`--latest`) — one lesson, never a sweep
 
-Students on an approved **extension** are the deliberate exception: they submit after everyone
-else and are graded by hand from the Grade tab's "Extensions ready to grade" queue. Do not delay
-the cycle for them and do not re-run it for them.
+Take **only the most recently due day track**, and run it only when `action` comes back `run`.
+If it comes back `skip`, record a `skipped` run and stop.
+
+**Do not walk backwards through the term**, however tempting an older "unanalyzed" lesson looks.
+That state is usually legitimate: a student on an approved extension submits days late, and late
+submissions are accepted by hand. **Both are graded manually on purpose.** A scheduler that swept
+up every outstanding lesson would re-grade those cohorts unattended and overwrite exactly the human
+judgement that handling them by hand was for. One lesson: the one whose deadline just passed.
+
+### Manual (no `--latest`) — show the list and ask
+
+Print the work list for the course and **ask which lesson to run**. It gives every past-due day
+track with its deadline, sections, submission and assessment counts, and whether it has been
+analyzed. Do not guess, and do not default to the newest — the reason a human is running this by
+hand is often that they want an *older* one.
+
+**Re-running an already-analyzed lesson is allowed and is frequently the point** — a late or
+extension submission has just been graded by hand and the rollup should now include it. Confirm the
+choice, then proceed. The re-run is safe: grading skips finalized and instructor-edited rows, and
+aggregation merges per scope.
+
+### Then, whichever path chose it: confirm that track is closed
+
+Read the effective deadline for each section in the chosen track (`assignment_offerings.due_at`,
+overridden by `assignment_due_dates`; `schema.js effectiveDue()` is the definition). `worklist`
+only returns past-due tracks, so this is a re-check rather than a discovery — but the clock moves
+and an override can be edited between the two calls.
+
+**If a section in the chosen track is still open, stop** and say which one and when it closes.
+Grading an open section produces suggestions against work students are still editing.
+
+Per-student **extensions are deliberately not consulted here.** A cycle waits for the *section*
+deadline, not for the last extended student — otherwise one extension would hold the whole class's
+rollup hostage. Extended students are graded by hand from the Grade tab's "Extensions ready to
+grade" queue afterwards, and the lesson can be re-run through the manual path once they are in.
 
 ## Step 2 — Grade (skip when there is nothing to grade)
 
@@ -170,12 +203,16 @@ Markdown runbook that needs an agent to execute it, so the unattended path is an
 that some external scheduler fires. Wire it yourself:
 
 ```
-claude -p "/lesson-cycle phys-215 preflight-02 M"
+claude -p "/lesson-cycle phys-215"
 ```
 
-On Windows, that command in a Task Scheduler action, one trigger per day track, timed after the
-deadline (the small hours are ideal — the job never contends with a human mid-session). Keep the
-working directory at the repo root so the relative paths in both sub-skills resolve.
+**No lesson slug.** The scheduled entry names only the course; Step 1's `worklist --latest` picks
+the lesson. A slug baked into a Task Scheduler action would re-run the same lesson every night
+forever, which is the obvious way to get this wrong.
+
+One trigger per night is enough — it fires, finds nothing due, records `skipped`, and exits.
+Timed for the small hours, so the job never contends with a human mid-session. Keep the working
+directory at the repo root so the relative paths in both sub-skills resolve.
 
 Two things a scheduled run must do that an interactive one gets for free:
 

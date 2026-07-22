@@ -988,6 +988,141 @@ def cmd_pull(args, conn):
         print(text)
 
 
+# ── worklist ───────────────────────────────────────────────────────────────────────────
+def cmd_worklist(args, conn):
+    """What is past due in a course, and has it been analyzed yet.
+
+    Two callers, two very different appetites, and the difference is the whole design:
+
+      * A HUMAN wants the list — every past-due lesson with its status — because they may
+        legitimately want to re-run an older one after grading a late submission by hand.
+      * The AUTOMATED path wants ONLY the most recently due lesson, and only if it has never
+        been analyzed. It must never walk backwards through the term.
+
+    Why the automated path is deliberately short-sighted: an older lesson can look "unanalyzed"
+    for reasons a scheduler must not act on. A student on an approved extension submits days
+    late; a late submission is accepted by hand. Both are graded manually, on purpose. A cron
+    that swept up every outstanding lesson would re-grade those cohorts unattended and overwrite
+    the human judgement that was the entire point of handling them by hand. So it looks at one
+    lesson: the one whose deadline just passed.
+
+    Day tracks are separate work. A lesson's M sections and T sections close on different days,
+    so "most recently due" is answered per day track, not per lesson.
+    """
+    day = (getattr(args, "day", None) or "").strip().upper() or None
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("""
+        with offering as (
+          select co.id
+            from course_offerings co
+            join courses c on c.id = co.course_id
+           where co.is_active and c.code = %(course)s
+        ),
+        -- The deadline that actually applies to each section: a per-section override when there
+        -- is one, else the offering default. Mirrors schema.js effectiveDue() minus the
+        -- per-student extension, which is exactly the case this must NOT chase.
+        sec_due as (
+          select ao.id as offering_id, s.id as section_id, s.code as section_code,
+                 s.meeting_days,
+                 coalesce(add.due_at, ao.due_at) as due_at
+            from assignment_offerings ao
+            join offering o on o.id = ao.course_offering_id
+            join sections s on s.course_offering_id = ao.course_offering_id
+            left join assignment_due_dates add
+                   on add.assignment_offering_id = ao.id and add.section_id = s.id
+        )
+        select ao.id                as offering_id,
+               a.slug, a.title,
+               ao.is_published,
+               d.track,
+               d.due_at,
+               d.section_codes,
+               (select count(*) from submissions sub
+                 where sub.assignment_offering_id = ao.id)                    as submissions,
+               (select count(*) from grades g
+                 where g.assignment_offering_id = ao.id
+                   and g.diagnostic->>'schema' = '1')                         as assessed,
+               (select max(r.started_at) from analysis_runs r
+                 where r.assignment_offering_id = ao.id
+                   and coalesce(r.day_track, '') = coalesce(d.track, '')
+                   and r.status = 'success')                                  as last_success,
+               (select r2.status from analysis_runs r2
+                 where r2.assignment_offering_id = ao.id
+                   and coalesce(r2.day_track, '') = coalesce(d.track, '')
+                 order by r2.started_at desc limit 1)                         as last_status,
+               (select count(*) from analysis_reports ar
+                 where ar.scope = 'assignment_offering' and ar.scope_id = ao.id
+                   and ar.kind = %(kind)s)                                    as has_analysis
+          from assignment_offerings ao
+          join assignments a on a.id = ao.assignment_id
+          join offering o    on o.id = ao.course_offering_id
+          join lateral (
+                 -- One row per day track this lesson is worked on, carrying the moment that
+                 -- track's work closed: the LAST of its sections' deadlines.
+                 select unnest(sd.meeting_days) as track,
+                        max(sd.due_at)          as due_at,
+                        array_agg(distinct sd.section_code order by sd.section_code) as section_codes
+                   from sec_due sd
+                  where sd.offering_id = ao.id and sd.due_at is not null
+                  group by unnest(sd.meeting_days)
+               ) d on true
+         where d.due_at <= now()
+           and (%(day)s is null or d.track = %(day)s)
+         order by d.due_at desc, a.slug
+    """, {"course": args.course, "day": day, "kind": KIND})
+    rows = cur.fetchall()
+    if not rows:
+        msg = f"Nothing past due in {args.course}" + (f" for day {day}" if day else "") + "."
+        print(json.dumps({"course": args.course, "day": day, "items": []}) if args.json else msg)
+        return
+
+    for r in rows:
+        # "Never analyzed" means BOTH: no successful run recorded, and no stored analysis. The
+        # second half matters because analysis_runs (migration 009) is newer than the analyses
+        # themselves — a lesson aggregated before the audit trail existed has a real rollup and
+        # no run row, and calling that "never analyzed" would invite a pointless re-run.
+        r["needs_run"] = r["last_success"] is None and not r["has_analysis"]
+        r["ready"] = r["submissions"] > 0
+
+    # --latest is the automated contract: the most recently due track, and only if it has never
+    # had a successful run. Anything older is left alone — see the docstring.
+    if args.latest:
+        top = rows[0]
+        out = {"course": args.course, "day": top["track"], "slug": top["slug"],
+               "offering_id": str(top["offering_id"]), "due_at": str(top["due_at"]),
+               "sections": top["section_codes"], "submissions": top["submissions"],
+               "assessed": top["assessed"], "last_status": top["last_status"],
+               "action": "run" if top["needs_run"] else "skip",
+               "reason": None if top["needs_run"]
+                         else (f"already analyzed successfully at {top['last_success']}"
+                               if top["last_success"] else "analysis already stored for this lesson")}
+        if not top["submissions"]:
+            out["action"], out["reason"] = "skip", "no submissions recorded"
+        print(json.dumps(out, default=str, indent=2) if args.json
+              else f"{out['action'].upper()}: {top['slug']} day {top['track']} "
+                   f"({', '.join(top['section_codes'])}, due {top['due_at']})"
+                   + (f" — {out['reason']}" if out['reason'] else ""))
+        return
+
+    if args.json:
+        print(json.dumps({"course": args.course, "day": day,
+                          "items": [dict(r, offering_id=str(r["offering_id"])) for r in rows]},
+                         default=str, indent=2))
+        return
+
+    print(f"{'lesson':22} {'day':>3} {'due':16} {'sections':14} {'subs':>4} {'assessed':>8}  status")
+    print("-" * 96)
+    for r in rows:
+        state = ("never analyzed" if r["needs_run"]
+                 else f"analyzed {str(r['last_success'])[:16]}")
+        if r["last_status"] and r["last_status"] != "success" and r["needs_run"]:
+            state = f"last run {r['last_status']}"
+        print(f"{r['slug']:22} {r['track'] or '-':>3} {str(r['due_at'])[:16]:16} "
+              f"{','.join(r['section_codes'])[:14]:14} {r['submissions']:>4} {r['assessed']:>8}  {state}")
+    print("\nRe-running an already-analyzed lesson is allowed and sometimes right — after grading a "
+          "late\nor extension submission by hand, for instance. The automated path never does it.")
+
+
 # ── write-analysis ─────────────────────────────────────────────────────────────────────
 def cmd_write(args, conn):
     items = json.loads(Path(args.infile).read_text(encoding="utf-8"))
@@ -1249,6 +1384,14 @@ def main():
     # Deliberately NO --day here: the input file names its scopes and the writer merges. A flag
     # would be a second source of truth about which scopes this run touches.
 
+    wl = sub.add_parser("worklist", help="what is past due in a course and whether it was analyzed")
+    wl.add_argument("--course", required=True, help="course code, e.g. phys-215")
+    wl.add_argument("--day", help="limit to one day track")
+    wl.add_argument("--latest", action="store_true",
+                    help="the automated contract: report ONLY the most recently due track, and "
+                         "whether to run it. Never looks further back — see cmd_worklist")
+    wl.add_argument("--json", action="store_true", help="machine-readable output")
+
     st = sub.add_parser("status", help="list analysis scopes + staleness (the verify step)")
     st.add_argument("--lesson", "--activity", "--interaction", dest="activity",
                     help="limit to one lesson (assignment or activity slug)")
@@ -1257,7 +1400,8 @@ def main():
     args = p.parse_args()
     conn = _connect()
     try:
-        {"pull": cmd_pull, "write-analysis": cmd_write, "status": cmd_status}[args.cmd](args, conn)
+        {"pull": cmd_pull, "write-analysis": cmd_write, "status": cmd_status,
+         "worklist": cmd_worklist}[args.cmd](args, conn)
     finally:
         conn.close()
 
