@@ -10,6 +10,35 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-22 — Casey via Claude
 
+### Changed — a director's rollup now opens on their own sections; the rest is an opt-in
+
+Reported with a screenshot: a director who teaches **one** of four sections opened the rollup to
+four section tabs, three of them other people's cohorts. `vm.sections` is every section a director
+may *see*, and the scope control had been showing all of it.
+
+Sections the viewer does not teach are now **hidden behind a director-only toggle, off by default**
+(`+ 3 other sections`). A director's day-to-day view of a lesson matches an instructor's, with the
+wider view one deliberate click away. Instructors never see the toggle — their `vm.sections` already
+contains only their own.
+
+Deliberately **not persisted**: a director should land on their own sections every time rather than
+inherit a wider view they switched on weeks ago and forgot. Two edge cases carry rules of their own —
+a director with only an offering-wide staff row teaches nothing here, so hiding "their" sections
+would strand them on an empty list and they get everything instead; and turning the toggle off while
+viewing a section it hides falls back to their default rather than leaving the control and the
+content disagreeing.
+
+### Fixed — a combined summary did not say so on a single-section view
+
+The screenshot showed **M1A** selected under a summary opening *"Both sections have the concept…"*
+with nothing indicating it covered two. The "Combining M1A + M3A" line added earlier was suppressed
+by a `!oneSec` guard — on exactly the view that most needs it. A reader on one section tab has no
+other way to tell the prose is broader than their selection.
+
+It now renders whenever the summary spans more than one section, with wording that adapts: *"This
+summary covers **M1A** + **M3A** · 36 students · the charts below show M1A only"* on a single
+section, *"Combining …"* on My sections.
+
 ### Fixed — "My sections" was invisible to global admins, and the scope order/defaults were wrong
 
 Reported from the rollup: no **My sections** option. **The cause was not being a director** — it was

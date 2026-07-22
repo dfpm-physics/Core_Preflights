@@ -644,30 +644,61 @@ section('rollup scope options + default — mirrors report.html scopeOptions()/d
 
 // These mirror report.html exactly. Kept here because the rules are no longer obvious: the option
 // is hidden at one section (it would duplicate that section's own tab) and the default moves.
-const scopeOptions = (mine, allSecs) =>
-  [...(mine.length > 1 ? ['mine'] : []), 'all', ...allSecs];
+// `visible` is vm.sections — every section the viewer MAY see (all of them, for a director).
+// `mine` is the sections they actually teach. Sections they do not teach are hidden unless the
+// director-only toggle is on, so a director's normal view of a lesson matches an instructor's.
+const scopeOptions = (mine, visible, showOthers = false) => {
+  const mineFirst = mine.length > 1 ? ['mine'] : [];
+  const own = visible.filter(id => mine.includes(id));
+  const base = own.length ? own : visible;
+  const extra = (showOthers && own.length) ? visible.filter(id => !mine.includes(id)) : [];
+  return [...mineFirst, 'all', ...base, ...extra];
+};
 const defaultScope = (mine) =>
   mine.length > 1 ? 'mine' : mine.length === 1 ? mine[0] : 'all';
 
 const FOUR = ['s1', 's2', 's3', 's4'];
-// Teaches two of four — the course-director case that prompted this.
+
+// THE REPORTED CASE: a director who teaches one of four sections saw all four tabs.
+eq('teaches one of four: only their own section is listed',
+   scopeOptions(['s3'], FOUR), ['all', 's3']);
+eq('…and it is the default', defaultScope(['s3']), 's3');
+eq('…with the toggle on, the other three appear AFTER their own',
+   scopeOptions(['s3'], FOUR, true), ['all', 's3', 's1', 's2', 's4']);
+eq('My sections is NOT offered at one section (it would duplicate that tab)',
+   scopeOptions(['s3'], FOUR).includes('mine'), false);
+
+// Teaches two of four.
 eq('two sections: My sections is offered, after the course rollup',
-   scopeOptions(['s1', 's2'], FOUR), ['mine', 'all', 's1', 's2', 's3', 's4']);
+   scopeOptions(['s1', 's2'], FOUR), ['mine', 'all', 's1', 's2']);
 eq('…and is the default', defaultScope(['s1', 's2']), 'mine');
-// Exactly one — the option would duplicate that section's own tab, so it is not offered.
-eq('one section: My sections is NOT offered', scopeOptions(['s3'], FOUR), ['all', ...FOUR]);
-eq('…and that section is the default', defaultScope(['s3']), 's3');
-// Staffs the offering but teaches none of it (a director with only an offering-wide row).
-eq('no taught sections: only the rollup and the sections', scopeOptions([], FOUR), ['all', ...FOUR]);
-eq('…and the course rollup is the default', defaultScope([]), 'all');
+eq('…toggle on adds only the two they do not teach',
+   scopeOptions(['s1', 's2'], FOUR, true), ['mine', 'all', 's1', 's2', 's3', 's4']);
+
+// A director with only an offering-wide staff row teaches nothing here. Hiding "their" sections
+// would strand them on an empty list, so they get everything and the toggle is meaningless.
+eq('no taught sections: everything is listed regardless of the toggle',
+   scopeOptions([], FOUR), ['all', ...FOUR]);
+eq('…and the toggle cannot make it different',
+   scopeOptions([], FOUR, true), scopeOptions([], FOUR));
+eq('…defaulting to the course rollup', defaultScope([]), 'all');
+
+// An instructor's vm.sections already contains only their own, so nothing is ever hidden from them
+// and the toggle is never rendered.
+eq('an instructor sees the same list with the toggle either way',
+   scopeOptions(['s1'], ['s1'], true), scopeOptions(['s1'], ['s1']));
+
 // Teaches everything: 'mine' and 'all' cover the same students but are NOT the same scope — one is
 // the union of section reads, the other the course-level synthesis — so both stay on offer.
-eq('teaches all four: both are still offered',
-   scopeOptions(FOUR, FOUR), ['mine', 'all', ...FOUR]);
+eq('teaches all four: both are still offered', scopeOptions(FOUR, FOUR), ['mine', 'all', ...FOUR]);
 eq('…defaulting to My sections, not the rollup', defaultScope(FOUR), 'mine');
-// The course rollup is never the default for anyone who teaches — reaching other sections is
-// deliberate, not where you land.
+
+// The course rollup is never the default for anyone who teaches — reaching wider is deliberate.
 eq('the rollup is never the default while you teach anything',
    [['s1'], ['s1', 's2'], FOUR].every(m => defaultScope(m) !== 'all'), true);
+// Whatever the toggle state, the current scope must remain selectable or the control and the
+// content disagree; renderScope falls back to defaultScope() when it does not.
+eq('hiding others never removes a section the viewer teaches',
+   scopeOptions(['s3'], FOUR).includes('s3'), true);
 
 process.exitCode = summary() ? 0 : 1;

@@ -1092,6 +1092,12 @@ tr:last-child td { border-bottom: none; }
 
 /* Per-section departures under the instructor-scoped readiness summary. The section code is bold
    because it is the scanning target — a reader looks for their own section, not the prose. */
+/* Director-only opt-in for sections they do not teach. Quiet by default — it is an escape hatch,
+   not a primary control, and a director's normal view of a lesson should match an instructor's. */
+.scope-more { margin-left: 8px; font-size: 0.8em; opacity: 0.75; }
+.scope-more:hover { opacity: 1; }
+.scope-more.on { opacity: 1; background: var(--surface-hover, var(--bg)); border-color: var(--blue-lt); color: var(--blue-lt); }
+
 /* Names the sections a combined readiness summary was written over, so an instructor can verify
    none of theirs was omitted. Deterministic — read from stored section_codes, never from the prose. */
 .ai-combined { font-size: 0.82em; color: var(--muted); margin-bottom: 8px; }
