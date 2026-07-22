@@ -69,12 +69,41 @@
     </div>
   </div>
 
+  <!-- Grant an extension to one or many non-submitters, without leaving the rollup. The list of
+       who has not submitted is right here; making the reader carry names to another page to act on
+       them is what made the legacy version inert. One reason covers the whole batch: `reason` is
+       NOT NULL and non-blank-checked (migration 007), and a batch granted for one cause genuinely
+       shares one cause. -->
+  <div class="modal-backdrop" id="ext-modal" style="z-index:80">
+    <div class="modal" style="max-width:460px">
+      <div class="modal-head"><h2 id="xm-title">Grant extension</h2><button class="modal-close" data-close>×</button></div>
+      <div id="xm-who" class="muted" style="font-size:0.86em;margin-bottom:12px"></div>
+      <div class="field">
+        <label for="xm-due">New deadline</label>
+        <input type="datetime-local" id="xm-due">
+      </div>
+      <div class="field">
+        <label for="xm-reason">Reason <span class="muted" style="font-weight:400">· required, and recorded</span></label>
+        <input type="text" id="xm-reason" placeholder="e.g. approved absence — team travel" maxlength="200">
+      </div>
+      <div class="row" style="justify-content:flex-end;gap:8px;margin-top:14px">
+        <button class="btn btn-ghost" data-close>Cancel</button>
+        <button class="btn btn-primary" id="xm-save">Grant</button>
+      </div>
+      <div id="xm-status" class="muted" style="font-size:0.82em;min-height:1.2em;margin-top:8px"></div>
+    </div>
+  </div>
+
   <script type="module">
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { esc, lastFirst } from '../js/util.js';
     import * as I from '../js/faculty-rollup.js';
+    // Extensions are granted from the "Did not submit" list. Reusing the Grade tab's writer rather
+    // than composing a second upsert here: one (enrolment, offering) UNIQUE key, one code path, so
+    // the two surfaces cannot drift on what an extension is.
+    import * as G from '../js/faculty-grade.js';
 
     // Live bandwidth knobs for the objective-understanding histogram KDE (lrFine5). These are the
     // active defaults; the director-only floating tuner (mountKdeTuner) lets a director nudge them
@@ -116,11 +145,17 @@
     }
 
     function wireModals() {
-      ['flag-modal', 'student-modal', 'fullreport-modal'].forEach(id => {
+      ['flag-modal', 'student-modal', 'fullreport-modal', 'ext-modal'].forEach(id => {
         const m = document.getElementById(id);
         m.addEventListener('click', (e) => { if (e.target.id === id || e.target.dataset.close !== undefined) m.classList.remove('open'); });
       });
       document.getElementById('rm-export').addEventListener('click', exportCorpus);
+      // Wired once here, not in wireNotSubmitted(): the panel re-renders on every scope change and
+      // re-binding a modal's Save on each pass would fire it once per render.
+      document.getElementById('xm-save').addEventListener('click', saveExt);
+      document.getElementById('xm-reason').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); saveExt(); }
+      });
     }
 
     // The lesson is chosen entirely by the URL (?i=<offering id>, optional &section=). No picker — the
@@ -310,11 +345,11 @@
 
       const others = otherSectionIds().length;
       const toggle = canSeeOthers()
-        ? `<button type="button" class="tbtn scope-more${showOtherSections ? ' on' : ''}" id="scope-more"
+        ? `<button type="button" class="scope-more${showOtherSections ? ' on' : ''}" id="scope-more"
                    aria-pressed="${showOtherSections}"
                    title="${showOtherSections ? 'Hide sections you do not teach'
                                               : 'Also show the ' + others + ' section(s) you do not teach'}"
-           >${showOtherSections ? '− Other sections' : `+ ${others} other section${others === 1 ? '' : 's'}`}</button>`
+           >${showOtherSections ? 'hide others' : `show all ${others + myScopeSectionIds.length}`}</button>`
         : '';
 
       if (opts.length <= SEG_MAX) {
@@ -828,28 +863,40 @@
                      || lastFirst(a.name).localeCompare(lastFirst(b.name)));
       dnsState = missing;
       if (!missing.length) return '';
-      const rows = missing.map(st => `<tr>
+      const rows = missing.map(st => `<tr data-enr="${esc(st.enrollment_id || '')}">
+          <td class="dns-pick"><input type="checkbox" data-dns-pick
+                 ${st.enrollment_id ? '' : 'disabled title="No enrolment row — cannot be extended here"'}
+                 aria-label="Select ${esc(lastFirst(st.name))}"></td>
           <td>${esc(lastFirst(st.name))}</td>
           <td><span class="tag">${esc(st.section)}</span></td>
           <td class="dns-id">${esc(String(st.student_id))}</td>
+          <td style="text-align:right">${st.enrollment_id
+            ? `<button class="tbtn dns-ext" type="button" data-ext-one="${esc(st.enrollment_id)}"
+                       title="Grant an extension to ${esc(lastFirst(st.name))}">Extend</button>` : ''}</td>
         </tr>`).join('');
       return `<div class="lr-sec fw-panel" id="dns-sec">
         <div class="lr-eyebrow">Did not submit
           <span class="dim">· ${missing.length} of ${roster.length} in this scope</span></div>
         <div class="sr-controls">
           <button class="tbtn" id="dns-copy" type="button">Copy list</button>
+          <button class="tbtn" id="dns-ext-many" type="button" disabled>Extend selected</button>
           <span class="spacer"></span>
-          <a class="tbtn" href="grade.html">Grant an extension in Grade ›</a>
+          <span class="muted" style="font-size:0.8em">Extending here writes the same row the Grade tab does.</span>
         </div>
         <div class="table-wrap" style="margin-top:10px"><table class="dns-tbl">
-          <thead><tr><th>Name</th><th>Section</th><th>Cadet ID</th></tr></thead>
+          <thead><tr>
+            <th class="dns-pick"><input type="checkbox" id="dns-all" aria-label="Select everyone listed"></th>
+            <th>Name</th><th>Section</th><th>Cadet ID</th><th></th>
+          </tr></thead>
           <tbody>${rows}</tbody></table></div>
       </div>`;
     }
     function wireNotSubmitted() {
+      const sec = document.getElementById('dns-sec');
+      if (!sec || !dnsState) return;
+
       const btn = document.getElementById('dns-copy');
-      if (!btn || !dnsState) return;
-      btn.addEventListener('click', async () => {
+      btn?.addEventListener('click', async () => {
         const text = dnsState.map(st => `${lastFirst(st.name)}\t${st.section}\t${st.student_id}`).join('\n');
         try {
           await navigator.clipboard.writeText(text);
@@ -857,6 +904,81 @@
           setTimeout(() => { btn.textContent = old; }, 1200);
         } catch (e) { btn.textContent = 'Copy blocked'; setTimeout(() => { btn.textContent = 'Copy list'; }, 1400); }
       });
+
+      const picks = () => [...sec.querySelectorAll('[data-dns-pick]:checked')]
+        .map(cb => cb.closest('tr')?.dataset.enr).filter(Boolean);
+      const many = document.getElementById('dns-ext-many');
+      const refresh = () => {
+        const n = picks().length;
+        many.disabled = n === 0;
+        many.textContent = n ? `Extend selected (${n})` : 'Extend selected';
+      };
+      sec.querySelectorAll('[data-dns-pick]').forEach(cb => cb.addEventListener('change', refresh));
+      document.getElementById('dns-all')?.addEventListener('change', (e) => {
+        sec.querySelectorAll('[data-dns-pick]:not([disabled])').forEach(cb => { cb.checked = e.target.checked; });
+        refresh();
+      });
+      many?.addEventListener('click', () => openExt(picks()));
+      sec.querySelectorAll('[data-ext-one]').forEach(b =>
+        b.addEventListener('click', () => openExt([b.dataset.extOne])));
+      refresh();
+    }
+
+    // ── Grant an extension from the rollup ──
+    // Same write the Grade tab performs (G.setExtension → upsert on the (enrolment, offering)
+    // UNIQUE key), so granting here and there cannot diverge, and re-granting amends rather than
+    // duplicating. One reason covers the batch: `reason` is NOT NULL with a non-blank CHECK since
+    // migration 007, and a set of students extended together share the cause that prompted it.
+    let extTargets = [];
+    function openExt(enrollmentIds) {
+      extTargets = enrollmentIds.filter(Boolean);
+      if (!extTargets.length) return;
+      const byEnr = Object.fromEntries(dnsState.map(st => [String(st.enrollment_id), st]));
+      const names = extTargets.map(id => lastFirst(byEnr[String(id)]?.name || '—'));
+      document.getElementById('xm-title').textContent =
+        extTargets.length === 1 ? 'Grant extension' : `Grant ${extTargets.length} extensions`;
+      document.getElementById('xm-who').textContent =
+        names.length <= 4 ? names.join(', ')
+                          : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
+      // Default to a week out at 2359 local — the shape every real deadline in this system takes
+      // (CORE.md §2: due dates are 2359 the night before). The grader can change it.
+      const d = new Date(); d.setDate(d.getDate() + 7); d.setHours(23, 59, 0, 0);
+      const pad = n => String(n).padStart(2, '0');
+      document.getElementById('xm-due').value =
+        `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      document.getElementById('xm-reason').value = '';
+      document.getElementById('xm-status').textContent = '';
+      document.getElementById('ext-modal').classList.add('open');
+      document.getElementById('xm-reason').focus();
+    }
+
+    async function saveExt() {
+      const status = document.getElementById('xm-status');
+      const iso = document.getElementById('xm-due').value;
+      const reason = document.getElementById('xm-reason').value.trim();
+      if (!iso) { status.textContent = 'Pick a new deadline.'; return; }
+      if (!reason) { status.textContent = 'A reason is required — it is recorded with the extension.'; return; }
+      const btn = document.getElementById('xm-save');
+      btn.disabled = true; status.textContent = 'Granting…';
+      const when = new Date(iso).toISOString();
+      let ok = 0; const errs = [];
+      // Sequential, not Promise.all: these are upserts on one table and a partial failure must be
+      // reportable per student rather than collapsing to one rejected promise.
+      for (const enr of extTargets) {
+        const { error } = await G.setExtension(ctx, reportInteraction, enr, when, reason);
+        if (error) errs.push(error.message); else ok++;
+      }
+      btn.disabled = false;
+      if (errs.length) {
+        status.style.color = 'var(--red)';
+        status.textContent = `Granted ${ok} of ${extTargets.length}. ${errs[0]}`;
+        return;
+      }
+      document.getElementById('ext-modal').classList.remove('open');
+      // The rollup's own numbers do not change — an extension moves a deadline, it does not submit
+      // work — so there is nothing to re-render. Say what happened instead of silently closing.
+      const note = document.getElementById('dns-sec')?.querySelector('.lr-eyebrow .dim');
+      if (note) note.textContent += ` · ${ok} extension${ok === 1 ? '' : 's'} granted`;
     }
 
     // Rollup body — effort + radar tiles, AI panels, per-objective rows, student responses.

@@ -10,6 +10,33 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-22 — Casey via Claude
 
+### Added — grant extensions directly from the rollup's "Did not submit" list
+
+The list of who has not submitted was already on the page; making the reader carry those names to
+another page to act on them is what made the legacy version inert. Now:
+
+- a quiet per-row **Extend**, appearing on hover — twenty rows of loud buttons would read as twenty
+  things demanding attention rather than one list with an action on each;
+- **checkboxes with select-all** and `Extend selected (N)` for a batch.
+
+Both open one modal defaulting to a week out at **2359 local** — the shape every deadline in this
+system takes (CORE.md §2). It calls the Grade tab's own `setExtension()` rather than composing a
+second upsert, so the two surfaces cannot drift on what an extension is, and re-granting **amends
+rather than duplicating** (the `(enrolment, offering)` UNIQUE key). One reason covers a batch:
+`reason` is NOT NULL and non-blank-checked since `007`, and a group extended together shares its
+cause. Writes are sequential, so a partial failure is reportable per student rather than collapsing
+into one rejected promise.
+
+A student with no enrolment row cannot be extended here; that row's checkbox and button are disabled
+with the reason in the tooltip rather than silently doing nothing.
+
+### Changed — the "show all sections" toggle is no longer a button
+
+Reported as still too prominent. It had `.tbtn` chrome, which put it in the same visual class as the
+segmented control it sits beside — so an escape hatch used a few times a term competed with the
+control used constantly. It is now plain underlined muted text ("show all 4" / "hide others"), closer
+to a footnote, gaining colour only once it is on.
+
 ### Changed — a director's rollup now opens on their own sections; the rest is an opt-in
 
 Reported with a screenshot: a director who teaches **one** of four sections opened the rollup to

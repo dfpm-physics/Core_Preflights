@@ -1092,11 +1092,19 @@ tr:last-child td { border-bottom: none; }
 
 /* Per-section departures under the instructor-scoped readiness summary. The section code is bold
    because it is the scanning target — a reader looks for their own section, not the prose. */
-/* Director-only opt-in for sections they do not teach. Quiet by default — it is an escape hatch,
-   not a primary control, and a director's normal view of a lesson should match an instructor's. */
-.scope-more { margin-left: 8px; font-size: 0.8em; opacity: 0.75; }
-.scope-more:hover { opacity: 1; }
-.scope-more.on { opacity: 1; background: var(--surface-hover, var(--bg)); border-color: var(--blue-lt); color: var(--blue-lt); }
+/* Director-only opt-in for sections they do not teach.
+   Deliberately NOT a button. It is an escape hatch used a few times a term, sitting beside a
+   segmented control the reader uses constantly; given button chrome it competed with the thing it
+   sits next to and read as a primary action. Plain muted text, no border, no background — closer to
+   a footnote than a control, and it only gains colour once it is actually on. */
+.scope-more {
+  margin-left: 10px; padding: 0; border: none; background: none;
+  font: inherit; font-size: 0.76em; color: var(--muted);
+  cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+  text-decoration-color: var(--border);
+}
+.scope-more:hover, .scope-more:focus-visible { color: var(--blue-lt); text-decoration-color: currentColor; }
+.scope-more.on { color: var(--blue-lt); }
 
 /* Names the sections a combined readiness summary was written over, so an instructor can verify
    none of theirs was omitted. Deterministic — read from stored section_codes, never from the prose. */
@@ -1111,8 +1119,14 @@ tr:last-child td { border-bottom: none; }
 /* "Did not submit" table on the rollup. Rebuilt from the legacy Report tab, which promotion
    deletes — made copyable and pointed at the Grade page, per the audit's recommendation. */
 .dns-tbl { font-size: 0.9em; }
-.dns-tbl td, .dns-tbl th { padding: 6px 10px; }
+.dns-tbl td, .dns-tbl th { padding: 6px 10px; vertical-align: middle; }
 .dns-id { font-variant-numeric: tabular-nums; color: var(--muted); }
+.dns-pick { width: 28px; }
+.dns-pick input { width: auto; margin: 0; }
+/* The per-row action stays quiet until the row is hovered — 20 rows of loud buttons would read as
+   20 things demanding attention rather than one list with an action available on each. */
+.dns-tbl .dns-ext { opacity: 0; font-size: 0.78em; transition: opacity .12s; }
+.dns-tbl tr:hover .dns-ext, .dns-tbl .dns-ext:focus-visible { opacity: 1; }
 a.tbtn { text-decoration: none; display: inline-flex; align-items: center; }
 
 /* Late-submission badge on a grade card, and the filter that narrows to them.

@@ -260,7 +260,14 @@ Both halves fixed:
   compact in-table select (`width: auto; min-width: 128px; padding: 5px 8px`) following the existing
   `.sec-assign select` house pattern.
 
-### P0.12 — A late submission is invisible on the grade card · ✅ **DONE 2026-07-22**
+### P0.12 — A late submission is invisible on the grade card · ✅ **DONE 2026-07-22** · ⚠️ *filter to be removed — see P1.14*
+
+> **The "Late only" filter added here is being withdrawn** at the director's request the same day.
+> It answers the wrong question: an instructor does not want to filter a section down to late work,
+> they want a standing queue of the few submissions needing attention. **P1.14** replaces it. The
+> late *chip* on the card is expected to stay — it is context while grading, and is not what was
+> objected to.
+
 
 **Shipped:** a new `submissionLateness()` + `lateBy()` pair in `schema.js` (beside `effectiveDue`,
 which answers a different question — clock-vs-deadline, not commit-vs-deadline), an amber `⏰ N days
@@ -554,22 +561,79 @@ Fix in the P1.10 rework: either name the people (they are already loaded), or st
 the grid as "6 staff cover all sections", or drop it. A per-offering constant rendered per-section
 is noise.
 
-### P1.12 — Bulk / whole-section extensions · **M** · *new*
+### P1.14 — Grade tab: replace the late filter with a "needs grading by hand" queue · **M** · *requested 2026-07-22*
 
-*The extension half of the director's "we need a way to grade this" — verified as partially built.*
+*Director's request, held for the roadmap rather than built.*
 
-**What already exists:** per-student grant/edit/remove in the Grade tab (`grade.html:239`, modal at
-`:79-81`, write at `faculty-grade.js:327-340`), plus a director oversight page
-(`faculty/extensions.html`) that is **read + revoke only**.
+**Remove the "Submitted late" filter** (shipped in P0.12, same day). It answers the wrong question:
+an instructor does not want to *filter a whole section down to* late work, they want a short standing
+list of the handful of submissions that need attention. The filter makes you go looking; a queue
+comes to you.
 
-**What does not:** any lesson-scoped, section-wide, or bulk grant. Every write is keyed
-`(enrollment_id, assignment_offering_id)` (`faculty-grade.js:339`). Extending a whole section after a
-cancelled class means clicking through students one at a time — which is exactly when it is needed
-and exactly when nobody will do it.
+*Assumption to confirm:* the **late chip on the grade card stays** — it is context you want while
+grading a specific student, and it is not what was objected to. Only the filter control goes.
 
-Add a bulk grant on the extensions page: pick an offering, pick a section or a multi-select of
-students, one due date, one reason (`reason` is NOT NULL and non-blank-checked by
-`007_extension_governance_and_review.sql:79-82`).
+**Add a queue at the top of the page, shaped like the lesson builder's orphan view**
+(`faculty/lessons.html` `.lb-orphans` / `.lb-orphan` — a row of compact cards above the main work
+area, each a thing waiting to be dealt with). It holds:
+
+- late submissions not yet finalized
+- students whose **extension has expired** with work still ungraded
+
+**Scoped to your own sections only.** Both data sources already exist and are already correctly
+scoped — `extensionsToGrade()` and `pastDueUngraded()` in `faculty-grade.js:481-571` — but today they
+are collapsed `<details>` queues showing counts at *assignment* granularity. This wants them
+per-student and open by default.
+
+**Clicking a student opens their responses to grade right there.** Rules:
+
+- **An interactive submission is auto-graded and must not appear at all.** The artifact wrote the
+  effort and the DB trigger derived the points; there is nothing for a human to do, and listing it
+  would train instructors to ignore the queue.
+- **A written submission opens Q2 and Q3** with the 3-state control and the feedback boxes, then
+  **Finalize**. Q1 is zero-point and stays hidden (`grade.html:207,215`).
+
+**Why this is P1 and not P0:** nothing is broken without it — late work is gradable today, just
+awkwardly. It becomes urgent the first week extensions are actually granted.
+
+### P1.15 — Dashboard: due-out boxes · **M** · *requested 2026-07-22 — supersedes part of P1.6*
+
+A row of boxes at the top of the faculty dashboard, one per **type** of outstanding work, each with
+a count. Clicking one goes to the page that clears it. Not one box per item — one per kind.
+
+Likely types, all of which already have a data source:
+
+| Box | Source | Goes to |
+|---|---|---|
+| Late / expired-extension work to grade | `extensionsToGrade()`, `pastDueUngraded()` | Grade (P1.14's queue) |
+| AI-suggested grades not finalized | `grades.is_finalized = false` | Grade |
+| Lessons past due, not yet aggregated | `lesson_aggregate.py worklist` | the rollup |
+| Sections with no staff assigned | Section Coverage | Course Admin |
+| A failed or stuck analysis run | `analysis_runs` | already the run banner |
+
+This is the concrete form of P1.6's "outstanding tasks panel" — build it as the registry P1.6
+describes (`{severity, text, link, count}`) so a new type is a registration, not a rewrite. **Zero is
+the common state for most of these most of the term**, so a box at zero should disappear rather than
+sit there reading `0`.
+
+### P1.12 — Bulk / whole-section extensions · ✅ **PARTLY DONE 2026-07-22** — granting moved onto the rollup
+
+*Bulk granting now exists, on the rollup — where the list of who needs one already was.*
+
+**Shipped 2026-07-22:** the "Did not submit" panel grants extensions inline, per row (a quiet
+`Extend` that appears on hover) and in bulk (checkboxes, select-all, `Extend selected (N)`), through
+a modal defaulting to a week out at 2359 local. It calls the Grade tab's own `setExtension()` rather
+than composing a second upsert, so the two surfaces cannot drift on what an extension is, and
+re-granting amends rather than duplicating (the `(enrolment, offering)` UNIQUE key).
+
+One reason covers a batch — `reason` is NOT NULL and non-blank-checked
+(`007_extension_governance_and_review.sql:79-82`), and a group extended together shares the cause
+that prompted it. Writes are sequential so a partial failure is reportable per student rather than
+collapsing into one rejected promise.
+
+**Still open:** a *whole-section* grant that does not go through the not-submitted list — e.g.
+extending every student in a section after a cancelled class, including those who already submitted.
+And `faculty/extensions.html` remains **read + revoke only**; it is the natural home for that.
 
 ### P1.13 — Container for unrecognized flags · **S** · *new, director-specified*
 
