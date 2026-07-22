@@ -130,6 +130,10 @@ export const CURATED_COLUMNS = {
   // work, and was anyone watching?"
   analysis_runs:         ['skill', 'invoked_by', 'status', 'assignment_offering_id',
                           'day_track', 'started_at', 'summary'],
+
+  // Hidden by default (see below), but curated anyway so that an administrator who opts in
+  // gets the two columns that mean anything rather than a uuid beside a jsonb blob.
+  user_preferences:      ['user_id', 'updated_at'],
 };
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -148,6 +152,10 @@ export const DEFAULT_HIDDEN_TABLES = new Set([
   'submission_activities',  // student-owned blobs, read-only to staff
   'grade_events',           // append-only audit log
   'analysis_reports',       // written by /preflight-analyze and /lesson-aggregate
+  // Self-scoped by RLS with no staff read policy (010), so a browser here shows an
+  // administrator exactly one row — their own — and would read as an empty or broken table
+  // rather than as the privacy boundary it is.
+  'user_preferences',
 ]);
 
 /* ══════════════════════════════════════════════════════════════════════════════

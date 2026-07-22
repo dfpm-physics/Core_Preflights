@@ -180,17 +180,35 @@ export function signOutEverywhere() {
 }
 
 /**
- * Preferences are browser-local by design.
+ * Preferences follow the person, as of P1.3 — see prefs.js for the full design.
  *
  * Both keys already exist and are already written by other parts of the app — the nav's theme
  * toggle owns cp.theme, and auth.js owns cp.currentOffering. This page does not invent storage;
  * it makes two settings that were only ever set as a side effect visible and resettable.
+ *
+ * What changed: those writes now go through prefs.js, which mirrors them into
+ * `app.user_preferences`. localStorage is still the read path (the anti-FOUC snippet needs a
+ * synchronous theme at first paint), so nothing here reads the database directly.
+ *
+ * An ABSENT cp.theme means "match my system" — that is the whole encoding, and it is why
+ * setTheme('system') stores an empty value rather than the string 'system'. Storing the literal
+ * made the <head> snippet read a value that was neither null nor 'dark', so "Match my system"
+ * silently meant "always light" until P1.3 (fixed 2026-07-22).
  */
-export const PREF_KEYS = { theme: 'cp.theme', offering: 'cp.currentOffering' };
+export const PREF_KEYS = {
+  theme: 'cp.theme',
+  offering: 'cp.currentOffering',
+  understanding: 'cp.rollup.understanding',
+};
 
 export function readPrefs() {
-  const get = (k) => { try { return localStorage.getItem(k); } catch (_) { return null; } };
-  return { theme: get(PREF_KEYS.theme) || 'system', offering: get(PREF_KEYS.offering) || '' };
+  return {
+    theme: getPref(PREF_KEYS.theme) || 'system',
+    offering: getPref(PREF_KEYS.offering) || '',
+    // Absent means the default rendering, which is the histogram (P1.5).
+    understanding: getPref(PREF_KEYS.understanding) || 'histogram',
+    synced: isSynced(),
+  };
 }
 
 /** Password rules, in one place so the meter and the validator cannot disagree. */
@@ -220,6 +238,7 @@ export function passwordStrength(pw) {
 
 import { esc } from './util.js';
 import { setTheme } from './theme.js';
+import { getPref, setPref, isSynced } from './prefs.js';
 
 export async function renderAccount(ctx, root) {
   const id = await loadIdentity(ctx);
@@ -274,7 +293,9 @@ export async function renderAccount(ctx, root) {
 
     <div class="card">
       <div class="card-title">Preferences</div>
-      <div class="card-meta">Saved to this browser only — they do not follow you to another device.</div>
+      <div class="card-meta">${prefs.synced === false
+        ? 'Saved to this browser only — PREP could not reach your account, so these will not follow you to another device.'
+        : 'Saved to your account, so they follow you to any device you sign in on.'}</div>
       <div class="field"><label for="pf-theme">Appearance</label>
         <select id="pf-theme">
           <option value="system"${sel(prefs.theme, 'system')}>Match my system</option>
@@ -287,8 +308,17 @@ export async function renderAccount(ctx, root) {
         <select id="pf-offering">
           ${ctx.courses.map(c => `<option value="${esc(c.offeringId)}"${sel(ctx.currentOffering, c.offeringId)}>${esc(ctx.courseTitleOf(c.offeringId))} · ${esc(c.termLabel || '')}</option>`).join('')}
         </select>
-        <div class="field-hint">Remembered from your last visit today; setting it here makes it
+        <div class="field-hint">Remembered from your last visit; setting it here makes it
           deliberate instead of a surprise.</div></div>` : ''}
+      ${isFaculty ? `
+      <div class="field"><label for="pf-understanding">Understanding by objective</label>
+        <select id="pf-understanding">
+          <option value="histogram"${sel(prefs.understanding, 'histogram')}>Histogram — counts at each score</option>
+          <option value="curve"${sel(prefs.understanding, 'curve')}>Smoothed curve — estimated distribution</option>
+        </select>
+        <div class="field-hint">How the lesson rollup draws each objective's 0–5 spread. The
+          histogram matches the effort chart above it and shows the actual counts; the curve is
+          an estimate that reads more smoothly for a large cohort.</div></div>` : ''}
     </div>
 
     <div class="card">
@@ -347,6 +377,18 @@ function wireAccount(ctx, root) {
   });
 
   $('pf-theme')?.addEventListener('change', (e) => setTheme(e.target.value));
+
+  // No live preview to update — the rollup reads this at render time, so the change lands on the
+  // next visit to a lesson report. Saying so beats leaving someone to wonder whether it took.
+  $('pf-understanding')?.addEventListener('change', (e) => {
+    setPref(PREF_KEYS.understanding, e.target.value);
+    const hint = e.target.parentElement?.querySelector('.field-hint');
+    if (hint && !hint.dataset.saved) {
+      hint.dataset.saved = '1';
+      hint.insertAdjacentHTML('beforeend',
+        ' <span class="ok-note">Saved — applies next time you open a lesson rollup.</span>');
+    }
+  });
 
   $('pf-offering')?.addEventListener('change', async (e) => {
     await ctx.setCurrentOffering(e.target.value);

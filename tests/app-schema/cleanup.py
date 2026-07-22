@@ -50,6 +50,13 @@ def main():
         ("grades", f"DELETE FROM app.grades WHERE {scope}"),
         ("extensions", f"DELETE FROM app.extensions WHERE {scope}"),
         ("submissions", f"DELETE FROM app.submissions WHERE {scope}"),
+        # user_preferences is keyed on the AUTH user id, not the enrolment, so it does not fit
+        # the `scope` clause above — it is reached through students.auth_user_id instead. Written
+        # by prefs.js on every signed-in page load (P1.3), so the test cadet grows one the moment
+        # any browser or Node suite signs in as them.
+        ("user_preferences", """DELETE FROM app.user_preferences WHERE user_id IN
+             (SELECT auth_user_id FROM app.students
+               WHERE student_id = %s AND auth_user_id IS NOT NULL)"""),
     ]
 
     print(f"{'COMMITTING' if args.commit else 'DRY RUN — will roll back'}: "

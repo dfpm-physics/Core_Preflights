@@ -104,6 +104,8 @@
     // than composing a second upsert here: one (enrolment, offering) UNIQUE key, one code path, so
     // the two surfaces cannot drift on what an extension is.
     import * as G from '../js/faculty-grade.js';
+    // P1.5 — which of the two understanding-by-objective renderings this person wants.
+    import { getPref } from '../js/prefs.js';
 
     // Live bandwidth knobs for the objective-understanding histogram KDE (lrFine5). These are the
     // active defaults; the director-only floating tuner (mountKdeTuner) lets a director nudge them
@@ -520,6 +522,39 @@
         <polygon points="${objs.map((_, i) => pt(i, 3.5).join(',')).join(' ')}" fill="none" stroke="var(--blue-lt)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.85"/>
         <polygon points="${objs.map((o, i) => pt(i, o.m).join(',')).join(' ')}" fill="color-mix(in srgb, ${col} 26%, transparent)" stroke="${col}" stroke-width="2.5"/>
         ${objs.map((o, i) => { const [x, y] = pt(i, o.m); return `<circle cx="${x}" cy="${y}" r="3.5" fill="${col}"/>`; }).join('')}${labels}${hits}</svg>`;
+    }
+
+    /* ── Understanding by objective: two renderings, one preference ──────────────────
+     * P1.5. The curve (lrFine5, below) is a kernel-density estimate — it is prettier, and it is
+     * a model. The histogram is the counts.
+     *
+     * The default is now the HISTOGRAM, for one reason that outweighs the curve's looks: the
+     * effort chart directly above it is an integer 0–5 histogram, and two charts of the same
+     * 0–5 measure drawn in two different visual languages invite exactly the wrong comparison.
+     * A reader who sees a smooth hump beside a bar chart reasonably assumes they are different
+     * KINDS of quantity. They are not — both are counts of students at each score.
+     *
+     * The curve is kept, not deleted, and reachable from Account > Preferences. It genuinely
+     * reads better for a large cohort where the integer bars get spiky, and a director who
+     * prefers it should not have to argue for it.
+     */
+    const UNDERSTANDING_PREF = 'cp.rollup.understanding';
+
+    // Integer histogram for a 0–5 distribution — deliberately the same markup, ramp and metrics
+    // as effortChart(), because "matches the effort histogram" is the requirement, not a
+    // coincidence. Anything that changes there should change here.
+    function objIntChart(counts) {
+      const max = Math.max(...counts, 1);
+      const cols = counts.map((c, i) =>
+        `<div class="eff-col" title="Understanding ${i}: ${c}"><span class="eff-cnt">${c}</span>` +
+        `<div class="eff-bar" style="height:${c / max * 100}%;background:${EFFORT_COL[i]}"></div></div>`).join('');
+      return `<div class="eff-wrap obj-hist"><div class="eff-bars">${cols}</div>
+        <div class="eff-x">${counts.map((_, i) => `<span>${i}</span>`).join('')}</div></div>`;
+    }
+
+    /** Render one objective's distribution in whichever style this person prefers. */
+    function objChart(counts) {
+      return getPref(UNDERSTANDING_PREF) === 'curve' ? lrFine5(counts) : objIntChart(counts);
     }
 
     // Fine-cell histogram for a 0–5 distribution: 5 column-groups × 5 cells trace a smooth curve;
@@ -1093,7 +1128,7 @@
           <span class="nm"><b class="ol-key sm">${o.letter}</b>${esc(o.label)}${
             isFR ? `<span class="obj-src" title="From the written question set — one free-response question, not a per-objective breakdown">questions</span>` : ''}</span>
           <span class="mu">${o.understanding == null ? 'n/a' : f1(o.understanding) + '/5'} · ${o.assessed} assessed</span></div>
-        ${lrFine5(o.dist)}
+        ${objChart(o.dist)}
       </div>`;
       }).join('');
       const objMix = s.objectives.some(o => o.source === 'written') && s.objectives.some(o => o.source === 'interactive')

@@ -12,31 +12,59 @@
 
 import { loadFacultyDashboard } from './faculty-data.js';
 import { summarizeReports } from './faculty-rollup.js';
+import { loadTasks, renderTasks } from './faculty-tasks.js';
 import { esc, iconHTML, fmtDate } from './util.js';
 
 let CTX = null, ROOT = null, MODEL = null;
+// STATE.scope is 'all', 'mine', or a section uuid. The uuid case is P1.7: the control could
+// previously only toggle all-vs-mine, so a director with six sections had no way to look at one.
 const STATE = { scope: 'all', metric: 'completion', viewLesson: null };
+// null while the task queries are still in flight — the panel renders a placeholder rather than
+// an empty state, because "nothing outstanding" and "not asked yet" must not look the same.
+let TASKS = null;
+// Bumped on every mount. The task load is async and ctx is the SAME OBJECT across a course
+// switch, so an identity check on ctx/root cannot tell a stale response from a current one — a
+// slow phys-110 load would paint its boxes over phys-215. The generation can.
+let MOUNT_GEN = 0;
 let _observersWired = false;
 
 /** Load the model and render the dashboard into `root`. Re-callable (e.g. on course change). */
 export async function mountDashboard(ctx, root) {
+  const gen = ++MOUNT_GEN;
   CTX = ctx; ROOT = root;
   root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading your dashboard…</span></div>`;
   MODEL = await loadFacultyDashboard(ctx);
+  if (gen !== MOUNT_GEN) return;          // a newer mount overtook this one
   STATE.scope = 'all';
   STATE.metric = 'completion';
   STATE.viewLesson = MODEL.activeId;
+  TASKS = null;
   render();
   wireGlobalObservers();
+
+  // Deliberately AFTER the first paint and not awaited into it. These are five extra round
+  // trips; blocking the whole dashboard on them would make every page load as slow as the
+  // slowest one, to show a panel that is empty most of the term.
+  loadTasks(ctx)
+    .catch(() => [])
+    .then(tasks => {
+      if (gen !== MOUNT_GEN) return;      // belongs to a course the reader has left
+      TASKS = tasks;
+      paintTasks();
+    });
 }
 
 /** Render-only entry (no network) for offline previews/tests: drive the real view with a
  *  pre-built model + a minimal ctx-like object ({ isDirectorForCurrent, instructorRow }). */
 export function renderModel(ctx, root, model, state = {}) {
+  MOUNT_GEN++;
   CTX = ctx; ROOT = root; MODEL = model;
   STATE.scope = state.scope || 'all';
   STATE.metric = state.metric || 'completion';
   STATE.viewLesson = state.viewLesson ?? model.activeId;
+  // Defaults to [] rather than null: this path never queries, so leaving it null would render
+  // the loading skeleton forever in an offline preview. Pass state.tasks to exercise the panel.
+  TASKS = state.tasks || [];
   render();
   wireGlobalObservers();
 }
@@ -45,8 +73,19 @@ export function renderModel(ctx, root, model, state = {}) {
 
 const dir = () => CTX.isDirectorForCurrent();
 const mySections = () => MODEL.sections.filter(s => s.isMine);
-const scopeSections = () =>
-  (dir() && STATE.scope === 'all') ? MODEL.sections : mySections();
+
+/* Which sections the current scope covers.
+ *
+ * P1.7 added the third case. 'all' and 'mine' are the two set-scopes; anything else is a
+ * section uuid, and an unknown one falls back to 'mine' rather than returning [] — a stale
+ * pick (a section that was renamed away, or a course switch) would otherwise render a
+ * dashboard of zeroes that looks like real data. */
+const scopeSections = () => {
+  if (STATE.scope === 'mine') return mySections();
+  if (STATE.scope === 'all') return dir() ? MODEL.sections : mySections();
+  const one = MODEL.sections.filter(s => s.id === STATE.scope);
+  return one.length ? one : mySections();
+};
 const activeIdx = () => MODEL.lessons.findIndex(l => l.id === MODEL.activeId);
 const lessonIdx = (id) => MODEL.lessons.findIndex(l => l.id === id);
 
@@ -152,6 +191,7 @@ function render() {
 
   ROOT.innerHTML =
     head(firstName, roleLabel) +
+    `<div id="dashTasks">${tasksMarkup()}</div>` +
     statTiles(agg, ctx) +
     spotlight(agg, ctx) +
     yourSections() +
@@ -160,13 +200,70 @@ function render() {
   wire();
 }
 
+/* The tasks panel is the one part of the dashboard that arrives late, so it owns a stable host
+ * element and repaints into it. Re-rendering the whole dashboard when the queries land would
+ * discard the reader's lesson navigation and scope pick for a panel above the fold. */
+function tasksMarkup() {
+  if (TASKS === null) {
+    return `<section class="dash-section"><div class="duo-row duo-loading">
+      <span class="duo-box duo-skel"></span><span class="duo-box duo-skel"></span>
+    </div></section>`;
+  }
+  return renderTasks(TASKS, { esc });
+}
+
+function paintTasks() {
+  const host = ROOT?.querySelector('#dashTasks');
+  if (host) host.innerHTML = tasksMarkup();
+}
+
 function head(firstName, roleLabel) {
   const c = MODEL.counts || { sections: 0, students: 0, lessons: 0 };
   return `<div class="page-head">
     <h1>Welcome, ${esc(firstName)}</h1>
     <div class="sub">${esc(MODEL.courseTitle)} · ${esc(roleLabel)} · ${c.sections} section${c.sections === 1 ? '' : 's'}
       · ${c.students} student${c.students === 1 ? '' : 's'} · ${c.lessons} lesson${c.lessons === 1 ? '' : 's'} published</div>
+    ${courseSwitcher()}
   </div>`;
+}
+
+/* ── P1.7 — inline course switcher ────────────────────────────────────────────
+ * The dashboard used to delegate course switching entirely to the global nav, which means the
+ * one control you want while looking at a course lives somewhere you have to go looking for.
+ *
+ * The component is the rollup's renderScope() shape, deliberately: a segmented group while the
+ * options fit, a <select> with counts once they do not. Copying the shape rather than the code
+ * because that one lives inside report.html's page script and is bound to its scope variables —
+ * lifting it into a shared module is worth doing when a third caller appears, not for the
+ * second.
+ *
+ * Renders nothing for a single course. A switcher with one option is a label pretending to be a
+ * control. */
+const SEG_MAX_COURSES = 4;
+
+function courseSwitcher() {
+  const courses = CTX.courses || [];
+  if (courses.length < 2) return '';
+  const label = (c) => `${CTX.courseTitleOf(c.offeringId)}${c.termLabel ? ` · ${c.termLabel}` : ''}`;
+
+  if (courses.length <= SEG_MAX_COURSES) {
+    return `<div class="seg course-seg" id="courseSeg" role="group" aria-label="Course">`
+      + courses.map(c => `<button data-offering="${esc(c.offeringId)}"
+           aria-pressed="${c.offeringId === CTX.currentOffering}">${esc(label(c))}</button>`).join('')
+      + `</div>`;
+  }
+  return `<div class="course-seg"><select id="courseSel" aria-label="Course">`
+    + courses.map(c => `<option value="${esc(c.offeringId)}"
+        ${c.offeringId === CTX.currentOffering ? 'selected' : ''}>${esc(label(c))}</option>`).join('')
+    + `</select></div>`;
+}
+
+/** Switch offering, then rebuild everything — sections, lessons and tasks are all course-scoped. */
+async function switchCourse(offeringId) {
+  if (!offeringId || offeringId === CTX.currentOffering) return;
+  ROOT.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
+  await CTX.setCurrentOffering(offeringId);
+  await mountDashboard(CTX, ROOT);
 }
 
 function statTiles(a, ctx) {
@@ -193,6 +290,45 @@ function statTiles(a, ctx) {
            : a.undFrom?.written ? 'diagnostic · free response'
            : 'diagnostic · not graded')}
   </div>`;
+}
+
+/* ── P1.7 — section scope, including individual sections ──────────────────────
+ * The old control was two buttons, all-vs-mine, so a director could see the whole course or the
+ * sections they teach and nothing in between. "How did M3A do?" — the most ordinary question a
+ * director asks — had no answer here; you had to open the full rollup.
+ *
+ * Beyond a handful of sections the segmented group stops fitting, so it becomes a <select>,
+ * matching the rollup's threshold behaviour. Counts ride along in the dropdown because an
+ * unlabelled section code tells you nothing about how much is behind it. */
+const SEG_MAX_SECTIONS = 5;
+
+function scopeControl() {
+  const secs = MODEL.sections;
+  const mine = mySections();
+  // 'mine' is only meaningful when it is a real subset — a director who teaches every section,
+  // or none, gets a duplicate option that answers the same question as 'all'.
+  const showMine = mine.length > 0 && mine.length < secs.length;
+  const opts = ['all', ...(showMine ? ['mine'] : []), ...secs.map(s => s.id)];
+
+  if (!opts.includes(STATE.scope)) STATE.scope = 'all';
+
+  const codeOf = id => secs.find(s => s.id === id)?.code || id;
+  const label = v => v === 'all' ? 'All sections' : v === 'mine' ? 'My sections' : codeOf(v);
+  const countOf = v => v === 'all' ? secs.length
+                     : v === 'mine' ? mine.length
+                     : (MODEL.sectionSize[v] || 0);
+
+  if (opts.length <= SEG_MAX_SECTIONS) {
+    return `<div class="seg" id="scopeSeg" role="group" aria-label="Section scope">`
+      + opts.map(v => `<button data-scope="${esc(v)}" aria-pressed="${STATE.scope === v}">${esc(label(v))}</button>`).join('')
+      + `</div>`;
+  }
+  return `<select id="scopeSel" class="scope-sel" aria-label="Section scope">`
+    + opts.map(v => `<option value="${esc(v)}" ${STATE.scope === v ? 'selected' : ''}>`
+        + `${esc(label(v))}${v === 'all' || v === 'mine'
+            ? ` (${countOf(v)} section${countOf(v) === 1 ? '' : 's'})`
+            : ` (${countOf(v)})`}</option>`).join('')
+    + `</select>`;
 }
 
 function ring(pct) {
@@ -261,10 +397,7 @@ function spotlight(a, ctx) {
   const dueTxt = L.due_date ? `due ${esc(fmtDate(L.due_date))}` : (st === 'past' ? 'earlier lesson' : st === 'upcoming' ? 'not yet due' : 'current lesson');
   const dueChip = st === 'today' ? `⏳ ${dueTxt}` : st === 'past' ? `✓ ${dueTxt}` : `🔭 ${dueTxt}`;
 
-  const scopeCtl = dir() ? `<div class="seg" id="scopeSeg">
-      <button data-scope="all"  aria-pressed="${STATE.scope === 'all'}">All sections</button>
-      <button data-scope="mine" aria-pressed="${STATE.scope === 'mine'}">My sections</button>
-    </div>` : '';
+  const scopeCtl = dir() ? scopeControl() : '';
   const todayBtn = st !== 'today'
     ? `<button class="btn btn-ghost btn-sm" data-today="1" title="Back to the current preflight">↩ Today</button>` : '';
 
@@ -431,6 +564,16 @@ function rerender() {
 function wire() {
   const ss = ROOT.querySelector('#scopeSeg');
   if (ss) ss.querySelectorAll('button').forEach(b => b.onclick = () => { STATE.scope = b.dataset.scope; rerender(); });
+
+  const ssel = ROOT.querySelector('#scopeSel');
+  if (ssel) ssel.onchange = () => { STATE.scope = ssel.value; rerender(); };
+
+  const cs = ROOT.querySelector('#courseSeg');
+  if (cs) cs.querySelectorAll('button').forEach(b =>
+    b.onclick = () => switchCourse(b.dataset.offering));
+
+  const csel = ROOT.querySelector('#courseSel');
+  if (csel) csel.onchange = () => switchCourse(csel.value);
 
   const ms = ROOT.querySelector('#metricSeg');
   if (ms) ms.querySelectorAll('button').forEach(b => b.onclick = (e) => { e.preventDefault(); STATE.metric = b.dataset.metric; rerender(); });

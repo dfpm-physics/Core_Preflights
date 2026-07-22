@@ -10,7 +10,7 @@
 //
 // tests/app-schema/test-db-schema.mjs fails when this file drifts from live.
 //
-// Source: scripts/app/gen_db_schema.py · schema `app` · 23 tables
+// Source: scripts/app/gen_db_schema.py · schema `app` · 24 tables
 // Shape per table: { name, comment, rls, primaryKey[], labelColumn, columns[], foreignKeys[],
 //                    enums{col:[values]}, policyCommands[], writable }
 //
@@ -3083,6 +3083,59 @@ export const DB_SCHEMA = {
       "policyCommands": [
         "ALL",
         "SELECT"
+      ],
+      "writable": true
+    },
+    "user_preferences": {
+      "name": "user_preferences",
+      "comment": "Per-user view preferences, keyed on the auth user id so one row serves a person across every device and both roles. PRESENTATION ONLY — never authorization, never grades. The user can write any value here (RLS is self-write), so no code may trust it for anything but rendering. localStorage remains the read-through cache; this table is what makes it survive a device change.",
+      "rls": true,
+      "primaryKey": [
+        "user_id"
+      ],
+      "labelColumn": "user_id",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "prefs",
+          "type": "jsonb",
+          "udt": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb",
+          "maxLength": null,
+          "generated": false,
+          "comment": "Open jsonb bag, keys namespaced to match their localStorage keys (cp.theme, cp.currentOffering, …). Deliberately schemaless: adding a preference must not require unsealing `app` for DDL.",
+          "pk": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [],
+      "enums": {},
+      "policyCommands": [
+        "DELETE",
+        "INSERT",
+        "SELECT",
+        "UPDATE"
       ],
       "writable": true
     }

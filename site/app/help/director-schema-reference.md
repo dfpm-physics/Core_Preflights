@@ -1,8 +1,12 @@
 PREP stores course data in four layers. The top two exist so that content can outlive the semester
 it was written for: a preflight is defined once and scheduled many times, rather than copied.
 
-The diagram shows every table, grouped by layer. Blue marks the four tables that carry the spine of
-the system — an assignment is defined, scheduled, worked, and graded.
+The diagram shows every table in those four layers. Blue marks the four that carry the spine of the
+system — an assignment is defined, scheduled, worked, and graded.
+
+Three tables sit outside the layers because they describe the *system* rather than the coursework:
+`grade_events` and `analysis_runs` are audit trails, and `user_preferences` holds one row of view
+settings per person. All three are covered further down; none of them can affect a grade.
 
 <svg class="schema-fig" viewBox="0 0 900 480" role="img" aria-label="The four layers of the PREP data model and the tables in each">
 
@@ -330,6 +334,17 @@ Reports are written by the analysis workflows, never by the website. Nothing her
 
 ## Two records that answer questions after the fact
 
+### analysis_runs
+
+One row per run of an AI workflow — `preflight-analyze`, `lesson-aggregate`, `lesson-cycle` —
+however it was started. The row is written **before** the work begins and updated when it ends, so a
+run that died part-way still leaves a trace; a row still marked `running` long afterwards is a
+crashed run, not a busy one.
+
+`invoked_by` separates a person typing the command from the scheduler firing it, which is usually
+the real question at 0400. Nothing signed in through the website can write here — an audit trail a
+user can append to is not an audit trail.
+
 ### grade_events
 
 Every change to a grade appends a row here — created, rescored, finalized, reopened, unlocked —
@@ -347,6 +362,22 @@ once all of its offerings are sealed.
 
 Freezing is what makes an interactive lesson safe to rebuild, so this is the check to run before
 starting work on the following semester.
+
+## Settings that follow a person
+
+### user_preferences
+
+One row per signed-in account, holding view settings — appearance, which course opens first, how the
+rollup draws its objective charts. Keyed on the sign-in account rather than on a cadet or an
+instructor record, so students and staff use the same table.
+
+**Everyone can read and write exactly their own row, and no one else's.** There is no staff read
+here and no system-admin override, unlike most of this schema: which theme a cadet uses is not
+course data, and a director reading another director's saved filters has no legitimate use.
+
+Nothing in it is ever consulted for permission. It decides what a page shows you *first*; what you
+are *allowed* to see is decided by the same rules as everything else in this document. Losing the
+row costs you your settings and nothing else.
 
 ## What the database will not allow
 

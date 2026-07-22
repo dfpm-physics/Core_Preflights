@@ -419,6 +419,76 @@ main { flex: 1 0 auto; }
 .stat-tile.accent-amber { --accent: #d97706; }
 
 /* ============================================================= *
+ *  Dashboard — due-out boxes (P1.6 / P1.15)                     *
+ * ============================================================= *
+ * One box per KIND of outstanding work, each a link to the page that clears it. Sized smaller
+ * than .stat-tile on purpose: the stat tiles are the lesson's numbers and should stay the
+ * loudest thing on the page, while this row is a to-do list that is empty most of the term. */
+/* Flex, not grid, and capped. A grid of auto-fit 1fr tracks stretches a LONE box across the whole
+   page — and one box is the normal case, since most of these sources are empty most of the term.
+   A single 1400px-wide card holding six words reads as a layout bug. Flex lets one box size to
+   ~420px and four wrap into a row. */
+.duo-row {
+  display: flex; flex-wrap: wrap; gap: 12px;
+}
+.duo-row > .duo-box { flex: 1 1 280px; max-width: 440px; }
+.duo-box {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--card); border: 1px solid var(--border);
+  border-left: 4px solid var(--accent, var(--blue-lt));
+  border-radius: var(--radius); padding: 13px 15px;
+  text-decoration: none; color: inherit;
+  transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+}
+.duo-box:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.duo-box:focus-visible { outline: 2px solid var(--accent, var(--blue-lt)); outline-offset: 2px; }
+.duo-ic {
+  width: 34px; height: 34px; border-radius: 10px; flex: none;
+  display: grid; place-items: center; font-size: 1.05em;
+  background: color-mix(in srgb, var(--accent, var(--blue-lt)) 16%, transparent);
+}
+.duo-n {
+  font-size: 1.35em; font-weight: 800; line-height: 1;
+  font-variant-numeric: tabular-nums; flex: none;
+}
+.duo-txt { font-size: 0.8em; color: var(--muted); line-height: 1.35; }
+/* Severity drives colour only — never order. A stalled overnight run and a grading backlog are
+   both red; which one matters more today is the reader's call, not the palette's. */
+.duo-box.sev-alert { --accent: var(--red); }
+.duo-box.sev-warn  { --accent: var(--gold); }
+.duo-box.sev-info  { --accent: var(--blue-lt); }
+
+/* Empty state. Deliberately one quiet line rather than a card: "you are done" should occupy
+   less of the page than the work would have, or the reward for clearing the list is a bigger
+   box saying nothing. */
+.duo-empty-wrap { margin-bottom: 22px; }
+.duo-empty {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 0.84em; color: var(--muted);
+  padding: 10px 14px; border-radius: var(--radius);
+  background: var(--surface-sunken); border: 1px solid var(--border);
+}
+.duo-empty-ic { color: var(--green); font-weight: 800; }
+
+.duo-loading { pointer-events: none; }
+.duo-skel {
+  height: 60px; flex: 1 1 280px; max-width: 440px; border-left-color: var(--border);
+  background: linear-gradient(90deg, var(--surface-sunken) 25%, var(--surface-hover) 50%, var(--surface-sunken) 75%);
+  background-size: 200% 100%; animation: duo-shimmer 1.2s linear infinite;
+}
+@keyframes duo-shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .duo-skel { animation: none; } }
+
+/* Course switcher + section scope select (P1.7) */
+.course-seg { margin-top: 10px; }
+.scope-sel, .course-seg select {
+  font: inherit; font-size: 0.8em; font-weight: 600; height: 32px;
+  padding: 0 26px 0 10px; width: auto; min-width: 150px;
+  border-radius: 8px; border: 1px solid var(--border);
+  background-color: var(--surface-sunken); color: var(--text);
+}
+
+/* ============================================================= *
  *  Dashboard — sections, to-do, roll-up                         *
  * ============================================================= */
 .dash-section { margin-bottom: 30px; }
@@ -523,6 +593,9 @@ input:focus, textarea:focus, select:focus {
 textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
 .field { margin-bottom: 18px; }
 .field-hint { font-size: 0.78em; color: var(--muted); margin-top: 4px; }
+/* Confirmation appended to a hint after a preference saves — green enough to read as success,
+   quiet enough not to become the loudest thing in the card. */
+.ok-note { color: var(--green); font-weight: 600; }
 .input-error { border-color: var(--red) !important; }
 .error-msg { font-size: 0.82em; color: var(--red); margin-top: 4px; }
 
@@ -707,6 +780,18 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
 /* axis ticks sit on group boundaries (absolute), so 0–5 ticks land in the inter-group gaps */
 .lr-fx { position: relative; height: 1.2em; margin-top: 5px; font-size: 0.68em; color: var(--muted); }
 .lr-fx span { position: absolute; top: 0; white-space: nowrap; }
+
+/* P1.5 — the integer-histogram rendering of the same 0–5 objective distribution.
+   Reuses the effort chart's .eff-* markup on purpose (that is the point: the two charts read as
+   one visual language), overriding only the size. .eff-wrap is built for a standalone panel at
+   min-height 150px; inside an objective row it has to sit in the same 54px band .lr-fine does,
+   or the objective list triples in height and stops being scannable. */
+.obj-hist.eff-wrap { min-height: 0; }
+.obj-hist .eff-bars { height: 54px; flex: none; padding-top: 12px; gap: 5px; }
+.obj-hist .eff-bar { border-radius: 5px 5px 2px 2px; }
+.obj-hist .eff-cnt { font-size: 0.66em; }
+.obj-hist .eff-x { gap: 5px; margin-top: 5px; }
+.obj-hist .eff-x span { font-size: 0.68em; font-weight: 500; }
 
 /* radar */
 .lr-radar { display: flex; justify-content: center; }

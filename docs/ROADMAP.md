@@ -4,6 +4,13 @@
 decisions and a verification pass against the code. Unlike `docs/decisions/`, this file is
 **refreshed, not superseded**. Update it as items land; do not fork a second copy.
 
+> **Ordering convention (2026-07-22):** the priority bands (§1–§4) hold **open work only**.
+> Finished items move to **[§8 Completed](#8-completed)**, grouped by the band they came from.
+> They are moved, never deleted — most of them record a *decision*, and that is what stops a
+> settled question being re-opened. Item numbers never change, so a reference to P0.9 still finds
+> P0.9 wherever it lives. An item that is *partly* done stays in its band, because it still has
+> work in it.
+
 *Authored 2026-07-22 by Casey (via Claude). Consolidates the outstanding-work sweep of the repo
 with the course director's feature requests and decisions. Companion to
 [`operations/PREP-V2-CUTOVER.md`](operations/PREP-V2-CUTOVER.md),
@@ -86,281 +93,36 @@ frozen contract URLs, delete the legacy root pages, push.
 
 </details>
 
-### P0.2 — Seal `prep_app_owner` · **S**
+### P0.2 — Seal `prep_app_owner`, and remove the test faculty account · **S**
 
 `ALTER ROLE prep_app_owner NOLOGIN;` as `postgres`. Flagged three separate times in CHANGELOG and
 never closed. **Human-only** — no agent role holds `CREATEROLE`. Do this *after* P0.1, since the
 cutover may still need DDL.
 
-### P0.3 — Revive the two dead DB test suites · ✅ **DONE 2026-07-22 (uncommitted)**
+**Sealing is also the moment the P0.5 test faculty account goes away.** Both are "close the door
+behind you" steps and neither should outlive the verification pass.
 
-Both died in fixture setup and therefore guarded nothing. Both now pass — **22/22 invariant checks,
-35/35 RLS enforcement checks.**
+**It is one step, not three.** Delete `prep.test.faculty@usafa.edu` in the Supabase dashboard
+(Authentication → Users) and the app rows go with it: `app.instructors.id` references
+`auth.users(id)` **ON DELETE CASCADE**, and `staff_assignments` cascades from `instructors` in
+turn. Verified against `pg_constraint` on 2026-07-22, after an earlier version of this entry
+claimed the opposite.
 
-- **`app_invariant_test.py`** — the fixture inserted a random uuid into `instructors`, which carries
-  an FK to `auth.users` that `postgres` added directly (the app owner cannot be delegated
-  `REFERENCES` on `auth.users`). `prep_app_dml` cannot create an auth user to satisfy it. Now
-  **borrows an existing instructor's id** — nothing is written to that account, the id is used only
-  as `unlocked_by` attribution, and the whole fixture is rolled back.
-- **`app_rls_test.py`** — three `extensions` inserts lacked `reason`, NOT NULL since `007`. The
-  crash was the visible half; **the dangerous half was silent.** Two of those inserts are
-  *expected to be denied*, so they were being rejected by the constraint before RLS was ever
-  consulted and reported "correctly denied" while testing nothing about the policy. A crash is
-  loud; a false pass is not. Also added a check that a blank reason is refused.
+Then confirm nothing was orphaned — it is a safe no-op if the cascade did its job:
 
-### P0.4 — Instructors can read the `__all__` whole-course scope · ✅ **RESOLVED 2026-07-22 — by a different decision**
+```
+.venv/Scripts/python scripts/test_faculty_account.py --status
+.venv/Scripts/python scripts/test_faculty_account.py --remove --commit   # only if --status found rows
+```
 
-The original recommendation was to stop an instructor's "All sections" from reading `__all__`. **The
-course director decided otherwise: All Sections stays visible to everyone**, and is simply no longer
-the default. That is their call to make — the whole-course read is useful context, and the panel was
-never a privacy boundary in the sense the sweep implied (RLS grants `analysis_reports` to any staff
-member of the offering regardless).
+*(Do not generalise the cascade: `app.students.auth_user_id` is **NO ACTION**. Deleting a cadet's
+auth user fails rather than tidying up.)*
 
-What actually shipped removes the *harm* without removing the *view*:
-
-- **"My sections" is the new default scope for everyone**, so nobody's first view is a cohort they
-  do not teach. That alone resolves the practical complaint.
-- **The readiness summary moved to instructor scope**, so what an instructor reads by default is
-  written about their own sections.
-- **When "All sections" is selected and the viewer cannot load the whole roster, the panel says so**
-  — `meta.n` (the true course-wide count) is compared to the rows actually summarized, and a mismatch
-  renders an explicit line. Previously whole-course prose sat silently above partial numbers.
-
-Still true, and still worth a deliberate decision: none of this is enforced in the database. See P3.9.
-
-### P0.5 — Verification pass in a browser · **M**
-
-Eight CHANGELOG entries record the same gap: **no faculty login is available to the automated
-harness**, so roster import, the review page, Grade/Roster, the rollup, and both new edge functions
-have never been exercised against the live database by a signed-in human.
-
-This is one session, not eight — a director walkthrough in light and dark mode as all three role
-tiers. Everything else in P0 should land first so the pass covers the shipped state.
-
-**Added 2026-07-22** — the four frontend fixes shipped that day are logic-verified and syntax-clean
-but **have not been looked at**, and each is a visual change that only an eye can confirm:
-
-- **Staff table** (P0.11) — rows equal height; your own row a disabled select; Role column no longer
-  stretched. Check as a director *and* as a global admin, whose row renders the third variant
-  (`implicit — no staff row`).
-- **Late chip + Late-only filter** (P0.12) — needs a genuinely late submission and one covered by an
-  extension, to confirm the second is *not* badged. Confirm the toggle is invisible when nothing is
-  late.
-- **Student responses** (P0.9) — 3 AI + 5 random = 8 cards, and the Shuffle control still reshuffles
-  only the random 5.
-- **KDE tuner** (P0.10) — absent from a plain rollup, present with `?kde=1` as a director, absent
-  with `?kde=1` as an instructor.
-
-### P0.6 — The four surfaces promotion deletes · ✅ **DONE 2026-07-22 (uncommitted)**
-
-| Surface | Outcome |
-|---|---|
-| Report tab copy-for-slides | **Already rebuilt** as the rollup's `.sr-*` panel — but it had **inherited the exact flaw the audit warned about** (below). Fixed. |
-| "Did Not Submit (N)" table | **Built** — did not exist in `site/app/` at all. Now a rollup panel, sorted by section then name, **copyable** (tab-separated for a spreadsheet), and linking to the Grade page where an extension is granted. Renders only when someone is missing. |
-| "Show flagged only" toggle on Grade | **Built** — one-click, driving the existing lamps (`full` off, `warn`+`zero` on) rather than becoming a competing third state. |
-| `site/review.html` | **Deleted by the promotion script** (`scripts/promote_app.py` `LEGACY`), per the audit: a re-enable away from a FERPA problem. |
-
-**The copy-for-slides privacy flaw, carried forward and now fixed.** The audit said of the legacy
-version: *"anonymity is cosmetic: names are in the DOM at `display:none`… If this is rebuilt, do not
-render names that are not meant to be shown."* The rollup panel had reproduced exactly that —
-`data-name` on every card plus a `hidden` attribution div — so a panel whose entire purpose is being
-**projected in a classroom** kept every student's name one devtools inspection, Ctrl+F, select-all or
-screen-reader pass away. Names are now not rendered at all unless the toggle is on; switching it
-re-renders (preserving the selection) rather than unhiding.
-
-### P0.7 — Remove every email-reset reference · ✅ **RESOLVED 2026-07-22 — mostly a non-issue**
-
-*Requested. On inspection this item was largely wrong, and acting on it as written would have made
-the system worse. Recorded in full so it is not "fixed" again later.*
-
-**What the sweep called a problem, and what it actually is:**
-
-| Flagged | Verdict |
-|---|---|
-| `site/app/reset.html` — "orphaned, delete it" | **KEPT.** It is not an email-reset flow; it is the page that tells a locked-out person there *is* no email reset and who to ask instead. Its own header explains why it outlived the flow: the login page linked there for a year, so bookmarks and history still point at it, and a 404 is the worst possible answer at the moment someone is locked out. Deleting it would remove the one thing that redirects them correctly. |
-| `DOC-SOURCES.json` listing `reset.html` as a source | **KEPT.** A correct dependency — `student-getting-started.md` was written from that page. Not a stale entry. |
-| Help docs mentioning reset | **KEPT.** Every mention is a *denial* ("PREP cannot email you a reset link", "there is no reset link to send"). They are the tombstones, correctly phrased. |
-| `tests/browser/test-account.html` | **KEPT.** Already carries a "Superseded 2026-07-21" banner and a comment reading *"Kept as the design record of the emailed-code flow, NOT as a picture of the system."* Deliberate archive. |
-| `tests/browser/test-admin.html` | **FIXED** — the one real defect. It rendered "Send reset email" with **no** supersession marker, unlike its sibling. Given the same banner, and its "Password operations" card relabelled `Planned` → `Superseded` (the email tier was removed; the system-admin tier was never built). |
-
-**The general lesson, worth keeping:** a reference to a removed feature is not automatically debt.
-A *denial* of it is documentation. Only an artifact that still presents the removed feature as
-available needed changing, and exactly one did.
-
-Left alone deliberately: the tombstone comments in `account.js:7-26` and `faculty-admin.js:139-158`,
-which explain *why* there is no email recovery — the thing a future operator will otherwise try to
-re-add.
-
-### P0.8 — AI prose is far too long · ✅ **DONE 2026-07-22**
-
-*Requested.* Length was the main tell. Resolved harder than scoped — one of the three panels was
-deleted rather than shortened.
-
-| Panel | Was | Now |
-|---|---|---|
-| `readiness_summary` | ≤ 8000 chars, multi-paragraph | **≤ 1200, 2–3 sentences**, enforced by the writer |
-| `misconception_trends` | ≤ 8000 chars, paragraphs | **Retired.** Not written, not rendered |
-| `misconception_recommendation` | ran long despite "one line" | **One imperative sentence**, ≤ 1200, single-paragraph check |
-| `section_notes[].note` *(new)* | — | ≤ 400 each, ≤ 12 |
-
-**Trends went away rather than shrinking** because the bars beneath it now carry each
-misconception's own description and student evidence (P0.13) — so the paragraph restating them had
-nothing left to say, while still costing an AI panel and a "coming soon" placeholder under
-fully-populated bars.
-
-**Caps are enforced in `lesson_aggregate.py`, not requested in prose** — an instruction to "be
-brief" is not a constraint. The skill also now bans the specific tells: no `Overall,` /
-`It's worth noting` openers, no three-item parallel lists, no restating the question back, no
-hedging stacks, and "name the physics" over "gaps in conceptual understanding".
-
-**Falsification (unchanged, and still owed):** show a director three rollups without saying which
-are new. If they cannot pick the rewritten ones, the caps were not the problem.
-
-### P0.9 — Student responses: 3 AI picks + 5 random · ✅ **DONE 2026-07-22**
-
-*Requested.* The panel capped itself at ~5 cards **total** via `randN = Math.max(0, 5 - ai.length)`,
-so every AI pick displaced a random one — meaning a well-analysed section showed the *least*
-unfiltered student writing. Inverted: the random sample is now a fixed 5, independent of the AI
-count, bounded only by the pool. The panel is 8 cards where the section has the material.
-
-- `report.html` `responsesSection()` — `RANDOM_N = 5`, `randN = Math.min(RANDOM_N, pool.length)`.
-  The eyebrow note and Shuffle control follow the real count.
-- `.ai/skills/lesson-aggregate/SKILL.md` — `selected_quotes` changed from "2-3 each" to **exactly
-  3**, in all four places it was stated, with an explicit note that emitting fewer now shrinks the
-  showcase without widening anything else, and that padding to 3 with a weak pick is wrong.
-
-**Unchanged by design:** quotes render on single-section scope only; `__all__` carries none.
-
-### P0.10 — Hide the histogram smoothing tuner, keep the code · ✅ **DONE 2026-07-22**
-
-*Requested.* `mountKdeTuner()` was mounted for **every** director on **every** rollup, where a
-floating panel of unexplained sliders reads as part of the product rather than the dev tool it is.
-
-Now reached by **`?kde=1` only**, still director-gated on top of that. Code untouched and fully
-working — it is the only thing that regenerates the KDE const line. To retune:
-`report.html?i=<slug>&kde=1`.
-
-Deliberately a query param rather than an account preference: it leaves no persisted state, so a
-director cannot switch it on, forget, and file the panel as a bug three weeks later.
-
-### P0.11 — Staff table row heights · ✅ **DONE 2026-07-22**
-
-*Requested, and confirmed as diagnosed.* Your own row rendered a `.score-badge` (~20px); every other
-row carried a `<select>` inheriting the global form rule `padding: 10px 14px` at `0.95em` (~40px)
-plus `width: 100%`. No `td select` override existed. Result: the one row you always look at was the
-odd one out, and the Role column stretched.
-
-Both halves fixed:
-
-- **`admin.html`** — your own row now renders the **same `<select>`, disabled**, instead of a badge.
-  Same box, no special case, and it states "you cannot change your own role" in the place the role
-  is changed. The change handler is scoped `[data-role-for]:not([disabled])`.
-- **`styles.css`** — new `.staff-tbl` block: `vertical-align: middle`, a `.role-cell` flex box with
-  `min-height: 30px` so the text-only *implicit* rows still occupy a select-sized cell, and a
-  compact in-table select (`width: auto; min-width: 128px; padding: 5px 8px`) following the existing
-  `.sec-assign select` house pattern.
-
-### P0.12 — A late submission is invisible on the grade card · ✅ **DONE 2026-07-22** · ⚠️ *filter to be removed — see P1.14*
-
-> **The "Late only" filter added here is being withdrawn** at the director's request the same day.
-> It answers the wrong question: an instructor does not want to filter a section down to late work,
-> they want a standing queue of the few submissions needing attention. **P1.14** replaces it. The
-> late *chip* on the card is expected to stay — it is context while grading, and is not what was
-> objected to.
-
-
-**Shipped:** a new `submissionLateness()` + `lateBy()` pair in `schema.js` (beside `effectiveDue`,
-which answers a different question — clock-vs-deadline, not commit-vs-deadline), an amber `⏰ N days
-late` chip on the grade card beside the extension chip, and a **Late only** filter that ANDs with
-the status lamps and hides itself entirely when nothing is late.
-
-**Extensions are honoured** — a student granted until Friday who submitted Thursday is not badged.
-That is the case the whole feature turns on, and it is covered by the harness below.
-
-Amber, not red: arriving late is a fact the grader should see, not a verdict. Whether it costs
-credit stays the instructor's call, and late work is routinely accepted by hand on purpose.
-
-*Verified:* 16/16 in a dedicated logic harness (on-time · 4-days-late · inside-extension ·
-past-extension · M/T section override both ways · draft · no-deadline · 30s clock-skew grace ·
-unparseable timestamp · label boundaries · `effectiveDue` regression guard), plus the full
-`tests/app-schema` suite green at 339/0. **Not yet seen in a browser** — folded into P0.5.
-
-<details><summary>Original diagnosis (kept for context)</summary>
-
-*The director asked "don't these show up in the Grade tab?" — they do, but you cannot tell which
-ones are late.*
-
-- `loadGradingData()` (`faculty-grade.js:93-103`) filters only by offering and enrolment. **Nothing
-  compares against `due_at`.**
-- The grade card (`grade.html:263-270`) renders name, section, finalized tag, provenance tag,
-  extension chip, total — **no lateness indicator.**
-- `committed_at` *is* fetched and shaped as `committedAt` (`schema.js:33-36`, `:154`) but is consumed
-  in exactly one place repo-wide (`student-lessons.js:107`). **It is never compared to a deadline
-  anywhere in the faculty UI.**
-- There is no late filter and no late sort — the only filters are the three full/warn/zero lamps
-  (`grade.html:336-368`), sorted alphabetically (`faculty-grade.js:86`).
-
-The data is already loaded, so this is a badge and a filter, not a query change. Compare
-`committedAt` against `effectiveDue()` — which already exists at `faculty-grade.js:552` and correctly
-accounts for extensions — and render a chip beside the extension chip.
-
-**In P0 because it affects grading from the first lesson**, it is small, and getting it wrong means
-an instructor silently gives full credit to work that arrived four days late.
-
-*(Note: the assignment-level `pastDueUngraded()` queue at `faculty-grade.js:506-571` already counts
-these correctly. The gap is purely per-submission visibility once you open the assignment.)*
-
-</details>
-
-### P0.13 — Rollup rework: scopes, self-explaining misconceptions, misconception bucketing · ✅ **DONE 2026-07-22**
-
-*Requested mid-stream, ahead of the P0.1 cutover. Groups several changes that share one payload
-contract.*
-
-**Display**
-- **"My sections" scope, default for everyone** — the sections you personally teach, combined.
-  `taughtSectionIds()` reads section-scoped staff rows only; a director's offering-wide row grants
-  sight of every section but is not a teaching assignment, so it does not count. Teach none → falls
-  back to All sections; teach all → the option is hidden as a duplicate.
-- **All sections** stays available to everyone, no longer the default (see P0.4).
-- **A single section shows its own numbers, quotes and recommendation, but its instructor's summary.**
-- **Every misconception bar explains itself** — hover or click for a popover carrying the
-  misconception's description, up to two verbatim (unattributed) student quotes, any coined ids that
-  folded onto it, and the canonical id. Keyboard- and touch-reachable: the row is a real `<button>`
-  with `aria-expanded`, Escape closes.
-- **"Show all N" toggle** on student responses — swaps the 5-card random sample for the entire pool,
-  AI picks still pinned on top. Reading every reflection previously meant opening students one at a
-  time.
-
-**Skill / data**
-- **The readiness summary is written per instructor**, across every section they teach, with
-  per-section departures as structured `section_notes[]` rendered with the section code in bold.
-  Two sections taught by one person used to get two isolated paragraphs that could not be compared.
-- **Misconception ids are canonicalized** at both counting sites — `canonMisconceptionId()` in JS and
-  the mirrored `re.sub` in `lesson_aggregate.py`. `scalar-sum`, `Scalar-Sum` and `scalar sum` were
-  three separate bars; reading-reflection topics had been trimmed and lowercased since day one while
-  ids never were.
-- **The clustering is finally persisted.** `/lesson-aggregate` was told to "fold novel ones into
-  known buckets" but had nowhere to put the fold, so it was written as prose and discarded — the bars
-  it sat under never changed and the work was redone every run. New offering-level
-  `misconception_aliases` (variant → canonical) and `misconception_glossary` maps, merged across
-  day-scoped runs, applied by the browser at render time.
-- **`/preflight-analyze` matches before it coins.** A four-step resolution order, the first step
-  being *query the ids already recorded against this assignment across every offering and term* —
-  a self-maintaining bucket that grows as lessons are analyzed. Nothing validates a misconception
-  id anywhere in the system, and the taxonomy covers 3 lessons of ~74, so the pressure to invent was
-  constant and unchecked.
-- **`description` and `evidence` survive to the cohort view.** Both producers emitted them, the
-  aggregator received them, and both counting sites dropped them — which is why a bar could show
-  `57%` and nothing about what the misconception was.
-
-*Verified:* `test-rollup.mjs` 160/0 (30 new, covering canonicalization, alias folds, glossary
-backfill, instructor scopes, and `taughtSectionIds`) · `aggregate_summarize_test.py` ALL PASS with a
-new JS↔Python parity block · full `tests/app-schema` run exit 0. **Two real bugs were caught by
-those parity tests**, not by review: the variant list compared only lowercase while the id also
-collapses whitespace, so `scalar sum` was reported as a "variant" of the id it normalizes to.
-
-**Not yet seen in a browser** — folded into P0.5.
+**Also delete the two dead auth users from the 2026-07-22 attempts** —
+`befe1026-2034-4cbc-908d-911eb319cd03` (unconfirmed, from the signup probe) and
+`bb18a447-a52a-41e4-abeb-0797777060d4`, if either still exists. Their app rows are already gone.
+Worth doing sooner than the seal: **duplicate unconfirmed users on the same address are the most
+likely reason the second account would not authenticate with a correctly copy-pasted password.**
 
 ---
 
@@ -442,22 +204,6 @@ table. Two ideas there are worth taking wholesale:
 **FERPA note:** this page concentrates everything about one cadet on one screen. Instructor access
 must be section-scoped in **RLS**, not just in the UI.
 
-### P1.3 — Persist user and account settings · **M**
-
-*Requested.* Today preferences are **localStorage only** and `account.js:182-194` says so
-deliberately: `cp.theme`, `cp.currentOffering`, a nav-open key, and run-banner dismissals. Nothing
-survives a device change.
-
-Recommended: an `app.user_preferences` table keyed on the auth user id, with RLS restricted to self,
-and a single jsonb `prefs` column so adding a preference is not a migration.
-
-**Keep localStorage as a write-through cache.** The theme is read by an inline anti-FOUC script at
-line 7 of *every* HTML file, before any module loads — a DB round-trip there would reintroduce the
-flash. Write both; read local first, reconcile from the DB after sign-in.
-
-This item is a **dependency for P1.5** (the understanding-histogram toggle) and for any per-user
-gradebook column preferences.
-
 ### P1.4 — EI (Extra Instruction) logging, single and bulk · **M**
 
 *Requested.* On the student detail page, a button opens a modal prefilled with **today's date, the
@@ -479,42 +225,6 @@ their own** (director's decision; additive to open later, breaking to close).
 
 Timezone: reuse the `zoneinfo` America/Denver handling from
 `scripts/fall2026/build_fall_preflights.py`. Store UTC, render local.
-
-### P1.5 — Understanding-by-objective as an integer histogram · **M**
-
-*Requested.* Replace the current per-objective rows (`report.html:639-653`) with an integer
-histogram matching the effort histogram (`effortChart`, `report.html:601`), **with an account
-preference to switch back to the current style. Default off for everyone.**
-
-Both are computed locally in `faculty-rollup.js` from `report_data` — no AI text, no schema change,
-so this is presentation only. **Depends on P1.3** (nowhere to store the toggle otherwise).
-
-### P1.6 — Dashboard: outstanding tasks panel · **M**
-
-*Requested.* A per-user task list. The director notes none of these tasks exist yet — so the
-deliverable is **the surface and its plumbing**, with sources registered as they appear.
-
-Likely first sources, all of which already exist as data:
-- Lessons past due with ungraded submissions (`lesson_aggregate.py worklist` already answers this)
-- Grades suggested by AI but not finalized (`is_finalized=false`)
-- Sections with no staff assigned (Section Coverage already computes this)
-- A failed or stuck analysis run (`analysis_runs`, already surfaced by the run banner)
-
-Design it as a registry — each source contributes `{severity, text, link, count}` — so adding a
-source later is not a rewrite. Take the **empty state** seriously: `djGradebookProject` gives every
-dashboard widget a cheerful one ("All caught up!"), and a task panel blank half the term needs one.
-
-### P1.7 — Dashboard course switcher · **S**
-
-*Requested.* The dashboard delegates course switching to the global nav
-(`dashboard.html:29`); the director wants inline buttons like the rollup's section switcher.
-
-Copy `renderScope()` (`report.html:179-197`) — it is already the right component: a `.seg`
-segmented group below a threshold, falling back to a `<select>` with counts above it. Point it at
-`ctx.courses` and `ctx.setCurrentOffering()`.
-
-Its current section control (`faculty-dashboard.js:264-267`) only toggles all-vs-mine and cannot
-pick an individual section — worth fixing in the same pass.
 
 ### P1.8 — EI stats on the dashboard · **S**
 
@@ -596,26 +306,6 @@ per-student and open by default.
 **Why this is P1 and not P0:** nothing is broken without it — late work is gradable today, just
 awkwardly. It becomes urgent the first week extensions are actually granted.
 
-### P1.15 — Dashboard: due-out boxes · **M** · *requested 2026-07-22 — supersedes part of P1.6*
-
-A row of boxes at the top of the faculty dashboard, one per **type** of outstanding work, each with
-a count. Clicking one goes to the page that clears it. Not one box per item — one per kind.
-
-Likely types, all of which already have a data source:
-
-| Box | Source | Goes to |
-|---|---|---|
-| Late / expired-extension work to grade | `extensionsToGrade()`, `pastDueUngraded()` | Grade (P1.14's queue) |
-| AI-suggested grades not finalized | `grades.is_finalized = false` | Grade |
-| Lessons past due, not yet aggregated | `lesson_aggregate.py worklist` | the rollup |
-| Sections with no staff assigned | Section Coverage | Course Admin |
-| A failed or stuck analysis run | `analysis_runs` | already the run banner |
-
-This is the concrete form of P1.6's "outstanding tasks panel" — build it as the registry P1.6
-describes (`{severity, text, link, count}`) so a new type is a registration, not a rewrite. **Zero is
-the common state for most of these most of the term**, so a box at zero should disappear rather than
-sit there reading `0`.
-
 ### P1.12 — Bulk / whole-section extensions · ✅ **PARTLY DONE 2026-07-22** — granting moved onto the rollup
 
 *Bulk granting now exists, on the rollup — where the list of who needs one already was.*
@@ -634,33 +324,6 @@ collapsing into one rejected promise.
 **Still open:** a *whole-section* grant that does not go through the not-submitted list — e.g.
 extending every student in a section after a cancelled class, including those who already submitted.
 And `faculty/extensions.html` remains **read + revoke only**; it is the natural home for that.
-
-### P1.13 — Container for unrecognized flags · ✅ **DONE 2026-07-22**
-
-*Director's Q4 decision: surface unknown flags in the summary so an instructor can see what the AI
-writing them was thinking.* Gap confirmed as scoped — the pill bar's 5-key whitelist, the rollup's
-two booleans, and a single hard-coded `flags.note` read in the student panel.
-
-- **`residualFlags()`** in `faculty-rollup.js` returns `[key, detail]` pairs for anything outside the
-  recognized set (`needs_follow_up`, `notable`, `note`). A `false`/null/empty value is a flag the
-  producer **cleared**, not raised, and is dropped — otherwise `{suspected_ai: false}` on every
-  student would read as a cohort-wide flag.
-- **"Other flags"** row in the student panel, rendered verbatim and **unstyled** — presenting an
-  unrecognized flag in the vocabulary of the recognized ones would assert a meaning PREP has not
-  agreed to.
-- **A neutral pill**, named by the keys actually coined. *This exceeds the original wording
-  ("uncounted and unstyled")* — a container reachable only by opening students at random would make
-  the taxonomy work no more observable than dropping the flags. Counted per student to match the
-  modal it opens; kept out of the recognized tallies.
-- `summarizeReports()` now returns `flags.other` and `flags.otherStudents`.
-
-*Verified:* `test-rollup.mjs` **190/0** (30 new) · full `tests/app-schema` exit 0. **Not yet seen in
-a browser** — folded into P0.5.
-
-Still the **cheap half of P3.3**, and the taxonomy work is now observable before the taxonomy exists.
-Deliberately left: `lesson_aggregate.py`'s Python `summarize()` still tallies only the two recognized
-booleans — teaching the aggregator to write prose about flags whose meaning is undefined belongs with
-P3.3, not ahead of it.
 
 ---
 
@@ -925,7 +588,7 @@ port-status rows · `site/app/README.md` "Not yet ported" · `student/interactio
 | All three `prep_app_*` roles carry `BYPASSRLS`, including the SELECT-only read role | CHANGELOG:704 | The read role should not bypass RLS |
 | `main` predates the `extensions.reason` NOT NULL constraint | CHANGELOG:706-709 | Harmless today (zero extensions); resolved by P0.1 |
 | Edge functions never exercised on a successful path | CHANGELOG:473-475 | Covered by P0.5 |
-| Remove `scripts/training/seed_training_preflight02.py` data | script header | **Before the real roster upload** — ordering matters |
+| Remove `scripts/training/seed_training_preflight02.py` data | script header | **Before the real roster upload** — ordering matters. Sharper than recorded: the seed draws from a small template pool, so **16 distinct answers are shared by up to 4 students each**. The rollup's showcase panel therefore renders visibly duplicate quotes (seen during P0.5), which reads as a sampler bug and is not one |
 | Five help docs still carry the "Starter stub" blockquote | docs-author SKILL.md:155-160 | `ai-and-your-work.md` needs director review before term |
 | `$PREP_CONFIG` neutralization (decided, not executed) | CORE.md:162-165 | One coordinated PR across every script + skill + doc |
 | No spacing/size scale token — padding is hand-tuned px | DESIGN.md:487-491 | Radius, shadow, color are tokenized; spacing is not |
@@ -1009,10 +672,29 @@ that would have taken a live course offering down, and the other silently hid mo
 verify step. Both were **S** and neither needed the database. Note the pattern: each was *worse than
 the roadmap recorded* once read against the code, so treat a §5 row as a lead, not a spec.
 
-**Next: P0.1 (cutover) and P0.3 (test suites) together.** The suites are the only proof that the
-schema the cutover promotes is safe, and they are still red — note this is the `supabase/admin/`
-pair (`app_invariant_test.py`, `app_rls_test.py`), *not* `tests/app-schema`, which passes 339/0.
-Then **P0.5's browser pass**, which now also covers the four fixes above.
+**Also 2026-07-22 (fourth batch):** **P1.3 · P1.5 · P1.6 (with P1.15) · P1.7** — preferences that
+follow the person, the objective histogram, the due-out panel, and the dashboard's two scope
+controls. P1.3 needed the DDL window that was already open, so it landed while the seal was off;
+the other three are frontend only. A `tests/browser-harness/` was built alongside them and is what
+makes P0.5 a repeatable session rather than a one-off.
+
+**P0.5 is done** — the walkthrough ran as all three role tiers in light and dark, 11/11 pages clean
+each time, plus 13/11/13 targeted assertions. Seven items' worth of never-looked-at UI is now
+looked at. Two things it could not reach are recorded in the entry: the late chip has nothing late
+to render (re-check in week one, with P1.14), and the two student-account edge functions need a
+disposable *cadet*, not a disposable instructor.
+
+**Two P0 items remain, and they are the same job.**
+
+**P0.1 (cutover) and P0.3 (test suites) go together.** The suites are the only proof that the schema
+the cutover promotes is safe — note this is the `supabase/admin/` pair (`app_invariant_test.py`,
+`app_rls_test.py`, both green at 22/22 and 35/35), *not* `tests/app-schema`, which passes 339/0.
+Everything the promotion touches has now been seen in a browser, which was the last thing standing
+between "prepared" and "run it".
+
+**Then P0.2 closes two doors, not one:** seal `prep_app_owner` *and* delete the test faculty
+account. Deleting the auth user is enough — `instructors` cascades from `auth.users` — but do the
+stray unconfirmed users at the same time.
 
 **P1.1's blocker is gone** — the 2-point scale is already uniform across both modalities, so the
 gradebook is now a rendering-and-performance problem rather than a grading-policy one. Fix the stale
@@ -1020,3 +702,515 @@ gradebook is now a rendering-and-performance problem rather than a grading-polic
 
 **Start P2.1 (Blackboard) during P1.** Its risk is entirely in round-trip testing with a real file,
 and that lead time cannot be compressed at term end.
+
+---
+
+## 8. Completed
+
+*Everything here is done. It is kept in full rather than deleted because most of these entries
+record a **decision** — why something was built the way it was, or why a request turned out to be
+wrong — and that is the part which stops the same question being re-opened in three weeks. Items
+keep their original numbers, so a reference to P0.9 still finds P0.9.*
+
+### P0 — was ship-blocking for 2026-08-10
+
+#### P0.3 — Revive the two dead DB test suites · ✅ **DONE 2026-07-22 (uncommitted)**
+
+Both died in fixture setup and therefore guarded nothing. Both now pass — **22/22 invariant checks,
+35/35 RLS enforcement checks.**
+
+- **`app_invariant_test.py`** — the fixture inserted a random uuid into `instructors`, which carries
+  an FK to `auth.users` that `postgres` added directly (the app owner cannot be delegated
+  `REFERENCES` on `auth.users`). `prep_app_dml` cannot create an auth user to satisfy it. Now
+  **borrows an existing instructor's id** — nothing is written to that account, the id is used only
+  as `unlocked_by` attribution, and the whole fixture is rolled back.
+- **`app_rls_test.py`** — three `extensions` inserts lacked `reason`, NOT NULL since `007`. The
+  crash was the visible half; **the dangerous half was silent.** Two of those inserts are
+  *expected to be denied*, so they were being rejected by the constraint before RLS was ever
+  consulted and reported "correctly denied" while testing nothing about the policy. A crash is
+  loud; a false pass is not. Also added a check that a blank reason is refused.
+
+#### P0.4 — Instructors can read the `__all__` whole-course scope · ✅ **RESOLVED 2026-07-22 — by a different decision**
+
+The original recommendation was to stop an instructor's "All sections" from reading `__all__`. **The
+course director decided otherwise: All Sections stays visible to everyone**, and is simply no longer
+the default. That is their call to make — the whole-course read is useful context, and the panel was
+never a privacy boundary in the sense the sweep implied (RLS grants `analysis_reports` to any staff
+member of the offering regardless).
+
+What actually shipped removes the *harm* without removing the *view*:
+
+- **"My sections" is the new default scope for everyone**, so nobody's first view is a cohort they
+  do not teach. That alone resolves the practical complaint.
+- **The readiness summary moved to instructor scope**, so what an instructor reads by default is
+  written about their own sections.
+- **When "All sections" is selected and the viewer cannot load the whole roster, the panel says so**
+  — `meta.n` (the true course-wide count) is compared to the rows actually summarized, and a mismatch
+  renders an explicit line. Previously whole-course prose sat silently above partial numbers.
+
+Still true, and still worth a deliberate decision: none of this is enforced in the database. See P3.9.
+
+#### P0.6 — The four surfaces promotion deletes · ✅ **DONE 2026-07-22 (uncommitted)**
+
+| Surface | Outcome |
+|---|---|
+| Report tab copy-for-slides | **Already rebuilt** as the rollup's `.sr-*` panel — but it had **inherited the exact flaw the audit warned about** (below). Fixed. |
+| "Did Not Submit (N)" table | **Built** — did not exist in `site/app/` at all. Now a rollup panel, sorted by section then name, **copyable** (tab-separated for a spreadsheet), and linking to the Grade page where an extension is granted. Renders only when someone is missing. |
+| "Show flagged only" toggle on Grade | **Built** — one-click, driving the existing lamps (`full` off, `warn`+`zero` on) rather than becoming a competing third state. |
+| `site/review.html` | **Deleted by the promotion script** (`scripts/promote_app.py` `LEGACY`), per the audit: a re-enable away from a FERPA problem. |
+
+**The copy-for-slides privacy flaw, carried forward and now fixed.** The audit said of the legacy
+version: *"anonymity is cosmetic: names are in the DOM at `display:none`… If this is rebuilt, do not
+render names that are not meant to be shown."* The rollup panel had reproduced exactly that —
+`data-name` on every card plus a `hidden` attribution div — so a panel whose entire purpose is being
+**projected in a classroom** kept every student's name one devtools inspection, Ctrl+F, select-all or
+screen-reader pass away. Names are now not rendered at all unless the toggle is on; switching it
+re-renders (preserving the selection) rather than unhiding.
+
+#### P0.7 — Remove every email-reset reference · ✅ **RESOLVED 2026-07-22 — mostly a non-issue**
+
+*Requested. On inspection this item was largely wrong, and acting on it as written would have made
+the system worse. Recorded in full so it is not "fixed" again later.*
+
+**What the sweep called a problem, and what it actually is:**
+
+| Flagged | Verdict |
+|---|---|
+| `site/app/reset.html` — "orphaned, delete it" | **KEPT.** It is not an email-reset flow; it is the page that tells a locked-out person there *is* no email reset and who to ask instead. Its own header explains why it outlived the flow: the login page linked there for a year, so bookmarks and history still point at it, and a 404 is the worst possible answer at the moment someone is locked out. Deleting it would remove the one thing that redirects them correctly. |
+| `DOC-SOURCES.json` listing `reset.html` as a source | **KEPT.** A correct dependency — `student-getting-started.md` was written from that page. Not a stale entry. |
+| Help docs mentioning reset | **KEPT.** Every mention is a *denial* ("PREP cannot email you a reset link", "there is no reset link to send"). They are the tombstones, correctly phrased. |
+| `tests/browser/test-account.html` | **KEPT.** Already carries a "Superseded 2026-07-21" banner and a comment reading *"Kept as the design record of the emailed-code flow, NOT as a picture of the system."* Deliberate archive. |
+| `tests/browser/test-admin.html` | **FIXED** — the one real defect. It rendered "Send reset email" with **no** supersession marker, unlike its sibling. Given the same banner, and its "Password operations" card relabelled `Planned` → `Superseded` (the email tier was removed; the system-admin tier was never built). |
+
+**The general lesson, worth keeping:** a reference to a removed feature is not automatically debt.
+A *denial* of it is documentation. Only an artifact that still presents the removed feature as
+available needed changing, and exactly one did.
+
+Left alone deliberately: the tombstone comments in `account.js:7-26` and `faculty-admin.js:139-158`,
+which explain *why* there is no email recovery — the thing a future operator will otherwise try to
+re-add.
+
+#### P0.8 — AI prose is far too long · ✅ **DONE 2026-07-22**
+
+*Requested.* Length was the main tell. Resolved harder than scoped — one of the three panels was
+deleted rather than shortened.
+
+| Panel | Was | Now |
+|---|---|---|
+| `readiness_summary` | ≤ 8000 chars, multi-paragraph | **≤ 1200, 2–3 sentences**, enforced by the writer |
+| `misconception_trends` | ≤ 8000 chars, paragraphs | **Retired.** Not written, not rendered |
+| `misconception_recommendation` | ran long despite "one line" | **One imperative sentence**, ≤ 1200, single-paragraph check |
+| `section_notes[].note` *(new)* | — | ≤ 400 each, ≤ 12 |
+
+**Trends went away rather than shrinking** because the bars beneath it now carry each
+misconception's own description and student evidence (P0.13) — so the paragraph restating them had
+nothing left to say, while still costing an AI panel and a "coming soon" placeholder under
+fully-populated bars.
+
+**Caps are enforced in `lesson_aggregate.py`, not requested in prose** — an instruction to "be
+brief" is not a constraint. The skill also now bans the specific tells: no `Overall,` /
+`It's worth noting` openers, no three-item parallel lists, no restating the question back, no
+hedging stacks, and "name the physics" over "gaps in conceptual understanding".
+
+**Falsification (unchanged, and still owed):** show a director three rollups without saying which
+are new. If they cannot pick the rewritten ones, the caps were not the problem.
+
+#### P0.9 — Student responses: 3 AI picks + 5 random · ✅ **DONE 2026-07-22**
+
+*Requested.* The panel capped itself at ~5 cards **total** via `randN = Math.max(0, 5 - ai.length)`,
+so every AI pick displaced a random one — meaning a well-analysed section showed the *least*
+unfiltered student writing. Inverted: the random sample is now a fixed 5, independent of the AI
+count, bounded only by the pool. The panel is 8 cards where the section has the material.
+
+- `report.html` `responsesSection()` — `RANDOM_N = 5`, `randN = Math.min(RANDOM_N, pool.length)`.
+  The eyebrow note and Shuffle control follow the real count.
+- `.ai/skills/lesson-aggregate/SKILL.md` — `selected_quotes` changed from "2-3 each" to **exactly
+  3**, in all four places it was stated, with an explicit note that emitting fewer now shrinks the
+  showcase without widening anything else, and that padding to 3 with a weak pick is wrong.
+
+**Unchanged by design:** quotes render on single-section scope only; `__all__` carries none.
+
+#### P0.10 — Hide the histogram smoothing tuner, keep the code · ✅ **DONE 2026-07-22**
+
+*Requested.* `mountKdeTuner()` was mounted for **every** director on **every** rollup, where a
+floating panel of unexplained sliders reads as part of the product rather than the dev tool it is.
+
+Now reached by **`?kde=1` only**, still director-gated on top of that. Code untouched and fully
+working — it is the only thing that regenerates the KDE const line. To retune:
+`report.html?i=<slug>&kde=1`.
+
+Deliberately a query param rather than an account preference: it leaves no persisted state, so a
+director cannot switch it on, forget, and file the panel as a bug three weeks later.
+
+#### P0.11 — Staff table row heights · ✅ **DONE 2026-07-22**
+
+*Requested, and confirmed as diagnosed.* Your own row rendered a `.score-badge` (~20px); every other
+row carried a `<select>` inheriting the global form rule `padding: 10px 14px` at `0.95em` (~40px)
+plus `width: 100%`. No `td select` override existed. Result: the one row you always look at was the
+odd one out, and the Role column stretched.
+
+Both halves fixed:
+
+- **`admin.html`** — your own row now renders the **same `<select>`, disabled**, instead of a badge.
+  Same box, no special case, and it states "you cannot change your own role" in the place the role
+  is changed. The change handler is scoped `[data-role-for]:not([disabled])`.
+- **`styles.css`** — new `.staff-tbl` block: `vertical-align: middle`, a `.role-cell` flex box with
+  `min-height: 30px` so the text-only *implicit* rows still occupy a select-sized cell, and a
+  compact in-table select (`width: auto; min-width: 128px; padding: 5px 8px`) following the existing
+  `.sec-assign select` house pattern.
+
+#### P0.12 — A late submission is invisible on the grade card · ✅ **DONE 2026-07-22** · ⚠️ *filter to be removed — see P1.14*
+
+> **The "Late only" filter added here is being withdrawn** at the director's request the same day.
+> It answers the wrong question: an instructor does not want to filter a section down to late work,
+> they want a standing queue of the few submissions needing attention. **P1.14** replaces it. The
+> late *chip* on the card is expected to stay — it is context while grading, and is not what was
+> objected to.
+
+
+**Shipped:** a new `submissionLateness()` + `lateBy()` pair in `schema.js` (beside `effectiveDue`,
+which answers a different question — clock-vs-deadline, not commit-vs-deadline), an amber `⏰ N days
+late` chip on the grade card beside the extension chip, and a **Late only** filter that ANDs with
+the status lamps and hides itself entirely when nothing is late.
+
+**Extensions are honoured** — a student granted until Friday who submitted Thursday is not badged.
+That is the case the whole feature turns on, and it is covered by the harness below.
+
+Amber, not red: arriving late is a fact the grader should see, not a verdict. Whether it costs
+credit stays the instructor's call, and late work is routinely accepted by hand on purpose.
+
+*Verified:* 16/16 in a dedicated logic harness (on-time · 4-days-late · inside-extension ·
+past-extension · M/T section override both ways · draft · no-deadline · 30s clock-skew grace ·
+unparseable timestamp · label boundaries · `effectiveDue` regression guard), plus the full
+`tests/app-schema` suite green at 339/0. **Not yet seen in a browser** — folded into P0.5.
+
+<details><summary>Original diagnosis (kept for context)</summary>
+
+*The director asked "don't these show up in the Grade tab?" — they do, but you cannot tell which
+ones are late.*
+
+- `loadGradingData()` (`faculty-grade.js:93-103`) filters only by offering and enrolment. **Nothing
+  compares against `due_at`.**
+- The grade card (`grade.html:263-270`) renders name, section, finalized tag, provenance tag,
+  extension chip, total — **no lateness indicator.**
+- `committed_at` *is* fetched and shaped as `committedAt` (`schema.js:33-36`, `:154`) but is consumed
+  in exactly one place repo-wide (`student-lessons.js:107`). **It is never compared to a deadline
+  anywhere in the faculty UI.**
+- There is no late filter and no late sort — the only filters are the three full/warn/zero lamps
+  (`grade.html:336-368`), sorted alphabetically (`faculty-grade.js:86`).
+
+The data is already loaded, so this is a badge and a filter, not a query change. Compare
+`committedAt` against `effectiveDue()` — which already exists at `faculty-grade.js:552` and correctly
+accounts for extensions — and render a chip beside the extension chip.
+
+**In P0 because it affects grading from the first lesson**, it is small, and getting it wrong means
+an instructor silently gives full credit to work that arrived four days late.
+
+*(Note: the assignment-level `pastDueUngraded()` queue at `faculty-grade.js:506-571` already counts
+these correctly. The gap is purely per-submission visibility once you open the assignment.)*
+
+</details>
+
+#### P0.13 — Rollup rework: scopes, self-explaining misconceptions, misconception bucketing · ✅ **DONE 2026-07-22**
+
+*Requested mid-stream, ahead of the P0.1 cutover. Groups several changes that share one payload
+contract.*
+
+**Display**
+- **"My sections" scope, default for everyone** — the sections you personally teach, combined.
+  `taughtSectionIds()` reads section-scoped staff rows only; a director's offering-wide row grants
+  sight of every section but is not a teaching assignment, so it does not count. Teach none → falls
+  back to All sections; teach all → the option is hidden as a duplicate.
+- **All sections** stays available to everyone, no longer the default (see P0.4).
+- **A single section shows its own numbers, quotes and recommendation, but its instructor's summary.**
+- **Every misconception bar explains itself** — hover or click for a popover carrying the
+  misconception's description, up to two verbatim (unattributed) student quotes, any coined ids that
+  folded onto it, and the canonical id. Keyboard- and touch-reachable: the row is a real `<button>`
+  with `aria-expanded`, Escape closes.
+- **"Show all N" toggle** on student responses — swaps the 5-card random sample for the entire pool,
+  AI picks still pinned on top. Reading every reflection previously meant opening students one at a
+  time.
+
+**Skill / data**
+- **The readiness summary is written per instructor**, across every section they teach, with
+  per-section departures as structured `section_notes[]` rendered with the section code in bold.
+  Two sections taught by one person used to get two isolated paragraphs that could not be compared.
+- **Misconception ids are canonicalized** at both counting sites — `canonMisconceptionId()` in JS and
+  the mirrored `re.sub` in `lesson_aggregate.py`. `scalar-sum`, `Scalar-Sum` and `scalar sum` were
+  three separate bars; reading-reflection topics had been trimmed and lowercased since day one while
+  ids never were.
+- **The clustering is finally persisted.** `/lesson-aggregate` was told to "fold novel ones into
+  known buckets" but had nowhere to put the fold, so it was written as prose and discarded — the bars
+  it sat under never changed and the work was redone every run. New offering-level
+  `misconception_aliases` (variant → canonical) and `misconception_glossary` maps, merged across
+  day-scoped runs, applied by the browser at render time.
+- **`/preflight-analyze` matches before it coins.** A four-step resolution order, the first step
+  being *query the ids already recorded against this assignment across every offering and term* —
+  a self-maintaining bucket that grows as lessons are analyzed. Nothing validates a misconception
+  id anywhere in the system, and the taxonomy covers 3 lessons of ~74, so the pressure to invent was
+  constant and unchecked.
+- **`description` and `evidence` survive to the cohort view.** Both producers emitted them, the
+  aggregator received them, and both counting sites dropped them — which is why a bar could show
+  `57%` and nothing about what the misconception was.
+
+*Verified:* `test-rollup.mjs` 160/0 (30 new, covering canonicalization, alias folds, glossary
+backfill, instructor scopes, and `taughtSectionIds`) · `aggregate_summarize_test.py` ALL PASS with a
+new JS↔Python parity block · full `tests/app-schema` run exit 0. **Two real bugs were caught by
+those parity tests**, not by review: the variant list compared only lowercase while the id also
+collapses whitespace, so `scalar sum` was reported as a "variant" of the id it normalizes to.
+
+**Not yet seen in a browser** — folded into P0.5.
+
+---
+
+### P1 — first weeks of term
+
+#### P1.3 — Persist user and account settings · ✅ **DONE 2026-07-22**
+
+Built as scoped. `app.user_preferences` (migration `010`, **applied**) — `user_id` PK, one jsonb
+`prefs`, RLS self-only on all four verbs. `site/app/js/prefs.js` is the write-through cache:
+localStorage stays the read path, the row is the durability path, `hydrate()` runs inside
+`bootstrap()` before anything reads a preference.
+
+**Three things worth knowing that the scoping did not anticipate:**
+
+- **"Match my system" was broken, and this is what surfaced it.** `setTheme('system')` stored the
+  literal string `'system'`, which the anti-FOUC snippet read as *neither* null *nor* `'dark'` —
+  so it painted light. Choosing "Match my system" has meant "always light" for as long as the
+  control has existed. Absence is now the encoding, which is what the snippet always expected.
+- **The policies cannot call `auth.uid()`.** The app tier has no privileges on schema `auth` at
+  all, so a policy written that way fails at CREATE time. `002_rls.sql` already solved it with
+  `app.current_uid()`, reading the same JWT claim. Same boundary as P0.5's blocker, from the
+  other direction.
+- **`prefs.js` must import `supabase.js` lazily.** A static import gave `theme.js` — and therefore
+  `nav.js`, and therefore every page's chrome — a hard dependency on a live client just to read a
+  cached theme. Two existing suites caught it immediately. Same pattern `run-banner.js` documents.
+
+**Not synced, deliberately:** the nav-open key, run-banner dismissals, and the System > Data column
+picker. The test is whether a setting describes the *person* or the *device*; a sidebar width does
+not follow you to another machine.
+
+*Verified:* `test-prefs.mjs` 28/0 — including a live round-trip and the RLS re-key attack the
+UPDATE policy's WITH CHECK exists to stop — plus full `tests/app-schema` 339/0. **Also verified in
+a real browser:** a signed-in page load wrote `cp.currentOffering` to the row.
+
+#### P1.5 — Understanding-by-objective as an integer histogram · ✅ **DONE 2026-07-22**
+
+Built as scoped, on top of P1.3. `objIntChart()` reuses `effortChart()`'s exact markup, ramp and
+metrics — that is the requirement, not a coincidence, so anything that changes there must change
+here. `objChart()` dispatches on `cp.rollup.understanding`; the account page carries the control.
+
+**The default is the histogram and the curve is the opt-in** (`'curve'`), which is what "default
+off" meant. The argument for flipping it: the effort chart directly above is an integer histogram
+of the *same* 0–5 measure, and drawing the two in different visual languages invites a reader to
+assume they are different kinds of quantity. They are not — both are counts of students per score.
+
+The KDE curve is kept and fully working. It genuinely reads better for a large cohort where the
+integer bars go spiky, and the `?kde=1` tuner (P0.10) still tunes it.
+
+*Verified:* `node --check`, full suite 339/0. **Not yet seen in a browser** — folded into P0.5.
+
+#### P1.6 — Dashboard: outstanding tasks panel · ✅ **DONE 2026-07-22** — *and it is also P1.15*
+
+Built as the registry P1.6 describes, rendered in the shape P1.15 asked for, because P1.15 says to.
+Treating them as two items would have produced two panels answering one question.
+
+`site/app/js/faculty-tasks.js` — `SOURCES` is an array of `{id, severity, icon, director, load()}`,
+and adding the sixth is an entry, not a rewrite. All five scoped sources shipped: work past due and
+unfinalized · AI-suggested grades awaiting review · lessons past due with no readiness rollup ·
+sections with nobody assigned · failed or stalled scheduled runs.
+
+**Decisions that are load-bearing:**
+
+- **A source returning zero renders nothing.** Most of these are empty most of the term, and a row
+  of permanent `0`s is how a panel teaches people to stop reading it.
+- **A source that throws is dropped, not fatal.** This sits at the top of the dashboard; one dead
+  query must not cost the page.
+- **The panel loads after first paint**, not into it. Five extra round trips should not make every
+  dashboard load as slow as the slowest source.
+- **Two sources are director-only as a UI convention** — `analysis_reports` and `analysis_runs`
+  admit any staff member of the offering under RLS, exactly like the run banner. Enforced here or
+  not at all, which is why there is a test pinning the list.
+
+*Verified:* `test-tasks.mjs` 19/0 — registry invariants, failure isolation, the zero rule, director
+gating, and escaping — plus full suite 339/0. The individual `load()` queries need a signed-in
+director and are **deliberately** left to P0.5 rather than mocked into a false green.
+
+#### P1.7 — Dashboard course switcher · ✅ **DONE 2026-07-22**
+
+Both halves, as scoped. `courseSwitcher()` sits under the page head — a `.seg` group up to four
+courses, a `<select>` beyond — driving `ctx.setCurrentOffering()` and then re-mounting, since
+sections, lessons and tasks are all course-scoped.
+
+**And the section control now picks a section.** It was two buttons, all-vs-mine, so "how did M3A
+do?" — the most ordinary question a director asks — had no answer on this page. Now `all` · `mine`
+· every section, with the same segmented-to-dropdown threshold. `mine` is hidden when it is not a
+real subset (teach every section, or none) rather than rendering an option that duplicates `all`.
+
+The rollup's `renderScope()` was **copied in shape, not lifted**: it lives inside `report.html`'s
+page script and is bound to its scope variables. Extracting it into a shared module is worth doing
+when a third caller appears, not for the second.
+
+*Verified:* full suite 339/0. **Not yet seen in a browser** — folded into P0.5.
+
+#### P1.15 — Dashboard: due-out boxes · ✅ **DONE 2026-07-22 — shipped as P1.6**
+
+*Built in the same pass and from the same registry, per this item's own instruction. See P1.6 for
+what shipped. Every box named in the table below exists; "zero disappears rather than sitting there
+reading 0" is implemented and tested.*
+
+<details><summary>Original scoping</summary>
+
+A row of boxes at the top of the faculty dashboard, one per **type** of outstanding work, each with
+a count. Clicking one goes to the page that clears it. Not one box per item — one per kind.
+
+Likely types, all of which already have a data source:
+
+| Box | Source | Goes to |
+|---|---|---|
+| Late / expired-extension work to grade | `extensionsToGrade()`, `pastDueUngraded()` | Grade (P1.14's queue) |
+| AI-suggested grades not finalized | `grades.is_finalized = false` | Grade |
+| Lessons past due, not yet aggregated | `lesson_aggregate.py worklist` | the rollup |
+| Sections with no staff assigned | Section Coverage | Course Admin |
+| A failed or stuck analysis run | `analysis_runs` | already the run banner |
+
+This is the concrete form of P1.6's "outstanding tasks panel" — build it as the registry P1.6
+describes (`{severity, text, link, count}`) so a new type is a registration, not a rewrite. **Zero is
+the common state for most of these most of the term**, so a box at zero should disappear rather than
+sit there reading `0`.
+
+</details>
+
+#### P1.13 — Container for unrecognized flags · ✅ **DONE 2026-07-22**
+
+*Director's Q4 decision: surface unknown flags in the summary so an instructor can see what the AI
+writing them was thinking.* Gap confirmed as scoped — the pill bar's 5-key whitelist, the rollup's
+two booleans, and a single hard-coded `flags.note` read in the student panel.
+
+- **`residualFlags()`** in `faculty-rollup.js` returns `[key, detail]` pairs for anything outside the
+  recognized set (`needs_follow_up`, `notable`, `note`). A `false`/null/empty value is a flag the
+  producer **cleared**, not raised, and is dropped — otherwise `{suspected_ai: false}` on every
+  student would read as a cohort-wide flag.
+- **"Other flags"** row in the student panel, rendered verbatim and **unstyled** — presenting an
+  unrecognized flag in the vocabulary of the recognized ones would assert a meaning PREP has not
+  agreed to.
+- **A neutral pill**, named by the keys actually coined. *This exceeds the original wording
+  ("uncounted and unstyled")* — a container reachable only by opening students at random would make
+  the taxonomy work no more observable than dropping the flags. Counted per student to match the
+  modal it opens; kept out of the recognized tallies.
+- `summarizeReports()` now returns `flags.other` and `flags.otherStudents`.
+
+*Verified:* `test-rollup.mjs` **190/0** (30 new) · full `tests/app-schema` exit 0. **Not yet seen in
+a browser** — folded into P0.5.
+
+Still the **cheap half of P3.3**, and the taxonomy work is now observable before the taxonomy exists.
+Deliberately left: `lesson_aggregate.py`'s Python `summarize()` still tallies only the two recognized
+booleans — teaching the aggregator to write prose about flags whose meaning is undefined belongs with
+P3.3, not ahead of it.
+
+---
+
+---
+
+## 8. Completed
+
+*Everything here is done. It is kept in full rather than deleted because most of these entries
+record a **decision** — why something was built the way it was, or why a request turned out to be
+wrong — and that is the part which stops the same question being re-opened in three weeks. Items
+keep their original numbers, so a reference to P0.9 still finds P0.9.*
+
+### P0 — was ship-blocking for 2026-08-10
+
+#### P0.5 — Verification pass in a browser · ✅ **DONE 2026-07-22** — *two items deferred, see below*
+
+**Run, as all three role tiers, in light and dark.** A course director created and confirmed
+`prep.test.faculty@usafa.edu` in the Supabase dashboard; `scripts/test_faculty_account.py` wrote its
+staffing and flipped it between tiers between passes.
+
+- **11/11 pages clean** in light and again in dark — no console errors, no uncaught exceptions, no
+  failed requests. Pages: dashboard · rollup · rollup with `?kde=1` · grade · roster · lessons ·
+  admin · extensions · account · system · help.
+- **`checks.mjs` — 13/13 director · 11/11 instructor · 13/13 global admin.** Assertions rather than
+  screenshots, because most of what this pass verifies is something being *absent for the right
+  role*, and absence is exactly what a screenshot review misses.
+
+**Confirmed working:** the KDE tuner is absent from a plain rollup, present with `?kde=1` as a
+director, absent with `?kde=1` as an instructor (P0.10) · student responses render 3 AI + 5 random
+with Shuffle intact (P0.9) · names are **not in the DOM** while the toggle is off (P0.6) · the staff
+table's own row is a disabled select, and a global admin gets the implicit variant (P0.11) · the
+"Did not submit" panel, misconception popovers and short AI prose (P0.6, P0.8, P0.13) · and this
+batch's P1.5 histogram, P1.6 due-out panel and P1.7 switchers.
+
+**Two things this pass could not verify, and why:**
+
+- **The late chip and its filter (P0.12).** *Nothing is late.* The active preflight is due Aug 9 and
+  today is Jul 22, so there is no late submission and no expired extension anywhere in the term
+  yet. The logic harness covers 16 cases including the extension boundary; the *rendering* is
+  unexercised until real work arrives late. Re-check in the first week of term — it is also exactly
+  when P1.14 lands.
+- **`provision-students` and `reset-student-password` on a successful path.** Both mutate real cadet
+  accounts, and there is no throwaway cohort to point them at. Their *gating* verified clean (all
+  five edge functions correctly refuse a caller whose JWT does not already resolve to
+  director/admin), but the happy path stays unproven. It needs a disposable student, not a
+  disposable instructor.
+
+**Two findings that are not bugs, recorded so they are not re-investigated:**
+
+- **The rollup shows duplicate student responses.** Two cards were character-identical. Not a
+  sampler bug — `sampleN` splices without replacement, and there are no duplicate submission or
+  activity rows. **16 distinct answers are shared by up to 4 students each**, because the seeded
+  training data draws from a small template pool. It is a good argument for clearing that data
+  before the real roster lands (§5).
+- **`--role` used to unstaff the account from other courses.** A re-tier deleted *every* staff row,
+  dropped the test account to one offering, and made the course switcher correctly disappear — which
+  read as a P1.7 bug for several minutes. The delete is now scoped to the offering being re-tiered.
+
+<details><summary>Why this was blocked, and the boundary that caused it — worth not re-learning</summary>
+
+Attempted first on the assumption that an unsealed database was enough to mint a faculty login.
+**It is not:**
+
+- All three `prep_app_*` roles connect and read `app` fine — but **every one of them is
+  `permission denied for schema auth`**. Schema `app` and schema `auth` are separate boundaries, and
+  unsealing the first grants nothing on the second. `claude_code_recker` is likewise denied.
+- The public signup endpoint **does** mint a user (`disable_signup=false`), but the project has
+  `mailer_autoconfirm=false` and **PREP has no SMTP** — so the account is created unconfirmed and
+  sign-in returns `email_not_confirmed`.
+- All five edge functions correctly require a caller JWT that already resolves to director/admin, so
+  none bootstraps the first account.
+- `~/.claude/skills/preflight-analyze/config.json` — the one place the `service_role` key lives — is
+  **absent on this machine**, so the Admin API is unreachable and **`/preflight-analyze` cannot run
+  here either**.
+
+So the account had to be created by a human in the dashboard. It took three attempts: the first two
+would not authenticate with a correctly copy-pasted password, most likely because duplicate
+unconfirmed users existed on the same address (see P0.2 — delete the strays).
+
+</details>
+
+<details><summary>Original scoping</summary>
+
+Eight CHANGELOG entries record the same gap: **no faculty login is available to the automated
+harness**, so roster import, the review page, Grade/Roster, the rollup, and both new edge functions
+have never been exercised against the live database by a signed-in human.
+
+This is one session, not eight — a director walkthrough in light and dark mode as all three role
+tiers. Everything else in P0 should land first so the pass covers the shipped state.
+
+**Added 2026-07-22** — the four frontend fixes shipped that day are logic-verified and syntax-clean
+but **have not been looked at**, and each is a visual change that only an eye can confirm:
+
+- **Staff table** (P0.11) — rows equal height; your own row a disabled select; Role column no longer
+  stretched. Check as a director *and* as a global admin, whose row renders the third variant
+  (`implicit — no staff row`).
+- **Late chip + Late-only filter** (P0.12) — needs a genuinely late submission and one covered by an
+  extension, to confirm the second is *not* badged. Confirm the toggle is invisible when nothing is
+  late.
+- **Student responses** (P0.9) — 3 AI + 5 random = 8 cards, and the Shuffle control still reshuffles
+  only the random 5.
+- **KDE tuner** (P0.10) — absent from a plain rollup, present with `?kde=1` as a director, absent
+  with `?kde=1` as an instructor.
+
+</details>
+
+---

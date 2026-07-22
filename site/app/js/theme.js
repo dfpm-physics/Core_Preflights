@@ -5,6 +5,7 @@
 // is no flash of the wrong theme. This module only wires up runtime toggling.
 
 import { iconHTML } from './util.js';
+import { setPref, readLocal } from './prefs.js';
 
 const KEY = 'cp.theme';
 
@@ -21,7 +22,7 @@ export function currentTheme() {
 }
 
 export function storedTheme() {
-  try { return localStorage.getItem(KEY); } catch (_) { return null; }
+  return readLocal(KEY);
 }
 
 export function applyTheme(mode) {
@@ -29,9 +30,21 @@ export function applyTheme(mode) {
   else document.documentElement.removeAttribute('data-theme');
 }
 
+/**
+ * Choose a theme.
+ *
+ * Writes through prefs.js rather than straight to localStorage, so the choice reaches
+ * `app.user_preferences` and follows the person to their next device (P1.3). The local write
+ * still happens first and synchronously — the anti-FOUC snippet in every <head> reads it at
+ * first paint and cannot wait for a round-trip.
+ *
+ * 'system' is stored as an empty value, i.e. no stored preference, which is what makes
+ * storedTheme() null and hands control back to the OS media query in initTheme().
+ */
 export function setTheme(mode) {
-  applyTheme(mode);
-  try { localStorage.setItem(KEY, mode); } catch (_) {}
+  const stored = mode === 'system' ? '' : mode;
+  applyTheme(stored || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  setPref(KEY, stored);
   updateToggleButtons();
 }
 

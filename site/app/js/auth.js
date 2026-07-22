@@ -25,6 +25,8 @@
 import { db } from './supabase.js';
 import { STAFF_SELECT, ENROLLMENT_SELECT } from './schema.js';
 import { COURSE_TITLE_FALLBACK } from './util.js';
+import { hydrate as hydratePrefs, setPref, getPref, resetPrefs } from './prefs.js';
+import { applyTheme, updateToggleButtons } from './theme.js';
 
 // App root relative to the current page: nested pages (student/ faculty/) are one
 // level deep. Works under /site/app/.
@@ -75,6 +77,20 @@ export async function bootstrap(opts = {}) {
     return;
   }
 
+  // ── Preferences (P1.3) ────────────────────────────────────────────────────
+  // Before offerings are resolved, because sortAndPick() reads cp.currentOffering out of the
+  // local cache — hydrating after it would apply the stored course one navigation late.
+  //
+  // The theme is re-applied only when the row actually disagreed with this browser's cache.
+  // The <head> snippet has already painted the cached value, so a no-op reassignment on every
+  // page load would be pure churn; the correction is the exception, not the rule.
+  const { changed } = await hydratePrefs(user.id);
+  if (changed.includes('cp.theme')) {
+    const mode = localStorage.getItem('cp.theme');
+    applyTheme(mode || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+    updateToggleButtons();
+  }
+
   // ── Enforce required role ─────────────────────────────────────────────────
   if (opts.require && role !== opts.require) { go(roleHome(role)); return; }
 
@@ -105,7 +121,9 @@ export async function bootstrap(opts = {}) {
     enrollments: [],        // students only
     staff: [],              // faculty only — raw staff_assignments rows
     appRoot: APP_ROOT,
-    signOut: async () => { await db.auth.signOut(); go(loginPath); },
+    // resetPrefs() before signOut so this user's pending push cannot land under the next
+    // person to sign in on a shared lab machine.
+    signOut: async () => { resetPrefs(); await db.auth.signOut(); go(loginPath); },
   };
 
   if (role === 'faculty') await resolveFacultyOfferings(ctx);
@@ -117,7 +135,7 @@ export async function bootstrap(opts = {}) {
     const c = ctx.courses.find(x => x.offeringId === offeringId);
     if (!c) return;
     applyCurrent(ctx, c);
-    try { localStorage.setItem(LS_OFFERING, offeringKey(c)); } catch (_) {}
+    setPref(LS_OFFERING, offeringKey(c));
     await resolveScopeSections(ctx);
   };
 
@@ -228,12 +246,14 @@ function sortAndPick(ctx) {
     String(b.termCode || '').localeCompare(String(a.termCode || '')) ||
     String(a.courseCode || '').localeCompare(String(b.courseCode || '')));
 
-  let stored = null;
-  try { stored = localStorage.getItem(LS_OFFERING); } catch (_) {}
+  // A stored offering SELECTS a scope, it does not grant one: the lookup runs against
+  // ctx.courses, which was built from staff_assignments, so a hand-edited preference naming an
+  // offering the caller does not staff simply falls through to the first real one.
+  const stored = getPref(LS_OFFERING);
   const chosen = ctx.courses.find(c => offeringKey(c) === stored) || ctx.courses[0] || null;
   if (chosen) {
     applyCurrent(ctx, chosen);
-    try { localStorage.setItem(LS_OFFERING, offeringKey(chosen)); } catch (_) {}
+    setPref(LS_OFFERING, offeringKey(chosen));
   }
 }
 

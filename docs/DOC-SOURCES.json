@@ -164,9 +164,13 @@
         "supabase/migrations/app/004_content_snapshot.sql",
         "site/app/css/styles.css",
         "supabase/migrations/app/005_extensions.sql",
-        "supabase/migrations/app/006_submission_lock_hardening.sql"
+        "supabase/migrations/app/006_submission_lock_hardening.sql",
+        "supabase/migrations/app/007_extension_governance_and_review.sql",
+        "supabase/migrations/app/008_student_identity.sql",
+        "supabase/migrations/app/009_analysis_runs.sql",
+        "supabase/migrations/app/010_user_preferences.sql"
       ],
-      "note": "Every table and field transcribed from the app-schema migrations and verified against information_schema on the live database. Owns the enforced-rules list and the exact accepted values. Inline SVG depends on the .sf-* classes in styles.css. Omits RLS policy predicates - help docs are world-readable at every tier."
+      "note": "Every table and field transcribed from the app-schema migrations and verified against information_schema on the live database. Owns the enforced-rules list and the exact accepted values. Inline SVG depends on the .sf-* classes in styles.css. Omits RLS policy predicates - help docs are world-readable at every tier. SOURCES MUST LIST EVERY MIGRATION: the list stopped at 006 until 2026-07-22, so 007-009 landed without ever flagging this page and analysis_runs went undocumented for two days. Add the new file here whenever a migration is added."
     },
     {
       "doc": "site/app/help/instructor-accounts.md",

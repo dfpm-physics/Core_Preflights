@@ -65,8 +65,11 @@ for (const s of OFFLINE) {
 //                 round-trip; those stubs are global and would leak into later suites
 //   test-help-status  stubs fetch/document/DOMPurify globally and re-imports help.js per
 //                 scenario to reset its module-level caches; both would leak in-process
+//   test-prefs   installBrowser() plus a live signed-in session; prefs.js binds window.db at
+//                 import time, so it must not share a process with the later suites
 for (const suite of ['test-imports.mjs', 'test-rollup.mjs', 'test-system-prefs.mjs',
-                     'test-run-banner.mjs', 'test-help-status.mjs']) {
+                     'test-run-banner.mjs', 'test-help-status.mjs', 'test-prefs.mjs',
+                     'test-tasks.mjs']) {
   const r = spawnSync(process.execPath, [resolve(import.meta.dirname, suite)],
                       { encoding: 'utf8' });
   process.stdout.write(r.stdout || '');

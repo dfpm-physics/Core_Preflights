@@ -8,6 +8,198 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-22 — Matthew Recker via Claude (fourth batch — P1.3, P1.5, P1.6/P1.15, P1.7)
+
+### Schema — `010_user_preferences.sql`, **applied** to `app`
+
+Preferences that follow the person instead of the browser (roadmap P1.3). `user_id` PK, one jsonb
+`prefs`, `updated_at`; RLS **self-only on all four verbs**, no staff read policy and no global-admin
+short-circuit — an instructor has no business knowing which theme a cadet uses. Constraints: `prefs`
+must be a JSON object, capped at 16 KB so a client bug cannot turn it into a data store.
+
+Applied during the DDL window that was already open. `prep_app_owner` **is still unsealed** — see
+roadmap P0.2, which now also owns removing the test faculty account.
+
+**Two boundaries this ran into, both worth remembering:**
+
+- **`auth.uid()` is unusable in an `app` policy.** The app tier has no privileges on schema `auth`
+  — not even USAGE — so the policy fails at CREATE time with `permission denied for schema auth`.
+  `002_rls.sql` already solved this with `app.current_uid()`, which reads the same `sub` claim from
+  the JWT GUC. Use it.
+- **No FK to `auth.users`.** `prep_app_owner` cannot be delegated REFERENCES there (that FK on
+  `instructors`/`students` was added by `postgres` directly). Not worth reopening for this table:
+  the RLS predicate already guarantees `user_id` is a real signing-in user.
+
+### Added — `prefs.js`, and a theme bug it exposed
+
+localStorage stays the **read** path (the anti-FOUC snippet in every `<head>` needs a synchronous
+theme at first paint); the row is the **durability** path. `hydrate()` runs inside `bootstrap()`
+before anything reads a preference, because `sortAndPick()` reads `cp.currentOffering` while
+choosing the current offering.
+
+**"Match my system" has never worked.** `setTheme('system')` stored the literal string `'system'`,
+and the `<head>` snippet does `localStorage.getItem('cp.theme') || <OS>` — so `'system'` was neither
+null nor `'dark'`, and the option silently meant "always light". Absence is now the encoding, which
+is what that snippet always expected. Fixed as a side effect of routing theme writes through
+`prefs.js`.
+
+**`prefs.js` imports `supabase.js` lazily**, and must keep doing so. A static import gave `theme.js`
+— and therefore `nav.js`, and therefore every page's chrome — a hard dependency on a live client
+just to read a cached theme. Two existing suites caught it in the same run. Same pattern
+`run-banner.js` documents for the same reason.
+
+**Not synced, deliberately:** the nav-open key, run-banner dismissals, and the System > Data column
+picker. The test is whether a setting describes the *person* or the *device*.
+
+### Added — the due-out panel (`faculty-tasks.js`), P1.6 and P1.15 as one thing
+
+A registry, not four hard-coded queries: `SOURCES` holds `{id, severity, icon, director, load()}`
+and the sixth source is an entry rather than a rewrite. Five shipped — work past due and
+unfinalized · AI-suggested grades awaiting review · lessons past due with no readiness rollup ·
+sections with nobody assigned · failed or stalled scheduled runs.
+
+- **Zero renders nothing.** Most of these are empty most of the term; a row of permanent `0`s is
+  how a panel teaches people to stop reading it.
+- **A source that throws is dropped, not fatal** — this sits at the top of the dashboard.
+- **Loads after first paint.** Five round trips should not make every dashboard load as slow as the
+  slowest source. Guarded by a mount generation, not an identity check: `ctx` is the *same object*
+  across a course switch, so `CTX === ctx` cannot distinguish a stale response and a slow phys-110
+  load would have painted its boxes over phys-215.
+- Two sources are director-only **as a UI convention** — RLS admits any staff member of the
+  offering to `analysis_reports` and `analysis_runs`, exactly like the run banner. A test pins the
+  list so the convention cannot quietly lapse.
+
+### Changed — rollup objective charts, and the dashboard's two scope controls
+
+- **P1.5:** understanding-by-objective now defaults to an **integer histogram** reusing
+  `effortChart()`'s markup and ramp exactly. The effort chart directly above it is an integer
+  histogram of the *same* 0–5 measure; drawing the two in different visual languages invites the
+  reader to assume they are different kinds of quantity. The KDE curve is kept, fully working, and
+  selectable from Account → Preferences.
+- **P1.7:** an inline **course switcher** on the dashboard (segmented up to four, `<select>` beyond),
+  and the section control **can finally pick a section** — it was all-vs-mine only, so "how did M3A
+  do?" had no answer on that page.
+
+### Added — `tests/browser-harness/`, and `scripts/test_faculty_account.py`
+
+Optional dev tooling, gitignored deps, nothing on the deploy path (CORE.md §2). The harness drives
+real Chrome through a local server against the live project, walks a page list in light or dark, and
+reports console errors, uncaught exceptions and failed requests per page. Screenshots go to the
+**session scratchpad and the harness refuses to write inside the repo** — faculty pages render real
+cadet names, and a PNG is the easiest way to commit a roster by accident.
+
+`scripts/test_faculty_account.py` creates, re-tiers and removes the P0.5 test account's `app` rows
+(dry-run by default). The create and the teardown live in one file on purpose: a teardown that
+exists only as a sentence in a roadmap does not happen.
+
+### P0.5 — done. The walkthrough ran, as all three tiers, in both themes
+
+A course director created and confirmed `prep.test.faculty@usafa.edu` in the dashboard (it took
+three attempts — see below); `scripts/test_faculty_account.py` wrote its staffing and flipped tiers
+between passes. Results: **11/11 pages clean in light and again in dark**, and **13/13 director ·
+11/11 instructor · 13/13 global admin** on the targeted assertions.
+
+Seven items' worth of never-looked-at UI is now looked at — P0.6, P0.8, P0.9, P0.10, P0.11, P0.13,
+and this batch's P1.5/P1.6/P1.7. Everything the promotion touches has been seen, which was the last
+thing standing between P0.1 "prepared" and "run it".
+
+**`checks.mjs` asserts, rather than screenshots.** Most of what P0.5 verifies is something being
+*absent for the right role* — the KDE tuner for an instructor, director-only task sources, a name
+that must not be in the DOM — and absence is exactly what a screenshot review misses, because a
+missing panel looks like a page that never had one.
+
+**Two things the pass could not reach**, recorded rather than glossed:
+
+- **The late chip (P0.12) has nothing late to render.** The active preflight is due Aug 9; today is
+  Jul 22. The logic harness covers 16 cases including the extension boundary, but the rendering is
+  unexercised until real work arrives late. Re-check in week one, alongside P1.14.
+- **`provision-students` and `reset-student-password` on a successful path.** Both mutate real cadet
+  accounts and there is no throwaway cohort. Their *gating* verified clean — all five edge functions
+  correctly refuse a caller whose JWT does not already resolve to director/admin — but the happy
+  path needs a disposable *student*, which a disposable instructor cannot substitute for.
+
+**Two findings that are not bugs.** The rollup showed character-identical student quotes: not a
+sampler fault (`sampleN` splices without replacement, and there are no duplicate submission rows) —
+**16 distinct answers are shared by up to 4 students** because the seeded training data draws from a
+small template pool. And a `--role` re-tier was deleting *every* staff row, which unstaffed the test
+account from phys-110, made the course switcher correctly vanish, and read as a P1.7 bug for several
+minutes; the delete is now scoped to the offering being re-tiered.
+
+**One harness bug, caught by looking.** `pass.mjs` only treated a bounce to *login* as a redirect,
+so when `report.html` sent an unresolvable lesson id to the dashboard it reported a clean pass — and
+the screenshot filed under "rollup" was the dashboard. It now flags landing on any path other than
+the one requested. A harness that reports a false pass is worse than no harness.
+
+### Why P0.5 was blocked first, and the boundary that caused it
+
+Attempted, on the assumption that an unsealed database was enough to mint a faculty login. **It is
+not.** All three `prep_app_*` roles read `app` fine and every one of them is `permission denied for
+schema auth`; `claude_code_recker` likewise. Public signup mints a user but the project has
+`mailer_autoconfirm=false` and PREP has no SMTP, so it lands unconfirmed. All five edge functions
+correctly require a caller JWT that already resolves to director/admin, so none bootstraps the first
+account. `~/.claude/skills/preflight-analyze/config.json` is absent on this machine, so the Admin
+API is unreachable too — which also means **`/preflight-analyze` cannot run here**.
+
+Creating the account in the dashboard took **three attempts** — the first two would not authenticate
+with a correctly copy-pasted password, most likely because duplicate unconfirmed users existed on
+the same address (one of them from the signup probe above). Delete the strays; P0.2 records the ids.
+
+**And the teardown is one step, not three — the opposite of what this file first claimed.**
+`app.instructors.id` references `auth.users(id)` **ON DELETE CASCADE** (verified against
+`pg_constraint`), and `staff_assignments` cascades from `instructors`, so deleting the account in
+the dashboard takes the app rows with it. Established the hard way: `--remove` found nothing to
+delete because the dashboard had already done it. Note the asymmetry — `app.students.auth_user_id`
+is **NO ACTION**, so deleting a cadet's auth user fails rather than tidying up. Do not reason from
+one to the other.
+
+### Changed — `ROADMAP.md` is now open work first, archive last
+
+*Director's request, mid-session.* The priority bands (§1–§4) hold **open items only**; finished
+ones move to a new **§8 Completed**, grouped by the band they came from. P0 went from thirteen
+entries to the three that are actually left, which is the point — the file is read to find what is
+outstanding, and ten resolved items above three live ones buries the answer.
+
+Moved, never deleted: most of those entries record a *decision* (why a request turned out to be
+wrong, why something was built a particular way), and that is what stops a settled question being
+re-opened. Numbers never change, so a reference to P0.9 still finds P0.9. A **partly** done item
+stays in its band — P1.12 still has a whole-section grant outstanding. The convention is written
+into the file's header so the next person maintains it rather than re-piling the top.
+
+### Verified
+
+`tests/app-schema` **339/0**, plus the isolated suites: rollup 190/0 · system-prefs 12/0 ·
+run-banner 22/0 · **prefs 28/0 (new)** · **tasks 19/0 (new)**. `test-db-schema` table count bumped
+23 → 24 and `db-schema.js` regenerated. Test-cadet cleanup extended to `user_preferences`.
+
+**P1.3 is verified in a real browser**, not only under Node: a signed-in page load wrote
+`cp.currentOffering` to the row, and all five student pages came back clean. **P1.5, P1.6 and P1.7
+are logic-verified but have not been looked at** — they need a faculty session, so they are folded
+into P0.5 alongside the four fixes already waiting there.
+
+Both `supabase/admin/` DB suites re-run against the live database after the migration —
+**22/22 invariant, 35/35 RLS** — since a new table with new policies is exactly the kind of change
+that can shift a policy count out from under them. It did not.
+
+### Docs — one real correction, and a source list that had been silently short
+
+`check_doc_sources.py` flagged `director-schema-reference.md`, and it was **genuinely wrong**: the
+page opens "the diagram shows every table" and migration `010` had just added one. Fixed properly
+rather than by bumping a date — the intro now says which tables sit outside the four layers and why,
+and there are new sections for `user_preferences` and for `analysis_runs`.
+
+**`analysis_runs` was undocumented for two days and the check never said so**, because that doc's
+`sources` list stopped at migration `006`. Migrations `007`–`010` are now registered, with a note in
+`DOC-SOURCES.json` saying to add each new one — a stale-detector that is not watching the file it
+should be watching reports green for the wrong reason, which is worse than reporting red.
+
+The other flagged documents were **deliberately not touched.** They are the pre-existing backlog
+recorded in roadmap §5, flagged by the third batch's `CORE.md`/`PROJECT.md` edits, and clearing them
+means reading each against its sources — precisely the work the mechanism exists to force. The two
+that my changes newly touched (`instructor-accounts.md`, `student-getting-started.md`) were read:
+neither says anything about preferences or theme, so neither was made wrong by this batch.
+
+---
+
 ## 2026-07-22 — Casey via Claude (third batch)
 
 ### Added — the Help centre warns readers off topics that are due for review
