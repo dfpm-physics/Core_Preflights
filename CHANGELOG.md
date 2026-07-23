@@ -8,6 +8,49 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-23 — Matthew Recker via Claude (gradebook colour layer)
+
+*Director follow-up to the fifth batch: "I want to see some colours on the gradebook like my other
+gradebook — effort level and understanding level for each assignment as well as points — and the
+rollup colours are probably good to reuse."*
+
+Each graded cell now carries two more signals, both on the **rollup's own 0–5 ramp** (`--s1`…`--s5`,
+red→green), chosen from three mockups the director picked between:
+
+- **Cell tint = understanding.** A low-understanding cell reads red even at full points — which
+  surfaces the exact "full credit but didn't get it" case the 3-state `warn` was built for, at grid
+  scale.
+- **Bottom bar = effort.** Width *and* colour both encode 0–5, so it does not rely on colour alone.
+
+**Everything degrades.** A cell tints only if understanding is known, draws a bar only if effort is
+known, and a graded cell with neither — a future assignment type that tracks differently — falls
+straight back to a plain number. That was the director's explicit forward-looking requirement and it
+is the default, not a special case.
+
+- **The colour maths is the rollup's, reproduced not guessed.** `zoneIndex()` in
+  `faculty-gradebook.js` is `report.html`'s `zoneVar` split so the arithmetic is testable; the page
+  supplies the `--s{n}`. A parity test pins the boundaries (0 and 1 → red, 5 → green) so the two
+  surfaces cannot drift.
+- **`GB_GRADE_SELECT` now fetches `diagnostic`** — the one narrowing from the first cut that this
+  makes wrong, since the written path's effort/understanding live there. Still bounded (one small
+  payload per grade, not the report blobs `SUBMISSION_SELECT` drags in).
+- **Signals come from the grade alone.** Interactive effort from `grades.effort`; written
+  effort/understanding from `grades.diagnostic` (`q2_effort`/`q3_understanding`, or a schema:1
+  payload's `overall_understanding`). The artifact's *claimed* effort is out of reach here (it needs
+  the submission blob), which is correct — every graded cell is covered without it.
+- **The per-student page speaks the same language** — its effort/understanding dials now carry a
+  left rail in the same ramp colour, so a level reads the same on the grid and on the drill-down.
+- **Tint survives row-hover** by blending into the hover surface rather than being overpainted —
+  hover is exactly when a grader is reading that row's colours. Kept to 18% so the numbers, which are
+  the grid's subject, stay legible in both themes.
+
+*Verified:* `test-gradebook.mjs` **96/0** (23 new — `zoneIndex` boundaries, `cellSignals` across both
+paths and the degradation cases, and that `buildMatrix` attaches signals to the cell) · full
+`tests/app-schema` exit 0 · both pages boot clean in light and dark · **and the colour itself was
+rendered** — the shipped `styles.css` against a synthetic grid, screenshotted in both themes, `color-mix`
+confirmed working and the tints legible on dark. Still not seen with real Fall data behind a faculty
+login (same gap as the parent batch).
+
 ## 2026-07-22 — Matthew Recker via Claude (fifth batch — P1.1, P1.2, P1.4)
 
 Three roadmap items that are one feature in practice: a grid, the page you reach by clicking a name

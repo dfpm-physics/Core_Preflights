@@ -935,8 +935,16 @@ against the same `points_possible`, so totals sum directly and no normalization 
 overdue who holds an active extension. The gradebook does not copy it. Fixing the dashboard is a
 separate, testable change and is filed in §5.
 
-*Verified:* `test-gradebook.mjs` **73/0** · full suite exit 0 · boots clean in light and dark.
-**Not seen rendered by a signed-in user** — see the note under P1.4.
+**Colour layer added 2026-07-23** (director follow-up): each graded cell tints by understanding and
+carries an effort bar, both on the rollup's `--s1`…`--s5` ramp, both optional so a future assignment
+type that tracks neither degrades to a plain number. `zoneIndex()` reproduces `report.html`'s
+`zoneVar` with a parity test so the grid and the rollup colour a 0–5 value identically. This is the
+one place the "no `diagnostic`" narrowing was wrong — the written path's effort/understanding live
+there — so `GB_GRADE_SELECT` now fetches it. The per-student dials carry the same ramp colour.
+
+*Verified:* `test-gradebook.mjs` **96/0** · full suite exit 0 · boots clean in light and dark · the
+colour itself rendered against the shipped CSS and screenshotted in both themes. **Not seen rendered
+by a signed-in user with real data** — see the note under P1.4.
 
 #### P1.2 — Per-student detail page · ✅ **DONE 2026-07-22**
 

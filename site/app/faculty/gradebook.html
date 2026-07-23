@@ -196,17 +196,47 @@
       return `<div class="table-wrap gb-wrap"><table class="gb"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
     }
 
+    // A 0–5 zone index → its ramp CSS variable. GB.zoneIndex() is the rollup's own arithmetic;
+    // this is the `--s{n}` half of report.html's zoneVar, kept here so the two cannot drift.
+    const zoneCss = (idx) => (idx == null ? null : `var(--s${idx + 1})`);
+
+    // The colour layer the director asked for, and the reason the grade select now carries
+    // `diagnostic`: a cell tints by UNDERSTANDING and carries an EFFORT bar along the bottom, both
+    // on the rollup's 0–5 ramp. Every part is optional — a graded cell for a future assignment
+    // type that tracks neither signal falls straight back to a plain number, which is exactly the
+    // degradation the director asked us to design for. Only graded/draft cells reach here; the
+    // others have no grade and so no signals.
+    function decor(c) {
+      const uIdx = GB.zoneIndex(c.understanding);
+      const eIdx = GB.zoneIndex(c.effort);
+      const tintCls = uIdx != null ? ' gb-tint' : '';
+      const style = uIdx != null ? ` style="--u:${zoneCss(uIdx)}"` : '';
+      // Width AND colour both encode effort, so it reads at a glance and does not rely on colour
+      // alone (a red/green-blind grader still sees a short bar for low effort).
+      const bar = eIdx != null
+        ? `<span class="gb-ebar" style="width:${Math.round((c.effort / 5) * 100)}%;--e:${zoneCss(eIdx)}"></span>`
+        : '';
+      const parts = [];
+      if (c.effort != null) parts.push(`effort ${c.effort}/5`);
+      if (c.understanding != null) parts.push(`understanding ${c.understanding}/5`);
+      return { tintCls, style, bar, sig: parts.length ? ' · ' + parts.join(' · ') : '' };
+    }
+
     // Five states, five distinct renderings. PENDING is the ONLY one that renders as nothing —
     // a blank that could mean either "not due" or "never handed in" is the defect that makes a
-    // gradebook untrustworthy.
+    // gradebook untrustworthy. Colour rides on top of the state, never replaces it.
     function cellHTML(c, col, row) {
       const t = `${col.title}${col.dueAt ? ` — due ${fmtDate(new Date(col.dueAt))}` : ''}`;
       const late = c.late ? ' ⏰' : '';
       switch (c.state) {
-        case GB.CELL.GRADED:
-          return `<td class="gb-cell" title="${esc(t)}">${c.points}${late}</td>`;
-        case GB.CELL.DRAFT:
-          return `<td class="gb-cell gb-draft" title="${esc(t)} — suggested, not finalized">${c.points}<sup>?</sup>${late}</td>`;
+        case GB.CELL.GRADED: {
+          const d = decor(c);
+          return `<td class="gb-cell${d.tintCls}"${d.style} title="${esc(t + d.sig)}">${c.points}${late}${d.bar}</td>`;
+        }
+        case GB.CELL.DRAFT: {
+          const d = decor(c);
+          return `<td class="gb-cell gb-draft${d.tintCls}"${d.style} title="${esc(t + ' — suggested, not finalized' + d.sig)}">${c.points}<sup>?</sup>${late}${d.bar}</td>`;
+        }
         case GB.CELL.UNGRADED:
           return `<td class="gb-cell gb-ungraded" title="${esc(t)} — submitted, not yet graded">·${late}</td>`;
         case GB.CELL.MISSING:
@@ -216,12 +246,21 @@
       }
     }
 
+    // The 0–5 ramp swatch, so the tint and bar colours are decodable. Same order and tokens as the
+    // rollup's charts (--s1 low → --s5 high), which is the whole point of reusing them.
+    function rampSwatch() {
+      return `<span class="gb-ramp" aria-hidden="true">`
+        + [1, 2, 3, 4, 5].map(n => `<i style="background:var(--s${n})"></i>`).join('')
+        + `</span>`;
+    }
+
     function legend(stats) {
       return `<div class="gb-legend">
         <span><b class="gb-key gb-missing">—</b> not submitted</span>
         <span><b class="gb-key gb-ungraded">·</b> submitted, ungraded</span>
         <span><b class="gb-key gb-draft">2<sup>?</sup></b> AI suggestion, not finalized</span>
         <span><b class="gb-key">⏰</b> arrived late</span>
+        <span class="gb-leg-sep">cell tint = understanding · bottom bar = effort ${rampSwatch()} low→high</span>
         <span class="muted">Blank = not due yet, and not counted.</span>
         <span class="grow"></span>
         <span class="muted">Median ${stats.median == null ? '—' : Math.round(stats.median * 100) + '%'}

@@ -1831,7 +1831,18 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 /* ~5rem is what makes 40 lessons fit at all; the full title lives on title= and aria-label. */
 .gb .gb-col { width: 4.6rem; min-width: 4.6rem; text-align: center; font-size: 0.78em;
   letter-spacing: 0.02em; padding: 8px 4px; }
-.gb .gb-cell { text-align: center; padding: 7px 4px; font-size: 0.9em; }
+.gb .gb-cell { text-align: center; padding: 7px 4px 9px; font-size: 0.9em; position: relative; }
+
+/* Colour layer (director request): cell tint = understanding, bottom bar = effort, both on the
+   0–5 rollup ramp (--s1..--s5), both fed by inline --u / --e custom properties. Optional by
+   construction — a cell with neither signal carries neither class and reads as a plain number.
+   Kept intentionally light: this grid's subject is the numbers, and a saturated fill behind every
+   one would bury them. The tint survives row-hover by blending into the hover surface rather than
+   being overpainted — hover is exactly when a grader is reading that row's colours. */
+.gb .gb-cell.gb-tint          { background: color-mix(in srgb, var(--u) 18%, transparent); }
+.gb tr:hover .gb-cell.gb-tint { background: color-mix(in srgb, var(--u) 18%, var(--surface-hover)); }
+.gb .gb-ebar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--e);
+  border-top-right-radius: 2px; pointer-events: none; }
 
 .gb .gb-missing  { color: var(--red); font-weight: 700; }
 .gb .gb-ungraded { color: var(--muted); font-weight: 700; }
@@ -1857,6 +1868,11 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 .gb-legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 12px;
   font-size: 0.78em; color: var(--text-soft); }
 .gb-legend .gb-key { display: inline-block; min-width: 1.4em; text-align: center; font-weight: 700; }
+.gb-legend .gb-leg-sep { padding-left: 14px; border-left: 1px solid var(--border); }
+/* The 0–5 ramp swatch, identical tokens and order to the rollup charts (low → high). */
+.gb-ramp { display: inline-flex; vertical-align: middle; margin: 0 4px; border-radius: 3px;
+  overflow: hidden; border: 1px solid var(--border); }
+.gb-ramp i { display: block; width: 12px; height: 10px; }
 
 /* ── Per-student detail ──────────────────────────────────────────────────── */
 .sd-head { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; margin-bottom: 18px; }
@@ -1869,7 +1885,10 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 /* The 0-5 diagnostics. Deliberately quieter than the points column beside them: they are a
    measurement, not a grade, and must not read as one. */
 .sd-dial { display: inline-block; min-width: 2.6em; padding: 1px 6px; border-radius: var(--radius-sm);
-  background: var(--surface-sunken); font-size: 0.8em; color: var(--text-soft); }
+  background: var(--surface-sunken); font-size: 0.8em; color: var(--text-soft);
+  /* left rail is tinted per level on the 0–5 ramp; transparent default keeps an un-levelled
+     dial visually flush with the others rather than bordered on one side only. */
+  border-left: 3px solid transparent; }
 
 .sd-work { margin-top: 6px; }
 .sd-work summary { cursor: pointer; font-size: 0.84em; color: var(--blue); }

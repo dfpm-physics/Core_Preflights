@@ -44,7 +44,7 @@
     import { runPage, esc, lastFirst, fmtDate, fmtDateTime } from '../js/util.js';
     import * as S from '../js/faculty-student.js';
     import * as EI from '../js/faculty-ei.js';
-    import { CELL } from '../js/faculty-gradebook.js';
+    import { CELL, zoneIndex } from '../js/faculty-gradebook.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
     runPage(ctx, init);
@@ -176,8 +176,8 @@
         <td class="sd-num">${statusChip(r)}</td>
         <td class="sd-num">${r.cell.points == null ? '<span class="muted">—</span>'
             : `${r.cell.points}<span class="muted">/${r.cell.possible}</span>`}</td>
-        <td class="sd-num">${r.effort == null ? '<span class="muted">—</span>' : `<span class="sd-dial" title="Engagement, 0–5. A measurement, not a grade.">${r.effort}/5</span>`}</td>
-        <td class="sd-num">${r.understanding == null ? '<span class="muted">—</span>' : `<span class="sd-dial" title="Demonstrated understanding, 0–5. A measurement, not a grade.">${r.understanding}/5</span>`}</td>
+        <td class="sd-num">${dial(r.effort, 'Engagement, 0–5. A measurement, not a grade.')}</td>
+        <td class="sd-num">${dial(r.understanding, 'Demonstrated understanding, 0–5. A measurement, not a grade.')}</td>
       </tr>`).join('');
 
       return `<div class="card"><div class="card-title">Lessons</div>
@@ -186,6 +186,16 @@
           <thead><tr><th></th><th>Lesson</th><th>Due</th><th>Status</th><th>Points</th>
             <th title="Engagement, 0–5">Effort</th><th title="Demonstrated understanding, 0–5">Underst.</th></tr></thead>
           <tbody>${body}</tbody></table></div></div>`;
+    }
+
+    // A 0–5 dial, coloured on the same rollup ramp the gradebook cells use, so a level reads the
+    // same colour on the grid and here. A left rail rather than a fill: the exact number is right
+    // there, so the colour is reinforcement, not the only cue.
+    function dial(v, title) {
+      if (v == null) return '<span class="muted">—</span>';
+      const idx = zoneIndex(v);
+      const style = idx == null ? '' : ` style="border-left-color:var(--s${idx + 1})"`;
+      return `<span class="sd-dial"${style} title="${esc(title)}">${v}/5</span>`;
     }
 
     function statusChip(r) {

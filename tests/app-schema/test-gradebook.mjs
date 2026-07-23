@@ -344,4 +344,94 @@ eq('an extension row reaches the cell it belongs to, and only that one',
 eq('…so the extended cadet has no percentage yet rather than a zero',
    extended.rows[1].totals.pct, null);
 
+/* ══════════════════════════════════════════════════════════════════════════
+ * Colour layer — zoneIndex + cellSignals (director request: tint = understanding,
+ * bar = effort, both reusing the rollup ramp)
+ * ════════════════════════════════════════════════════════════════════════════ */
+section('zoneIndex — the rollup ramp arithmetic, reproduced exactly');
+
+// This MUST match report.html's zoneVar: v => RAMP5[clamp(0,4, ceil(v)-1)]. If it drifts, the
+// gradebook and the rollup colour the same 0–5 value differently, which is the one thing the
+// director asked us not to do. The boundaries below are that formula pinned.
+eq('0 lands on the first zone (red), same as the rollup', G.zoneIndex(0), 0);
+eq('a hair above 0 is still the first zone', G.zoneIndex(0.1), 0);
+eq('1 is the first zone', G.zoneIndex(1), 0);
+eq('2 is the second', G.zoneIndex(2), 1);
+eq('3 is the third', G.zoneIndex(3), 2);
+eq('4 is the fourth', G.zoneIndex(4), 3);
+eq('5 is the fifth (green)', G.zoneIndex(5), 4);
+eq('a fractional 3.4 rounds UP into zone 4, exactly as ceil() does', G.zoneIndex(3.4), 3);
+eq('above range clamps to the top zone', G.zoneIndex(9), 4);
+eq('null has no zone — a future assignment that tracks nothing gets no colour', G.zoneIndex(null), null);
+eq('undefined has no zone', G.zoneIndex(undefined), null);
+eq('NaN has no zone', G.zoneIndex(NaN), null);
+
+section('cellSignals — effort and understanding from the grade alone');
+
+// Interactive path: effort is grades.effort, source "grade". No understanding on the grade (it is
+// per-objective in the submission payload the gradebook does not fetch) — so it is null, and the
+// cell simply gets an effort bar and no tint. That IS the graceful-degradation case.
+eq('interactive effort comes from grades.effort',
+   G.cellSignals({ effort: 4, diagnostic: {} }),
+   { effort: 4, understanding: null, effortSource: 'grade' });
+
+// Written path: both signals live in grades.diagnostic (q2_effort / q3_understanding).
+eq('written effort and understanding come from the diagnostic q2/q3 pair',
+   G.cellSignals({ effort: null, diagnostic: { q2_effort: 3, q3_understanding: 5 } }),
+   { effort: 3, understanding: 5, effortSource: 'diagnostic' });
+
+// A schema:1 payload outranks q2_effort for effort (it is the commensurable measure) and supplies
+// understanding via overall_understanding when q3 is absent.
+eq('a schema:1 payload supplies effort and overall_understanding',
+   G.cellSignals({ effort: null, diagnostic: { schema: 1, effort: 2, overall_understanding: 4 } }),
+   { effort: 2, understanding: 4, effortSource: 'report' });
+
+check('q3_understanding wins over a schema:1 overall_understanding when both are present',
+      G.cellSignals({ effort: null,
+        diagnostic: { schema: 1, effort: 2, overall_understanding: 4, q3_understanding: 1 } })
+        .understanding === 1,
+      'q3 is the more specific written signal; overall is the fallback');
+
+// The degradation cases the director asked us to design for.
+eq('a grade with an empty diagnostic yields no signals',
+   G.cellSignals({ effort: null, diagnostic: {} }),
+   { effort: null, understanding: null, effortSource: null });
+eq('no grade at all yields no signals',
+   G.cellSignals(null),
+   { effort: null, understanding: null, effortSource: null });
+eq('a grade with no diagnostic key at all is safe',
+   G.cellSignals({ effort: null }),
+   { effort: null, understanding: null, effortSource: null });
+
+section('buildMatrix attaches the signals to each graded cell');
+
+// The signals have to survive the trip through buildMatrix onto the cell, beside the state —
+// that is what the page reads to draw the tint and bar.
+const coloured = G.buildMatrix({
+  enrollments: [{ enrollmentId: 'e1', sectionId: SEC_M }],
+  offerings: [offering({ offeringId: 'x1', slug: 'preflight-01', dueAt: PAST })],
+  grades: [{ enrollment_id: 'e1', assignment_offering_id: 'x1', points_earned: 2,
+             points_possible: 2, is_finalized: true, effort: null,
+             diagnostic: { q2_effort: 4, q3_understanding: 2 } }],
+  submissions: [{ enrollment_id: 'e1', assignment_offering_id: 'x1', status: 'committed',
+                  committed_at: PAST }],
+  extensions: [], now: NOW,
+});
+{
+  const cell = coloured.rows[0].cells[0];
+  eq('a graded cell carries its effort', cell.effort, 4);
+  eq('…and its understanding', cell.understanding, 2);
+  check('…without disturbing the state or points the earlier tests pin',
+        cell.state === G.CELL.GRADED && cell.points === 2);
+}
+
+// A MISSING cell (no grade) must carry no signals, so the page draws no colour on it.
+const bare = G.buildMatrix({
+  enrollments: [{ enrollmentId: 'e9', sectionId: SEC_M }],
+  offerings: [offering({ offeringId: 'x1', slug: 'preflight-01', dueAt: PAST })],
+  grades: [], submissions: [], extensions: [], now: NOW,
+});
+eq('a cell with no grade has null signals, so it renders plain',
+   [bare.rows[0].cells[0].effort, bare.rows[0].cells[0].understanding], [null, null]);
+
 process.exitCode = summary() ? 0 : 1;

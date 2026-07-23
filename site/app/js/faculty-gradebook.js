@@ -20,7 +20,10 @@
 //   faculty-grade.js does it correctly and this follows that instead.
 
 import { db } from './supabase.js';
-import { chunked, lessonNumber, effectiveDue, submissionLateness } from './schema.js';
+import {
+  chunked, lessonNumber, effectiveDue, submissionLateness,
+  effortSignal, writtenSignals, writtenReport, int05,
+} from './schema.js';
 
 /* ---------------------------------------------------------------------------
  * Selects — deliberately narrower than the shared ones
@@ -35,9 +38,15 @@ export const GB_OFFERING_SELECT =
   + 'assignments!inner(id,slug,title),'
   + 'assignment_due_dates(section_id,due_at)';
 
-// NOT GRADE_SELECT — question_scores and diagnostic are per-student payloads no cell renders.
+// Narrower than GRADE_SELECT, but `diagnostic` now IS rendered — the cell tints by understanding
+// and draws an effort bar, both of which live there for the written path (`q2_effort` /
+// `q3_understanding`, or a schema:1 payload). `question_scores` stays out; no cell shows per-
+// question points. This is the one place the "no diagnostic" narrowing from the first cut was
+// wrong: a colour the director explicitly asked for is worth the jsonb. It is still bounded —
+// one small payload per grade, not the report blobs SUBMISSION_SELECT would drag in.
 export const GB_GRADE_SELECT =
-  'enrollment_id,assignment_offering_id,points_earned,points_possible,effort,is_finalized,source';
+  'enrollment_id,assignment_offering_id,points_earned,points_possible,effort,diagnostic,'
+  + 'is_finalized,source';
 
 // NOT SUBMISSION_SELECT — that drags in every submission_activities blob, including the
 // interactive report markdown. A cell needs to know only whether work arrived, and when.
@@ -122,6 +131,51 @@ export const BANDS = [
 export function bandOf(pct) {
   if (pct == null || !Number.isFinite(pct)) return null;
   return BANDS.find((b) => b.test(pct)) || BANDS[BANDS.length - 1];
+}
+
+/* ---------------------------------------------------------------------------
+ * Effort / understanding colour — the SAME mapping the rollup uses
+ * ------------------------------------------------------------------------- */
+
+/**
+ * A 0–5 value → an index 0..4 into the five-zone ramp (`--s1`…`--s5`).
+ *
+ * This is `report.html`'s `zoneVar` split in two: the arithmetic here (testable, no DOM), the
+ * `--s{n}` lookup in the page. Reproduced rather than reused because that one lives inside the
+ * rollup's page script — the same reason the scope control is copied, not imported — and the
+ * director asked specifically for "the colours in the rollup", so drift between the two would be
+ * the bug. `ceil(v) - 1`, clamped: 0 and (0,1] land on `--s1` (red), 5 on `--s5` (green).
+ *
+ * @returns {number|null} 0..4, or null when there is no value to colour (a future assignment type
+ *   that tracks neither signal, which is the case the director asked us to design for).
+ */
+export function zoneIndex(v) {
+  if (v == null || !Number.isFinite(v)) return null;
+  return Math.max(0, Math.min(4, Math.ceil(v) - 1));
+}
+
+/**
+ * The two 0–5 signals for one cell, from the grade alone.
+ *
+ * Effort follows `effortSignal`'s precedence with **no** submission report in hand — the gradebook
+ * does not fetch `submission_activities.content` (that is the report-blob payload P3.7 warns
+ * about), so the artifact's *claimed* effort is out of reach here. In practice it does not matter:
+ * `grades.effort` carries the interactive path and `diagnostic` carries the written path, which is
+ * every graded cell. The per-student page, which does fetch the submission, is where the claimed
+ * value can still surface.
+ *
+ * Understanding is the written diagnostic's `q3_understanding`, falling back to a schema:1
+ * payload's `overall_understanding`. Both live in `grades.diagnostic`.
+ *
+ * Every field is nullable on purpose. A cell with neither signal renders as a plain points cell —
+ * which is exactly what a future assignment type that tracks neither must degrade to.
+ */
+export function cellSignals(grade) {
+  if (!grade) return { effort: null, understanding: null, effortSource: null };
+  const { effort, source } = effortSignal(grade, null);
+  const u = writtenSignals(grade).understanding;
+  const understanding = u != null ? u : int05(writtenReport(grade)?.overall_understanding);
+  return { effort, understanding, effortSource: source };
 }
 
 /* ---------------------------------------------------------------------------
@@ -235,14 +289,21 @@ export function buildMatrix({ enrollments, offerings, grades, submissions, exten
     [key(x.enrollment_id, x.assignment_offering_id), x.extended_due_at]));
 
   const rows = (enrollments || []).map((en) => {
-    const cells = columns.map((c) => cellState({
-      grade: gradeBy.get(key(en.enrollmentId, c.offeringId)) || null,
-      submission: subBy.get(key(en.enrollmentId, c.offeringId)) || null,
-      offering: c.offering,
-      sectionId: en.sectionId,
-      extensionISO: extBy.get(key(en.enrollmentId, c.offeringId)) || null,
-      now,
-    }));
+    const cells = columns.map((c) => {
+      const grade = gradeBy.get(key(en.enrollmentId, c.offeringId)) || null;
+      const cell = cellState({
+        grade,
+        submission: subBy.get(key(en.enrollmentId, c.offeringId)) || null,
+        offering: c.offering,
+        sectionId: en.sectionId,
+        extensionISO: extBy.get(key(en.enrollmentId, c.offeringId)) || null,
+        now,
+      });
+      // The two 0–5 signals live alongside the state, not inside it: a colour is a property of the
+      // cell, but it is not what the cell IS (its state is), and cellState has a wall of tests
+      // pinning exactly what it returns.
+      return { ...cell, ...cellSignals(grade) };
+    });
     const totals = totalsFor(cells);
     return { ...en, cells, totals, band: bandOf(totals.pct) };
   });
