@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lessons · PREP</title>
+  <title>Assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
   <link rel="stylesheet" href="../css/styles.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -12,7 +12,7 @@
 <body>
   <header id="topnav"></header>
   <main class="page-wide" id="main">
-    <div class="center-load"><span class="spinner"></span><span>Loading lessons…</span></div>
+    <div class="center-load"><span class="spinner"></span><span>Loading assignments…</span></div>
   </main>
 
   <!-- New / edit lesson modal (directors).
@@ -23,15 +23,15 @@
        The inline question builder renders into #lb-q-list; everything else is static. -->
   <div class="modal-backdrop" id="lesson-modal">
     <div class="modal" style="max-width:760px">
-      <div class="modal-head"><h2 id="lm-title">New lesson</h2><button class="modal-close" data-close>×</button></div>
+      <div class="modal-head"><h2 id="lm-title">New assignment</h2><button class="modal-close" data-close>×</button></div>
       <div class="alert alert-error" id="lm-error" style="display:none"></div>
       <div class="alert alert-warn" id="lm-notice" style="display:none"></div>
 
       <div class="row wrap" style="gap:14px">
         <div class="field grow" style="min-width:180px"><label for="f-course">Course &amp; term</label><select id="f-course"></select></div>
-        <div class="field grow" style="min-width:160px"><label for="f-id">Lesson id (slug)</label>
+        <div class="field grow" style="min-width:160px"><label for="f-id">Assignment id (slug)</label>
           <input id="f-id" type="text"><div class="field-hint" id="f-id-hint">Lowercase letters, numbers, hyphens.</div></div>
-        <div class="field" style="min-width:110px;flex:0 0 110px"><label for="f-num">Lesson #</label>
+        <div class="field" style="min-width:110px;flex:0 0 110px"><label for="f-num">Assignment #</label>
           <input id="f-num" type="number" min="0" step="1" placeholder="2"></div>
       </div>
       <div class="field"><label for="f-title">Title</label><input id="f-title" type="text"></div>
@@ -59,7 +59,7 @@
           </div>
         </div>
         <div class="field-hint" id="lb-pf-detached" style="display:none;margin:2px 0 0">
-          The question set stays in the library — it is only detached from this term's lesson, and can be re-attached later.
+          The question set stays in the library — it is only detached from this term's assignment, and can be re-attached later.
         </div>
 
         <div id="lb-pf-new">
@@ -91,16 +91,16 @@
           </div>
         </div>
         <div class="field-hint" id="lb-i-detached" style="display:none;margin:2px 0 0">
-          The artifact stays in the library — it is only detached from this term's lesson, and can be re-attached later.
+          The artifact stays in the library — it is only detached from this term's assignment, and can be re-attached later.
         </div>
 
         <div id="lb-i-new">
           <div class="row wrap" style="gap:12px">
             <div class="field grow" style="min-width:180px"><label for="f-i-id">Interaction id (slug)</label>
               <input id="f-i-id" type="text" data-i="slug">
-              <div class="field-hint" id="f-i-id-hint">Defaults to the lesson id; must match the slug the AI tool posts in <code>#i=</code>.</div></div>
+              <div class="field-hint" id="f-i-id-hint">Defaults to the assignment id; must match the slug the AI tool posts in <code>#i=</code>.</div></div>
             <div class="field grow" style="min-width:180px"><label for="f-i-title">Interaction title (optional)</label>
-              <input id="f-i-title" type="text" data-i="title" placeholder="Defaults to the lesson title"></div>
+              <input id="f-i-title" type="text" data-i="title" placeholder="Defaults to the assignment title"></div>
           </div>
           <div class="field"><label for="f-i-url">Interaction URL</label>
             <input id="f-i-url" type="text" data-i="artifact_url" placeholder="https://chatgpt.com/g/…  or  https://claude.ai/public/artifacts/…"></div>
@@ -129,7 +129,7 @@
               <option value="lock_on_start">Lock on start</option>
             </select></div>
         </div>
-        <div class="field-hint" style="margin:-4px 0 10px">Points and the deadline belong to this term's run of the lesson — editing them never touches the library content or another semester.</div>
+        <div class="field-hint" style="margin:-4px 0 10px">Points and the deadline belong to this term's run of the assignment — editing them never touches the library content or another semester.</div>
 
         <!-- One date per meeting-day letter that this offering's sections actually use. The old
              fixed M/T pair inferred the day from the first character of a section code; the
@@ -140,7 +140,7 @@
       </div>
 
       <div class="row" style="gap:10px;margin-top:18px">
-        <button class="btn btn-primary" id="lm-save">Save lesson</button>
+        <button class="btn btn-primary" id="lm-save">Save assignment</button>
         <button class="btn btn-secondary" id="lm-preview">Preview (student view)</button>
         <button class="btn btn-secondary" data-close>Cancel</button>
       </div>
@@ -153,7 +153,7 @@
        this term's work with it. Only the library definition survives. -->
   <div class="modal-backdrop" id="del-modal">
     <div class="modal" style="max-width:520px">
-      <div class="modal-head"><h2>Remove lesson</h2><button class="modal-close" data-delclose>×</button></div>
+      <div class="modal-head"><h2>Remove assignment</h2><button class="modal-close" data-delclose>×</button></div>
       <p id="del-msg" style="margin:0 0 12px"></p>
       <div class="alert alert-info" id="del-info" style="margin-bottom:16px">Loading impact…</div>
       <div class="lb-del-actions">
@@ -177,17 +177,17 @@
       <div class="dest-boxes">
         <button class="dest-box" data-dest="new">
           <span class="dest-box-ic">✚</span>
-          <span class="dest-box-t">Create new lesson</span>
-          <span class="dest-box-d">Start a new lesson built around this artifact.</span>
+          <span class="dest-box-t">Create new assignment</span>
+          <span class="dest-box-d">Start a new assignment built around this artifact.</span>
         </button>
         <button class="dest-box" data-dest="existing">
           <span class="dest-box-ic">📚</span>
-          <span class="dest-box-t">Modify or add to lesson</span>
-          <span class="dest-box-d">Attach it to a lesson you already have.</span>
+          <span class="dest-box-t">Modify or add to assignment</span>
+          <span class="dest-box-d">Attach it to an assignment you already have.</span>
         </button>
       </div>
       <div class="dest-pick" id="dest-pick" style="display:none">
-        <div class="muted" style="font-size:.82em;margin-bottom:8px">Pick the lesson to add it to. Red cards already have an interaction — a different slug would replace it.</div>
+        <div class="muted" style="font-size:.82em;margin-bottom:8px">Pick the assignment to add it to. Red cards already have an interaction — a different slug would replace it.</div>
         <div class="lb-orphans" id="dest-lessons"></div>
       </div>
     </div>
@@ -199,7 +199,7 @@
        so the count has to be shown before, not explained after. -->
   <div class="modal-backdrop" id="swap-modal">
     <div class="modal" style="max-width:520px">
-      <div class="modal-head"><h2>Replace this lesson's interaction?</h2><button class="modal-close" data-swapclose>×</button></div>
+      <div class="modal-head"><h2>Replace this assignment's interaction?</h2><button class="modal-close" data-swapclose>×</button></div>
       <p id="swap-msg" style="margin:0 0 12px"></p>
       <div class="alert" id="swap-info" style="margin-bottom:16px"></div>
       <div class="lb-del-actions">
@@ -291,11 +291,11 @@
       vm = await L.loadManager(ctx);
       compose = { assignmentId: null };
 
-      const newBtn = isDirector() ? `<button class="btn btn-primary" id="new-btn">+ New lesson</button>` : '';
+      const newBtn = isDirector() ? `<button class="btn btn-primary" id="new-btn">+ New assignment</button>` : '';
       const head = `<div class="page-head">
         <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
-          <div><h1>Lessons</h1>
-            <div class="sub">${isDirector() ? 'Schedule library content or author new — then publish' : 'Published lessons'} for ${esc(ctx.courseTitleOf(ctx.currentOffering))}${ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''}.</div></div>
+          <div><h1>Assignments</h1>
+            <div class="sub">${isDirector() ? 'Schedule library content or author new — then publish' : 'Published assignments'} for ${esc(ctx.courseTitleOf(ctx.currentOffering))}${ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''}.</div></div>
           ${newBtn}
         </div></div>`;
 
@@ -304,10 +304,10 @@
       const composeHtml = isDirector() ? composeRegion() : '';
       const body = vm.lessons.length
         ? vm.lessons.map(card).join('')
-        : `<div class="empty-state"><div class="es-ic">📚</div><h3>No lessons scheduled this term</h3>
+        : `<div class="empty-state"><div class="es-ic">📚</div><h3>No assignments scheduled this term</h3>
              <p>${isDirector()
-                  ? (composeHtml ? 'Pick an assignment from the library above to schedule it, or click <strong>+ New lesson</strong>.'
-                                 : 'Click <strong>+ New lesson</strong> to create one.')
+                  ? (composeHtml ? 'Pick an assignment from the library above to schedule it, or click <strong>+ New assignment</strong>.'
+                                 : 'Click <strong>+ New assignment</strong> to create one.')
                   : 'Nothing has been published yet.'}</p></div>`;
 
       root.innerHTML = head + composeHtml + body;
@@ -591,7 +591,7 @@
       document.getElementById('lm-error').style.display = 'none';
       document.getElementById('lm-notice').style.display = 'none';
       document.getElementById('lm-title').textContent =
-        id ? 'Edit lesson' : (prefill ? 'New lesson — review & save' : 'New lesson');
+        id ? 'Edit assignment' : (prefill ? 'New assignment — review & save' : 'New assignment');
 
       // The scope selector lists OFFERINGS (course in a term). Everything scheduled hangs off one.
       const courseSel = document.getElementById('f-course');
@@ -641,7 +641,7 @@
       idEl.disabled = !!model.existingInteractive;
       document.getElementById('f-i-id-hint').innerHTML = model.existingInteractive
         ? 'Frozen — deployed artifacts post to this slug and every student report resolves through it.'
-        : 'Defaults to the lesson id; must match the slug the AI tool posts in <code>#i=</code>.';
+        : 'Defaults to the assignment id; must match the slug the AI tool posts in <code>#i=</code>.';
       document.getElementById('f-i-title').value = model.interactive.title;
       document.getElementById('f-i-url').value   = model.interactive.artifact_url;
       document.getElementById('f-i-desc').value  = model.interactive.description;
@@ -938,7 +938,7 @@
     }
     function previewHtml(title, questions) {
       if (!questions.length)
-        return `<div class="muted">This lesson has no free-response questions (interaction-only, or none selected).</div>`;
+        return `<div class="muted">This assignment has no free-response questions (interaction-only, or none selected).</div>`;
       const head = `<h3 style="margin-top:0">${esc(title || 'Preflight')}</h3>`;
       return head + questions.map((q, i) => {
         const pts  = q.points != null ? ` <span class="muted" style="font-size:.8em">(${q.points} pt${q.points === 1 ? '' : 's'})</span>` : '';
@@ -972,10 +972,10 @@
       const course = ctx.courses.find(c => c.offeringId === offeringId);
 
       if (!model.assignmentId && !L.isValidSlug(slug))
-        return fail('Lesson id must be lowercase letters, numbers, and hyphens only.');
-      if (!title) return fail('Enter a lesson title.');
+        return fail('Assignment id must be lowercase letters, numbers, and hyphens only.');
+      if (!title) return fail('Enter an assignment title.');
       if (!model.written.include && !model.interactive.include)
-        return fail('A lesson needs at least one activity — include the written questions, the AI interaction, or both.');
+        return fail('An assignment needs at least one activity — include the written questions, the AI interaction, or both.');
       if (!availablePolicies().includes(model.policy))
         return fail('The selected mode needs its activity included — add the preflight and/or interaction, or change the allowed mode.');
 
@@ -993,7 +993,7 @@
       const btn = document.getElementById('lm-save');
       const busy = (on) => {
         btn.disabled = on;
-        btn.innerHTML = on ? '<span class="spinner on-dark"></span> Saving…' : 'Save lesson';
+        btn.innerHTML = on ? '<span class="spinner on-dark"></span> Saving…' : 'Save assignment';
       };
 
       // A DIFFERENT slug on an existing artifact is not an edit. UNIQUE(assignment_id, modality)
@@ -1064,12 +1064,12 @@
       // to the new max. That silently changes cadets' totals — say so out loud.
       if (rescored > 0) {
         notes.push(`A question's point value changed, so ${rescored} existing grade${rescored !== 1 ? 's were' : ' was'} updated to match. `
-          + `Student totals for this lesson have changed; finalized grades keep their finalized state.`);
+          + `Student totals for this assignment have changed; finalized grades keep their finalized state.`);
       }
       // Detaching an activity clears the choice of anyone who had committed to it (the composite
       // FK is ON DELETE SET NULL). They keep their work; they no longer have a graded selection.
       if (unchosen > 0) {
-        notes.push(`${unchosen} student${unchosen !== 1 ? 's had' : ' had'} committed to an activity that is no longer part of this lesson, `
+        notes.push(`${unchosen} student${unchosen !== 1 ? 's had' : ' had'} committed to an activity that is no longer part of this assignment, `
           + `so their selection was cleared. Their saved work is untouched, but they must pick again.`);
       }
       if (notes.length) alert('Saved.\n\n' + notes.join('\n\n'));
@@ -1089,7 +1089,7 @@
     function openDeleteModal(l) {
       if (!l) return;
       delLesson = l;
-      document.getElementById('del-msg').innerHTML = `Remove lesson <strong>${esc(l.title)}</strong> (<code>${esc(l.slug)}</code>)?`;
+      document.getElementById('del-msg').innerHTML = `Remove assignment <strong>${esc(l.title)}</strong> (<code>${esc(l.slug)}</code>)?`;
       const info = document.getElementById('del-info');
       info.textContent = 'Loading impact…';
       cancelHold();
@@ -1105,7 +1105,7 @@
         const workTxt = work.length
           ? `This term's ${work.join(', ')} will be permanently deleted.`
           : `No student work has been recorded for it yet.`;
-        info.innerHTML = `<strong>Remove from this term</strong> unschedules the lesson. ${workTxt} `
+        info.innerHTML = `<strong>Remove from this term</strong> unschedules the assignment. ${workTxt} `
           + `The question set and artifact stay in the library and can be scheduled again.<br><br>`
           + `<strong>Delete library copy too</strong> also removes the reusable assignment and its activities `
           + `for every term — including every student report ever submitted against the artifact. `
@@ -1193,7 +1193,7 @@
       pick.style.display = 'none';
       modal.querySelectorAll('.dest-box').forEach(b => b.classList.remove('active'));
       document.getElementById('dest-sub').textContent = prefill.ititle || prefill.title
-        ? `“${prefill.ititle || prefill.title}”${known ? ` · a lesson already uses the id “${prefill.id}”` : ''}`
+        ? `“${prefill.ititle || prefill.title}”${known ? ` · an assignment already uses the id “${prefill.id}”` : ''}`
         : 'Choose where this artifact should land.';
 
       modal.querySelector('[data-dest="new"]').onclick = () => {
@@ -1213,7 +1213,7 @@
       const wrap = document.getElementById('dest-lessons');
       const lessons = (vm.lessons || []).slice();
       if (!lessons.length) {
-        wrap.innerHTML = `<div class="muted" style="font-size:.85em">No lessons yet — choose <strong>Create new lesson</strong>.</div>`;
+        wrap.innerHTML = `<div class="muted" style="font-size:.85em">No assignments yet — choose <strong>Create new assignment</strong>.</div>`;
         return;
       }
       const iid = prefill.iid || prefill.id;
@@ -1262,15 +1262,15 @@
     async function renderSwapNotice() {
       const el = document.getElementById('lm-notice');
       if (!pendingSwap) { el.style.display = 'none'; return; }
-      el.textContent = `Saving replaces this lesson's interaction “${pendingSwap.fromSlug}”. Checking how many student reports are attached…`;
+      el.textContent = `Saving replaces this assignment's interaction “${pendingSwap.fromSlug}”. Checking how many student reports are attached…`;
       el.style.display = '';
       const n = await L.countActivityReports(pendingSwap.activityId);
       if (!pendingSwap) return;                  // director closed/changed the form during the await
       pendingSwap.reports = n;
       el.textContent = n > 0
-        ? `Saving replaces this lesson's interaction “${pendingSwap.fromSlug}”, which holds ${n} student report${n === 1 ? '' : 's'}. `
+        ? `Saving replaces this assignment's interaction “${pendingSwap.fromSlug}”, which holds ${n} student report${n === 1 ? '' : 's'}. `
           + `Those reports are attached to that artifact and would be DELETED with it. To keep them, restore the original slug and only change the URL.`
-        : `Saving replaces this lesson's interaction “${pendingSwap.fromSlug}”. No student reports are attached to it yet, so nothing is lost.`;
+        : `Saving replaces this assignment's interaction “${pendingSwap.fromSlug}”. No student reports are attached to it yet, so nothing is lost.`;
     }
 
     function promptSwapConfirm(swap) {
@@ -1279,7 +1279,7 @@
         const ok = document.getElementById('swap-ok');
         const info = document.getElementById('swap-info');
         document.getElementById('swap-msg').textContent =
-          `“${swap.fromSlug}” is this lesson's interactive activity. A lesson holds only one, so saving a different slug deletes it and creates the new one.`;
+          `“${swap.fromSlug}” is this assignment's interactive activity. An assignment holds only one, so saving a different slug deletes it and creates the new one.`;
         const n = swap.reports || 0;
         info.className = 'alert ' + (n > 0 ? 'alert-warn' : 'alert-info');
         info.textContent = n > 0

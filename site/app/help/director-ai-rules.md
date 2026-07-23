@@ -15,7 +15,7 @@ described below.
 It produces no class-level output at all. It used to also write a per-instructor misconception
 report; that was retired in July 2026, because an instructor is not a unit of analysis — a single
 report pooled all of an instructor's sections, so it could never be shown for one section. Anything
-about the class as a whole now comes from lesson aggregation.
+about the class as a whole now comes from assignment aggregation.
 
 Running M and T separately is safe: each run only touches the students it graded.
 
@@ -35,14 +35,14 @@ totals, or finalization, and no student-facing page requests or renders any of i
 measure the instrument, not the student, and to let a written preflight be summarized the same way
 an interactive lesson is. Per-student values are never displayed individually.
 
-## Lesson aggregation
+## Assignment aggregation
 
 Run **after a day track's deadline**. It reads the per-student assessments and produces the AI text
-on the lesson rollup: a short readiness summary, a one-line teaching recommendation under the
+on the assignment rollup: a short readiness summary, a one-line teaching recommendation under the
 misconception bars, and the showcase quotes.
 
 **The readiness summary is written per instructor**, covering every section you teach at once, with
-any section that genuinely differs called out beneath it by name. Two sections of the same lesson
+any section that genuinely differs called out beneath it by name. Two sections of the same assignment
 used to get two separate summaries written as though the other did not exist, so nothing told you
 whether a gap was your whole cohort or one section. Viewing a single section shows its own numbers,
 quotes and recommendation, with your summary above them.
@@ -62,7 +62,7 @@ two names and split into two bars. Aggregation records which invented labels mea
 and the rollup merges them from then on — the popover on a merged bar lists the other names it
 absorbed.
 
-**It covers both ways a lesson can be worked.** Students who took the interactive artifact and
+**It covers both ways an assignment can be worked.** Students who took the interactive artifact and
 students who answered the question set are summarized together, because both now produce the same
 per-student assessment. Where the two genuinely differ, the rollup says so rather than blurring
 them: effort is one measurement across both paths (the reading reflection is the same question
@@ -82,7 +82,7 @@ a readiness summary written over half a *section* would describe a class that do
 
 ## Running both together
 
-There is a third workflow that simply runs the two in order for one lesson and one day: grade
+There is a third workflow that simply runs the two in order for one assignment and one day: grade
 everything that closed, then summarize it. It adds the checks that only make sense between the two
 steps — that the deadline has actually passed, and that grading produced the assessments the
 summary reads.

@@ -20,7 +20,7 @@
       "doc": "site/app/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-07-21",
+      "reviewed": "2026-07-23",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -51,7 +51,7 @@
       "doc": "site/app/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-07-22",
+      "reviewed": "2026-07-23",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -64,7 +64,7 @@
       "doc": "site/app/help/director-ai-rules.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-07-22",
+      "reviewed": "2026-07-23",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -179,7 +179,7 @@
       "doc": "site/app/help/instructor-accounts.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-07-21",
+      "reviewed": "2026-07-23",
       "sources": [
         ".ai/instructions/PROJECT.md",
         "site/app/js/roster-import.js",

@@ -102,7 +102,7 @@
       const body = items.length
         ? `<div class="list">${items.map(lessonItem).join('')}</div>`
         : `<div class="empty-state"><div class="es-ic">${iconHTML('rocket', '🚀', 'ic')}</div><h3>All caught up</h3>
-             <p>You have no open lessons right now. Nice work.</p></div>`;
+             <p>You have no open assignments right now. Nice work.</p></div>`;
       return `<section class="dash-section">
         <div class="section-head"><h2>${iconHTML('due-soon', '⏳', 'ic')} Up next</h2>
           ${items.length ? `<span class="count-pill">${items.length}</span>` : ''}

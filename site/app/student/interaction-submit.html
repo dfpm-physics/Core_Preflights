@@ -120,17 +120,17 @@
       }
       if (!payload) {
         emptyState('💡', 'Nothing to submit',
-          'Open a lesson interaction and finish it — it will send your report here automatically.');
+          'Open an interactive lesson and finish it — it will send your report here automatically.');
         return;
       }
       if (payload.type !== 'interaction') {
         notice('warn', `This submission type (“${payload.type}”) isn’t supported yet.`,
-          'Your report was not saved. Let your instructor know which lesson produced this link.');
+          'Your report was not saved. Let your instructor know which assignment produced this link.');
         return;
       }
       if (!payload.markdown) {
         notice('error', 'Could not read the report.',
-          'The link may have been truncated or copied incompletely. Re-open the lesson and submit again from the finish screen.');
+          'The link may have been truncated or copied incompletely. Re-open the interactive lesson and submit again from the finish screen.');
         return;
       }
       await render();
@@ -165,22 +165,22 @@
 
       let banner = '';
       if (!payload.id) {
-        banner = `<div class="alert alert-warn">This link is missing its lesson id, so the report can’t be
-          attached to a lesson. You can read it below, but it can’t be saved.</div>`;
+        banner = `<div class="alert alert-warn">This link is missing its assignment id, so the report can’t be
+          attached to an assignment. You can read it below, but it can’t be saved.</div>`;
       } else if (!activity) {
-        banner = `<div class="alert alert-warn">This lesson isn’t set up yet — ask your instructor to add
+        banner = `<div class="alert alert-warn">This assignment isn’t set up yet — ask your instructor to add
           interaction “${esc(payload.id)}” before you submit.</div>`;
       } else if (!offering) {
-        banner = `<div class="alert alert-warn">This lesson exists, but it isn’t published for your class
+        banner = `<div class="alert alert-warn">This assignment exists, but it isn’t published for your class
           this term, so there’s nowhere to record it. You can read your report below — check with your
-          instructor before re-running the lesson.</div>`;
+          instructor before re-running the interactive lesson.</div>`;
       } else if (offered?.gradingRole === 'practice') {
-        banner = `<div class="alert alert-info">This lesson is set up as <strong>practice</strong> this term,
+        banner = `<div class="alert alert-info">This assignment is set up as <strong>practice</strong> this term,
           so the written preflight is what carries your grade. Your report is still saved and your instructor
           will see it — it just won’t replace your written work.</div>`;
       } else if (writtenAnswers > 0) {
         banner = `<div class="alert alert-warn">You have ${writtenAnswers} answer${writtenAnswers === 1 ? '' : 's'}
-          saved on the written version of this lesson. <strong>Submitting this report makes the interactive
+          saved on the written version of this assignment. <strong>Submitting this report makes the interactive
           lesson the one that counts</strong> — your written answers are kept, but they won’t be graded, and
           you won’t be able to switch back without asking your instructor.</div>`;
       }
@@ -203,7 +203,7 @@
                 <div class="card-title">${esc(activity?.title || offering?.title || 'Interaction report')}</div>
                 ${effortTag}
               </div>
-              ${payload.id ? `<div class="muted" style="font-size:0.88em;margin-top:6px">Lesson id: ${esc(payload.id)}</div>` : ''}
+              ${payload.id ? `<div class="muted" style="font-size:0.88em;margin-top:6px">Assignment id: ${esc(payload.id)}</div>` : ''}
             </div>
             ${canSubmit ? `<div class="row" style="gap:10px;flex-shrink:0">
               <button class="btn btn-primary" id="submit-btn">Submit this report</button>
@@ -255,7 +255,7 @@
           (committed ? ` (about ${effortPoints(payload.effort, possible)} of ${possible} pts).` : '.')
         : '';
       status.textContent = (committed
-        ? 'Saved — this lesson is now the one that counts for your grade.'
+        ? 'Saved — this assignment is now the one that counts for your grade.'
         : `Saved to your record${role === 'practice' ? ' as practice' : ''}.`) + pts +
         ' Re-submitting will overwrite it.';
       status.style.color = 'var(--green)';

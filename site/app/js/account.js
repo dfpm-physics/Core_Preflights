@@ -316,7 +316,7 @@ export async function renderAccount(ctx, root) {
           <option value="histogram"${sel(prefs.understanding, 'histogram')}>Histogram — counts at each score</option>
           <option value="curve"${sel(prefs.understanding, 'curve')}>Smoothed curve — estimated distribution</option>
         </select>
-        <div class="field-hint">How the lesson rollup draws each objective's 0–5 spread. The
+        <div class="field-hint">How the assignment rollup draws each objective's 0–5 spread. The
           histogram matches the effort chart above it and shows the actual counts; the curve is
           an estimate that reads more smoothly for a large cohort.</div></div>` : ''}
     </div>
@@ -386,7 +386,7 @@ function wireAccount(ctx, root) {
     if (hint && !hint.dataset.saved) {
       hint.dataset.saved = '1';
       hint.insertAdjacentHTML('beforeend',
-        ' <span class="ok-note">Saved — applies next time you open a lesson rollup.</span>');
+        ' <span class="ok-note">Saved — applies next time you open an assignment rollup.</span>');
     }
   });
 

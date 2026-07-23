@@ -346,7 +346,7 @@ export async function resolveActivityBySlug(ctx, slug) {
  * activity can never carry credit and the DB would reject it anyway.
  */
 export async function submitInteractionReport(ctx, { activity, offering, markdown, data }) {
-  if (!offering) return { error: new Error('This lesson is not scheduled for you this term.') };
+  if (!offering) return { error: new Error('This assignment is not scheduled for you this term.') };
 
   const { data: submission, error } = await ensureSubmission(ctx, offering.offeringId);
   if (error || !submission) return { error: error || new Error('Could not open a submission.') };

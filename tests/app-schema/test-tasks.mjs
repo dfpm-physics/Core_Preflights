@@ -44,6 +44,13 @@ const shapeProblems = T.SOURCES.filter(s =>
 eq('every source has an id, an icon, a known severity and a load()',
    shapeProblems.map(s => s.id), []);
 
+// `action` is what the box actually prints, and it only works if it stays SHORT — the row is
+// sized to its words, so one wordy source stretches the whole thing back out.
+const longActions = T.SOURCES
+  .map(s => [s.id, String(s.load).match(/action:\s*'([^']+)'/)?.[1]])
+  .filter(([, a]) => !a || a.length > 22);
+eq('every source names a short imperative action', longActions.map(([id]) => id), []);
+
 // The two director-only sources are a UI convention, not RLS — analysis_reports and
 // analysis_runs both admit any staff member of the offering. If this flag is dropped, an
 // instructor starts seeing work they cannot act on, and nothing in the database objects.
@@ -108,8 +115,10 @@ check('the empty state says so in words', /Nothing outstanding/.test(empty));
 check('…and renders no boxes at all', !/duo-box/.test(empty));
 
 const html = T.renderTasks([
-  { id: 'to-grade', severity: 'alert', icon: '📝', count: 9, text: '9 submissions', link: 'grade.html' },
-  { id: 'ai-unfinalized', severity: 'warn', icon: '🤖', count: 2, text: '2 grades', link: 'grade.html' },
+  { id: 'to-grade', severity: 'alert', icon: '📝', count: 9, action: 'Review grades',
+    text: '9 submissions past due and not finalized', link: 'grade.html' },
+  { id: 'ai-unfinalized', severity: 'warn', icon: '🤖', count: 2, action: 'Review AI grades',
+    text: '2 AI-suggested grades awaiting your review', link: 'grade.html' },
 ], { esc });
 
 eq('one box per task', (html.match(/class="duo-box/g) || []).length, 2);
@@ -117,6 +126,18 @@ check('severity becomes a class', html.includes('sev-alert') && html.includes('s
 check('the count is rendered', html.includes('>9<'));
 check('each box links to the page that clears it', html.includes('href="grade.html"'));
 check('the panel counts itself', html.includes('count-pill">2<'));
+
+// The face of the box is the imperative, not the sentence — that is the whole point of the
+// compact row. The sentence survives as the tooltip so nothing is actually lost.
+check('the box shows the short action', html.includes('>Review AI grades<'));
+check('…and the full sentence is the tooltip',
+      html.includes('title="9 submissions past due and not finalized"'));
+
+// A source written before `action` existed must still render rather than print "undefined".
+const legacy = T.renderTasks([
+  { id: 'x', severity: 'info', icon: '·', count: 1, text: 'something outstanding', link: 'a.html' },
+], { esc });
+check('a source with no action falls back to its text', legacy.includes('>something outstanding<'));
 
 // Source text is authored in JS today, but a future source could interpolate a section code or
 // a lesson title that came from the database. Escaping is cheap now and unavailable later.

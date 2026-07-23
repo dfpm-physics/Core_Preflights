@@ -289,7 +289,7 @@ export function commentCard({ student, enrollment, totals, rows, ei = [], classS
   if (understandings.length) {
     const avg = understandings.reduce((a, b) => a + b, 0) / understandings.length;
     L.push('');
-    L.push(`Demonstrated understanding: ${avg.toFixed(1)} / 5 across ${understandings.length} graded lesson(s).`);
+    L.push(`Demonstrated understanding: ${avg.toFixed(1)} / 5 across ${understandings.length} graded assignment(s).`);
   }
 
   const mc = foldMisconceptions(rows).filter((m) => m.count > 1);

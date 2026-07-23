@@ -176,9 +176,9 @@ function render() {
   }
   if (!MODEL.lessons.length) {
     ROOT.innerHTML = head(firstName, roleLabel) + `<div class="empty-state"><div class="es-ic">💡</div>
-      <h3>No published lessons yet</h3><p>Once interactions are published for ${esc(MODEL.courseTitle)},
+      <h3>No published assignments yet</h3><p>Once interactions are published for ${esc(MODEL.courseTitle)},
       this dashboard fills in with completion, effort, and misconception trends.
-      ${dir() ? '<a href="lessons.html">Manage lessons →</a>' : ''}</p></div>`;
+      ${dir() ? '<a href="lessons.html">Manage assignments →</a>' : ''}</p></div>`;
     return;
   }
 
@@ -189,11 +189,18 @@ function render() {
   const ctx = { vIdx: lessonIdx(STATE.viewLesson), lesson: MODEL.lessons[lessonIdx(STATE.viewLesson)] };
   ctx.status = statusOf(ctx.vIdx);
 
+  // The tasks row sits BELOW the spotlight, not above the stat tiles where it started.
+  //
+  // It loads a beat after everything else and its height depends on how much is outstanding, so
+  // at the top of the page it pushed the two things people actually come here for — the KPI tiles
+  // and the active preflight — to a different vertical position on every visit, and moved them
+  // again once the queries landed. Underneath, the numbers and the spotlight are in the same
+  // place whether you have five things to do or none.
   ROOT.innerHTML =
     head(firstName, roleLabel) +
-    `<div id="dashTasks">${tasksMarkup()}</div>` +
     statTiles(agg, ctx) +
     spotlight(agg, ctx) +
+    `<div id="dashTasks">${tasksMarkup()}</div>` +
     yourSections() +
     (dir() ? matrix() : '');
 
@@ -222,49 +229,25 @@ function head(firstName, roleLabel) {
   return `<div class="page-head">
     <h1>Welcome, ${esc(firstName)}</h1>
     <div class="sub">${esc(MODEL.courseTitle)} · ${esc(roleLabel)} · ${c.sections} section${c.sections === 1 ? '' : 's'}
-      · ${c.students} student${c.students === 1 ? '' : 's'} · ${c.lessons} lesson${c.lessons === 1 ? '' : 's'} published</div>
-    ${courseSwitcher()}
+      · ${c.students} student${c.students === 1 ? '' : 's'} · ${c.lessons} assignment${c.lessons === 1 ? '' : 's'} published</div>
   </div>`;
 }
 
-/* ── P1.7 — inline course switcher ────────────────────────────────────────────
- * The dashboard used to delegate course switching entirely to the global nav, which means the
- * one control you want while looking at a course lives somewhere you have to go looking for.
+/* ── The inline course switcher that used to sit here (P1.7, removed 2026-07-23) ──────────────
+ * It was a segmented group (or a <select> past four courses) under the page heading, mirroring
+ * the rollup's renderScope() shape, with a switchCourse() that re-set the offering and remounted
+ * the whole dashboard.
  *
- * The component is the rollup's renderScope() shape, deliberately: a segmented group while the
- * options fit, a <select> with counts once they do not. Copying the shape rather than the code
- * because that one lives inside report.html's page script and is bound to its scope variables —
- * lifting it into a shared module is worth doing when a third caller appears, not for the
- * second.
+ * WHY IT EXISTED, because the reason is still valid: switching course from the dashboard meant
+ * opening the user menu, which is not where you look while reading a course.
  *
- * Renders nothing for a single course. A switcher with one option is a label pretending to be a
- * control. */
-const SEG_MAX_COURSES = 4;
-
-function courseSwitcher() {
-  const courses = CTX.courses || [];
-  if (courses.length < 2) return '';
-  const label = (c) => `${CTX.courseTitleOf(c.offeringId)}${c.termLabel ? ` · ${c.termLabel}` : ''}`;
-
-  if (courses.length <= SEG_MAX_COURSES) {
-    return `<div class="seg course-seg" id="courseSeg" role="group" aria-label="Course">`
-      + courses.map(c => `<button data-offering="${esc(c.offeringId)}"
-           aria-pressed="${c.offeringId === CTX.currentOffering}">${esc(label(c))}</button>`).join('')
-      + `</div>`;
-  }
-  return `<div class="course-seg"><select id="courseSel" aria-label="Course">`
-    + courses.map(c => `<option value="${esc(c.offeringId)}"
-        ${c.offeringId === CTX.currentOffering ? 'selected' : ''}>${esc(label(c))}</option>`).join('')
-    + `</select></div>`;
-}
-
-/** Switch offering, then rebuild everything — sections, lessons and tasks are all course-scoped. */
-async function switchCourse(offeringId) {
-  if (!offeringId || offeringId === CTX.currentOffering) return;
-  ROOT.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
-  await CTX.setCurrentOffering(offeringId);
-  await mountDashboard(CTX, ROOT);
-}
+ * WHY IT IS GONE: the answer to that turned out to belong in the nav, not on one page. The course
+ * name was already printed beside the wordmark on EVERY page, and it is now the switcher itself
+ * (nav.js → brandCourseHTML). Keeping this one as well would have put two controls for the same
+ * choice on the same screen, one of which only exists on the dashboard.
+ *
+ * Course changes still remount this view — dashboard.html passes `onCourseChange` into renderNav,
+ * so nothing about the reload path changed, only who triggers it. */
 
 function statTiles(a, ctx) {
   const tile = (accent, icon, emoji, num, label, sub) => `
@@ -276,10 +259,10 @@ function statTiles(a, ctx) {
   const scopeLabel = (dir() && STATE.scope === 'all') ? 'all sections' : 'your sections';
   const L = ctx.lesson.short;
   const compLabel = ctx.status === 'today' ? 'Active preflight complete'
-    : ctx.status === 'past' ? `Lesson ${L} complete` : `Upcoming preflight (L${L})`;
-  const compSub = ctx.status === 'today' ? `Lesson ${L} · ${a.done}/${a.total} · before next class`
-    : ctx.status === 'past' ? `Lesson ${L} · ${a.done}/${a.total} · past lesson`
-    : `Lesson ${L} · ${a.done}/${a.total} · not yet due · early submissions`;
+    : ctx.status === 'past' ? `Assignment ${L} complete` : `Upcoming preflight (A${L})`;
+  const compSub = ctx.status === 'today' ? `Assignment ${L} · ${a.done}/${a.total} · before next class`
+    : ctx.status === 'past' ? `Assignment ${L} · ${a.done}/${a.total} · already covered`
+    : `Assignment ${L} · ${a.done}/${a.total} · not yet due · early submissions`;
   return `<div class="stat-grid">
     ${tile('blue',  'completion', '📨', Math.round(a.pct * 100) + '%', compLabel, compSub)}
     ${tile('gold',  'bolt',       '⚡', f1(a.effort), 'Avg effort (graded)',
@@ -356,7 +339,7 @@ function spotlight(a, ctx) {
       <div class="eff-bar" style="height:${Math.round(cnt / maxC * 100)}%;background:${dColor(s)}"></div>
     </div>`).join('');
   const effBody = noData
-    ? `<div class="empty-note">No submissions yet for this lesson.</div>`
+    ? `<div class="empty-note">No submissions yet for this assignment.</div>`
     : lowData
       ? `<div class="empty-note">Only ${a.done} early submission${a.done === 1 ? '' : 's'} — too soon for a reliable distribution.</div>`
       : `<div class="eff-wrap">
@@ -382,7 +365,7 @@ function spotlight(a, ctx) {
     ? `<div class="empty-note">Trends appear once students submit.</div>`
     : writtenOnly && !a.mis.length
       ? `<div class="empty-note">Everyone worked the question set. Misconceptions appear here once
-         the lesson has been graded and aggregated —
+         the assignment has been graded and aggregated —
          <a href="report.html?i=${encodeURIComponent(L.id)}">open the full rollup</a>.</div>`
       : lowData
         ? `<div class="empty-note">Trends appear once more students submit.</div>`
@@ -390,11 +373,11 @@ function spotlight(a, ctx) {
           + (a.flags ? `<div class="callout">🚩 <span><b>${a.flags}</b> student${a.flags === 1 ? '' : 's'} flagged for follow-up</span></div>` : '');
 
   const eyebrowTxt = st === 'today' ? 'Active preflight · due before next class'
-    : st === 'past' ? 'Past lesson · already covered in class' : 'Upcoming preflight · not yet due';
+    : st === 'past' ? 'Past assignment · already covered in class' : 'Upcoming preflight · not yet due';
   const metaTxt = st === 'today' ? 'What to know before you walk into class'
     : st === 'past' ? 'How this one landed' : 'Preview — students working ahead';
   const statusWord = st === 'today' ? 'Today' : st === 'past' ? 'Past' : 'Upcoming';
-  const dueTxt = L.due_date ? `due ${esc(fmtDate(L.due_date))}` : (st === 'past' ? 'earlier lesson' : st === 'upcoming' ? 'not yet due' : 'current lesson');
+  const dueTxt = L.due_date ? `due ${esc(fmtDate(L.due_date))}` : (st === 'past' ? 'earlier assignment' : st === 'upcoming' ? 'not yet due' : 'current assignment');
   const dueChip = st === 'today' ? `⏳ ${dueTxt}` : st === 'past' ? `✓ ${dueTxt}` : `🔭 ${dueTxt}`;
 
   const scopeCtl = dir() ? scopeControl() : '';
@@ -402,23 +385,23 @@ function spotlight(a, ctx) {
     ? `<button class="btn btn-ghost btn-sm" data-today="1" title="Back to the current preflight">↩ Today</button>` : '';
 
   return `<div class="spot-shell">
-    <button class="spot-arrow left"  data-nav="prev" ${vIdx === 0 ? 'disabled' : ''} aria-label="Previous lesson"><span class="arrow-tab">◀</span></button>
-    <button class="spot-arrow right" data-nav="next" ${vIdx === last ? 'disabled' : ''} aria-label="Next lesson"><span class="arrow-tab">▶</span></button>
+    <button class="spot-arrow left"  data-nav="prev" ${vIdx === 0 ? 'disabled' : ''} aria-label="Previous assignment"><span class="arrow-tab">◀</span></button>
+    <button class="spot-arrow right" data-nav="next" ${vIdx === last ? 'disabled' : ''} aria-label="Next assignment"><span class="arrow-tab">▶</span></button>
     <section class="card">
       <div class="card-head">
         <div>
           <span class="eyebrow">${eyebrowTxt}</span>
-          <div class="card-title">Lesson ${esc(L.short)} — ${esc(L.title)} <span class="status-tag ${st}">${statusWord}</span></div>
+          <div class="card-title">Assignment ${esc(L.short)} — ${esc(L.title)} <span class="status-tag ${st}">${statusWord}</span></div>
           <div class="card-meta">${metaTxt}</div>
         </div>
         <span class="grow"></span>
         ${scopeCtl}
         <div class="tnav">
-          <button data-nav="prev" ${vIdx === 0 ? 'disabled' : ''} aria-label="Previous lesson">◀</button>
-          <button data-nav="next" ${vIdx === last ? 'disabled' : ''} aria-label="Next lesson">▶</button>
+          <button data-nav="prev" ${vIdx === 0 ? 'disabled' : ''} aria-label="Previous assignment">◀</button>
+          <button data-nav="next" ${vIdx === last ? 'disabled' : ''} aria-label="Next assignment">▶</button>
         </div>
         ${todayBtn}
-        <a class="btn btn-ghost btn-sm" href="report.html?i=${encodeURIComponent(L.id)}" title="Open the full lesson rollup">Open full rollup →</a>
+        <a class="btn btn-ghost btn-sm" href="report.html?i=${encodeURIComponent(L.id)}" title="Open the full assignment rollup">Open full rollup →</a>
       </div>
       <div class="spot">
         <div class="spot-col ring-wrap">
@@ -450,9 +433,9 @@ function yourSections() {
       const cc = cellFor(sec.id, L.id);
       const u = cc.und, col = sColor(u);
       const act = L.id === MODEL.activeId ? 'active-col' : '';
-      const title = `Lesson ${L.short} — understanding ${f1(u)}/5 · ${cc.done}/${cc.total} submitted`;
+      const title = `Assignment ${L.short} — understanding ${f1(u)}/5 · ${cc.done}/${cc.total} submitted`;
       return `<div class="us-cell ${act}" title="${esc(title)}">
-        <div class="cl">L${esc(L.short)}</div>
+        <div class="cl">A${esc(L.short)}</div>
         <div class="cv" style="color:${col}">${f1(u)}${u == null ? '' : '<span class="cv-unit">/5</span>'}</div></div>`;
     }).join('');
     return `<div class="sec-card mine">
@@ -466,7 +449,7 @@ function yourSections() {
         <div class="minstat"><div class="mv">${f1(c.und)}</div><div class="ml">understanding</div></div>
         <div class="minstat"><div class="mv ${c.flags ? 'flag' : ''}">${c.flags}</div><div class="ml">flagged</div></div>
       </div>
-      <div class="strip-eyebrow">Understanding by lesson</div>
+      <div class="strip-eyebrow">Understanding by assignment</div>
       <div class="us-strip">${strip}</div>
     </div>`;
   }).join('')}</div>`
@@ -486,7 +469,7 @@ function matrix() {
   const aIdx = activeIdx();
   const upTo = MODEL.lessons.slice(0, aIdx + 1);   // columns stop at the active lesson
   const colHdr = upTo.map(L => `<th class="lcol ${L.id === MODEL.activeId ? 'active-col' : ''}"
-    title="${esc(L.title)}">L${esc(L.short)}</th>`).join('');
+    title="${esc(L.title)}">A${esc(L.short)}</th>`).join('');
 
   const ordered = [...MODEL.sections].sort((a, b) => (b.isMine ? 1 : 0) - (a.isMine ? 1 : 0));
   const rows = ordered.map((s, i) => {
@@ -514,7 +497,7 @@ function matrix() {
     </tr>`;
   }).join('');
 
-  const unit = metric === 'completion' ? '% complete per lesson' : 'avg effort (0–5) per lesson';
+  const unit = metric === 'completion' ? '% complete per assignment' : 'avg effort (0–5) per assignment';
   const aShort = MODEL.lessons[aIdx]?.short || '';
   return `<details class="matrix">
     <summary>
@@ -527,7 +510,7 @@ function matrix() {
     </summary>
     <div class="card matrix-card">
       <div class="matrix-toolbar">
-        <span class="eyebrow" style="margin:0">Section × lesson · ${unit}</span>
+        <span class="eyebrow" style="margin:0">Section × assignment · ${unit}</span>
         <span class="grow"></span>
         <div class="legend"><span>low</span>
           <span class="ramp"><span style="background:${tint(0).bg}"></span><span style="background:${tint(.25).bg}"></span><span style="background:${tint(.5).bg}"></span><span style="background:${tint(.75).bg}"></span><span style="background:${tint(1).bg}"></span></span>
@@ -543,8 +526,8 @@ function matrix() {
             <th class="sticky-l" style="text-align:left">Section</th>
             <th>Students</th>
             ${colHdr}
-            <th title="Active lesson — average effort">Effort·L${esc(aShort)}</th>
-            <th title="Active lesson — students flagged">Flags·L${esc(aShort)}</th>
+            <th title="Active assignment — average effort">Effort·A${esc(aShort)}</th>
+            <th title="Active assignment — students flagged">Flags·A${esc(aShort)}</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -567,13 +550,6 @@ function wire() {
 
   const ssel = ROOT.querySelector('#scopeSel');
   if (ssel) ssel.onchange = () => { STATE.scope = ssel.value; rerender(); };
-
-  const cs = ROOT.querySelector('#courseSeg');
-  if (cs) cs.querySelectorAll('button').forEach(b =>
-    b.onclick = () => switchCourse(b.dataset.offering));
-
-  const csel = ROOT.querySelector('#courseSel');
-  if (csel) csel.onchange = () => switchCourse(csel.value);
 
   const ms = ROOT.querySelector('#metricSeg');
   if (ms) ms.querySelectorAll('button').forEach(b => b.onclick = (e) => { e.preventDefault(); STATE.metric = b.dataset.metric; rerender(); });

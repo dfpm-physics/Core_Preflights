@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lessons · PREP</title>
+  <title>Assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
   <link rel="stylesheet" href="../css/styles.css">
   <style>
@@ -37,7 +37,7 @@
 <body>
   <header id="topnav"></header>
   <main class="page" id="main">
-    <div class="center-load"><span class="spinner"></span><span>Loading lessons…</span></div>
+    <div class="center-load"><span class="spinner"></span><span>Loading assignments…</span></div>
   </main>
 
   <script type="module">
@@ -119,9 +119,9 @@
 
       if (!list.length) {
         root.innerHTML = `
-          <div class="page-head"><h1>Lessons</h1></div>
+          <div class="page-head"><h1>Assignments</h1></div>
           <div class="empty-state"><div class="es-ic">${iconHTML('rocket', '🚀', 'ic')}</div>
-            <h3>No lessons yet</h3><p>Lessons appear here once your instructor publishes them.</p></div>`;
+            <h3>No assignments yet</h3><p>Assignments appear here once your instructor publishes them.</p></div>`;
         return;
       }
 
@@ -129,14 +129,14 @@
       const rest = list.filter(l => l.isPast || l.completion);
 
       root.innerHTML = `
-        <div class="page-head"><h1>Lessons</h1>
+        <div class="page-head"><h1>Assignments</h1>
           <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))} · Section ${esc(ctx.sectionCodeOf(ctx.sectionIds[0]) || '—')}</div>
         </div>
         ${open.length ? `<section class="dash-section">
           <div class="section-head"><h2>To do</h2><span class="count-pill">${open.length}</span></div>
           <div class="list">${open.map(lessonItem).join('')}</div></section>` : ''}
         ${rest.length ? `<section class="dash-section">
-          <div class="section-head"><h2>Past lessons</h2></div>
+          <div class="section-head"><h2>Past assignments</h2></div>
           <div class="list">${rest.map(lessonItem).join('')}</div></section>` : ''}`;
 
       root.querySelectorAll('.list-item').forEach(el =>
@@ -163,7 +163,7 @@
           `Launch the interactive version?\n\n` +
           `You have ${n} answer${n === 1 ? '' : 's'} saved on the written version. If you submit ` +
           `an interactive report, those answers stop counting and the interactive version ` +
-          `becomes your grade for this lesson.\n\n` +
+          `becomes your grade for this assignment.\n\n` +
           `You can still launch it to study without submitting anything.`);
         if (!ok) return;
       }
@@ -175,7 +175,7 @@
       const max = l.points ?? 2;
       return `<div class="card score-hero">
         <div class="row wrap" style="justify-content:space-between;align-items:center">
-          <div><div style="font-size:0.78em;opacity:0.8;text-transform:uppercase;letter-spacing:0.05em">Lesson grade</div>
+          <div><div style="font-size:0.78em;opacity:0.8;text-transform:uppercase;letter-spacing:0.05em">Assignment grade</div>
             <div style="font-size:2em;font-weight:800">${pts} / ${max} pts</div></div>
           <div style="font-size:0.85em;opacity:0.85;text-align:right">
             Graded on effort<br>via the ${l.completion.path === 'interaction' ? 'interactive' : 'written'} version</div>
@@ -204,13 +204,13 @@
         case STATE.COMPLETE:
           return `<div class="alert alert-ok">Complete — graded from your interactive report.${
             l.writtenAnswerCount > 0
-              ? ` Your written answers are no longer counted for this lesson.` : ''}</div>`;
+              ? ` Your written answers are no longer counted for this assignment.` : ''}</div>`;
         case STATE.SUBMITTED:
           return `<div class="alert alert-ok">Submitted${l.due ? ` — you can still edit your answers until ${fmtDateTime(l.due)}.` : '.'}</div>`;
         case STATE.GRADING:
-          return `<div class="alert alert-info">Submitted. Your instructor is grading this lesson.</div>`;
+          return `<div class="alert alert-info">Submitted. Your instructor is grading this assignment.</div>`;
         case STATE.MISSED:
-          return `<div class="alert alert-warn">The deadline has passed and nothing was submitted, so this lesson scores 0.
+          return `<div class="alert alert-warn">The deadline has passed and nothing was submitted, so this assignment scores 0.
             You can still launch the interactive version below to study.</div>`;
         default:
           return '';
@@ -224,7 +224,7 @@
       const root = document.getElementById('main');
 
       const header = `
-        <button class="btn btn-secondary btn-sm" id="back-btn" style="margin-bottom:20px">← Back to lessons</button>
+        <button class="btn btn-secondary btn-sm" id="back-btn" style="margin-bottom:20px">← Back to assignments</button>
         <div class="card">
           <div class="card-title">${l.lesson_number != null ? esc(l.lesson_number) + '. ' : ''}${esc(l.title)}</div>
           <div class="card-meta">${l.due ? 'Due ' + fmtDateTime(l.due) : 'No due date'} · ${l.points ?? 2} pts · graded on effort</div>
@@ -250,7 +250,7 @@
     function choiceBlock(l) {
       const qn = l.preflight?.questions?.length ?? 0;
       return `<div class="card">
-        <div class="card-title">Choose how to complete this lesson</div>
+        <div class="card-title">Choose how to complete this assignment</div>
         <div style="font-size:0.9em;color:var(--text-soft);margin-top:6px">
           Both are worth the same ${l.points ?? 2} points, and both are graded on effort — not on
           getting the physics right. Pick whichever suits you.</div>
@@ -281,7 +281,7 @@
           </div>
         </div>
         <div class="study-note">You can switch later — but once you submit an interactive report it
-          becomes your grade for this lesson, your written answers stop counting, and you can't
+          becomes your grade for this assignment, your written answers stop counting, and you can't
           switch back.</div>
       </div>`;
     }

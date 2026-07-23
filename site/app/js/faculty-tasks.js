@@ -11,8 +11,8 @@
 //
 // ── ONE BOX PER KIND, NOT ONE PER ITEM ───────────────────────────────────────────
 // P1.15 is explicit about this and it is the thing that keeps the panel usable in week ten: a
-// box says "9 submissions to grade" and clicking it goes to the page that clears them. A list
-// of nine rows here would duplicate the Grade tab badly and push everything else off screen.
+// box says "9 · Review grades" and clicking it goes to the page that clears them. A list of nine
+// rows here would duplicate the Grade tab badly and push everything else off screen.
 //
 // ── ZERO IS THE COMMON STATE, SO ZERO RENDERS NOTHING ────────────────────────────
 // Most of these are empty most of the term. A box sitting at `0` trains people to ignore the
@@ -47,11 +47,18 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
  *   severity   'alert' | 'warn' | 'info' — drives colour only, never order
  *   icon       emoji; the dashboard's stat tiles already use this vocabulary
  *   director   true = only a director/admin sees it
- *   load(ctx)  → { count, text, link } | null
+ *   load(ctx)  → { count, action, text, link } | null
  *
  * `text` is written by the source rather than assembled from a template, because "3 lessons
  * need aggregating" and "3 sections have nobody assigned" want different words and a generic
  * `${count} ${label}` would produce a worse sentence for both.
+ *
+ * `action` is the two-or-three-word version of the same thing — the imperative, no count in it.
+ * The box shows `count + action`; `text` becomes its tooltip. The row used to print the number
+ * and then the full sentence beside it, which said the count twice, ran four boxes to the full
+ * width of the page, and buried the only decision the reader makes here (go, or not) in a
+ * clause. What a box is FOR fits in two words; the sentence is detail, and detail belongs on
+ * hover.
  */
 export const SOURCES = [
   {
@@ -66,8 +73,9 @@ export const SOURCES = [
       const lessons = rows.length;
       return {
         count,
+        action: 'Review grades',
         text: `${plural(count, 'submission', 'submissions')} past due and not finalized`
-            + ` · ${plural(lessons, 'lesson', 'lessons')}`,
+            + ` · ${plural(lessons, 'assignment', 'assignments')}`,
         // Plain grade.html: the page takes no assignment parameter today, so deep-linking to
         // the oldest one would be a URL that silently does nothing. When P1.14 gives it a
         // queue, this is where that link goes.
@@ -101,8 +109,9 @@ export const SOURCES = [
       const lessons = new Set((data || []).map(g => g.assignment_offering_id)).size;
       return {
         count,
+        action: 'Review AI grades',
         text: `${plural(count, 'AI-suggested grade', 'AI-suggested grades')} awaiting your review`
-            + ` · ${plural(lessons, 'lesson', 'lessons')}`,
+            + ` · ${plural(lessons, 'assignment', 'assignments')}`,
         link: 'grade.html',
       };
     },
@@ -142,7 +151,8 @@ export const SOURCES = [
       missing.sort((a, b) => new Date(a.due_at) - new Date(b.due_at));
       return {
         count: missing.length,
-        text: `${plural(missing.length, 'lesson', 'lessons')} past due with no readiness rollup yet`,
+        action: 'Run rollups',
+        text: `${plural(missing.length, 'assignment', 'assignments')} past due with no readiness rollup yet`,
         link: `report.html?i=${encodeURIComponent(missing[0].assignments?.slug || '')}`,
       };
     },
@@ -172,6 +182,7 @@ export const SOURCES = [
       if (!bare.length) return null;
       return {
         count: bare.length,
+        action: 'Assign instructors',
         text: `${plural(bare.length, 'section has', 'sections have')} nobody assigned`
             + ` · ${bare.map(s => s.code).sort().join(', ')}`,
         link: 'admin.html',
@@ -203,6 +214,7 @@ export const SOURCES = [
       const failed = bad.filter(r => r.status === 'failed').length;
       return {
         count: bad.length,
+        action: 'Check scheduled runs',
         text: failed === bad.length
           ? `${plural(failed, 'scheduled run', 'scheduled runs')} failed`
           : `${plural(bad.length, 'scheduled run needs', 'scheduled runs need')} attention`
@@ -258,18 +270,21 @@ export function renderTasks(tasks, { esc }) {
   if (!tasks.length) {
     return `<section class="dash-section duo-empty-wrap">
       <div class="duo-empty"><span class="duo-empty-ic">✓</span>
-        <span>Nothing outstanding — grading is current and every lesson past its deadline has a rollup.</span>
+        <span>Nothing outstanding — grading is current and every assignment past its deadline has a rollup.</span>
       </div></section>`;
   }
 
+  // count + imperative, and nothing else on the face of it. The full sentence rides along as the
+  // title so the detail is one hover away rather than one line wider. `action` is optional so a
+  // source added before this convention still renders something sensible.
   const boxes = tasks.map(t => `
-    <a class="duo-box sev-${esc(t.severity)}" href="${esc(t.link)}" data-task="${esc(t.id)}">
-      <span class="duo-ic" aria-hidden="true">${t.icon}</span>
+    <a class="duo-box sev-${esc(t.severity)}" href="${esc(t.link)}" data-task="${esc(t.id)}"
+       title="${esc(t.text)}">
       <span class="duo-n">${t.count}</span>
-      <span class="duo-txt">${esc(t.text)}</span>
+      <span class="duo-act">${esc(t.action || t.text)}</span>
     </a>`).join('');
 
-  return `<section class="dash-section">
+  return `<section class="dash-section dash-tasks">
     <div class="section-head"><h2>📌 Needs your attention</h2>
       <span class="count-pill">${tasks.length}</span></div>
     <div class="duo-row">${boxes}</div>

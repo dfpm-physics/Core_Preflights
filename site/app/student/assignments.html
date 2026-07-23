@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Assignments · PREP</title>
+  <title>Written preflights · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
   <link rel="stylesheet" href="../css/styles.css">
   <style>
@@ -86,9 +86,9 @@
     function renderList() {
       const root = document.getElementById('main');
       if (!list.length) {
-        root.innerHTML = `<div class="page-head"><h1>Assignments</h1></div>
-          <div class="empty-state"><div class="es-ic">📋</div><h3>No assignments yet</h3>
-          <p>Published assignments for ${esc(ctx.courseTitleOf(ctx.currentOffering))} will appear here.</p></div>`;
+        root.innerHTML = `<div class="page-head"><h1>Written preflights</h1></div>
+          <div class="empty-state"><div class="es-ic">📋</div><h3>No written preflights yet</h3>
+          <p>Published preflights for ${esc(ctx.courseTitleOf(ctx.currentOffering))} will appear here.</p></div>`;
         return;
       }
       const items = list.map(a => {
@@ -110,8 +110,8 @@
           <div class="li-right"><span class="muted" style="font-size:0.82em">${esc(meta.text(a))}</span><span class="li-arrow">›</span></div>
         </a>`;
       }).join('');
-      root.innerHTML = `<div class="page-head"><h1>My assignments</h1>
-        <div class="sub">Open assignments can be edited until you submit. Click one to work on it or view your grade.</div></div>
+      root.innerHTML = `<div class="page-head"><h1>My written preflights</h1>
+        <div class="sub">Open preflights can be edited until you submit. Click one to work on it or view your grade.</div></div>
         <div class="list">${items}</div>`;
 
       root.querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', (e) => {
@@ -283,7 +283,7 @@
       // Submitting is now a commitment, not just a flag: it locks the answers and, on a
       // choice lesson, decides which path is graded. Say that plainly before they click.
       const extra = current.isChoice
-        ? `\n\nThis makes the written preflight the version that counts for this lesson, and you ` +
+        ? `\n\nThis makes the written preflight the version that counts for this assignment, and you ` +
           `won't be able to switch to the interactive lesson afterwards.`
         : '';
       if (!confirm(`Submit with ${answered} of ${qs.length} questions answered?` +

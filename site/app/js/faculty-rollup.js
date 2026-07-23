@@ -713,16 +713,19 @@ export function summarizeReports(rows, possible = 2, opts = {}) {
   //    "Free response" rather than being spread across the authored objectives. (Teasing real
   //    objectives out of the free-response answer is the future version of this; it would slot
   //    in here by replacing this one entry with several.)
+  //
+  //    IT LEADS THE LIST — always first, hence always axis A on the radar and the top row of the
+  //    breakdown. It was previously re-sorted into the weakest-first order with everything else,
+  //    which meant the one measure that is not a resolved learning objective moved position from
+  //    lesson to lesson and from section to section: axis A on Monday, axis D on Tuesday. A fixed
+  //    seat makes the radar comparable across cohorts, and it is the row a reader most often wants
+  //    to find deliberately rather than hunt for. Everything after it is still weakest first.
   const frHist = [0, 0, 0, 0, 0, 0];
   const frVals = [];
   list.forEach(({ frUnderstanding: u }) => { if (u != null) { frHist[u]++; frVals.push(u); } });
   if (frVals.length) {
-    const fr = { key: FREE_RESPONSE_KEY, label: FREE_RESPONSE_LABEL, assessed: frVals.length,
-                 understanding: mean(frVals), confidence: null, dist: frHist, source: 'written' };
-    // Re-sorted rather than pushed: the list is "weakest first", and the whole point of the row
-    // is that it competes with the objectives for the reader's attention on the same terms.
-    objectives.push(fr);
-    objectives.sort((a, b) => (a.understanding ?? 99) - (b.understanding ?? 99));
+    objectives.unshift({ key: FREE_RESPONSE_KEY, label: FREE_RESPONSE_LABEL, assessed: frVals.length,
+                         understanding: mean(frVals), confidence: null, dist: frHist, source: 'written' });
   }
 
   // ── Misconceptions — counted by CANONICAL id, and now carrying enough to explain themselves.
@@ -876,7 +879,7 @@ export function summarizeReports(rows, possible = 2, opts = {}) {
  */
 export async function buildLessonCorpus(ctx, offeringId) {
   const found = await interactiveActivityOf(offeringId);
-  const title = found?.offering?.interactive?.title || found?.offering?.title || 'Lesson';
+  const title = found?.offering?.interactive?.title || found?.offering?.title || 'Assignment';
   const base = { title, interactionId: offeringId, studentCount: 0, text: '' };
   if (!found || !ctx.sectionIds?.length) return base;
 
@@ -905,7 +908,7 @@ export async function buildLessonCorpus(ctx, offeringId) {
   });
 
   const head = `# ${title} — combined reports for analysis\n`
-    + `Lesson: ${offeringId} · ${reports.length} report${reports.length === 1 ? '' : 's'}.\n`
+    + `Assignment: ${offeringId} · ${reports.length} report${reports.length === 1 ? '' : 's'}.\n`
     + `Each block is labeled with the student's name, ID, and section.\n`;
 
   const blocks = reports.map(r => {

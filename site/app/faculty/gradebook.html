@@ -128,7 +128,7 @@
       root.innerHTML = `
         <div class="page-head">
           <h1>Gradebook</h1>
-          <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))} — ${rows.length} student${rows.length === 1 ? '' : 's'} · ${columns.length} lesson${columns.length === 1 ? '' : 's'} published.</div>
+          <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))} — ${rows.length} student${rows.length === 1 ? '' : 's'} · ${columns.length} assignment${columns.length === 1 ? '' : 's'} published.</div>
         </div>
         <div class="row wrap" style="gap:12px;align-items:center;margin-bottom:16px">
           ${scopeControl()}

@@ -8,6 +8,99 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-23 — Matthew Recker via Claude (say "assignment", not "lesson"; five UI corrections)
+
+### Changed — the UI now uses the schema's noun
+
+Schema `app` calls the container an **assignment** (`assignments` → `assignment_offerings`); the
+portal still called it a *lesson* everywhere a human could read it. Renamed across faculty and
+student copy: the nav entry (**Lessons → Assignments**), page titles and headings, the spotlight card
+(*Assignment 02 — …*), the matrix and section-card column codes (`L02` → `A02`), the authoring modal
+(*Assignment id (slug)*, *Assignment #*, *Save assignment*), every validation and confirmation
+string, and the three in-app help topics that name the page.
+
+**What deliberately did NOT change:**
+
+- **File paths.** `site/faculty/lessons.html` and `site/student/interaction-submit.html` are frozen
+  contract URLs (CORE.md §6) targeted by deployed artifacts and prefill links. The label moved; the
+  path cannot. Same for `student/lessons.html`, and for identifiers, CSS classes and skill names
+  (`/lesson-aggregate`, `/lesson-cycle`, the `lesson-figures` bucket).
+- **"Interactive lesson."** That is the *modality* — the Claude artifact, branded iPREP
+  (*interactive Pre-lesson Readiness Engagement Platform*) — not the container. An assignment is
+  completed *via* the interactive lesson or the written preflight, and the two nouns now say which
+  is which instead of both being "lesson".
+- **Q1's wording.** "…in preparation for this lesson?" is the question text built from the source
+  DOCX (`build_fall_preflights.py`) and means the class period. Changing it would break the match.
+- **The class period generally** — "before you teach the lesson", "2359 the night before the
+  lesson" are still lessons and still read that way.
+
+`student/assignments.html` was retitled **Written preflights**. It is the written-preflight surface
+reached from an assignment, and once the assignment LIST became "Assignments" the two pages had the
+same name.
+
+### Changed — the course switcher moved onto the brand
+
+The course name printed beside the wordmark on every page *is* the switcher now: a button with a
+dropdown (`nav.js` → `brandCourseHTML`). The label and the control that changes it were previously at
+opposite ends of the nav bar.
+
+Two copies of that control were removed as a consequence: the picker inside the user menu, and the
+dashboard's own inline segmented switcher (P1.7). The dashboard version is **documented in place**
+rather than merely deleted — `faculty-dashboard.js` carries a block explaining what it was, why it
+existed, and why the answer belonged in the nav. `courseMenuHTML()` became `courseOptionsHTML()`
+(rows only, no menu wrapper); `test-nav.mjs` follows.
+
+On a phone the plain course *label* still hides, but the *switcher* does not — it is now the only way
+to change course, so it truncates instead of disappearing.
+
+### Changed — "Needs your attention" is a row of chips, under the spotlight
+
+Each box was a ~420px card holding an emoji, a large number and a full sentence that repeated the
+number; four of them filled the page width to say four short things. A box is now **count +
+imperative** — `64 · Review AI grades` — sized to its own words, with the sentence kept as the
+tooltip. Each source in the registry gained an `action` field; a source without one falls back to its
+text, and a test holds `action` to 22 characters because the row is sized by its words.
+
+It also **moved below the active-preflight spotlight**. It loads a beat after everything else and its
+height depends on how much is outstanding, so at the top of the page it put the KPI tiles and the
+spotlight at a different vertical position on every visit — and moved them again once the queries
+landed.
+
+### Changed — the rollup's other-sections toggle is a lamp inside the scope group
+
+`show all 4` / `hide others` was a text link sitting *beside* the scope tabs: a second control in a
+second visual language, whose number was the total rather than the count being revealed, and which
+read as though it selected a scope. It does not — it changes which tabs exist. It is now a small
+lamp at the head of the same segmented group, left of **Course rollup**: grey when off, green when
+on, and deliberately not taking the group's "selected" chrome so only one tab ever reads as current.
+
+### Changed — free response is always axis A
+
+The written path's free-response understanding used to be re-sorted into the weakest-first order with
+the interactive objectives, so the one measure that is *not* a resolved learning objective moved seat
+between lessons and between sections — axis A on Monday, axis D on Tuesday. It now leads the list
+unconditionally (`summarizeReports` unshifts it), making it axis A on the radar and the top row of
+**Understanding by objective**; everything after it is still weakest first. The panel's eyebrow says
+so.
+
+### Verified
+
+`tests/app-schema/run.mjs` — 339 checks, 0 failures (includes the live-REST and RLS suites; the
+standalone `test-student.mjs` needs the runner's reset step or it inherits its own leftover rows).
+Browser walkthrough via `tests/browser-harness/pass.mjs`: 9/9 faculty and 5/5 student pages clean, no
+console errors, no failed requests. The rollup, the brand dropdown and the lamp were additionally
+driven in a real signed-in browser in both themes — dropdown opens and switches, the lamp toggles the
+tab list 3 → 6, and the objective rows read `A Free response`, then B–E weakest first.
+`check_doc_sources.py` run; `instructor-grading.md` corrected (the rollup tab is **Course rollup**,
+not "All sections", and the lamp is now documented) and five help entries re-reviewed.
+
+**Worth knowing for the next walkthrough:** `pass.mjs` screenshots `student/lessons.html` while it is
+still on its spinner and reports it clean, because that page's wait selector is `main`, which always
+exists. Driven directly it renders all 37 rows with no errors — the harness is measuring the wrong
+thing there, not the page failing.
+
+---
+
 ## 2026-07-23 — Matthew Recker via Claude (feedback resolution matrix, site admins only)
 
 ### Added — every comment now reaches a decision, and accepted ones get a destination

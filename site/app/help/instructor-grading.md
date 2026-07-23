@@ -101,14 +101,18 @@ carry a default deadline used by any section without one of its own.
 
 ## The Report tab
 
-The report summarizes how a lesson went — how ready the class is, which misconceptions showed up,
+The report summarizes how an assignment went — how ready the class is, which misconceptions showed up,
 one recommended thing to cover, and a few reading-reflection quotes worth reading aloud. It is
 intended as a five-minute read before you teach the lesson.
 
-**It opens on "My sections"** — your own sections combined. "All sections" covers the whole course
+**It opens on "My sections"** — your own sections combined. "Course rollup" covers the whole course
 and is still there if you want the wider picture; when you pick it, the charts show only the
 students you have access to, and the page says so if that is fewer than the summary describes.
 Picking a single section shows that section's own numbers, quotes and recommendation.
+
+**Directors: the small lamp to the left of the tabs adds the sections you do not teach.** It is off
+by default and is not remembered, so every visit starts on your own sections; switch it on and the
+other sections appear as tabs beside yours.
 
 **The readiness summary covers all the sections you teach at once**, with any section that genuinely
 differs named beneath it — so you can see whether something is your whole cohort or just one class.
@@ -121,5 +125,5 @@ label and a percentage on their own rarely tell you what went wrong.
 with the AI's picks still at the top — useful when you are looking for a particular student rather
 than something to read aloud.
 
-It appears once the lesson has been graded *and* aggregated, which happens after the deadline for
+It appears once the assignment has been graded *and* aggregated, which happens after the deadline for
 that section — so a section whose deadline has not passed yet will still show placeholders.

@@ -158,8 +158,19 @@ eq('…with a 0–5 distribution shaped like an objective', fr.dist, [0, 1, 0, 1
 eq('interactive objectives are tagged too',
    objectified.objectives.filter(o => o.source === 'interactive').map(o => o.key).sort(),
    ['coulomb', 'vector']);
-eq('free response sorts weakest-first alongside the objectives, not appended',
+// Free response leads, whatever its score — so it is axis A on the radar and the top row of the
+// breakdown on every lesson, instead of moving as the numbers move. The rest stay weakest first.
+eq('free response leads, then the objectives weakest first',
    objectified.objectives.map(o => o.key), [FREE_RESPONSE_KEY, 'vector', 'coulomb']);
+
+// The same list with the free response STRONGEST — under the old weakest-first sort it landed
+// last; it must still lead.
+const frStrong = summarizeReports([
+  interactiveRow(1, { effort: 4, overall: 4, objectives: [obj('coulomb', 2, 'Coulomb magnitude'), obj('vector', 1, 'Vector sum')] }),
+  writtenRow(2, { effort: 4, understanding: 5 }),
+], 2);
+eq('…even when it is the strongest measure in the scope',
+   frStrong.objectives.map(o => o.key), [FREE_RESPONSE_KEY, 'vector', 'coulomb']);
 
 const noWritten = summarizeReports([interactiveRow(1, { effort: 4, overall: 4, objectives: [obj('a', 3)] })], 2);
 check('no free-response row when nobody answered a question set',

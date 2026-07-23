@@ -197,11 +197,34 @@ main { flex: 1 0 auto; }
 /* bigger, box-less logo mark */
 .topnav .brand .brand-mark { display: grid; place-items: center; font-size: 1.3em; }
 .topnav .brand .brand-mark .ic { width: 38px; height: 38px; }
-.topnav .brand .brand-sub {
+/* The course name beside the wordmark. Sized against the brand (1.24em) rather than the bar, so
+   it stays subordinate to "PREP" the way it did when it lived inside the anchor. */
+.topnav .brand-sub {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 0.6em; font-weight: 500; color: var(--muted); letter-spacing: 0;
-  margin-left: 9px; padding-left: 10px; border-left: 1px solid var(--nav-border);
+  font-size: 0.745em; font-weight: 500; color: var(--muted); letter-spacing: 0;
+  margin-left: 5px; padding-left: 11px; border-left: 1px solid var(--nav-border);
+  white-space: nowrap;
 }
+
+/* ── The course name as the course switcher ───────────────────────────────
+ * It is a button that still reads as the label it replaced: no border, no fill, just the
+ * course name and a caret. The affordance appears on hover — a permanently boxed control
+ * next to the wordmark would compete with it, and this is context, not a destination. */
+.course-menu { position: relative; display: inline-flex; align-items: center; }
+.topnav .course-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: none; border-left: 1px solid var(--nav-border);
+  cursor: pointer; border-radius: 0 8px 8px 0;
+  padding: 5px 9px 5px 11px; margin-left: 5px;
+  transition: background 0.14s, color 0.14s;
+}
+.topnav .course-btn:hover,
+.topnav .course-btn[aria-expanded="true"] { background: var(--nav-hover-bg); color: var(--text); }
+.topnav .course-btn .cb-name { display: inline-block; }
+.topnav .course-btn .cb-caret { font-size: 0.8em; opacity: 0.75; }
+.topnav .course-btn:focus-visible { outline: 2px solid var(--blue-lt); outline-offset: 2px; }
+/* Hangs off the LEFT edge, unlike the user menu on the right side of the bar. */
+.course-pop { right: auto; left: 0; min-width: 232px; }
 
 .nav-links { display: flex; align-items: center; gap: 4px; justify-self: center; }
 .nav-link {
@@ -218,9 +241,11 @@ main { flex: 1 0 auto; }
 
 .nav-right  { display: flex; align-items: center; gap: 8px; }
 
-/* The course switcher used to be a pill row here, in the nav bar. It moved into the user
-   menu (see `.course-opt` below) — course is context, not a destination, and a flat pill row
-   could not express one course offered across several terms. */
+/* The course switcher used to be a pill row here, in the nav bar; then it moved into the user
+   menu — course is context, not a destination, and a flat pill row could not express one course
+   offered across several terms. It now hangs off the course name beside the wordmark
+   (`.course-btn` / `.course-pop` above), which is the same idea with the label and the control
+   finally in the same place. */
 
 /* theme toggle — box-less, just the icon */
 .theme-toggle {
@@ -270,11 +295,10 @@ main { flex: 1 0 auto; }
 /* separates the destructive item from the ordinary ones above it */
 .menu-sep { height: 1px; background: var(--border); margin: 4px 8px; }
 
-/* ── Course-view picker (inside the user menu) ─────────────────────────────
- * Which course you are looking at is context, not a destination, so it lives with
- * identity in the user menu rather than in the nav bar. Replaces the old
- * `.course-switch` pill row, which could not express one course across several terms.
- * Left-aligned per DESIGN.md: these rows are content, not an empty prompt. */
+/* ── Course-view picker (the dropdown on the brand) ────────────────────────
+ * The option rows are shared markup: `.menu-label` / `.menu-subhead` / `.menu-scroll` /
+ * `.course-opt` are styled here and used by `.course-pop`. Left-aligned per DESIGN.md:
+ * these rows are content, not an empty prompt. */
 .menu-label {
   padding: 6px 12px 2px; font-size: 0.7em; font-weight: 700; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--muted);
@@ -424,34 +448,37 @@ main { flex: 1 0 auto; }
  * One box per KIND of outstanding work, each a link to the page that clears it. Sized smaller
  * than .stat-tile on purpose: the stat tiles are the lesson's numbers and should stay the
  * loudest thing on the page, while this row is a to-do list that is empty most of the term. */
-/* Flex, not grid, and capped. A grid of auto-fit 1fr tracks stretches a LONE box across the whole
-   page — and one box is the normal case, since most of these sources are empty most of the term.
-   A single 1400px-wide card holding six words reads as a layout bug. Flex lets one box size to
-   ~420px and four wrap into a row. */
+/* Flex, and every box sized to its own words (`flex: 0 0 auto`) rather than stretched to a track.
+   These used to be ~420px cards carrying an emoji, a big number and a full sentence that repeated
+   the number — four of them filled the page width to say four short things. A box is now a count
+   and an imperative, so it should be as wide as "3 Review AI grades" and no wider; the sentence
+   moved to the title attribute. */
 .duo-row {
-  display: flex; flex-wrap: wrap; gap: 12px;
+  display: flex; flex-wrap: wrap; gap: 8px;
 }
-.duo-row > .duo-box { flex: 1 1 280px; max-width: 440px; }
+.duo-row > .duo-box { flex: 0 0 auto; }
 .duo-box {
-  display: flex; align-items: center; gap: 12px;
+  display: inline-flex; align-items: center; gap: 9px;
   background: var(--card); border: 1px solid var(--border);
-  border-left: 4px solid var(--accent, var(--blue-lt));
-  border-radius: var(--radius); padding: 13px 15px;
+  border-left: 3px solid var(--accent, var(--blue-lt));
+  border-radius: 999px; padding: 6px 15px 6px 12px;
   text-decoration: none; color: inherit;
-  transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+  transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s, background 0.15s;
 }
 .duo-box:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
 .duo-box:focus-visible { outline: 2px solid var(--accent, var(--blue-lt)); outline-offset: 2px; }
-.duo-ic {
-  width: 34px; height: 34px; border-radius: 10px; flex: none;
-  display: grid; place-items: center; font-size: 1.05em;
+.duo-n {
+  min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px;
+  display: inline-grid; place-items: center; flex: none;
+  font-size: 0.82em; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums;
+  color: var(--accent, var(--blue-lt));
   background: color-mix(in srgb, var(--accent, var(--blue-lt)) 16%, transparent);
 }
-.duo-n {
-  font-size: 1.35em; font-weight: 800; line-height: 1;
-  font-variant-numeric: tabular-nums; flex: none;
-}
-.duo-txt { font-size: 0.8em; color: var(--muted); line-height: 1.35; }
+.duo-act { font-size: 0.86em; font-weight: 600; white-space: nowrap; }
+/* Under the spotlight the row is a footnote to the page, not its headline — so the heading is
+   quieter here than the section headings that introduce real content below it. */
+.dash-tasks { margin-top: -8px; }
+.dash-tasks .section-head h2 { font-size: 0.95em; }
 /* Severity drives colour only — never order. A stalled overnight run and a grading backlog are
    both red; which one matters more today is the reader's call, not the palette's. */
 .duo-box.sev-alert { --accent: var(--red); }
@@ -472,16 +499,16 @@ main { flex: 1 0 auto; }
 
 .duo-loading { pointer-events: none; }
 .duo-skel {
-  height: 60px; flex: 1 1 280px; max-width: 440px; border-left-color: var(--border);
+  height: 36px; width: 168px; border-radius: 999px; border-left-color: var(--border);
   background: linear-gradient(90deg, var(--surface-sunken) 25%, var(--surface-hover) 50%, var(--surface-sunken) 75%);
   background-size: 200% 100%; animation: duo-shimmer 1.2s linear infinite;
 }
 @keyframes duo-shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .duo-skel { animation: none; } }
 
-/* Course switcher + section scope select (P1.7) */
-.course-seg { margin-top: 10px; }
-.scope-sel, .course-seg select {
+/* Section scope select (P1.7). The `.course-seg` rules that sat beside this belonged to the
+   dashboard's own course switcher, which moved onto the brand — see nav.js. */
+.scope-sel {
   font: inherit; font-size: 0.8em; font-weight: 600; height: 32px;
   padding: 0 26px 0 10px; width: auto; min-width: 150px;
   border-radius: 8px; border: 1px solid var(--border);
@@ -1196,19 +1223,27 @@ tr:last-child td { border-bottom: none; }
 
 /* Per-section departures under the instructor-scoped readiness summary. The section code is bold
    because it is the scanning target — a reader looks for their own section, not the prose. */
-/* Director-only opt-in for sections they do not teach.
-   Deliberately NOT a button. It is an escape hatch used a few times a term, sitting beside a
-   segmented control the reader uses constantly; given button chrome it competed with the thing it
-   sits next to and read as a primary action. Plain muted text, no border, no background — closer to
-   a footnote than a control, and it only gains colour once it is actually on. */
-.scope-more {
-  margin-left: 10px; padding: 0; border: none; background: none;
-  font: inherit; font-size: 0.76em; color: var(--muted);
-  cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
-  text-decoration-color: var(--border);
+/* Director-only opt-in for sections they do not teach — the lamp at the head of the scope group.
+   It replaced a "show all 4" text link that sat OUTSIDE the group: a second control in a second
+   visual language, next to tabs, which read as though it selected a scope. It does not; it
+   controls which tabs exist. A lamp inside the group is honest about that — same chrome as its
+   neighbours, but no label, so it is plainly not one of the choices — and it is off (grey) far
+   more often than on (green), which is the state a director should be able to see at a glance. */
+.seg .scope-light { padding: 0 11px; }
+/* Never take the group's "selected" chrome. Exactly one tab in this group is the current scope;
+   a second raised cell would claim to be a second selection. Only the lamp changes. */
+.seg .scope-light[aria-pressed="true"] { background: transparent; box-shadow: none; }
+.scope-light .lt {
+  width: 9px; height: 9px; border-radius: 999px; display: block;
+  background: var(--track-edge, var(--border));
+  transition: background 0.15s, box-shadow 0.15s;
 }
-.scope-more:hover, .scope-more:focus-visible { color: var(--blue-lt); text-decoration-color: currentColor; }
-.scope-more.on { color: var(--blue-lt); }
+.seg .scope-light:hover .lt { background: var(--muted); }
+.seg .scope-light[aria-pressed="true"] .lt,
+.seg .scope-light[aria-pressed="true"]:hover .lt {
+  background: var(--green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 24%, transparent);
+}
 
 /* Names the sections a combined readiness summary was written over, so an instructor can verify
    none of theirs was omitted. Deterministic — read from stored section_codes, never from the prose. */
@@ -1612,7 +1647,11 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
   .card { padding: 18px; }
   .id-card { padding: 28px 20px; }
   .topnav-inner { padding: 0 12px; gap: 6px; }
-  .topnav .brand .brand-sub { display: none; }
+  /* The plain label is decoration and goes; the switcher STAYS — since it moved onto the brand
+     it is the only way to change course, so hiding it would strand a two-course reader on a
+     phone. It truncates instead. */
+  .topnav .brand-sub:not(.course-btn) { display: none; }
+  .topnav .course-btn .cb-name { max-width: 84px; overflow: hidden; text-overflow: ellipsis; }
   .user-chip .nm { display: none; }
   .stat-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
   .rollup-grid { grid-template-columns: 1fr; }

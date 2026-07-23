@@ -121,7 +121,7 @@
 
         <div class="stat-grid" style="margin-bottom:20px">
           ${statTile('Points to date', totals.pct == null ? '—' : `${Math.round(totals.pct * 100)}%`,
-                     `${totals.earned} of ${totals.possible} · ${totals.counted} lesson(s) due`, 'blue')}
+                     `${totals.earned} of ${totals.possible} · ${totals.counted} assignment(s) due`, 'blue')}
           ${statTile('Missing', String(rows.filter(r => r.cell.state === CELL.MISSING).length),
                      'past due, nothing submitted', 'red')}
           ${statTile('Awaiting grading', String(rows.filter(r => r.cell.state === CELL.UNGRADED).length),
@@ -164,7 +164,7 @@
 
     function lessonTable() {
       if (!rows.length) return `<div class="card"><div class="empty-state"><div class="es-ic">📚</div>
-        <h3>No published lessons</h3><p>Nothing has been scheduled in this course yet.</p></div></div>`;
+        <h3>No published assignments</h3><p>Nothing has been scheduled in this course yet.</p></div></div>`;
 
       const body = rows.map(r => `<tr>
         <td class="sd-code" title="${esc(r.title)}">${esc(r.code)}</td>
@@ -180,10 +180,10 @@
         <td class="sd-num">${dial(r.understanding, 'Demonstrated understanding, 0–5. A measurement, not a grade.')}</td>
       </tr>`).join('');
 
-      return `<div class="card"><div class="card-title">Lessons</div>
+      return `<div class="card"><div class="card-title">Assignments</div>
         <div class="card-meta">Points are the grade. The two 0–5 columns are diagnostics — they are never added to the total.</div>
         <div class="table-wrap"><table class="sd-lessons">
-          <thead><tr><th></th><th>Lesson</th><th>Due</th><th>Status</th><th>Points</th>
+          <thead><tr><th></th><th>Assignment</th><th>Due</th><th>Status</th><th>Points</th>
             <th title="Engagement, 0–5">Effort</th><th title="Demonstrated understanding, 0–5">Underst.</th></tr></thead>
           <tbody>${body}</tbody></table></div></div>`;
     }
@@ -219,7 +219,7 @@
           <div class="sd-q">${esc(q.prompt || q.text || q.id)}</div>
           <div class="sd-a">${esc(String(answers[q.id]))}</div></div>`).join('');
       return `<details class="sd-work"><summary>Show work</summary>${qa}
-        ${r.reportMarkdown ? `<div class="sd-qa"><div class="sd-q">Interactive lesson report</div>
+        ${r.reportMarkdown ? `<div class="sd-qa"><div class="sd-q">Interactive assignment report</div>
           <div class="sd-a">${esc(r.reportMarkdown.slice(0, 4000))}</div></div>` : ''}</details>`;
     }
 
@@ -227,7 +227,7 @@
       const mc = S.foldMisconceptions(rows);
       if (!mc.length) return '';
       return `<div class="card"><div class="card-title">Sticking points across the term</div>
-        <div class="card-meta">Folded from every graded lesson. Repeats first — a misconception seen three times is the conversation.</div>
+        <div class="card-meta">Folded from every graded assignment. Repeats first — a misconception seen three times is the conversation.</div>
         <div class="sd-mc">${mc.map(m => `<div class="sd-mc-row">
           <div class="sd-mc-n">${m.count}×</div>
           <div class="sd-mc-body"><strong>${esc(m.description || m.id)}</strong>

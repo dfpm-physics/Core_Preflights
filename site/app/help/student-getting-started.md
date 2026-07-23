@@ -21,9 +21,9 @@ your password.
 
 ## Finding your work
 
-**Lessons** is the one place to look. Each lesson card shows what is due, when it is due, and
-whether you have finished it. Some lessons ask for a written preflight, some open an interactive
-lesson, and some offer a choice between the two — the card tells you which.
+**Assignments** is the one place to look. Each card shows what is due, when it is due, and
+whether you have finished it. Some assignments ask for a written preflight, some open an
+interactive lesson, and some offer a choice between the two — the card tells you which.
 
 **Dashboard** is the short version of the same thing: what is due next, and what you have missed.
 
@@ -34,9 +34,9 @@ deadline; after the deadline the form locks.
 
 Preflights are due at **2359 the night before the lesson**.
 
-## Lessons that offer a choice
+## Assignments that offer a choice
 
-Some lessons let you either write the preflight or work through the interactive lesson. Submitting
+Some assignments let you either write the preflight or work through the interactive lesson. Submitting
 one of them chooses it: that path becomes the one you are graded on, and you cannot switch to the
 other yourself afterwards.
 
@@ -46,10 +46,10 @@ choose again.
 
 ## Seeing your grade
 
-Grades appear on the lesson once your instructor has reviewed them. A score you can see has been
+Grades appear on the assignment once your instructor has reviewed them. A score you can see has been
 checked by a person — see [How AI is used on your work](help.html?doc=ai-and-your-work).
 
 ## Something is wrong
 
-Missing lesson, wrong section, a grade that looks incorrect: contact your course instructor
+Missing assignment, wrong section, a grade that looks incorrect: contact your course instructor
 directly. Instructors can correct scores and grant extensions.

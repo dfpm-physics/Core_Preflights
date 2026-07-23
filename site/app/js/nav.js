@@ -17,13 +17,15 @@ import { mountFeedback } from './feedback.js';
 // All nav-rendering pages live one level deep (student/ , faculty/), so same-role links are
 // bare filenames. The nav no longer links out to the legacy site at all (see FACULTY_LINKS),
 // so legacyUrl() is not needed here; it remains in util.js for any page that still needs it.
-// Students navigate by LESSON, not by modality. Listing "Assignments" and "Interactions"
-// side by side showed a choice lesson twice — as two separate mandatory items — with nothing
+// Students navigate by ASSIGNMENT, not by modality. Listing "Assignments" and "Interactions"
+// side by side showed a choice assignment twice — as two separate mandatory items — with nothing
 // saying they were alternatives (STUDENT-LESSON-VIEW.md §1). assignments.html still exists as
-// the written-preflight surface, reached from a lesson. interactions.html was deleted 2026-07-20.
+// the written-preflight surface, reached from an assignment; it is titled "Written preflights"
+// so it does not collide with the nav entry below, which is the assignment LIST (lessons.html).
+// interactions.html was deleted 2026-07-20.
 const STUDENT_LINKS = [
   { key: 'dashboard', label: 'Dashboard', href: 'dashboard.html', icon: 'dashboard',   emoji: '🏠' },
-  { key: 'lessons',   label: 'Lessons',   href: 'lessons.html',   icon: 'assignments', emoji: '📚' },
+  { key: 'lessons',   label: 'Assignments', href: 'lessons.html', icon: 'assignments', emoji: '📚' },
 ];
 // Report (the lesson rollup) is intentionally absent: it is reached only via a link carrying its
 // lesson key (?i=) — from an Interactions card or the dashboard's "Open full rollup →".
@@ -55,7 +57,11 @@ const FACULTY_LINKS = [
   // name, exactly as report.html is, and a nav entry for it would have nothing to point at.
   { key: 'gradebook',    label: 'Gradebook',    href: 'gradebook.html',         icon: 'progress',      emoji: '📊' },
   { key: 'roster',       label: 'Roster',       href: 'roster.html',            icon: 'roster',        emoji: '🧑‍🎓', directorOnly: true },
-  { key: 'lessons',      label: 'Lessons',      href: 'lessons.html',           icon: 'assignments',   emoji: '📚' },
+  // Label, not path. The page is the term's list of assignment offerings, which is what the
+  // schema calls them; the FILE stays `lessons.html` because `site/faculty/lessons.html` is a
+  // frozen contract URL (CORE.md §6) that AI-generated prefill links target — renaming it would
+  // break every deployed artifact. Same for the student list.
+  { key: 'lessons',      label: 'Assignments',  href: 'lessons.html',           icon: 'assignments',   emoji: '📚' },
   // Extensions is its own destination rather than a panel inside Admin because it is a
   // recurring review, not a one-off administrative action: the director reads it to see how
   // many extensions each instructor is granting and then goes and talks to them. Burying a
@@ -69,14 +75,19 @@ const FACULTY_LINKS = [
 ];
 
 /* ── Course-view picker ────────────────────────────────────────────────────────
- * Lives in the USER MENU, not the nav bar. The nav bar is for destinations; which
- * course you are looking at is context, and context already lives in that menu —
- * its header names you, your role and your course. Putting the control beside the
- * thing it describes is why this is not a separate nav control.
+ * Lives on the BRAND, as a dropdown hanging off the course name beside "PREP".
  *
- * It replaces the old `.course-switch` pill row, which the term axis made untenable:
- * a flat row of pills cannot express one course offered across several semesters,
- * and it only appeared at all when someone held more than one course.
+ * It used to live in the user menu, on the reasoning that course is context rather than a
+ * destination and the user menu is where context lives. That reasoning still holds — what it
+ * missed is that the course name was ALREADY printed beside the wordmark on every page, so the
+ * label and the control that changes it sat at opposite ends of the nav bar. Making the label
+ * itself the control is the shorter path to the same idea: the thing you read is the thing you
+ * click. (The dashboard briefly grew its own inline switcher for the same discoverability
+ * reason; that one is gone now — see faculty-dashboard.js.)
+ *
+ * It replaced the older `.course-switch` pill row, which the term axis made untenable: a flat
+ * row of pills cannot express one course offered across several semesters, and it only appeared
+ * at all when someone held more than one course.
  *
  * Offered to ANY role with more than one offering — a student enrolled in two courses
  * needs this for the same reason a system administrator does. It grants no access:
@@ -85,7 +96,9 @@ const FACULTY_LINKS = [
  *
  * Exported and pure (string in, string out) so it can be unit-tested without a DOM.
  */
-export function courseMenuHTML(ctx) {
+
+/** The option rows themselves — term subheadings + one `.course-opt` per offering. '' for <2. */
+export function courseOptionsHTML(ctx) {
   const courses = ctx.courses || [];
   if (courses.length < 2) return '';                    // nothing to switch between
 
@@ -116,14 +129,34 @@ export function courseMenuHTML(ctx) {
       </button>`;
   };
 
+  return [...byTerm.entries()].map(([term, list]) =>
+    (spansTerms && term ? `<div class="menu-subhead">${esc(term)}</div>` : '') +
+    list.map(option).join('')).join('');
+}
+
+/**
+ * The brand-mounted picker: the course name beside "PREP", as a button with a dropdown.
+ *
+ * With a single course it degrades to the plain `.brand-sub` label it has always been — a
+ * dropdown holding one option is a label pretending to be a control, and the caret would
+ * promise a choice that does not exist.
+ */
+function brandCourseHTML(ctx, courseTitle) {
+  if (!courseTitle) return '';
+  const opts = courseOptionsHTML(ctx);
+  if (!opts) return `<span class="brand-sub">${esc(courseTitle)}</span>`;
   return `
-    <div class="menu-sep"></div>
-    <div class="menu-label" id="course-view-label">Course view</div>
-    <div class="menu-scroll" role="group" aria-labelledby="course-view-label">
-      ${[...byTerm.entries()].map(([term, list]) =>
-        (spansTerms && term ? `<div class="menu-subhead">${esc(term)}</div>` : '') +
-        list.map(option).join('')).join('')}
-    </div>`;
+    <span class="course-menu">
+      <button class="brand-sub course-btn" data-course-toggle aria-haspopup="true"
+              aria-expanded="false" aria-controls="course-menu-pop"
+              title="Switch course">
+        <span class="cb-name">${esc(courseTitle)}</span><span class="cb-caret" aria-hidden="true">▾</span>
+      </button>
+      <div class="menu-pop course-pop" id="course-menu-pop" role="menu">
+        <div class="menu-label">Course view</div>
+        <div class="menu-scroll">${opts}</div>
+      </div>
+    </span>`;
 }
 
 export function renderNav(ctx, opts = {}) {
@@ -148,7 +181,6 @@ export function renderNav(ctx, opts = {}) {
   // Only disambiguate by term when the caller actually spans more than one. Showing
   // "Physics 215 · Fall 2026" to everyone in a single-term deployment is noise.
   const spansTerms = new Set(ctx.courses.map(c => c.termCode)).size > 1;
-  const switcherHTML = courseMenuHTML(ctx);
 
   const linksHTML = links.map(l => `
     <a class="nav-link${l.key === active ? ' active' : ''}${l.external ? ' external' : ''}"
@@ -162,8 +194,9 @@ export function renderNav(ctx, opts = {}) {
       <div class="nav-left">
         <a class="brand" href="dashboard.html" title="PREP — Pre-lesson Readiness Engagement Platform">
           <span class="brand-mark">${iconHTML('atom', '⚛️', 'ic')}</span>
-          <span>PREP${courseTitle ? `<span class="brand-sub">${esc(courseTitle)}</span>` : ''}</span>
+          <span>PREP</span>
         </a>
+        ${brandCourseHTML(ctx, courseTitle)}
         <button class="nav-burger" aria-label="Menu" data-burger>${iconHTML('menu', '☰', 'ic')}</button>
       </div>
       <nav class="nav-links" id="nav-links">${linksHTML}</nav>
@@ -181,8 +214,7 @@ export function renderNav(ctx, opts = {}) {
                 <div class="rl">${esc(roleLabel)}${courseTitle ? ' · ' + esc(courseTitle) : ''}${
                   spansTerms && ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''}</div></div>
             </div>
-            ${switcherHTML}
-            ${switcherHTML ? '<div class="menu-sep"></div>' : ''}
+            <div class="menu-sep"></div>
             <a class="menu-item" href="account.html">
               ${iconHTML('user', '👤', 'ic')}<span>Account</span>
             </a>
@@ -302,6 +334,26 @@ function wireNav(ctx, mount, onCourseChange) {
     if (pop && !pop.contains(e.target) && e.target !== chip) pop.classList.remove('open');
   });
 
+  // Course dropdown on the brand. Same open/close contract as the user menu, and the two are
+  // mutually exclusive — two panels open at once over a 64px bar is never what was meant.
+  const cbtn = mount.querySelector('[data-course-toggle]');
+  const cpop = mount.querySelector('#course-menu-pop');
+  const closeCourse = () => {
+    cpop?.classList.remove('open');
+    cbtn?.setAttribute('aria-expanded', 'false');
+  };
+  cbtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    pop?.classList.remove('open');
+    const open = !cpop.classList.contains('open');
+    cpop.classList.toggle('open', open);
+    cbtn.setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', (e) => {
+    if (cpop && !cpop.contains(e.target) && !cbtn?.contains(e.target)) closeCourse();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCourse(); });
+
   // Sign out
   mount.querySelector('[data-signout]')?.addEventListener('click', () => ctx.signOut());
 
@@ -313,7 +365,7 @@ function wireNav(ctx, mount, onCourseChange) {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();                       // don't let the outside-click handler close it yet
       const id = btn.dataset.course;
-      if (id === ctx.currentOffering) { pop?.classList.remove('open'); return; }
+      if (id === ctx.currentOffering) { pop?.classList.remove('open'); closeCourse(); return; }
 
       btn.classList.add('busy');
       await ctx.setCurrentOffering(id);
@@ -328,7 +380,7 @@ function wireNav(ctx, mount, onCourseChange) {
       btn.classList.remove('busy');
 
       // Keep the two places the course is named in step with the new selection.
-      const sub = mount.querySelector('.brand-sub');
+      const sub = mount.querySelector('.cb-name') || mount.querySelector('.brand-sub');
       if (sub) sub.textContent = ctx.courseTitleOf(id);
       const rl = mount.querySelector('.menu-head .rl');
       if (rl) {
@@ -342,6 +394,7 @@ function wireNav(ctx, mount, onCourseChange) {
       }
 
       pop?.classList.remove('open');
+      closeCourse();
       onCourseChange?.(id);
     });
   });

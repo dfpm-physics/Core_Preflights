@@ -23,7 +23,7 @@
       <!-- Tinted header: Oswald title + completion badge, then flag pills + the scope control. -->
       <header class="lesson-head">
         <div class="lh-top">
-          <h2 class="lh-title grow" id="rm-title">Lesson report</h2>
+          <h2 class="lh-title grow" id="rm-title">Assignment report</h2>
           <div id="rm-comp"></div>
         </div>
         <div class="lh-sub">
@@ -39,7 +39,7 @@
       <!-- Analysis export lives on the bottom row, below the summary. -->
       <div class="row" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);justify-content:flex-end">
         <button class="btn btn-secondary btn-sm" id="rm-export"
-          title="Download a combined Markdown report (all your sections for this lesson) to hand to the analysis AI">Export for analysis ⬇</button>
+          title="Download a combined Markdown report (all your sections for this assignment) to hand to the analysis AI">Export for analysis ⬇</button>
       </div>
     </div>
   </main>
@@ -200,7 +200,7 @@
     function showReport(interactionId, title, section) {
       reportInteraction = interactionId;
       const it = vm.interactions.find(x => x.id === interactionId);
-      document.getElementById('rm-title').textContent = title || it?.title || 'Lesson report';
+      document.getElementById('rm-title').textContent = title || it?.title || 'Assignment report';
 
       // Sections you personally teach, intersected with what this rollup actually loaded. A
       // director holds an offering-wide staff row that grants sight of every section but is not a
@@ -301,7 +301,7 @@
     // Default: My sections when you teach several, your single section when you teach one, and the
     // course rollup only when you teach none of it.
     //
-    // SECTIONS YOU DO NOT TEACH ARE HIDDEN BEHIND A TOGGLE, off by default, director-only.
+    // SECTIONS YOU DO NOT TEACH ARE HIDDEN BEHIND THE LAMP, off by default, director-only.
     // `vm.sections` is every section a director may SEE, which on a four-section course meant a
     // director who teaches one of them opened this page to four tabs, three of them other people's
     // cohorts. A director's day-to-day view of a lesson should look like an instructor's — their own
@@ -345,27 +345,39 @@
       // and the content disagreeing.
       if (!opts.includes(reportScope)) reportScope = defaultScope();
 
+      // The other-sections toggle is a LAMP, and it sits inside the scope group rather than beside
+      // it. It used to be a text link reading "show all 4" / "hide others", which was two problems:
+      // the number said nothing about what changes (4 is the total, not the 3 being revealed), and
+      // parking a second, differently-styled control next to the tabs implied it selected a scope
+      // too. It never did — it changes which TABS exist. A lamp at the head of the group says
+      // "there is more behind this" without pretending to be one of the choices, and it is the
+      // leftmost thing in the group so the tabs that appear when it lights up grow to its right.
       const others = otherSectionIds().length;
-      const toggle = canSeeOthers()
-        ? `<button type="button" class="scope-more${showOtherSections ? ' on' : ''}" id="scope-more"
-                   aria-pressed="${showOtherSections}"
-                   title="${showOtherSections ? 'Hide sections you do not teach'
-                                              : 'Also show the ' + others + ' section(s) you do not teach'}"
-           >${showOtherSections ? 'hide others' : `show all ${others + myScopeSectionIds.length}`}</button>`
+      const lamp = canSeeOthers()
+        ? `<button type="button" class="scope-light" id="scope-more" aria-pressed="${showOtherSections}"
+                   aria-label="${showOtherSections ? 'Hide the ' + others + ' section(s) you do not teach'
+                                                   : 'Also show the ' + others + ' section(s) you do not teach'}"
+                   title="${showOtherSections ? `Showing all sections — click to hide the ${others} you do not teach`
+                                              : `Also show the ${others} section${others === 1 ? '' : 's'} you do not teach`}"
+           ><span class="lt" aria-hidden="true"></span></button>`
         : '';
 
       if (opts.length <= SEG_MAX) {
-        host.innerHTML = `<div class="seg" role="group" aria-label="Section">`
+        host.innerHTML = `<div class="seg" role="group" aria-label="Section">` + lamp
           + opts.map(v => `<button data-scope="${esc(v)}" aria-pressed="${reportScope === v}">${esc(label(v))}</button>`).join('')
-          + `</div>` + toggle;
+          + `</div>`;
         host.querySelector('.seg').addEventListener('click', e => {
-          const b = e.target.closest('button'); if (b) { reportScope = b.dataset.scope; renderScope(); renderAggregate(); }
+          // The lamp lives in this group but is not a scope — it has no data-scope, and letting
+          // the delegated handler see it would set reportScope to undefined.
+          const b = e.target.closest('button[data-scope]');
+          if (b) { reportScope = b.dataset.scope; renderScope(); renderAggregate(); }
         });
       } else {
-        host.innerHTML = `<select aria-label="Section">`
+        host.innerHTML = (lamp ? `<div class="seg" role="group" aria-label="Section">${lamp}</div>` : '')
+          + `<select aria-label="Section">`
           + opts.map(v => `<option value="${esc(v)}" ${reportScope === v ? 'selected' : ''}>`
               + `${esc(label(v))}${v === 'mine' || v === 'all' ? ` (${countOf(v)} section${countOf(v) === 1 ? '' : 's'})` : ` (${countOf(v)})`}</option>`).join('')
-          + `</select>` + toggle;
+          + `</select>`;
         host.querySelector('select').addEventListener('change', e => { reportScope = e.target.value; renderAggregate(); });
       }
       host.querySelector('#scope-more')?.addEventListener('click', () => {
@@ -417,7 +429,9 @@
       const rows = reportRows.filter(r => ids.has(String(r.student_id)));
       const s = I.summarizeReports(rows, undefined,
         { aliases: reportAliases, glossary: reportGlossary });
-      s.objectives.forEach((o, i) => o.letter = String.fromCharCode(65 + i));   // A, B, C… (weakest first)
+      // A, B, C… in list order — free response first when present, then weakest first
+      // (summarizeReports owns that order; see its objectives block).
+      s.objectives.forEach((o, i) => o.letter = String.fromCharCode(65 + i));
       el.innerHTML = aggregateHTML(s, rows, roster, currentAnalysis());
       renderFlagBar(s);
       wireRollup();
@@ -476,7 +490,7 @@
     function radarUnavailable(radar, paths) {
       const body = {
         'no-data': `No submissions in this scope yet.`,
-        'written-only': `Not available for this lesson — everyone worked the question set, which
+        'written-only': `Not available for this assignment — everyone worked the question set, which
           measures understanding on one free-response question rather than per objective. That
           score is in <b>Understanding by objective</b> below, as <b>Free response</b>.`,
         'too-few-objectives': `Needs at least 3 assessed objectives — this scope has
@@ -493,8 +507,9 @@
     //
     // On a mixed cohort the written path contributes one extra axis, "Free response", alongside
     // the interactive objectives: it is the same 0–5 understanding measure, so it plots on the
-    // same scale and is directly comparable. It arrives already in `objectives` (summarizeReports
-    // appends it), which is why nothing here special-cases it.
+    // same scale and is directly comparable. It arrives already FIRST in `objectives`
+    // (summarizeReports unshifts it), so it is always axis A — at the top of the polygon, in the
+    // same place on every lesson — and nothing here has to special-case it.
     function radarSVG(objectives, radar, paths) {
       const objs = objectives.filter(o => o.understanding != null).map(o => ({ letter: o.letter, m: o.understanding, label: o.label }));
       if (objs.length < 3) return radarUnavailable(radar || { reason: 'too-few-objectives', axisCount: objs.length }, paths);
@@ -1099,7 +1114,7 @@
       const aiSec = `<div class="lr-sec fw-panel">
         <div class="lr-eyebrow">AI readiness summary <span class="dim">${readiness ? aiGenNote(analysis, s.n) + whoNote : '· coming soon'}</span></div>
         ${readiness ? combinedBar + aiProse(analysis.readiness_summary) + notesHTML + scopeMismatch
-          : aiPlaceholder('A short read on how ready the class is for this lesson — engagement, where understanding is solid vs. shaky, and what to cover in class — will be generated here once the lesson has been aggregated.')}
+          : aiPlaceholder('A short read on how ready the class is for this assignment — engagement, where understanding is solid vs. shaky, and what to cover in class — will be generated here once the assignment has been aggregated.')}
       </div>`;
 
       // ── Misconceptions ──
@@ -1116,11 +1131,12 @@
       </div>`;
 
       // The written path's free-response understanding is charted here exactly like an
-      // objective — same 0–5 KDE, same weakest-first ordering, so it competes for attention on
-      // equal terms. It carries a small "questions" tag only so nobody reads it as an authored
-      // objective: it is one score for one question, not a resolved learning objective. (When
-      // the analysis can tease actual objectives out of the free-response answer, this row is
-      // what gets replaced by several — nothing else here has to change.)
+      // objective — same 0–5 chart, same row — but it always sits FIRST rather than taking its
+      // place in the weakest-first order, so it keeps one seat across every lesson and section.
+      // It carries a small "questions" tag so nobody reads it as an authored objective: it is one
+      // score for one question, not a resolved learning objective. (When the analysis can tease
+      // actual objectives out of the free-response answer, this row is what gets replaced by
+      // several — nothing else here has to change.)
       const objRows = s.objectives.map(o => {
         const isFR = o.source === 'written';
         return `<div class="obj-row${isFR ? ' obj-row-fr' : ''}">
@@ -1131,8 +1147,10 @@
         ${objChart(o.dist)}
       </div>`;
       }).join('');
-      const objMix = s.objectives.some(o => o.source === 'written') && s.objectives.some(o => o.source === 'interactive')
-        ? '· weakest first · interactive objectives + the written free response'
+      const hasFR = s.objectives.some(o => o.source === 'written');
+      const objMix = hasFR && s.objectives.some(o => o.source === 'interactive')
+        ? '· free response first, then weakest first · interactive objectives + the written free response'
+        : hasFR ? '· free response first, then weakest first'
         : '· weakest first';
       const objSec = s.objectives.length ? `<div class="lr-sec obj-box">
         <div class="lr-eyebrow">Understanding by objective <span class="dim">${objMix}</span></div>${objRows}</div>` : '';
@@ -1368,7 +1386,7 @@
       btn.disabled = true; btn.textContent = 'Preparing…';
       try {
         const { text, studentCount } = await I.buildLessonCorpus(ctx, reportInteraction);
-        if (!studentCount) { alert('No reports to export for this lesson yet.'); return; }
+        if (!studentCount) { alert('No reports to export for this assignment yet.'); return; }
         downloadText(`${reportInteraction}-reports.md`, text);
       } catch (e) {
         alert('Could not build the export: ' + (e?.message || e));

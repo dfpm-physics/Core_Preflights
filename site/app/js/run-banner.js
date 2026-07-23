@@ -71,7 +71,7 @@ export function bannerFor(run, courseLabel) {
   if (stale) {
     return { id: run.id, level: 'error', course: courseLabel,
              text: 'The overnight analysis started but never finished. Grades and the rollup may '
-                 + 'be incomplete for this lesson.' };
+                 + 'be incomplete for this assignment.' };
   }
   if (run.status === 'failed') {
     return { id: run.id, level: 'error', course: courseLabel,
