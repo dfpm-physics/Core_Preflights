@@ -548,6 +548,57 @@ export function effortSignal(grade, reportData) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
+ * Scope — what you may SEE vs what you personally TEACH
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * The sections the viewer personally TEACHES in the current offering.
+ *
+ * Distinct from `ctx.sectionIds`, which is what they may SEE — for a director those are all
+ * sections, and for a global admin they are every section in the offering. "My sections" has to
+ * mean the narrower thing or the default scope would be meaningless for exactly the people who
+ * have more than one section to choose between.
+ *
+ * A director's offering-wide staff row carries `section_id` NULL (auth.js documents this as the
+ * gotcha: NULL means all sections, not none). That row grants visibility, not a teaching
+ * assignment, so it is deliberately NOT counted here — a director who teaches M1A also holds a
+ * section-scoped row for it. A director who teaches nothing gets an empty list, and the caller
+ * falls back to the whole course.
+ *
+ * Lives here rather than in faculty-rollup.js (its original home, which still re-exports it)
+ * because the Grade page and the dashboard's due-out row need it too, and neither should pull a
+ * 56 KB aggregation module into the browser to ask a question about ctx.
+ */
+export function taughtSectionIds(ctx) {
+  const rows = (ctx?.staff || []).filter(sa => sa.course_offering_id === ctx.currentOffering);
+  return [...new Set(rows.map(sa => sa.section_id).filter(Boolean).map(String))];
+}
+
+/**
+ * The sections whose work is YOURS TO ACT ON — taught ∩ visible, falling back to visible.
+ *
+ * This is the scope for anything that presents itself as a personal worklist: the dashboard's
+ * due-out boxes and the Grade page's queue. A director may SEE the whole course, but a queue
+ * headed "what you owe" that lists another instructor's ungraded section is not a worklist, it is
+ * a course status report wearing one — and it is large enough that the reader stops opening it.
+ *
+ * The fallback matters: someone who staffs the offering but teaches no section of it (a pure
+ * director, a grader) would otherwise get an empty queue rather than the course-wide one they
+ * actually want. Empty-because-nothing-is-outstanding and empty-because-you-teach-nothing must
+ * not look the same.
+ *
+ * @returns {{ ids: string[], narrowed: boolean }} `narrowed` = the caller may say "your sections"
+ */
+export function actionableSections(ctx) {
+  const visible = (ctx?.sectionIds || []).map(String);
+  const taught = new Set(taughtSectionIds(ctx));
+  const mine = visible.filter(id => taught.has(id));
+  return mine.length && mine.length < visible.length
+    ? { ids: mine, narrowed: true }
+    : { ids: visible, narrowed: false };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
  * Misc
  * ════════════════════════════════════════════════════════════════════════════ */
 

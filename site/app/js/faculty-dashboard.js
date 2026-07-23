@@ -13,6 +13,8 @@
 import { loadFacultyDashboard } from './faculty-data.js';
 import { summarizeReports } from './faculty-rollup.js';
 import { loadTasks, renderTasks } from './faculty-tasks.js';
+import { actionableSections } from './schema.js';
+import { loadEiForSections, summarizeEi, renderEiPanel } from './faculty-ei.js';
 import { esc, iconHTML, fmtDate } from './util.js';
 
 let CTX = null, ROOT = null, MODEL = null;
@@ -22,6 +24,10 @@ const STATE = { scope: 'all', metric: 'completion', viewLesson: null };
 // null while the task queries are still in flight — the panel renders a placeholder rather than
 // an empty state, because "nothing outstanding" and "not asked yet" must not look the same.
 let TASKS = null;
+// P1.8's extra-instruction panel, on the same late-arriving contract as TASKS: null while the
+// query is in flight, `{ stats, nameOf }` once it lands. It renders nothing when nothing has been
+// logged, which is most instructors in week one — see renderEiPanel().
+let EI = null;
 // Bumped on every mount. The task load is async and ctx is the SAME OBJECT across a course
 // switch, so an identity check on ctx/root cannot tell a stale response from a current one — a
 // slow phys-110 load would paint its boxes over phys-215. The generation can.
@@ -39,6 +45,7 @@ export async function mountDashboard(ctx, root) {
   STATE.metric = 'completion';
   STATE.viewLesson = MODEL.activeId;
   TASKS = null;
+  EI = null;
   render();
   wireGlobalObservers();
 
@@ -52,6 +59,30 @@ export async function mountDashboard(ctx, root) {
       TASKS = tasks;
       paintTasks();
     });
+
+  // Same contract, same reasoning, separate failure: EI is a nice-to-have panel and its two
+  // queries must not be able to cost the reader the due-out row, or vice versa.
+  loadEi(ctx)
+    .catch(() => null)
+    .then(ei => {
+      if (gen !== MOUNT_GEN) return;
+      EI = ei || { stats: { total: 0 }, nameOf: () => '' };
+      paintEi();
+    });
+}
+
+/**
+ * Extra-instruction sessions for the sections the viewer TEACHES.
+ *
+ * Scoped the same way the due-out row is, and for the same reason: "how much EI have I held" is a
+ * question about your own teaching. A director reading the whole course's EI total would be
+ * reading a different, also-useful number that this panel does not claim to be.
+ */
+async function loadEi(ctx) {
+  const { ids, narrowed } = actionableSections(ctx);
+  if (!ids.length) return null;
+  const { rows, nameOf } = await loadEiForSections(ids);
+  return { stats: summarizeEi(rows), nameOf, scoped: narrowed };
 }
 
 /** Render-only entry (no network) for offline previews/tests: drive the real view with a
@@ -65,6 +96,7 @@ export function renderModel(ctx, root, model, state = {}) {
   // Defaults to [] rather than null: this path never queries, so leaving it null would render
   // the loading skeleton forever in an offline preview. Pass state.tasks to exercise the panel.
   TASKS = state.tasks || [];
+  EI = state.ei || { stats: { total: 0 }, nameOf: () => '' };
   render();
   wireGlobalObservers();
 }
@@ -202,6 +234,10 @@ function render() {
     spotlight(agg, ctx) +
     `<div id="dashTasks">${tasksMarkup()}</div>` +
     yourSections() +
+    // Below your sections, because it is a record of what you have done rather than something
+    // waiting on you — the due-out row above owns that job and should not have to share the
+    // reader's first glance.
+    `<div id="dashEi">${eiMarkup()}</div>` +
     (dir() ? matrix() : '');
 
   wire();
@@ -216,12 +252,25 @@ function tasksMarkup() {
       <span class="duo-box duo-skel"></span><span class="duo-box duo-skel"></span>
     </div></section>`;
   }
-  return renderTasks(TASKS, { esc });
+  return renderTasks(TASKS, { esc, scoped: actionableSections(CTX).narrowed });
 }
 
 function paintTasks() {
   const host = ROOT?.querySelector('#dashTasks');
   if (host) host.innerHTML = tasksMarkup();
+}
+
+/* P1.8's panel, on the same late-arriving/stable-host contract as the tasks row. No skeleton:
+ * unlike the due-out boxes this is often legitimately empty forever, so a placeholder would
+ * promise a panel that never appears. */
+function eiMarkup() {
+  if (EI === null) return '';
+  return renderEiPanel(EI.stats, { esc, fmtDate, nameOf: EI.nameOf, scoped: EI.scoped });
+}
+
+function paintEi() {
+  const host = ROOT?.querySelector('#dashEi');
+  if (host) host.innerHTML = eiMarkup();
 }
 
 function head(firstName, roleLabel) {

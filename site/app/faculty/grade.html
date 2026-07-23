@@ -34,35 +34,24 @@
                   title="Show only answers flagged for review or given no credit">Flagged only</button>
         </div>
       </div>
-      <!-- Hidden entirely when nothing is late, so the common case gains no clutter. -->
-      <div class="field">
-        <label for="late-only">Submitted late</label>
-        <button type="button" class="tbtn late-toggle" id="late-only" aria-pressed="false" hidden
-                title="Show only submissions that arrived after the student's own deadline">
-          ⏰ Late only <span data-late-count>0</span>
-        </button>
-      </div>
     </div>
 
-    <!-- Worklists. Collapsed by default so the grading view stays the focus, but the counts
-         are visible without opening them — an empty queue should cost nothing to ignore. -->
-    <details class="queue-card" id="q-ext" hidden>
-      <summary>
-        <span class="queue-dot warn"></span>
-        <span class="queue-title">Extensions ready to grade</span>
-        <span class="queue-count" id="q-ext-count">0</span>
-      </summary>
-      <div class="queue-body" id="q-ext-body"></div>
-    </details>
-
-    <details class="queue-card" id="q-past" hidden>
-      <summary>
-        <span class="queue-dot late"></span>
-        <span class="queue-title">Past due and not finalized</span>
-        <span class="queue-count" id="q-past-count">0</span>
-      </summary>
-      <div class="queue-body" id="q-past-body"></div>
-    </details>
+    <!-- P1.14 — the hand-grading queue. A row of compact cards, one per student waiting on a
+         human, ABOVE the grading view and open by default. It replaced two collapsed <details>
+         worklists that counted at assignment granularity: "3 outstanding on preflight-02" tells
+         you a number, not who, and closed queues showing a number are read as decoration.
+         Shaped like the lesson builder's orphan strip (.lb-orphan) because it is the same idea —
+         a small pile of things waiting to be dealt with, each one click from being dealt with. -->
+    <section class="hq-wrap" id="hq" hidden>
+      <div class="hq-head">
+        <h2>📌 Needs grading by hand</h2>
+        <span class="count-pill" id="hq-count">0</span>
+        <span class="hq-scope muted" id="hq-scope"></span>
+        <span class="grow"></span>
+        <span class="muted hq-note">The AI run happens once, after the deadline. These arrived after it.</span>
+      </div>
+      <div class="hq-cards" id="hq-cards"></div>
+    </section>
 
     <div id="grade-container">
       <div class="muted">Select an assignment to begin grading.</div>
@@ -125,7 +114,7 @@
     import { initTheme } from '../js/theme.js';
     import { esc, lastFirst, fmtDate, fmtDateTime, runPage } from '../js/util.js';
     // Questions now live in the written activity's content, not on the assignment row.
-    import { questionsOf, submissionLateness, lateBy } from '../js/schema.js';
+    import { questionsOf, submissionLateness, lateBy, actionableSections } from '../js/schema.js';
     import * as G from '../js/faculty-grade.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
@@ -156,7 +145,7 @@
       document.getElementById('signoff-btn').addEventListener('click', openSignoff);
       wireExtModal();
       wireSignoffModal();
-      wireQueues();
+      wireQueue();
       await populate(false);
     }
 
@@ -180,8 +169,17 @@
         // A section id is a uuid now; the CODE is what an instructor recognises.
         + list.map(s => `<option value="${esc(s)}">${esc(ctx.sectionCodeOf(s))}</option>`).join('');
 
-      if (reset) { container().innerHTML = `<div class="muted">Select an assignment to begin grading.</div>`; document.getElementById('grade-actions').style.display = 'none'; }
+      if (reset) {
+        container().innerHTML = `<div class="muted">Select an assignment to begin grading.</div>`;
+        document.getElementById('grade-actions').style.display = 'none';
+        renderQueue();
+      }
       else if (asgnSel().value) loadView();
+      // No assignment picked yet — which is how the page ALWAYS opens. loadView() paints the queue
+      // on every later load, but it does not run here, so without this the standing worklist would
+      // be invisible until the reader had already chosen where to look. That is the queue's whole
+      // reason for existing, inverted.
+      else renderQueue();
     }
 
     function resolveSectionIds() {
@@ -216,7 +214,9 @@
       render(data.students);
       actions.style.display = 'flex';
       renderSignoffBar();
-      renderQueues();
+      // Deliberately not awaited: the queue is cross-assignment and reloads from scratch, and the
+      // grading view the reader asked for must not wait on a panel above it.
+      renderQueue();
     }
 
     const LABEL = { full: '✓ Full credit', warn: '⚠ Full credit — review', zero: '✗ No credit' };
@@ -281,7 +281,7 @@
                  <div class="muted" style="margin-top:6px;font-size:.9em">Effort 0 → 0 pts ·
                  1–2 → half · 3–5 → full. A reading reflection that is not meaningful caps effort
                  at 2. Adjust it on the student's page, not here.</div></div>`;
-          return `<div class="grade-card${finalized ? ' finalized' : ''}" id="gc-${sid}" data-late="${late.late ? '1' : '0'}">
+          return `<div class="grade-card${finalized ? ' finalized' : ''}" id="gc-${sid}">
             <div class="gc-head">
               <span class="gc-name">${nm}</span><span class="tag">Sec ${esc(ctx.sectionCodeOf(st.section_id))}</span>
               <span class="tag tag-ai">Interactive</span>
@@ -314,7 +314,7 @@
           </div>`;
         }).join('');
 
-        return `<div class="grade-card${finalized ? ' finalized' : ''}" id="gc-${sid}" data-late="${late.late ? '1' : '0'}">
+        return `<div class="grade-card${finalized ? ' finalized' : ''}" id="gc-${sid}">
           <div class="gc-head">
             <span class="gc-name">${nm}</span><span class="tag">Sec ${esc(ctx.sectionCodeOf(st.section_id))}</span>
             ${headExtras}
@@ -373,8 +373,13 @@
     // them. Filtering is pure DOM work against `.grade-q[data-status]` — no refetch — but it has
     // to run after every render AND every credit toggle, or the view drifts out of step with the
     // lamps. `data-status` is the only hook present on both the finalized and editable branches.
+    //
+    // The "Late only" filter that used to AND with these lamps was WITHDRAWN 2026-07-23 (P1.14).
+    // It answered the wrong question — an instructor does not want a section narrowed down to its
+    // late work, they want the short list of submissions needing attention, which is now the queue
+    // above. The late CHIP on the card stays: that is context while grading a specific student,
+    // and it was never what was objected to.
     const lampOn = { full: true, warn: true, zero: true };
-    let lateOnly = false;   // narrows to late submissions; ANDs with the lamps, never overrides them
     const LAMP_NAME = { full: 'Full credit', warn: 'Flagged for review', zero: 'No credit' };
 
     function wireLamps() {
@@ -398,24 +403,15 @@
           b.setAttribute('aria-pressed', String(lampOn[b.dataset.lamp] !== false)));
         applyFilters();
       });
-
-      document.getElementById('late-only')?.addEventListener('click', (e) => {
-        lateOnly = !lateOnly;
-        e.currentTarget.setAttribute('aria-pressed', String(lateOnly));
-        e.currentTarget.classList.toggle('on', lateOnly);
-        applyFilters();
-      });
     }
 
     function applyFilters() {
       const counts = { full: 0, warn: 0, zero: 0 };
-      let anyRows = false, shownCards = 0, lateTotal = 0;
+      let anyRows = false, shownCards = 0;
 
       document.querySelectorAll('.grade-card').forEach(card => {
         const rows = card.querySelectorAll('.grade-q');
         if (rows.length) anyRows = true;
-        const isLate = card.dataset.late === '1';
-        if (isLate) lateTotal++;
         let shown = 0;
         rows.forEach(row => {
           const s = row.dataset.status;
@@ -426,18 +422,10 @@
         });
         // A card with no gradable rows at all (every question worth 0 pts) wasn't filtered out
         // by the lamps — keep it visible instead of silently dropping the student.
-        // The late toggle is an AND on top of the lamps: it narrows to late submissions rather
-        // than revealing ones the lamps hid.
-        const visible = (rows.length ? shown > 0 : true) && (!lateOnly || isLate);
+        const visible = rows.length ? shown > 0 : true;
         card.style.display = visible ? '' : 'none';
         if (visible) shownCards++;
       });
-
-      const lateBtn = document.getElementById('late-only');
-      if (lateBtn) {
-        lateBtn.hidden = lateTotal === 0;         // no late work → no control to explain
-        lateBtn.querySelector('[data-late-count]').textContent = lateTotal;
-      }
 
       // The count is the button's only text, so it would otherwise BE the accessible name
       // ("0, pressed"). Keep an explicit label carrying both the colour's meaning and the count.
@@ -494,53 +482,69 @@
       loadView();
     }
 
-    /* ── Worklists ─────────────────────────────────────────────────────────────
-     * These answer "what do I owe", which the assignment-at-a-time view never could. The
-     * extensions queue is the mechanism that stops late work being lost: preflight-analyze
-     * runs once, after the section deadline, so a student on an extension submits into
-     * silence unless something remembers them. Nothing here grades automatically — it is a
-     * reminder, and the instructor grades those few by hand.
+    /* ── The hand-grading queue (P1.14) ────────────────────────────────────────
+     * "What do I owe", per student, across every assignment — which the assignment-at-a-time
+     * view never could answer. Its scope is the sections you personally TEACH, not the ones you
+     * may see: a director reading a queue full of another instructor's ungraded work is reading
+     * a course status report, not a worklist, and stops opening it by week three.
+     *
+     * Nothing here grades automatically. It is a reminder, and the instructor grades those few
+     * by hand — one click puts the student's answers on screen with the 3-state controls.
      */
-    async function renderQueues() {
-      // Extension queue — scoped to the assignment on screen.
-      const q = G.extensionsToGrade(current, currentStudents, extensionMap, scoreMap, submissionMap);
-      const qEl = document.getElementById('q-ext');
-      document.getElementById('q-ext-count').textContent = q.length;
-      qEl.hidden = q.length === 0;
-      if (q.length) {
-        document.getElementById('q-ext-body').innerHTML = `
-          <p class="queue-note">Their extension has passed and the work is in, but nothing is
-          published yet. These are graded by hand — the AI run happened before they submitted.</p>
-          <ul class="queue-list">` + q.map(r => `
-            <li><a href="#gc-${r.student.student_id}" data-act="jump" data-sid="${r.student.student_id}">
-              ${esc(lastFirst(r.student.name))}</a>
-              <span class="tag">Sec ${esc(ctx.sectionCodeOf(r.student.section_id))}</span>
-              <span class="muted">was due ${esc(fmtDateTime(r.extension.due))}</span>
-              <span class="tag ${r.state === 'ungraded' ? 'tag-ungraded' : 'tag-ai'}">${
-                r.state === 'ungraded' ? 'no grade yet'
-                : r.state === 'ai-only' ? 'AI suggested, unreviewed' : 'draft saved'}</span>
-              <span class="queue-why">${esc(r.extension.reason)}</span></li>`).join('') + `</ul>`;
-      }
+    const STATE_LABEL = {
+      ungraded: 'no grade yet', 'ai-only': 'AI suggested, unreviewed', draft: 'draft saved',
+    };
 
-      // Past-due queue — deliberately across ALL assignments in the offering, not just this
-      // one, because a backlog you can only see one assignment at a time is not a backlog.
-      const past = await G.pastDueUngraded(ctx, resolveSectionIds());
-      const pEl = document.getElementById('q-past');
-      const totalOutstanding = past.reduce((n, r) => n + r.outstanding, 0);
-      document.getElementById('q-past-count').textContent = totalOutstanding;
-      pEl.hidden = past.length === 0;
-      if (past.length) {
-        document.getElementById('q-past-body').innerHTML = `
-          <p class="queue-note">Submitted, past the student's own deadline, not yet finalized.
-          Students still inside an extension are not counted here.</p>
-          <ul class="queue-list">` + past.map(r => `
-            <li><a href="#" data-act="goto-asgn" data-oid="${esc(r.offeringId)}">${esc(r.title)}</a>
-              <span class="muted">due ${esc(fmtDate(r.dueAt))}</span>
-              <span class="tag">${r.outstanding} outstanding</span>
-              ${r.ungraded ? `<span class="tag tag-ungraded">${r.ungraded} with no grade</span>` : ''}
-              ${r.waiting ? `<span class="tag muted">${r.waiting} still on extension</span>` : ''}
-            </li>`).join('') + `</ul>`;
+    async function renderQueue() {
+      const { ids, narrowed } = actionableSections(ctx);
+      const rows = await G.gradingQueue(ctx, ids);
+      const wrap = document.getElementById('hq');
+      wrap.hidden = rows.length === 0;          // an empty queue costs nothing to ignore
+      document.getElementById('hq-count').textContent = rows.length;
+      document.getElementById('hq-scope').textContent =
+        narrowed ? '· your sections' : '· all sections you staff';
+      if (!rows.length) return;
+
+      document.getElementById('hq-cards').innerHTML = rows.map(r => `
+        <button type="button" class="hq-card ${r.reason === 'late' ? 'late' : 'ext'}"
+                data-act="queue-open" data-oid="${esc(r.offeringId)}" data-sid="${r.studentId}"
+                data-sec="${esc(r.sectionId)}"
+                title="${esc(r.reason === 'late'
+                  ? `Submitted ${lateBy(r.lateMs)} · ${r.title}`
+                  : `Extension ran out ${fmtDateTime(r.extendedDue)} · ${r.extensionReason}`)}">
+          <span class="hq-badge">${r.reason === 'late'
+            ? `⏰ ${esc(lateBy(r.lateMs))}` : `📅 extension over`}</span>
+          <span class="hq-name">${esc(lastFirst(r.studentName))}</span>
+          <span class="hq-meta">${esc(r.title)} · Sec ${esc(ctx.sectionCodeOf(r.sectionId))}</span>
+          <span class="hq-state ${esc(r.state)}">${esc(STATE_LABEL[r.state] || r.state)}</span>
+        </button>`).join('');
+    }
+
+    /**
+     * Open one queued student's work for grading, right here.
+     *
+     * Switching the assignment picker is what actually loads them — but the SECTION picker has to
+     * be widened first when the reader had narrowed to a single section that is not this student's.
+     * Otherwise the click loads an assignment scoped to the wrong section and the card it was meant
+     * to reveal is simply not in the DOM, which reads as the button being broken.
+     */
+    async function openQueued(offeringId, studentId, sectionId) {
+      const picked = secSel().value;
+      // '' (all my sections) and '__all__' (whole course) both already contain them.
+      const wrongSection = picked && picked !== '__all__' && picked !== sectionId;
+      if (asgnSel().value !== offeringId || wrongSection) {
+        asgnSel().value = offeringId;
+        if (wrongSection) secSel().value = '';
+        await loadView();
       }
+      const card = document.getElementById(`gc-${studentId}`);
+      if (!card) { flash('That student is not in the section currently selected.'); return; }
+      // Their card may be hidden by the status lamps — a queued student is exactly who the
+      // reader asked to see, so reveal it rather than scrolling to nothing.
+      card.style.display = '';
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.classList.add('flash');
+      setTimeout(() => card.classList.remove('flash'), 1600);
     }
 
     // ── Extension modal ──
@@ -556,18 +560,14 @@
       document.getElementById('signoff-save').addEventListener('click', saveSignoff);
     }
 
-    function wireQueues() {
-      document.getElementById('main').addEventListener('click', (e) => {
-        const el = e.target.closest('[data-act="jump"], [data-act="goto-asgn"]');
+    function wireQueue() {
+      // Delegated on #gq rather than on #main: the queue re-renders on every load, and one
+      // listener on the stable host survives that where per-card listeners would not.
+      document.getElementById('hq').addEventListener('click', (e) => {
+        const el = e.target.closest('[data-act="queue-open"]');
         if (!el) return;
         e.preventDefault();
-        if (el.dataset.act === 'jump') {
-          const card = document.getElementById(`gc-${el.dataset.sid}`);
-          if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.classList.add('flash'); setTimeout(() => card.classList.remove('flash'), 1600); }
-        } else {
-          asgnSel().value = el.dataset.oid;
-          loadView();
-        }
+        openQueued(el.dataset.oid, el.dataset.sid, el.dataset.sec);
       });
     }
     function openExt(sid, name) {

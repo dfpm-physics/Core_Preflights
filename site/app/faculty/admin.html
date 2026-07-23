@@ -153,24 +153,146 @@
                         : 'System-admin rows can only be changed by another system admin.'}</div>
         </div>
 
-        <div class="card">
-          <div class="card-title">Section coverage</div>
-          <div class="card-meta">Derived from the rows above — <code>staff_assignments</code> replaced
-            <code>sections.instructor_id</code>, so adding staff and assigning a section are the same
-            action. Enrolment is managed on <a href="roster.html">Roster</a>.</div>
-          <div class="sec-grid">${sections.map(sec => {
-            const named = staff.filter(s => !s.implicit && s.sections.some(x => x.id === sec.id));
-            const wide = staff.filter(s => !s.implicit && s.wide);
-            return `<div class="sec-assign">
-              <div class="sec-tag">${esc(sec.code)}</div>
-              <div style="font-size:0.84em;margin-top:6px">${named.length
-                ? named.map(s => esc(s.name)).join(', ')
-                : `<span style="color:var(--red)">— unassigned —</span>`}</div>
-              ${wide.length ? `<div class="muted" style="font-size:0.76em;margin-top:4px">+ ${wide.length} offering-wide</div>` : ''}
-            </div>`; }).join('') || `<div class="muted">No sections yet — create them on Roster.</div>`}</div>
-        </div>`;
+        ${sectionCoverage(staff, sections)}`;
 
       wireStaff(panel);
+      wireCoverage(panel);
+    }
+
+    /* ───────────────────── Section coverage (P1.10 · P1.11) ─────────────────────
+     * Assignment happens HERE now, on the grid, instead of inside a per-person tick-box modal on
+     * the Staff table. Three complaints drove that, and each is answered by a different part of
+     * this function:
+     *
+     *   1. WRONG PLACE. "Who covers M1A" is a question about M1A, and it was only answerable by
+     *      opening six people's modals in turn and remembering what each said. The tile now holds
+     *      its own answer and its own controls.
+     *
+     *   2. TICK BOXES ARE THE WRONG CONTROL. Drag a name onto a tile, or pick from the tile's
+     *      dropdown. BOTH paths exist and that is not optional: drag-and-drop alone is a keyboard
+     *      trap and unusable on a tablet, which is exactly where an instructor stands when they
+     *      are doing this. The dropdown is the real control; the drag is the fast one.
+     *      (Native HTML5 drag events, not SortableJS — CORE.md §2 forbids a runtime dependency,
+     *      and faculty/lessons.html already does the same thing for orphan lessons.)
+     *
+     *   3. "+6 OFFERING-WIDE" WAS THE SAME NUMBER ON EVERY TILE. It never referenced the section it
+     *      was rendered under — it could not, since an offering-wide row covers everything — so a
+     *      director scanning the grid read an identical "+6" six times and learned nothing
+     *      section-specific from any of them. It is stated ONCE above the grid, with names, since
+     *      the people are already loaded. A per-offering constant rendered per-section is noise.
+     *
+     * The old modal survives as the per-person view (its copy is fixed below); this is the
+     * per-section one, and they write the same rows.
+     */
+    function sectionCoverage(staff, sections) {
+      // Everyone who could hold a teaching assignment. Implicit rows are global admins with no
+      // staff_assignments row at all — assigning one CREATES their row, which is a real action, so
+      // they are offered here rather than hidden.
+      const pool = staff.slice().sort((a, b) => lastFirst(a.name).localeCompare(lastFirst(b.name)));
+      const wide = staff.filter(s => !s.implicit && s.wide);
+
+      if (!sections.length) {
+        return `<div class="card"><div class="card-title">Section coverage</div>
+          <div class="muted">No sections yet — they are created by a roster import on
+          <a href="enrollment.html">Enrollment</a>.</div></div>`;
+      }
+
+      const chip = (s) => `<span class="cov-chip" draggable="true" data-person="${esc(s.instructorId)}"
+          title="Drag onto a section, or use a section's dropdown">
+          ${esc(s.name)}${s.sysadmin ? ' <span class="cov-sys">admin</span>' : ''}</span>`;
+
+      const tiles = sections.map(sec => {
+        const named = staff.filter(s => s.sections.some(x => x.id === sec.id));
+        const free = pool.filter(s => !named.some(n => n.instructorId === s.instructorId));
+        return `<div class="sec-assign cov-tile" data-section="${esc(sec.id)}">
+          <div class="sec-tag">${esc(sec.code)}</div>
+          <div class="cov-holders">${named.length
+            ? named.map(s => `<span class="cov-held">${esc(s.name)}
+                <button class="cov-x" data-drop-person="${esc(s.instructorId)}"
+                        data-drop-section="${esc(sec.id)}" data-name="${esc(s.name)}"
+                        title="Remove ${esc(s.name)} from ${esc(sec.code)}"
+                        aria-label="Remove ${esc(s.name)} from ${esc(sec.code)}">×</button></span>`).join('')
+            : `<span class="cov-empty">— nobody assigned —</span>`}</div>
+          <select class="cov-add" data-add-to="${esc(sec.id)}"
+                  aria-label="Add an instructor to ${esc(sec.code)}"${free.length ? '' : ' disabled'}>
+            <option value="">${free.length ? '+ add instructor…' : 'everyone is assigned'}</option>
+            ${free.map(s => `<option value="${esc(s.instructorId)}">${esc(lastFirst(s.name))}</option>`).join('')}
+          </select>
+        </div>`;
+      }).join('');
+
+      return `<div class="card">
+        <div class="card-title">Section coverage</div>
+        <div class="card-meta">Drag a name onto a section, or use the section's dropdown. Each
+          person grades the sections they hold here — <code>staff_assignments</code> replaced
+          <code>sections.instructor_id</code>, so adding staff and assigning a section are one
+          action. Enrolment is managed on <a href="enrollment.html">Enrollment</a>.</div>
+        ${wide.length ? `<div class="alert alert-info cov-wide">
+            <strong>${wide.length} of ${pool.length} hold offering-wide coverage:</strong>
+            ${wide.map(s => esc(s.name)).join(', ')}.
+            A staff row with no section (which is how a director is recorded, and what
+            <code>+ Add staff</code> writes by default) grants sight of <em>every</em> section and
+            picks up sections added later.
+            <span class="muted">The tiles below record who actually <em>teaches</em> each section —
+            that is what "my sections" means on the dashboard, the gradebook and the grading queue,
+            and it is separate from coverage. Directors teach too: give them a tile as well.</span>
+          </div>` : ''}
+        <div class="cov-pool" id="cov-pool">${pool.map(chip).join('')}</div>
+        <div class="sec-grid">${tiles}</div>
+        <div id="cov-status" class="muted" style="font-size:0.82em;min-height:1.2em;margin-top:10px"></div>
+      </div>`;
+    }
+
+    function wireCoverage(panel) {
+      const status = (msg, colour = 'var(--muted)') => {
+        const el = document.getElementById('cov-status');
+        if (!el) return;
+        el.style.color = colour; el.textContent = msg;
+        if (colour !== 'var(--red)') setTimeout(() => { el.textContent = ''; }, 2600);
+      };
+      const personById = (id) => cache.staff.find(s => s.instructorId === id);
+
+      async function assign(personId, sectionId) {
+        const who = personById(personId);
+        if (!who) return;
+        status('Saving…');
+        // Their existing role, never a chosen one — see addStaffSection()'s header on P0.15.
+        const { error } = await A.addStaffSection(ctx, personId, who.role, sectionId);
+        if (error) return status('⚠ ' + error.message, 'var(--red)');
+        status(`✓ ${who.name} → ${ctx.sectionCodeOf(sectionId)}`, 'var(--green)');
+        renderStaff();
+      }
+
+      panel.querySelectorAll('.cov-chip').forEach(el => {
+        el.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/plain', el.dataset.person);
+          e.dataTransfer.effectAllowed = 'copy';
+          el.classList.add('dragging');
+        });
+        el.addEventListener('dragend', () => el.classList.remove('dragging'));
+      });
+
+      panel.querySelectorAll('.cov-tile').forEach(tile => {
+        tile.addEventListener('dragover', (e) => { e.preventDefault(); tile.classList.add('over'); });
+        tile.addEventListener('dragleave', () => tile.classList.remove('over'));
+        tile.addEventListener('drop', (e) => {
+          e.preventDefault(); tile.classList.remove('over');
+          const id = e.dataTransfer.getData('text/plain');
+          if (id) assign(id, tile.dataset.section);
+        });
+      });
+
+      panel.querySelectorAll('.cov-add').forEach(sel => sel.addEventListener('change', () => {
+        if (sel.value) assign(sel.value, sel.dataset.addTo);
+      }));
+
+      panel.querySelectorAll('.cov-x').forEach(b => b.addEventListener('click', async () => {
+        status('Saving…');
+        const { error } = await A.removeStaffSection(ctx, b.dataset.dropPerson, b.dataset.dropSection);
+        if (error) return status('⚠ ' + error.message, 'var(--red)');
+        status(`✓ ${b.dataset.name} removed from ${ctx.sectionCodeOf(b.dataset.dropSection)}`, 'var(--green)');
+        renderStaff();
+      }));
     }
 
     function wireStaff(panel) {
@@ -228,10 +350,23 @@
       panel.querySelectorAll('[data-sections]').forEach(b => b.addEventListener('click', () => {
         const who = cache.staff.find(s => s.instructorId === b.dataset.sections);
         const checked = new Set(who.sections.map(x => x.id));
+        // The copy here used to read: "Leave everything unticked to give them all sections of this
+        // offering. That is how a director is recorded, and it covers sections added later."
+        // Every clause of that is true and the whole thing is misleading. It describes the DATA
+        // ENCODING (an offering-wide row carries section_id NULL) as though it were the role, and
+        // in doing so it implies a director does not teach. Directors teach sections — the two are
+        // independent, and someone can hold both. Say that instead, and say where the offering-wide
+        // part actually comes from.
         openModal(`Sections — ${who.name}`,
-          `<div class="alert alert-info">Leave everything unticked to give them
-             <strong>all sections</strong> of this offering. That is how a director is recorded, and it
-             covers sections added later.</div>
+          `<div class="alert alert-info">These are the sections
+             <strong>${esc(who.name)}</strong> personally teaches and grades.
+             ${who.wide
+               ? `They also cover <strong>every section</strong> of this offering, which is how a
+                  director is recorded and picks up sections added later. That is separate from
+                  teaching — ticking a section here as well is normal, not a contradiction.`
+               : `Ticking none means they teach no section of this offering. It does <em>not</em>
+                  grant them all of them — offering-wide coverage comes from their role, set in the
+                  Role column.`}</div>
            ${cache.sections.map(s => `<label class="row" style="gap:8px;padding:6px 0">
               <input type="checkbox" value="${esc(s.id)}" data-sec ${checked.has(s.id) ? 'checked' : ''}
                      style="width:auto;margin:0">

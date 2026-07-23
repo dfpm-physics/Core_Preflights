@@ -22,7 +22,7 @@ import { db } from './supabase.js';
 import { lastFirst } from './util.js';
 import {
   OFFERING_SELECT, GRADE_SELECT, SUBMISSION_SELECT, EXTENSION_SELECT,
-  shapeOffering, shapeSubmission, questionsOf, effectiveDue,
+  shapeOffering, shapeSubmission, questionsOf, effectiveDue, submissionLateness,
 } from './schema.js';
 
 /** Scheduled assignments for the current offering, for the picker. */
@@ -504,23 +504,13 @@ export function signoffStale(signoff, gradeUpdatedISOs) {
  * Both are pure reads over existing tables; no DDL, and no new denormalised state to drift.
  */
 
-/** Students whose extension has now expired and whose work is still not finalized. */
-export function extensionsToGrade(offering, students, extensionMap, gradeMap, submissionMap, now = new Date()) {
-  return students.map(st => {
-    const sid = st.student_id;
-    const ext = extensionMap[sid];
-    if (!ext || ext.isRevoked) return null;
-    if (new Date(ext.due) > now) return null;              // still has time
-    const sub = submissionMap[sid];
-    if (!sub) return null;                                  // nothing came in
-    const g = gradeMap[sid];
-    if (g?.finalized) return null;                          // already published
-    return {
-      student: st, extension: ext, submission: sub, grade: g || null,
-      state: !g ? 'ungraded' : (g.source === 'ai_suggested' ? 'ai-only' : 'draft'),
-    };
-  }).filter(Boolean);
-}
+/* `extensionsToGrade()` lived here until 2026-07-23 and is now `buildGradingQueue()` below.
+ *
+ * It answered the same question one assignment at a time, off the maps the Grade page had already
+ * loaded — which meant an expired extension on a lesson you were not currently looking at was
+ * invisible. P1.14's queue is cross-assignment and per-student, so the narrower version had no
+ * caller left. The RULE it encoded (active extension + past its date + work in + not finalized)
+ * is carried over unchanged. */
 
 /**
  * Assignments in this offering whose deadline has passed and which still hold unfinalized
@@ -595,6 +585,165 @@ export async function pastDueUngraded(ctx, sectionIds, now = new Date()) {
     }
   }
   return rows.sort((a, b) => new Date(a.dueAt || 0) - new Date(b.dueAt || 0));
+}
+
+/* ── The hand-grading queue (P1.14) ──────────────────────────────────────────
+ *
+ * WHAT THIS REPLACED, AND WHY IT IS A DIFFERENT SHAPE
+ *   The Grade page used to carry a "Submitted late" FILTER: pick an assignment, pick a section,
+ *   then narrow the cards down to the late ones. That answers the wrong question. An instructor
+ *   does not want to filter a section down to late work — they want the short standing list of
+ *   the handful of submissions that need a human, without first guessing which assignment holds
+ *   them. A filter makes you go looking; a queue comes to you.
+ *
+ * WHAT IS IN IT
+ *   Exactly two things, both of which are "the AI run has already happened and missed this":
+ *     late            — committed after that student's own deadline, not finalized
+ *     extension-expired — their extension has now passed, work is in, nothing published
+ *   /preflight-analyze runs once, after the section deadline. Anything that arrives afterwards is
+ *   invisible unless something remembers it, and these are the two ways that happens.
+ *
+ * WHAT IS DELIBERATELY NOT IN IT
+ *   INTERACTIVE TAKERS. Migration 015 grades them on commit — finalized, derived, from the report
+ *   effort — so there is nothing for a human to do and listing them would train people to ignore
+ *   the queue. This is the one rule here that is a claim about another part of the system rather
+ *   than about this data, so it is asserted narrowly: a submission whose CHOSEN activity is not
+ *   the written one is out. A draft (nothing chosen) is still in, because that student may yet
+ *   land on the written path.
+ *
+ *   Also out: non-submitters. That is a roster conversation, not a grading backlog, and the
+ *   rollup's "Did not submit" panel is where it already lives.
+ */
+
+/**
+ * Pure half — takes the five row-sets, returns the queue. Unit-tested without a network.
+ *
+ * @param {object} data
+ *   offerings   [{ id, dueAt, dueBySection, slug, title, position, writtenActivityId }]
+ *   students    [{ student_id, name, enrollment_id, section_id }]
+ *   submissions [{ enrollment_id, assignment_offering_id, chosen_activity_id, status, committed_at }]
+ *   grades      [{ enrollment_id, assignment_offering_id, is_finalized, source }]
+ *   extensions  [{ enrollment_id, assignment_offering_id, extended_due_at, reason }]  ACTIVE only
+ * @param {Date} [now]
+ */
+export function buildGradingQueue({ offerings, students, submissions, grades, extensions }, now = new Date()) {
+  const key = (e, o) => `${e}|${o}`;
+  const studentOf = Object.fromEntries((students || []).map(s => [s.enrollment_id, s]));
+  const gradeBy = Object.fromEntries((grades || []).map(g => [key(g.enrollment_id, g.assignment_offering_id), g]));
+  const extBy = Object.fromEntries((extensions || []).map(x => [key(x.enrollment_id, x.assignment_offering_id), x]));
+  const offeringBy = Object.fromEntries((offerings || []).map(o => [o.id, o]));
+
+  const out = [];
+  for (const sub of (submissions || [])) {
+    if (sub.status !== 'committed') continue;              // a draft is not waiting on a grader
+    const st = studentOf[sub.enrollment_id];
+    const off = offeringBy[sub.assignment_offering_id];
+    if (!st || !off) continue;
+
+    // Auto-graded on commit — see the header.
+    if (sub.chosen_activity_id && sub.chosen_activity_id !== off.writtenActivityId) continue;
+
+    const k = key(sub.enrollment_id, off.id);
+    const g = gradeBy[k];
+    if (g?.is_finalized) continue;                          // already published
+
+    const ext = extBy[k];
+    const extISO = ext?.extended_due_at || null;
+    // shapeOffering()'s two fields are all effectiveDue/submissionLateness read.
+    const shaped = { dueAt: off.dueAt, dueBySection: off.dueBySection || {} };
+    const late = submissionLateness(shaped, st.section_id, extISO, sub.committed_at);
+    const extExpired = !!extISO && new Date(extISO) <= now;
+
+    // Late wins when both apply: it is the more specific fact, and an extension that was blown
+    // through is exactly the case a grader wants named as late rather than as "extension over".
+    const reason = late.late ? 'late' : extExpired ? 'extension-expired' : null;
+    if (!reason) continue;
+
+    out.push({
+      offeringId: off.id,
+      slug: off.slug,
+      title: off.title,
+      dueAt: off.dueAt,
+      position: off.position ?? 0,
+      studentId: st.student_id,
+      studentName: st.name,
+      sectionId: st.section_id,
+      enrollmentId: st.enrollment_id,
+      reason,
+      lateMs: late.late ? late.ms : 0,
+      due: late.due || (extISO ? new Date(extISO) : null),
+      extendedDue: extISO,
+      extensionReason: ext?.reason || '',
+      // Same vocabulary extensionsToGrade() already uses, so the two read alike.
+      state: !g ? 'ungraded' : (g.source === 'ai_suggested' ? 'ai-only' : 'draft'),
+    });
+  }
+
+  // Oldest deadline first, then by name. The thing that has been waiting longest is the thing
+  // most likely to be forgotten, and it is also the one a cadet is most likely to ask about.
+  return out.sort((a, b) =>
+    new Date(a.dueAt || 0) - new Date(b.dueAt || 0)
+    || lastFirst(a.studentName).localeCompare(lastFirst(b.studentName)));
+}
+
+/**
+ * The queue, fetched. Scoped by the CALLER to the sections they personally teach — see
+ * schema.js `actionableSections()` for why "what I can see" is the wrong scope for a worklist.
+ *
+ * Cross-assignment on purpose: the Grade page is otherwise strictly one-at-a-time, which is
+ * exactly why nothing ever surfaced a backlog.
+ */
+export async function gradingQueue(ctx, sectionIds, now = new Date()) {
+  if (!ctx.currentOffering || !sectionIds?.length) return [];
+
+  const { data: enrolRows } = await db.from('enrollments')
+    .select('id, student_id, section_id, students!inner(student_id, name)')
+    .in('section_id', sectionIds).eq('status', 'active');
+  const students = (enrolRows || []).map(e => ({
+    student_id: e.student_id,
+    name: e.students?.name || String(e.student_id),
+    enrollment_id: e.id,
+    section_id: e.section_id,
+  }));
+  if (!students.length) return [];
+  const enrolmentIds = students.map(s => s.enrollment_id);
+
+  // offering_activities is embedded so the written activity id is known per offering — that is
+  // what separates an interactive taker from a written one, and there is no other source for it.
+  const { data: offeringRows } = await db.from('assignment_offerings')
+    .select('id, due_at, position, assignments!inner(slug, title),' +
+            'assignment_due_dates(section_id, due_at),' +
+            'offering_activities(activity_id, activities(id, modality))')
+    .eq('course_offering_id', ctx.currentOffering).eq('is_published', true);
+
+  const offerings = (offeringRows || []).map(o => ({
+    id: o.id,
+    dueAt: o.due_at,
+    position: o.position ?? 0,
+    slug: o.assignments?.slug || '',
+    title: o.assignments?.title || o.assignments?.slug || '—',
+    dueBySection: Object.fromEntries((o.assignment_due_dates || []).map(d => [d.section_id, d.due_at])),
+    writtenActivityId:
+      (o.offering_activities || []).find(oa => oa.activities?.modality === 'written')?.activity_id || null,
+  }));
+  const offeringIds = offerings.map(o => o.id);
+  if (!offeringIds.length) return [];
+
+  const [subs, grds, exts] = await Promise.all([
+    db.from('submissions')
+      .select('enrollment_id, assignment_offering_id, chosen_activity_id, status, committed_at')
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrolmentIds),
+    db.from('grades').select('enrollment_id, assignment_offering_id, is_finalized, source')
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrolmentIds),
+    db.from('extensions').select('enrollment_id, assignment_offering_id, extended_due_at, reason')
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrolmentIds)
+      .is('revoked_at', null),
+  ]);
+
+  return buildGradingQueue({
+    offerings, students,
+    submissions: subs.data || [], grades: grds.data || [], extensions: exts.data || [],
+  }, now);
 }
 
 /**

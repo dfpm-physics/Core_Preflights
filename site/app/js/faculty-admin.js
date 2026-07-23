@@ -158,6 +158,42 @@ export async function setStaffSections(ctx, instructorId, role, sectionIds) {
   })));
 }
 
+/* ── One section at a time (P1.10) ───────────────────────────────────────────
+ * The Section Coverage grid assigns and unassigns a SINGLE (person, section) pair, because that
+ * is what dropping a name on a tile means. setStaffSections() above replaces the whole set, which
+ * is right for the tick-box modal and wrong here: a drop that silently rewrote every other section
+ * the person holds would be a data-loss bug the operator has no way to see coming.
+ *
+ * ROLE IS CARRIED, NOT CHOSEN. Every row a person holds in an offering must agree on their role —
+ * P0.15 was exactly the bug where they did not, and `director_offerings()` grants the privilege on
+ * a director role in ANY row, so a stray 'instructor' row is harmless but a stray 'director' row
+ * silently re-promotes. The caller passes the person's existing role and this writes that.
+ */
+
+/** Add one person to one section. Idempotent — re-dropping the same name changes nothing. */
+export function addStaffSection(ctx, instructorId, role, sectionId) {
+  return db.from('staff_assignments').upsert({
+    instructor_id: instructorId,
+    course_offering_id: ctx.currentOffering,
+    section_id: sectionId,
+    role: role || 'instructor',
+  }, { onConflict: 'instructor_id,course_offering_id,section_id' });
+}
+
+/**
+ * Remove one person from one section.
+ *
+ * Their offering-wide row (section_id NULL) is untouched, which matters: a director who also
+ * teaches M1A and is dropped from M1A stays a director of the offering. Only the teaching
+ * assignment goes.
+ */
+export function removeStaffSection(ctx, instructorId, sectionId) {
+  return db.from('staff_assignments').delete()
+    .eq('course_offering_id', ctx.currentOffering)
+    .eq('instructor_id', instructorId)
+    .eq('section_id', sectionId);
+}
+
 /* ── Staff password recovery: removed, not relocated ──────────────────────────
  *
  * `sendResetEmail()` used to live here and called Supabase's public recovery endpoint. It was

@@ -319,6 +319,10 @@ export function commentCard({ student, enrollment, totals, rows, ei = [], classS
 
 const ALLOWED_BACK = new Set([
   'gradebook.html', 'roster.html', 'grade.html', 'dashboard.html', 'report.html', 'extensions.html',
+  // enrollment.html joined on 2026-07-23 (P1.9): its section-placement table links a cadet's name
+  // here, exactly as Roster's does, so without this a director drilling in from there is bounced
+  // to the gradebook instead of back to the list they were working through.
+  'enrollment.html',
 ]);
 
 /**
@@ -327,8 +331,8 @@ const ALLOWED_BACK = new Set([
  *
  * ALLOWLISTED, not merely same-origin-checked. `document.referrer` is attacker-controllable — a
  * page anywhere can link here with any referrer — and a "back" link built from it unvalidated is
- * an open redirect. An allowlist of the six faculty pages that legitimately link here costs
- * nothing and cannot be talked into pointing somewhere else.
+ * an open redirect. An allowlist of the faculty pages that legitimately link here costs nothing
+ * and cannot be talked into pointing somewhere else.
  */
 export function backTarget(referrer, fallback = 'gradebook.html') {
   if (!referrer) return fallback;

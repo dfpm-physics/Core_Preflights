@@ -17,8 +17,8 @@ Tell them their password is back to the last six digits of their cadet ID. Say i
 than emailing it: for the few minutes before they sign in, that value is a working credential.
 
 The button only appears for cadets who already have an account. If it is missing, they have not
-been provisioned yet — use **Provision accounts** instead, which creates the login with the
-default password already set.
+been provisioned yet — that is your course director's **Enrollment** page, not yours. Roster tells
+you which cadets are in that state: the **Auth** column reads `—` rather than `✓`.
 
 **Any instructor assigned to the course can do this**, not just the course director. That is
 deliberate: the cadet is standing in front of whoever teaches their section, and sending them
@@ -51,10 +51,14 @@ Ask a system admin, who resets staff accounts from the Supabase dashboard.
 
 ## Uploading a roster
 
+**This is on the Enrollment page, and it is a course-director action** — Roster itself is read-only
+for everyone. The two were one page until 23 July 2026, which is why Roster used to be closed to
+instructors: you cannot hand somebody a lookup table whose first card overwrites the roster.
+
 Use the registrar's export as-is — save it as CSV (or tab-separated text) and drop it on the
-Roster page. It must contain **Cadet EMPLID**, **Cadet Name**, **Email**, **Cadet Squadron**, and
-**Section**; Term, Subject, Course Number, majors, sex, and advisor are picked up when present and
-everything else is ignored.
+Enrollment page. It must contain **Cadet EMPLID**, **Cadet Name**, **Email**, **Cadet Squadron**,
+and **Section**; Term, Subject, Course Number, majors, sex, and advisor are picked up when present
+and everything else is ignored.
 
 Two things the upload does that are worth knowing:
 
@@ -65,3 +69,6 @@ Two things the upload does that are worth knowing:
   have — a stale export should not quietly overwrite a correction somebody made by hand.
 
 If the file names a section that does not exist yet, the preview offers to create it and re-check.
+
+Once the import lands, **Provision accounts** on the same page creates a login for every enrolled
+cadet who does not have one, with the default password already set.

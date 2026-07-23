@@ -485,6 +485,17 @@ main { flex: 1 0 auto; }
 .duo-box.sev-warn  { --accent: var(--gold); }
 .duo-box.sev-info  { --accent: var(--blue-lt); }
 
+/* The boxes are scoped to the sections you TEACH (P1.8's scoping fix), and a panel that silently
+   shows a subset is worse than one that shows everything — so it says which. */
+.duo-scope { font-size: 0.78em; }
+/* The standing route to the Grade page. It is not a task, so it is not a box: the nav bar stopped
+   listing Grade when these boxes became the way you get there (P1.14), and this is what keeps it
+   reachable on the day there is nothing outstanding. */
+.duo-link { font-size: 0.8em; font-weight: 600; color: var(--blue-lt); text-decoration: none;
+  white-space: nowrap; }
+.duo-link:hover { text-decoration: underline; }
+.duo-empty .duo-link { margin-left: auto; }
+
 /* Empty state. Deliberately one quiet line rather than a card: "you are done" should occupy
    less of the page than the work would have, or the reward for clearing the list is a bigger
    box saying nothing. */
@@ -505,6 +516,20 @@ main { flex: 1 0 auto; }
 }
 @keyframes duo-shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .duo-skel { animation: none; } }
+
+/* ── Extra instruction panel (P1.8) ────────────────────────────────────────────
+   Two big numbers and the last five sittings. SITTINGS is the headline, not row count: a batch
+   of six cadets is one session, and a dashboard that reports forty sessions for a week that held
+   nine is a dashboard people stop believing. Renders nothing at all when nothing is logged. */
+.ei-scope { font-size: 0.78em; }
+.ei-card { display: grid; grid-template-columns: minmax(180px, 260px) 1fr; gap: 20px; align-items: start; }
+@media (max-width: 640px) { .ei-card { grid-template-columns: 1fr; } }
+.ei-nums { display: flex; flex-direction: column; gap: 14px; }
+.ei-n { font-size: 1.9em; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--blue-lt); }
+.ei-l { font-size: 0.86em; font-weight: 600; margin-top: 3px; }
+.ei-s { font-size: 0.75em; color: var(--muted); }
+.ei-recent { font-size: 0.84em; }
+.ei-recent th { font-weight: 600; font-size: 0.9em; color: var(--muted); }
 
 /* Section scope select (P1.7). The `.course-seg` rules that sat beside this belonged to the
    dashboard's own course switcher, which moved onto the brand — see nav.js. */
@@ -954,38 +979,53 @@ tr:last-child td { border-bottom: none; }
 .hidden { display: none !important; }
 
 /* ============================================================= *
- *  Grade worklists + review sign-off (migration 007)            *
+ *  Grade queue (P1.14) + review sign-off (migration 007)        *
  * ============================================================= */
-/* Collapsed by default: the count is the whole point, and an empty queue should cost
-   nothing to ignore. The <details> element carries the open/closed state natively. */
-.queue-card {
-  border: 1px solid var(--border); border-radius: 10px; background: var(--card);
-  margin-bottom: 12px; overflow: hidden;
+/* OPEN, not collapsed, and per STUDENT rather than per assignment.
+ *
+ * This replaced two <details> worklists whose summaries carried a count. Both were correct and
+ * both were ignored: a closed row reading "3" is decoration, and a count at ASSIGNMENT
+ * granularity ("3 outstanding on preflight-02") still leaves the reader to go and find out who.
+ * The strip below borrows the lesson builder's orphan cards (.lb-orphan) because it is the same
+ * idea — a small pile of things waiting, each one click from being dealt with — and it renders
+ * nothing at all when the pile is empty, which is most of the term.
+ *
+ * PREFIXED `hq-`, NOT `gq-`. `.gq-head` / `.gq-label` / `.gq-text` are already taken further down
+ * by the per-QUESTION rows inside a grade card, on the same page. The obvious prefix for a Grade
+ * Queue collides with them, and the later definition wins — so the queue's header would silently
+ * inherit the question row's layout. */
+.hq-wrap {
+  border: 1px solid var(--border); border-left: 3px solid var(--gold); border-radius: 10px;
+  background: var(--surface-sunken); padding: 12px 14px 14px; margin-bottom: 16px;
 }
-.queue-card > summary {
-  display: flex; align-items: center; gap: 10px; padding: 11px 14px;
-  cursor: pointer; font-size: 0.9em; list-style: none;
+.hq-wrap[hidden] { display: none; }
+.hq-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 10px; }
+.hq-head h2 { font-size: 1.02em; font-weight: 700; margin: 0; }
+.hq-scope { font-size: 0.8em; }
+.hq-note  { font-size: 0.78em; }
+.hq-cards { display: flex; flex-wrap: wrap; gap: 8px; max-height: 260px; overflow-y: auto; padding: 2px; }
+.hq-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  min-width: 180px; max-width: 260px; text-align: left; font: inherit;
+  border: 1px solid var(--border); border-left: 3px solid var(--gold);
+  border-radius: var(--radius-sm); background: var(--card); padding: 8px 10px; cursor: pointer;
+  transition: box-shadow .12s, transform .06s;
 }
-.queue-card > summary::-webkit-details-marker { display: none; }
-.queue-card > summary::after {
-  content: '▸'; margin-left: auto; color: var(--muted); transition: transform 0.15s;
-}
-.queue-card[open] > summary::after { transform: rotate(90deg); }
-.queue-title { font-weight: 700; }
-.queue-count {
-  font-size: 0.78em; font-weight: 800; padding: 1px 9px; border-radius: 999px;
-  background: var(--surface-hover); color: var(--muted); border: 1px solid var(--border);
-}
-.queue-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
-.queue-dot.warn { background: var(--gold); }
-.queue-dot.late { background: var(--red); }
-.queue-body { padding: 0 14px 14px; border-top: 1px solid var(--border); }
-.queue-note { font-size: 0.82em; color: var(--muted); margin: 10px 0; }
-.queue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
-.queue-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.86em; }
-.queue-list a { font-weight: 600; color: var(--blue-lt); text-decoration: none; }
-.queue-list a:hover { text-decoration: underline; }
-.queue-why { color: var(--muted); font-style: italic; flex-basis: 100%; font-size: 0.94em; }
+.hq-card.late { border-left-color: var(--red); }
+.hq-card:hover { box-shadow: var(--shadow-sm); }
+.hq-card:active { transform: scale(0.98); }
+.hq-card:focus-visible { outline: 2px solid var(--blue-lt); outline-offset: 2px; }
+.hq-badge { font-size: 0.66em; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--gold); }
+.hq-card.late .hq-badge { color: var(--red); }
+.hq-name { font-size: 0.88em; font-weight: 700; color: var(--text); }
+.hq-meta { font-size: 0.72em; color: var(--muted);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Three states, and the difference matters: nobody has looked at "no grade yet", the AI has
+   looked at "AI suggested", and a human has at "draft saved". */
+.hq-state { font-size: 0.68em; font-weight: 700; padding: 1px 7px; border-radius: 999px; margin-top: 3px; }
+.hq-state.ungraded { background: var(--alert-warn-bg); color: var(--alert-warn-fg); }
+.hq-state.ai-only { background: var(--alert-info-bg); color: var(--alert-info-fg); }
+.hq-state.draft { background: var(--surface-hover); color: var(--muted); }
 
 .signoff-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .signoff-pill {
@@ -1180,6 +1220,35 @@ tr:last-child td { border-bottom: none; }
 .sec-assign .sec-tag { font-weight: 800; font-size: 0.95em; margin-bottom: 9px; color: var(--blue-lt); letter-spacing: 0.02em; }
 .sec-assign select { font-size: 0.85em; padding: 7px 9px; }
 
+/* ── Section coverage: drag a name, or pick from the tile's dropdown (P1.10) ───
+   BOTH paths ship. Drag-only is a keyboard trap and useless on the tablet an instructor is
+   actually holding; the dropdown is the real control and the drag is the fast one. Native HTML5
+   drag events — no SortableJS, because CORE.md §2 forbids a runtime dependency. */
+.cov-wide { font-size: 0.86em; margin-bottom: 12px; }
+.cov-pool { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px;
+  padding: 10px; border: 1px dashed var(--border); border-radius: var(--radius);
+  background: var(--surface-sunken); }
+.cov-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 0.82em; font-weight: 600;
+  padding: 5px 11px; border-radius: 999px; background: var(--card);
+  border: 1px solid var(--border); border-left: 3px solid var(--blue-lt);
+  cursor: grab; user-select: none; transition: box-shadow .12s, opacity .12s; }
+.cov-chip:hover { box-shadow: var(--shadow-sm); }
+.cov-chip:active { cursor: grabbing; }
+.cov-chip.dragging { opacity: 0.4; }
+.cov-sys { font-size: 0.78em; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+.cov-tile { transition: border-color .12s, background .12s; }
+.cov-tile.over { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 8%, transparent); }
+.cov-holders { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; min-height: 26px; }
+.cov-held { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8em; font-weight: 600;
+  padding: 3px 4px 3px 9px; border-radius: 999px;
+  background: var(--alert-info-bg); color: var(--alert-info-fg); }
+.cov-x { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 1.05em;
+  line-height: 1; padding: 0 4px; opacity: 0.6; }
+.cov-x:hover { opacity: 1; }
+.cov-empty { font-size: 0.8em; color: var(--red); }
+.cov-add { width: 100%; }
+
 /* Staff table — keep every row the same height.
    A <select> inherits the global form rule (padding 10px 14px, width 100%), which made it ~20px
    taller than the badge/plain-text cells beside it. Since only SOME rows carry a select (your own
@@ -1275,9 +1344,9 @@ a.tbtn { text-decoration: none; display: inline-flex; align-items: center; }
 .lamp-only { margin-left: 8px; font-size: 0.82em; }
 .lamp-only.on { background: var(--alert-warn-bg); color: var(--alert-warn-fg); border-color: var(--alert-warn-fg); }
 
+/* The late CHIP stays. Its sibling `.late-toggle` — the "Late only" filter button — was removed
+   with the filter itself on 2026-07-23 (P1.14); the chip was never what was objected to. */
 .tag-late { background: var(--alert-warn-bg); color: var(--alert-warn-fg); font-weight: 700; }
-.late-toggle.on { background: var(--alert-warn-bg); color: var(--alert-warn-fg); border-color: var(--alert-warn-fg); }
-.late-toggle[hidden] { display: none; }
 
 .auth-yes { color: var(--green); font-weight: 700; }
 .auth-no  { color: var(--muted); }

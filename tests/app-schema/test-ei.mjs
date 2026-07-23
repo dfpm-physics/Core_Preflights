@@ -278,4 +278,56 @@ eq('a row with an unreadable duration contributes zero minutes, not NaN',
    EI.summarizeEi([{ id: 'x', batch_id: null, enrollment_id: 'e1',
                      duration_minutes: 'oops' }]).totalMinutes, 0);
 
+/* ── renderEiPanel — the dashboard tile (Roadmap P1.8) ───────────────────────
+ *
+ * Two behaviours carry the panel's honesty, and both are properties of the render rather than of
+ * summarizeEi():
+ *
+ *   ZERO RENDERS NOTHING. Most instructors have no EI logged in week one, and a permanent `0`
+ *   sitting on the dashboard teaches people to skip that region of the page — the same failure the
+ *   due-out row's registry exists to avoid.
+ *
+ *   THE HEADLINE IS SITTINGS. summarizeEi() computes it correctly (above); this pins that the
+ *   panel actually SHOWS that number rather than `total`, which is the easy slip and produces the
+ *   flattering-and-wrong figure the module header warns about.
+ */
+section('faculty-ei.js — renderEiPanel');
+
+const { esc } = await import('../../site/app/js/util.js');
+const fmtDate = (iso) => String(iso || '').slice(0, 10);
+const panelOpts = { esc, fmtDate, nameOf: (id) => ({ e1: 'Ada Byron', e2: 'Cadet Two' })[id] || '' };
+
+eq('nothing logged renders nothing at all', EI.renderEiPanel({ total: 0 }, panelOpts), '');
+eq('a null summary renders nothing', EI.renderEiPanel(null, panelOpts), '');
+
+// Six cadets in one sitting plus one solo visit: 7 rows, 2 sittings, 7 cadets.
+const batchRows = Array.from({ length: 6 }, (_, i) => ({
+  id: `b${i}`, batch_id: 'batch-1', enrollment_id: `e${i}`, duration_minutes: 20,
+  started_at: '2026-09-08T21:00:00Z', instructors: { name: 'Maj Doe' },
+}));
+const panel = EI.renderEiPanel(EI.summarizeEi([
+  ...batchRows,
+  { id: 'solo', batch_id: null, enrollment_id: 'e1', duration_minutes: 30,
+    started_at: '2026-09-09T22:00:00Z', instructors: { name: 'Maj Doe' } },
+]), panelOpts);
+
+check('the headline is SITTINGS, not the row count', panel.includes('>2</div>'));
+check('…and it says so, so 2 is not read as 2 cadets', panel.includes('a group counts once'));
+check('the row count survives as cadets seen', /class="ei-n">6</.test(panel));
+check('total time is stated', panel.includes('2 h 30 min'));
+check('the mini-table names cadets, not enrolment uuids', panel.includes('Ada Byron'));
+check('…and who logged it', panel.includes('Maj Doe'));
+// Newest first, matching summarizeEi's `recent` — the solo visit is a day later than the batch.
+check('the newest sitting is listed first',
+      panel.indexOf('2026-09-09') < panel.indexOf('2026-09-08'));
+check('a director is told the panel is scoped to what they teach',
+      EI.renderEiPanel(EI.summarizeEi(batchRows), { ...panelOpts, scoped: true })
+        .includes('your sections'));
+
+// Student names reach this from the database, so they are untrusted here even though nobody is
+// currently typing markup into a registrar export.
+check('a cadet name is escaped',
+      !EI.renderEiPanel(EI.summarizeEi(batchRows),
+        { ...panelOpts, nameOf: () => '<img src=x onerror=alert(1)>' }).includes('<img src=x'));
+
 process.exitCode = summary() ? 0 : 1;

@@ -40,11 +40,18 @@ export async function loadOfferingSections(ctx) {
  * the WHOLE students table unfiltered and narrowed it in JS, which only ever worked because
  * the old policy made the roster world-readable. Here the enrolment is both the correct
  * join path and the thing RLS scopes.
+ *
+ * @param {object} ctx
+ * @param {string[]} [scope]  narrow to these sections. Roster passes ctx.sectionIds so an
+ *   instructor's page asks only for their own sections rather than asking for the whole offering
+ *   and letting RLS silently drop most of the answer. Enrollment omits it — a director is looking
+ *   at the offering. The argument narrows the query; it does not secure it.
  */
-export async function loadRoster(ctx) {
+export async function loadRoster(ctx, scope = null) {
   if (!ctx.currentOffering) return { students: [], sections: [], total: 0, unprovisioned: 0 };
   const { sections, byId } = await loadOfferingSections(ctx);
-  const sectionIds = sections.map(s => s.id);
+  const inScope = scope?.length ? new Set(scope.map(String)) : null;
+  const sectionIds = sections.map(s => s.id).filter(id => !inScope || inScope.has(String(id)));
   if (!sectionIds.length) return { students: [], sections, total: 0, unprovisioned: 0 };
 
   const { data } = await db.from('enrollments')
@@ -330,48 +337,26 @@ export function createSection(ctx, code, meetingDays = [], period = null) {
  * without also meaning "director of it forever".
  */
 
-/** Sections of the offering plus who is assigned to each, and every instructor for the picker. */
-export async function loadSections(ctx) {
-  const { sections } = await loadOfferingSections(ctx);
-  const [{ data: staff }, { data: instructors }] = await Promise.all([
-    db.from('staff_assignments')
-      .select('id, instructor_id, section_id, role, instructors(id, name)')
-      .eq('course_offering_id', ctx.currentOffering),
-    db.from('instructors').select('id, name').order('name'),
-  ]);
+/* `loadSections()` and `assignInstructor()` lived here until 2026-07-23 and are GONE.
+ *
+ * They powered Roster's "Sections" tab — one <select> per section, "assign an instructor". That
+ * whole surface moved to Course Admin's Section Coverage grid (roadmap P1.10), which is where a
+ * director looking at staffing already was, and which offers both a drag target and a dropdown.
+ * `faculty-admin.js` addStaffSection()/removeStaffSection() are the replacements.
+ *
+ * assignInstructor() is not worth resurrecting even as a reference: it deleted every
+ * `role='instructor'` row for the section first, so one section could hold exactly one
+ * instructor. That was never a rule anybody stated — two people co-teaching a section is
+ * ordinary — and the grid does not reproduce it.
+ */
 
-  const bySection = {};
-  (staff || []).filter(s => s.section_id).forEach(s => {
-    (bySection[s.section_id] ||= []).push({
-      assignmentId: s.id, instructorId: s.instructor_id,
-      name: s.instructors?.name || '—', role: s.role,
-    });
-  });
-  // A staff row with no section covers the whole offering — that is how a director is
-  // recorded, and the page shows them separately rather than against every section.
-  const offeringWide = (staff || []).filter(s => !s.section_id).map(s => ({
-    assignmentId: s.id, instructorId: s.instructor_id,
-    name: s.instructors?.name || '—', role: s.role,
-  }));
-
-  return { sections, bySection, offeringWide, instructors: instructors || [] };
-}
-
-/** Assign an instructor to one section (replacing whoever held that section-level slot). */
-export async function assignInstructor(ctx, sectionId, instructorId) {
-  await db.from('staff_assignments').delete()
-    .eq('course_offering_id', ctx.currentOffering)
-    .eq('section_id', sectionId).eq('role', 'instructor');
-  if (!instructorId) return { data: null, error: null };
-  return db.from('staff_assignments').insert({
-    instructor_id: instructorId,
-    course_offering_id: ctx.currentOffering,
-    section_id: sectionId,
-    role: 'instructor',
-  });
-}
-
-/** Grant or revoke an offering-wide role (director / instructor / grader). */
+/** Grant or revoke an offering-wide role (director / instructor / grader).
+ *
+ * ⚠ UNUSED, and do not reach for it as a role-setter: it writes ONLY the offering-wide row, which
+ * is precisely the P0.15 bug (a demoted director kept `role='director'` on their section rows, and
+ * `director_offerings()` grants the privilege on a director role in ANY row). `faculty-admin.js`
+ * setRole() is the one that updates every row and is what the Staff table calls. This is kept for
+ * the revoke path — passing a falsy role deletes the offering-wide row and nothing else. */
 export function setOfferingRole(ctx, instructorId, role) {
   if (!role) {
     return db.from('staff_assignments').delete()

@@ -124,294 +124,7 @@ auth user fails rather than tidying up.)*
 Worth doing sooner than the seal: **duplicate unconfirmed users on the same address are the most
 likely reason the second account would not authenticate with a correctly copy-pasted password.**
 
-### P0.16 — Interactive grades itself on commit; student nav gating · ✅ **DONE 2026-07-23 (015 applied)**
-
-*Director follow-up to P0.14: the interactive grade should appear on its own — no run — and be
-auto-final, but only when the interactive path is an ALLOWED (graded) mode; and the student-facing
-choice/navigation had several defects.*
-
-**Grading — auto-final, reactive (frontend + tooling shipped; trigger written, apply BLOCKED):**
-
-- Migration `app/015_interactive_autograde.sql` — a `SECURITY DEFINER` trigger
-  (`grade_interactive_on_commit`) that, when a submission commits to a **graded** interactive
-  activity, copies the report effort (with the §5.2 cap re-applied) onto a **finalized, derived**
-  grade — student-visible immediately, no review step, matching the legacy `public` behaviour the
-  director wanted. Practice commits get **no** grade. A finalized instructor/imported grade is never
-  clobbered ("auto-grade as long as there wasn't a response already graded"). **APPLIED 2026-07-23**
-  on the director's return; `autograde_interactive_test.py` passes 12/12 live. A "no usable effort"
-  guard bug (`<>` vs `IS DISTINCT FROM`, which let an absent effort create a NULL-effort grade) was
-  caught by that test and fixed before use.
-- `grade_interactive.py` + its 49-check suite re-aligned to the auto-final policy (`source='derived'`,
-  `is_finalized=true`); the script is now a **backfill** tool writing the identical row the trigger
-  writes. Until 015 is applied, a committed interactive submission still produces no grade on its own
-  — the script is the interim path.
-
-**Student navigation (shipped, no DDL):**
-
-- **Routing bug fixed** — clicking *Written preflight* linked to `assignments.html?a=<activity id>`,
-  which that page resolves against `offeringId`; the mismatch dumped the student on the full list.
-  Now links by offering id, so it opens the actual written input — including the written-only case.
-- **Interactive availability is now respected** — the interactive card is launchable only when its
-  `available_after` gate is met (`submit`/`due`, or always past the deadline); before then it shows
-  **greyed and disabled** with the reason ("Available after you submit your written responses"),
-  instead of a live Launch button on a practice activity the assignment says isn't open yet.
-- **The launch warning ("your written answers stop counting") only fires when the interactive path
-  is graded** — on a practice activity it was simply false.
-
-### P0.15 — "Once a director, always a director" — role demotion never took · ✅ **FIXED 2026-07-23**
-
-*Director report: you cannot set a faculty member back to instructor in a course once they've been a
-director. Director is meant to be a per-course privilege; system admin is the global one.*
-
-**Root cause, confirmed against live `app`:** the model is right — director lives in
-`staff_assignments` per offering, sysadmin in `instructors.is_global_admin` — but a director holds
-**several** `staff_assignments` rows (offering-wide + one per section), all `role='director'`, and
-`setRole()` (`faculty-admin.js`) upserted only the offering-wide row. The section-scoped rows kept
-reading `director`, and `director_offerings()` (002_rls.sql) grants the privilege on a director role
-in **any** row — so the person stayed a director no matter how many times you chose Instructor.
-
-**Fix:** `setRole()` now updates the role on **every** row the person holds in the offering, then
-guarantees the offering-wide row — so a demotion actually clears every director row. Verified live
-(rolled back): the old logic left a mixed director/instructor state and `director_offerings()` still
-returned the person; the new logic demotes cleanly and promote-back still works.
-
-**⚠ Two live records are already corrupted by the old bug and need the director's call:**
-`Kimberly de La Harpe` and `TJ Hardy` both hold an offering-wide `instructor` row with section rows
-still `director`, so they currently read as (and have the privileges of) directors despite a
-half-completed demotion. I did **not** auto-repair them — whether they should be directors or
-instructors is a privilege decision, not something to guess. Resolve by re-selecting their role in
-Staff (the fixed `setRole` will clean it up), or tell me the intended role and I'll apply it.
-
-### P0.14 — The interactive path produces no grade · ✅ **DONE 2026-07-23 (migration applied)**
-
-*Director's observation: interactive submitters get no grade and no mark in the gradebook matrix,
-and their student page shows no points.* **Confirmed against live `app` the same day — the
-observation is exact, and the roadmap had been asserting the opposite.**
-
-**Shipped 2026-07-23 (frontend + tooling, no DDL yet):**
-
-- **`supabase/admin/grade_interactive.py`** — the missing writer. Reads a committed, `graded`,
-  chosen interactive submission's `effort` from `submission_activities.content`, re-applies the
-  §5.2 reflection cap as a server-side guard, and upserts one `grades` row (`is_finalized=false`,
-  `source='ai_suggested'`, so it lands in the dashboard review queue). `status` / `run --commit`,
-  dry-run by default. Correct **before and after** the migration: pre-migration the old trigger
-  returns early on `grading_mode='points'` so the script's own `points_earned` stands;
-  post-migration the trigger recomputes the identical value. Uses the one shared effort curve
-  (`points_from_effort`, imported not copied). 49-check suite `grade_interactive_test.py` — pure
-  logic **plus** a live end-to-end write inside a rolled-back transaction.
-- **Grade tab now excludes interactive takers** (`faculty-grade.js` `isEffortGraded()` +
-  `buildGradeData()` gained a `submissionMap` arg; `grade.html` renders a read-only "graded on
-  effort N/5" card for them). This closes the zeroing bug directly: without it, an interactive
-  taker's blank written answers defaulted to `zero` and — because they hold a prior grade row —
-  a single Save would have overwritten their effort grade with 0. `test-grade.mjs` (14 checks)
-  pins it, counterfactual included.
-
-**Applied 2026-07-23 as `prep_app_owner`:** migration
-`supabase/migrations/app/014_effort_grades_per_row.sql` re-keys the effort trigger on the grade
-**row** (`NEW.effort IS NOT NULL`) instead of the offering's `grading_mode`, and adds a
-`grades_one_grading_mechanism` CHECK (`effort IS NULL OR question_scores = '{}'`) so the
-written/effort split is enforced by the database rather than by prose. This is what lets a
-**choice** offering grade a written taker by `question_scores` and an interactive taker by effort
-*on the same offering* — the case `preflight-03`/`-04` already present. All 64 existing rows
-satisfied the CHECK; verified live afterward (a points-mode offering now derives points from
-effort, an effort-NULL row is left alone, and an effort+`question_scores` row is rejected).
-
-**⚠ Re-seal the owner (CORE.md §0, human-only).** `prep_app_owner` was unsealed to apply this and
-should go back to `NOLOGIN` — `ALTER ROLE prep_app_owner NOLOGIN;` as `postgres`. Folds into P0.2,
-which already seals it once and for all before term.
-
-**Verification gap to close during P0.5:** the new interactive Grade-tab card has **not** been seen
-in a browser, because no committed interactive submission exists in the term yet (the only
-interactive work is `preflight-02` practice). Logic-verified and syntax-clean; walk it once a real
-`graded` interactive submission lands, or against a seeded fixture.
-
-**Remaining decision (narrowed, not eliminated):** the migration takes option 2 below (trigger keys
-on the row). Option 1 (move `grading_mode` to `offering_activities`) remains the "honest schema"
-alternative if the row-keyed trigger ever proves too implicit; it is more DDL for the same
-behaviour and was not chosen. Recorded so the choice reads as deliberate.
-
-**There is no writer for `grades.effort` anywhere in the app-schema stack.** Three separate places
-each decline to write it, all for defensible local reasons, and nobody owns the gap between them:
-
-| Component | What it does | Why |
-|---|---|---|
-| `student/interaction-submit.html:54-57` | records the report, writes **no** grade | correct — a student cannot; `grades_staff_write` would refuse |
-| `faculty-grade.js:223,235` | builds rows from `questionsOf(offering.written)` only | the Grade tab has no effort control at all |
-| `/preflight-analyze` | grades free-response answers | its blast radius is written work by design |
-
-So an interactive submission that *does* commit lands in `UNGRADED` and stays there.
-
-**Two more layers are also missing, and each would independently defeat a fix to the first.**
-
-- **`grading_mode` is `'points'` on all 74 offerings.** `grades_points_from_effort()`
-  (`001_core_model.sql:568-586`) returns early unless the mode is `'effort'`, so writing
-  `grades.effort` today derives no points. The trigger is fine; nothing is configured to reach it.
-- **`grading_mode` sits on the *offering*, but `preflight-03` and `preflight-04` offer *both*
-  modalities as `graded`.** One column cannot serve two modalities on one offering, and that is the
-  decision this item actually turns on — see the correction to Q2 below, which assumed one modality
-  per offering and is why the conflict was never noticed.
-
-**What the director saw, precisely.** The only interactive work in the database is 8 reports on
-`lesson-02-electric-charge-coulombs-law` (seeded 2026-07-21). That activity is `grading_role =
-'practice'` on `preflight-02`, so `submitInteractionReport()` (`student-data.js:364-368`) records
-the work and returns **without committing** — which is right, practice is not the graded path. All
-8 submissions are therefore `status='draft'` with `chosen_activity_id IS NULL` and no grade row.
-`cellState()` (`faculty-gradebook.js:200-231`) sees neither a grade nor a committed submission, the
-Aug 10 deadline has not passed, so the cell is `PENDING` — **and `PENDING` renders as nothing.**
-
-**This gets worse on its own, without anyone touching it.** On 2026-08-10 those same cells flip
-`PENDING → MISSING`: a cadet who completed the lesson reads as never having handed anything in, and
-`totalsFor()` counts them zero out of 2. Then `preflight-03` (Aug 12) and `preflight-04` (Aug 14)
-arrive with their interactive activity marked `graded`, where a student *does* commit — and lands in
-`UNGRADED` permanently, which drags their percentage identically. **That is the P0 clock**, and it
-is why this is not "the gradebook is incomplete" but "the gradebook is about to be wrong."
-
-**The name mismatch inside the fixtures is expected and is not a defect** (director, 2026-07-23):
-those reports were produced by faculty on the legacy system, archived, and re-attached to random
-roster students to exercise the pipeline. The student page rendered them faithfully. Noted only so
-the discrepancy is not investigated a second time. *(Those 8 students also have no written work on
-`preflight-02`, which is why nothing else filled the row.)*
-
-**The grading policy is settled and was never the open question** (director, 2026-07-23): an
-interactive assignment is **automatically** graded from effort — `0 → 0` · `1–2 → 1` · `3+ → 2` —
-with effort **capped at 2** when the student gives no meaningful reading reflection. That is
-implemented and correct on both halves:
-
-| Rule | Where it lives | State |
-|---|---|---|
-| effort → points, `≥3 → possible` · `≥1 → possible/2` · `else 0` | `grades_points_from_effort()`, `001_core_model.sql:568-586` | built, matches the policy exactly at `points_possible = 2` |
-| reflection cap, effort ≤ 2 when `reading_reflection.meaningful = false` | contract §5.2 — applied by the artifact, re-clamped server-side as a guard (`interaction_reports.py:223-231`) | built, and deliberately belt-and-braces |
-
-**So this item is not "decide a grading rule". It is "connect a rule that already exists to a column
-nothing populates."** Scope: a writer that copies the payload's `effort` into `grades.effort` (with
-the §5.2 cap re-applied as a guard, never trusting the student-controllable payload), plus the
-configuration that lets the trigger fire.
-
-**⚠ The obvious configuration change would zero every written taker. Do not make it first.**
-Setting `grading_mode='effort'` on `preflight-03`/`-04` looks like the one-line fix and is a
-data-loss bug: the trigger is `BEFORE INSERT OR UPDATE` and assigns `points_earned`
-**unconditionally** once the mode matches, and `NULL` effort maps to `0`. Every *written* taker on
-that offering — graded 2/2 through `question_scores`, with `effort` correctly NULL
-(`WRITTEN-SCHEMA1.md:118-121`) — would be silently rewritten to **0 points** on the next save.
-`preflight-03` and `preflight-04` carry *both* modalities as `graded`, so this is not hypothetical.
-
-**How a *mixed* offering grades two modalities under one `grading_mode` column** was the last open
-question. Two ways were on the table: move `grading_mode` to `offering_activities` (honest schema,
-more DDL), or make the trigger key on the grade **row** (`NEW.effort IS NOT NULL`) instead of the
-offering (one `CREATE OR REPLACE FUNCTION`, lets one offering serve both). **Migration 014 takes the
-row-keyed option** — see the status block at the top of this item. The `NULL effort → 0` semantics
-it changes were confirmed vacuous: a non-submitter has no grade row at all. The safe order was, and
-the shipped order is, **writer first, configuration second** — the writer alone is inert, whereas a
-mode change with no writer is the zeroing bug above.
-
-**Do not "fix" this by flipping `preflight-02`'s interactive activity to `graded`.** It is practice
-on purpose, and doing so would commit 8 students to a path that still has no grade writer — turning
-8 blank cells into 8 permanently ungraded ones.
-
-**Falsification:** if no cadet ever chooses the interactive path on a `graded` offering this term,
-this is a P1 that never fired, and the fixture rows on `preflight-02` are cosmetic. The way to know
-early is to watch `submissions.chosen_activity_id` on `preflight-03` in the days after Aug 12.
-
----
-
 ## 2. P1 — First weeks of term
-
-### P1.8 — EI stats on the dashboard · **S** · *unblocked 2026-07-22 — and mostly written already*
-
-*Requested.* ~~Depends on P1.4.~~ **P1.4 landed**, and with it the hard half of this item:
-`summarizeEi()` in `js/faculty-ei.js` already returns exactly `get_ei_stats()`'s scope — `total`,
-`uniqueStudents`, `totalMinutes`, `recent` (the last five) — as a **pure** function, so this is a
-render against an existing shape rather than a second query.
-
-One number in it is worth keeping when you build the tile: **`sittings` counts a batch as one
-session however many cadets were in it.** Counting rows would tell a director they held 40 sessions
-in a week when they held nine, which is the exact kind of inflated number that gets a dashboard
-ignored.
-
-Remaining: register a source in `faculty-tasks.js`'s `SOURCES` registry (P1.6 built it so that
-adding one is an entry, not a rewrite) and render two big numbers plus a mini-table. Note the
-registry's own rule applies — **a source returning zero renders nothing**, and most instructors will
-have zero EI logged in week one.
-
-### P1.9 — Move enrollment out of Roster into its own tab · **M**
-
-*Requested.* Roster import currently lives entirely in `site/app/faculty/roster.html` +
-`js/roster-import.js` + `js/faculty-roster.js`.
-
-Recommended: a new **Enrollment** tab visible only to directors and system admins, holding import,
-reconciliation, and section placement. The parsing module is already pure and DOM-free, so this is a
-re-mount, not a rewrite. Leave day-to-day roster viewing where instructors expect it.
-
-### P1.10 — Section assignment: drag-and-drop, in Course Admin · **M**
-
-*Requested.* Three separate complaints, worth separating:
-
-1. **Wrong location.** Assignment happens in a per-person modal on the Staff tab
-   (`admin.html:217-238`); it belongs on the Section Coverage grid in Course Admin.
-2. **Tickboxes are the wrong control.** Wanted: drag a name onto a section tile, *or* click a
-   section and pick from a dropdown. `djGradebookProject` uses SortableJS + a post-on-drop handler
-   in ~25 lines; the same shape works against Supabase. **Provide the dropdown path too** — drag and
-   drop alone is a keyboard-accessibility failure and is unusable on a tablet.
-3. **The modal text about directors is wrong.** It currently reads: *"Leave everything unticked to
-   give them all sections of this offering. That is how a director is recorded, and it covers
-   sections added later."* This describes the **data encoding**, not the role, and it implies a
-   director does not teach. **Directors also teach sections** — the copy must say so, and the new UI
-   should let a director hold both offering-wide coverage and a named section without that reading
-   as a contradiction.
-
-### P1.11 — Fix "+6 offering-wide" · **S**
-
-*Answering the director's direct question:* it is the count of staff in this offering who hold a
-`staff_assignments` row with `section_id IS NULL` — i.e. director-shaped, covering everything —
-excluding global admins, who hold no staff row at all.
-
-**It is the same number on every tile.** `admin.html:155` computes `wide` without ever referencing
-the section it is being rendered under, so a director scanning the grid sees an identical "+6"
-repeated on every card and learns nothing section-specific from it.
-
-Fix in the P1.10 rework: either name the people (they are already loaded), or state it once above
-the grid as "6 staff cover all sections", or drop it. A per-offering constant rendered per-section
-is noise.
-
-### P1.14 — Grade tab: replace the late filter with a "needs grading by hand" queue · **M** · *requested 2026-07-22*
-
-*Director's request, held for the roadmap rather than built.*
-
-**Remove the "Submitted late" filter** (shipped in P0.12, same day). It answers the wrong question:
-an instructor does not want to *filter a whole section down to* late work, they want a short standing
-list of the handful of submissions that need attention. The filter makes you go looking; a queue
-comes to you.
-
-*Assumption to confirm:* the **late chip on the grade card stays** — it is context you want while
-grading a specific student, and it is not what was objected to. Only the filter control goes.
-
-**Add a queue at the top of the page, shaped like the lesson builder's orphan view**
-(`faculty/lessons.html` `.lb-orphans` / `.lb-orphan` — a row of compact cards above the main work
-area, each a thing waiting to be dealt with). It holds:
-
-- late submissions not yet finalized
-- students whose **extension has expired** with work still ungraded
-
-**Scoped to your own sections only.** Both data sources already exist and are already correctly
-scoped — `extensionsToGrade()` and `pastDueUngraded()` in `faculty-grade.js:481-571` — but today they
-are collapsed `<details>` queues showing counts at *assignment* granularity. This wants them
-per-student and open by default.
-
-**Clicking a student opens their responses to grade right there.** Rules:
-
-- **An interactive submission is auto-graded and must not appear at all** — *right rule, but it is
-  not true yet.* The policy is confirmed (director, 2026-07-23: `0 → 0` · `1–2 → 1` · `3+ → 2`, with
-  the reflection cap), and the trigger implements it. But under `app` **nothing writes
-  `grades.effort`**, so today an interactive submission is *not* auto-graded — see **P0.14**. Build
-  this rule as stated; it becomes correct the moment P0.14 lands, and **P0.14 should land first** or
-  the queue will hide exactly the students who are silently ungraded. *(The rule was originally
-  written as already-true, inherited from the legacy `public` receiver where migration `013` wrote
-  the effort. That is what made P0.14 invisible for a month.)*
-- **A written submission opens Q2 and Q3** with the 3-state control and the feedback boxes, then
-  **Finalize**. Q1 is zero-point and stays hidden (`grade.html:207,215`).
-
-**Why this is P1 and not P0:** nothing is broken without it — late work is gradable today, just
-awkwardly. It becomes urgent the first week extensions are actually granted.
 
 ### P1.12 — Bulk / whole-section extensions · ✅ **PARTLY DONE 2026-07-22** — granting moved onto the rollup
 
@@ -595,8 +308,12 @@ override to P1.1's gradebook work rather than building it now.
 ### P3.6 — Accessibility pass · **M**
 
 Bundle with the gradebook, because a dense grid is where accessibility problems become severe:
-keyboard navigation, focus order, screen-reader table semantics, contrast in both themes. P1.10 makes
-this concrete — **drag-only is a keyboard trap**, which is why P1.10 requires the dropdown path too.
+keyboard navigation, focus order, screen-reader table semantics, contrast in both themes.
+
+P1.10 shipped 2026-07-23 with **both** a drag target and a per-tile dropdown, for exactly this
+reason — drag-only is a keyboard trap. That is a floor, not a pass: the dropdown is reachable and
+labelled, but the coverage grid has not been walked with a screen reader, and the Grade queue's cards
+(P1.14) are `<button>`s in a scrolling strip whose focus order nobody has checked.
 
 ### P3.7 — Performance budget · **S** to **M**
 
@@ -617,6 +334,17 @@ P0.4 fixes a privacy rule in the UI. `analysis_reports` admits any staff member 
 several director-only conventions (`__all__`, the run banner's director filter) are UI-only. Decide
 deliberately which should be enforced in the database. Some genuinely should stay conventions; the
 point is that today it is not a decision, it is a default.
+
+**⚠️ Added 2026-07-23, found while building P1.11 — this is now the sharpest instance of the same
+problem, and it wants the director's decision.** Nearly every staff member holds an **offering-wide**
+`staff_assignments` row (`section_id IS NULL`): `create-instructor` inserts one by default and
+`setRole()` guarantees it exists. `app.staff_sections()` expands that to *every* section of the
+offering — so as configured today an ordinary instructor can read every section's submissions and
+grades, not just their own. Section-scoped rows are still doing real work, but it is **UI scoping**
+(`taughtSectionIds()`, "my sections", and now the due-out row and the Grade queue), not access
+control. Either that is intended and should be written down, or the default row should stop being
+offering-wide for a plain instructor — which is a one-line change in the edge function plus a
+backfill, and is a **privilege change, so it is the director's call, not an agent's.**
 
 ### P3.10 — Ephemeral "View as instructor" toggle · **M** · *director: yes*
 
@@ -733,7 +461,7 @@ port-status rows · `site/app/README.md` "Not yet ported" · `student/interactio
 
 | Item | Where | Note |
 |---|---|---|
-| ⚠️ **`check_doc_sources.py` is red — 8 documents flagged** | run it | **Pre-existing, not caused by the 2026-07-22 batches.** *(Recounted after the fifth batch: 8, not 7. `instructor-accounts.md` also picked up that batch's `roster.html` edit — reviewed, content unaffected, and deliberately **not** bumped, because a bump would have attested to reviewing its two pre-existing sources as well. `director-schema-reference.md` was flagged during that batch and cleared on commit, which is the mechanism working as designed.)* Dominated by a `CORE.md` edit earlier that day plus the skills touched by it. *(Was 11; the docs batch cleared four.)* Deliberately *not* cleared by bulk-bumping `reviewed` dates — that is precisely the failure the mechanism exists to prevent. Clearing it properly means reading each of the 7 against its sources; it overlaps the help-doc stub expansion below, so do them together. **Verified harmless for the gradebook:** no help doc states a points value, so the `question_scores` correction did not invalidate any of them |
+| ⚠️ **`check_doc_sources.py` is red — 7 documents flagged** | run it | **Pre-existing, not caused by any 2026-07-22/23 batch.** Dominated by a `CORE.md` edit on 2026-07-22 plus the skills touched by it. *(Was 11; the docs batch cleared four.)* Deliberately *not* cleared by bulk-bumping `reviewed` dates — that is precisely the failure the mechanism exists to prevent. Clearing it properly means reading each of the 7 against its sources; it overlaps the help-doc stub expansion below, so do them together. **Verified harmless for the gradebook:** no help doc states a points value, so the `question_scores` correction did not invalidate any of them. *(The sixth batch, 2026-07-23, briefly showed 10: `instructor-grading.md` and `instructor-accounts.md` were genuinely invalidated by P1.14 and P1.9 and were **rewritten**, not bumped — the Grade page has no nav entry now and the roster import moved to Enrollment, and both docs said otherwise. `instructor-grading.md` also carried a claim that predates this batch: it described interactive effort grades as arriving unfinalized and needing review, which migration 015 stopped being true. `director-schema-reference.md` flagged on a `styles.css` edit that did not touch its `.sf-*` classes. All three clear on commit — the mechanism working as designed.)* |
 | ~~`lesson_aggregate.py` misdiagnoses a cross-course slug collision as a stale offering~~ | `supabase/admin/lesson_aggregate.py` `_ambiguous_slug_message` | ✅ **FIXED 2026-07-22.** The message now splits the two cases: same-term/different-course lists each course with its course-scoped activity slug and says *do not deactivate either one*; different-term keeps the deactivation advice, which is correct only there. Covered by `aggregate_summarize_test.py` |
 | ~~`status --lesson` cannot report a question-only lesson~~ | `supabase/admin/lesson_aggregate.py` `cmd_status` | ✅ **FIXED 2026-07-22 — and it was worse than recorded.** The join was *inner*, so written-only offerings were absent from the **unfiltered** listing too, not merely unfilterable. Since most of a term is written-only, `/lesson-cycle`'s verify step was reporting "No analysis_reports rows yet" for lessons that had aggregated fine. Now keyed on the assignment, with activities resolved by offering id so a shared slug cannot abort the listing. **Not yet run against the live DB** — needs a connection |
 | ⚠️ **The dashboard ignores extensions when computing status** | `faculty-data.js:148` | Found while building P1.1. It calls `effectiveDue(offering, sectionId, **null**)` — the extension argument hardcoded — so a student holding an active extension can show as `overdue`/`pending` on the dashboard. `faculty-grade.js` and the new `faculty-gradebook.js` both do it correctly; this is the one caller that does not. **S**, and it needs a test, not just a fix |
@@ -876,14 +604,37 @@ Three things that pass forward:
   where a §5 row or an adjacent file turned out worse than recorded once read against the code;
   treat a roadmap entry as a lead, not a spec.
 
-**P1.8 is unblocked and is now nearly free** — `summarizeEi()` already computes exactly what its
-dashboard tile needs, as a pure function.
+**Also 2026-07-23 (sixth batch): P1.8 · P1.9 · P1.10 · P1.11 · P1.14** — the EI panel, Enrollment as
+its own page, drag-and-drop section coverage, the offering-wide count, and the Grade queue that
+replaces the late filter. Frontend only; no DDL, no live data touched. **P1 is now empty except
+P1.12's whole-section half.**
 
-**The one thing still owed on this batch:** neither new page has been seen rendered by a signed-in
-faculty user. Every logic layer is green (821 assertions, three DB suites, a both-themes boot check)
-but that is not the same claim. **Run `tests/browser-harness/pass.mjs` before P0.2 deletes the test
-faculty account** — after that it needs a human in the Supabase dashboard again, which is what made
-P0.5 take three attempts.
+Four things pass forward, and two of them are the kind of finding a roadmap entry cannot contain:
+
+- **"What you can see" is not "what you owe", and the difference was already shipped wrong.** A
+  director's staff row is offering-wide, so `ctx.sectionIds` is the whole course — and the due-out
+  row was counting the whole course under a heading reading *Needs your attention*. `schema.js`
+  `actionableSections()` is the fix and is now the scope rule for anything that presents itself as a
+  personal worklist. Watch for the next surface that reaches for `ctx.sectionIds` out of habit.
+- **Which raises a real permissions question nobody has decided.** Nearly *everyone* holds an
+  offering-wide row, because that is what `create-instructor` writes by default — so section rows are
+  scoping the UI, not access. Filed on **P3.9**; it needs the director, not an agent.
+- **Removing a control is not the same as removing its route.** Dropping Grade from the nav was
+  right, but the boxes that justify it render nothing when there is nothing outstanding. The empty
+  state had to grow a link, and the test that pins it is the one worth keeping.
+- **A queue that lists work nobody has to do is a queue nobody opens.** The interactive-taker
+  exclusion is the only rule in the new queue that depends on *another* part of the system being
+  true (migration 015). It is asserted narrowly and pinned by a counterfactual test, on the pattern
+  P0.14 established.
+
+**The one thing still owed, and it is now owed twice:** none of the sixth batch has been seen
+rendered by a signed-in faculty user either — 200-odd new assertions and a clean syntax pass are not
+the same claim, and this batch is unusually visual (a drag target, a card strip, a page that did not
+exist). **Run `tests/browser-harness/pass.mjs` before P0.2 deletes the test faculty account** — after
+that it needs a human in the Supabase dashboard again, which is what made P0.5 take three attempts.
+Specifically unverified: the coverage grid's drag-and-drop, the Grade queue against genuinely late
+work (still nothing late in the term — same blocker P0.5 hit), and Roster rendered as a plain
+instructor, which is a role boundary that changed.
 
 **Start P2.1 (Blackboard) during P1.** Its risk is entirely in round-trip testing with a real file,
 and that lead time cannot be compressed at term end.
@@ -898,6 +649,196 @@ wrong — and that is the part which stops the same question being re-opened in 
 keep their original numbers, so a reference to P0.9 still finds P0.9.*
 
 ### P0 — was ship-blocking for 2026-08-10
+
+#### P0.16 — Interactive grades itself on commit; student nav gating · ✅ **DONE 2026-07-23 (015 applied)**
+
+*Director follow-up to P0.14: the interactive grade should appear on its own — no run — and be
+auto-final, but only when the interactive path is an ALLOWED (graded) mode; and the student-facing
+choice/navigation had several defects.*
+
+**Grading — auto-final, reactive (frontend + tooling shipped; trigger written, apply BLOCKED):**
+
+- Migration `app/015_interactive_autograde.sql` — a `SECURITY DEFINER` trigger
+  (`grade_interactive_on_commit`) that, when a submission commits to a **graded** interactive
+  activity, copies the report effort (with the §5.2 cap re-applied) onto a **finalized, derived**
+  grade — student-visible immediately, no review step, matching the legacy `public` behaviour the
+  director wanted. Practice commits get **no** grade. A finalized instructor/imported grade is never
+  clobbered ("auto-grade as long as there wasn't a response already graded"). **APPLIED 2026-07-23**
+  on the director's return; `autograde_interactive_test.py` passes 12/12 live. A "no usable effort"
+  guard bug (`<>` vs `IS DISTINCT FROM`, which let an absent effort create a NULL-effort grade) was
+  caught by that test and fixed before use.
+- `grade_interactive.py` + its 49-check suite re-aligned to the auto-final policy (`source='derived'`,
+  `is_finalized=true`); the script is now a **backfill** tool writing the identical row the trigger
+  writes. Until 015 is applied, a committed interactive submission still produces no grade on its own
+  — the script is the interim path.
+
+**Student navigation (shipped, no DDL):**
+
+- **Routing bug fixed** — clicking *Written preflight* linked to `assignments.html?a=<activity id>`,
+  which that page resolves against `offeringId`; the mismatch dumped the student on the full list.
+  Now links by offering id, so it opens the actual written input — including the written-only case.
+- **Interactive availability is now respected** — the interactive card is launchable only when its
+  `available_after` gate is met (`submit`/`due`, or always past the deadline); before then it shows
+  **greyed and disabled** with the reason ("Available after you submit your written responses"),
+  instead of a live Launch button on a practice activity the assignment says isn't open yet.
+- **The launch warning ("your written answers stop counting") only fires when the interactive path
+  is graded** — on a practice activity it was simply false.
+
+#### P0.15 — "Once a director, always a director" — role demotion never took · ✅ **FIXED 2026-07-23**
+
+*Director report: you cannot set a faculty member back to instructor in a course once they've been a
+director. Director is meant to be a per-course privilege; system admin is the global one.*
+
+**Root cause, confirmed against live `app`:** the model is right — director lives in
+`staff_assignments` per offering, sysadmin in `instructors.is_global_admin` — but a director holds
+**several** `staff_assignments` rows (offering-wide + one per section), all `role='director'`, and
+`setRole()` (`faculty-admin.js`) upserted only the offering-wide row. The section-scoped rows kept
+reading `director`, and `director_offerings()` (002_rls.sql) grants the privilege on a director role
+in **any** row — so the person stayed a director no matter how many times you chose Instructor.
+
+**Fix:** `setRole()` now updates the role on **every** row the person holds in the offering, then
+guarantees the offering-wide row — so a demotion actually clears every director row. Verified live
+(rolled back): the old logic left a mixed director/instructor state and `director_offerings()` still
+returned the person; the new logic demotes cleanly and promote-back still works.
+
+**⚠ Two live records are already corrupted by the old bug and need the director's call:**
+`Kimberly de La Harpe` and `TJ Hardy` both hold an offering-wide `instructor` row with section rows
+still `director`, so they currently read as (and have the privileges of) directors despite a
+half-completed demotion. I did **not** auto-repair them — whether they should be directors or
+instructors is a privilege decision, not something to guess. Resolve by re-selecting their role in
+Staff (the fixed `setRole` will clean it up), or tell me the intended role and I'll apply it.
+
+#### P0.14 — The interactive path produces no grade · ✅ **DONE 2026-07-23 (migration applied)**
+
+*Director's observation: interactive submitters get no grade and no mark in the gradebook matrix,
+and their student page shows no points.* **Confirmed against live `app` the same day — the
+observation is exact, and the roadmap had been asserting the opposite.**
+
+**Shipped 2026-07-23 (frontend + tooling, no DDL yet):**
+
+- **`supabase/admin/grade_interactive.py`** — the missing writer. Reads a committed, `graded`,
+  chosen interactive submission's `effort` from `submission_activities.content`, re-applies the
+  §5.2 reflection cap as a server-side guard, and upserts one `grades` row (`is_finalized=false`,
+  `source='ai_suggested'`, so it lands in the dashboard review queue). `status` / `run --commit`,
+  dry-run by default. Correct **before and after** the migration: pre-migration the old trigger
+  returns early on `grading_mode='points'` so the script's own `points_earned` stands;
+  post-migration the trigger recomputes the identical value. Uses the one shared effort curve
+  (`points_from_effort`, imported not copied). 49-check suite `grade_interactive_test.py` — pure
+  logic **plus** a live end-to-end write inside a rolled-back transaction.
+- **Grade tab now excludes interactive takers** (`faculty-grade.js` `isEffortGraded()` +
+  `buildGradeData()` gained a `submissionMap` arg; `grade.html` renders a read-only "graded on
+  effort N/5" card for them). This closes the zeroing bug directly: without it, an interactive
+  taker's blank written answers defaulted to `zero` and — because they hold a prior grade row —
+  a single Save would have overwritten their effort grade with 0. `test-grade.mjs` (14 checks)
+  pins it, counterfactual included.
+
+**Applied 2026-07-23 as `prep_app_owner`:** migration
+`supabase/migrations/app/014_effort_grades_per_row.sql` re-keys the effort trigger on the grade
+**row** (`NEW.effort IS NOT NULL`) instead of the offering's `grading_mode`, and adds a
+`grades_one_grading_mechanism` CHECK (`effort IS NULL OR question_scores = '{}'`) so the
+written/effort split is enforced by the database rather than by prose. This is what lets a
+**choice** offering grade a written taker by `question_scores` and an interactive taker by effort
+*on the same offering* — the case `preflight-03`/`-04` already present. All 64 existing rows
+satisfied the CHECK; verified live afterward (a points-mode offering now derives points from
+effort, an effort-NULL row is left alone, and an effort+`question_scores` row is rejected).
+
+**⚠ Re-seal the owner (CORE.md §0, human-only).** `prep_app_owner` was unsealed to apply this and
+should go back to `NOLOGIN` — `ALTER ROLE prep_app_owner NOLOGIN;` as `postgres`. Folds into P0.2,
+which already seals it once and for all before term.
+
+**Verification gap to close during P0.5:** the new interactive Grade-tab card has **not** been seen
+in a browser, because no committed interactive submission exists in the term yet (the only
+interactive work is `preflight-02` practice). Logic-verified and syntax-clean; walk it once a real
+`graded` interactive submission lands, or against a seeded fixture.
+
+**Remaining decision (narrowed, not eliminated):** the migration takes option 2 below (trigger keys
+on the row). Option 1 (move `grading_mode` to `offering_activities`) remains the "honest schema"
+alternative if the row-keyed trigger ever proves too implicit; it is more DDL for the same
+behaviour and was not chosen. Recorded so the choice reads as deliberate.
+
+**There is no writer for `grades.effort` anywhere in the app-schema stack.** Three separate places
+each decline to write it, all for defensible local reasons, and nobody owns the gap between them:
+
+| Component | What it does | Why |
+|---|---|---|
+| `student/interaction-submit.html:54-57` | records the report, writes **no** grade | correct — a student cannot; `grades_staff_write` would refuse |
+| `faculty-grade.js:223,235` | builds rows from `questionsOf(offering.written)` only | the Grade tab has no effort control at all |
+| `/preflight-analyze` | grades free-response answers | its blast radius is written work by design |
+
+So an interactive submission that *does* commit lands in `UNGRADED` and stays there.
+
+**Two more layers are also missing, and each would independently defeat a fix to the first.**
+
+- **`grading_mode` is `'points'` on all 74 offerings.** `grades_points_from_effort()`
+  (`001_core_model.sql:568-586`) returns early unless the mode is `'effort'`, so writing
+  `grades.effort` today derives no points. The trigger is fine; nothing is configured to reach it.
+- **`grading_mode` sits on the *offering*, but `preflight-03` and `preflight-04` offer *both*
+  modalities as `graded`.** One column cannot serve two modalities on one offering, and that is the
+  decision this item actually turns on — see the correction to Q2 below, which assumed one modality
+  per offering and is why the conflict was never noticed.
+
+**What the director saw, precisely.** The only interactive work in the database is 8 reports on
+`lesson-02-electric-charge-coulombs-law` (seeded 2026-07-21). That activity is `grading_role =
+'practice'` on `preflight-02`, so `submitInteractionReport()` (`student-data.js:364-368`) records
+the work and returns **without committing** — which is right, practice is not the graded path. All
+8 submissions are therefore `status='draft'` with `chosen_activity_id IS NULL` and no grade row.
+`cellState()` (`faculty-gradebook.js:200-231`) sees neither a grade nor a committed submission, the
+Aug 10 deadline has not passed, so the cell is `PENDING` — **and `PENDING` renders as nothing.**
+
+**This gets worse on its own, without anyone touching it.** On 2026-08-10 those same cells flip
+`PENDING → MISSING`: a cadet who completed the lesson reads as never having handed anything in, and
+`totalsFor()` counts them zero out of 2. Then `preflight-03` (Aug 12) and `preflight-04` (Aug 14)
+arrive with their interactive activity marked `graded`, where a student *does* commit — and lands in
+`UNGRADED` permanently, which drags their percentage identically. **That is the P0 clock**, and it
+is why this is not "the gradebook is incomplete" but "the gradebook is about to be wrong."
+
+**The name mismatch inside the fixtures is expected and is not a defect** (director, 2026-07-23):
+those reports were produced by faculty on the legacy system, archived, and re-attached to random
+roster students to exercise the pipeline. The student page rendered them faithfully. Noted only so
+the discrepancy is not investigated a second time. *(Those 8 students also have no written work on
+`preflight-02`, which is why nothing else filled the row.)*
+
+**The grading policy is settled and was never the open question** (director, 2026-07-23): an
+interactive assignment is **automatically** graded from effort — `0 → 0` · `1–2 → 1` · `3+ → 2` —
+with effort **capped at 2** when the student gives no meaningful reading reflection. That is
+implemented and correct on both halves:
+
+| Rule | Where it lives | State |
+|---|---|---|
+| effort → points, `≥3 → possible` · `≥1 → possible/2` · `else 0` | `grades_points_from_effort()`, `001_core_model.sql:568-586` | built, matches the policy exactly at `points_possible = 2` |
+| reflection cap, effort ≤ 2 when `reading_reflection.meaningful = false` | contract §5.2 — applied by the artifact, re-clamped server-side as a guard (`interaction_reports.py:223-231`) | built, and deliberately belt-and-braces |
+
+**So this item is not "decide a grading rule". It is "connect a rule that already exists to a column
+nothing populates."** Scope: a writer that copies the payload's `effort` into `grades.effort` (with
+the §5.2 cap re-applied as a guard, never trusting the student-controllable payload), plus the
+configuration that lets the trigger fire.
+
+**⚠ The obvious configuration change would zero every written taker. Do not make it first.**
+Setting `grading_mode='effort'` on `preflight-03`/`-04` looks like the one-line fix and is a
+data-loss bug: the trigger is `BEFORE INSERT OR UPDATE` and assigns `points_earned`
+**unconditionally** once the mode matches, and `NULL` effort maps to `0`. Every *written* taker on
+that offering — graded 2/2 through `question_scores`, with `effort` correctly NULL
+(`WRITTEN-SCHEMA1.md:118-121`) — would be silently rewritten to **0 points** on the next save.
+`preflight-03` and `preflight-04` carry *both* modalities as `graded`, so this is not hypothetical.
+
+**How a *mixed* offering grades two modalities under one `grading_mode` column** was the last open
+question. Two ways were on the table: move `grading_mode` to `offering_activities` (honest schema,
+more DDL), or make the trigger key on the grade **row** (`NEW.effort IS NOT NULL`) instead of the
+offering (one `CREATE OR REPLACE FUNCTION`, lets one offering serve both). **Migration 014 takes the
+row-keyed option** — see the status block at the top of this item. The `NULL effort → 0` semantics
+it changes were confirmed vacuous: a non-submitter has no grade row at all. The safe order was, and
+the shipped order is, **writer first, configuration second** — the writer alone is inert, whereas a
+mode change with no writer is the zeroing bug above.
+
+**Do not "fix" this by flipping `preflight-02`'s interactive activity to `graded`.** It is practice
+on purpose, and doing so would commit 8 students to a path that still has no grade writer — turning
+8 blank cells into 8 permanently ungraded ones.
+
+**Falsification:** if no cadet ever chooses the interactive path on a `graded` offering this term,
+this is a P1 that never fired, and the fixture rows on `preflight-02` are cosmetic. The way to know
+early is to watch `submissions.chosen_activity_id` on `preflight-03` in the days after Aug 12.
+
+---
 
 #### P0.3 — Revive the two dead DB test suites · ✅ **DONE 2026-07-22 (uncommitted)**
 
@@ -1044,13 +985,17 @@ Both halves fixed:
   compact in-table select (`width: auto; min-width: 128px; padding: 5px 8px`) following the existing
   `.sec-assign select` house pattern.
 
-#### P0.12 — A late submission is invisible on the grade card · ✅ **DONE 2026-07-22** · ⚠️ *filter to be removed — see P1.14*
+#### P0.12 — A late submission is invisible on the grade card · ✅ **DONE 2026-07-22** · *filter withdrawn 2026-07-23*
 
-> **The "Late only" filter added here is being withdrawn** at the director's request the same day.
-> It answers the wrong question: an instructor does not want to filter a section down to late work,
-> they want a standing queue of the few submissions needing attention. **P1.14** replaces it. The
-> late *chip* on the card is expected to stay — it is context while grading, and is not what was
-> objected to.
+> **The "Late only" filter added here was withdrawn on 2026-07-23**, at the director's request the
+> day after it shipped. It answered the wrong question: an instructor does not want to filter a
+> section down to late work, they want a standing queue of the few submissions needing attention.
+> **P1.14** replaced it, and the `.late-toggle` control and its CSS are gone. The late **chip** on
+> the card stayed, as predicted — it is context while grading, and is not what was objected to.
+>
+> Recorded as a shape worth noticing rather than a mistake: the filter was a correct implementation
+> of a stated request, and it took seeing it to establish that the request was for the wrong control.
+> One day between shipping and withdrawing is a cheap way to find that out.
 
 
 **Shipped:** a new `submissionLateness()` + `lateBy()` pair in `schema.js` (beside `effectiveDue`,
@@ -1148,7 +1093,250 @@ collapses whitespace, so `scalar sum` was reported as a "variant" of the id it n
 
 ---
 
+#### P0.5 — Verification pass in a browser · ✅ **DONE 2026-07-22** — *two items deferred, see below*
+
+**Run, as all three role tiers, in light and dark.** A course director created and confirmed
+`prep.test.faculty@usafa.edu` in the Supabase dashboard; `scripts/test_faculty_account.py` wrote its
+staffing and flipped it between tiers between passes.
+
+- **11/11 pages clean** in light and again in dark — no console errors, no uncaught exceptions, no
+  failed requests. Pages: dashboard · rollup · rollup with `?kde=1` · grade · roster · lessons ·
+  admin · extensions · account · system · help.
+- **`checks.mjs` — 13/13 director · 11/11 instructor · 13/13 global admin.** Assertions rather than
+  screenshots, because most of what this pass verifies is something being *absent for the right
+  role*, and absence is exactly what a screenshot review misses.
+
+**Confirmed working:** the KDE tuner is absent from a plain rollup, present with `?kde=1` as a
+director, absent with `?kde=1` as an instructor (P0.10) · student responses render 3 AI + 5 random
+with Shuffle intact (P0.9) · names are **not in the DOM** while the toggle is off (P0.6) · the staff
+table's own row is a disabled select, and a global admin gets the implicit variant (P0.11) · the
+"Did not submit" panel, misconception popovers and short AI prose (P0.6, P0.8, P0.13) · and this
+batch's P1.5 histogram, P1.6 due-out panel and P1.7 switchers.
+
+**Two things this pass could not verify, and why:**
+
+- **The late chip and its filter (P0.12).** *Nothing is late.* The active preflight is due Aug 9 and
+  today is Jul 22, so there is no late submission and no expired extension anywhere in the term
+  yet. The logic harness covers 16 cases including the extension boundary; the *rendering* is
+  unexercised until real work arrives late. Re-check in the first week of term — it is also exactly
+  when P1.14 lands.
+- **`provision-students` and `reset-student-password` on a successful path.** Both mutate real cadet
+  accounts, and there is no throwaway cohort to point them at. Their *gating* verified clean (all
+  five edge functions correctly refuse a caller whose JWT does not already resolve to
+  director/admin), but the happy path stays unproven. It needs a disposable student, not a
+  disposable instructor.
+
+**Two findings that are not bugs, recorded so they are not re-investigated:**
+
+- **The rollup shows duplicate student responses.** Two cards were character-identical. Not a
+  sampler bug — `sampleN` splices without replacement, and there are no duplicate submission or
+  activity rows. **16 distinct answers are shared by up to 4 students each**, because the seeded
+  training data draws from a small template pool. It is a good argument for clearing that data
+  before the real roster lands (§5).
+- **`--role` used to unstaff the account from other courses.** A re-tier deleted *every* staff row,
+  dropped the test account to one offering, and made the course switcher correctly disappear — which
+  read as a P1.7 bug for several minutes. The delete is now scoped to the offering being re-tiered.
+
+<details><summary>Why this was blocked, and the boundary that caused it — worth not re-learning</summary>
+
+Attempted first on the assumption that an unsealed database was enough to mint a faculty login.
+**It is not:**
+
+- All three `prep_app_*` roles connect and read `app` fine — but **every one of them is
+  `permission denied for schema auth`**. Schema `app` and schema `auth` are separate boundaries, and
+  unsealing the first grants nothing on the second. `claude_code_recker` is likewise denied.
+- The public signup endpoint **does** mint a user (`disable_signup=false`), but the project has
+  `mailer_autoconfirm=false` and **PREP has no SMTP** — so the account is created unconfirmed and
+  sign-in returns `email_not_confirmed`.
+- All five edge functions correctly require a caller JWT that already resolves to director/admin, so
+  none bootstraps the first account.
+- `~/.claude/skills/preflight-analyze/config.json` — the one place the `service_role` key lives — is
+  **absent on this machine**, so the Admin API is unreachable and **`/preflight-analyze` cannot run
+  here either**.
+
+So the account had to be created by a human in the dashboard. It took three attempts: the first two
+would not authenticate with a correctly copy-pasted password, most likely because duplicate
+unconfirmed users existed on the same address (see P0.2 — delete the strays).
+
+</details>
+
+<details><summary>Original scoping</summary>
+
+Eight CHANGELOG entries record the same gap: **no faculty login is available to the automated
+harness**, so roster import, the review page, Grade/Roster, the rollup, and both new edge functions
+have never been exercised against the live database by a signed-in human.
+
+This is one session, not eight — a director walkthrough in light and dark mode as all three role
+tiers. Everything else in P0 should land first so the pass covers the shipped state.
+
+**Added 2026-07-22** — the four frontend fixes shipped that day are logic-verified and syntax-clean
+but **have not been looked at**, and each is a visual change that only an eye can confirm:
+
+- **Staff table** (P0.11) — rows equal height; your own row a disabled select; Role column no longer
+  stretched. Check as a director *and* as a global admin, whose row renders the third variant
+  (`implicit — no staff row`).
+- **Late chip + Late-only filter** (P0.12) — needs a genuinely late submission and one covered by an
+  extension, to confirm the second is *not* badged. Confirm the toggle is invisible when nothing is
+  late.
+- **Student responses** (P0.9) — 3 AI + 5 random = 8 cards, and the Shuffle control still reshuffles
+  only the random 5.
+- **KDE tuner** (P0.10) — absent from a plain rollup, present with `?kde=1` as a director, absent
+  with `?kde=1` as an instructor.
+
+</details>
+
+---
+
 ### P1 — first weeks of term
+
+#### P1.14 — Grade tab: a "needs grading by hand" queue, replacing the late filter · ✅ **DONE 2026-07-23**
+
+*And the Grade tab left the nav bar, at the director's request in the same breath.*
+
+**The filter is gone; the chip stayed.** "Submitted late" (shipped as P0.12 the day before) answered
+the wrong question — an instructor does not want a section narrowed down to its late work, they want
+the short list of what needs attention. The late chip on the grade card is untouched: it is context
+while grading a specific student and was never what was objected to.
+
+**In its place, one open strip of cards above the grading view**, shaped like the lesson builder's
+orphan row. `buildGradingQueue()` (pure, 21 assertions in `test-grade.mjs`) + `gradingQueue()` in
+`faculty-grade.js`. Each card is one student on one assignment, cross-assignment and per-student —
+which is what the two `<details>` worklists it replaced could not be. They counted at *assignment*
+granularity behind a closed summary, and "3 outstanding on preflight-02" tells you a number, not a
+name.
+
+Four rules are load-bearing:
+
+- **Interactive takers never appear.** Migration 015 grades them on commit, so there is nothing for a
+  human to do, and a queue listing work that does not exist stops being opened. This is the one rule
+  that is a claim about *another* part of the system, so it is asserted narrowly (chosen activity ≠
+  the written one) and pinned by a test.
+- **An undecided submitter still appears** — nothing chosen yet means they may still land on the
+  written path.
+- **Late beats extension-expired** when both are true. A blown-through extension is more usefully
+  named as late.
+- **Scoped to the sections you TEACH**, not the ones you may see — see the entry below.
+
+**Grade left the nav bar.** Grading is not a place you browse to, it is work that arrives: the
+dashboard's due-out boxes link straight to it and the queue names the students waiting. A permanent
+nav entry beside them asked "go and check whether you owe anything", which is the question those
+boxes answer unasked. `grade.html` is unchanged and still reachable — from the boxes, from the queue,
+from the gradebook, by URL. **The due-out row therefore carries a standing `Grade page →` link in
+BOTH states, including the empty one**, or the day an instructor has nothing outstanding would be the
+day the page has no route to it at all. `test-nav.mjs` pins the absence; `test-tasks.mjs` pins the
+link.
+
+<details><summary>Original scoping</summary>
+
+**Remove the "Submitted late" filter** (shipped in P0.12, same day). It answers the wrong question:
+an instructor does not want to *filter a whole section down to* late work, they want a short standing
+list of the handful of submissions that need attention. The filter makes you go looking; a queue
+comes to you.
+
+*Assumption to confirm:* the **late chip on the grade card stays** — it is context you want while
+grading a specific student, and it is not what was objected to. Only the filter control goes.
+
+**Add a queue at the top of the page, shaped like the lesson builder's orphan view**
+(`faculty/lessons.html` `.lb-orphans` / `.lb-orphan`). It holds late submissions not yet finalized,
+and students whose **extension has expired** with work still ungraded. **Scoped to your own sections
+only.** Clicking a student opens their responses to grade right there; an interactive submission is
+auto-graded and must not appear at all; a written one opens Q2 and Q3 with the 3-state control and
+the feedback boxes, then **Finalize** (Q1 is zero-point and stays hidden).
+
+*(The auto-graded rule was originally written as already-true, inherited from the legacy `public`
+receiver where migration `013` wrote the effort. That is what made P0.14 invisible for a month.
+P0.14 and P0.16 landed first, so it is true now.)*
+
+</details>
+
+#### P1.8 — EI stats on the dashboard · ✅ **DONE 2026-07-23** — *and the due-out row's scope was wrong*
+
+**The panel**: `renderEiPanel()` in `faculty-ei.js` (pure, string in / string out) against the
+`summarizeEi()` that P1.4 already shipped — so it is a render, not a second query, exactly as the
+scoping predicted. Two big numbers and the last five sittings, mounted below Your Sections because it
+records what you have *done* rather than what is waiting on you.
+
+**Sittings is the headline, and that is the point.** A batch of six cadets after class is ONE
+session. Counting rows would tell a director they held forty sessions in a week they held nine, and
+an inflated number is how a dashboard stops being read. The row count survives as "cadets seen",
+where it means something. Nothing logged renders nothing at all — most instructors have no EI in week
+one, and a permanent `0` teaches people to skip that region of the page.
+
+**Built as its own panel rather than a `SOURCES` entry**, which the original scoping suggested. The
+registry's shape is `{ count, action, text, link }` — a count and an imperative — and EI is neither
+outstanding nor actionable. Registering it would have printed "12 · Extra instruction" in a row headed
+*Needs your attention*, which is false. The registry's **rule** was taken (zero renders nothing); its
+container was not.
+
+**The finding this turned up, which was not in the item:** the due-out row itself was scoped to
+`ctx.sectionIds`. A director's staff row carries `section_id NULL`, which `staff_sections()` expands
+to *every* section of the offering — so "9 · Review grades" under a heading reading **Needs YOUR
+attention** was counting nine other instructors' ungraded submissions. Now scoped through a new
+`actionableSections()` in `schema.js`: taught ∩ visible, **falling back to visible** so a director who
+teaches nothing gets the course-wide list rather than a permanently empty panel. The row says which
+scope it is showing, because a panel that silently shows a subset is worse than one that shows
+everything. Both halves are pinned in `test-schema.mjs` and `test-tasks.mjs`.
+
+`taughtSectionIds()` moved from `faculty-rollup.js` to `schema.js` for this (re-exported, so
+`report.html` and `gradebook.html` are untouched) — three surfaces now need it and none of them should
+pull 56 KB of aggregation maths into the browser to ask a question about `ctx`.
+
+#### P1.9 — Enrollment moved out of Roster into its own tab · ✅ **DONE 2026-07-23**
+
+`faculty/enrollment.html` — director-gated, holding the registrar import and its reconciliation,
+account provisioning, and section placement (grouped by section, because "is anybody in the wrong
+section" is the question after an import and a flat list sorted by name cannot answer it). A re-mount,
+not a rewrite: `roster-import.js` was already pure and DOM-free, and none of the import logic changed.
+
+**Roster is now open to any staff member of the offering**, which is the half of this item that was
+easy to miss. It was director-only *because* it also held a destructive bulk import — you cannot show
+an instructor a page whose first card overwrites the roster. What remains is a lookup table with a
+search box, scoped to `ctx.sectionIds`; "what squadron is she in, has he got a login yet" is an
+instructor's ordinary question and always should have been theirs to ask. The password reset stayed:
+`reset-student-password` derives the default from the cadet ID and rejects a chosen one, so it reveals
+nothing the instructor was not already looking at.
+
+**Roster's "Sections" tab went away** rather than moving — it was the assign-an-instructor UI that
+P1.10 replaces. `loadSections()` and `assignInstructor()` are deleted with it. Worth recording:
+`assignInstructor()` deleted every `role='instructor'` row for the section before inserting, so a
+section could hold exactly one instructor. Nobody ever stated that rule, two people co-teaching is
+ordinary, and the replacement does not reproduce it.
+
+#### P1.10 — Section assignment: drag-and-drop, in Course Admin · ✅ **DONE 2026-07-23**
+
+All three complaints, answered separately:
+
+1. **Wrong place** — assignment now happens on the Section Coverage grid, where "who covers M1A" was
+   already being asked. Previously it was only answerable by opening six people's modals in turn.
+2. **Tick boxes were the wrong control** — drag a name chip onto a tile, *or* pick from the tile's own
+   dropdown. **Both ship, and that is not optional**: drag-only is a keyboard trap and unusable on the
+   tablet an instructor is actually holding. Native HTML5 drag events, matching `lessons.html`'s
+   orphan cards — not SortableJS, because CORE.md §2 forbids a runtime dependency.
+3. **The director copy was wrong** — it described the *data encoding* (an offering-wide row carries
+   `section_id NULL`) as though it were the role, and in doing so implied a director does not teach.
+   Rewritten in both places to say the two are independent and that holding both is normal.
+
+New `addStaffSection()` / `removeStaffSection()` in `faculty-admin.js` write ONE (person, section)
+pair, because that is what dropping a name means; `setStaffSections()` replaces the whole set, which
+is right for the modal and would have been a silent data-loss bug here. Both **carry the person's
+existing role rather than choosing one** — P0.15 was exactly the bug where a person's rows disagreed,
+and `director_offerings()` grants the privilege on a director role in *any* row.
+
+#### P1.11 — "+6 offering-wide" · ✅ **DONE 2026-07-23 — and it was worse than recorded**
+
+Stated once above the grid, with names, since the people were already loaded.
+
+The item said it was the same number on every tile. It is: `wide` never referenced the section it was
+rendered under, and could not, because an offering-wide row covers everything. **What the item did not
+know is that the number is very nearly the whole staff list.** `create-instructor` inserts
+`section_id: null` by default and `setRole()` guarantees that row exists, so essentially every staff
+member added through the UI holds offering-wide coverage — and `staff_sections()` expands it to every
+section. The banner therefore reads "N of M hold offering-wide coverage", names them, and says plainly
+what it grants.
+
+**Filed as a consequence, not fixed here:** if everyone is offering-wide, section-scoped rows are
+doing no work in RLS — they scope the *UI* (`taughtSectionIds`, and now the queues), not access.
+Whether that is intended is a permissions decision for the director, and it belongs with **P3.9**.
 
 #### P1.1 — Gradebook view · ✅ **DONE 2026-07-22**
 
@@ -1461,7 +1649,7 @@ Likely types, all of which already have a data source:
 
 | Box | Source | Goes to |
 |---|---|---|
-| Late / expired-extension work to grade | `extensionsToGrade()`, `pastDueUngraded()` | Grade (P1.14's queue) |
+| Late / expired-extension work to grade | `pastDueUngraded()` — *and `extensionsToGrade()`, which P1.14 replaced with `buildGradingQueue()` on 2026-07-23* | Grade (P1.14's queue) |
 | AI-suggested grades not finalized | `grades.is_finalized = false` | Grade |
 | Lessons past due, not yet aggregated | `lesson_aggregate.py worklist` | the rollup |
 | Sections with no staff assigned | Section Coverage | Course Admin |
@@ -1500,110 +1688,3 @@ Still the **cheap half of P3.3**, and the taxonomy work is now observable before
 Deliberately left: `lesson_aggregate.py`'s Python `summarize()` still tallies only the two recognized
 booleans — teaching the aggregator to write prose about flags whose meaning is undefined belongs with
 P3.3, not ahead of it.
-
----
-
----
-
-## 8. Completed
-
-*Everything here is done. It is kept in full rather than deleted because most of these entries
-record a **decision** — why something was built the way it was, or why a request turned out to be
-wrong — and that is the part which stops the same question being re-opened in three weeks. Items
-keep their original numbers, so a reference to P0.9 still finds P0.9.*
-
-### P0 — was ship-blocking for 2026-08-10
-
-#### P0.5 — Verification pass in a browser · ✅ **DONE 2026-07-22** — *two items deferred, see below*
-
-**Run, as all three role tiers, in light and dark.** A course director created and confirmed
-`prep.test.faculty@usafa.edu` in the Supabase dashboard; `scripts/test_faculty_account.py` wrote its
-staffing and flipped it between tiers between passes.
-
-- **11/11 pages clean** in light and again in dark — no console errors, no uncaught exceptions, no
-  failed requests. Pages: dashboard · rollup · rollup with `?kde=1` · grade · roster · lessons ·
-  admin · extensions · account · system · help.
-- **`checks.mjs` — 13/13 director · 11/11 instructor · 13/13 global admin.** Assertions rather than
-  screenshots, because most of what this pass verifies is something being *absent for the right
-  role*, and absence is exactly what a screenshot review misses.
-
-**Confirmed working:** the KDE tuner is absent from a plain rollup, present with `?kde=1` as a
-director, absent with `?kde=1` as an instructor (P0.10) · student responses render 3 AI + 5 random
-with Shuffle intact (P0.9) · names are **not in the DOM** while the toggle is off (P0.6) · the staff
-table's own row is a disabled select, and a global admin gets the implicit variant (P0.11) · the
-"Did not submit" panel, misconception popovers and short AI prose (P0.6, P0.8, P0.13) · and this
-batch's P1.5 histogram, P1.6 due-out panel and P1.7 switchers.
-
-**Two things this pass could not verify, and why:**
-
-- **The late chip and its filter (P0.12).** *Nothing is late.* The active preflight is due Aug 9 and
-  today is Jul 22, so there is no late submission and no expired extension anywhere in the term
-  yet. The logic harness covers 16 cases including the extension boundary; the *rendering* is
-  unexercised until real work arrives late. Re-check in the first week of term — it is also exactly
-  when P1.14 lands.
-- **`provision-students` and `reset-student-password` on a successful path.** Both mutate real cadet
-  accounts, and there is no throwaway cohort to point them at. Their *gating* verified clean (all
-  five edge functions correctly refuse a caller whose JWT does not already resolve to
-  director/admin), but the happy path stays unproven. It needs a disposable student, not a
-  disposable instructor.
-
-**Two findings that are not bugs, recorded so they are not re-investigated:**
-
-- **The rollup shows duplicate student responses.** Two cards were character-identical. Not a
-  sampler bug — `sampleN` splices without replacement, and there are no duplicate submission or
-  activity rows. **16 distinct answers are shared by up to 4 students each**, because the seeded
-  training data draws from a small template pool. It is a good argument for clearing that data
-  before the real roster lands (§5).
-- **`--role` used to unstaff the account from other courses.** A re-tier deleted *every* staff row,
-  dropped the test account to one offering, and made the course switcher correctly disappear — which
-  read as a P1.7 bug for several minutes. The delete is now scoped to the offering being re-tiered.
-
-<details><summary>Why this was blocked, and the boundary that caused it — worth not re-learning</summary>
-
-Attempted first on the assumption that an unsealed database was enough to mint a faculty login.
-**It is not:**
-
-- All three `prep_app_*` roles connect and read `app` fine — but **every one of them is
-  `permission denied for schema auth`**. Schema `app` and schema `auth` are separate boundaries, and
-  unsealing the first grants nothing on the second. `claude_code_recker` is likewise denied.
-- The public signup endpoint **does** mint a user (`disable_signup=false`), but the project has
-  `mailer_autoconfirm=false` and **PREP has no SMTP** — so the account is created unconfirmed and
-  sign-in returns `email_not_confirmed`.
-- All five edge functions correctly require a caller JWT that already resolves to director/admin, so
-  none bootstraps the first account.
-- `~/.claude/skills/preflight-analyze/config.json` — the one place the `service_role` key lives — is
-  **absent on this machine**, so the Admin API is unreachable and **`/preflight-analyze` cannot run
-  here either**.
-
-So the account had to be created by a human in the dashboard. It took three attempts: the first two
-would not authenticate with a correctly copy-pasted password, most likely because duplicate
-unconfirmed users existed on the same address (see P0.2 — delete the strays).
-
-</details>
-
-<details><summary>Original scoping</summary>
-
-Eight CHANGELOG entries record the same gap: **no faculty login is available to the automated
-harness**, so roster import, the review page, Grade/Roster, the rollup, and both new edge functions
-have never been exercised against the live database by a signed-in human.
-
-This is one session, not eight — a director walkthrough in light and dark mode as all three role
-tiers. Everything else in P0 should land first so the pass covers the shipped state.
-
-**Added 2026-07-22** — the four frontend fixes shipped that day are logic-verified and syntax-clean
-but **have not been looked at**, and each is a visual change that only an eye can confirm:
-
-- **Staff table** (P0.11) — rows equal height; your own row a disabled select; Role column no longer
-  stretched. Check as a director *and* as a global admin, whose row renders the third variant
-  (`implicit — no staff row`).
-- **Late chip + Late-only filter** (P0.12) — needs a genuinely late submission and one covered by an
-  extension, to confirm the second is *not* badged. Confirm the toggle is invisible when nothing is
-  late.
-- **Student responses** (P0.9) — 3 AI + 5 random = 8 cards, and the Shuffle control still reshuffles
-  only the random 5.
-- **KDE tuner** (P0.10) — absent from a plain rollup, present with `?kde=1` as a director, absent
-  with `?kde=1` as an instructor.
-
-</details>
-
----

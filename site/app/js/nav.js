@@ -30,8 +30,15 @@ const STUDENT_LINKS = [
 // Report (the lesson rollup) is intentionally absent: it is reached only via a link carrying its
 // lesson key (?i=) — from an Interactions card or the dashboard's "Open full rollup →".
 //
-// Grade is NOT director-gated: instructors grade their own sections (grade.html resolves scope from
-// the role). Lessons is not gated either — instructors get a read-only view of published lessons
+// GRADE IS ABSENT TOO, as of 2026-07-23 (P1.14), and this is the one removal that will look like a
+// mistake. It is not. Grading is not a place you browse to, it is work that arrives: the dashboard's
+// due-out row already carries "N · Review grades" and "N · Review AI grades" boxes that link
+// straight here, and the Grade page's own queue now names the students waiting. A permanent nav
+// entry beside them said "go and check whether you owe anything", which is the question those boxes
+// answer without being asked. grade.html is unchanged and still reachable — from the due-out boxes,
+// from the queue, from the gradebook, and by URL — it simply is not a destination on the bar.
+//
+// Lessons is not director-gated — instructors get a read-only view of published lessons
 // (faculty-lessons.js filters to is_published; the page gates every authoring control on isDirector).
 // Two links were removed on 2026-07-20:
 //   Interactions — the page was deleted. A lesson is now an assignment offering, so a standalone
@@ -46,17 +53,28 @@ const STUDENT_LINKS = [
 // System is a SEPARATE destination gated on is_global_admin, not on director. The split is a
 // permission boundary, not tidiness: creating an offering means appointing its director, i.e.
 // minting course-level authority, which a director must not be able to do for themselves.
-const FACULTY_LINKS = [
+// Exported for tests. Which pages the bar offers, and to whom, is a decision that has been quietly
+// wrong before (Admin pointing at a legacy page reading the wrong schema), and it is the kind of
+// thing nobody notices until a role that should not see a link does. String in, no DOM needed.
+export const FACULTY_LINKS = [
   { key: 'dashboard',    label: 'Dashboard',    href: 'dashboard.html',         icon: 'dashboard',     emoji: '🏠' },
-  { key: 'grade',        label: 'Grade',        href: 'grade.html',             icon: 'grades',        emoji: '✅' },
-  // Ungated, like Grade and for the same reason: an instructor sees their own sections, resolved
-  // from ctx.sectionIds and enforced by RLS. It is not a director surface — "how is my section
-  // doing across the term" is the ordinary question this answers.
+  // Ungated: an instructor sees their own sections, resolved from ctx.sectionIds and enforced by
+  // RLS. It is not a director surface — "how is my section doing across the term" is the ordinary
+  // question this answers.
   //
   // student.html is deliberately ABSENT from this list. It is a drill-down reached by clicking a
   // name, exactly as report.html is, and a nav entry for it would have nothing to point at.
   { key: 'gradebook',    label: 'Gradebook',    href: 'gradebook.html',         icon: 'progress',      emoji: '📊' },
-  { key: 'roster',       label: 'Roster',       href: 'roster.html',            icon: 'roster',        emoji: '🧑‍🎓', directorOnly: true },
+  // Roster stopped being director-only on 2026-07-23 (P1.9). It was gated because it also held a
+  // destructive bulk import; now that import lives on Enrollment, what remains is a lookup table
+  // scoped to ctx.sectionIds — "what squadron is she in, has he got a login yet" — which is an
+  // instructor's ordinary question and always should have been theirs to ask.
+  { key: 'roster',       label: 'Roster',       href: 'roster.html',            icon: 'roster',        emoji: '🧑‍🎓' },
+  // Everything that CHANGES who is enrolled: the registrar import and its reconciliation, account
+  // provisioning, and moving a cadet between sections. Director-gated, and separate from Roster
+  // because they are different jobs on different clocks — bursts at the start of term versus a
+  // lookup most weeks — and because mixing them is what kept Roster shut to instructors.
+  { key: 'enrollment',   label: 'Enrollment',   href: 'enrollment.html',        icon: 'roster',        emoji: '📋', directorOnly: true },
   // Label, not path. The page is the term's list of assignment offerings, which is what the
   // schema calls them; the FILE stays `lessons.html` because `site/faculty/lessons.html` is a
   // frozen contract URL (CORE.md §6) that AI-generated prefill links target — renaming it would

@@ -149,6 +149,28 @@ export async function loadEiForEnrollment(enrollmentId) {
   return { rows: data || [], error };
 }
 
+/**
+ * Every session across a set of SECTIONS, with the names to label them. Drives P1.8's panel.
+ *
+ * The name map is built here rather than by the caller because the panel is useless without it —
+ * `ei_sessions` keys on the enrolment, so a mini-table of the last five sittings would otherwise
+ * be five uuids. One extra column on a query the panel has to make anyway.
+ *
+ * @returns {{ rows, nameOf }} `nameOf(enrollmentId)` → student name, '' when unknown
+ */
+export async function loadEiForSections(sectionIds) {
+  const none = { rows: [], nameOf: () => '' };
+  if (!sectionIds?.length) return none;
+  const { data: enrol } = await db.from('enrollments')
+    .select('id, students!inner(name)').in('section_id', sectionIds).eq('status', 'active');
+  const nameBy = Object.fromEntries((enrol || []).map(e => [e.id, e.students?.name || '']));
+  const ids = Object.keys(nameBy);
+  if (!ids.length) return none;
+  const { rows, error } = await loadEiForEnrollments(ids);
+  if (error) throw error;
+  return { rows, nameOf: (id) => nameBy[id] || '' };
+}
+
 /** Every session across a set of enrolments. Drives the gradebook's EI column and P1.8's stats. */
 export async function loadEiForEnrollments(enrollmentIds) {
   const ids = (enrollmentIds || []).filter(Boolean);
@@ -228,4 +250,61 @@ export function summarizeEi(rows) {
             + list.filter((r) => !r.batch_id).length,
     recent: byTime.slice(0, 5),
   };
+}
+
+/* ---------------------------------------------------------------------------
+ * The dashboard panel (roadmap P1.8)
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Two big numbers and a mini-table — `djGradebookProject`'s get_ei_stats() scope, which the
+ * roadmap calls the right one, rendered against summarizeEi() rather than a second query.
+ *
+ * SITTINGS, NOT ROWS, is the headline number and that choice is the whole reason this is worth
+ * writing carefully. A batch of six cadets after class is ONE session; counting rows would tell a
+ * director they held forty sessions in a week when they held nine, and an inflated number on a
+ * dashboard is how the dashboard stops being read. The row count is still available as the
+ * cadets-seen figure beside it, where it means something ("how many people did I actually reach").
+ *
+ * NOTHING LOGGED RENDERS NOTHING, matching the due-out row's rule directly above it: most
+ * instructors have zero EI in week one, and a permanent `0` teaches people to skip the whole
+ * region of the page.
+ *
+ * Pure — string in, string out — so the empty case and the sittings arithmetic are testable
+ * without a database or a DOM.
+ *
+ * @param {object} stats     a summarizeEi() result
+ * @param {object} opts      { esc, fmtDate, nameOf(enrollmentId) -> string, scoped }
+ */
+export function renderEiPanel(stats, { esc, fmtDate, nameOf = () => '', scoped = false } = {}) {
+  if (!stats || !stats.total) return '';
+
+  const s = stats.sittings;
+  const u = stats.uniqueStudents;
+  const rows = stats.recent.map((r) => `<tr>
+      <td class="muted">${esc(fmtDate(r.started_at))}</td>
+      <td>${esc(nameOf(r.enrollment_id) || '—')}</td>
+      <td>${esc(fmtDuration(r.duration_minutes))}</td>
+      <td class="muted">${esc(r.instructors?.name || '—')}</td>
+    </tr>`).join('');
+
+  return `<section class="dash-section ei-panel">
+    <div class="section-head"><h2>🧑‍🏫 Extra instruction</h2>
+      <span class="muted ei-scope">${scoped ? 'your sections' : 'all sections you staff'}</span>
+      <span class="grow"></span>
+      <a class="duo-link" href="gradebook.html">Log a session →</a></div>
+    <div class="card ei-card">
+      <div class="ei-nums">
+        <div class="ei-num"><div class="ei-n">${s}</div>
+          <div class="ei-l">sitting${s === 1 ? '' : 's'}</div>
+          <div class="ei-s">a group counts once</div></div>
+        <div class="ei-num"><div class="ei-n">${u}</div>
+          <div class="ei-l">cadet${u === 1 ? '' : 's'} seen</div>
+          <div class="ei-s">${fmtDuration(stats.totalMinutes)} logged in total</div></div>
+      </div>
+      <div class="table-wrap"><table class="ei-recent">
+        <thead><tr><th>When</th><th>Cadet</th><th>Length</th><th>Logged by</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+    </div>
+  </section>`;
 }

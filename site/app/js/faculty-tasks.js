@@ -20,10 +20,23 @@
 // is omitted entirely, and when every source is empty the panel says so once, cheerfully, in
 // one line.
 //
-// ── SCOPE: WHAT YOU CAN ACT ON, NOT WHAT YOU CAN SEE ─────────────────────────────
-// Everything here is scoped to ctx.sectionIds — the sections the caller actually staffs — and
-// two sources are director-only because an instructor cannot act on them. That is a UI
-// convention, exactly like the run banner's: RLS admits any staff member of the offering to
+// ── SCOPE: WHAT YOU TEACH, NOT WHAT YOU CAN SEE ──────────────────────────────────
+// The per-student sources are scoped to the sections the caller personally TEACHES
+// (schema.js `actionableSections`), not to ctx.sectionIds.
+//
+// That distinction was wrong here until 2026-07-23 and the difference is not small. A director's
+// staff row carries section_id NULL, which app.staff_sections() expands to EVERY section of the
+// offering — so "9 · Review grades" was counting the whole course, including nine other
+// instructors' ungraded work, in a panel headed "Needs YOUR attention". A worklist that lists work
+// belonging to somebody else is a course status report wearing a worklist's clothes, and the
+// number is large enough that people stop reading the row.
+//
+// Someone who staffs the offering but teaches no section of it still gets the course-wide list —
+// otherwise a pure director's panel would be permanently empty, which is a worse lie.
+//
+// The three director-only sources are unaffected: they ask about the OFFERING (unstaffed sections,
+// missing rollups, failed runs), where course-wide is the right and only scope. Their gating is a
+// UI convention, exactly like the run banner's — RLS admits any staff member of the offering to
 // these tables, so if the convention is not applied here it is not applied at all.
 //
 // ── FAILURE IS PER-SOURCE ────────────────────────────────────────────────────────
@@ -32,6 +45,7 @@
 // outcome than a dashboard that will not render.
 
 import { db } from './supabase.js';
+import { actionableSections } from './schema.js';
 import { pastDueUngraded } from './faculty-grade.js';
 
 /** A run still marked 'running' this long after it started did not finish (mirrors run-banner.js). */
@@ -240,12 +254,19 @@ export async function loadTasks(ctx, opts = {}) {
   if (!ctx?.currentOffering || !ctx.sectionIds?.length) return [];
   const isDirector = !!ctx.isDirectorForCurrent?.();
 
+  // Narrow to what the caller teaches — see the header. Passed as a derived ctx rather than as a
+  // second argument so a source added later cannot forget to apply it: `ctx.sectionIds` inside a
+  // load() is already the right list, and there is no wider one within reach.
+  const { ids } = actionableSections(ctx);
+  if (!ids.length) return [];
+  const scoped = { ...ctx, sectionIds: ids };
+
   const eligible = SOURCES.filter(s =>
     (!s.director || isDirector) && (!opts.only || opts.only.includes(s.id)));
 
   const settled = await Promise.all(eligible.map(async (src) => {
     try {
-      const out = await src.load(ctx);
+      const out = await src.load(scoped);
       if (!out || !out.count) return null;
       return { id: src.id, severity: src.severity, icon: src.icon, ...out };
     } catch (err) {
@@ -265,12 +286,24 @@ export async function loadTasks(ctx, opts = {}) {
 /**
  * The due-out row. Pure — takes the loaded tasks, returns markup — so it can be rendered in a
  * test without a database, which is how the empty state stays verified.
+ *
+ * `opts.scoped` (from actionableSections().narrowed) only labels the row. It is computed by the
+ * caller rather than carried on each task because it is a property of the VIEWER, not of any one
+ * source, and putting it on the task objects would invite a future source to disagree with it.
+ *
+ * BOTH STATES CARRY A LINK TO GRADE, including the empty one. That is not decoration: the nav bar
+ * stopped listing Grade on 2026-07-23 (P1.14) on the grounds that these boxes are the route to it,
+ * and with nothing outstanding there are no boxes — so without this the page with the "nothing to
+ * do" message would also be the page with no way to go and check.
  */
-export function renderTasks(tasks, { esc }) {
+export function renderTasks(tasks, { esc, scoped = false } = {}) {
+  const gradeLink = `<a class="duo-link" href="grade.html">Grade page →</a>`;
+
   if (!tasks.length) {
     return `<section class="dash-section duo-empty-wrap">
       <div class="duo-empty"><span class="duo-empty-ic">✓</span>
         <span>Nothing outstanding — grading is current and every assignment past its deadline has a rollup.</span>
+        ${gradeLink}
       </div></section>`;
   }
 
@@ -286,7 +319,9 @@ export function renderTasks(tasks, { esc }) {
 
   return `<section class="dash-section dash-tasks">
     <div class="section-head"><h2>📌 Needs your attention</h2>
-      <span class="count-pill">${tasks.length}</span></div>
+      <span class="count-pill">${tasks.length}</span>
+      <span class="muted duo-scope">${scoped ? 'your sections' : 'all sections you staff'}</span>
+      <span class="grow"></span>${gradeLink}</div>
     <div class="duo-row">${boxes}</div>
   </section>`;
 }

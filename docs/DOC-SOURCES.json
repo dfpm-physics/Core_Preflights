@@ -56,9 +56,11 @@
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
         "site/app/js/faculty-grade.js",
+        "site/app/faculty/grade.html",
+        "site/app/js/nav.js",
         "site/app/js/auth.js"
       ],
-      "note": "The 3-state toggle, question_scores shape, and the 'all my sections' scoping rule. If the Grade tab's behaviour changes, this doc is wrong before anything else is."
+      "note": "The 3-state toggle, question_scores shape, and the 'all my sections' scoping rule. If the Grade tab's behaviour changes, this doc is wrong before anything else is. nav.js is a source because the page has NO nav entry (P1.14, 2026-07-23) — the doc's 'getting to the Grade page' section is the only place that is written down, so a nav change silently invalidates it. grade.html is a source because the hand-grading queue is rendered there, not in the data module."
     },
     {
       "doc": "site/app/help/director-ai-rules.md",
@@ -185,11 +187,12 @@
         "site/app/js/roster-import.js",
         "site/app/js/faculty-roster.js",
         "site/app/faculty/roster.html",
+        "site/app/faculty/enrollment.html",
         "supabase/functions/reset-student-password/index.ts",
         "supabase/functions/provision-students/index.ts",
         "site/app/js/account.js"
       ],
-      "why": "The only documentation of the in-person password-reset workflow, which replaced email recovery on 2026-07-21, and of the registrar roster-export format. If reset-student-password's authorization or the importer's required columns change, this page misdirects an instructor standing in front of a locked-out cadet."
+      "why": "The only documentation of the in-person password-reset workflow, which replaced email recovery on 2026-07-21, and of the registrar roster-export format. If reset-student-password's authorization or the importer's required columns change, this page misdirects an instructor standing in front of a locked-out cadet. Both pages are sources since 2026-07-23 (P1.9): reset lives on Roster and is an instructor action, import and provisioning live on Enrollment and are a director's — the doc sends the reader to one or the other by name, so a move between them makes it wrong."
     }
   ]
 }

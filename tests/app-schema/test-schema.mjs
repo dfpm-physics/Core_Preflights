@@ -6,6 +6,7 @@ import {
   shapeOffering, shapeSubmission, effectiveDue, isOpen, deriveStatus,
   canSwitchActivity, isActivityAvailable, pointsFromEffort, displayPoints,
   questionsOf, questionPoints, answeredCount, lessonNumber, chunked,
+  taughtSectionIds, actionableSections,
 } from '../../site/app/js/schema.js';
 
 const NOW = new Date('2026-09-01T12:00:00Z');
@@ -215,6 +216,65 @@ const qs = [{ id: 'q1' }, { id: 'q2' }, { id: 'q3' }];
 eq('counts non-blank answers', answeredCount({ q1: 'a', q2: '   ', q3: 'c' }, qs), 2);
 eq('null answers => 0', answeredCount(null, qs), 0);
 eq('empty object => 0', answeredCount({}, qs), 0);
+
+/* ── scope: what you SEE vs what you TEACH ──────────────────────────────────
+ *
+ * WHY THIS EARNS ITS PLACE
+ *   A director's staff row carries section_id NULL, which app.staff_sections() expands to EVERY
+ *   section of the offering — so ctx.sectionIds for a director is the whole course. Anything that
+ *   presents itself as a personal worklist ("Needs your attention", the Grade queue) has to use
+ *   the narrower list or it counts nine other instructors' ungraded work as yours. That bug shipped
+ *   in the due-out row and was fixed on 2026-07-23; it is invisible from the page, because a wrong
+ *   number renders exactly like a right one.
+ *
+ *   The FALLBACK is the half that is easy to get wrong in the other direction: someone who staffs
+ *   the offering but teaches no section of it must get the course-wide list, not an empty one.
+ */
+section('taughtSectionIds / actionableSections');
+
+const staffRow = (sectionId, offering = 'off-1') =>
+  ({ course_offering_id: offering, section_id: sectionId, role: 'instructor' });
+
+const instructorCtx = {
+  currentOffering: 'off-1',
+  sectionIds: ['s1', 's2'],
+  staff: [staffRow('s1'), staffRow('s2')],
+};
+// A director: one offering-wide row (section_id NULL) plus a section they actually teach.
+const directorCtx = {
+  currentOffering: 'off-1',
+  sectionIds: ['s1', 's2', 's3', 's4'],
+  staff: [staffRow(null), staffRow('s2')],
+};
+const pureDirectorCtx = { ...directorCtx, staff: [staffRow(null)] };
+
+eq('an offering-wide row is NOT a teaching assignment', taughtSectionIds(pureDirectorCtx), []);
+eq('a director who teaches one section is credited with exactly that one',
+   taughtSectionIds(directorCtx), ['s2']);
+eq('rows from another offering are ignored',
+   taughtSectionIds({ ...instructorCtx, staff: [staffRow('s9', 'other')] }), []);
+eq('duplicate section rows collapse',
+   taughtSectionIds({ ...instructorCtx, staff: [staffRow('s1'), staffRow('s1')] }), ['s1']);
+
+eq('a director acts on the sections they teach, not the whole course',
+   actionableSections(directorCtx), { ids: ['s2'], narrowed: true });
+// An instructor teaches everything they can see, so nothing is narrowed and the UI must not claim
+// otherwise — "your sections" on a view that is already only your sections is noise.
+eq('an instructor sees no narrowing, because there is none',
+   actionableSections(instructorCtx), { ids: ['s1', 's2'], narrowed: false });
+// The fallback. Empty-because-nothing-outstanding and empty-because-you-teach-nothing must not
+// look the same, and only one of them is true here.
+eq('someone who teaches nothing falls back to everything they staff',
+   actionableSections(pureDirectorCtx), { ids: ['s1', 's2', 's3', 's4'], narrowed: false });
+eq('no sections at all is empty, not a crash',
+   actionableSections({ currentOffering: 'off-1', sectionIds: [], staff: [] }),
+   { ids: [], narrowed: false });
+eq('a missing ctx is survivable', actionableSections(undefined), { ids: [], narrowed: false });
+// A stale section row (renamed away, or a course switch mid-flight) must not narrow the scope to
+// a section that is not in view — that would render a dashboard of zeroes looking like real data.
+eq('a taught section outside the visible set does not narrow anything',
+   actionableSections({ ...instructorCtx, staff: [staffRow('gone')] }),
+   { ids: ['s1', 's2'], narrowed: false });
 
 /* ── misc ──────────────────────────────────────────────────────────────────── */
 section('misc helpers');

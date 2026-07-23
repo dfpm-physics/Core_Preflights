@@ -8,7 +8,7 @@
 import { check, eq, section, installBrowser } from './harness.mjs';
 
 installBrowser({});   // nav.js imports util.js, which reads `location` at module load
-const { courseOptionsHTML } = await import('../../site/app/js/nav.js');
+const { courseOptionsHTML, FACULTY_LINKS } = await import('../../site/app/js/nav.js');
 
 const OFF_215 = { offeringId: 'o-215-f26', courseId: 'c-215', courseCode: 'phys-215',
                   courseTitle: 'Physics 215', termCode: 'fall-2026', termLabel: 'Fall 2026', role: 'director' };
@@ -19,6 +19,35 @@ const OFF_215_S27 = { ...OFF_215, offeringId: 'o-215-s27', termCode: 'spring-202
 
 const ctxOf = (courses, current, extra = {}) =>
   ({ courses, currentOffering: current, role: 'faculty', instructorRow: { name: 'X' }, ...extra });
+
+/* ── The faculty bar itself (P1.9 · P1.14, 2026-07-23) ────────────────────────
+ * Two changes landed the same day and each is invisible from the other end of the app: Grade left
+ * the bar (the dashboard's due-out boxes and the Grade page's own queue are the route now), and
+ * Roster stopped being director-only once its destructive import moved to Enrollment. Both are
+ * decisions rather than accidents, and both would be silently undone by a careless edit here. */
+
+section('faculty nav — what the bar offers, and to whom');
+
+const keys = FACULTY_LINKS.map(l => l.key);
+const linkFor = (k) => FACULTY_LINKS.find(l => l.key === k);
+
+check('Grade is NOT a nav destination (P1.14)', !keys.includes('grade'));
+check('Enrollment is (P1.9)', keys.includes('enrollment'));
+check('…and it is director-gated — it changes who is enrolled',
+      linkFor('enrollment').directorOnly === true);
+check('Roster is NOT director-gated — it is a lookup any staff member may make (P1.9)',
+      !linkFor('roster').directorOnly);
+check('…and still points at roster.html', linkFor('roster').href === 'roster.html');
+
+// adminOnly is the GLOBAL flag, not "director of the current course". Conflating them would let a
+// director inherit the system tier by switching course, which is the whole reason for the split.
+eq('the system tier stays on is_global_admin, not on director',
+   FACULTY_LINKS.filter(l => l.adminOnly).map(l => l.key).sort(), ['feedback', 'system']);
+check('no link is both directorOnly and adminOnly',
+      !FACULTY_LINKS.some(l => l.directorOnly && l.adminOnly));
+eq('every link has a key, a label and an href',
+   FACULTY_LINKS.filter(l => !l.key || !l.label || !l.href).map(l => l.key || '(none)'), []);
+eq('link keys are unique', keys.length, new Set(keys).size);
 
 section('course-view picker — when it appears');
 

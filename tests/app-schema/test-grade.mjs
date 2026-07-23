@@ -135,4 +135,130 @@ check('...so a Save WOULD write a row that zeroes their 1-pt effort grade',
 check('...whereas WITH the fix that student is not in the model to be touched',
       gd[1002] === undefined);
 
+/* ══════════════════════════════════════════════════════════════════════════════
+ * buildGradingQueue — the hand-grading queue (Roadmap P1.14)
+ * ════════════════════════════════════════════════════════════════════════════
+ * WHY THIS EARNS ITS PLACE
+ *   The queue's whole claim is "these, and only these, need a human". Two failure modes destroy
+ *   that and neither is visible on the page:
+ *
+ *     1. LISTING SOMEBODY WHO IS ALREADY HANDLED — most importantly an interactive taker, whose
+ *        grade migration 015 writes on commit. A queue that lists work nobody has to do is a queue
+ *        people stop opening, and this is the one rule here that depends on another part of the
+ *        system being true.
+ *     2. OMITTING SOMEBODY WHO IS NOT — a student inside an extension that has since run out is
+ *        exactly the person the AI pass missed, because /preflight-analyze ran before they
+ *        submitted. They are invisible everywhere else.
+ *
+ *   Extensions also flip the meaning of "late": granted until Friday and submitted Thursday is NOT
+ *   late, and badging it would turn an on-time submission into an accusation.
+ */
+section('buildGradingQueue — who is waiting on a human');
+
+const QNOW = new Date('2026-09-10T12:00:00Z');
+const DUE  = '2026-09-01T05:59:00Z';          // the offering deadline, well past QNOW
+
+const qOffering = (over = {}) => ({
+  id: 'off-q', slug: 'preflight-05', title: 'Preflight 5', dueAt: DUE, position: 5,
+  dueBySection: {}, writtenActivityId: WRITTEN_ID, ...over,
+});
+const qStudent = (n, section = 'sec-A') => ({
+  student_id: n, name: `Cadet ${n}`, enrollment_id: `enr-${n}`, section_id: section,
+});
+const qSub = (n, over = {}) => ({
+  enrollment_id: `enr-${n}`, assignment_offering_id: 'off-q',
+  chosen_activity_id: WRITTEN_ID, status: 'committed',
+  committed_at: '2026-09-03T10:00:00Z',        // two days after the deadline => late
+  ...over,
+});
+
+const runQ = (d) => G.buildGradingQueue({
+  offerings: [qOffering()], students: [], submissions: [], grades: [], extensions: [], ...d,
+}, QNOW);
+
+// The base case: committed late, nothing published.
+const late1 = runQ({ students: [qStudent(1)], submissions: [qSub(1)] });
+eq('a late submission is queued', late1.map(r => r.studentId), [1]);
+eq('…labelled as late', late1[0].reason, 'late');
+eq('…with no grade row it reads as ungraded', late1[0].state, 'ungraded');
+check('…and carries the assignment so one click can open it',
+      late1[0].offeringId === 'off-q' && late1[0].title === 'Preflight 5');
+
+// THE RULE THAT DEPENDS ON MIGRATION 015. An interactive taker is auto-graded on commit; listing
+// them would be listing work that does not exist.
+eq('an interactive taker is never queued, however late',
+   runQ({ students: [qStudent(2)], submissions: [qSub(2, { chosen_activity_id: INTERACTIVE_ID })] }), []);
+// …but a student who has not chosen yet still might land on the written path, so they stay in.
+eq('an undecided (nothing chosen) late submitter IS queued',
+   runQ({ students: [qStudent(3)], submissions: [qSub(3, { chosen_activity_id: null })] })
+     .map(r => r.studentId), [3]);
+
+// Already dealt with, in each of the three ways.
+eq('a finalized grade removes them',
+   runQ({ students: [qStudent(4)], submissions: [qSub(4)],
+          grades: [{ enrollment_id: 'enr-4', assignment_offering_id: 'off-q', is_finalized: true }] }), []);
+eq('an unfinalized AI suggestion keeps them, flagged as AI-only',
+   runQ({ students: [qStudent(5)], submissions: [qSub(5)],
+          grades: [{ enrollment_id: 'enr-5', assignment_offering_id: 'off-q',
+                     is_finalized: false, source: 'ai_suggested' }] })[0].state, 'ai-only');
+eq('an unfinalized instructor draft keeps them, flagged as a draft',
+   runQ({ students: [qStudent(6)], submissions: [qSub(6)],
+          grades: [{ enrollment_id: 'enr-6', assignment_offering_id: 'off-q',
+                     is_finalized: false, source: 'instructor' }] })[0].state, 'draft');
+
+// Nothing to grade.
+eq('a draft submission is not queued — nobody handed anything in',
+   runQ({ students: [qStudent(7)], submissions: [qSub(7, { status: 'draft', committed_at: null })] }), []);
+eq('an on-time submission is not queued',
+   runQ({ students: [qStudent(8)],
+          submissions: [qSub(8, { committed_at: '2026-08-31T22:00:00Z' })] }), []);
+
+/* Extensions — the case the whole feature turns on. */
+const ext = (n, iso, reason = 'Team trip') =>
+  ({ enrollment_id: `enr-${n}`, assignment_offering_id: 'off-q', extended_due_at: iso, reason });
+
+eq('a student INSIDE a live extension is not queued and not called late',
+   runQ({ students: [qStudent(9)], submissions: [qSub(9)],
+          extensions: [ext(9, '2026-09-20T05:59:00Z')] }), []);
+
+const expired = runQ({
+  students: [qStudent(10)],
+  // Submitted before their extension ran out, so they are NOT late — but the extension has now
+  // passed and nothing is published, which is precisely the student the AI pass never saw.
+  submissions: [qSub(10, { committed_at: '2026-09-04T10:00:00Z' })],
+  extensions: [ext(10, '2026-09-05T05:59:00Z')],
+});
+eq('an expired extension with work in IS queued', expired.map(r => r.studentId), [10]);
+eq('…and is labelled as an extension, not as late', expired[0].reason, 'extension-expired');
+eq('…carrying the reason the director will want', expired[0].extensionReason, 'Team trip');
+
+// Blowing through an extension: both facts are true and the more specific one wins.
+eq('past their own extended deadline reads as late, not as "extension over"',
+   runQ({ students: [qStudent(11)], submissions: [qSub(11, { committed_at: '2026-09-06T10:00:00Z' })],
+          extensions: [ext(11, '2026-09-05T05:59:00Z')] })[0].reason, 'late');
+
+// A per-section deadline override must beat the offering default, or a T-day section reads late.
+eq('a section override moves the line',
+   G.buildGradingQueue({
+     offerings: [qOffering({ dueBySection: { 'sec-A': '2026-09-05T05:59:00Z' } })],
+     students: [qStudent(12)], submissions: [qSub(12)], grades: [], extensions: [],
+   }, QNOW), []);
+
+// Ordering: oldest deadline first — what has waited longest is what gets forgotten.
+const ordered = G.buildGradingQueue({
+  offerings: [qOffering(), qOffering({ id: 'off-old', slug: 'preflight-01', title: 'Preflight 1',
+                                       dueAt: '2026-08-10T05:59:00Z' })],
+  students: [qStudent(13), qStudent(14)],
+  submissions: [qSub(13), qSub(14, { assignment_offering_id: 'off-old' })],
+  grades: [], extensions: [],
+}, QNOW);
+eq('the queue is cross-assignment', ordered.length, 2);
+eq('…oldest deadline first', ordered.map(r => r.slug), ['preflight-01', 'preflight-05']);
+
+// Rows we cannot resolve must drop rather than render half a card.
+eq('a submission for an unknown offering is dropped',
+   runQ({ students: [qStudent(15)], submissions: [qSub(15, { assignment_offering_id: 'gone' })] }), []);
+eq('a submission for an unknown enrolment is dropped',
+   runQ({ students: [], submissions: [qSub(16)] }), []);
+
 process.exit(summary() ? 0 : 1);

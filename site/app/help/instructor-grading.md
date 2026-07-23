@@ -1,3 +1,13 @@
+## Getting to the Grade page
+
+There is no **Grade** entry in the top navigation. Grading is work that arrives rather than a place
+you browse to, so the routes to it are the places that already know you have some:
+
+- the **Needs your attention** boxes on your dashboard — *Review grades* and *Review AI grades* —
+  which appear only when there is something in them;
+- the **Grade page →** link beside those boxes, which is always there even when they are not;
+- a student's name in the **gradebook**.
+
 ## Scope: what you can see
 
 You grade the sections you staff, for the semester you are looking at. Staffing is recorded one of
@@ -60,10 +70,16 @@ Their grade comes from **effort**, scored 0–5 from the lesson report: 0 earns 
 half, 3–5 earns full. A reading reflection that is not meaningful caps effort at 2 (so at most half
 credit), regardless of engagement elsewhere. The card shows the effort and the points it earned.
 
-Like the written path, an effort grade arrives **unfinalized** and tagged **AI suggested** — review
-and finalize it the same way. To change an effort score, open the student's page from the gradebook;
-it is not editable on the Grade tab. A card that reads *not yet graded* means the lesson report has
-not been processed into a grade yet.
+**Unlike the written path, this grade is automatic and final.** It is written the moment the student
+commits, from the report, and the student sees it immediately — there is no review step and nothing
+for you to publish. That is deliberate: the effort rule above is arithmetic, not a judgement, so
+holding the result back would delay a grade nobody was going to change.
+
+Two consequences worth knowing. These students never appear in your *Needs grading by hand* row —
+there is nothing to do. And if you *do* need to change an effort score, open the student's page from
+the gradebook; it is not editable on the Grade tab. A card that reads *not yet graded* means the
+lesson report has not been turned into a grade yet, which today means it predates the automatic
+grading — tell your director rather than scoring it by hand.
 
 ## Saving, publishing, and marking a section reviewed
 
@@ -83,17 +99,30 @@ releasing anything, and your director can see who is done before grades go out. 
 section change after you sign off, the marker reads *reviewed, then changed* — sign off again once
 you are happy.
 
-## Your worklists
+## Needs grading by hand
 
-Two collapsible lists sit above the grading view, and both stay hidden when they are empty.
+A row of cards sits above the grading view — one card per student who is waiting on you, across
+*every* assignment in the course rather than just the one on screen. It is hidden entirely when
+there is nothing in it.
 
-- **Extensions ready to grade** — students whose extension has now passed and whose work is in, but
-  is not yet published. The analysis run happens *before* these students submit, so nobody has
-  proposed grades for them: **grade these by hand.** Do not re-run the analysis for a whole
-  assignment to catch a few late submissions.
-- **Past due and not finalized** — across *every* assignment in the course, not just the one on
-  screen. Students still inside an extension are not counted; they appear in the first list when
-  their own deadline passes.
+**Select a card and that student's answers open**, switching the assignment for you and widening the
+section filter if they are not in the section you had selected.
+
+Two things put somebody there:
+
+- **Late** — they submitted after their own deadline, and nothing is published yet.
+- **Extension over** — their extension has now passed and their work is in.
+
+Both mean the same thing in practice: the analysis run happened *before* they submitted, so nobody
+has proposed grades for them. **Grade these by hand.** Do not re-run the analysis for a whole
+assignment to catch a few late submissions.
+
+A student still *inside* a live extension is not here — they arrive when their own deadline passes.
+Neither is anybody who took the interactive lesson: those are graded automatically the moment the
+student commits, so there is nothing for you to do (see above).
+
+Each card says what state the work is in — *no grade yet*, *AI suggested, unreviewed*, or *draft
+saved* — so you can tell what you are walking into before you select it.
 
 ## Extensions
 

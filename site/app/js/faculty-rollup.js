@@ -520,24 +520,17 @@ export async function loadAnalysis(offeringId) {
   return { scopes: out, aliases, glossary };
 }
 
-/**
- * The sections the viewer personally TEACHES in the current offering.
+/* `taughtSectionIds` moved to schema.js on 2026-07-23 and is re-exported here unchanged.
  *
- * Distinct from `ctx.sectionIds`, which is what they may SEE — for a director those are all
- * sections, and for a global admin they are every section in the offering. "My sections" has to
- * mean the narrower thing or the default scope would be meaningless for exactly the people who
- * have more than one section to choose between.
+ * Two other surfaces needed the same question answered — the Grade page's queue (P1.14) and the
+ * dashboard's due-out row (P1.8's scoping fix) — and neither should import this module to get it:
+ * it is 56 KB of aggregation maths they have no other use for. It is a pure function over `ctx`
+ * with no `db` in it, so schema.js is where it always belonged.
  *
- * A director's offering-wide staff row carries `section_id` NULL (auth.js documents this as the
- * gotcha: NULL means all sections, not none). That row grants visibility, not a teaching
- * assignment, so it is deliberately NOT counted here — a director who teaches M1A also holds a
- * section-scoped row for it. A director who teaches nothing gets an empty list, and the caller
- * falls back to the whole course.
- */
-export function taughtSectionIds(ctx) {
-  const rows = (ctx?.staff || []).filter(sa => sa.course_offering_id === ctx.currentOffering);
-  return [...new Set(rows.map(sa => sa.section_id).filter(Boolean).map(String))];
-}
+ * Re-exported rather than moved-and-updated-at-every-call-site: report.html reaches it as
+ * `I.taughtSectionIds` through a namespace import, and gradebook.html imports it by name from
+ * here. Both keep working, and neither reads a second definition. */
+export { taughtSectionIds } from './schema.js';
 
 /* ══════════════════════════════════════════════════════════════════════════════
  * Numeric rollup — PURE, unchanged by the migration

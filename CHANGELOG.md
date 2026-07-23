@@ -8,6 +8,143 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-23 — Matthew Recker via Claude (roadmap P1.8 · P1.9 · P1.10 · P1.11 · P1.14)
+
+Five roadmap items, frontend only. **No DDL, no migration, no live data touched.** Verified by the
+`tests/app-schema` suites (all offline suites green; ~90 new assertions across
+`test-grade.mjs`, `test-schema.mjs`, `test-tasks.mjs`, `test-ei.mjs`, `test-nav.mjs`) plus a
+`node --check` pass over every changed module and every changed page's inline module.
+**Not seen in a browser** — see the caveat at the end.
+
+### Changed — the Grade tab: a queue replaces the "Late only" filter (P1.14)
+
+The **"Submitted late" filter is removed** (it shipped 2026-07-22 as P0.12; the director asked for it
+back the next day). It answers the wrong question — an instructor does not want a section narrowed
+down to its late work, they want the short list of what needs a human. The amber late **chip** on the
+grade card stays; it is context while grading and was never what was objected to.
+
+In its place, an **open strip of cards above the grading view**, one per student per assignment
+(`site/app/faculty/grade.html`, `.gq-*` in `styles.css`). It replaced two collapsed `<details>`
+worklists that counted at *assignment* granularity — "3 outstanding on preflight-02" is a number, not
+a name. New `buildGradingQueue()` (pure) + `gradingQueue()` in `js/faculty-grade.js`; the superseded
+`extensionsToGrade()` is deleted, `pastDueUngraded()` stays (the dashboard still uses it).
+
+Four rules, each pinned by a test:
+
+- **Interactive takers never appear** — migration 015 grades them on commit, so there is nothing to
+  do, and a queue listing phantom work stops being opened.
+- **An undecided submitter does** — nothing chosen yet means they may still take the written path.
+- **Late beats extension-expired** when both hold; a blown-through extension is more usefully late.
+- **Scoped to the sections you teach** (below).
+
+**Clicking a card opens that student's answers**, switching the assignment picker and widening the
+section picker first when the reader had narrowed to a section the student is not in — otherwise the
+card it means to reveal is simply not in the DOM.
+
+### Changed — Grade left the nav bar (P1.14, director's request)
+
+Grading is not a place you browse to, it is work that arrives. `grade.html` is unchanged and still
+reachable — from the dashboard's due-out boxes, the queue, the gradebook, and by URL. **The due-out
+row therefore carries a standing `Grade page →` link in both states, including the empty one**: the
+boxes render nothing when nothing is outstanding, so without it the day an instructor is caught up
+would be the day the page has no route to it. `test-nav.mjs` pins the absence; `test-tasks.mjs` pins
+the link.
+
+### Fixed — the dashboard's due-out row was counting the whole course as "yours"
+
+Found while building P1.8, and **this is the entry worth reading twice.** A director's
+`staff_assignments` row carries `section_id IS NULL`, which `app.staff_sections()` expands to *every*
+section of the offering — so `ctx.sectionIds` for a director is the whole course, and "9 · Review
+grades" under a heading reading **Needs your attention** was counting nine other instructors'
+ungraded submissions.
+
+New `actionableSections()` in `js/schema.js`: taught ∩ visible, **falling back to visible** so a
+director who teaches no section gets the course-wide list rather than a permanently empty panel. The
+row now states which scope it is showing. `taughtSectionIds()` moved from `js/faculty-rollup.js` to
+`js/schema.js` (re-exported, so `report.html` and `gradebook.html` are untouched) — three surfaces
+need it now and none should pull 56 KB of aggregation maths into the browser to ask about `ctx`.
+
+### Added — extra-instruction panel on the faculty dashboard (P1.8)
+
+`renderEiPanel()` in `js/faculty-ei.js`, pure, rendered against the `summarizeEi()` P1.4 already
+shipped — a render, not a second query. **Sittings is the headline, not the row count**: a batch of
+six cadets after class is one session, and reporting forty sessions for a week that held nine is how
+a dashboard stops being believed. The row count survives as "cadets seen". **Nothing logged renders
+nothing at all**, matching the due-out row's rule.
+
+Deliberately *not* registered as a `SOURCES` entry, which the roadmap suggested: that registry's
+shape is a count plus an imperative, and EI is neither outstanding nor actionable — it would have
+printed "12 · Extra instruction" under *Needs your attention*, which is false.
+
+### Changed — Enrollment is its own page; Roster is open to instructors (P1.9)
+
+New **`site/app/faculty/enrollment.html`** (director-gated): registrar import and reconciliation,
+account provisioning, and section placement grouped by section. A re-mount, not a rewrite —
+`js/roster-import.js` was already pure and DOM-free and none of its logic changed.
+
+**`roster.html` is now visible to any staff member of the offering.** It was director-only *because*
+it also held a destructive bulk import; what remains is a lookup table with a search box, scoped to
+`ctx.sectionIds`. The student password reset stayed — `reset-student-password` derives the default
+from the cadet ID and rejects a chosen one, so it reveals nothing an instructor was not already
+looking at. `loadRoster()` gained an optional section scope for this.
+
+Roster's **"Sections" tab is gone** rather than moved — it was the assign-an-instructor UI that P1.10
+replaces. `loadSections()` and `assignInstructor()` are deleted with it. Worth recording:
+`assignInstructor()` deleted every `role='instructor'` row for the section before inserting, so a
+section could hold exactly **one** instructor. Nobody stated that rule, co-teaching is ordinary, and
+the replacement does not reproduce it.
+
+### Changed — Section Coverage assigns staff, by drag or by dropdown (P1.10)
+
+On Course Admin's coverage grid (`site/app/faculty/admin.html`), where "who covers M1A" was already
+being asked — previously answerable only by opening six people's modals in turn. Drag a name chip
+onto a tile, **or** pick from the tile's own dropdown. **Both ship, and that is not optional:**
+drag-only is a keyboard trap and unusable on the tablet an instructor is actually holding. Native
+HTML5 drag events, matching `lessons.html` — not SortableJS, per CORE.md §2.
+
+New `addStaffSection()` / `removeStaffSection()` in `js/faculty-admin.js` write one (person, section)
+pair, because that is what dropping a name means; `setStaffSections()` replaces the whole set, which
+is right for the modal and would be silent data loss here. Both **carry the person's existing role
+rather than choosing one** — P0.15 was exactly the bug where a person's rows disagreed, and
+`director_offerings()` grants the privilege on a director role in *any* row.
+
+**The modal copy about directors is rewritten.** It read *"Leave everything unticked to give them all
+sections… That is how a director is recorded"* — every clause true, the whole thing misleading: it
+describes the data encoding as if it were the role, and implies a director does not teach. Directors
+teach sections; the two are independent and holding both is normal.
+
+### Fixed — "+6 offering-wide" (P1.11) · ⚠️ and what it turned out to mean
+
+Stated **once above the grid, with names**, instead of as an identical constant on every tile (it
+never referenced the section it was rendered under, and could not).
+
+**The number is very nearly the whole staff list**, which the roadmap did not know:
+`create-instructor` inserts `section_id: null` by default and `setRole()` guarantees that row exists,
+so essentially every staff member added through the UI holds offering-wide coverage — and
+`staff_sections()` expands it to every section.
+
+> **⚠️ A permissions question for the course director, filed on roadmap P3.9 and deliberately not
+> acted on.** As configured today an ordinary instructor can read every section's submissions and
+> grades, not just their own. Section-scoped rows are doing real work, but it is **UI scoping**
+> (`taughtSectionIds()`, "my sections", the due-out row, the new queue), **not access control**.
+> Either that is intended and should be written down, or the default row should stop being
+> offering-wide for a plain instructor — a one-line change in the edge function plus a backfill.
+> That is a privilege decision, so it is yours, not an agent's.
+
+### Not verified
+
+**None of this has been seen rendered by a signed-in faculty user** — a clean syntax pass and ~90 new
+assertions are not that claim, and this batch is unusually visual. Run
+`tests/browser-harness/pass.mjs` before P0.2 deletes the test faculty account. Specifically
+unexercised: the coverage grid's drag-and-drop, the Grade queue against genuinely late work (nothing
+in the term is late yet — the same blocker P0.5 hit), and Roster rendered as a plain instructor,
+which is a role boundary that changed.
+
+`docs/ROADMAP.md` also had **two `## 8. Completed` sections**; they are merged, and the five items
+above plus P0.14/P0.15/P0.16 moved out of the priority bands into it.
+
+---
+
 ## 2026-07-23 — Matthew Recker via Claude (assignment editor: collapsible activity sections)
 
 The two activity sections in the assignment editor (Free-Response Preflight, AI Interaction) made

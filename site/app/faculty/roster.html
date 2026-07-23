@@ -15,20 +15,6 @@
     <div class="center-load"><span class="spinner"></span><span>Loading roster…</span></div>
   </main>
 
-  <!-- Edit-section modal -->
-  <div class="modal-backdrop" id="sec-modal">
-    <div class="modal" style="max-width:380px">
-      <div class="modal-head"><h2>Change section</h2><button class="modal-close" data-close>×</button></div>
-      <p class="muted" style="font-size:0.88em;margin-bottom:14px" id="sm-name"></p>
-      <div class="field"><label for="sm-select">Section</label><select id="sm-select"></select></div>
-      <div class="error-msg" id="sm-error" style="min-height:1em"></div>
-      <div class="row" style="gap:10px;margin-top:8px">
-        <button class="btn btn-primary" id="sm-save">Save</button>
-        <button class="btn btn-secondary" data-close>Cancel</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Reset-password modal -->
   <div class="modal-backdrop" id="pw-modal">
     <div class="modal" style="max-width:440px">
@@ -46,382 +32,126 @@
     </div>
   </div>
 
-  <input type="file" id="csv-file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" style="display:none">
-
   <script type="module">
+    /* roster.html — look somebody up. That is the whole page now (roadmap P1.9).
+     *
+     * WHAT LEFT, AND WHY
+     *   Import, provisioning, and section placement moved to faculty/enrollment.html, and the
+     *   "Sections" tab (assigning instructors to sections) moved to Course Admin's coverage grid
+     *   (P1.10). Three different jobs were sharing one page because they all touched the word
+     *   "roster", and the mix is what kept this page director-only: you cannot show an instructor
+     *   a page whose first card is a destructive bulk import.
+     *
+     * WHAT THAT BOUGHT
+     *   Roster is now open to ANY staff member of the offering, which is what an instructor
+     *   expected all along — "what squadron is Cadet Nguyen in, and has she got an account yet"
+     *   is the ordinary question this answers, and it needed a director before. Scope is
+     *   ctx.sectionIds, mirroring RLS: an instructor sees their sections, a director sees all.
+     *
+     * WHAT STAYED, deliberately
+     *   The password reset. Any staff member of the offering may already call
+     *   `reset-student-password` — the edge function DERIVES the default from the cadet ID and
+     *   rejects a chosen one, so it reveals nothing the instructor was not already looking at,
+     *   and a locked-out cadet asks whichever instructor is standing in front of them.
+     */
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { esc, lastFirst, runPage } from '../js/util.js';
     import * as R from '../js/faculty-roster.js';
-    import * as RI from '../js/roster-import.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
     runPage(ctx, init);
 
-    let tab = 'students';
-    // The staged import, between preview and commit. `conflicts` carries a per-student
-    // `resolution` the operator edits in place; nothing is written until they confirm.
-    let staged = null;   // { parsed, fresh, conflicts, summary, filename }
-    let pwTarget = null; // { studentId, name } for the reset modal
-    // Sections of the current OFFERING: [{ id (uuid), code, meeting_days, period }].
-    let offeringSections = [];
-    let editSid = null;
+    let pwTarget = null;   // { studentId, name } for the reset modal
+    let rows = [];         // the loaded roster, filtered client-side by the search box
+    let query = '';
 
-    async function init() {
+    function init() {
       initTheme();
-      renderNav(ctx, { active: 'roster', onCourseChange: () => { staged = null; render(); } });
-      wireModal();
+      renderNav(ctx, { active: 'roster', onCourseChange: () => render() });
       wirePwModal();
-      document.getElementById('csv-file').addEventListener('change', (e) => {
-        const f = e.target.files[0]; if (f) readCsv(f);
-      });
       render();
     }
 
-    function render() {
+    async function render() {
       const root = document.getElementById('main');
-      if (!ctx.isDirectorForCurrent()) {
-        root.innerHTML = `<div class="page-head"><h1>Roster</h1></div>
-          <div class="alert alert-info">Roster and section management is available to course directors and admins.
-          You can grade your assigned sections from <a href="grade.html">Grade</a>.</div>`;
-        return;
-      }
+      const isDirector = ctx.isDirectorForCurrent();
       root.innerHTML = `
-        <div class="page-head"><h1>Roster &amp; sections</h1>
-          <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))} — manage enrollment and instructor assignments.</div></div>
-        <div class="subtabs">
-          <button class="subtab ${tab === 'students' ? 'active' : ''}" data-tab="students">Students</button>
-          <button class="subtab ${tab === 'sections' ? 'active' : ''}" data-tab="sections">Sections</button>
+        <div class="page-head"><h1>Roster</h1>
+          <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))}${
+            ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''} — everyone in
+            ${isDirector ? 'this offering' : 'your sections'}.${
+            isDirector ? ' Enrolling, moving and importing happens on <a href="enrollment.html">Enrollment</a>.' : ''}</div></div>
+        <div class="toolbar">
+          <div class="field grow"><label for="q">Find a cadet</label>
+            <input id="q" type="search" placeholder="Name, cadet ID, squadron or section"
+                   autocomplete="off" value="${esc(query)}"></div>
         </div>
-        <div id="panel"></div>`;
-      root.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; render(); }));
-      if (tab === 'students') renderStudents(); else renderSections();
+        <div id="panel"><div class="center-load"><span class="spinner"></span><span>Loading…</span></div></div>`;
+
+      document.getElementById('q').addEventListener('input', (e) => {
+        query = e.target.value; renderTable();
+      });
+      await load();
     }
 
-    // ───────────────────────── Students ─────────────────────────
-    async function renderStudents() {
+    async function load() {
+      // Scoped to the sections the caller may see. loadRoster() reads through `enrollments`,
+      // which RLS already narrows — the argument narrows the query, it does not secure it.
+      const { students } = await R.loadRoster(ctx, ctx.sectionIds);
+      rows = students;
+      renderTable();
+    }
+
+    /** Substring match across the four things people actually search by. */
+    function matches(s, q) {
+      if (!q) return true;
+      const hay = `${s.name} ${s.student_id} ${s.squadron || ''} ${s.section_code}`.toLowerCase();
+      return q.toLowerCase().split(/\s+/).filter(Boolean).every(t => hay.includes(t));
+    }
+
+    function renderTable() {
       const panel = document.getElementById('panel');
-      panel.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
-      const { students, sections, total, unprovisioned } = await R.loadRoster(ctx);
-      // Sections are {id, code} now — the id is a uuid, the code is what people read.
-      offeringSections = sections;
+      if (!panel) return;
+      const list = rows.filter(s => matches(s, query));
+      const unprovisioned = rows.filter(s => !s.auth_user_id).length;
 
-      const prov = unprovisioned > 0
-        ? `<div class="row wrap" style="justify-content:space-between;gap:10px">
-             <span class="muted" style="font-size:0.9em">${unprovisioned} of ${total} students need auth accounts provisioned.</span>
-             <button class="btn btn-primary btn-sm" id="prov-btn">Provision ${unprovisioned} account${unprovisioned !== 1 ? 's' : ''}</button>
-           </div><div id="prov-result" style="font-size:0.85em;margin-top:8px"></div>`
-        : total > 0 ? `<span class="muted" style="font-size:0.9em">✓ All ${total} students have auth accounts.</span>`
-        : `<span class="muted" style="font-size:0.9em">Upload a roster to provision student accounts.</span>`;
+      if (!rows.length) {
+        panel.innerHTML = `<div class="empty-state"><div class="es-ic">🧑‍🎓</div>
+          <h3>No students yet</h3><p>${ctx.isDirectorForCurrent()
+            ? 'Upload the registrar\'s roster export on <a href="enrollment.html">Enrollment</a>.'
+            : 'Nobody is enrolled in your sections yet. Your course director imports the roster.'}</p></div>`;
+        return;
+      }
 
-      const table = total
-        ? `<div class="table-wrap"><table>
+      panel.innerHTML = `
+        <div class="card">
+          <div class="row wrap" style="justify-content:space-between;gap:10px">
+            <div class="card-title" style="margin:0">${list.length === rows.length
+              ? `${rows.length} student${rows.length === 1 ? '' : 's'}`
+              : `${list.length} of ${rows.length} students`}</div>
+            ${unprovisioned ? `<span class="muted" style="font-size:0.85em">${unprovisioned}
+               ${unprovisioned === 1 ? 'has' : 'have'} no login yet${ctx.isDirectorForCurrent()
+                 ? ' — <a href="enrollment.html">provision accounts</a>' : ''}</span>` : ''}
+          </div>
+          ${list.length ? `<div class="table-wrap" style="margin-top:14px"><table>
             <thead><tr><th>Student ID</th><th>Name</th><th>Email</th><th>Sqdn</th><th>Section</th><th style="text-align:center">Auth</th><th></th></tr></thead>
-            <tbody>${students.map(s => `<tr>
+            <tbody>${list.map(s => `<tr>
               <td>${s.student_id}</td>
               <td><a href="student.html?e=${encodeURIComponent(s.enrollment_id)}">${esc(lastFirst(s.name))}</a></td>
               <td class="muted" style="font-size:0.9em">${s.email ? esc(s.email) : '<span title="No address on file — this cadet predates the registrar import.">—</span>'}</td>
               <td>${esc(s.squadron || '—')}</td>
               <td>${esc(s.section_code)}</td>
               <td style="text-align:center" class="${s.auth_user_id ? 'auth-yes' : 'auth-no'}">${s.auth_user_id ? '✓' : '—'}</td>
-              <td style="white-space:nowrap">
-                <button class="btn btn-ghost btn-sm" data-edit="${esc(s.enrollment_id)}" data-name="${esc(lastFirst(s.name))}" data-section="${esc(s.section_id)}">Edit section</button>
+              <td style="white-space:nowrap;text-align:right">
                 ${s.auth_user_id ? `<button class="btn btn-ghost btn-sm" data-pwreset="${esc(s.student_id)}" data-name="${esc(lastFirst(s.name))}">Reset password</button>` : ''}
-                <button class="btn btn-ghost btn-sm" style="color:var(--red)" data-remove="${esc(s.enrollment_id)}" data-name="${esc(lastFirst(s.name))}" data-sid="${esc(s.student_id)}">Remove</button>
               </td></tr>`).join('')}</tbody></table></div>`
-        : `<div class="empty-state"><div class="es-ic">🧑‍🎓</div><h3>No students yet</h3><p>Upload the registrar's roster export to get started.</p></div>`;
-
-      panel.innerHTML = `
-        <div class="card">
-          <div class="card-title">Upload roster</div>
-          <div class="card-meta">The registrar's export, saved as <strong>CSV</strong> or tab-separated text.
-            It must include <code>Cadet EMPLID</code>, <code>Cadet Name</code>, <code>Email</code>,
-            <code>Cadet Squadron</code>, and <code>Section</code>; Term, Subject, Course Number,
-            Majors, Sex, and Advisor Name are used when present. Rows for other courses are
-            filtered out, and you review anything that would change an existing record before
-            it is written.</div>
-          <div class="dropzone" id="dropzone">
-            <div class="dz-ic">📄</div><div><strong>Choose a file</strong> or drag &amp; drop it here</div>
-          </div>
-          <div id="csv-preview" style="display:none;margin-top:16px"></div>
-        </div>
-        <div class="card"><div class="card-title">Student accounts</div>
-          <div class="card-meta">Creates a login for each enrolled cadet. Their username is the email
-            address on their roster row; their first password is the last 6 digits of their cadet ID,
-            and they must change it the first time they sign in.</div>${prov}</div>
-        <div class="card"><div class="card-title">Enrolled students <span class="muted" style="font-weight:500">· ${total}</span></div>${table}</div>`;
-
-      // wire
-      const dz = document.getElementById('dropzone');
-      dz.addEventListener('click', () => document.getElementById('csv-file').click());
-      dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-over'); });
-      dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
-      dz.addEventListener('drop', (e) => { e.preventDefault(); dz.classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) readCsv(f); });
-      document.getElementById('prov-btn')?.addEventListener('click', doProvision);
-      panel.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openSecModal(b.dataset.edit, b.dataset.name, b.dataset.section)));
-      panel.querySelectorAll('[data-remove]').forEach(b => b.addEventListener('click', () => doRemove(b.dataset.remove, b.dataset.name, b.dataset.sid)));
-      panel.querySelectorAll('[data-pwreset]').forEach(b => b.addEventListener('click', () => openPwModal(b.dataset.pwreset, b.dataset.name)));
-    }
-
-    /* ── Import: read → preview → review → commit ──────────────────────────────
-     * Nothing is written until the operator clicks through the preview. That is not just
-     * politeness: the file may cover several courses, may name sections that do not exist,
-     * and may carry stale details for cadets we already hold. Each of those is a decision,
-     * and the only place to make it is in front of the data.
-     *
-     * An .xlsx dropped here cannot be read — parsing the zip+XML would mean shipping a
-     * spreadsheet library, and CORE.md §2 forbids adding a build step or a runtime
-     * dependency to the site. Detected by signature and explained, rather than parsed into
-     * nonsense.
-     */
-    function readCsv(file) {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const text = e.target.result;
-        if (/^PK\x03\x04/.test(text.slice(0, 4))) {
-          showImportError([
-            'That looks like an Excel workbook (.xlsx), which this page cannot read.',
-            'In Excel: File → Save As → CSV UTF-8 (Comma delimited), then upload that file.',
-          ]);
-          return;
-        }
-        await previewImport(text, file.name);
-      };
-      reader.readAsText(file);
-    }
-
-    function showImportError(lines) {
-      const box = document.getElementById('csv-preview');
-      box.style.display = '';
-      box.innerHTML = `<div class="alert alert-error">
-          ${lines.map(l => `<div>${esc(l)}</div>`).join('')}
-        </div>
-        <button class="btn btn-secondary" id="csv-cancel">Close</button>`;
-      document.getElementById('csv-cancel').onclick = clearImport;
-    }
-
-    function clearImport() {
-      staged = null;
-      const box = document.getElementById('csv-preview');
-      if (box) { box.style.display = 'none'; box.innerHTML = ''; }
-      const f = document.getElementById('csv-file'); if (f) f.value = '';
-    }
-
-    async function previewImport(text, filename) {
-      const known = Object.fromEntries(offeringSections.map(x => [x.code.toUpperCase(), x]));
-      const parsed = RI.parseRosterFile(text, {
-        knownSections: Object.keys(known).length ? known : null,
-        courseCode: ctx.currentCourseCode,
-      });
-
-      if (parsed.errors.length) { showImportError(parsed.errors); return; }
-      if (!parsed.rows.length && !parsed.unknownSections.length) {
-        showImportError(['No rows in that file matched this course.',
-          ...parsed.skipped.slice(0, 4).map(s => `Line ${s.line} (${s.label}): ${s.reason}`)]);
-        return;
-      }
-
-      // Reconcile against what we already hold. Two reads, not one per student.
-      const ids = parsed.rows.map(r => r.student_id);
-      const [{ students: existing, error }, enrolledIds] = await Promise.all([
-        R.loadExistingStudents(ids),
-        R.loadEnrolledIds(ctx),
-      ]);
-      if (error) { showImportError([`Could not check the current roster: ${error.message}`]); return; }
-
-      const { fresh, conflicts } = RI.reconcile(parsed.rows, existing, enrolledIds);
-      // rawText is kept so "create these sections" can re-run this exact parse against the
-      // new sections without asking the operator to pick the file again.
-      staged = { parsed, fresh, conflicts, filename, rawText: text,
-                 summary: RI.summarize(parsed, { fresh, conflicts }) };
-      renderPreview();
-    }
-
-    function renderPreview() {
-      const { parsed, fresh, conflicts, summary: s } = staged;
-      const box = document.getElementById('csv-preview');
-      box.style.display = '';
-
-      const decidable = conflicts.filter(c => !c.trivial);
-
-      // Unknown sections block the rows that reference them, so offer the fix inline rather
-      // than sending the operator to another tab and back.
-      const sectionOffer = parsed.unknownSections.length ? `
-        <div class="alert alert-warn">
-          <strong>${parsed.unknownSections.length} section${parsed.unknownSections.length !== 1 ? 's' : ''} in this file do not exist yet:</strong>
-          ${esc(parsed.unknownSections.join(', '))}.
-          The ${parsed.skipped.filter(k => k.code === 'unknown-section').length} row(s) in them were left out.
-          <div style="margin-top:8px">
-            <button class="btn btn-secondary btn-sm" id="mk-sections">Create these sections and re-check</button>
-          </div>
-        </div>` : '';
-
-      const skippedByCode = {};
-      parsed.skipped.forEach(k => { (skippedByCode[k.code] ||= []).push(k); });
-      const SKIP_LABEL = {
-        'other-course': 'for another course',
-        'unknown-section': 'in a section this course does not have',
-        'invalid': 'with a problem in the row',
-      };
-      const skipSummary = parsed.skipped.length ? `
-        <details style="margin-top:10px">
-          <summary class="muted" style="cursor:pointer;font-size:0.88em">
-            ${parsed.skipped.length} row(s) not imported — see why</summary>
-          <div class="table-wrap" style="margin-top:8px"><table>
-            <thead><tr><th>Line</th><th>Who</th><th>Reason</th></tr></thead>
-            <tbody>${Object.entries(skippedByCode).flatMap(([code, list]) =>
-              list.slice(0, 25).map(k => `<tr>
-                <td>${k.line}</td><td>${esc(k.label)}</td>
-                <td class="muted">${esc(k.reason)}</td></tr>`)
-              .concat(list.length > 25
-                ? [`<tr><td colspan="3" class="muted">…and ${list.length - 25} more ${esc(SKIP_LABEL[code] || code)}</td></tr>`]
-                : [])
-            ).join('')}</tbody></table></div>
-        </details>` : '';
-
-      const conflictBlock = decidable.length ? `
-        <div class="card" style="margin-top:14px">
-          <div class="card-title">${decidable.length} returning student${decidable.length !== 1 ? 's' : ''} — choose what to keep</div>
-          <div class="card-meta">These cadets already have a record, and this file has different
-            details for them. <strong>Keep existing</strong> enrolls them in this course and changes
-            nothing else. <strong>Use the file</strong> replaces the fields shown.
-            <button class="btn btn-ghost btn-sm" id="bulk-attach">Keep existing for all</button>
-            <button class="btn btn-ghost btn-sm" id="bulk-overwrite">Use the file for all</button>
-          </div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>Cadet</th><th>What would change</th><th style="white-space:nowrap">Resolution</th></tr></thead>
-            <tbody>${decidable.map((c, i) => `<tr>
-              <td style="white-space:nowrap">
-                <div>${esc(lastFirst(c.row.name))}</div>
-                <div class="muted" style="font-size:0.85em">${c.row.student_id}${c.alreadyEnrolled ? ' · already enrolled' : ''}</div>
-              </td>
-              <td>${c.diffs.map(d => `<div style="font-size:0.88em">
-                    <span class="muted">${esc(d.label)}:</span>
-                    <span style="text-decoration:line-through;opacity:0.65">${esc(d.from || '—')}</span>
-                    → <strong>${esc(d.to)}</strong></div>`).join('')}</td>
-              <td style="white-space:nowrap">
-                <label style="display:block;font-size:0.88em"><input type="radio" name="res-${i}" data-res="${i}" value="attach" ${c.resolution === 'attach' ? 'checked' : ''}> Keep existing</label>
-                <label style="display:block;font-size:0.88em"><input type="radio" name="res-${i}" data-res="${i}" value="overwrite" ${c.resolution === 'overwrite' ? 'checked' : ''}> Use the file</label>
-              </td></tr>`).join('')}</tbody></table></div>
-        </div>` : '';
-
-      const trivialCount = conflicts.length - decidable.length;
-
-      box.innerHTML = `
-        ${sectionOffer}
-        <div class="alert alert-info">
-          <strong>${s.matched}</strong> of ${s.inFile} row(s) match this course —
-          <strong>${fresh.length}</strong> new, <strong>${conflicts.length}</strong> already on file${trivialCount ? ` (${trivialCount} unchanged)` : ''}.
-          Sections: ${esc(s.sections.join(', ') || '—')}.
-          ${skipSummary}
-        </div>
-        ${fresh.length ? `<details${fresh.length <= 12 ? ' open' : ''}>
-          <summary class="muted" style="cursor:pointer;font-size:0.88em">${fresh.length} new student(s)</summary>
-          <div class="table-wrap" style="margin-top:8px"><table>
-            <thead><tr><th>Cadet ID</th><th>Name</th><th>Email</th><th>Sqdn</th><th>Section</th></tr></thead>
-            <tbody>${fresh.slice(0, 25).map(r => `<tr>
-              <td>${r.student_id}</td><td>${esc(lastFirst(r.name))}</td>
-              <td class="muted" style="font-size:0.9em">${esc(r.email)}</td>
-              <td>${esc(r.squadron)}</td><td>${esc(r.section_code)}</td></tr>`).join('')}
-            ${fresh.length > 25 ? `<tr><td colspan="5" class="muted">…and ${fresh.length - 25} more</td></tr>` : ''}
-            </tbody></table></div></details>` : ''}
-        ${conflictBlock}
-        <div class="row" style="gap:10px;margin-top:14px">
-          <button class="btn btn-primary" id="csv-commit">Import ${s.matched} student${s.matched !== 1 ? 's' : ''}</button>
-          <button class="btn btn-secondary" id="csv-cancel">Cancel</button>
-          <span id="csv-status" style="font-size:0.85em"></span>
+            : `<div class="muted" style="margin-top:14px">Nobody matches “${esc(query)}”.</div>`}
         </div>`;
 
-      box.querySelectorAll('[data-res]').forEach(r => r.addEventListener('change', () => {
-        decidable[Number(r.dataset.res)].resolution = r.value;
-      }));
-      document.getElementById('bulk-attach')?.addEventListener('click', () => {
-        decidable.forEach(c => { c.resolution = 'attach'; }); renderPreview();
-      });
-      document.getElementById('bulk-overwrite')?.addEventListener('click', () => {
-        decidable.forEach(c => { c.resolution = 'overwrite'; }); renderPreview();
-      });
-      document.getElementById('mk-sections')?.addEventListener('click', doCreateSections);
-      document.getElementById('csv-commit').onclick = doCommit;
-      document.getElementById('csv-cancel').onclick = clearImport;
-    }
-
-    /**
-     * Create the sections the file referenced, then re-parse the SAME file against them.
-     * Re-parsing rather than patching the staged rows keeps one code path: the rows that were
-     * skipped for an unknown section go through exactly the validation everything else did.
-     */
-    async function doCreateSections() {
-      const btn = document.getElementById('mk-sections');
-      const codes = staged.parsed.unknownSections;
-      btn.disabled = true; btn.textContent = 'Creating…';
-      const { error } = await R.createSections(ctx, codes);
-      if (error) { btn.disabled = false; btn.textContent = 'Create these sections and re-check';
-                   showImportError([`Could not create sections: ${error.message}`]); return; }
-      const { sections } = await R.loadOfferingSections(ctx);
-      offeringSections = sections;
-      staged.sectionsCreated = (staged.sectionsCreated || 0) + codes.length;
-      const created = staged.sectionsCreated, name = staged.filename, text = staged.rawText;
-      await previewImport(text, name);
-      if (staged) staged.sectionsCreated = created;
-    }
-
-    async function doCommit() {
-      if (!staged) return;
-      const st = document.getElementById('csv-status');
-      const btn = document.getElementById('csv-commit');
-      btn.disabled = true;
-      st.style.color = 'var(--muted)'; st.textContent = 'Importing…';
-
-      const { error, counts, invisible, auditWarning } = await R.commitRoster(
-        ctx, staged.fresh, staged.conflicts,
-        { filename: staged.filename, rowsInFile: staged.summary.inFile,
-          sectionsCreated: staged.sectionsCreated || 0 });
-
-      if (error) {
-        btn.disabled = false;
-        st.style.color = 'var(--red)'; st.textContent = '⚠ ' + error.message;
-        return;
-      }
-      st.style.color = 'var(--green)';
-      st.innerHTML = `✓ ${counts.students_created} added, ${counts.students_updated} updated, `
-        + `${counts.students_untouched} left as-is`
-        // Worth saying out loud: some of those "new" students turned out to already exist in a
-        // course this director cannot see, so their records were enrolled but not touched.
-        + (invisible ? `<div class="muted" style="margin-top:6px">${invisible} of the new
-             students already had a record from another course — they were enrolled here without
-             changing it.</div>` : '');
-      if (auditWarning) console.warn('Roster import audit row failed:', auditWarning);
-      setTimeout(() => { clearImport(); renderStudents(); }, 1600);
-    }
-
-    async function doProvision() {
-      const btn = document.getElementById('prov-btn'), out = document.getElementById('prov-result');
-      btn.disabled = true; btn.innerHTML = '<span class="spinner on-dark"></span> Provisioning…'; out.textContent = '';
-      const { data, error } = await R.provision(ctx);
-      btn.disabled = false; btn.textContent = 'Provision accounts';
-      const res = data || {};
-      if (error || res.error) { out.style.color = 'var(--red)'; out.textContent = '⚠ ' + (res.error || error.message); return; }
-      out.style.color = res.count ? 'var(--green)' : 'var(--muted)';
-      const noEmail = res.skipped_no_email || 0;
-      const otherFailures = (res.errors?.length || 0) - noEmail;
-      out.innerHTML = `✓ ${res.count || 0} account${res.count !== 1 ? 's' : ''} created`
-        // A cadet with no address is the one failure an operator can actually fix, so it gets
-        // a sentence rather than a console entry.
-        + (noEmail ? `<div style="color:var(--alert-warn-fg);margin-top:6px">
-             ${noEmail} skipped — no email address on file. Re-upload the registrar's export
-             (with its <code>Email</code> column) and provision again.</div>` : '')
-        + (otherFailures > 0 ? `<div style="color:var(--red);margin-top:4px">${otherFailures} failed — see the browser console.</div>` : '');
-      if (res.errors?.length) console.warn('Provision errors:', res.errors);
-      setTimeout(renderStudents, 2000);
-    }
-
-    async function doRemove(enrollmentId, name, sid) {
-      if (!confirm(`Remove ${name} (${sid})?\n\nThis permanently deletes their enrolment in this course, all submissions, and all scores.`)) return;
-      const { error } = await R.removeEnrollment(enrollmentId);
-      if (error) { alert('Error removing student: ' + error.message); return; }
-      renderStudents();
+      panel.querySelectorAll('[data-pwreset]').forEach(b =>
+        b.addEventListener('click', () => openPwModal(b.dataset.pwreset, b.dataset.name)));
     }
 
     /* ── Reset a student's password to the default ─────────────────────────────
@@ -463,52 +193,6 @@
       alert(`${pwTarget.name}'s password is back to the default — the last 6 digits of their cadet ID.\n\n` +
             `Tell them in person. They will have to choose a new password when they sign in.`);
       pwTarget = null;
-    }
-
-    // edit-section modal
-    function wireModal() {
-      const m = document.getElementById('sec-modal');
-      m.addEventListener('click', (e) => { if (e.target.id === 'sec-modal' || e.target.dataset.close !== undefined) m.classList.remove('open'); });
-      document.getElementById('sm-save').addEventListener('click', saveSection);
-    }
-    function openSecModal(enrollmentId, name, cur) {
-      editSid = enrollmentId;
-      document.getElementById('sm-name').textContent = name;
-      document.getElementById('sm-select').innerHTML = offeringSections.map(x => `<option value="${esc(x.id)}"${x.id === cur ? ' selected' : ''}>${esc(x.code)}</option>`).join('');
-      document.getElementById('sm-error').textContent = '';
-      document.getElementById('sec-modal').classList.add('open');
-    }
-    async function saveSection() {
-      const sec = document.getElementById('sm-select').value;
-      const err = document.getElementById('sm-error');
-      const { error } = await R.updateStudentSection(editSid, sec);
-      if (error) { err.textContent = 'Error: ' + error.message; return; }
-      document.getElementById('sec-modal').classList.remove('open');
-      renderStudents();
-    }
-
-    // ───────────────────────── Sections ─────────────────────────
-    async function renderSections() {
-      const panel = document.getElementById('panel');
-      panel.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
-      const { sections, bySection, instructors } = await R.loadSections(ctx);
-      if (!sections.length) { panel.innerHTML = `<div class="empty-state"><div class="es-ic">🗂️</div><h3>No sections yet</h3><p>Upload a roster to create sections.</p></div>`; return; }
-      const grid = sections.map(s => `<div class="sec-assign">
-        <div class="sec-tag">${esc(s.code)}</div>
-        <select data-section="${esc(s.id)}">
-          <option value="">— unassigned —</option>
-          ${instructors.map(i => `<option value="${esc(i.id)}"${i.id === (bySection[s.id]?.[0]?.instructorId) ? ' selected' : ''}>${esc(i.name)}</option>`).join('')}
-        </select></div>`).join('');
-      panel.innerHTML = `<div class="card"><div class="card-title">Assign instructors</div>
-        <div class="card-meta">Each instructor grades the sections assigned here. Changes save instantly.</div>
-        <div class="sec-grid">${grid}</div>
-        <div id="sec-status" class="muted" style="font-size:0.82em;margin-top:12px"></div></div>`;
-      panel.querySelectorAll('select[data-section]').forEach(sel => sel.addEventListener('change', async () => {
-        const out = document.getElementById('sec-status'); out.textContent = 'Saving…';
-        const { error } = await R.assignInstructor(ctx, sel.dataset.section, sel.value);
-        out.textContent = error ? '⚠ ' + error.message : `✓ ${ctx.sectionCodeOf(sel.dataset.section)} updated`;
-        setTimeout(() => { out.textContent = ''; }, 2500);
-      }));
     }
   </script>
 </body>

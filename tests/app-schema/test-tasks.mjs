@@ -77,6 +77,49 @@ function withSources(stubs, fn) {
 
 const ctx = { currentOffering: 'o1', sectionIds: ['s1'], isDirectorForCurrent: () => true };
 
+/* ── Scope: the panel counts YOUR work, not the course's (2026-07-23) ────────
+ * A director's staff row carries section_id NULL, which staff_sections() expands to every section
+ * of the offering — so before this, "9 · Review grades" under a heading reading "Needs YOUR
+ * attention" was counting nine other instructors' ungraded submissions. Nothing about the rendered
+ * box distinguishes a right number from a wrong one, which is precisely why it needs a test.
+ *
+ * The director-only sources are NOT narrowed: they ask about the offering (unstaffed sections,
+ * missing rollups, failed runs), where course-wide is the only correct scope. */
+section('faculty-tasks.js — section scope');
+
+const dirCtx = {
+  currentOffering: 'o1',
+  sectionIds: ['s1', 's2', 's3'],                    // what a director may SEE
+  staff: [{ course_offering_id: 'o1', section_id: null, role: 'director' },
+          { course_offering_id: 'o1', section_id: 's2', role: 'director' }],   // …and teaches
+  isDirectorForCurrent: () => true,
+};
+
+let sawPerStudent = null, sawDirector = null;
+await withSources([
+  { id: 'per-student', severity: 'warn', icon: '⚑',
+    load: async (c) => { sawPerStudent = c.sectionIds; return { count: 1, text: 't', link: 'a.html' }; } },
+  { id: 'offering-wide', severity: 'warn', icon: '⚑', director: true,
+    load: async (c) => { sawDirector = c.sectionIds; return { count: 1, text: 't', link: 'b.html' }; } },
+], async () => {
+  await T.loadTasks(dirCtx);
+  eq('a per-student source is given only the sections the caller teaches', sawPerStudent, ['s2']);
+  // Same narrowed ctx reaches both — a director source asks about ctx.currentOffering and never
+  // reads sectionIds, so narrowing it costs nothing and one scope rule is easier to keep right.
+  eq('…and the offering-wide sources do not read it anyway', sawDirector, ['s2']);
+});
+
+// The fallback, and it is the half that would otherwise fail silently: a director who teaches no
+// section must still get the course-wide list rather than an empty panel.
+let sawPure = null;
+await withSources([
+  { id: 'per-student', severity: 'warn', icon: '⚑',
+    load: async (c) => { sawPure = c.sectionIds; return { count: 1, text: 't', link: 'a.html' }; } },
+], async () => {
+  await T.loadTasks({ ...dirCtx, staff: [{ course_offering_id: 'o1', section_id: null, role: 'director' }] });
+  eq('a director who teaches nothing still sees everything they staff', sawPure, ['s1', 's2', 's3']);
+});
+
 await withSources([
   { id: 'ok', severity: 'warn', icon: '⚑', load: async () => ({ count: 3, text: 'three', link: 'a.html' }) },
   { id: 'boom', severity: 'alert', icon: '✖', load: async () => { throw new Error('query died'); } },
@@ -114,6 +157,11 @@ const empty = T.renderTasks([], { esc });
 check('the empty state says so in words', /Nothing outstanding/.test(empty));
 check('…and renders no boxes at all', !/duo-box/.test(empty));
 
+/* The nav bar stopped listing Grade on 2026-07-23 (P1.14) on the grounds that these boxes are how
+ * you get there. That is only true if a link survives when there are no boxes — otherwise the day
+ * an instructor has nothing outstanding is the day the Grade page has no route to it at all. */
+check('the EMPTY state still offers a way to the Grade page', empty.includes('href="grade.html"'));
+
 const html = T.renderTasks([
   { id: 'to-grade', severity: 'alert', icon: '📝', count: 9, action: 'Review grades',
     text: '9 submissions past due and not finalized', link: 'grade.html' },
@@ -138,6 +186,14 @@ const legacy = T.renderTasks([
   { id: 'x', severity: 'info', icon: '·', count: 1, text: 'something outstanding', link: 'a.html' },
 ], { esc });
 check('a source with no action falls back to its text', legacy.includes('>something outstanding<'));
+
+// A panel that silently shows a subset is worse than one that shows everything, so it says which.
+check('the row says when it is narrowed to your own sections',
+      T.renderTasks([{ id: 'x', severity: 'info', icon: '·', count: 1, text: 't', link: 'a.html' }],
+                    { esc, scoped: true }).includes('your sections'));
+check('…and says the wider thing when it is not',
+      T.renderTasks([{ id: 'x', severity: 'info', icon: '·', count: 1, text: 't', link: 'a.html' }],
+                    { esc, scoped: false }).includes('all sections you staff'));
 
 // Source text is authored in JS today, but a future source could interpolate a section code or
 // a lesson title that came from the database. Escaping is cheap now and unavailable later.
