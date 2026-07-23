@@ -166,26 +166,49 @@ arrive with their interactive activity marked `graded`, where a student *does* c
 `UNGRADED` permanently, which drags their percentage identically. **That is the P0 clock**, and it
 is why this is not "the gradebook is incomplete" but "the gradebook is about to be wrong."
 
-**Not a rendering bug, and worth saying so before someone hunts one:** the student page showed
-demonstration data because that is what is stored. The 8 fixtures carry names inside the Markdown
-(`DEMONSTRATION`, `Chen`, `Brooks`, `Garcia`, `Carmona`, `Carter`, `Ellis`) that do not match the
-roster students they are attached to (`Arden Bishop`, `Avery Rivas`, …). "Show work" rendered them
-faithfully. Those 8 students also have **no written work at all** on `preflight-02`, so nothing else
-would have filled the row.
+**The name mismatch inside the fixtures is expected and is not a defect** (director, 2026-07-23):
+those reports were produced by faculty on the legacy system, archived, and re-attached to random
+roster students to exercise the pipeline. The student page rendered them faithfully. Noted only so
+the discrepancy is not investigated a second time. *(Those 8 students also have no written work on
+`preflight-02`, which is why nothing else filled the row.)*
 
-**Decide before building** — the shape of the fix follows entirely from this, and it is a director's
-call, not an implementation detail:
+**The grading policy is settled and was never the open question** (director, 2026-07-23): an
+interactive assignment is **automatically** graded from effort — `0 → 0` · `1–2 → 1` · `3+ → 2` —
+with effort **capped at 2** when the student gives no meaningful reading reflection. That is
+implemented and correct on both halves:
 
-1. **Is `grading_mode` per offering or per offering-activity?** Moving it to `offering_activities`
-   is the honest model once one offering can carry two graded modalities, and it is DDL on `app`
-   (unseal → migrate → re-seal, CORE.md §0). Keeping it per-offering means a mixed offering has to
-   pick one mode and the other modality's grade is computed some other way.
-2. **Who writes the effort — a human, or the analysis run?** A control on the Grade tab is the
-   smaller change and keeps a human in the loop, matching how every other grade in PREP is
-   finalized. Extending `/preflight-analyze` to emit `grades.effort` for interactive takers scales
-   better and reuses the schema:1 payload the artifact already sends, but it needs the written-path
-   guard kept intact — on `grading_mode='points'` offerings `effort` **must stay out of
-   `grades.effort`** or the trigger seizes `points_earned` (`WRITTEN-SCHEMA1.md:118-121`).
+| Rule | Where it lives | State |
+|---|---|---|
+| effort → points, `≥3 → possible` · `≥1 → possible/2` · `else 0` | `grades_points_from_effort()`, `001_core_model.sql:568-586` | built, matches the policy exactly at `points_possible = 2` |
+| reflection cap, effort ≤ 2 when `reading_reflection.meaningful = false` | contract §5.2 — applied by the artifact, re-clamped server-side as a guard (`interaction_reports.py:223-231`) | built, and deliberately belt-and-braces |
+
+**So this item is not "decide a grading rule". It is "connect a rule that already exists to a column
+nothing populates."** Scope: a writer that copies the payload's `effort` into `grades.effort` (with
+the §5.2 cap re-applied as a guard, never trusting the student-controllable payload), plus the
+configuration that lets the trigger fire.
+
+**⚠ The obvious configuration change would zero every written taker. Do not make it first.**
+Setting `grading_mode='effort'` on `preflight-03`/`-04` looks like the one-line fix and is a
+data-loss bug: the trigger is `BEFORE INSERT OR UPDATE` and assigns `points_earned`
+**unconditionally** once the mode matches, and `NULL` effort maps to `0`. Every *written* taker on
+that offering — graded 2/2 through `question_scores`, with `effort` correctly NULL
+(`WRITTEN-SCHEMA1.md:118-121`) — would be silently rewritten to **0 points** on the next save.
+`preflight-03` and `preflight-04` carry *both* modalities as `graded`, so this is not hypothetical.
+
+**The one decision left, then, is narrow:** how does a *mixed* offering grade two modalities under
+one `grading_mode` column?
+
+1. **Move `grading_mode` to `offering_activities`.** The honest model once an offering can carry two
+   graded modalities. DDL on `app` (unseal → migrate → re-seal, CORE.md §0), and the trigger's
+   lookup changes with it.
+2. **Make the trigger key on the row, not the offering** — derive from effort only when
+   `NEW.effort IS NOT NULL`, leave `points_earned` alone otherwise. Much smaller (one
+   `CREATE OR REPLACE FUNCTION`), and it lets one offering serve both. It does change today's
+   `NULL effort → 0` semantics, so confirm nothing depends on that; a non-submitter has no grade row
+   at all, which suggests that path is vacuous, but check rather than assume.
+
+Either way the writer is the same, and the safe order is **writer first, configuration second** —
+a writer with no mode change is inert, whereas a mode change with no writer is the zeroing bug above.
 
 **Do not "fix" this by flipping `preflight-02`'s interactive activity to `graded`.** It is practice
 on purpose, and doing so would commit 8 students to a path that still has no grade writer — turning
@@ -282,12 +305,14 @@ per-student and open by default.
 
 **Clicking a student opens their responses to grade right there.** Rules:
 
-- ~~**An interactive submission is auto-graded and must not appear at all.**~~ **Wrong — corrected
-  2026-07-23, see P0.14.** That was true of the legacy `public` receiver (migration `013` wrote the
-  effort and the trigger derived the points). Under `app` **nothing writes `grades.effort`**, so an
-  interactive submission is not auto-graded and is exactly the kind of thing this queue exists to
-  surface. Whether it belongs here depends on how P0.14 is resolved: if a human sets the effort, it
-  is queue work; if `/preflight-analyze` does, it is not. **Settle P0.14 before building this rule.**
+- **An interactive submission is auto-graded and must not appear at all** — *right rule, but it is
+  not true yet.* The policy is confirmed (director, 2026-07-23: `0 → 0` · `1–2 → 1` · `3+ → 2`, with
+  the reflection cap), and the trigger implements it. But under `app` **nothing writes
+  `grades.effort`**, so today an interactive submission is *not* auto-graded — see **P0.14**. Build
+  this rule as stated; it becomes correct the moment P0.14 lands, and **P0.14 should land first** or
+  the queue will hide exactly the students who are silently ungraded. *(The rule was originally
+  written as already-true, inherited from the legacy `public` receiver where migration `013` wrote
+  the effort. That is what made P0.14 invisible for a month.)*
 - **A written submission opens Q2 and Q3** with the 3-state control and the feedback boxes, then
   **Finalize**. Q1 is zero-point and stays hidden (`grade.html:207,215`).
 
@@ -675,13 +700,15 @@ Verified against `001_core_model.sql:255,579-584`, `preflight-analyze/SKILL.md:3
 `WRITTEN-SCHEMA1.md:118-121`, and both Fall builders. **This unblocks P1.1** — no normalization
 layer.
 
-⚠️ **Amended 2026-07-23.** The reconciliation above is correct and the gradebook's arithmetic stands.
-What this answer got wrong was reading "the trigger derives the points" as "the interactive path is
-wired". It is not: **nothing writes `grades.effort`**, no offering is `grading_mode='effort'`, and
-the column the mode lives on cannot express an offering where *both* modalities are graded — which
-`preflight-03` and `preflight-04` already are. Full diagnosis and the two decisions it needs: **P0.14**.
-The lesson worth keeping is narrower than the original claim: *verifying that a mechanism exists is
-not verifying that anything invokes it.*
+⚠️ **Amended 2026-07-23.** The reconciliation above is correct, the gradebook's arithmetic stands,
+and the **policy is confirmed by the director** (`0 → 0` · `1–2 → 1` · `3+ → 2`, effort capped at 2
+without a meaningful reading reflection) — the trigger implements exactly that. What this answer got
+wrong was reading "the trigger derives the points" as "the interactive path is wired". It is not:
+**nothing writes `grades.effort`**, no offering is `grading_mode='effort'`, and the column the mode
+lives on cannot express an offering where *both* modalities are graded — which `preflight-03` and
+`preflight-04` already are. Full diagnosis and the one decision left: **P0.14**. The lesson worth
+keeping is narrower than the original claim: *verifying that a mechanism exists is not verifying
+that anything invokes it.*
 
 *(Caveat: `PROJECT.md:91-98`'s `question_scores` example still shows the retired 5-points-per-question
 shape. That block only — the 0–5 diagnostics documented elsewhere in that file are correct. See §5.)*

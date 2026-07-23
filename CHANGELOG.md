@@ -35,18 +35,44 @@ That clock is why this is P0 rather than "the gradebook is incomplete."
 
 The "demonstration data" on the student page is not a rendering bug — it is what is stored. The 8
 fixtures carry names inside the Markdown (`DEMONSTRATION`, `Chen`, `Brooks`, …) that do not match
-the roster students they are attached to. Recorded so nobody hunts a bug that is not there.
+the roster students they are attached to. **Expected**: the director confirms those reports were run
+by faculty on the legacy system, archived, and re-attached to random roster students to exercise the
+pipeline. Recorded so the discrepancy is not investigated a second time.
+
+### Corrected same day — the grading policy was never the open question
+
+The director confirmed the intended rule: an interactive assignment is **automatically** graded from
+effort — `0 → 0` · `1–2 → 1` · `3+ → 2` — with effort capped at 2 when the reading reflection is not
+meaningful. **Both halves are already implemented and match the policy exactly**: the curve in
+`grades_points_from_effort()` (`001_core_model.sql:568-586`) at `points_possible = 2`, and the cap in
+contract §5.2, applied by the artifact and re-clamped server-side as a guard
+(`interaction_reports.py:223-231`).
+
+So P0.14 was re-scoped from "decide who grades interactive work" to what it actually is: **connect a
+rule that already exists to a column nothing populates.** One decision remains — how a *mixed*
+offering grades two modalities under one `grading_mode` column.
+
+**And one hazard was found while re-scoping, which is the reason this correction is worth a
+CHANGELOG entry of its own.** Setting `grading_mode='effort'` on `preflight-03`/`-04` looks like the
+one-line fix and is a data-loss bug: the trigger is `BEFORE INSERT OR UPDATE` and assigns
+`points_earned` unconditionally once the mode matches, with `NULL` effort mapping to `0`. Both those
+offerings carry written **and** interactive activities as `graded`, so every written taker — scored
+2/2 through `question_scores`, `effort` correctly NULL — would be silently rewritten to 0 points on
+the next save. The safe order is **writer first, configuration second**: a writer without the mode
+change is inert; the mode change without a writer is the zeroing bug.
 
 ### Changed — `docs/ROADMAP.md`
 
-- **Added P0.14**, with the diagnosis, the two decisions it turns on (is `grading_mode` per offering
-  or per offering-activity — DDL on `app`; and does a human or `/preflight-analyze` write the
-  effort), and an explicit warning **not** to "fix" it by flipping `preflight-02` to `graded`, which
-  would convert 8 blank cells into 8 permanently ungraded ones.
+- **Added P0.14**, with the diagnosis, the confirmed policy and where each half of it is already
+  built, the remaining mixed-offering decision (move `grading_mode` to `offering_activities`, or key
+  the trigger on `NEW.effort IS NOT NULL` instead of the offering), the zeroing hazard above, and an
+  explicit warning **not** to "fix" it by flipping `preflight-02` to `graded` — which would convert
+  8 blank cells into 8 permanently ungraded ones.
 - **Corrected P1.14**, which instructed the future grading queue to hide interactive submissions
-  because they "are auto-graded." True of the legacy `public` receiver (migration `013`); false
-  under `app`. Left struck through rather than deleted — the queue's design depends on how P0.14
-  resolves, and the stale rule should not be silently re-derived.
+  because they "are auto-graded." The rule is right and should be built as written; it is simply not
+  true yet, so P0.14 must land first or the queue will hide exactly the students who are silently
+  ungraded. It was inherited already-true from the legacy `public` receiver (migration `013`), which
+  is what kept P0.14 invisible.
 - **Amended decision Q2.** Its arithmetic is right and P1.1 was correctly unblocked by it; what it
   got wrong was reading "the trigger derives the points" as "the path is wired." Verifying that a
   mechanism exists is not verifying that anything invokes it.
