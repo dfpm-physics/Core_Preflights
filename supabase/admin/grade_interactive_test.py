@@ -194,30 +194,32 @@ def test_live_write(conn):
     g = cur.fetchone()
     check("effort stored", g["effort"], effort)
     check("points match the curve", g["points_earned"], points)
-    check("provisional, not finalized", g["is_finalized"], False)
-    check("source is ai_suggested (lands in the review queue)", g["source"], "ai_suggested")
+    check("auto-final: interactive is finalized on write", g["is_finalized"], True)
+    check("source is derived (auto-final, not a review-queue item)", g["source"], "derived")
     check("linked to the submission", g["submission_id"], r["submission_id"])
     # The migration-014 guard: an effort-graded row must carry no question_scores.
     check("no question_scores — satisfies grades_one_grading_mechanism", g["question_scores"], {})
 
-    # Idempotence: a second run must not double-write or change the answer.
+    # Idempotence: a second run must not double-write. And because the existing row is DERIVED, a
+    # re-submit IS allowed to update it in place (the guard only protects human-graded work).
     n2 = write_grade(cur, {**r, "effort": effort, "points": points})
     cur.execute("""SELECT count(*) AS n FROM grades
                     WHERE enrollment_id = %s AND assignment_offering_id = %s""",
                 (r["enrollment_id"], r["assignment_offering_id"]))
     check("re-run updates in place, never duplicates", cur.fetchone()["n"], 1)
-    check("re-run still writes exactly one row", n2, 1)
+    check("a derived finalized grade is re-writable (re-submit)", n2, 1)
 
-    # A finalized grade is untouchable — the rule that protects an instructor's published work.
-    cur.execute("""UPDATE grades SET is_finalized = true
+    # But an INSTRUCTOR-finalized grade is untouchable — the rule that protects published human
+    # work. "Auto-grade the interaction as long as there wasn't a response already graded."
+    cur.execute("""UPDATE grades SET is_finalized = true, source = 'instructor'
                     WHERE enrollment_id = %s AND assignment_offering_id = %s""",
                 (r["enrollment_id"], r["assignment_offering_id"]))
     n3 = write_grade(cur, {**r, "effort": 0, "points": Decimal("0")})
-    check("finalized grade refuses the write", n3, 0)
+    check("an instructor-finalized grade refuses the write", n3, 0)
     cur.execute("""SELECT points_earned FROM grades
                     WHERE enrollment_id = %s AND assignment_offering_id = %s""",
                 (r["enrollment_id"], r["assignment_offering_id"]))
-    check("finalized points unchanged", cur.fetchone()["points_earned"], points)
+    check("instructor-finalized points unchanged", cur.fetchone()["points_earned"], points)
 
 
 def main():

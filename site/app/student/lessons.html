@@ -148,16 +148,23 @@
 
     /* ── Detail ───────────────────────────────────────────────────────────── */
 
+    // Route by the OFFERING id, not the written activity id. assignments.html resolves ?a= against
+    // offeringId (assignments.html:71); handing it the activity id matched nothing and fell through
+    // to the full list, which is the "clicking written sends me to a list of everything" bug.
     function writtenHref(l) {
-      return `assignments.html?a=${encodeURIComponent(l.preflight.id)}`;
+      return `assignments.html?a=${encodeURIComponent(l.offeringId)}`;
     }
 
     /** Warning 2 of 3 (STUDENT-LESSON-VIEW §6): fires on LAUNCH, not on submit — by the time a
      *  cadet reaches the receiver they've already done the work, so warning them there and having
      *  them back out wastes it. A confirm, never a refusal: launching to study is always
-     *  legitimate (D8), so the artifact link must stay usable either way. */
+     *  legitimate (D8), so the artifact link must stay usable either way.
+     *
+     *  Only warns when the interactive path is GRADED. If it is practice, submitting a report
+     *  never commits and never touches the grade (student-data.js submitInteractionReport), so the
+     *  "your written answers stop counting" warning would be simply false. */
     function launchInteraction(l) {
-      if (l.writtenAnswerCount > 0 && !l.completion) {
+      if (l.interactiveGraded && l.writtenAnswerCount > 0 && !l.completion) {
         const n = l.writtenAnswerCount;
         const ok = confirm(
           `Launch the interactive version?\n\n` +
@@ -183,19 +190,40 @@
       </div>`;
     }
 
-    /** The launch CTA is present in EVERY state with an interaction — it's just a link to the
-     *  artifact, so running it is never restricted. The database is the only limit: one accepted
-     *  submission per lesson (pir_due_guard, migration 021). */
+    /** The interactive card in every state OTHER than a still-open choice (which choiceBlock
+     *  already draws). Three shapes:
+     *   - GRADED + launchable  → normal launch CTA; its report carries the grade.
+     *   - practice + launchable → launch CTA labelled practice; running it never affects the grade.
+     *   - not yet available     → the SAME card, greyed and disabled, saying WHEN it opens. This is
+     *     the "show both boxes but the interaction is greyed until the written is done" rule: the
+     *     card is present so the student knows the path exists, but it cannot be launched until its
+     *     `available_after` gate (submit / due) is met. */
     function studyBlock(l) {
       if (!l.hasInteraction) return '';
+      const graded = l.interactiveGraded;
+
+      if (!l.interactiveAvailable) {
+        const when = l.interactiveGateReason || 'later';
+        return `<div class="card" aria-disabled="true" style="opacity:0.55">
+          <div class="card-title">Interactive lesson <span class="tag">practice</span></div>
+          <div class="lesson-actions" style="margin-top:10px">
+            <button class="btn btn-secondary" disabled title="Not available yet">Launch ↗</button>
+          </div>
+          <div class="study-note">Available ${esc(when)}.</div>
+        </div>`;
+      }
+
+      const note = graded
+        ? `Launch this any time — to work through it, or to review later. You can run it as many
+           times as you like; only your first submitted report counts toward your grade.`
+        : `Practice — launch it any time to work through the material or review. It does not affect
+           your grade for this assignment.`;
       return `<div class="card">
-        <div class="card-title">Interactive lesson</div>
+        <div class="card-title">Interactive lesson${graded ? '' : ' <span class="tag">practice</span>'}</div>
         <div class="lesson-actions" style="margin-top:10px">
           <button class="btn btn-secondary" id="study-btn">Launch ↗</button>
         </div>
-        <div class="study-note">Launch this any time — to work through it, or to review later.
-          You can run it as many times as you like; only your first submitted report counts
-          toward your grade.</div>
+        <div class="study-note">${note}</div>
       </div>`;
     }
 

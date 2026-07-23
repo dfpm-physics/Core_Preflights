@@ -44,10 +44,18 @@ Anything you did on the other path is kept and your instructor can still see it 
 what counts. If you picked the wrong one, ask your instructor; they can release it so you can
 choose again.
 
+Sometimes the interactive lesson is offered only for **practice** — it does not carry the grade, and
+it may be locked until you submit your written preflight or the deadline passes. When that is the
+case the assignment says so, and the practice card is greyed out until it opens.
+
 ## Seeing your grade
 
-Grades appear on the assignment once your instructor has reviewed them. A score you can see has been
-checked by a person — see [How AI is used on your work](help.html?doc=ai-and-your-work).
+For a **written preflight**, the grade appears once your instructor has reviewed it — a score you can
+see has been checked by a person.
+
+For an **interactive lesson**, the grade is worked out automatically from your effort and appears as
+soon as you submit your report — there is nothing to wait for. It still shows up on the assignment
+like any other grade. See [How AI is used on your work](help.html?doc=ai-and-your-work).
 
 ## Something is wrong
 

@@ -15,6 +15,13 @@ THE STEP THIS IS
   so an interactive submitter got no grade, no points, and a blank gradebook cell. See ROADMAP
   P0.14 for the full diagnosis.
 
+NOW A BACKFILL TOOL
+  As of migration 015, a committed interactive submission grades itself via a DB trigger
+  (grade_interactive_on_commit). So for every LIVE commit this script is redundant. What it is for:
+  interactive work that committed BEFORE the trigger existed, or that a config change makes gradable
+  after the fact. It writes the IDENTICAL row the trigger writes (effort, source='derived',
+  is_finalized=true), so running it can never disagree with the automatic path.
+
 WHAT IT DOES NOT DO
   It does not judge anything. The effort was assessed by the artifact and already stored; this
   reads it, re-applies the reflection cap as a server-side guard, and writes one grades row. The
@@ -30,10 +37,11 @@ THE RULES IT ENFORCES (each one is a way this could go wrong)
   * Only `status='committed'` submissions whose `chosen_activity_id` IS the interactive activity.
     That commitment is the block that decides which of a student's two attempts counts; this
     script reads that decision, it never makes it.
-  * `is_finalized=false` and `source='ai_suggested'`, always. CORE.md §6: an AI-produced score is
-    a suggestion until a human finalizes it. 'ai_suggested' is also what puts these rows in the
-    dashboard's "AI grades awaiting your review" queue (faculty-tasks.js:88-117) — 'derived' would
-    grade them into invisibility, which is the failure this whole item is about.
+  * `is_finalized=true` and `source='derived'`. The director's decision (2026-07-23): effort IS the
+    grade and the artifact already assessed it, so an interactive grade is auto-final and
+    student-visible, matching the legacy `public` behaviour. It is NOT 'ai_suggested', so it does
+    not sit in the dashboard review queue (faculty-tasks.js) — there is nothing to review. An
+    instructor can still reopen one from the Grade tab if a report looks tampered.
   * The §5.2 reflection cap is RE-APPLIED here (effort <= 2 when reading_reflection.meaningful is
     false), not trusted. The payload rides in a URL hash the student controls; the artifact
     applying the cap is not a reason to skip applying it again.
@@ -245,19 +253,24 @@ def cmd_status(args, conn):
 # ── The write ────────────────────────────────────────────────────────────────────────
 # Module-level so the test suite exercises THIS statement rather than a paraphrase of it. A test
 # that reimplements the SQL it is testing proves only that the author can write it twice.
+# Writes the SAME row the migration-015 trigger writes: derived, finalized. The ON CONFLICT WHERE
+# mirrors the trigger's guard — replace an unreleased draft or a prior derived (interactive) grade,
+# never a finalized instructor/imported one.
 UPSERT_GRADE = """
     INSERT INTO grades (enrollment_id, assignment_offering_id, submission_id,
-                        effort, points_earned, points_possible,
+                        effort, points_earned, points_possible, question_scores,
                         source, is_finalized)
-         VALUES (%(enr)s, %(off)s, %(sub)s, %(eff)s, %(pts)s, %(poss)s,
-                 'ai_suggested', false)
+         VALUES (%(enr)s, %(off)s, %(sub)s, %(eff)s, %(pts)s, %(poss)s, '{}'::jsonb,
+                 'derived', true)
     ON CONFLICT (enrollment_id, assignment_offering_id) DO UPDATE
-            SET effort        = EXCLUDED.effort,
-                points_earned = EXCLUDED.points_earned,
-                submission_id = EXCLUDED.submission_id,
-                source        = 'ai_suggested',
-                updated_at    = now()
-          WHERE NOT grades.is_finalized
+            SET effort          = EXCLUDED.effort,
+                points_earned   = EXCLUDED.points_earned,
+                submission_id   = EXCLUDED.submission_id,
+                question_scores = '{}'::jsonb,
+                source          = 'derived',
+                is_finalized    = true,
+                updated_at      = now()
+          WHERE grades.is_finalized = false OR grades.source = 'derived'
 """
 
 

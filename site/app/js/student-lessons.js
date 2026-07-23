@@ -21,7 +21,18 @@
 // sources, and there is now exactly one (app.grades, UNIQUE per enrolment per offering).
 
 import { loadAssignmentStatuses } from './student-data.js';
-import { questionsOf, answeredCount, displayPoints } from './schema.js';
+import { questionsOf, answeredCount, displayPoints, isActivityAvailable } from './schema.js';
+
+/**
+ * Why the interactive path is not launchable yet, in words a student can act on.
+ * `available_after` is the DB field; this turns it into the sentence the gated card shows.
+ * Only 'submit' and 'due' gate; 'always' never reaches here.
+ */
+function interactiveGate(activity) {
+  if (activity?.availableAfter === 'submit') return 'after you submit your written responses';
+  if (activity?.availableAfter === 'due') return 'after the due date';
+  return null;
+}
 
 /**
  * The states a lesson can be in for one student (STUDENT-LESSON-VIEW §4).
@@ -96,6 +107,16 @@ export async function loadLessonStatuses(ctx) {
     const state = resolveState(item);
     const savedAnswers = written ? (item.submission?.activities?.[written.id]?.content || null) : null;
 
+    // May the student LAUNCH the interactive right now? The DB field `available_after` gates it
+    // (`submit` unlocks once written is committed; `due` unlocks after the deadline), and after
+    // the deadline everything opens as study mode regardless — which is the "…or the assignment
+    // has passed the due date" half of the rule. An invisible activity never opens.
+    const interactiveVisible = !!interactive && interactive.isVisible !== false;
+    const interactiveAvailable = interactiveVisible &&
+      (isActivityAvailable(interactive, { submission: item.submission, isPast: item.isPast })
+       || item.isPast);
+    const interactiveGraded = interactive?.gradingRole === 'graded';
+
     // `completion` keeps its old shape so the page's renderers are untouched, but it is now
     // derived from the single grades row rather than a separate lesson_completions table.
     const committed = item.submission?.status === 'committed';
@@ -128,7 +149,15 @@ export async function loadLessonStatuses(ctx) {
         description: interactive.content?.description || null,
         artifact_url: interactive.content?.artifact_url || null,
         gradingRole: interactive.gradingRole,
+        availableAfter: interactive.availableAfter,
       } : null,
+
+      // Whether the interactive path can be launched now, whether it carries a grade, and — when
+      // it cannot be launched yet — the reason to show in its place. Computed here so the page
+      // never re-derives the availability rule (STUDENT-LESSON-VIEW §4).
+      interactiveAvailable,
+      interactiveGraded,
+      interactiveGateReason: interactiveAvailable ? null : interactiveGate(interactive),
 
       due: item.due, isPast: item.isPast, isExtended: item.dueSource === 'extension',
       draft: savedAnswers ? { answers: savedAnswers } : null,

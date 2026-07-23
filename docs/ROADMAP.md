@@ -124,6 +124,65 @@ auth user fails rather than tidying up.)*
 Worth doing sooner than the seal: **duplicate unconfirmed users on the same address are the most
 likely reason the second account would not authenticate with a correctly copy-pasted password.**
 
+### P0.16 — Interactive grades itself on commit; student nav gating · **BUILT 2026-07-23, one migration pending apply**
+
+*Director follow-up to P0.14: the interactive grade should appear on its own — no run — and be
+auto-final, but only when the interactive path is an ALLOWED (graded) mode; and the student-facing
+choice/navigation had several defects.*
+
+**Grading — auto-final, reactive (frontend + tooling shipped; trigger written, apply BLOCKED):**
+
+- Migration `app/015_interactive_autograde.sql` — a `SECURITY DEFINER` trigger
+  (`grade_interactive_on_commit`) that, when a submission commits to a **graded** interactive
+  activity, copies the report effort (with the §5.2 cap re-applied) onto a **finalized, derived**
+  grade — student-visible immediately, no review step, matching the legacy `public` behaviour the
+  director wanted. Practice commits get **no** grade. A finalized instructor/imported grade is never
+  clobbered ("auto-grade as long as there wasn't a response already graded"). **NOT APPLIED:** the
+  live-DDL apply was refused by the harness permission classifier while the director was away; the
+  migration is written and logic-verified and needs the director to apply it (unseal → migrate →
+  re-seal) or approve the command. `autograde_interactive_test.py` verifies it live the moment it
+  lands.
+- `grade_interactive.py` + its 49-check suite re-aligned to the auto-final policy (`source='derived'`,
+  `is_finalized=true`); the script is now a **backfill** tool writing the identical row the trigger
+  writes. Until 015 is applied, a committed interactive submission still produces no grade on its own
+  — the script is the interim path.
+
+**Student navigation (shipped, no DDL):**
+
+- **Routing bug fixed** — clicking *Written preflight* linked to `assignments.html?a=<activity id>`,
+  which that page resolves against `offeringId`; the mismatch dumped the student on the full list.
+  Now links by offering id, so it opens the actual written input — including the written-only case.
+- **Interactive availability is now respected** — the interactive card is launchable only when its
+  `available_after` gate is met (`submit`/`due`, or always past the deadline); before then it shows
+  **greyed and disabled** with the reason ("Available after you submit your written responses"),
+  instead of a live Launch button on a practice activity the assignment says isn't open yet.
+- **The launch warning ("your written answers stop counting") only fires when the interactive path
+  is graded** — on a practice activity it was simply false.
+
+### P0.15 — "Once a director, always a director" — role demotion never took · ✅ **FIXED 2026-07-23**
+
+*Director report: you cannot set a faculty member back to instructor in a course once they've been a
+director. Director is meant to be a per-course privilege; system admin is the global one.*
+
+**Root cause, confirmed against live `app`:** the model is right — director lives in
+`staff_assignments` per offering, sysadmin in `instructors.is_global_admin` — but a director holds
+**several** `staff_assignments` rows (offering-wide + one per section), all `role='director'`, and
+`setRole()` (`faculty-admin.js`) upserted only the offering-wide row. The section-scoped rows kept
+reading `director`, and `director_offerings()` (002_rls.sql) grants the privilege on a director role
+in **any** row — so the person stayed a director no matter how many times you chose Instructor.
+
+**Fix:** `setRole()` now updates the role on **every** row the person holds in the offering, then
+guarantees the offering-wide row — so a demotion actually clears every director row. Verified live
+(rolled back): the old logic left a mixed director/instructor state and `director_offerings()` still
+returned the person; the new logic demotes cleanly and promote-back still works.
+
+**⚠ Two live records are already corrupted by the old bug and need the director's call:**
+`Kimberly de La Harpe` and `TJ Hardy` both hold an offering-wide `instructor` row with section rows
+still `director`, so they currently read as (and have the privileges of) directors despite a
+half-completed demotion. I did **not** auto-repair them — whether they should be directors or
+instructors is a privilege decision, not something to guess. Resolve by re-selecting their role in
+Staff (the fixed `setRole` will clean it up), or tell me the intended role and I'll apply it.
+
 ### P0.14 — The interactive path produces no grade · ✅ **DONE 2026-07-23 (migration applied)**
 
 *Director's observation: interactive submitters get no grade and no mark in the gradebook matrix,

@@ -8,6 +8,73 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-23 — Matthew Recker via Claude (auto-final interactive grading · student nav gating · role-demotion fix)
+
+An autonomous batch (director away, `/loop`). Three areas; all code + tests shipped, one migration
+written but not yet applied (the harness blocked the live-DDL apply — see below).
+
+### Grading — an interactive submission grades itself, auto-final
+
+Follows the director's decision that an interactive grade should appear on its own, immediately,
+finalized, **only when the interactive path is a graded (allowed) mode**.
+
+- **`supabase/migrations/app/015_interactive_autograde.sql` — WRITTEN, NOT APPLIED.** A
+  `SECURITY DEFINER` trigger (`grade_interactive_on_commit`): when a submission commits to a
+  **graded** interactive activity, it copies the report effort (re-applying the §5.2 reading-
+  reflection cap server-side) onto a **finalized, derived** grade — student-visible at once, no
+  review step. Practice commits produce no grade. A finalized instructor/imported grade is never
+  overwritten (a prior *derived* one is, so re-submits work). RLS-safe: `grades` has RLS enabled but
+  not forced, so the owning definer writes past the student's policy; scoped to the firing
+  submission's own enrolment. **The live apply was refused by the harness permission classifier**
+  while the director was away — it is logic-verified and needs the director to apply it (unseal →
+  migrate → re-seal) or approve the command.
+- **`grade_interactive.py` + its 49-check suite re-aligned to auto-final** (`source='derived'`,
+  `is_finalized=true`). The script is now a **backfill** tool that writes the identical row the
+  trigger writes; until 015 is applied it is the interim way an interactive submission gets a grade.
+- **`autograde_interactive_test.py`** (new) — verifies the trigger live in rolled-back transactions
+  (graded→grade, practice→none, cap→2, instructor grade protected, no-effort→none). Reports and
+  exits cleanly with "015 not applied" until the migration lands.
+
+### Student portal — navigation and availability
+
+- **Routing bug fixed.** Clicking *Written preflight* linked to `assignments.html?a=<activity id>`,
+  but that page resolves `?a=` against the **offering** id — the mismatch fell through to the full
+  "My written preflights" list. Now links by offering id (`lessons.html` `writtenHref`), so it opens
+  the actual written input, including when an assignment is written-only.
+- **Interactive availability respected.** The interactive card is launchable only when its
+  `available_after` gate is met (`submit` / `due`, or always once past the deadline). Before then it
+  renders **greyed and disabled** with the reason ("Available after you submit your written
+  responses") instead of a live Launch button on a practice activity that isn't open yet. Reuses the
+  existing tested `isActivityAvailable()`; `student-lessons.js` now carries the availability + gate
+  reason onto each row.
+- **Launch warning gated.** The "submitting the interactive makes your written answers stop counting"
+  confirm now fires only when the interactive path is **graded** — on a practice activity it was
+  simply false.
+
+### Staff — role demotion now takes ("once a director, always a director" fixed)
+
+- **`faculty-admin.js` `setRole()`** upserted only the offering-wide `staff_assignments` row, but a
+  director holds section-scoped rows too, all `role='director'`, and `director_offerings()` grants
+  the privilege on a director role in **any** row. So choosing Instructor never removed the director
+  privilege. `setRole()` now updates the role on **every** row the person holds in the offering, then
+  guarantees the offering-wide row. Verified live (rolled back): old logic left a mixed state and the
+  person stayed a director; new logic demotes cleanly and promote-back works. Director stays a
+  per-offering privilege; `is_global_admin` (system admin) is untouched.
+- **Two live records are already corrupted by the old bug** and were left for the director to
+  resolve, not auto-repaired (the intended role is a privilege decision, not a guess):
+  `Kimberly de La Harpe` and `TJ Hardy` each hold an offering-wide `instructor` row with section rows
+  still `director`, so they currently read and act as directors. Re-selecting their role in Staff
+  cleans it up under the fixed `setRole`.
+
+### Docs
+
+- `site/app/help/student-getting-started.md` — distinguishes written grades (reviewed by a person)
+  from interactive grades (auto-final on effort), and notes practice interactive availability.
+- ROADMAP: **P0.16** (auto-final + nav), **P0.15** (role demotion). Verification note that 015's
+  live apply is pending.
+
+---
+
 ## 2026-07-23 — Matthew Recker via Claude (P0.14 — the interactive grade writer, built + migration applied)
 
 ### Schema — migration `app/014_effort_grades_per_row.sql` APPLIED

@@ -98,8 +98,30 @@ export function addStaff(ctx, { name, email, password, role }) {
   });
 }
 
-/** Change someone's offering-wide role. Plain DML — no edge function needed. */
-export function setRole(ctx, instructorId, role) {
+/**
+ * Change someone's role for THIS offering — on EVERY row they hold in it.
+ *
+ * The role lives on each staff_assignments row: the offering-wide one (section_id NULL) AND any
+ * section-scoped rows. This used to upsert only the offering-wide row, which left a demoted
+ * director's section rows still reading 'director' — and `director_offerings()` (002_rls.sql)
+ * grants the director privilege on a director role in ANY row. So the person stayed a director
+ * however many times you picked "Instructor": the "once a director, always a director" bug.
+ *
+ * A person holds ONE role per offering; split-role rows are never intended and are what broke.
+ * So: set the role on every existing row, then guarantee the offering-wide row exists (that is how
+ * a director is recorded, and a harmless default for an instructor the admin can narrow later with
+ * Sections). Director is the per-offering privilege here; system admin is the global one
+ * (instructors.is_global_admin) and is deliberately untouched by this.
+ *
+ * (Self-demotion isn't reachable — admin.html disables the select on your own row — so the RLS
+ * corner where a director updates their own last director row away mid-statement never arises.)
+ */
+export async function setRole(ctx, instructorId, role) {
+  const upd = await db.from('staff_assignments')
+    .update({ role })
+    .eq('instructor_id', instructorId)
+    .eq('course_offering_id', ctx.currentOffering);
+  if (upd.error) return upd;
   return db.from('staff_assignments').upsert({
     instructor_id: instructorId,
     course_offering_id: ctx.currentOffering,
