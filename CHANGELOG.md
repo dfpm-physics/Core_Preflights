@@ -8,6 +8,16 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-23 — Matthew Recker via Claude (assignment editor: collapsible activity sections)
+
+The two activity sections in the assignment editor (Free-Response Preflight, AI Interaction) made
+the form long. Each now **starts collapsed** when the editor opens; a chevron in the section header
+expands one when needed, and choosing **Include** expands that section (you just decided to fill it
+in). UI state only — never saved, and unchanged from what *Include / Not this term* means
+(`site/app/faculty/lessons.html`).
+
+---
+
 ## 2026-07-23 — Matthew Recker via Claude (student two-box view for required-written · gradebook drops the effort bar)
 
 ### Changed — student assignment view: one layout for both-loaded assignments
