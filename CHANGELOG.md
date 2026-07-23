@@ -8,6 +8,29 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-23 — Matthew Recker via Claude (test-faculty creds → the untracked env)
+
+### Changed — the P0.5 test login lives in `supabase/admin/.env`, not in source or on the line
+
+The disposable faculty account's email, password and UID now sit in the gitignored
+`supabase/admin/.env` as `PREP_TEST_FACULTY_EMAIL` / `_PASSWORD` / `_UID`, beside the DB role
+credentials the same file already holds. One source of truth for the three consumers:
+
+- `scripts/test_faculty_account.py` reads the UID from there (was a hardcoded default). Absent, it
+  exits with instructions rather than operating on nothing.
+- `tests/browser-harness/{pass,checks}.mjs` fall back to the env via a new `env.mjs`, so the
+  walkthrough runs with **no secret on the command line** — verified: `checks.mjs --tier director`
+  passed 13/13 with credentials supplied only by the env.
+
+**Why this matters beyond tidiness:** the auth user is recreated by hand in the Supabase dashboard
+whenever it is rebuilt, and that mints a **new UID every time** — which is exactly why the account
+was recreated three times on 2026-07-22. Putting the UID in the one file that is *meant* to change
+makes a rebuild a one-line edit instead of a source change in three places, and keeps the password
+out of shell history and scratch files. `.env` is covered by the `.env*` gitignore rule; confirmed
+it stays untracked. CORE.md §3's secrets table updated to say the file now holds this too.
+
+---
+
 ## 2026-07-23 — Matthew Recker via Claude (gradebook colour layer)
 
 *Director follow-up to the fifth batch: "I want to see some colours on the gradebook like my other
