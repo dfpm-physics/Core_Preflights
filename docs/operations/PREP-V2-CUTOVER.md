@@ -56,8 +56,8 @@ each role connects and holds exactly the privileges it should, and no more.
 
 4. **Run the invariant suite** —
    [`../../supabase/admin/app_invariant_test.py`](../../supabase/admin/app_invariant_test.py). It
-   asserts the structural guarantees (one grade per enrolment/offering and bounded by its points, one
-   submission per enrolment/offering, the gradable and lock triggers, the attributable unlock).
+   asserts the structural guarantees (one grade per enrollment/offering and bounded by its points, one
+   submission per enrollment/offering, the gradable and lock triggers, the attributable unlock).
 5. **Run the RLS suite** —
    [`../../supabase/admin/app_rls_test.py`](../../supabase/admin/app_rls_test.py). It must show the
    `anon` role reads nothing, and that a student cannot read or write another student's rows. The

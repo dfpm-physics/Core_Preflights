@@ -8,6 +8,56 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-23 — Matthew Recker via Claude (roster folds into Course Admin · `enrolment` → `enrollment`)
+
+Two corrections to the batch below, both the director's call.
+
+### Changed — Roster and Enrollment are one tab of Course Admin
+
+The entry below split them into two standalone pages. **Both are deleted.** Everything they held is
+now `site/app/faculty/admin.html` → the **Students** tab, beside Staff and Export: the roster table
+with a search box, the registrar import and its reconciliation, account provisioning, section
+placement, and the password reset.
+
+The split's reasoning was not wrong — a destructive bulk import should not head the page you open to
+check a squadron number, which is why the roster table is first here and the import sits in a
+collapsed panel below it. What it got wrong was the **cost**: two more nav entries for one job. The
+nav bar is the scarcer resource, and Course Admin was already where a director went to manage the
+offering. A roster is one more thing about the offering.
+
+Nav loses both entries. `admin.html` is the only one, and stays director-gated.
+`test-nav.mjs` now asserts the bar's shape and that **every href resolves to a file that exists** —
+the failure mode of any page merge. `faculty-student.js`'s back-link allowlist follows the move.
+
+> **⚠️ A claim in the help docs turns out to have been wrong all along, and it is corrected rather
+> than carried.** `instructor-accounts.md` said *"any instructor assigned to the course can [reset a
+> cadet's password], not just the course director"*. The edge function really does admit any staff
+> member of the offering — but **no page has ever offered them the button**, because the only page
+> carrying it has always been director-gated. Nothing regressed today; the doc was describing an
+> intention. If lockouts start costing a day, the fix is a read-only Students tab for instructors,
+> not a password field.
+
+### Changed — `enrolment` → `enrollment` everywhere it is not a frozen record
+
+American spelling, as asked. British spelling had leaked into ~50 files' comments, prose, and local
+variable names while the database column has been `enrollment_id` all along — so the code disagreed
+with the schema it was reading. Normalized across `site/`, `tests/`, `scripts/`, `supabase/admin/`,
+`supabase/functions/`, `.ai/`, and the live `docs/` (ROADMAP, architecture, operations).
+
+**Deliberately not touched, so the remaining hits are not mistaken for misses:**
+
+- `docs/decisions/` and `docs/contracts/` — point-in-time records and frozen interfaces, superseded
+  rather than refreshed (CORE.md §5).
+- `supabase/migrations/**` — an applied chain. The file on disk should match what was executed,
+  comments included.
+- Historical `CHANGELOG.md` entries — this is the audit trail; today's entries are written correctly
+  and the older ones stay as they were said.
+
+Verified: `node --check` over every shipped module, all 21 inline page modules, `py_compile` over
+every tracked Python file, and the full offline `tests/app-schema` suite green.
+
+---
+
 ## 2026-07-23 — Matthew Recker via Claude (roadmap P1.8 · P1.9 · P1.10 · P1.11 · P1.14)
 
 Five roadmap items, frontend only. **No DDL, no migration, no live data touched.** Verified by the

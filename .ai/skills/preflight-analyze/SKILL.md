@@ -230,7 +230,7 @@ If either field is null, skip this step (proceed without RAG context).
 
 ---
 
-## Step 4 — Fetch the Roster (sections → staff → enrolments)
+## Step 4 — Fetch the Roster (sections → staff → enrollments)
 
 ### 4a. Sections, and the day filter
 
@@ -260,8 +260,8 @@ GET {SUPA_URL}/rest/v1/enrollments?select=id,student_id,section_id,status,studen
 Headers: READ_HEADERS
 ```
 
-Build `enrolmentMap[enrollment_id] = { student_id, name, section_id }` and the reverse
-`byStudent[student_id] = enrollment_id`. Only `status = 'active'` enrolments count; a dropped cadet
+Build `enrollmentMap[enrollment_id] = { student_id, name, section_id }` and the reverse
+`byStudent[student_id] = enrollment_id`. Only `status = 'active'` enrollments count; a dropped cadet
 is not "missing".
 
 ---
@@ -278,8 +278,8 @@ For each submission, find the embedded `submission_activities` entry whose
 `{ "q1": "…", "q2": "…" }` shape `responses.answers` used to hold.
 
 Compute:
-- `submittedEnrolments` = enrolments with a written activity row whose `content` has at least one non-empty answer
-- `missingEnrolments` = filtered roster enrolments with no such row
+- `submittedEnrollments` = enrollments with a written activity row whose `content` has at least one non-empty answer
+- `missingEnrollments` = filtered roster enrollments with no such row
 
 > **Draft vs. committed is new, and it matters.** `public` treated "a `responses` row exists" as
 > submitted, so an autosave counted as a submission. `app` makes committing explicit
@@ -590,7 +590,7 @@ Headers: WRITE_HEADERS + Prefer: resolution=merge-duplicates,return=minimal
 
 Body: (array of grade objects)
 [{
-  "enrollment_id": "{enrolment uuid}",
+  "enrollment_id": "{enrollment uuid}",
   "assignment_offering_id": "{OFFERING_ID}",
   "submission_id": "{submission uuid, or null}",
   "points_earned": {N},
@@ -637,7 +637,7 @@ GET {SUPA_URL}/rest/v1/grades?select=enrollment_id,points_earned,points_possible
 Headers: READ_HEADERS
 ```
 
-Require exactly one row per graded enrolment, with `source = "ai_suggested"` and
+Require exactly one row per graded enrollment, with `source = "ai_suggested"` and
 `is_finalized = false`. Where `q2`/`q3` exists on the assignment, require an integer in `[0,5]` at
 `diagnostic.q2_effort` / `diagnostic.q3_understanding`; where absent, require the key to be absent.
 Then run the `schema: 1` checks in
@@ -724,7 +724,7 @@ Grade tab already shows each answer beside its score.
 - **Empty filtered set**: If `DAY_FILTER` is set but no sections match, print "No {M-day / T-day} sections found in this offering."
 - **Points mismatch**: question points ≠ `points_possible` — stop before writing and report both.
 - **`grading_mode = 'effort'`**: stop; a trigger owns `points_earned` on that offering.
-- **Diagnostic read-back mismatch**: Treat the run as failed; report the mismatched enrolment ids and do not claim success.
+- **Diagnostic read-back mismatch**: Treat the run as failed; report the mismatched enrollment ids and do not claim success.
 
 ---
 
@@ -738,7 +738,7 @@ Grade tab already shows each answer beside its score.
 6. **Yellow feedback must be tailored** — never use the same feedback string for two different students' yellow answers on the same question. Each `warn` feedback must name the specific flaw in that student's response and correct it using `expected_response` and/or `REFERENCE_TEXT`. A generic "the reasoning may be incorrect" paste is not acceptable.
 7. **Protect the service key** — never print `SUPA_KEY` in the output. Reference it as `[service_key]` if you need to show a sample request.
 8. **Every request names its schema** — `Accept-Profile: app` on reads, `Content-Profile: app` on writes, decided once in Step 0.
-9. **Key on `enrollment_id`** — never write a grade or read work by `student_id` alone; the enrolment is what carries the section and the term.
+9. **Key on `enrollment_id`** — never write a grade or read work by `student_id` alone; the enrollment is what carries the section and the term.
 10. **Diagnostics never affect grades** — everything in `grades.diagnostic` (`q2_effort`, `q3_understanding`, and the whole `schema: 1` payload including its `effort`) is diagnostic only. Never use any of it in `question_scores`, `points_earned`, `points_possible`, status, feedback, finalization, or the analysis report, and never render or print individual per-student values. The `effort` inside `diagnostic` is **not** `grades.effort` and must not be written to that column: these offerings are `grading_mode='points'` (Step 2), where points come from `question_scores`.
 11. **Emit structure, not prose** — every misconception you identify in Step 7 must leave this skill as an entry in `misconceptions[]` in Step 9's `schema: 1` payload, against a taxonomy id. That structured list is the *only* way a finding reaches anyone: the rollup counts it into the prevalence bars, and `/lesson-aggregate` clusters it into the cohort trends. A misconception you only describe in the run report is a misconception nobody downstream can see. See [`references/WRITTEN-SCHEMA1.md`](references/WRITTEN-SCHEMA1.md).
 12. **Write no cohort output.** Never write `analysis_reports` — not readiness prose, not trends, not a per-question breakdown. That table belongs to `/lesson-aggregate`, which runs after the deadline over a whole section. This skill's blast radius is `grades`, and nothing else.

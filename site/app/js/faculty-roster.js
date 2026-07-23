@@ -34,11 +34,11 @@ export async function loadOfferingSections(ctx) {
 }
 
 /**
- * Roster for the current offering: every active enrolment, with the person behind it.
+ * Roster for the current offering: every active enrollment, with the person behind it.
  *
  * Reads through `enrollments` rather than `students` on purpose. The legacy version fetched
  * the WHOLE students table unfiltered and narrowed it in JS, which only ever worked because
- * the old policy made the roster world-readable. Here the enrolment is both the correct
+ * the old policy made the roster world-readable. Here the enrollment is both the correct
  * join path and the thing RLS scopes.
  *
  * @param {object} ctx
@@ -95,7 +95,7 @@ export function provision(ctx) {
 /**
  * Remove a student from THIS offering.
  *
- * Deletes the enrolment, not the person: `students` is the human, independent of any course,
+ * Deletes the enrollment, not the person: `students` is the human, independent of any course,
  * and someone may legitimately be enrolled elsewhere. The cascade from enrollments removes
  * their submissions and grades for this offering only — which is destructive, so the page
  * confirms first. Prefer dropStudent() when the intent is "they withdrew".
@@ -113,7 +113,7 @@ export function dropStudent(enrollmentId) {
 
 /**
  * Move a student to a different section within the same offering.
- * Their work moves with them, because it hangs off this enrolment row.
+ * Their work moves with them, because it hangs off this enrollment row.
  */
 export function updateStudentSection(enrollmentId, sectionId) {
   return db.from('enrollments').update({ section_id: sectionId }).eq('id', enrollmentId);
@@ -133,7 +133,7 @@ export function updateStudentSection(enrollmentId, sectionId) {
  * 2 KB and leaves headroom.
  *
  * Note what this can and cannot see: RLS lets a director read a student row only through an
- * enrolment in an offering they direct (students_read_staff), so a cadet who exists in the
+ * enrollment in an offering they direct (students_read_staff), so a cadet who exists in the
  * database but has never been in one of your sections comes back EMPTY here and is staged as
  * new. The upsert then updates them anyway. That is the correct outcome — the alternative is
  * showing one director another director's roster — but it means "fresh" honestly means "not
@@ -152,7 +152,7 @@ export async function loadExistingStudents(studentIds) {
   return { students: out, error: null };
 }
 
-/** Which of these cadets already hold an enrolment in this offering. */
+/** Which of these cadets already hold an enrollment in this offering. */
 export async function loadEnrolledIds(ctx) {
   const { sections } = await loadOfferingSections(ctx);
   if (!sections.length) return new Set();
@@ -191,9 +191,9 @@ export async function createSections(ctx, codes) {
  *   2. UPDATE only the conflicts explicitly resolved as `overwrite`, one statement each. A
  *      bulk upsert cannot express "these ten yes, those thirty no" without also re-writing the
  *      thirty, which is exactly the data loss `attach` exists to prevent.
- *   3. UPSERT enrolments for everyone in the file regardless of resolution, because being in
- *      the file IS the enrolment claim. ignoreDuplicates keeps a re-import idempotent rather
- *      than resurrecting a dropped enrolment.
+ *   3. UPSERT enrollments for everyone in the file regardless of resolution, because being in
+ *      the file IS the enrollment claim. ignoreDuplicates keeps a re-import idempotent rather
+ *      than resurrecting a dropped enrollment.
  *
  * This is deliberately NOT a transaction, because PostgREST has no way to express one from the
  * browser. A failure part-way leaves people created but not enrolled — recoverable by simply
@@ -238,28 +238,28 @@ export async function commitRoster(ctx, fresh, conflicts, meta = {}) {
     }
   }
 
-  // 3 — enrolments for everyone named in the file.
-  const enrolments = all.map(r => ({
+  // 3 — enrollments for everyone named in the file.
+  const enrollments = all.map(r => ({
     student_id: r.student_id,
     section_id: byCode[r.section_code].id,
     status: 'active',
   }));
-  const { error: eErr } = await db.from('enrollments').upsert(enrolments, {
+  const { error: eErr } = await db.from('enrollments').upsert(enrollments, {
     onConflict: 'student_id,section_id', ignoreDuplicates: true,
   });
   if (eErr) return { error: eErr };
 
   // `created` is what the database actually inserted, not what we asked it to. The two differ
   // when a "fresh" cadet already existed but was invisible to this director — RLS only exposes
-  // a student through an enrolment in an offering you direct, so someone who has only ever
+  // a student through an enrollment in an offering you direct, so someone who has only ever
   // taken another course reads as new here. ON CONFLICT DO NOTHING leaves their record intact
-  // and step 3 still enrols them, which is exactly the `attach` outcome. Recording the attempt
+  // and step 3 still enrolls them, which is exactly the `attach` outcome. Recording the attempt
   // count instead would put a number in the audit trail that never happened.
   const counts = {
     students_created: created,
     students_updated: toOverwrite.length,
     students_untouched: (conflicts.length - toOverwrite.length) + invisible,
-    enrollments_created: enrolments.length,
+    enrollments_created: enrollments.length,
   };
 
   // The audit row is best-effort on purpose. The roster landed; failing the whole import
@@ -291,7 +291,7 @@ export async function commitRoster(ctx, fresh, conflicts, meta = {}) {
  *   1. Another director imported the same cadet while this one was reviewing. CORE.md §0
  *      coordination is a convention, not a lock.
  *   2. The cadet already exists but is INVISIBLE to this director — students_read_staff only
- *      exposes a student through an enrolment in an offering you direct, so someone who has
+ *      exposes a student through an enrollment in an offering you direct, so someone who has
  *      only ever taken another course reads as new here and collides on insert.
  *
  * (2) is the common one at the start of a term and is not an error in any meaningful sense.

@@ -163,7 +163,7 @@ const base = { instructorId: 'i1', startedAt: '2026-07-22T14:35', durationMinute
                notes: 'After-class help.' };
 
 const solo = EI.eiRows({ ...base, enrollmentIds: ['e1'] });
-eq('one enrolment produces one row', solo.length, 1);
+eq('one enrollment produces one row', solo.length, 1);
 // A batch of one gets a NULL batch_id, matching migration 011. Minting a batch for every single
 // log would make `batch_id IS NOT NULL` stop meaning "this was a group sitting" — which is the
 // only question the column exists to answer, and what summarizeEi() counts on below.
@@ -172,11 +172,11 @@ eq('…and carries the instructor and duration through',
    [solo[0].instructor_id, solo[0].duration_minutes], ['i1', 30]);
 
 const group = EI.eiRows({ ...base, enrollmentIds: ['e1', 'e2', 'e3'] });
-eq('three enrolments produce three rows', group.length, 3);
+eq('three enrollments produce three rows', group.length, 3);
 check('…every one with a batch_id', group.every((r) => r.batch_id));
 eq('…and it is the SAME batch_id on all of them',
    new Set(group.map((r) => r.batch_id)).size, 1);
-eq('…one row per enrolment, in order', group.map((r) => r.enrollment_id), ['e1', 'e2', 'e3']);
+eq('…one row per enrollment, in order', group.map((r) => r.enrollment_id), ['e1', 'e2', 'e3']);
 
 // Two separate bulk logs must not be conflated into one sitting.
 check('a second batch gets a different batch_id',
@@ -186,13 +186,13 @@ eq('an explicit batchId is honoured rather than regenerated',
    EI.eiRows({ ...base, enrollmentIds: ['e1', 'e2'], batchId: 'given' })
      .map((r) => r.batch_id), ['given', 'given']);
 
-// A checkbox list can hand the same enrolment over twice; the row would violate nothing in the
+// A checkbox list can hand the same enrollment over twice; the row would violate nothing in the
 // database, it would just charge one cadet for two sittings they did not have.
-eq('duplicate enrolment ids are de-duplicated',
+eq('duplicate enrollment ids are de-duplicated',
    EI.eiRows({ ...base, enrollmentIds: ['e1', 'e2', 'e1'] }).map((r) => r.enrollment_id),
    ['e1', 'e2']);
 // …and a "batch" that de-duplicates down to one person is a solo log, not a group sitting.
-eq('…and a list that collapses to one enrolment is back to a null batch_id',
+eq('…and a list that collapses to one enrollment is back to a null batch_id',
    EI.eiRows({ ...base, enrollmentIds: ['e1', 'e1'] })[0].batch_id, null);
 eq('falsy entries are dropped',
    EI.eiRows({ ...base, enrollmentIds: ['e1', null, '', undefined] }).map((r) => r.enrollment_id),
@@ -315,7 +315,7 @@ check('the headline is SITTINGS, not the row count', panel.includes('>2</div>'))
 check('…and it says so, so 2 is not read as 2 cadets', panel.includes('a group counts once'));
 check('the row count survives as cadets seen', /class="ei-n">6</.test(panel));
 check('total time is stated', panel.includes('2 h 30 min'));
-check('the mini-table names cadets, not enrolment uuids', panel.includes('Ada Byron'));
+check('the mini-table names cadets, not enrollment uuids', panel.includes('Ada Byron'));
 check('…and who logged it', panel.includes('Maj Doe'));
 // Newest first, matching summarizeEi's `recent` — the solo visit is a day later than the batch.
 check('the newest sitting is listed first',

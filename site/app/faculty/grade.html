@@ -198,7 +198,7 @@
       current = data.offering; responseMap = data.responseMap; scoreMap = data.gradeMap; extensionMap = data.extensionMap;
       currentStudents = data.students; submissionMap = data.submissionMap;
       signoffs = await G.loadSignoffs(ctx, asgnId, resolveSectionIds());
-      // Enrolment is the key for every per-student write now (grades, extensions), so keep
+      // Enrollment is the key for every per-student write now (grades, extensions), so keep
       // the map the click handlers need — they only ever have a student id to hand.
       enrollmentOf = Object.fromEntries(data.students.map(s => [s.student_id, s.enrollment_id]));
       questions = questionsOf(current.written);

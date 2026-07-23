@@ -107,9 +107,9 @@ export const SOURCES = [
       // An AI suggestion is not a grade until a human says so — that is the whole posture of
       // /preflight-analyze (is_finalized=false, always). This box is the queue that posture
       // creates, and without it the suggestions sit unreviewed and invisible.
-      const { data: enrol } = await db.from('enrollments')
+      const { data: enroll } = await db.from('enrollments')
         .select('id').in('section_id', ctx.sectionIds).eq('status', 'active');
-      const ids = (enrol || []).map(e => e.id);
+      const ids = (enroll || []).map(e => e.id);
       if (!ids.length) return null;
 
       const { data, error } = await db.from('grades')

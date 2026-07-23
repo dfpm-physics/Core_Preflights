@@ -4,7 +4,7 @@ Read this file whenever `/preflight-analyze` scores a submitted written prefligh
 two integer diagnostics. Store only the numbers; do not add them to feedback, `question_scores`,
 `points_earned`, `points_possible`, the analysis report, or the printed per-student report.
 
-Both values live in **one place**: the `diagnostic` jsonb on the enrolment's `app.grades` row
+Both values live in **one place**: the `diagnostic` jsonb on the enrollment's `app.grades` row
 (`{"q2_effort": N, "q3_understanding": N}`). The old `scores.q2_effort` / `scores.q3_understanding`
 columns belonged to the retired `public` schema.
 
@@ -52,7 +52,7 @@ may receive understanding 4 or 5 even if its prose is brief.
   natural "not assessed" — there is no column to null out any more.)
 - Write the diagnostics in the same `grades` batch upsert as the suggested grade, keyed on
   `enrollment_id` — never `student_id` alone.
-- Read back `enrollment_id` and `diagnostic` for the run's exact enrolment ids; require one row per
-  graded enrolment and integer values in `[0,5]` wherever the question exists.
+- Read back `enrollment_id` and `diagnostic` for the run's exact enrollment ids; require one row per
+  graded enrollment and integer values in `[0,5]` wherever the question exists.
 - Never let a diagnostic reach `points_earned`. `grades` has `CHECK (points_earned <= points_possible)`
   and these numbers are on a different scale entirely — a leak would be both wrong and rejected.

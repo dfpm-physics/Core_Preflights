@@ -24,7 +24,7 @@ import {
   questionsOf, questionPoints, displayPoints, isActivityAvailable, answeredCount,
 } from './schema.js';
 
-/** The enrolment ids the current student holds in the current offering. */
+/** The enrollment ids the current student holds in the current offering. */
 function myEnrollmentIds(ctx) {
   return ctx.enrollmentIds || [];
 }
@@ -57,7 +57,7 @@ export async function loadAssignmentStatuses(ctx) {
   const offerings = (offeringRows || []).map(shapeOffering).filter(Boolean);
   if (!offerings.length) return [];
 
-  // Their work + their grades + any extension. Scoped by enrolment, which is what every
+  // Their work + their grades + any extension. Scoped by enrollment, which is what every
   // per-student table in this model keys on.
   let submissions = [], grades = [], extensions = [];
   if (enrollmentIds.length) {
@@ -213,7 +213,7 @@ export async function loadStudentDashboard(ctx) {
  */
 export async function ensureSubmission(ctx, offeringId, chosenActivityId = null) {
   const enrollmentId = myEnrollmentIds(ctx)[0];
-  if (!enrollmentId) return { data: null, error: new Error('No active enrolment for this course.') };
+  if (!enrollmentId) return { data: null, error: new Error('No active enrollment for this course.') };
 
   const { data: existing } = await db.from('submissions')
     .select(SUBMISSION_SELECT)

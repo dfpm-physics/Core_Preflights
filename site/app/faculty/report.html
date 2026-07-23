@@ -101,7 +101,7 @@
     import { esc, lastFirst } from '../js/util.js';
     import * as I from '../js/faculty-rollup.js';
     // Extensions are granted from the "Did not submit" list. Reusing the Grade tab's writer rather
-    // than composing a second upsert here: one (enrolment, offering) UNIQUE key, one code path, so
+    // than composing a second upsert here: one (enrollment, offering) UNIQUE key, one code path, so
     // the two surfaces cannot drift on what an extension is.
     import * as G from '../js/faculty-grade.js';
     // P1.5 — which of the two understanding-by-objective renderings this person wants.
@@ -915,7 +915,7 @@
       if (!missing.length) return '';
       const rows = missing.map(st => `<tr data-enr="${esc(st.enrollment_id || '')}">
           <td class="dns-pick"><input type="checkbox" data-dns-pick
-                 ${st.enrollment_id ? '' : 'disabled title="No enrolment row — cannot be extended here"'}
+                 ${st.enrollment_id ? '' : 'disabled title="No enrollment row — cannot be extended here"'}
                  aria-label="Select ${esc(lastFirst(st.name))}"></td>
           <td>${esc(lastFirst(st.name))}</td>
           <td><span class="tag">${esc(st.section)}</span></td>
@@ -975,7 +975,7 @@
     }
 
     // ── Grant an extension from the rollup ──
-    // Same write the Grade tab performs (G.setExtension → upsert on the (enrolment, offering)
+    // Same write the Grade tab performs (G.setExtension → upsert on the (enrollment, offering)
     // UNIQUE key), so granting here and there cannot diverge, and re-granting amends rather than
     // duplicating. One reason covers the batch: `reason` is NOT NULL with a non-blank CHECK since
     // migration 007, and a set of students extended together share the cause that prompted it.

@@ -125,19 +125,19 @@ export async function loadManager(ctx) {
   const offerings = (offeringRows || []).map(shapeOffering).filter(Boolean)
     .filter(o => o.interactive || o.written);
 
-  const enrolments = enrolRows || [];
-  const studentOf = Object.fromEntries(enrolments.map(e => [e.id, e.student_id]));
-  const sectionOf = Object.fromEntries(enrolments.map(e => [e.id, e.section_id]));
+  const enrollments = enrolRows || [];
+  const studentOf = Object.fromEntries(enrollments.map(e => [e.id, e.student_id]));
+  const sectionOf = Object.fromEntries(enrollments.map(e => [e.id, e.section_id]));
 
   const sectionSize = {};
   sectionIds.forEach(id => { sectionSize[id] = 0; });
-  enrolments.forEach(e => { if (sectionSize[e.section_id] != null) sectionSize[e.section_id]++; });
+  enrollments.forEach(e => { if (sectionSize[e.section_id] != null) sectionSize[e.section_id]++; });
 
   // ONE query for every submission in scope, not one per lesson. The legacy page issued a
   // report query per interaction inside a Promise.all — N+1 by construction, and the reason
   // it slowed as the term filled up. Everything reaches through the offering now.
   const submissions = [];
-  for (const ids of chunked(enrolments.map(e => e.id))) {
+  for (const ids of chunked(enrollments.map(e => e.id))) {
     const { data } = await db.from('submissions').select(SUBMISSION_SELECT).in('enrollment_id', ids);
     submissions.push(...(data || []).map(shapeSubmission));
   }
@@ -198,7 +198,7 @@ export async function loadManager(ctx) {
   const sections = sectionIds.map(id => ({
     id,
     code: ctx.sectionCodeOf(id),
-    students: enrolments.filter(e => e.section_id === id)
+    students: enrollments.filter(e => e.section_id === id)
       .map(e => ({ student_id: e.student_id, name: e.students?.name || String(e.student_id),
                    enrollment_id: e.id }))
       .sort((a, b) => String(a.name).localeCompare(String(b.name))),
@@ -250,9 +250,9 @@ export async function loadReport(offeringId, studentId) {
   const found = await interactiveActivityOf(offeringId);
   if (!found) return null;
 
-  const { data: enrol } = await db.from('enrollments')
+  const { data: enroll } = await db.from('enrollments')
     .select('id').eq('student_id', studentId);
-  const enrolIds = (enrol || []).map(e => e.id);
+  const enrolIds = (enroll || []).map(e => e.id);
   if (!enrolIds.length) return null;
 
   const { data: subs } = await db.from('submissions')
@@ -293,17 +293,17 @@ export async function loadInteractionData(offeringId, studentIds) {
   // Resolved once per lesson, not per student: which written question is the reading reflection.
   const reflectionQid = reflectionQuestionId(found.offering?.written);
 
-  const enrolments = [];
+  const enrollments = [];
   for (const ids of chunked(studentIds)) {
     const { data } = await db.from('enrollments')
       .select('id, student_id, section_id').in('student_id', ids).eq('status', 'active');
-    enrolments.push(...(data || []));
+    enrollments.push(...(data || []));
   }
-  if (!enrolments.length) return [];
-  const studentOf = Object.fromEntries(enrolments.map(e => [e.id, e.student_id]));
+  if (!enrollments.length) return [];
+  const studentOf = Object.fromEntries(enrollments.map(e => [e.id, e.student_id]));
 
   const submissions = [], grades = [];
-  for (const ids of chunked(enrolments.map(e => e.id))) {
+  for (const ids of chunked(enrollments.map(e => e.id))) {
     const [s, g] = await Promise.all([
       db.from('submissions').select(SUBMISSION_SELECT)
         .eq('assignment_offering_id', offeringId).in('enrollment_id', ids),
@@ -891,23 +891,23 @@ export async function buildLessonCorpus(ctx, offeringId) {
   const { data: enrolRows } = await db.from('enrollments')
     .select('id, student_id, section_id, students!inner(student_id, name)')
     .in('section_id', ctx.sectionIds).eq('status', 'active');
-  const enrolments = enrolRows || [];
-  if (!enrolments.length) return base;
-  const byEnrolment = Object.fromEntries(enrolments.map(e => [e.id, e]));
+  const enrollments = enrolRows || [];
+  if (!enrollments.length) return base;
+  const byEnrollment = Object.fromEntries(enrollments.map(e => [e.id, e]));
 
   const reports = [];
-  for (const ids of chunked(enrolments.map(e => e.id))) {
+  for (const ids of chunked(enrollments.map(e => e.id))) {
     const { data } = await db.from('submissions')
       .select(SUBMISSION_SELECT).eq('assignment_offering_id', offeringId).in('enrollment_id', ids);
     (data || []).map(shapeSubmission).forEach(s => {
       const work = s.activities?.[found.activityId];
-      if (work?.reportMarkdown) reports.push({ enrolmentId: s.enrollmentId, md: work.reportMarkdown });
+      if (work?.reportMarkdown) reports.push({ enrollmentId: s.enrollmentId, md: work.reportMarkdown });
     });
   }
 
   // Stable order: section code, then student id.
   reports.sort((a, b) => {
-    const ea = byEnrolment[a.enrolmentId] || {}, eb = byEnrolment[b.enrolmentId] || {};
+    const ea = byEnrollment[a.enrollmentId] || {}, eb = byEnrollment[b.enrollmentId] || {};
     return String(ctx.sectionCodeOf(ea.section_id)).localeCompare(String(ctx.sectionCodeOf(eb.section_id)))
         || String(ea.student_id).localeCompare(String(eb.student_id));
   });
@@ -917,7 +917,7 @@ export async function buildLessonCorpus(ctx, offeringId) {
     + `Each block is labeled with the student's name, ID, and section.\n`;
 
   const blocks = reports.map(r => {
-    const e = byEnrolment[r.enrolmentId] || {};
+    const e = byEnrollment[r.enrollmentId] || {};
     const name = e.students?.name ? `${e.students.name} · ` : '';
     return `\n\n---\n\n## ${name}${e.student_id} · Section ${ctx.sectionCodeOf(e.section_id) || '—'}\n\n${r.md}`;
   });

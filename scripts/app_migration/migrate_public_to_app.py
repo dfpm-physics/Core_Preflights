@@ -158,7 +158,7 @@ def main():
         section_id[code] = cur.fetchone()[0]
     note("sections", len(section_id))
 
-    # ---------------------------------------------------------------- students + enrolments
+    # ---------------------------------------------------------------- students + enrollments
     cur.execute("""SELECT student_id, name, section_id, auth_user_id
                      FROM public.students ORDER BY student_id""")
     roster = cur.fetchall()

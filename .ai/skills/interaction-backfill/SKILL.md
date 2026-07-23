@@ -8,7 +8,7 @@ description: >
   understanding for an old lesson", "fill in report_data for the interactions", or
   /interaction-backfill. Reads each report's Markdown and derives effort, understanding, objectives,
   misconceptions, reading reflection, integrity, and triage flags per INTERACTION-DATA-CONTRACT.md,
-  then writes them to app.submission_activities.content and the enrolment's app.grades row. NOT the
+  then writes them to app.submission_activities.content and the enrollment's app.grades row. NOT the
   cohort-aggregation skill (readiness summaries / misconception trends across a class) — that is
   /lesson-aggregate. Run by a Course Director / System Admin on a machine with the scoped
   prep_app_dml DB role.
@@ -25,7 +25,7 @@ description: >
 A lesson **interaction** report ideally carries a structured `report_data` blob (the contract's `d`)
 that powers every numeric rollup in the faculty UI. Reports missing it have the Markdown but no
 structured data. This skill reads that Markdown and reconstructs a faithful **schema-1** `report_data`
-for each, then writes it back (which also sets the enrolment's `effort` and points).
+for each, then writes it back (which also sets the enrollment's `effort` and points).
 
 **Canonical spec:** [`INTERACTION-DATA-CONTRACT.md`](../../../docs/contracts/INTERACTION-DATA-CONTRACT.md) (schema 1).
 Read §1–§5 of the contract before grading.
@@ -152,13 +152,13 @@ Write results as a JSON array of `{student_id, activity_slug, report_data}` to a
 .venv/Scripts/python supabase/admin/interaction_reports.py write --in <scratch>/filled.json --dry-run
 .venv/Scripts/python supabase/admin/interaction_reports.py write --in <scratch>/filled.json
 ```
-The writer sets `submission_activities.content` **and** upserts the enrolment's `app.grades` row
+The writer sets `submission_activities.content` **and** upserts the enrollment's `app.grades` row
 (`effort` + `points_earned` from the effort curve, `source='ai_suggested'`, `is_finalized=false`).
 It fills **only** rows with `content IS NULL` unless `--force`, re-clamps effort for non-meaningful
 reflections, and rejects any blob over 32 KB. Re-running is safe (filled rows are skipped).
 
 **A finalized grade is never overwritten.** If an instructor has already finalized that
-(enrolment, offering), the content is still repaired but the grade is left alone, and the line
+(enrollment, offering), the content is still repaired but the grade is left alone, and the line
 reads `GRADE KEPT (finalized)`. Check for those before assuming a run rewrote everything.
 
 ## Step 5 — Verify
@@ -179,7 +179,7 @@ misconceptions, reflection quotes, and flags. Spot-check one student against the
    don't fabricate misconceptions or quotes.
 4. **Consistent objective keys within an activity.**
 5. **Mark provenance** — `producer: "backfill-from-report@<date>"`.
-6. **Never alter schema or other data.** Only `submission_activities.content` and the enrolment's
+6. **Never alter schema or other data.** Only `submission_activities.content` and the enrollment's
    `grades` row (`effort`, `points_earned`) are written. Never write `question_scores`, never set
    `is_finalized`, and never touch another activity's work.
 7. **Never revert a finalized grade** — the writer's `ON CONFLICT … WHERE NOT is_finalized` guard

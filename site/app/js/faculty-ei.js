@@ -1,7 +1,7 @@
 // faculty-ei.js — extra-instruction logging (roadmap P1.4).
 //
 // Two callers, one module: the student detail page logs a single session, the gradebook logs a
-// batch. They are the SAME write with a different number of enrolments, which is the whole reason
+// batch. They are the SAME write with a different number of enrollments, which is the whole reason
 // this is one module — the roadmap is explicit that a design where bulk is a bolt-on "will be
 // abandoned by week three", and the surest way to get there is two code paths that drift.
 //
@@ -140,7 +140,7 @@ export function newBatchId() {
  * Reads and writes
  * ------------------------------------------------------------------------- */
 
-/** Every session for one enrolment, newest first. Drives the student detail panel. */
+/** Every session for one enrollment, newest first. Drives the student detail panel. */
 export async function loadEiForEnrollment(enrollmentId) {
   const { data, error } = await db.from('ei_sessions')
     .select(EI_SELECT)
@@ -153,7 +153,7 @@ export async function loadEiForEnrollment(enrollmentId) {
  * Every session across a set of SECTIONS, with the names to label them. Drives P1.8's panel.
  *
  * The name map is built here rather than by the caller because the panel is useless without it —
- * `ei_sessions` keys on the enrolment, so a mini-table of the last five sittings would otherwise
+ * `ei_sessions` keys on the enrollment, so a mini-table of the last five sittings would otherwise
  * be five uuids. One extra column on a query the panel has to make anyway.
  *
  * @returns {{ rows, nameOf }} `nameOf(enrollmentId)` → student name, '' when unknown
@@ -161,9 +161,9 @@ export async function loadEiForEnrollment(enrollmentId) {
 export async function loadEiForSections(sectionIds) {
   const none = { rows: [], nameOf: () => '' };
   if (!sectionIds?.length) return none;
-  const { data: enrol } = await db.from('enrollments')
+  const { data: enroll } = await db.from('enrollments')
     .select('id, students!inner(name)').in('section_id', sectionIds).eq('status', 'active');
-  const nameBy = Object.fromEntries((enrol || []).map(e => [e.id, e.students?.name || '']));
+  const nameBy = Object.fromEntries((enroll || []).map(e => [e.id, e.students?.name || '']));
   const ids = Object.keys(nameBy);
   if (!ids.length) return none;
   const { rows, error } = await loadEiForEnrollments(ids);
@@ -171,7 +171,7 @@ export async function loadEiForSections(sectionIds) {
   return { rows, nameOf: (id) => nameBy[id] || '' };
 }
 
-/** Every session across a set of enrolments. Drives the gradebook's EI column and P1.8's stats. */
+/** Every session across a set of enrollments. Drives the gradebook's EI column and P1.8's stats. */
 export async function loadEiForEnrollments(enrollmentIds) {
   const ids = (enrollmentIds || []).filter(Boolean);
   if (!ids.length) return { rows: [], error: null };

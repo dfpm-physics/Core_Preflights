@@ -1,28 +1,31 @@
 ## The short version
 
-A cadet who cannot sign in has one remedy: **you reset them to the default from the Roster page.**
-PREP has no mail server, so there is no reset link to send and no code to wait for.
+A cadet who cannot sign in has one remedy: **a course director resets them to the default, from
+Course Admin → Students.** PREP has no mail server, so there is no reset link to send and no code
+to wait for.
 
-You never see or choose their password. Resetting puts it back to the last six digits of their
-cadet ID — a value already printed on your roster — and PREP then forces them to pick a new one
+Nobody sees or chooses their password. Resetting puts it back to the last six digits of their
+cadet ID — a value already printed on the roster — and PREP then forces them to pick a new one
 before they can do anything else.
 
 ## Resetting a student's password
 
-1. Open **Roster**.
-2. Find the cadet and select **Reset password**.
-3. Confirm.
+1. Open **Admin** → the **Students** tab.
+2. Find the cadet — the search box matches name, cadet ID, squadron or section.
+3. Select **Reset password**, and confirm.
 
 Tell them their password is back to the last six digits of their cadet ID. Say it in person rather
 than emailing it: for the few minutes before they sign in, that value is a working credential.
 
 The button only appears for cadets who already have an account. If it is missing, they have not
-been provisioned yet — that is your course director's **Enrollment** page, not yours. Roster tells
-you which cadets are in that state: the **Auth** column reads `—` rather than `✓`.
+been provisioned yet — the **Auth** column reads `—` rather than `✓`, and **Provision accounts** on
+the same tab creates the logins.
 
-**Any instructor assigned to the course can do this**, not just the course director. That is
-deliberate: the cadet is standing in front of whoever teaches their section, and sending them
-away for a button that reveals nothing would just make the lockout last a day.
+**This is a course-director action.** The underlying `reset-student-password` function would accept
+any staff member of the offering — it derives the password from a cadet ID you are already looking
+at, so it reveals nothing — but the only page carrying the button has always been director-only, so
+in practice an instructor asks their director. If that turns out to make lockouts last a day, the
+fix is to expose the Students tab read-only to instructors, not to hand out a password field.
 
 ## Why you cannot choose a password for them
 
@@ -49,16 +52,15 @@ the same predictable default, so until they change it, it is not really private.
 Instructor accounts have no cadet ID, so there is no default to restore and no equivalent button.
 Ask a system admin, who resets staff accounts from the Supabase dashboard.
 
-## Uploading a roster
+## Importing a roster
 
-**This is on the Enrollment page, and it is a course-director action** — Roster itself is read-only
-for everyone. The two were one page until 23 July 2026, which is why Roster used to be closed to
-instructors: you cannot hand somebody a lookup table whose first card overwrites the roster.
+**Admin → Students**, in the collapsed **Import the registrar's roster** panel below the student
+table. A course-director action.
 
-Use the registrar's export as-is — save it as CSV (or tab-separated text) and drop it on the
-Enrollment page. It must contain **Cadet EMPLID**, **Cadet Name**, **Email**, **Cadet Squadron**,
-and **Section**; Term, Subject, Course Number, majors, sex, and advisor are picked up when present
-and everything else is ignored.
+Use the registrar's export as-is — save it as CSV (or tab-separated text) and drop it on that
+panel. It must contain **Cadet EMPLID**, **Cadet Name**, **Email**, **Cadet Squadron**, and
+**Section**; Term, Subject, Course Number, majors, sex, and advisor are picked up when present and
+everything else is ignored.
 
 Two things the upload does that are worth knowing:
 
@@ -70,5 +72,7 @@ Two things the upload does that are worth knowing:
 
 If the file names a section that does not exist yet, the preview offers to create it and re-check.
 
-Once the import lands, **Provision accounts** on the same page creates a login for every enrolled
-cadet who does not have one, with the default password already set.
+Once the import lands, **Provision accounts** on the same tab creates a login for every enrolled
+cadet who does not have one, with the default password already set. **Move** and **Remove** on each
+row handle the rest of add/drop — moving a cadet between sections carries their submissions and
+grades with them, because those hang off the enrollment rather than the section.

@@ -166,7 +166,7 @@ One semester's run, and the people in it:
 | `assignment_offerings` | An assignment scheduled into one semester |
 | `offering_activities` | Which activities are live this semester, and which carries credit |
 | `assignment_due_dates` | Per-section deadline overrides |
-| `extensions` | Per-student deadline overrides, attached to their enrolment |
+| `extensions` | Per-student deadline overrides, attached to their enrollment |
 | `review_signoffs` | One instructor attestation per section per assignment: "I have reviewed this" |
 | `ei_sessions` | A log of extra instruction — one row per student per sitting |
 
@@ -200,13 +200,13 @@ changed*, so a stored marker can never disagree with the grades it claims to cov
 
 ### ei_sessions
 
-One row per student per sitting of extra instruction. Attached to the **enrolment**, exactly as
+One row per student per sitting of extra instruction. Attached to the **enrollment**, exactly as
 grades and extensions are, so a session belongs to a student's place in a section in one semester —
 a cadet repeating the course does not inherit the previous term's log.
 
 | Field | Holds |
 |---|---|
-| `enrollment_id` | Which student, in which section, in which semester. Deleting the enrolment deletes its sessions with it |
+| `enrollment_id` | Which student, in which section, in which semester. Deleting the enrollment deletes its sessions with it |
 | `instructor_id` | Who held it. Left empty rather than deleted if that instructor's record is removed, so the record that the session happened survives them |
 | `started_at` | When the session began. **No default** — see below |
 | `duration_minutes` | How long it ran. Defaults to 30, and must be between 1 and 480 |
@@ -297,23 +297,23 @@ from one modality to the other, and students who already earned a grade keep it.
 
 Both attach people to a **semester**, not to a course in general. Someone who directs Physics 215 in
 Fall 2026 does not automatically direct it in Spring 2027. A student who changes section keeps their
-old grades attached to the old section, because grades hang off the enrolment.
+old grades attached to the old section, because grades hang off the enrollment.
 
 `staff_assignments` with no section covers the whole offering — that is how a director is recorded.
 With a section, it covers that section only.
 
 #### When a student drops or changes section
 
-An enrolment carries a `status` of `active`, `dropped`, or `completed`, and a `dropped_at` date.
-Because every submission and grade hangs off the enrolment rather than off the student, marking one
+An enrollment carries a `status` of `active`, `dropped`, or `completed`, and a `dropped_at` date.
+Because every submission and grade hangs off the enrollment rather than off the student, marking one
 `dropped` leaves that work exactly where it was, attached to the section it was done in.
 
-Moving a student to a different section means a second enrolment, not an edit to the first. Their
+Moving a student to a different section means a second enrollment, not an edit to the first. Their
 earlier work stays with the earlier section, which is what makes a mid-semester move safe and what
-keeps a past semester's section rosters reconstructable. A student may hold several enrolments at
+keeps a past semester's section rosters reconstructable. A student may hold several enrollments at
 once — across sections, courses, or semesters.
 
-All 73 Fall 2026 enrolments are `active`.
+All 73 Fall 2026 enrollments are `active`.
 
 ## Work
 

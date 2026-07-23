@@ -258,7 +258,7 @@ eq('…oldest deadline first', ordered.map(r => r.slug), ['preflight-01', 'prefl
 // Rows we cannot resolve must drop rather than render half a card.
 eq('a submission for an unknown offering is dropped',
    runQ({ students: [qStudent(15)], submissions: [qSub(15, { assignment_offering_id: 'gone' })] }), []);
-eq('a submission for an unknown enrolment is dropped',
+eq('a submission for an unknown enrollment is dropped',
    runQ({ students: [], submissions: [qSub(16)] }), []);
 
 process.exit(summary() ? 0 : 1);

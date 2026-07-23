@@ -37,7 +37,10 @@ const { CELL } = await import('../../site/app/js/faculty-gradebook.js');
 section('backTarget — an allowlist, not a same-origin check');
 
 eq('a plain gradebook referrer comes back', S.backTarget('https://x.test/site/app/faculty/gradebook.html'), 'gradebook.html');
-eq('roster is allowed (the second real drill-down path)', S.backTarget('https://x.test/site/app/faculty/roster.html'), 'roster.html');
+// Course Admin's Students tab is the second real drill-down path, since 2026-07-23 — it replaced
+// the standalone roster page, which no longer exists.
+eq('course admin is allowed', S.backTarget('https://x.test/site/app/faculty/admin.html'), 'admin.html');
+eq('the deleted roster page is NOT allowed', S.backTarget('https://x.test/site/app/faculty/roster.html'), 'gradebook.html');
 eq('grade is allowed', S.backTarget('https://x.test/site/app/faculty/grade.html?i=abc'), 'grade.html');
 eq('no referrer at all falls back', S.backTarget(''), 'gradebook.html');
 eq('undefined referrer falls back', S.backTarget(undefined), 'gradebook.html');

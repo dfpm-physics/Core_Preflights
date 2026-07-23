@@ -186,8 +186,7 @@
         ".ai/instructions/PROJECT.md",
         "site/app/js/roster-import.js",
         "site/app/js/faculty-roster.js",
-        "site/app/faculty/roster.html",
-        "site/app/faculty/enrollment.html",
+        "site/app/faculty/admin.html",
         "supabase/functions/reset-student-password/index.ts",
         "supabase/functions/provision-students/index.ts",
         "site/app/js/account.js"

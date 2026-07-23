@@ -273,9 +273,9 @@ eq('a row\'s cells are in column order',
    ordered.rows[0].cells.map((c) => c.possible),
    ordered.columns.map((c) => c.pointsPossible));
 
-// An enrolment with nothing at all must still produce a full-width row; a short row would shift
+// An enrollment with nothing at all must still produce a full-width row; a short row would shift
 // every cell after it into the wrong column.
-eq('an enrolment with no grades and no submissions still gets a full row of cells',
+eq('an enrollment with no grades and no submissions still gets a full row of cells',
    ordered.rows[0].cells.length, ordered.columns.length);
 eq('…all of which are MISSING or PENDING by deadline',
    ordered.rows[0].cells.map((c) => c.state),
@@ -330,7 +330,7 @@ eq('before any deadline the class statistics are null, not zero',
    [early.stats.median, early.stats.mean], [null, null]);
 
 // The extension has to survive the trip through buildMatrix, not just cellState — extBy is keyed
-// on the same enrolment/offering pair as grades and submissions, and a mismatch there would look
+// on the same enrollment/offering pair as grades and submissions, and a mismatch there would look
 // exactly like "no extensions exist".
 const extended = G.buildMatrix({
   enrollments: [{ enrollmentId: 'e1', sectionId: SEC_M }, { enrollmentId: 'e2', sectionId: SEC_M }],

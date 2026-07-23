@@ -48,7 +48,7 @@ export const EXTENSION_SELECT =
   'id,enrollment_id,assignment_offering_id,extended_due_at,reason,granted_by,created_at,' +
   'revoked_at,revoked_by,revoked_reason';
 
-/** Faculty view of submissions/grades: reach through the enrolment to the person. */
+/** Faculty view of submissions/grades: reach through the enrollment to the person. */
 export const ENROLLMENT_JOIN = 'enrollments!inner(id,student_id,section_id,students(student_id,name))';
 
 export const STAFF_SELECT =

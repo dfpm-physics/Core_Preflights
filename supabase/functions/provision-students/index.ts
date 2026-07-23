@@ -114,9 +114,9 @@ serve(async (req) => {
     const sectionIds = (sections || []).map((s: { id: string }) => s.id);
     if (!sectionIds.length) return ok({ success: true, count: 0, errors: [] });
 
-    // Reach the person through the enrolment. `students` no longer carries a section, and a
+    // Reach the person through the enrollment. `students` no longer carries a section, and a
     // person may be enrolled in another course this function has no business provisioning.
-    const { data: enrolments, error: enrErr } = await supabaseAdmin
+    const { data: enrollments, error: enrErr } = await supabaseAdmin
       .from("enrollments")
       .select("student_id, students!inner(student_id, name, email, auth_user_id)")
       .in("section_id", sectionIds)
@@ -124,12 +124,12 @@ serve(async (req) => {
       .is("students.auth_user_id", null);
 
     if (enrErr) return ok({ error: "Could not fetch students: " + enrErr.message });
-    if (!enrolments?.length) return ok({ success: true, count: 0, errors: [] });
+    if (!enrollments?.length) return ok({ success: true, count: 0, errors: [] });
 
-    // One person may hold several enrolments in the same offering; provision them once.
+    // One person may hold several enrollments in the same offering; provision them once.
     type Row = { student_id: number; students: { name: string; email: string | null } };
     const byId = new Map<number, { name: string; email: string | null }>();
-    for (const e of enrolments as unknown as Row[]) {
+    for (const e of enrollments as unknown as Row[]) {
       if (!byId.has(e.student_id)) {
         byId.set(e.student_id, { name: e.students?.name ?? "", email: e.students?.email ?? null });
       }

@@ -136,7 +136,7 @@ serve(async (req) => {
     const sectionIds = (sections || []).map((s: { id: string }) => s.id);
     if (!sectionIds.length) return ok({ error: "This course has no sections." });
 
-    const { data: enrolment, error: enrErr } = await supabaseAdmin
+    const { data: enrollment, error: enrErr } = await supabaseAdmin
       .from("enrollments")
       .select("student_id, students!inner(student_id, name, auth_user_id)")
       .in("section_id", sectionIds)
@@ -145,9 +145,9 @@ serve(async (req) => {
       .maybeSingle();
 
     if (enrErr) return ok({ error: "Could not look up the student: " + enrErr.message });
-    if (!enrolment) return ok({ error: "That student is not enrolled in this course." });
+    if (!enrollment) return ok({ error: "That student is not enrolled in this course." });
 
-    const student = enrolment.students as unknown as {
+    const student = enrollment.students as unknown as {
       student_id: number; name: string; auth_user_id: string | null;
     };
 

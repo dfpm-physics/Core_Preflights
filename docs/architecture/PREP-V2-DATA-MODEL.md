@@ -60,7 +60,7 @@ new kind is an `INSERT`), `assignments` (the container), `activities` (the conte
 everything term-scoped hangs from), `sections`, `students`, `enrollments`, `instructors`,
 `staff_assignments`, `assignment_offerings`, `offering_activities`, `assignment_due_dates`.
 
-**Layer 3 — work and grades (per enrolment).** `submissions` (one per enrolment per offering — the
+**Layer 3 — work and grades (per enrollment).** `submissions` (one per enrollment per offering — the
 choice, the lock, and the attempt's identity live together here), `submission_activities` (the actual
 work, one row per activity engaged with, *including* practice ones), `grades`, `grade_events` (an
 append-only audit).
@@ -78,9 +78,9 @@ The shape is chosen to delete whole categories of prior fault, not to add featur
   `assignments` is the primary noun, not a bolted-on join.
 - **The scattered grade.** A grade was spread across `scores`, `preflight_interaction_reports.score`,
   and `lesson_completions.points`, with nothing relating earned points to possible points. `grades`
-  is exactly one row per (enrolment, offering), bounded by the offering's value, with the history in
+  is exactly one row per (enrollment, offering), bounded by the offering's value, with the history in
   `grade_events`.
-- **The re-attribution bug.** Because all student work hangs off the **enrolment**, not the student,
+- **The re-attribution bug.** Because all student work hangs off the **enrollment**, not the student,
   moving someone between sections no longer silently rewrites their history.
 - **The global-PK collision.** Slugs are unique *per course* (`UNIQUE (course_id, slug)`), so the
   July 2026 `preflight-02` collision cannot recur and the `phys-110-` id prefix workaround is dropped
@@ -93,8 +93,8 @@ These are enforced structurally and covered by
 tested, not assumed. The point of listing them here is that they are load-bearing: application code
 may rely on them holding.
 
-- Exactly one grade per (enrolment, offering); a grade can never exceed the offering's points.
-- Exactly one submission per (enrolment, offering).
+- Exactly one grade per (enrollment, offering); a grade can never exceed the offering's points.
+- Exactly one submission per (enrollment, offering).
 - A chosen activity must be one actually offered in that offering (composite foreign key), and must be
   `graded` at the moment it is chosen (trigger).
 - The chosen activity cannot silently change — the lock is driven by the offering's `switch_policy`

@@ -5,6 +5,7 @@
 // sees a picker at all, how terms are grouped, which row is marked current — is exactly the
 // part worth testing, and it is all string in / string out.
 
+import { readdirSync } from 'node:fs';
 import { check, eq, section, installBrowser } from './harness.mjs';
 
 installBrowser({});   // nav.js imports util.js, which reads `location` at module load
@@ -21,10 +22,17 @@ const ctxOf = (courses, current, extra = {}) =>
   ({ courses, currentOffering: current, role: 'faculty', instructorRow: { name: 'X' }, ...extra });
 
 /* ── The faculty bar itself (P1.9 · P1.14, 2026-07-23) ────────────────────────
- * Two changes landed the same day and each is invisible from the other end of the app: Grade left
- * the bar (the dashboard's due-out boxes and the Grade page's own queue are the route now), and
- * Roster stopped being director-only once its destructive import moved to Enrollment. Both are
- * decisions rather than accidents, and both would be silently undone by a careless edit here. */
+ * Two decisions live here and each is invisible from the other end of the app:
+ *
+ *   Grade left the bar — the dashboard's due-out boxes and the Grade page's own queue are the
+ *   route now, because grading is work that arrives rather than a place you browse to.
+ *
+ *   Roster and Enrollment are not on it either. They were briefly two standalone pages; both are
+ *   now the Students tab of Course Admin. One job, one nav entry — re-adding either would put the
+ *   clutter back, and re-adding one of them would resurrect a page that no longer exists.
+ *
+ * Both would be silently undone by a careless edit, and neither shows up as a broken test
+ * anywhere else. */
 
 section('faculty nav — what the bar offers, and to whom');
 
@@ -32,12 +40,16 @@ const keys = FACULTY_LINKS.map(l => l.key);
 const linkFor = (k) => FACULTY_LINKS.find(l => l.key === k);
 
 check('Grade is NOT a nav destination (P1.14)', !keys.includes('grade'));
-check('Enrollment is (P1.9)', keys.includes('enrollment'));
-check('…and it is director-gated — it changes who is enrolled',
-      linkFor('enrollment').directorOnly === true);
-check('Roster is NOT director-gated — it is a lookup any staff member may make (P1.9)',
-      !linkFor('roster').directorOnly);
-check('…and still points at roster.html', linkFor('roster').href === 'roster.html');
+check('neither is Roster — it is Course Admin > Students now (P1.9)', !keys.includes('roster'));
+check('nor Enrollment — same tab, same reason', !keys.includes('enrollment'));
+check('Course Admin is, and is director-gated', linkFor('admin').directorOnly === true);
+check('…pointing at the page that carries all three tabs', linkFor('admin').href === 'admin.html');
+
+// Every href must be a page that exists. This is the check that would have caught a nav entry
+// left pointing at a deleted file — the failure mode of every page merge.
+const PAGES = new Set(readdirSync(new URL('../../site/app/faculty/', import.meta.url)));
+eq('every faculty nav link points at a page that exists',
+   FACULTY_LINKS.filter(l => !l.external && !PAGES.has(l.href)).map(l => l.href), []);
 
 // adminOnly is the GLOBAL flag, not "director of the current course". Conflating them would let a
 // director inherit the system tier by switching course, which is the whole reason for the split.
@@ -109,5 +121,5 @@ section('students switch too');
 const student = courseOptionsHTML({
   courses: [OFF_215, OFF_110], currentOffering: 'o-110-f26', role: 'student', studentRow: { name: 'S' },
 });
-check('a student with two enrolments gets a picker', student.includes('course-opt'));
+check('a student with two enrollments gets a picker', student.includes('course-opt'));
 check('…marking the right one', /course-opt active[\s\S]*?data-course="o-110-f26"/.test(student));

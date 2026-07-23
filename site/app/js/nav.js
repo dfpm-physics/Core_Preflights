@@ -65,16 +65,10 @@ export const FACULTY_LINKS = [
   // student.html is deliberately ABSENT from this list. It is a drill-down reached by clicking a
   // name, exactly as report.html is, and a nav entry for it would have nothing to point at.
   { key: 'gradebook',    label: 'Gradebook',    href: 'gradebook.html',         icon: 'progress',      emoji: '📊' },
-  // Roster stopped being director-only on 2026-07-23 (P1.9). It was gated because it also held a
-  // destructive bulk import; now that import lives on Enrollment, what remains is a lookup table
-  // scoped to ctx.sectionIds — "what squadron is she in, has he got a login yet" — which is an
-  // instructor's ordinary question and always should have been theirs to ask.
-  { key: 'roster',       label: 'Roster',       href: 'roster.html',            icon: 'roster',        emoji: '🧑‍🎓' },
-  // Everything that CHANGES who is enrolled: the registrar import and its reconciliation, account
-  // provisioning, and moving a cadet between sections. Director-gated, and separate from Roster
-  // because they are different jobs on different clocks — bursts at the start of term versus a
-  // lookup most weeks — and because mixing them is what kept Roster shut to instructors.
-  { key: 'enrollment',   label: 'Enrollment',   href: 'enrollment.html',        icon: 'roster',        emoji: '📋', directorOnly: true },
+  // NO Roster or Enrollment entry. Both were standalone pages for a few hours on 2026-07-23
+  // (roadmap P1.9) and are now the **Students** tab of Course Admin — one page, one nav entry, and
+  // the tab sits beside Staff and Export because "who is in this offering" and "who runs it" are
+  // the same visit. Two nav entries for one job was the cost that made the split not worth it.
   // Label, not path. The page is the term's list of assignment offerings, which is what the
   // schema calls them; the FILE stays `lessons.html` because `site/faculty/lessons.html` is a
   // frozen contract URL (CORE.md §6) that AI-generated prefill links target — renaming it would

@@ -2,10 +2,10 @@
 //
 // This imports site/app/js/auth.js and student-data.js unmodified and runs them against the
 // live database through RLS. It is the only suite that proves the wiring actually works
-// rather than merely type-checking: bootstrap resolves a real enrolment, the assignment list
+// rather than merely type-checking: bootstrap resolves a real enrollment, the assignment list
 // stitches four tables together, and the write path creates real rows.
 //
-// WRITES: confined to the test cadet's own enrolment, and reset at the end. The reset is
+// WRITES: confined to the test cadet's own enrollment, and reset at the end. The reset is
 // best-effort by design — RLS grants no DELETE on `submissions` to anyone (deliberately: a
 // student must not be able to erase their work, and neither should an instructor), so the
 // submission row itself survives as a draft. cleanup.py removes it with the operator tier.
@@ -36,7 +36,7 @@ eq('course code resolved', ctx.currentCourseCode, 'phys-215');
 check('term label resolved', !!ctx.currentTermLabel, `got ${ctx.currentTermLabel}`);
 check('exactly one section in scope (their own)', ctx.sectionIds.length === 1,
       `got ${ctx.sectionIds.length}`);
-check('an enrolment id is available for writes', (ctx.enrollmentIds || []).length === 1);
+check('an enrollment id is available for writes', (ctx.enrollmentIds || []).length === 1);
 eq('a student is never a director', ctx.isDirectorForCurrent(), false);
 // A student must not be handed staff scope by accident.
 eq('no staff assignments leaked into the context', ctx.staff.length, 0);

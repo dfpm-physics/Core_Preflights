@@ -804,7 +804,7 @@ def _instructors(conn, course_offering_id):
 
 def _load_reports(conn, offering_id, interactive_id, written_id, refl_qid=None,
                   response_qids=()):
-    """All work on one LESSON, by either path, joined to the enrolment's section and its grade.
+    """All work on one LESSON, by either path, joined to the enrollment's section and its grade.
 
     The schema:1 assessment lives in a different table depending on how the student worked:
     on their SUBMISSION for the interactive path (the artifact wrote it) and on their GRADE for

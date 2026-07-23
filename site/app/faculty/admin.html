@@ -16,7 +16,7 @@
   </main>
 
   <!-- Generic modal — body swapped per action, following the established pattern (there is no
-       shared UI module; roster.html and grade.html do the same). -->
+       shared UI module; grade.html does the same). -->
   <div class="modal-backdrop" id="mk-modal">
     <div class="modal" style="max-width:520px">
       <div class="modal-head"><h2 id="mk-title"></h2><button class="modal-close" data-close>×</button></div>
@@ -29,6 +29,42 @@
     </div>
   </div>
 
+  <!-- Move a student between sections. Its own modal rather than the generic one because it
+       carries a <select> that has to be populated before it opens. -->
+  <div class="modal-backdrop" id="sec-modal">
+    <div class="modal" style="max-width:380px">
+      <div class="modal-head"><h2>Change section</h2><button class="modal-close" data-close>×</button></div>
+      <p class="muted" style="font-size:0.88em;margin-bottom:14px" id="sm-name"></p>
+      <div class="field"><label for="sm-select">Section</label><select id="sm-select"></select></div>
+      <div class="field-hint">Their work moves with them — submissions and grades hang off the
+        enrollment row, not off the section.</div>
+      <div class="error-msg" id="sm-error" style="min-height:1em"></div>
+      <div class="row" style="gap:10px;margin-top:8px">
+        <button class="btn btn-primary" id="sm-save">Save</button>
+        <button class="btn btn-secondary" data-close>Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reset a cadet to the default password. -->
+  <div class="modal-backdrop" id="pw-modal">
+    <div class="modal" style="max-width:440px">
+      <div class="modal-head"><h2>Reset password</h2><button class="modal-close" data-close>×</button></div>
+      <p id="pwm-name" style="font-weight:600;margin-bottom:6px"></p>
+      <p class="muted" style="font-size:0.88em;margin-bottom:14px">
+        This sets their password back to the <strong>default</strong> — the last 6 digits of their
+        cadet ID. They will be required to choose a new one the next time they sign in.
+        You cannot set a specific password, and you will not be shown theirs.</p>
+      <div class="error-msg" id="pwm-error" style="min-height:1em"></div>
+      <div class="row" style="gap:10px;margin-top:8px">
+        <button class="btn btn-primary" id="pwm-confirm">Reset to default</button>
+        <button class="btn btn-secondary" data-close>Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="csv-file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" style="display:none">
+
   <script type="module">
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
@@ -36,10 +72,33 @@
     import { esc, lastFirst, runPage, showFatal } from '../js/util.js';
     import { allSectionIds } from '../js/faculty-grade.js';
     import * as A from '../js/faculty-admin.js';
+    import * as R from '../js/faculty-roster.js';
+    import * as RI from '../js/roster-import.js';
 
-    let tab = 'staff';
+    /* ── One page, three tabs: Students · Staff · Export ─────────────────────────
+     * The Students tab was two separate pages for a few hours on 2026-07-23 (`roster.html` and
+     * `enrollment.html`, roadmap P1.9) before the director called it: they are one job, and
+     * splitting them put two more entries in the nav bar to do it. Both pages are gone; everything
+     * they held lives here, which is where a director looking at staffing and export already was.
+     *
+     * The whole page stays director-gated, as it has been. Note that `reset-student-password`
+     * itself admits ANY staff member of the offering — the help doc has said so since 2026-07-21 —
+     * but no UI has ever offered it to an instructor, because the only page carrying the button was
+     * always director-only. That gap predates this merge and is recorded rather than quietly
+     * widened; exposing it means giving instructors a read-only view of this tab, which is a
+     * deliberate decision and not one to make in passing.
+     */
+    let tab = 'students';
     let cache = null;                       // last loadStaff() result, for the modals
     let onConfirm = null;                   // active modal's confirm handler
+
+    // Students tab state.
+    let staged = null;            // the import, between preview and commit
+    let pwTarget = null;          // { studentId, name } for the reset modal
+    let offeringSections = [];    // [{ id (uuid), code, meeting_days, period }]
+    let editSid = null;           // enrollment id being moved
+    let roster = [];              // the loaded roster, filtered client-side by the search box
+    let query = '';
 
     const ctx = await bootstrap({ require: 'faculty' });
     const isAdmin = () => !!ctx?.instructorRow?.is_global_admin;
@@ -51,8 +110,27 @@
 
     function init() {
       initTheme();
-      renderNav(ctx, { active: 'admin', onCourseChange: () => { cache = null; render().catch(showFatal); } });
+      renderNav(ctx, { active: 'admin', onCourseChange: () => {
+        cache = null; staged = null; roster = []; query = '';
+        render().catch(showFatal);
+      } });
       wireModal();
+      wireSecModal();
+      wirePwModal();
+      // Cross-tab links inside a panel ("…is the Students tab") switch rather than navigate.
+      // Delegated on #main, wired ONCE here rather than inside render(): render() replaces the
+      // panel beneath this element on every tab change but not the element itself, so re-attaching
+      // there would stack a fresh handler per render and re-render N times on the Nth click.
+      document.getElementById('main').addEventListener('click', (e) => {
+        const link = e.target.closest('[data-goto-tab]');
+        if (!link) return;
+        e.preventDefault();
+        tab = link.dataset.gotoTab;
+        render().catch(showFatal);
+      });
+      document.getElementById('csv-file').addEventListener('change', (e) => {
+        const f = e.target.files[0]; if (f) readCsv(f);
+      });
       return render();
     }
 
@@ -71,17 +149,464 @@
       root.innerHTML = `
         <div class="page-head"><h1>Course administration</h1>
           <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))}${
-            ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''} — this offering, and the people who run it.</div></div>
+            ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''} — this offering, the cadets in it,
+            and the people who run it.</div></div>
         <div class="subtabs">
+          <button class="subtab ${tab === 'students' ? 'active' : ''}" data-tab="students">Students</button>
           <button class="subtab ${tab === 'staff' ? 'active' : ''}" data-tab="staff">Staff</button>
           <button class="subtab ${tab === 'export' ? 'active' : ''}" data-tab="export">Export</button>
         </div>
         <div id="panel"><div class="center-load"><span class="spinner"></span><span>Loading…</span></div></div>`;
 
       root.querySelectorAll('[data-tab]').forEach(b =>
-        b.addEventListener('click', () => { tab = b.dataset.tab; render().catch(showFatal); }));
+        b.addEventListener('click', () => {
+          tab = b.dataset.tab;
+          // A staged-but-uncommitted import does not survive leaving the tab. That is deliberate:
+          // the preview was computed against a roster that may have moved underneath it, and
+          // silently committing a stale reconciliation is the one outcome the preview exists to
+          // prevent (djGradebookProject's importer abandons on navigation for the same reason).
+          if (tab !== 'students') staged = null;
+          render().catch(showFatal);
+        }));
 
-      if (tab === 'staff') await renderStaff(); else await renderExport();
+      if (tab === 'students') await renderStudents();
+      else if (tab === 'staff') await renderStaff();
+      else await renderExport();
+    }
+
+    /* ═══════════════════════════ Students ═══════════════════════════
+     * Looking a cadet up, and everything that changes who is enrolled, on one tab. The order is
+     * deliberate: the roster table is FIRST and the import is behind a disclosure below it,
+     * because looking somebody up is the frequent action and a destructive bulk import should
+     * not be the thing at the top of the page you open twenty times a term.
+     */
+    async function renderStudents() {
+      const panel = document.getElementById('panel');
+      const { students, sections, total, unprovisioned } = await R.loadRoster(ctx);
+      offeringSections = sections;
+      roster = students;
+
+      panel.innerHTML = `
+        <div class="card">
+          <div class="row wrap" style="justify-content:space-between;gap:12px;align-items:flex-end">
+            <div class="field grow" style="margin-bottom:0;min-width:220px">
+              <label for="q">Find a cadet</label>
+              <input id="q" type="search" placeholder="Name, cadet ID, squadron or section"
+                     autocomplete="off" value="${esc(query)}">
+            </div>
+            <div id="prov-box"></div>
+          </div>
+          <div id="prov-result" style="font-size:0.85em;margin-top:8px"></div>
+          <div id="roster-table"></div>
+        </div>
+
+        <details class="card imp-card" id="imp"${total ? '' : ' open'}>
+          <summary><strong>Import the registrar's roster</strong>
+            <span class="muted" style="font-size:0.85em">— adds and updates cadets in bulk</span></summary>
+          <div class="card-meta" style="margin-top:10px">The registrar's export, saved as
+            <strong>CSV</strong> or tab-separated text. It must include <code>Cadet EMPLID</code>,
+            <code>Cadet Name</code>, <code>Email</code>, <code>Cadet Squadron</code>, and
+            <code>Section</code>; Term, Subject, Course Number, Majors, Sex, and Advisor Name are
+            used when present. Rows for other courses are filtered out, and you review anything that
+            would change an existing record before it is written.</div>
+          <div class="dropzone" id="dropzone">
+            <div class="dz-ic">📄</div><div><strong>Choose a file</strong> or drag &amp; drop it here</div>
+          </div>
+          <div id="csv-preview" style="display:none;margin-top:16px"></div>
+        </details>`;
+
+      document.getElementById('q').addEventListener('input', (e) => {
+        query = e.target.value; renderRosterTable();
+      });
+
+      const dz = document.getElementById('dropzone');
+      dz.addEventListener('click', () => document.getElementById('csv-file').click());
+      dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-over'); });
+      dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+      dz.addEventListener('drop', (e) => {
+        e.preventDefault(); dz.classList.remove('drag-over');
+        const f = e.dataTransfer.files[0]; if (f) readCsv(f);
+      });
+
+      renderProvision(total, unprovisioned);
+      renderRosterTable();
+      if (staged) { document.getElementById('imp').open = true; renderPreview(); }
+    }
+
+    function renderProvision(total, unprovisioned) {
+      const box = document.getElementById('prov-box');
+      box.innerHTML = unprovisioned > 0
+        ? `<div class="row" style="gap:10px;align-items:center">
+             <span class="muted" style="font-size:0.9em">${unprovisioned} of ${total} need logins.</span>
+             <button class="btn btn-primary btn-sm" id="prov-btn">Provision ${unprovisioned} account${unprovisioned !== 1 ? 's' : ''}</button>
+           </div>`
+        : total > 0 ? `<span class="muted" style="font-size:0.9em">✓ All ${total} students have logins.</span>`
+        : `<span class="muted" style="font-size:0.9em">Import a roster to create student accounts.</span>`;
+      document.getElementById('prov-btn')?.addEventListener('click', doProvision);
+    }
+
+    /** Substring match across the four things people actually search by. */
+    function matches(s, q) {
+      if (!q) return true;
+      const hay = `${s.name} ${s.student_id} ${s.squadron || ''} ${s.section_code}`.toLowerCase();
+      return q.toLowerCase().split(/\s+/).filter(Boolean).every(t => hay.includes(t));
+    }
+
+    function renderRosterTable() {
+      const host = document.getElementById('roster-table');
+      if (!host) return;
+      if (!roster.length) {
+        host.innerHTML = `<div class="empty-state" style="margin-top:14px"><div class="es-ic">🧑‍🎓</div>
+          <h3>Nobody enrolled yet</h3><p>Import the registrar's export below to get started.</p></div>`;
+        return;
+      }
+      const list = roster.filter(s => matches(s, query));
+      host.innerHTML = `
+        <div class="muted" style="font-size:0.85em;margin:14px 0 6px">${
+          list.length === roster.length
+            ? `${roster.length} student${roster.length === 1 ? '' : 's'} enrolled`
+            : `${list.length} of ${roster.length} students`}</div>
+        ${list.length ? `<div class="table-wrap"><table>
+          <thead><tr><th>Student ID</th><th>Name</th><th>Email</th><th>Sqdn</th><th>Section</th><th style="text-align:center">Auth</th><th></th></tr></thead>
+          <tbody>${list.map(s => `<tr>
+            <td>${s.student_id}</td>
+            <td><a href="student.html?e=${encodeURIComponent(s.enrollment_id)}">${esc(lastFirst(s.name))}</a></td>
+            <td class="muted" style="font-size:0.9em">${s.email ? esc(s.email) : '<span title="No address on file — this cadet predates the registrar import.">—</span>'}</td>
+            <td>${esc(s.squadron || '—')}</td>
+            <td>${esc(s.section_code)}</td>
+            <td style="text-align:center" class="${s.auth_user_id ? 'auth-yes' : 'auth-no'}">${s.auth_user_id ? '✓' : '—'}</td>
+            <td style="white-space:nowrap;text-align:right">
+              <button class="btn btn-ghost btn-sm" data-edit="${esc(s.enrollment_id)}" data-name="${esc(lastFirst(s.name))}" data-section="${esc(s.section_id)}">Move</button>
+              ${s.auth_user_id ? `<button class="btn btn-ghost btn-sm" data-pwreset="${esc(s.student_id)}" data-name="${esc(lastFirst(s.name))}">Reset password</button>` : ''}
+              <button class="btn btn-ghost btn-sm" style="color:var(--red)" data-remove="${esc(s.enrollment_id)}" data-name="${esc(lastFirst(s.name))}" data-sid="${esc(s.student_id)}">Remove</button>
+            </td></tr>`).join('')}</tbody></table></div>`
+          : `<div class="muted">Nobody matches “${esc(query)}”.</div>`}`;
+
+      host.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openSecModal(b.dataset.edit, b.dataset.name, b.dataset.section)));
+      host.querySelectorAll('[data-remove]').forEach(b => b.addEventListener('click', () => doRemove(b.dataset.remove, b.dataset.name, b.dataset.sid)));
+      host.querySelectorAll('[data-pwreset]').forEach(b => b.addEventListener('click', () => openPwModal(b.dataset.pwreset, b.dataset.name)));
+    }
+
+    /* ── Import: read → preview → review → commit ──────────────────────────────
+     * Nothing is written until the operator clicks through the preview. That is not just
+     * politeness: the file may cover several courses, may name sections that do not exist,
+     * and may carry stale details for cadets we already hold. Each of those is a decision,
+     * and the only place to make it is in front of the data.
+     *
+     * An .xlsx dropped here cannot be read — parsing the zip+XML would mean shipping a
+     * spreadsheet library, and CORE.md §2 forbids adding a build step or a runtime
+     * dependency to the site. Detected by signature and explained, rather than parsed into
+     * nonsense.
+     */
+    function readCsv(file) {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const text = e.target.result;
+        if (/^PK\x03\x04/.test(text.slice(0, 4))) {
+          showImportError([
+            'That looks like an Excel workbook (.xlsx), which this page cannot read.',
+            'In Excel: File → Save As → CSV UTF-8 (Comma delimited), then upload that file.',
+          ]);
+          return;
+        }
+        await previewImport(text, file.name);
+      };
+      reader.readAsText(file);
+    }
+
+    function showImportError(lines) {
+      const box = document.getElementById('csv-preview');
+      box.style.display = '';
+      box.innerHTML = `<div class="alert alert-error">
+          ${lines.map(l => `<div>${esc(l)}</div>`).join('')}
+        </div>
+        <button class="btn btn-secondary" id="csv-cancel">Close</button>`;
+      document.getElementById('csv-cancel').onclick = clearImport;
+    }
+
+    function clearImport() {
+      staged = null;
+      const box = document.getElementById('csv-preview');
+      if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+      const f = document.getElementById('csv-file'); if (f) f.value = '';
+    }
+
+    async function previewImport(text, filename) {
+      const known = Object.fromEntries(offeringSections.map(x => [x.code.toUpperCase(), x]));
+      const parsed = RI.parseRosterFile(text, {
+        knownSections: Object.keys(known).length ? known : null,
+        courseCode: ctx.currentCourseCode,
+      });
+
+      if (parsed.errors.length) { showImportError(parsed.errors); return; }
+      if (!parsed.rows.length && !parsed.unknownSections.length) {
+        showImportError(['No rows in that file matched this course.',
+          ...parsed.skipped.slice(0, 4).map(s => `Line ${s.line} (${s.label}): ${s.reason}`)]);
+        return;
+      }
+
+      // Reconcile against what we already hold. Two reads, not one per student.
+      const ids = parsed.rows.map(r => r.student_id);
+      const [{ students: existing, error }, enrolledIds] = await Promise.all([
+        R.loadExistingStudents(ids),
+        R.loadEnrolledIds(ctx),
+      ]);
+      if (error) { showImportError([`Could not check the current roster: ${error.message}`]); return; }
+
+      const { fresh, conflicts } = RI.reconcile(parsed.rows, existing, enrolledIds);
+      // rawText is kept so "create these sections" can re-run this exact parse against the
+      // new sections without asking the operator to pick the file again.
+      staged = { parsed, fresh, conflicts, filename, rawText: text,
+                 summary: RI.summarize(parsed, { fresh, conflicts }) };
+      renderPreview();
+    }
+
+    function renderPreview() {
+      const { parsed, fresh, conflicts, summary: s } = staged;
+      const box = document.getElementById('csv-preview');
+      box.style.display = '';
+
+      const decidable = conflicts.filter(c => !c.trivial);
+
+      // Unknown sections block the rows that reference them, so offer the fix inline rather
+      // than sending the operator somewhere else and back.
+      const sectionOffer = parsed.unknownSections.length ? `
+        <div class="alert alert-warn">
+          <strong>${parsed.unknownSections.length} section${parsed.unknownSections.length !== 1 ? 's' : ''} in this file do not exist yet:</strong>
+          ${esc(parsed.unknownSections.join(', '))}.
+          The ${parsed.skipped.filter(k => k.code === 'unknown-section').length} row(s) in them were left out.
+          <div style="margin-top:8px">
+            <button class="btn btn-secondary btn-sm" id="mk-sections">Create these sections and re-check</button>
+          </div>
+        </div>` : '';
+
+      const skippedByCode = {};
+      parsed.skipped.forEach(k => { (skippedByCode[k.code] ||= []).push(k); });
+      const SKIP_LABEL = {
+        'other-course': 'for another course',
+        'unknown-section': 'in a section this course does not have',
+        'invalid': 'with a problem in the row',
+      };
+      const skipSummary = parsed.skipped.length ? `
+        <details style="margin-top:10px">
+          <summary class="muted" style="cursor:pointer;font-size:0.88em">
+            ${parsed.skipped.length} row(s) not imported — see why</summary>
+          <div class="table-wrap" style="margin-top:8px"><table>
+            <thead><tr><th>Line</th><th>Who</th><th>Reason</th></tr></thead>
+            <tbody>${Object.entries(skippedByCode).flatMap(([code, list]) =>
+              list.slice(0, 25).map(k => `<tr>
+                <td>${k.line}</td><td>${esc(k.label)}</td>
+                <td class="muted">${esc(k.reason)}</td></tr>`)
+              .concat(list.length > 25
+                ? [`<tr><td colspan="3" class="muted">…and ${list.length - 25} more ${esc(SKIP_LABEL[code] || code)}</td></tr>`]
+                : [])
+            ).join('')}</tbody></table></div>
+        </details>` : '';
+
+      const conflictBlock = decidable.length ? `
+        <div class="card" style="margin-top:14px">
+          <div class="card-title">${decidable.length} returning student${decidable.length !== 1 ? 's' : ''} — choose what to keep</div>
+          <div class="card-meta">These cadets already have a record, and this file has different
+            details for them. <strong>Keep existing</strong> enrolls them in this course and changes
+            nothing else. <strong>Use the file</strong> replaces the fields shown.
+            <button class="btn btn-ghost btn-sm" id="bulk-attach">Keep existing for all</button>
+            <button class="btn btn-ghost btn-sm" id="bulk-overwrite">Use the file for all</button>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Cadet</th><th>What would change</th><th style="white-space:nowrap">Resolution</th></tr></thead>
+            <tbody>${decidable.map((c, i) => `<tr>
+              <td style="white-space:nowrap">
+                <div>${esc(lastFirst(c.row.name))}</div>
+                <div class="muted" style="font-size:0.85em">${c.row.student_id}${c.alreadyEnrolled ? ' · already enrolled' : ''}</div>
+              </td>
+              <td>${c.diffs.map(d => `<div style="font-size:0.88em">
+                    <span class="muted">${esc(d.label)}:</span>
+                    <span style="text-decoration:line-through;opacity:0.65">${esc(d.from || '—')}</span>
+                    → <strong>${esc(d.to)}</strong></div>`).join('')}</td>
+              <td style="white-space:nowrap">
+                <label style="display:block;font-size:0.88em"><input type="radio" name="res-${i}" data-res="${i}" value="attach" ${c.resolution === 'attach' ? 'checked' : ''}> Keep existing</label>
+                <label style="display:block;font-size:0.88em"><input type="radio" name="res-${i}" data-res="${i}" value="overwrite" ${c.resolution === 'overwrite' ? 'checked' : ''}> Use the file</label>
+              </td></tr>`).join('')}</tbody></table></div>
+        </div>` : '';
+
+      const trivialCount = conflicts.length - decidable.length;
+
+      box.innerHTML = `
+        ${sectionOffer}
+        <div class="alert alert-info">
+          <strong>${s.matched}</strong> of ${s.inFile} row(s) match this course —
+          <strong>${fresh.length}</strong> new, <strong>${conflicts.length}</strong> already on file${trivialCount ? ` (${trivialCount} unchanged)` : ''}.
+          Sections: ${esc(s.sections.join(', ') || '—')}.
+          ${skipSummary}
+        </div>
+        ${fresh.length ? `<details${fresh.length <= 12 ? ' open' : ''}>
+          <summary class="muted" style="cursor:pointer;font-size:0.88em">${fresh.length} new student(s)</summary>
+          <div class="table-wrap" style="margin-top:8px"><table>
+            <thead><tr><th>Cadet ID</th><th>Name</th><th>Email</th><th>Sqdn</th><th>Section</th></tr></thead>
+            <tbody>${fresh.slice(0, 25).map(r => `<tr>
+              <td>${r.student_id}</td><td>${esc(lastFirst(r.name))}</td>
+              <td class="muted" style="font-size:0.9em">${esc(r.email)}</td>
+              <td>${esc(r.squadron)}</td><td>${esc(r.section_code)}</td></tr>`).join('')}
+            ${fresh.length > 25 ? `<tr><td colspan="5" class="muted">…and ${fresh.length - 25} more</td></tr>` : ''}
+            </tbody></table></div></details>` : ''}
+        ${conflictBlock}
+        <div class="row" style="gap:10px;margin-top:14px">
+          <button class="btn btn-primary" id="csv-commit">Import ${s.matched} student${s.matched !== 1 ? 's' : ''}</button>
+          <button class="btn btn-secondary" id="csv-cancel">Cancel</button>
+          <span id="csv-status" style="font-size:0.85em"></span>
+        </div>`;
+
+      box.querySelectorAll('[data-res]').forEach(r => r.addEventListener('change', () => {
+        decidable[Number(r.dataset.res)].resolution = r.value;
+      }));
+      document.getElementById('bulk-attach')?.addEventListener('click', () => {
+        decidable.forEach(c => { c.resolution = 'attach'; }); renderPreview();
+      });
+      document.getElementById('bulk-overwrite')?.addEventListener('click', () => {
+        decidable.forEach(c => { c.resolution = 'overwrite'; }); renderPreview();
+      });
+      document.getElementById('mk-sections')?.addEventListener('click', doCreateSections);
+      document.getElementById('csv-commit').onclick = doCommit;
+      document.getElementById('csv-cancel').onclick = clearImport;
+    }
+
+    /**
+     * Create the sections the file referenced, then re-parse the SAME file against them.
+     * Re-parsing rather than patching the staged rows keeps one code path: the rows that were
+     * skipped for an unknown section go through exactly the validation everything else did.
+     */
+    async function doCreateSections() {
+      const btn = document.getElementById('mk-sections');
+      const codes = staged.parsed.unknownSections;
+      btn.disabled = true; btn.textContent = 'Creating…';
+      const { error } = await R.createSections(ctx, codes);
+      if (error) { btn.disabled = false; btn.textContent = 'Create these sections and re-check';
+                   showImportError([`Could not create sections: ${error.message}`]); return; }
+      const { sections } = await R.loadOfferingSections(ctx);
+      offeringSections = sections;
+      staged.sectionsCreated = (staged.sectionsCreated || 0) + codes.length;
+      const created = staged.sectionsCreated, name = staged.filename, text = staged.rawText;
+      await previewImport(text, name);
+      if (staged) staged.sectionsCreated = created;
+    }
+
+    async function doCommit() {
+      if (!staged) return;
+      const st = document.getElementById('csv-status');
+      const btn = document.getElementById('csv-commit');
+      btn.disabled = true;
+      st.style.color = 'var(--muted)'; st.textContent = 'Importing…';
+
+      const { error, counts, invisible, auditWarning } = await R.commitRoster(
+        ctx, staged.fresh, staged.conflicts,
+        { filename: staged.filename, rowsInFile: staged.summary.inFile,
+          sectionsCreated: staged.sectionsCreated || 0 });
+
+      if (error) {
+        btn.disabled = false;
+        st.style.color = 'var(--red)'; st.textContent = '⚠ ' + error.message;
+        return;
+      }
+      st.style.color = 'var(--green)';
+      st.innerHTML = `✓ ${counts.students_created} added, ${counts.students_updated} updated, `
+        + `${counts.students_untouched} left as-is`
+        // Worth saying out loud: some of those "new" students turned out to already exist in a
+        // course this director cannot see, so their records were enrolled but not touched.
+        + (invisible ? `<div class="muted" style="margin-top:6px">${invisible} of the new
+             students already had a record from another course — they were enrolled here without
+             changing it.</div>` : '');
+      if (auditWarning) console.warn('Roster import audit row failed:', auditWarning);
+      setTimeout(() => { clearImport(); renderStudents(); }, 1600);
+    }
+
+    async function doProvision() {
+      const btn = document.getElementById('prov-btn'), out = document.getElementById('prov-result');
+      btn.disabled = true; btn.innerHTML = '<span class="spinner on-dark"></span> Provisioning…'; out.textContent = '';
+      const { data, error } = await R.provision(ctx);
+      btn.disabled = false; btn.textContent = 'Provision accounts';
+      const res = data || {};
+      if (error || res.error) { out.style.color = 'var(--red)'; out.textContent = '⚠ ' + (res.error || error.message); return; }
+      out.style.color = res.count ? 'var(--green)' : 'var(--muted)';
+      const noEmail = res.skipped_no_email || 0;
+      const otherFailures = (res.errors?.length || 0) - noEmail;
+      out.innerHTML = `✓ ${res.count || 0} account${res.count !== 1 ? 's' : ''} created`
+        // A cadet with no address is the one failure an operator can actually fix, so it gets
+        // a sentence rather than a console entry.
+        + (noEmail ? `<div style="color:var(--alert-warn-fg);margin-top:6px">
+             ${noEmail} skipped — no email address on file. Re-import the registrar's export
+             (with its <code>Email</code> column) and provision again.</div>` : '')
+        + (otherFailures > 0 ? `<div style="color:var(--red);margin-top:4px">${otherFailures} failed — see the browser console.</div>` : '');
+      if (res.errors?.length) console.warn('Provision errors:', res.errors);
+      setTimeout(renderStudents, 2000);
+    }
+
+    async function doRemove(enrollmentId, name, sid) {
+      if (!confirm(`Remove ${name} (${sid})?\n\nThis permanently deletes their enrollment in this course, all submissions, and all scores.`)) return;
+      const { error } = await R.removeEnrollment(enrollmentId);
+      if (error) { alert('Error removing student: ' + error.message); return; }
+      renderStudents();
+    }
+
+    // section-move modal
+    function wireSecModal() {
+      const m = document.getElementById('sec-modal');
+      m.addEventListener('click', (e) => { if (e.target.id === 'sec-modal' || e.target.dataset.close !== undefined) m.classList.remove('open'); });
+      document.getElementById('sm-save').addEventListener('click', saveSection);
+    }
+    function openSecModal(enrollmentId, name, cur) {
+      editSid = enrollmentId;
+      document.getElementById('sm-name').textContent = name;
+      document.getElementById('sm-select').innerHTML = offeringSections.map(x => `<option value="${esc(x.id)}"${x.id === cur ? ' selected' : ''}>${esc(x.code)}</option>`).join('');
+      document.getElementById('sm-error').textContent = '';
+      document.getElementById('sec-modal').classList.add('open');
+    }
+    async function saveSection() {
+      const sec = document.getElementById('sm-select').value;
+      const err = document.getElementById('sm-error');
+      const { error } = await R.updateStudentSection(editSid, sec);
+      if (error) { err.textContent = 'Error: ' + error.message; return; }
+      document.getElementById('sec-modal').classList.remove('open');
+      renderStudents();
+    }
+
+    /* ── Reset a student's password to the default ─────────────────────────────
+     * The operator never chooses or sees the password: the edge function derives it from the
+     * cadet ID and flags the account so the student is forced to pick their own on the next
+     * sign-in. There is deliberately no "set a specific password" path — someone who knows a
+     * cadet's password is indistinguishable, in the database, from that cadet.
+     */
+    function wirePwModal() {
+      const m = document.getElementById('pw-modal');
+      m.addEventListener('click', (e) => {
+        if (e.target.id === 'pw-modal' || e.target.dataset.close !== undefined) m.classList.remove('open');
+      });
+      document.getElementById('pwm-confirm').addEventListener('click', doPwReset);
+    }
+    function openPwModal(studentId, name) {
+      pwTarget = { studentId, name };
+      document.getElementById('pwm-name').textContent = `${name} · ${studentId}`;
+      document.getElementById('pwm-error').textContent = '';
+      const btn = document.getElementById('pwm-confirm');
+      btn.disabled = false; btn.textContent = 'Reset to default';
+      document.getElementById('pw-modal').classList.add('open');
+    }
+    async function doPwReset() {
+      if (!pwTarget) return;
+      const err = document.getElementById('pwm-error'), btn = document.getElementById('pwm-confirm');
+      btn.disabled = true; btn.innerHTML = '<span class="spinner on-dark"></span> Resetting…';
+      err.textContent = '';
+
+      const { data, error } = await R.resetStudentPassword(ctx, pwTarget.studentId);
+      const res = data || {};
+      if (error || res.error) {
+        btn.disabled = false; btn.textContent = 'Reset to default';
+        err.textContent = '⚠ ' + (res.error || error.message);
+        return;
+      }
+      document.getElementById('pw-modal').classList.remove('open');
+      alert(`${pwTarget.name}'s password is back to the default — the last 6 digits of their cadet ID.\n\n` +
+            `Tell them in person. They will have to choose a new password when they sign in.`);
+      pwTarget = null;
     }
 
     /* ───────────────────────────── Staff ───────────────────────────── */
@@ -193,8 +718,8 @@
 
       if (!sections.length) {
         return `<div class="card"><div class="card-title">Section coverage</div>
-          <div class="muted">No sections yet — they are created by a roster import on
-          <a href="enrollment.html">Enrollment</a>.</div></div>`;
+          <div class="muted">No sections yet — they are created by a roster import on the
+          <a href="#" data-goto-tab="students">Students</a> tab.</div></div>`;
       }
 
       const chip = (s) => `<span class="cov-chip" draggable="true" data-person="${esc(s.instructorId)}"
@@ -226,7 +751,8 @@
         <div class="card-meta">Drag a name onto a section, or use the section's dropdown. Each
           person grades the sections they hold here — <code>staff_assignments</code> replaced
           <code>sections.instructor_id</code>, so adding staff and assigning a section are one
-          action. Enrolment is managed on <a href="enrollment.html">Enrollment</a>.</div>
+          action. Which <em>cadets</em> are in each section is the
+          <a href="#" data-goto-tab="students">Students</a> tab.</div>
         ${wide.length ? `<div class="alert alert-info cov-wide">
             <strong>${wide.length} of ${pool.length} hold offering-wide coverage:</strong>
             ${wide.map(s => esc(s.name)).join(', ')}.
@@ -447,7 +973,7 @@
 
         <div class="card">
           <div class="card-title">Full JSON backup</div>
-          <div class="card-meta">Assignments, enrolments, submissions, and grades for
+          <div class="card-meta">Assignments, enrollments, submissions, and grades for
             <strong>this offering</strong> — for archiving a term or moving data off-platform.</div>
           <div class="alert alert-warn">Contains student PII and every free-response answer. It
             downloads unencrypted — store it like a gradebook, not like a spreadsheet.</div>
@@ -478,7 +1004,7 @@
         A.triggerDownload(JSON.stringify(backup, null, 2),
           A.exportFilename('Backup', 'json'), 'application/json');
         st.style.color = 'var(--green)';
-        st.textContent = `✓ ${backup.enrollments.length} enrolments, ${backup.grades.length} grades`;
+        st.textContent = `✓ ${backup.enrollments.length} enrollments, ${backup.grades.length} grades`;
       });
     }
 

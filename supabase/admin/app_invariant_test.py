@@ -2,7 +2,7 @@
 """Exercise the structural guarantees of schema `app` against the live database.
 
 Builds a throwaway fixture (course -> term -> course_offering -> section -> student ->
-enrolment, plus an assignment with a written and an interactive activity, scheduled as one
+enrollment, plus an assignment with a written and an interactive activity, scheduled as one
 assignment_offering), asserts each invariant behaves, then ROLLS BACK. Nothing persists.
 
 Runs as the `dml` tier, which doubles as proof that the everyday role can do real work.
@@ -11,7 +11,7 @@ What is proven here — these are the claims the redesign rests on, so they are 
 than asserted:
 
   1. effort -> points follows the migration-013 curve, scaled to points_possible
-  2. a SECOND grade for the same (enrolment, offering) is refused          <- "never 4 of 2"
+  2. a SECOND grade for the same (enrollment, offering) is refused          <- "never 4 of 2"
   3. points_earned > points_possible is refused                           <- "never 4 of 2"
   4. a 'practice' activity can never be chosen for credit
   5. an activity not offered in THIS offering cannot be chosen
@@ -20,7 +20,7 @@ than asserted:
   8. an unlock must name who performed it; an attributed unlock releases the lock
   9. flipping grading_role mid-term redirects NEW choices without breaking existing rows
      (the "if the interactive breaks, kick everyone over to the questions" case)
- 10. ei_sessions is repeatable, bounded, batch-groupable, and dies with its enrolment
+ 10. ei_sessions is repeatable, bounded, batch-groupable, and dies with its enrollment
  11. feedback enforces its category/message/role constraints and is write-once
 
 Usage:
@@ -150,7 +150,7 @@ def main():
     cur.execute("""INSERT INTO grades (enrollment_id,assignment_offering_id,submission_id,
                                        points_possible,effort,source)
                    VALUES (%s,%s,%s,2,4,'ai_suggested')""", (enrollment, ao, submission))
-    expect_error(cur, "second grade for same (enrolment, offering) is refused",
+    expect_error(cur, "second grade for same (enrollment, offering) is refused",
                  """INSERT INTO grades (enrollment_id,assignment_offering_id,points_possible,
                                         effort,source)
                     VALUES (%s,%s,2,5,'instructor')""", (enrollment, ao))
@@ -265,7 +265,7 @@ def main():
     print("\n--- 10. ei_sessions (migration 011) ---")
     cur.execute("SAVEPOINT ei")
 
-    # A second enrolment, for the batch check. Group 9 built one, but inside its own savepoint,
+    # A second enrollment, for the batch check. Group 9 built one, but inside its own savepoint,
     # which has already been rolled back — so this block owns its fixture rather than reaching
     # for a name that no longer resolves to a row.
     cur.execute("INSERT INTO students (student_id,name) VALUES (3000000003,'Third Cadet')")
@@ -274,11 +274,11 @@ def main():
     ei_e2 = cur.fetchone()[0]
 
     # The whole point of the table: the same cadet may come back. `extensions` refuses a second
-    # row for the same (enrolment, offering); this must NOT, or the second visit is swallowed.
+    # row for the same (enrollment, offering); this must NOT, or the second visit is swallowed.
     cur.execute("""INSERT INTO ei_sessions (enrollment_id,instructor_id,started_at,duration_minutes)
                    VALUES (%s,%s,now(),30) RETURNING id""", (enrollment, instructor))
     ei_1 = cur.fetchone()[0]
-    expect_ok(cur, "a SECOND session for the same enrolment is allowed (EI is repeatable)",
+    expect_ok(cur, "a SECOND session for the same enrollment is allowed (EI is repeatable)",
               """INSERT INTO ei_sessions (enrollment_id,instructor_id,started_at,duration_minutes)
                  VALUES (%s,%s,now(),45)""", (enrollment, instructor))
 
@@ -306,7 +306,7 @@ def main():
                  """INSERT INTO ei_sessions (enrollment_id,started_at,notes)
                     VALUES (%s,now(),%s)""", (enrollment, "x" * 4001))
 
-    # One bulk log = one batch_id across several enrolments, so a wrong duration is one edit.
+    # One bulk log = one batch_id across several enrollments, so a wrong duration is one edit.
     cur.execute("""INSERT INTO ei_sessions (enrollment_id,instructor_id,started_at,batch_id)
                    VALUES (%s,%s,now(),gen_random_uuid()) RETURNING batch_id""",
                 (enrollment, instructor))
@@ -321,9 +321,9 @@ def main():
     check("instructor_id is ON DELETE SET NULL, so departing staff do not erase history",
           cur.fetchone()[0] == "n")
 
-    # …but the rows are the cadet's term record, so they go when the enrolment does.
+    # …but the rows are the cadet's term record, so they go when the enrollment does.
     cur.execute("SELECT confdeltype FROM pg_constraint WHERE conname='ei_sessions_enrollment_id_fkey'")
-    check("enrollment_id is ON DELETE CASCADE, so a dropped enrolment takes its log",
+    check("enrollment_id is ON DELETE CASCADE, so a dropped enrollment takes its log",
           cur.fetchone()[0] == "c")
 
     # ROADMAP Q3: students cannot read their own. Enforcement is the ABSENCE of a student policy,

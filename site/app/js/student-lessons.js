@@ -18,7 +18,7 @@
 // contract the page renders and the doc describes. Only its derivation changed.
 //
 // `lesson_completions` is gone with no replacement: it existed to reconcile two grade
-// sources, and there is now exactly one (app.grades, UNIQUE per enrolment per offering).
+// sources, and there is now exactly one (app.grades, UNIQUE per enrollment per offering).
 
 import { loadAssignmentStatuses } from './student-data.js';
 import { questionsOf, answeredCount, displayPoints, isActivityAvailable } from './schema.js';

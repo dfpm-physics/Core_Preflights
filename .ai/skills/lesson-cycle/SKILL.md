@@ -122,7 +122,7 @@ writes `grades` and nothing else, and it skips rows that are `is_finalized = tru
 `source = 'instructor'`.
 
 **Before continuing, verify grading actually produced what the aggregator needs.** Every graded
-enrolment must carry a `schema: 1` payload in `grades.diagnostic`. If the skipped-row counts are
+enrollment must carry a `schema: 1` payload in `grades.diagnostic`. If the skipped-row counts are
 non-zero, those students have no assessment and will be a denominator with nothing in it — decide
 whether to proceed or fix them by hand first, and say which you chose.
 

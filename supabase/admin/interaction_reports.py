@@ -185,7 +185,7 @@ def _target(conn, student_id, activity_slug):
 
     One lookup rather than a compound UPDATE: the write has two destinations now
     (submission_activities.content and a grades row), and both need the same submission,
-    enrolment and offering.
+    enrollment and offering.
     """
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
@@ -253,7 +253,7 @@ def cmd_write(args, conn):
         try:
             cur.execute("update submission_activities set content = %s where id = %s",
                         (Json(rd), tgt["submission_activity_id"]))
-            # One grade per (enrolment, offering). A finalized grade is the instructor's —
+            # One grade per (enrollment, offering). A finalized grade is the instructor's —
             # repair the content but leave their number alone.
             cur.execute("""
                 insert into grades (enrollment_id, assignment_offering_id, submission_id,

@@ -134,7 +134,7 @@ likely reason the second account would not authenticate with a correctly copy-pa
 `Extend` that appears on hover) and in bulk (checkboxes, select-all, `Extend selected (N)`), through
 a modal defaulting to a week out at 2359 local. It calls the Grade tab's own `setExtension()` rather
 than composing a second upsert, so the two surfaces cannot drift on what an extension is, and
-re-granting amends rather than duplicating (the `(enrolment, offering)` UNIQUE key).
+re-granting amends rather than duplicating (the `(enrollment, offering)` UNIQUE key).
 
 One reason covers a batch — `reason` is NOT NULL and non-blank-checked
 (`007_extension_governance_and_review.sql:79-82`), and a group extended together shares the cause
@@ -604,12 +604,12 @@ Three things that pass forward:
   where a §5 row or an adjacent file turned out worse than recorded once read against the code;
   treat a roadmap entry as a lead, not a spec.
 
-**Also 2026-07-23 (sixth batch): P1.8 · P1.9 · P1.10 · P1.11 · P1.14** — the EI panel, Enrollment as
-its own page, drag-and-drop section coverage, the offering-wide count, and the Grade queue that
-replaces the late filter. Frontend only; no DDL, no live data touched. **P1 is now empty except
-P1.12's whole-section half.**
+**Also 2026-07-23 (sixth batch): P1.8 · P1.9 · P1.10 · P1.11 · P1.14** — the EI panel, the roster
+folded into Course Admin, drag-and-drop section coverage, the offering-wide count, and the Grade
+queue that replaces the late filter. Frontend only; no DDL, no live data touched. **P1 is now empty
+except P1.12's whole-section half.**
 
-Four things pass forward, and two of them are the kind of finding a roadmap entry cannot contain:
+Five things pass forward, and two of them are the kind of finding a roadmap entry cannot contain:
 
 - **"What you can see" is not "what you owe", and the difference was already shipped wrong.** A
   director's staff row is offering-wide, so `ctx.sectionIds` is the whole course — and the due-out
@@ -626,15 +626,20 @@ Four things pass forward, and two of them are the kind of finding a roadmap entr
   exclusion is the only rule in the new queue that depends on *another* part of the system being
   true (migration 015). It is asserted narrowly and pinned by a counterfactual test, on the pattern
   P0.14 established.
+- **The nav bar is the scarce resource, and P1.9 spent two entries before anyone noticed.** The
+  first build of it was two pages — defensible on its own terms, and corrected within hours because
+  the cost showed up somewhere the item never mentioned. When an item says "move X out of Y", ask
+  where it *lands* before asking how to split it. A test now asserts the bar's shape, including that
+  every href resolves to a file that exists.
 
 **The one thing still owed, and it is now owed twice:** none of the sixth batch has been seen
 rendered by a signed-in faculty user either — 200-odd new assertions and a clean syntax pass are not
-the same claim, and this batch is unusually visual (a drag target, a card strip, a page that did not
-exist). **Run `tests/browser-harness/pass.mjs` before P0.2 deletes the test faculty account** — after
-that it needs a human in the Supabase dashboard again, which is what made P0.5 take three attempts.
+the same claim, and this batch is unusually visual (a drag target, a card strip, a rebuilt tab).
+**Run `tests/browser-harness/pass.mjs` before P0.2 deletes the test faculty account** — after that
+it needs a human in the Supabase dashboard again, which is what made P0.5 take three attempts.
 Specifically unverified: the coverage grid's drag-and-drop, the Grade queue against genuinely late
-work (still nothing late in the term — same blocker P0.5 hit), and Roster rendered as a plain
-instructor, which is a role boundary that changed.
+work (still nothing late in the term — same blocker P0.5 hit), and the merged Students tab, which is
+now the only route to a roster import.
 
 **Start P2.1 (Blackboard) during P1.** Its risk is entirely in round-trip testing with a real file,
 and that lead time cannot be compressed at term end.
@@ -1019,7 +1024,7 @@ unparseable timestamp · label boundaries · `effectiveDue` regression guard), p
 *The director asked "don't these show up in the Grade tab?" — they do, but you cannot tell which
 ones are late.*
 
-- `loadGradingData()` (`faculty-grade.js:93-103`) filters only by offering and enrolment. **Nothing
+- `loadGradingData()` (`faculty-grade.js:93-103`) filters only by offering and enrollment. **Nothing
   compares against `due_at`.**
 - The grade card (`grade.html:263-270`) renders name, section, finalized tag, provenance tag,
   extension chip, total — **no lateness indicator.**
@@ -1281,26 +1286,42 @@ everything. Both halves are pinned in `test-schema.mjs` and `test-tasks.mjs`.
 `report.html` and `gradebook.html` are untouched) — three surfaces now need it and none of them should
 pull 56 KB of aggregation maths into the browser to ask a question about `ctx`.
 
-#### P1.9 — Enrollment moved out of Roster into its own tab · ✅ **DONE 2026-07-23**
+#### P1.9 — Roster and enrollment, as one tab of Course Admin · ✅ **DONE 2026-07-23** — *corrected the same day*
 
-`faculty/enrollment.html` — director-gated, holding the registrar import and its reconciliation,
-account provisioning, and section placement (grouped by section, because "is anybody in the wrong
-section" is the question after an import and a flat list sorted by name cannot answer it). A re-mount,
-not a rewrite: `roster-import.js` was already pure and DOM-free, and none of the import logic changed.
+**Where it landed: `faculty/admin.html` → the Students tab**, beside Staff and Export. It holds the
+roster table with a search box, the registrar import and its reconciliation, account provisioning,
+and section placement. Both standalone pages are deleted. A re-mount, not a rewrite:
+`roster-import.js` was already pure and DOM-free, and none of the import logic changed.
 
-**Roster is now open to any staff member of the offering**, which is the half of this item that was
-easy to miss. It was director-only *because* it also held a destructive bulk import — you cannot show
-an instructor a page whose first card overwrites the roster. What remains is a lookup table with a
-search box, scoped to `ctx.sectionIds`; "what squadron is she in, has he got a login yet" is an
-instructor's ordinary question and always should have been theirs to ask. The password reset stayed:
-`reset-student-password` derives the default from the cadet ID and rejects a chosen one, so it reveals
-nothing the instructor was not already looking at.
+**The first attempt built it as two separate pages** (`roster.html` for lookups, open to
+instructors; `enrollment.html` for everything that changes who is enrolled, director-gated) and the
+director corrected it within hours. The reasoning for splitting was not wrong — a destructive bulk
+import genuinely should not head the page you open to check a squadron number — but the cost was
+**two more nav entries for one job**, and the nav bar is the scarcer resource. Course Admin was
+already where a director went to manage the offering; the roster is one more thing about the
+offering.
+
+**What the correction gave up, recorded so it is a decision and not a slip:** an instructor has no
+roster lookup, because Course Admin is director-gated. That is the state PREP was in before this
+item, so nothing regressed — but a claim in `instructor-accounts.md` did turn out to have been
+wrong all along. It said *"any instructor assigned to the course can [reset a password], not just
+the course director"*, and `reset-student-password` really does admit any staff member. **No page
+has ever offered them the button**, because the only page carrying it was always director-only. The
+doc is corrected. If lockouts start costing a day, the fix is a read-only Students tab for
+instructors, not a password field.
 
 **Roster's "Sections" tab went away** rather than moving — it was the assign-an-instructor UI that
 P1.10 replaces. `loadSections()` and `assignInstructor()` are deleted with it. Worth recording:
 `assignInstructor()` deleted every `role='instructor'` row for the section before inserting, so a
 section could hold exactly one instructor. Nobody ever stated that rule, two people co-teaching is
 ordinary, and the replacement does not reproduce it.
+
+**Also 2026-07-23: `enrolment` → `enrollment` throughout.** British spelling had leaked into ~50
+files' comments, prose and local variable names while the database column was `enrollment_id` all
+along. Normalized across `site/`, `tests/`, `scripts/`, `supabase/admin/`, `supabase/functions/`,
+`.ai/` and the live `docs/`. **Deliberately not touched:** `docs/decisions/` and `docs/contracts/`
+(point-in-time records, CORE.md §5), `supabase/migrations/**` (an applied chain — the file on disk
+should match what was executed, comments included), and historical `CHANGELOG.md` entries.
 
 #### P1.10 — Section assignment: drag-and-drop, in Course Admin · ✅ **DONE 2026-07-23**
 
@@ -1383,8 +1404,8 @@ by a signed-in user with real data** — see the note under P1.4.
 
 #### P1.2 — Per-student detail page · ✅ **DONE 2026-07-22**
 
-`faculty/student.html?e=<enrolment>` + `js/faculty-student.js`. Reached from the gradebook or the
-roster; no nav entry, like `report.html`. Keyed on the **enrolment**, because that is what every RLS
+`faculty/student.html?e=<enrollment>` + `js/faculty-student.js`. Reached from the gradebook or the
+roster; no nav entry, like `report.html`. Keyed on the **enrollment**, because that is what every RLS
 policy keys on — a cadet id would have to be resolved to one before anything could be read anyway.
 
 - **This is where the two layers sit side by side, and the only place they should.** Points are the
@@ -1537,7 +1558,7 @@ pass: pick a date/time/duration once, tick the students who were there, log.
 interaction pattern is the good part: **log-now-with-one-click, correct-later-in-a-modal**, with
 row-click opening the edit modal.
 
-Proposed shape — `app.ei_sessions`: enrolment (or student + offering), staff id, `started_at`,
+Proposed shape — `app.ei_sessions`: enrollment (or student + offering), staff id, `started_at`,
 `duration_minutes`, `notes`, `created_at`. **RLS: staff of the offering only — students cannot read
 their own** (director's decision; additive to open later, breaking to close).
 

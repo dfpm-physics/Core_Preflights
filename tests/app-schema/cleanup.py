@@ -7,7 +7,7 @@ WHY THIS IS PYTHON AND NOT PART OF THE NODE SUITE
     instructor), so the Node suite genuinely cannot clean up after itself. Teardown needs the
     operator tier, which is a direct Postgres connection.
 
-SAFETY: every statement is bounded to enrolments belonging to student 3009999999. It cannot
+SAFETY: every statement is bounded to enrollments belonging to student 3009999999. It cannot
 touch another cadet's work even if run by accident. Dry run by default, per CORE.md §4.
 
 Usage (from the repo root, via the project venv):
@@ -50,7 +50,7 @@ def main():
         ("grades", f"DELETE FROM app.grades WHERE {scope}"),
         ("extensions", f"DELETE FROM app.extensions WHERE {scope}"),
         ("submissions", f"DELETE FROM app.submissions WHERE {scope}"),
-        # user_preferences is keyed on the AUTH user id, not the enrolment, so it does not fit
+        # user_preferences is keyed on the AUTH user id, not the enrollment, so it does not fit
         # the `scope` clause above — it is reached through students.auth_user_id instead. Written
         # by prefs.js on every signed-in page load (P1.3), so the test cadet grows one the moment
         # any browser or Node suite signs in as them.

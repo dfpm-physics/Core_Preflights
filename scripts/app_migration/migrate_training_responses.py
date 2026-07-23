@@ -29,7 +29,7 @@ THE MAPPING
       q2_effort, q3_understanding    grades.diagnostic  (never affects points — CORE.md §6)
       is_finalized (all false)       is_finalized=false, source='ai_suggested'
 
-    The student is reached through their ENROLMENT, which is what every per-student table in
+    The student is reached through their ENROLLMENT, which is what every per-student table in
     `app` keys on. A response whose student is not enrolled in the target offering is skipped
     and reported rather than guessed at.
 
@@ -80,7 +80,7 @@ def write_app():
 
 
 def resolve_target(cur):
-    """The offering, its written activity, and enrolment ids by student, in `app`."""
+    """The offering, its written activity, and enrollment ids by student, in `app`."""
     cur.execute("""
         SELECT ao.id, ao.points_possible, ao.grading_mode
           FROM app.assignment_offerings ao
@@ -134,11 +134,11 @@ def main():
     cur = app_conn.cursor()
     cur.execute("SET search_path = app, public")
 
-    offering_id, activity_id, points_possible, grading_mode, enrolment_of = resolve_target(cur)
+    offering_id, activity_id, points_possible, grading_mode, enrollment_of = resolve_target(cur)
     print(f"target offering : {offering_id}  ({COURSE} {TERM} {SLUG})")
     print(f"written activity: {activity_id}")
     print(f"points_possible : {points_possible}  (grading_mode={grading_mode})")
-    print(f"enrolments      : {len(enrolment_of)}\n")
+    print(f"enrollments      : {len(enrollment_of)}\n")
 
     if args.undo:
         undo(cur, offering_id, args.commit)
@@ -164,7 +164,7 @@ def main():
     n_sub = n_act = n_grade = 0
     skipped = []
     for r in responses:
-        enr = enrolment_of.get(r["student_id"])
+        enr = enrollment_of.get(r["student_id"])
         if not enr:
             skipped.append(r["student_id"])
             continue

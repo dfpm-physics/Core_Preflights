@@ -238,11 +238,11 @@ export async function gradeMatrix(ctx, sectionIds) {
     return { columns, students: [], cell: () => null };
   }
 
-  const { data: enrolments } = await db.from('enrollments')
+  const { data: enrollments } = await db.from('enrollments')
     .select('id, student_id, section_id, students!inner(student_id, name)')
     .in('section_id', sectionIds).eq('status', 'active');
 
-  const students = (enrolments || []).map(e => ({
+  const students = (enrollments || []).map(e => ({
     enrollmentId: e.id,
     studentId: e.student_id,
     name: e.students?.name || String(e.student_id),
@@ -298,7 +298,7 @@ export function buildGradesCsv(matrix, sectionCodeOf) {
  * by the page, scoped to the offering, and orders by nothing it does not select.
  */
 export async function buildBackup(ctx, sectionIds) {
-  const [{ data: offerings }, { data: enrolments }] = await Promise.all([
+  const [{ data: offerings }, { data: enrollments }] = await Promise.all([
     db.from('assignment_offerings')
       .select('id, points_possible, grading_mode, opens_at, due_at, is_published, position, assignments!inner(slug, title, description)')
       .eq('course_offering_id', ctx.currentOffering),
@@ -307,13 +307,13 @@ export async function buildBackup(ctx, sectionIds) {
       .in('section_id', sectionIds),
   ]);
 
-  const enrolmentIds = (enrolments || []).map(e => e.id);
+  const enrollmentIds = (enrollments || []).map(e => e.id);
   const [{ data: submissions }, { data: grades }] = await Promise.all([
-    enrolmentIds.length
-      ? db.from('submissions').select('*').in('enrollment_id', enrolmentIds)
+    enrollmentIds.length
+      ? db.from('submissions').select('*').in('enrollment_id', enrollmentIds)
       : Promise.resolve({ data: [] }),
-    enrolmentIds.length
-      ? db.from('grades').select('*').in('enrollment_id', enrolmentIds)
+    enrollmentIds.length
+      ? db.from('grades').select('*').in('enrollment_id', enrollmentIds)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -323,7 +323,7 @@ export async function buildBackup(ctx, sectionIds) {
     course: ctx.courseTitleOf(ctx.currentOffering),
     term: ctx.currentTermLabel || null,
     assignment_offerings: offerings || [],
-    enrollments: enrolments || [],
+    enrollments: enrollments || [],
     submissions: submissions || [],
     grades: grades || [],
   };

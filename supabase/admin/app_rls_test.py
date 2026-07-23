@@ -243,7 +243,7 @@ def main():
     with Persona(cur, student_a_uid, f"student A (test cadet, section M1A)") as p:
         check("sees only their own student row in the fixture",
               p.count(f"SELECT count(*) FROM students WHERE {STU_IN_FIXTURE}", (sec1, sec2)) == 1)
-        check("sees only their own fixture enrolment",
+        check("sees only their own fixture enrollment",
               p.count("SELECT count(*) FROM enrollments WHERE section_id IN (%s,%s)", (sec1, sec2)) == 1)
         check("sees only their own submission",
               p.count(f"SELECT count(*) FROM submissions WHERE {IN_FIXTURE}", (ao,)) == 1)
@@ -255,7 +255,7 @@ def main():
                  "DELETE FROM students WHERE student_id=3000000102")
         p.denied("CANNOT overwrite another student's submission",
                  "UPDATE submissions SET status='committed' WHERE id=%s", (sub_b,))
-        p.denied("CANNOT insert a submission against another student's enrolment",
+        p.denied("CANNOT insert a submission against another student's enrollment",
                  """INSERT INTO submissions (enrollment_id,assignment_offering_id,status)
                     VALUES (%s,%s,'draft')""", (enr_b, ao))
         p.denied("CANNOT write their own grade",
@@ -358,7 +358,7 @@ def main():
     # It matters because `notes` holds an instructor's candid read of a cadet. A student read path
     # would disclose it, and there would be nothing in the schema objecting.
     #
-    # Scoped on enrolment, not IN_FIXTURE — ei_sessions has no assignment_offering_id, because a
+    # Scoped on enrollment, not IN_FIXTURE — ei_sessions has no assignment_offering_id, because a
     # session is about a student and not about one lesson.
     EI_IN_FIXTURE = "enrollment_id IN (%s,%s)"
     cur.execute("RESET ROLE")

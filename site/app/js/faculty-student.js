@@ -38,10 +38,10 @@ import { loadEiForEnrollment } from './faculty-ei.js';
  * ------------------------------------------------------------------------- */
 
 /**
- * Everything for one enrolment.
+ * Everything for one enrollment.
  *
- * Keyed on the ENROLMENT, not the cadet id, because that is what every policy keys on and what
- * scopes the read to one section in one term. A cadet id would have to be resolved to an enrolment
+ * Keyed on the ENROLLMENT, not the cadet id, because that is what every policy keys on and what
+ * scopes the read to one section in one term. A cadet id would have to be resolved to an enrollment
  * before anything could be read anyway, and resolving it in the browser would mean a query that
  * is not itself section-scoped.
  */
@@ -56,7 +56,7 @@ export async function loadStudentDetail(ctx, enrollmentId) {
     .eq('id', enrollmentId).maybeSingle();
 
   if (enrErr) return { error: enrErr };
-  // RLS returns an empty result rather than an error when the caller may not see this enrolment,
+  // RLS returns an empty result rather than an error when the caller may not see this enrollment,
   // so "not found" and "not yours" are the same answer here — deliberately. Telling an instructor
   // that a cadet exists but belongs to somebody else is itself a disclosure.
   if (!enr) return { notFound: true };
@@ -318,11 +318,13 @@ export function commentCard({ student, enrollment, totals, rows, ei = [], classS
  * ------------------------------------------------------------------------- */
 
 const ALLOWED_BACK = new Set([
-  'gradebook.html', 'roster.html', 'grade.html', 'dashboard.html', 'report.html', 'extensions.html',
-  // enrollment.html joined on 2026-07-23 (P1.9): its section-placement table links a cadet's name
-  // here, exactly as Roster's does, so without this a director drilling in from there is bounced
-  // to the gradebook instead of back to the list they were working through.
-  'enrollment.html',
+  'gradebook.html', 'grade.html', 'dashboard.html', 'report.html', 'extensions.html',
+  // admin.html replaced roster.html here on 2026-07-23: the roster moved into Course Admin's
+  // Students tab, whose table links a cadet's name to this page. Without it, a director drilling
+  // in from that list is bounced to the gradebook instead of back to what they were working
+  // through. (It returns to the tab the page opens on, which IS Students — good enough, and a
+  // fragment would have to survive this allowlist to do better.)
+  'admin.html',
 ]);
 
 /**

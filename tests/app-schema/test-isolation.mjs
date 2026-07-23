@@ -57,9 +57,9 @@ section('the app client cannot reach schema `public`');
   check('student sees exactly one students row (their own)', (students || []).length === 1,
         `saw ${(students || []).length}`);
 
-  const { data: enrol } = await client.from('enrollments').select('id, student_id');
-  check('student sees only their own enrolment(s)',
-        (enrol || []).every(e => e.student_id === 3009999999));
+  const { data: enroll } = await client.from('enrollments').select('id, student_id');
+  check('student sees only their own enrollment(s)',
+        (enroll || []).every(e => e.student_id === 3009999999));
 
   const { data: grades } = await client.from('grades').select('id, is_finalized');
   check('student sees no unfinalized grade',

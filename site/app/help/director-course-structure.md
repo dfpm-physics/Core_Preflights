@@ -96,11 +96,11 @@ time without moving anyone else's deadline.
 
 ## When a student changes section
 
-Moving a student adds a second enrolment rather than editing the first. Their earlier work stays
+Moving a student adds a second enrollment rather than editing the first. Their earlier work stays
 attached to the section they did it in, so a mid-semester move never re-attributes past grades and a
 previous roster stays reconstructable.
 
-A student may hold several enrolments at once — across sections, courses, or semesters.
+A student may hold several enrollments at once — across sections, courses, or semesters.
 
 ## Who can change what
 

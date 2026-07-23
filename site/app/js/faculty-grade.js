@@ -5,7 +5,7 @@
 //   responses.answers                  ->  submission_activities.content
 //   extensions(student_id, ...)        ->  extensions(enrollment_id, ...)   [migration 005]
 //
-// Everything is keyed on the ENROLMENT now, not the student. That is the change with real
+// Everything is keyed on the ENROLLMENT now, not the student. That is the change with real
 // consequences: a grade belongs to a student's place in a section in a term, so moving a
 // cadet between sections no longer silently re-attributes their history, and one student
 // taking two courses cannot collide.
@@ -338,7 +338,7 @@ export async function reopenScore(ctx, offeringId, enrollmentId) {
 }
 
 /* ── Extensions (migrations 005 + 007) ───────────────────────────────────────
- * Keyed on the enrolment, like everything else per-student. `granted_by` is recorded so an
+ * Keyed on the enrollment, like everything else per-student. `granted_by` is recorded so an
  * extension is attributable the same way an unlock is.
  *
  * Three verbs, and the difference between them is the whole governance model:
@@ -361,7 +361,7 @@ export function setExtension(ctx, offeringId, enrollmentId, iso, reason) {
     reason: why,
     granted_by: ctx.user.id,
     // Amending a revoked extension reinstates it — the UNIQUE key means there is only ever
-    // one row per (enrolment, offering), so this is the reinstatement path too.
+    // one row per (enrollment, offering), so this is the reinstatement path too.
     revoked_at: null, revoked_by: null, revoked_reason: null,
   }, { onConflict: 'enrollment_id,assignment_offering_id' });
 }
@@ -406,13 +406,13 @@ export async function courseExtensions(ctx, sectionIds) {
   const { data: enrolRows } = await db.from('enrollments')
     .select('id, student_id, section_id, students!inner(student_id, name)')
     .in('section_id', scope);
-  const byEnrolment = Object.fromEntries((enrolRows || []).map(e => [e.id, e]));
-  const enrolmentIds = Object.keys(byEnrolment);
-  if (!enrolmentIds.length) return [];
+  const byEnrollment = Object.fromEntries((enrolRows || []).map(e => [e.id, e]));
+  const enrollmentIds = Object.keys(byEnrollment);
+  if (!enrollmentIds.length) return [];
 
   const [exts, offerings, staff] = await Promise.all([
     db.from('extensions').select(EXTENSION_SELECT)
-      .in('enrollment_id', enrolmentIds).order('created_at', { ascending: false }),
+      .in('enrollment_id', enrollmentIds).order('created_at', { ascending: false }),
     db.from('assignment_offerings')
       .select('id, due_at, points_possible, assignments!inner(slug, title)')
       .eq('course_offering_id', ctx.currentOffering),
@@ -424,7 +424,7 @@ export async function courseExtensions(ctx, sectionIds) {
 
   return (exts.data || []).map(row => {
     const x = shapeExtension(row);
-    const e = byEnrolment[x.enrollmentId];
+    const e = byEnrollment[x.enrollmentId];
     const o = offeringOf[x.offeringId];
     return {
       ...x,
@@ -525,9 +525,9 @@ export async function pastDueUngraded(ctx, sectionIds, now = new Date()) {
 
   const { data: enrolRows } = await db.from('enrollments')
     .select('id, section_id').in('section_id', sectionIds).eq('status', 'active');
-  const enrolmentIds = (enrolRows || []).map(e => e.id);
+  const enrollmentIds = (enrolRows || []).map(e => e.id);
   const sectionOf = Object.fromEntries((enrolRows || []).map(e => [e.id, e.section_id]));
-  if (!enrolmentIds.length) return [];
+  if (!enrollmentIds.length) return [];
 
   const { data: offerings } = await db.from('assignment_offerings')
     .select('id, due_at, position, is_published, assignments!inner(slug, title),' +
@@ -539,11 +539,11 @@ export async function pastDueUngraded(ctx, sectionIds, now = new Date()) {
 
   const [subs, grds, exts] = await Promise.all([
     db.from('submissions').select('enrollment_id, assignment_offering_id, status')
-      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrolmentIds),
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds),
     db.from('grades').select('enrollment_id, assignment_offering_id, is_finalized')
-      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrolmentIds),
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds),
     db.from('extensions').select('enrollment_id, assignment_offering_id, extended_due_at')
-      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrolmentIds)
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds)
       .is('revoked_at', null),
   ]);
 
@@ -706,7 +706,7 @@ export async function gradingQueue(ctx, sectionIds, now = new Date()) {
     section_id: e.section_id,
   }));
   if (!students.length) return [];
-  const enrolmentIds = students.map(s => s.enrollment_id);
+  const enrollmentIds = students.map(s => s.enrollment_id);
 
   // offering_activities is embedded so the written activity id is known per offering — that is
   // what separates an interactive taker from a written one, and there is no other source for it.
@@ -732,11 +732,11 @@ export async function gradingQueue(ctx, sectionIds, now = new Date()) {
   const [subs, grds, exts] = await Promise.all([
     db.from('submissions')
       .select('enrollment_id, assignment_offering_id, chosen_activity_id, status, committed_at')
-      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrolmentIds),
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds),
     db.from('grades').select('enrollment_id, assignment_offering_id, is_finalized, source')
-      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrolmentIds),
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds),
     db.from('extensions').select('enrollment_id, assignment_offering_id, extended_due_at, reason')
-      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrolmentIds)
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds)
       .is('revoked_at', null),
   ]);
 

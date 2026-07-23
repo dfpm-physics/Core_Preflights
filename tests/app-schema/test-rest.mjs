@@ -64,7 +64,7 @@ await shapeOk('activity lookup by slug (interaction-submit receiver)', () =>
     'assignment_offerings(id,is_published,course_offering_id,points_possible,grading_mode,switch_policy))')
     .eq('slug', 'lesson-02-electric-charge-coulombs-law'));
 
-await shapeOk('sections with enrolment counts (faculty roster)', () =>
+await shapeOk('sections with enrollment counts (faculty roster)', () =>
   db.from('sections').select('id,code,meeting_days,period,enrollments(id,status,student_id)')
     .eq('course_offering_id', NIL).order('code'));
 

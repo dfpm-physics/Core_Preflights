@@ -24,7 +24,7 @@ record here reaches nobody.
 
 ## Where it goes
 
-One object on the enrolment's `app.grades` row, at `diagnostic`, in the **same batch upsert** as
+One object on the enrollment's `app.grades` row, at `diagnostic`, in the **same batch upsert** as
 the suggested grade (Step 9). The column comment already names this shape:
 
 > *The frozen schema:1 payload — overall_understanding, objectives[], misconceptions[],
@@ -201,7 +201,7 @@ clean", which you cannot know.
 
 ## Verification (extends Step 9's read-back)
 
-Read back `diagnostic` for the run's exact enrolment ids and require, per graded enrolment:
+Read back `diagnostic` for the run's exact enrollment ids and require, per graded enrollment:
 
 - `schema == 1` and `source == "preflight-analyze"`.
 - `effort` an integer in `[0,5]`; where the reflection was judged not meaningful, `effort <= 2`.

@@ -15,7 +15,7 @@ practice: a grid, the page you reach by clicking a name in it, and the thing you
 They share one data spine and one navigation path:
 
 ```
-gradebook.html  ──click a name──▶  student.html?e=<enrolment>  ──"Log EI"──▶  ei_sessions
+gradebook.html  ──click a name──▶  student.html?e=<enrollment>  ──"Log EI"──▶  ei_sessions
    (P1.1)                              (P1.2)                                    (P1.4)
 ```
 
@@ -83,7 +83,7 @@ from it with redundant `GRANT`s; this follows 008.
 
 **Loader is bounded and narrow.** Not `loadRoster` — ROADMAP P3.7 flags that it fetches every
 student in the database and filters client-side, and the gradebook is what makes that untenable.
-Four queries, all scoped to `ctx.sectionIds` or chunked over enrolment ids:
+Four queries, all scoped to `ctx.sectionIds` or chunked over enrollment ids:
 
 | Query | Select | Why narrow |
 |---|---|---|
@@ -128,11 +128,11 @@ weighting today and the roadmap parks the numeric field with P3.5. Do not copy
 
 ## 3. P1.2 — Student detail
 
-`site/app/faculty/student.html?e=<enrolment uuid>`. **No nav entry** — a drill-down, like
+`site/app/faculty/student.html?e=<enrollment uuid>`. **No nav entry** — a drill-down, like
 `report.html`.
 
-Keyed on the enrolment, not the cadet id, because that is what scopes it to one section in one term
-and what every RLS policy already keys on. A cadet id would have to be resolved to an enrolment
+Keyed on the enrollment, not the cadet id, because that is what scopes it to one section in one term
+and what every RLS policy already keys on. A cadet id would have to be resolved to an enrollment
 before anything could be read anyway.
 
 Sections, in order:

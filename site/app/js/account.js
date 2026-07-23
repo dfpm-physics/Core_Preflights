@@ -49,7 +49,7 @@ async function studentIdentity(ctx) {
     ['Sign-in email', ctx.user?.email || '—', 'Derived from your cadet ID.'],
   ];
 
-  // One row per active enrolment. A student may hold several — that is the whole reason
+  // One row per active enrollment. A student may hold several — that is the whole reason
   // enrollments exists as a table rather than a column on students.
   (ctx.enrollments || []).forEach(e => {
     const sec = e.sections;
@@ -57,11 +57,11 @@ async function studentIdentity(ctx) {
     if (!o) return;
     const label = `${o.courses?.title || o.courses?.code || 'Course'} · ${o.terms?.label || ''}`.trim();
     rows.push([label, `Section ${sec.code}`,
-      'Set by your enrolment. Ask your instructor to move you.']);
+      'Set by your enrollment. Ask your instructor to move you.']);
   });
 
   if (!(ctx.enrollments || []).length) {
-    rows.push(['Enrolment', '— none active —',
+    rows.push(['Enrollment', '— none active —',
       'You are not enrolled in any section yet. Your instructor uploads the roster.']);
   }
   return { name: ctx.studentRow?.name || 'Student', rows, roleLabel: 'Student' };

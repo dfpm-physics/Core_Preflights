@@ -59,10 +59,10 @@ export async function loadFacultyDashboard(ctx) {
       .eq('course_offering_id', ctx.currentOffering),
   ]);
 
-  const enrolments = enrolRows || [];
-  const enrollmentIds = enrolments.map(e => e.id);
-  const sectionOf = Object.fromEntries(enrolments.map(e => [e.id, e.section_id]));
-  const studentOf = Object.fromEntries(enrolments.map(e => [e.id, e.student_id]));
+  const enrollments = enrolRows || [];
+  const enrollmentIds = enrollments.map(e => e.id);
+  const sectionOf = Object.fromEntries(enrollments.map(e => [e.id, e.section_id]));
+  const studentOf = Object.fromEntries(enrollments.map(e => [e.id, e.student_id]));
 
   const instrName = {};
   (staffRows || []).filter(s => s.section_id).forEach(s => {
@@ -74,7 +74,7 @@ export async function loadFacultyDashboard(ctx) {
 
   const sectionSize = {};
   sectionIds.forEach(id => { sectionSize[id] = 0; });
-  enrolments.forEach(e => { if (sectionSize[e.section_id] != null) sectionSize[e.section_id]++; });
+  enrollments.forEach(e => { if (sectionSize[e.section_id] != null) sectionSize[e.section_id]++; });
 
   // 3) The lesson sequence, ordered by the deadline that actually applies. Section overrides
   //    differ per section, so the dashboard orders by the offering's own due_at — the one
@@ -195,7 +195,7 @@ export async function loadFacultyDashboard(ctx) {
       n: sectionSize[id] || 0,
     })),
     lessons, activeId, rowsByLesson, sectionSize,
-    counts: { sections: sectionIds.length, students: enrolments.length, lessons: lessons.length },
+    counts: { sections: sectionIds.length, students: enrollments.length, lessons: lessons.length },
   };
 }
 
@@ -258,11 +258,11 @@ export async function loadInteractionData(ctx, offeringId) {
   const { data: enrolRows } = await db.from('enrollments')
     .select('id, student_id, section_id, students!inner(student_id, name)')
     .in('section_id', ctx.sectionIds).eq('status', 'active');
-  const enrolments = enrolRows || [];
-  const byId = Object.fromEntries(enrolments.map(e => [e.id, e]));
+  const enrollments = enrolRows || [];
+  const byId = Object.fromEntries(enrollments.map(e => [e.id, e]));
 
   const out = [];
-  for (const ids of chunked(enrolments.map(e => e.id))) {
+  for (const ids of chunked(enrollments.map(e => e.id))) {
     const { data } = await db.from('submissions')
       .select(SUBMISSION_SELECT).eq('assignment_offering_id', offeringId).in('enrollment_id', ids);
     (data || []).map(shapeSubmission).forEach(s => {

@@ -158,7 +158,7 @@ export function resolutionPatch({ status, resolutionNote, roadmapRef, adminId, n
 /**
  * Every comment, newest first.
  *
- * Unbounded on purpose, and safe to be: this table grows by human typing, not by enrolment, so it
+ * Unbounded on purpose, and safe to be: this table grows by human typing, not by enrollment, so it
  * is measured in hundreds a term rather than the tens of thousands the gradebook had to worry
  * about. RLS returns nothing at all to a non-admin, so there is no scoping argument to get wrong.
  */
