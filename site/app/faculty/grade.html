@@ -210,7 +210,9 @@
 
       if (!data.students.length) { container().innerHTML = `<div class="alert alert-warn">No students found for the selected section(s).</div>`; actions.style.display = 'none'; return; }
 
-      gradeData = G.buildGradeData(current, data.students, responseMap, scoreMap);
+      // submissionMap is passed so interactive takers are excluded — they are graded by effort,
+      // not by these questions. See buildGradeData()'s header for what happens without it.
+      gradeData = G.buildGradeData(current, data.students, responseMap, scoreMap, submissionMap);
       render(data.students);
       actions.style.display = 'flex';
       renderSignoffBar();
@@ -221,6 +223,9 @@
     const isZeroPointQuestion = q => Number(q?.points) === 0;
 
     function studentTotal(sid) {
+      // An effort-graded student has no gradeData entry at all (buildGradeData excludes them).
+      // Their total is the grade row's own points, which the effort curve already decided.
+      if (!gradeData[sid]) return Number(scoreMap[sid]?.pointsEarned ?? 0);
       return questions.reduce((s, q) => s + (Number(gradeData[sid][q.id]?.score) || 0), 0);
     }
 
@@ -259,6 +264,33 @@
             <button class="btn btn-ghost btn-sm" data-act="ext" data-sid="${sid}" data-name="${nm}">Edit</button>
             <button class="btn btn-ghost btn-sm" data-act="ext-remove" data-sid="${sid}" data-name="${nm}">Remove</button>`
             : `<button class="btn btn-ghost btn-sm" data-act="ext" data-sid="${sid}" data-name="${nm}">Grant extension</button>`}`;
+
+        // This student worked the interactive lesson, so there is nothing here to mark. Show what
+        // they were graded on instead of a column of "No answer submitted" — which is what the
+        // written controls would render, and which reads as a failing student rather than one who
+        // took the other path. The card stays read-only by construction: no toggles, no feedback
+        // boxes, and no gradeData entry for Save to pick up.
+        if (!gradeData[sid]) {
+          const eff = scoreMap[sid]?.effort;
+          const body = eff == null
+            ? `<div class="grade-answer empty">Interactive lesson submitted — not yet graded.
+                 Effort arrives from the lesson report; run <code>grade_interactive.py</code> or
+                 wait for the analysis pass.</div>`
+            : `<div class="grade-answer">Graded on <strong>effort ${eff}/5</strong> from the
+                 interactive lesson report — ${total.toFixed(2)} of ${maxTotal.toFixed(2)} points.
+                 <div class="muted" style="margin-top:6px;font-size:.9em">Effort 0 → 0 pts ·
+                 1–2 → half · 3–5 → full. A reading reflection that is not meaningful caps effort
+                 at 2. Adjust it on the student's page, not here.</div></div>`;
+          return `<div class="grade-card${finalized ? ' finalized' : ''}" id="gc-${sid}" data-late="${late.late ? '1' : '0'}">
+            <div class="gc-head">
+              <span class="gc-name">${nm}</span><span class="tag">Sec ${esc(ctx.sectionCodeOf(st.section_id))}</span>
+              <span class="tag tag-ai">Interactive</span>
+              ${headExtras}
+              <span class="gc-total" id="tot-${sid}">${total.toFixed(2)} / ${maxTotal.toFixed(2)} pts</span>
+            </div>
+            <div class="gc-body"><div class="grade-q">${body}</div></div>
+          </div>`;
+        }
 
         const rows = displayQs.map(q => {
           const idx = qs.indexOf(q);

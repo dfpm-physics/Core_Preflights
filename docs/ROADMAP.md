@@ -124,11 +124,49 @@ auth user fails rather than tidying up.)*
 Worth doing sooner than the seal: **duplicate unconfirmed users on the same address are the most
 likely reason the second account would not authenticate with a correctly copy-pasted password.**
 
-### P0.14 — The interactive path produces no grade · **M** · *reported 2026-07-23*
+### P0.14 — The interactive path produces no grade · **BUILT 2026-07-23, migration not yet applied**
 
 *Director's observation: interactive submitters get no grade and no mark in the gradebook matrix,
 and their student page shows no points.* **Confirmed against live `app` the same day — the
-observation is exact, and the roadmap has been asserting the opposite.**
+observation is exact, and the roadmap had been asserting the opposite.**
+
+**Shipped 2026-07-23 (frontend + tooling, no DDL yet):**
+
+- **`supabase/admin/grade_interactive.py`** — the missing writer. Reads a committed, `graded`,
+  chosen interactive submission's `effort` from `submission_activities.content`, re-applies the
+  §5.2 reflection cap as a server-side guard, and upserts one `grades` row (`is_finalized=false`,
+  `source='ai_suggested'`, so it lands in the dashboard review queue). `status` / `run --commit`,
+  dry-run by default. Correct **before and after** the migration: pre-migration the old trigger
+  returns early on `grading_mode='points'` so the script's own `points_earned` stands;
+  post-migration the trigger recomputes the identical value. Uses the one shared effort curve
+  (`points_from_effort`, imported not copied). 49-check suite `grade_interactive_test.py` — pure
+  logic **plus** a live end-to-end write inside a rolled-back transaction.
+- **Grade tab now excludes interactive takers** (`faculty-grade.js` `isEffortGraded()` +
+  `buildGradeData()` gained a `submissionMap` arg; `grade.html` renders a read-only "graded on
+  effort N/5" card for them). This closes the zeroing bug directly: without it, an interactive
+  taker's blank written answers defaulted to `zero` and — because they hold a prior grade row —
+  a single Save would have overwritten their effort grade with 0. `test-grade.mjs` (14 checks)
+  pins it, counterfactual included.
+
+**Not yet applied — needs a human (CORE.md §0):** migration
+`supabase/migrations/app/014_effort_grades_per_row.sql` re-keys the effort trigger on the grade
+**row** (`NEW.effort IS NOT NULL`) instead of the offering's `grading_mode`, and adds a
+`grades_one_grading_mechanism` CHECK (`effort IS NULL OR question_scores = '{}'`) so the
+written/effort split is enforced by the database rather than by prose. This is what lets a
+**choice** offering grade a written taker by `question_scores` and an interactive taker by effort
+*on the same offering* — the case `preflight-03`/`-04` already present. Applying it needs
+`prep_app_owner` unsealed → migrate → re-seal. Every existing grade row satisfies the new CHECK
+(all 64 have `effort IS NULL`), verified before writing it.
+
+**Verification gap to close during P0.5:** the new interactive Grade-tab card has **not** been seen
+in a browser, because no committed interactive submission exists in the term yet (the only
+interactive work is `preflight-02` practice). Logic-verified and syntax-clean; walk it once a real
+`graded` interactive submission lands, or against a seeded fixture.
+
+**Remaining decision (narrowed, not eliminated):** the migration takes option 2 below (trigger keys
+on the row). Option 1 (move `grading_mode` to `offering_activities`) remains the "honest schema"
+alternative if the row-keyed trigger ever proves too implicit; it is more DDL for the same
+behaviour and was not chosen. Recorded so the choice reads as deliberate.
 
 **There is no writer for `grades.effort` anywhere in the app-schema stack.** Three separate places
 each decline to write it, all for defensible local reasons, and nobody owns the gap between them:
@@ -195,20 +233,14 @@ that offering — graded 2/2 through `question_scores`, with `effort` correctly 
 (`WRITTEN-SCHEMA1.md:118-121`) — would be silently rewritten to **0 points** on the next save.
 `preflight-03` and `preflight-04` carry *both* modalities as `graded`, so this is not hypothetical.
 
-**The one decision left, then, is narrow:** how does a *mixed* offering grade two modalities under
-one `grading_mode` column?
-
-1. **Move `grading_mode` to `offering_activities`.** The honest model once an offering can carry two
-   graded modalities. DDL on `app` (unseal → migrate → re-seal, CORE.md §0), and the trigger's
-   lookup changes with it.
-2. **Make the trigger key on the row, not the offering** — derive from effort only when
-   `NEW.effort IS NOT NULL`, leave `points_earned` alone otherwise. Much smaller (one
-   `CREATE OR REPLACE FUNCTION`), and it lets one offering serve both. It does change today's
-   `NULL effort → 0` semantics, so confirm nothing depends on that; a non-submitter has no grade row
-   at all, which suggests that path is vacuous, but check rather than assume.
-
-Either way the writer is the same, and the safe order is **writer first, configuration second** —
-a writer with no mode change is inert, whereas a mode change with no writer is the zeroing bug above.
+**How a *mixed* offering grades two modalities under one `grading_mode` column** was the last open
+question. Two ways were on the table: move `grading_mode` to `offering_activities` (honest schema,
+more DDL), or make the trigger key on the grade **row** (`NEW.effort IS NOT NULL`) instead of the
+offering (one `CREATE OR REPLACE FUNCTION`, lets one offering serve both). **Migration 014 takes the
+row-keyed option** — see the status block at the top of this item. The `NULL effort → 0` semantics
+it changes were confirmed vacuous: a non-submitter has no grade row at all. The safe order was, and
+the shipped order is, **writer first, configuration second** — the writer alone is inert, whereas a
+mode change with no writer is the zeroing bug above.
 
 **Do not "fix" this by flipping `preflight-02`'s interactive activity to `graded`.** It is practice
 on purpose, and doing so would commit 8 students to a path that still has no grade writer — turning

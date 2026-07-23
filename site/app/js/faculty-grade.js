@@ -165,15 +165,42 @@ export function dueForStudent(offering, student, extensionMap) {
 }
 
 /**
+ * Did this student commit to something other than the written activity?
+ *
+ * On a `choice` offering both activities are `graded` and each student picks, so the grading
+ * MECHANISM is a property of the student, not of the offering: an interactive taker is graded by
+ * effort (grades.effort -> the DB trigger), a written taker by question_scores. This is the
+ * predicate that tells the two apart, and `chosen_activity_id` is the right source for it because
+ * that commitment IS the decision — the same one submissions_lock enforces.
+ *
+ * Nothing chosen yet => false, so a draft still shows the written card to grade against.
+ */
+export function isEffortGraded(offering, submission) {
+  const chosen = submission?.chosenActivityId;
+  if (!chosen) return false;
+  return chosen !== offering?.written?.id;
+}
+
+/**
  * Build the editable 3-state grade model (full / warn / zero).
  * Unchanged in spirit from the legacy view — the states and their meaning are a course
  * policy, not a schema detail — but it now reads questions out of the written activity's
  * content rather than off the assignment row.
+ *
+ * INTERACTIVE TAKERS ARE EXCLUDED ENTIRELY, and that omission is load-bearing. Their grade comes
+ * from effort; they answered no written question, so every question would default to `zero` here
+ * (`hasAnswer` false), and because they DO have a prior grade row, gradeRows() rule 2 would not
+ * skip them — one click of Save on somebody else's card would write `question_scores` full of
+ * zeros over their effort grade and set points_earned to 0. Giving them no gradeData entry is
+ * what makes rule 2 skip them for the right reason. Migration 014's
+ * `grades_one_grading_mechanism` CHECK is the second line of defence, turning the same mistake
+ * into a rejected write rather than a silent zero.
  */
-export function buildGradeData(offering, students, responseMap, gradeMap) {
+export function buildGradeData(offering, students, responseMap, gradeMap, submissionMap = {}) {
   const questions = questionsOf(offering.written);
   const gradeData = {};
   (students || []).forEach(st => {
+    if (isEffortGraded(offering, submissionMap[st.student_id])) return;
     gradeData[st.student_id] = {};
     questions.forEach(q => {
       const saved = gradeMap[st.student_id]?.qs[q.id];

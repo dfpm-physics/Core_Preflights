@@ -8,7 +8,54 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
-## 2026-07-23 — Matthew Recker via Claude (the interactive path produces no grade — diagnosed, scoped as P0.14)
+## 2026-07-23 — Matthew Recker via Claude (P0.14 — the interactive grade writer, built)
+
+### Added — carry an interactive submission's effort up to its grade
+
+The gap diagnosed earlier today (entry below) is closed on the frontend + tooling side; the one
+DDL step is written and waiting for a human to apply.
+
+- **`supabase/admin/grade_interactive.py`** — the writer the interactive path never had. For a
+  committed, `graded`, chosen interactive submission it reads `effort` from
+  `submission_activities.content`, re-applies the contract §5.2 reflection cap as a server-side
+  guard (never trusting the student-controllable payload), and upserts one `grades` row —
+  `is_finalized=false`, `source='ai_suggested'`, so it lands in the dashboard's "AI grades awaiting
+  review" queue exactly as `/preflight-analyze`'s written grades do. `status` surveys and names why
+  each row is or is not gradable; `run` is dry-run by default, `--commit` writes. It reuses the one
+  shared effort curve (`points_from_effort`, imported from `interaction_reports.py`, not a fourth
+  copy) and is correct **both before and after** the migration below — pre-migration the old trigger
+  returns early on `grading_mode='points'` so the script's own `points_earned` stands; post-migration
+  the trigger recomputes the identical value.
+- **`supabase/admin/grade_interactive_test.py`** — 49 checks: the curve, the cap and its
+  malformed-payload edge cases (a string/float/bool `effort` is refused, not coerced into a grade),
+  the gradable/skip/needs-backfill classification, **and** a live end-to-end write — promote a
+  fixture to `graded`, commit it, run the script's own SELECT and INSERT, assert the grade, prove
+  the rollback left nothing. All 49 pass; production untouched (verified: 0 grades carry an effort).
+- **Grade tab no longer risks zeroing an interactive taker.** `faculty-grade.js` gained
+  `isEffortGraded()` and `buildGradeData()` now takes `submissionMap`; a student who committed to
+  the interactive activity is **excluded from the editable question model** and `grade.html` shows
+  them a read-only "graded on effort N/5" card instead. Without this, their blank written answers
+  defaulted to `zero`, and because they hold a prior grade row `gradeRows()` rule 2 would not skip
+  them — one Save would overwrite their effort grade with 0. `tests/app-schema/test-grade.mjs` (14
+  checks, registered in `run.mjs`) pins the exclusion and includes the counterfactual proving the
+  bug was real. Full app-schema suite green.
+
+**Migration `supabase/migrations/app/014_effort_grades_per_row.sql` — WRITTEN, NOT APPLIED.** It
+re-keys `grades_points_from_effort()` on the grade **row** (`NEW.effort IS NOT NULL`) rather than the
+offering's `grading_mode`, and adds a `grades_one_grading_mechanism` CHECK
+(`effort IS NULL OR question_scores = '{}'`) that makes the written/effort split a database
+invariant instead of a documented convention. This is what lets a **choice** offering
+(`preflight-03`/`-04` already are) grade a written taker by `question_scores` and an interactive
+taker by effort on the *same* offering. Applying it needs `prep_app_owner` unsealed → migrate →
+re-seal (CORE.md §0); every existing grade row satisfies the new CHECK (all 64 have `effort IS
+NULL`), verified before writing it. It also dissolves the zeroing hazard flagged earlier: the
+`grading_mode='effort'`-on-a-choice-offering trap stops existing once the trigger ignores
+`grading_mode`.
+
+**Known verification limit (CORE.md §2):** the new interactive Grade-tab card is logic- and
+syntax-verified but has **not** been seen in a browser — no committed interactive submission exists
+in the term yet (the only interactive work is `preflight-02` practice). Walk it during P0.5, or
+against a seeded fixture, once a real `graded` interactive submission lands.
 
 ### Investigated — the gradebook is not incomplete, it is about to be wrong
 

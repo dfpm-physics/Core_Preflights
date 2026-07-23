@@ -50,6 +50,21 @@ A card tagged **Not yet graded** has no grade at all — the analysis run never 
 This is not the same as a zero, and saving will not create a grade for them. To grade them, set
 their questions yourself.
 
+## Students who did the interactive lesson
+
+Some assignments let a student choose the interactive lesson instead of the written preflight. A
+student who committed to the interactive path shows a read-only card marked **Interactive** — there
+are no question toggles and no feedback boxes, because there are no written answers to mark.
+
+Their grade comes from **effort**, scored 0–5 from the lesson report: 0 earns no points, 1–2 earns
+half, 3–5 earns full. A reading reflection that is not meaningful caps effort at 2 (so at most half
+credit), regardless of engagement elsewhere. The card shows the effort and the points it earned.
+
+Like the written path, an effort grade arrives **unfinalized** and tagged **AI suggested** — review
+and finalize it the same way. To change an effort score, open the student's page from the gradebook;
+it is not editable on the Grade tab. A card that reads *not yet graded* means the lesson report has
+not been processed into a grade yet.
+
 ## Saving, publishing, and marking a section reviewed
 
 Three separate actions, deliberately:
