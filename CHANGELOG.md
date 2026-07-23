@@ -8,6 +8,44 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-23 — Matthew Recker via Claude (rollup counts graded-path only · backfill grades existing interactive drafts)
+
+### Fixed — the rollup no longer counts practice work as "complete"
+
+`loadInteractionData` (`faculty-rollup.js`) included any submission with interactive **or** written
+work, regardless of whether that activity was the graded path. So on `preflight-02` the eight seeded
+**practice** interactive drafts — no written responses, which is the required path there — showed as
+*complete* in the cohort rollup. Now a piece of work counts toward the rollup only when its activity
+is `grading_role='graded'` this term **or** the student committed it for credit; a practice run is
+not the assignment. Written-graded takers are unaffected (verified: `preflight-02`'s 64 written
+submissions still count).
+
+### Added — `supabase/admin/commit_interactive_drafts.py`
+
+When a director flips an interactive activity to graded (e.g. converts an assignment to
+student-choice), interactive work already sitting there as **uncommitted practice drafts** does not
+auto-grade — the migration-015 trigger fires on *commit*, and those drafts never committed. This
+backfill commits such drafts (graded interactive · usable effort · not committed to another activity
+· no human grade already), which fires the trigger to grade them. Dry-run by default; scoped by
+offering/activity/course. It writes no grade itself — it commits, and lets the same trigger a live
+submit would.
+
+### Data — graded the eight `lesson-02` test interactives
+
+After the director converted `preflight-02` to student-choice (both activities `graded`), ran the
+backfill: committed and auto-graded the eight seeded interactive submissions through the live 015
+trigger — Arden Bishop, Avery Rivas, Kai Sterling, Rowan Whitfield, Sage Marsh at **2/2** (effort
+4–5), Jordan Calloway, Remy Ashby, Tatum Vaughn at **1/2** (effort 1–2). These are the fixtures for
+testing both-modality aggregation; each is `source='derived'`, finalized.
+
+*Note: making this reactive-on-config-change **automatic** (a trigger on `offering_activities` that
+commits + grades existing interactive work the moment an activity is set graded) is a possible
+follow-up. It was left as an explicit backfill for now — auto-committing a student's submission as a
+side effect of a config toggle is a bigger decision, especially where a student did more than one
+activity.*
+
+---
+
 ## 2026-07-23 — Matthew Recker via Claude (auto-final interactive grading · student nav gating · role-demotion fix)
 
 An autonomous batch (director away, `/loop`). Three areas; all code + tests shipped, one migration

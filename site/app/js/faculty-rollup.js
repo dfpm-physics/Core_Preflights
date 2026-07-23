@@ -315,10 +315,22 @@ export async function loadInteractionData(offeringId, studentIds) {
   }
   const gradeBy = Object.fromEntries(grades.map(g => [g.enrollment_id, g]));
 
+  // Only work on a GRADED path counts toward the rollup — a practice activity is not the
+  // assignment. A student who ran the interactive lesson for practice (grading_role='practice')
+  // but never did the required written questions has completed nothing, and must not be counted
+  // "complete" in the cohort (the bug this fixes: lesson-02 practice interactives showed complete
+  // with no question responses). Committing an activity for credit also counts it — that is how a
+  // 'choice' offering's chosen interactive path is included.
+  const iGraded = found.offering?.interactive?.gradingRole === 'graded';
+  const wGraded = found.offering?.written?.gradingRole === 'graded';
+
   const out = [];
   submissions.forEach(s => {
-    const interactiveWork = found.interactiveId ? s.activities?.[found.interactiveId] : null;
-    const writtenWork     = found.writtenId     ? s.activities?.[found.writtenId]     : null;
+    const rawInteractive = found.interactiveId ? s.activities?.[found.interactiveId] : null;
+    const rawWritten     = found.writtenId     ? s.activities?.[found.writtenId]     : null;
+    const chosen = s.chosenActivityId;
+    const interactiveWork = rawInteractive && (iGraded || chosen === found.interactiveId) ? rawInteractive : null;
+    const writtenWork     = rawWritten     && (wGraded || chosen === found.writtenId)     ? rawWritten     : null;
     if (!interactiveWork && !writtenWork) return;
 
     const grade = gradeBy[s.enrollmentId] || null;
