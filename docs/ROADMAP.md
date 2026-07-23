@@ -124,6 +124,77 @@ auth user fails rather than tidying up.)*
 Worth doing sooner than the seal: **duplicate unconfirmed users on the same address are the most
 likely reason the second account would not authenticate with a correctly copy-pasted password.**
 
+### P0.14 — The interactive path produces no grade · **M** · *reported 2026-07-23*
+
+*Director's observation: interactive submitters get no grade and no mark in the gradebook matrix,
+and their student page shows no points.* **Confirmed against live `app` the same day — the
+observation is exact, and the roadmap has been asserting the opposite.**
+
+**There is no writer for `grades.effort` anywhere in the app-schema stack.** Three separate places
+each decline to write it, all for defensible local reasons, and nobody owns the gap between them:
+
+| Component | What it does | Why |
+|---|---|---|
+| `student/interaction-submit.html:54-57` | records the report, writes **no** grade | correct — a student cannot; `grades_staff_write` would refuse |
+| `faculty-grade.js:223,235` | builds rows from `questionsOf(offering.written)` only | the Grade tab has no effort control at all |
+| `/preflight-analyze` | grades free-response answers | its blast radius is written work by design |
+
+So an interactive submission that *does* commit lands in `UNGRADED` and stays there.
+
+**Two more layers are also missing, and each would independently defeat a fix to the first.**
+
+- **`grading_mode` is `'points'` on all 74 offerings.** `grades_points_from_effort()`
+  (`001_core_model.sql:568-586`) returns early unless the mode is `'effort'`, so writing
+  `grades.effort` today derives no points. The trigger is fine; nothing is configured to reach it.
+- **`grading_mode` sits on the *offering*, but `preflight-03` and `preflight-04` offer *both*
+  modalities as `graded`.** One column cannot serve two modalities on one offering, and that is the
+  decision this item actually turns on — see the correction to Q2 below, which assumed one modality
+  per offering and is why the conflict was never noticed.
+
+**What the director saw, precisely.** The only interactive work in the database is 8 reports on
+`lesson-02-electric-charge-coulombs-law` (seeded 2026-07-21). That activity is `grading_role =
+'practice'` on `preflight-02`, so `submitInteractionReport()` (`student-data.js:364-368`) records
+the work and returns **without committing** — which is right, practice is not the graded path. All
+8 submissions are therefore `status='draft'` with `chosen_activity_id IS NULL` and no grade row.
+`cellState()` (`faculty-gradebook.js:200-231`) sees neither a grade nor a committed submission, the
+Aug 10 deadline has not passed, so the cell is `PENDING` — **and `PENDING` renders as nothing.**
+
+**This gets worse on its own, without anyone touching it.** On 2026-08-10 those same cells flip
+`PENDING → MISSING`: a cadet who completed the lesson reads as never having handed anything in, and
+`totalsFor()` counts them zero out of 2. Then `preflight-03` (Aug 12) and `preflight-04` (Aug 14)
+arrive with their interactive activity marked `graded`, where a student *does* commit — and lands in
+`UNGRADED` permanently, which drags their percentage identically. **That is the P0 clock**, and it
+is why this is not "the gradebook is incomplete" but "the gradebook is about to be wrong."
+
+**Not a rendering bug, and worth saying so before someone hunts one:** the student page showed
+demonstration data because that is what is stored. The 8 fixtures carry names inside the Markdown
+(`DEMONSTRATION`, `Chen`, `Brooks`, `Garcia`, `Carmona`, `Carter`, `Ellis`) that do not match the
+roster students they are attached to (`Arden Bishop`, `Avery Rivas`, …). "Show work" rendered them
+faithfully. Those 8 students also have **no written work at all** on `preflight-02`, so nothing else
+would have filled the row.
+
+**Decide before building** — the shape of the fix follows entirely from this, and it is a director's
+call, not an implementation detail:
+
+1. **Is `grading_mode` per offering or per offering-activity?** Moving it to `offering_activities`
+   is the honest model once one offering can carry two graded modalities, and it is DDL on `app`
+   (unseal → migrate → re-seal, CORE.md §0). Keeping it per-offering means a mixed offering has to
+   pick one mode and the other modality's grade is computed some other way.
+2. **Who writes the effort — a human, or the analysis run?** A control on the Grade tab is the
+   smaller change and keeps a human in the loop, matching how every other grade in PREP is
+   finalized. Extending `/preflight-analyze` to emit `grades.effort` for interactive takers scales
+   better and reuses the schema:1 payload the artifact already sends, but it needs the written-path
+   guard kept intact — on `grading_mode='points'` offerings `effort` **must stay out of
+   `grades.effort`** or the trigger seizes `points_earned` (`WRITTEN-SCHEMA1.md:118-121`).
+
+**Do not "fix" this by flipping `preflight-02`'s interactive activity to `graded`.** It is practice
+on purpose, and doing so would commit 8 students to a path that still has no grade writer — turning
+8 blank cells into 8 permanently ungraded ones.
+
+**Falsification:** if no cadet ever chooses the interactive path on a `graded` offering this term,
+this is a P1 that never fired, and the fixture rows on `preflight-02` are cosmetic. The way to know
+early is to watch `submissions.chosen_activity_id` on `preflight-03` in the days after Aug 12.
+
 ---
 
 ## 2. P1 — First weeks of term
@@ -211,9 +282,12 @@ per-student and open by default.
 
 **Clicking a student opens their responses to grade right there.** Rules:
 
-- **An interactive submission is auto-graded and must not appear at all.** The artifact wrote the
-  effort and the DB trigger derived the points; there is nothing for a human to do, and listing it
-  would train instructors to ignore the queue.
+- ~~**An interactive submission is auto-graded and must not appear at all.**~~ **Wrong — corrected
+  2026-07-23, see P0.14.** That was true of the legacy `public` receiver (migration `013` wrote the
+  effort and the trigger derived the points). Under `app` **nothing writes `grades.effort`**, so an
+  interactive submission is not auto-graded and is exactly the kind of thing this queue exists to
+  surface. Whether it belongs here depends on how P0.14 is resolved: if a human sets the effort, it
+  is queue work; if `/preflight-analyze` does, it is not. **Settle P0.14 before building this rule.**
 - **A written submission opens Q2 and Q3** with the 3-state control and the feedback boxes, then
   **Finalize**. Q1 is zero-point and stays hidden (`grade.html:207,215`).
 
@@ -485,6 +559,50 @@ Shuffle a section into N groups or groups of size N. Small, self-contained, genu
 `body.palette-x { --color-accent: … }` overrides. PREP's `DESIGN.md` is already token-based so it is
 nearly free — but it is polish. Last.
 
+### P3.16 — `/feedback-triage`: roll accepted feedback into this file · **M** · *requested 2026-07-23*
+
+*Director's request, deliberately deferred when the resolution matrix was built the same day.* The
+collecting and the deciding both shipped 2026-07-23 — the in-app feedback box (migration `012`) and
+the site-admin **resolution matrix** at `site/app/faculty/feedback.html` (migration `013`). What is
+missing is the last hop: an accepted comment still has to be written into this file by hand.
+
+**The input contract already exists and is enforced, so this skill starts from a fixed point:**
+
+```sql
+SELECT * FROM app.feedback WHERE status = 'accepted' AND roadmap_ref IS NULL;
+```
+
+That is the whole work list — "agreed to, not yet written down". Stamping `feedback.roadmap_ref`
+with the id this file gives the item (`P3.17`, …) is what removes a row from it, permanently. Three
+properties of that contract were built specifically so a skill could rely on them, and none should
+be renegotiated:
+
+- **There is no `roadmapped` status.** A status would have to be kept in step with this file by
+  hand; `roadmap_ref IS NULL` cannot drift from the thing it describes.
+- **A CHECK confines `roadmap_ref` to accepted rows**, so a declined comment can never appear in the
+  work list however the column is written.
+- **A blank ref is stored as NULL, never `''`** — an empty string looks correct in the UI while
+  silently failing `IS NULL`, which would strand the item forever. There is a test pinning it.
+
+**What the skill has to decide, and why it is not trivial.** Reading the rows is the easy half. The
+judgment is *placement*: several accepted comments are usually one roadmap item, a comment often
+restates an item that already exists (the honest outcome is then `duplicate`, not a new entry), and
+the band matters — feedback arrives as "this is annoying", not as "this is P2". Expect the skill to
+propose, and a human to approve, rather than to write straight into this file.
+
+**Do not let it write unattended.** This file is the planning record for a live system; a skill that
+appends to it on a schedule will eventually invent an item nobody agreed to. Same posture as
+`/lesson-cycle`'s: the skill drafts, the human lands it. Writing the `roadmap_ref` back is the one
+step that *should* be automatic, because it is bookkeeping, and forgetting it means the item is
+proposed twice.
+
+**Falsification:** if the first month's accepted comments turn out to be mostly one-liners that map
+one-to-one onto existing items, this is a `sed` script wearing a skill's clothes and should be
+dropped in favour of doing it by hand in the matrix.
+
+Depends on: nothing further — the data and the matrix are live. See `.ai/skills/docs-author/` before
+adding it, and `CORE.md` §4 for where a runbook lives.
+
 ---
 
 ## 5. C — Cleanup and debt
@@ -544,7 +662,7 @@ Storing it as an **access level** was rejected, for three reasons:
 **Falsification:** if the banner gets ignored and someone reports "PREP hid my buttons", the
 ephemerality is not visible enough and the feature should be pulled rather than persisted.
 
-### Q2 — How do points and effort reconcile? — **They already do. ✔ No work needed.**
+### Q2 — How do points and effort reconcile? — **The arithmetic does. ✔ The interactive path does not — see P0.14.**
 
 Two layers, both live:
 
@@ -556,6 +674,14 @@ Two layers, both live:
 Verified against `001_core_model.sql:255,579-584`, `preflight-analyze/SKILL.md:319-320,569-570`,
 `WRITTEN-SCHEMA1.md:118-121`, and both Fall builders. **This unblocks P1.1** — no normalization
 layer.
+
+⚠️ **Amended 2026-07-23.** The reconciliation above is correct and the gradebook's arithmetic stands.
+What this answer got wrong was reading "the trigger derives the points" as "the interactive path is
+wired". It is not: **nothing writes `grades.effort`**, no offering is `grading_mode='effort'`, and
+the column the mode lives on cannot express an offering where *both* modalities are graded — which
+`preflight-03` and `preflight-04` already are. Full diagnosis and the two decisions it needs: **P0.14**.
+The lesson worth keeping is narrower than the original claim: *verifying that a mechanism exists is
+not verifying that anything invokes it.*
 
 *(Caveat: `PROJECT.md:91-98`'s `question_scores` example still shows the retired 5-points-per-question
 shape. That block only — the 0–5 diagnostics documented elsewhere in that file are correct. See §5.)*

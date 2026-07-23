@@ -8,6 +8,54 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-23 — Matthew Recker via Claude (the interactive path produces no grade — diagnosed, scoped as P0.14)
+
+### Investigated — the gradebook is not incomplete, it is about to be wrong
+
+The director reported that students who submitted an **interactive** assignment get no grade and no
+mark in the gradebook matrix, and that their per-student page shows no points. Confirmed against
+live `app`; the observation is exact. **Read-only investigation — no code, schema or data changed.**
+
+**There is no writer for `grades.effort` anywhere in the app-schema stack.** Three components each
+decline to write it for a defensible local reason, and nobody owns the gap: the receiver refuses by
+design (a student cannot write a grade — `grades_staff_write`), the Grade tab builds rows only from
+`questionsOf(offering.written)`, and `/preflight-analyze` grades written work by design. Two further
+layers would each independently defeat a fix to the first: every one of the 74 offerings is
+`grading_mode='points'`, so the effort trigger returns early and derives nothing; and `grading_mode`
+lives on the **offering** while `preflight-03` and `preflight-04` already offer *both* modalities as
+`graded` — one column cannot serve two.
+
+What the director actually saw: the only interactive work in the database is 8 seeded reports on
+`lesson-02-…`, whose activity is `grading_role='practice'` on `preflight-02`. Submitting practice
+work records it without committing (correct), so all 8 sit `status='draft'` with no grade, and
+`cellState()` returns `PENDING` — **which renders as nothing**. On 2026-08-10 those cells flip to
+`MISSING` and count as zero out of 2 against cadets who did the work; `preflight-03` (Aug 12) then
+commits real students into a permanently `UNGRADED` state that drags the percentage identically.
+That clock is why this is P0 rather than "the gradebook is incomplete."
+
+The "demonstration data" on the student page is not a rendering bug — it is what is stored. The 8
+fixtures carry names inside the Markdown (`DEMONSTRATION`, `Chen`, `Brooks`, …) that do not match
+the roster students they are attached to. Recorded so nobody hunts a bug that is not there.
+
+### Changed — `docs/ROADMAP.md`
+
+- **Added P0.14**, with the diagnosis, the two decisions it turns on (is `grading_mode` per offering
+  or per offering-activity — DDL on `app`; and does a human or `/preflight-analyze` write the
+  effort), and an explicit warning **not** to "fix" it by flipping `preflight-02` to `graded`, which
+  would convert 8 blank cells into 8 permanently ungraded ones.
+- **Corrected P1.14**, which instructed the future grading queue to hide interactive submissions
+  because they "are auto-graded." True of the legacy `public` receiver (migration `013`); false
+  under `app`. Left struck through rather than deleted — the queue's design depends on how P0.14
+  resolves, and the stale rule should not be silently re-derived.
+- **Amended decision Q2.** Its arithmetic is right and P1.1 was correctly unblocked by it; what it
+  got wrong was reading "the trigger derives the points" as "the path is wired." Verifying that a
+  mechanism exists is not verifying that anything invokes it.
+
+Also carries a `docs/ROADMAP.md` addition by a concurrent Claude session: **P3.16**
+(`/feedback-triage`, rolling accepted feedback into the roadmap), unrelated to the above.
+
+---
+
 ## 2026-07-23 — Matthew Recker via Claude (say "assignment", not "lesson"; five UI corrections)
 
 ### Changed — the UI now uses the schema's noun
