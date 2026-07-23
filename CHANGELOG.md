@@ -41,8 +41,12 @@ is the default, not a special case.
 - **The per-student page speaks the same language** — its effort/understanding dials now carry a
   left rail in the same ramp colour, so a level reads the same on the grid and on the drill-down.
 - **Tint survives row-hover** by blending into the hover surface rather than being overpainted —
-  hover is exactly when a grader is reading that row's colours. Kept to 18% so the numbers, which are
-  the grid's subject, stay legible in both themes.
+  hover is exactly when a grader is reading that row's colours.
+
+**Adjusted same day, on the director's eye:** the first cut was too faint and the cells too large.
+Tint bumped 18% → 34% (clearly readable in both themes while the numbers stay legible), and the grid
+tightened — columns 4.6rem → 3.4rem, row padding roughly halved, name column 190px → 144px — so more
+of a ~40-lesson term is visible without scrolling. CSS only; re-screenshotted in both themes.
 
 *Verified:* `test-gradebook.mjs` **96/0** (23 new — `zoneIndex` boundaries, `cellSignals` across both
 paths and the degradation cases, and that `buildMatrix` attaches signals to the cell) · full

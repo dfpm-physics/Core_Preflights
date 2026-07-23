@@ -41,6 +41,13 @@ ROLE TIERS
     --role instructor  one section-scoped instructor row, nothing offering-wide
     --admin            is_global_admin = true (implicit access, holds no staff rows at all)
 
+WHERE THE IDENTITY LIVES
+  The email, password and UID are in the gitignored supabase/admin/.env
+  (PREP_TEST_FACULTY_*), beside the DB role credentials. This script reads the UID from there;
+  the browser harness reads all three. Keeping them in the one file that is meant to change means
+  a dashboard-recreated account is a one-line edit, not a code change, and no secret is on a
+  command line or in a scratch file.
+
 DRY RUN BY DEFAULT, per CORE.md §4. Prints the plan; --commit writes.
 
 Usage (from the repo root, via the project venv):
@@ -56,16 +63,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "supabase" / "admin"))
-from app_tier_check import load, connect  # noqa: E402
+from app_tier_check import load, connect, read_env, ENV_FILE  # noqa: E402
 
 # The account the roadmap tracks. Named so it is unmistakable in a staff list — if this ever
 # shows up in a real course roster screenshot, someone forgot to run --remove.
 #
-# The uuid is a DEFAULT, not a constant: --uid overrides it. Recreating the auth user in the
-# dashboard mints a new id every time, and this account was recreated three times on 2026-07-22
-# before it would authenticate. Editing a source file for each attempt is how the app rows end up
-# pointing at a user that no longer exists.
-TEST_UID = "b444e0be-4766-4e2d-9e2c-0e4787679a23"
+# The UID is NOT hardcoded — it lives in the gitignored supabase/admin/.env as
+# PREP_TEST_FACULTY_UID, beside the email and password the browser harness reads. Recreating the
+# auth user in the dashboard mints a new id every time (this account was recreated three times on
+# 2026-07-22 before it authenticated), so it belongs in the one file that is meant to change, not
+# in source. --uid still overrides for a one-off. Absent from the env, the script says so rather
+# than silently operating on nothing.
+_ENV = read_env(ENV_FILE)
+TEST_UID = _ENV.get("PREP_TEST_FACULTY_UID")
 TEST_NAME = "PREP Test Faculty (P0.5 — delete at seal)"
 
 COURSE_CODE = "phys-215"
@@ -139,7 +149,7 @@ def main():
     ap.add_argument("--no-admin", dest="admin", action="store_false",
                     help="set is_global_admin = false")
     ap.add_argument("--uid", default=TEST_UID,
-                    help="auth user id to operate on (defaults to the tracked test account)")
+                    help="auth user id to operate on (default: PREP_TEST_FACULTY_UID from .env)")
     ap.add_argument("--status", action="store_true", help="print current state and exit")
     ap.add_argument("--commit", action="store_true", help="actually write; otherwise roll back")
     args = ap.parse_args()
@@ -150,6 +160,9 @@ def main():
         ap.error("--remove is exclusive; run it on its own")
 
     uid = args.uid
+    if not uid:
+        sys.exit("No UID — set PREP_TEST_FACULTY_UID in supabase/admin/.env, or pass --uid. "
+                 "The auth user is created in the Supabase dashboard; copy its id in.")
 
     cfg, tiers = load()
     if "dml" not in tiers:

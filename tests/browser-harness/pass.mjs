@@ -7,6 +7,7 @@
 import puppeteer from 'puppeteer-core';
 import { existsSync, mkdirSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
+import { testFaculty } from './env.mjs';
 
 const REPO = resolve(import.meta.dirname, '..', '..');
 
@@ -21,14 +22,18 @@ const flag = (name) => argv.includes(`--${name}`);
 const BASE = arg('base', 'http://localhost:8000');
 const THEME = arg('theme', 'light');
 const STUDENT = flag('student');
-// The deliberate test cadet from tests/app-schema/harness.mjs — no real account involved.
-const EMAIL = arg('email', STUDENT ? '3009999999@usafa.edu' : null);
-const PASSWORD = arg('password', STUDENT ? '999999' : null);
+// Faculty credentials come from supabase/admin/.env (PREP_TEST_FACULTY_*) unless overridden on the
+// command line — so the walkthrough is `node pass.mjs` with no secret typed. The student path uses
+// the deliberate test cadet from tests/app-schema/harness.mjs; no real account is involved.
+const FAC = STUDENT ? {} : testFaculty();
+const EMAIL = arg('email', STUDENT ? '3009999999@usafa.edu' : FAC.email || null);
+const PASSWORD = arg('password', STUDENT ? '999999' : FAC.password || null);
 const OUT = arg('out', process.env.CLAUDE_SCRATCHPAD
   || resolve(process.env.TEMP || '/tmp', 'prep-browser-pass'));
 
 if (!EMAIL || !PASSWORD) {
-  console.error('Need --email and --password (or --student for the test cadet).');
+  console.error('No faculty credentials. Set PREP_TEST_FACULTY_EMAIL / _PASSWORD in '
+    + 'supabase/admin/.env, or pass --email and --password (or --student for the test cadet).');
   process.exit(2);
 }
 // A screenshot of a faculty page is a roster. Refuse to put one in the working tree.

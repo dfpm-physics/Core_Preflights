@@ -5,15 +5,17 @@
 // and absence is exactly what a screenshot review misses, because a missing panel looks like a
 // page that simply does not have one.
 //
-// Run once per role tier; flip the account between runs with
+// Credentials come from supabase/admin/.env (PREP_TEST_FACULTY_*) unless overridden. Run once per
+// role tier; flip the account between runs with
 //   scripts/test_faculty_account.py --role instructor --commit
 //
 // Usage:
-//   node tests/browser-harness/checks.mjs --email <addr> --password <pw> --lesson <offering-uuid>
-//                                         --tier director|instructor|admin
+//   node tests/browser-harness/checks.mjs --tier director|instructor|admin --lesson <offering-uuid>
+//   (add --email/--password to override the .env; --multi-course when staffed on 2+ offerings)
 
 import puppeteer from 'puppeteer-core';
 import { existsSync } from 'node:fs';
+import { testFaculty } from './env.mjs';
 
 const argv = process.argv.slice(2);
 const arg = (n, d = null) => {
@@ -21,10 +23,17 @@ const arg = (n, d = null) => {
   return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : d;
 };
 
+const FAC = testFaculty();
 const BASE = arg('base', 'http://localhost:8000');
-const EMAIL = arg('email'), PASSWORD = arg('password'), LESSON = arg('lesson');
+const EMAIL = arg('email', FAC.email || null);
+const PASSWORD = arg('password', FAC.password || null);
+const LESSON = arg('lesson');
 const TIER = arg('tier', 'director');
-if (!EMAIL || !PASSWORD) { console.error('Need --email and --password.'); process.exit(2); }
+if (!EMAIL || !PASSWORD) {
+  console.error('No faculty credentials. Set PREP_TEST_FACULTY_* in supabase/admin/.env, '
+    + 'or pass --email and --password.');
+  process.exit(2);
+}
 
 const CHROME = [
   arg('chrome'),

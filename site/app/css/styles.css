@@ -1817,30 +1817,32 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 .gb thead th { position: sticky; top: 0; z-index: 2; }
 .gb .gb-name, .gb .gb-pick { position: sticky; background: var(--card); z-index: 1; }
 .gb .gb-pick { left: 0; width: 34px; text-align: center; }
-.gb .gb-name { left: 0; min-width: 190px; }
+.gb .gb-name { left: 0; min-width: 144px; }
 .gb thead .gb-name, .gb thead .gb-pick { z-index: 3; background: var(--th-bg); }
 /* When the pick column is present the name column sits beside it, not under it. */
 .gb .gb-pick + .gb-name { left: 34px; }
 .gb tr:hover .gb-name, .gb tr:hover .gb-pick { background: var(--surface-hover); }
 
-.gb th, .gb td { border-bottom: 1px solid var(--border); }
+/* Compact by default — a term is ~40 columns, so every px of row height and column width is
+   multiplied many times over. The specific cell/column rules below tighten further still. */
+.gb th, .gb td { border-bottom: 1px solid var(--border); padding: 4px 8px; }
 .gb .gb-name a { color: var(--blue); text-decoration: none; font-weight: 600; }
 .gb .gb-name a:hover { text-decoration: underline; }
-.gb .gb-sec { color: var(--muted); font-size: 0.86em; white-space: nowrap; }
+.gb .gb-sec { color: var(--muted); font-size: 0.82em; white-space: nowrap; }
 
-/* ~5rem is what makes 40 lessons fit at all; the full title lives on title= and aria-label. */
-.gb .gb-col { width: 4.6rem; min-width: 4.6rem; text-align: center; font-size: 0.78em;
-  letter-spacing: 0.02em; padding: 8px 4px; }
-.gb .gb-cell { text-align: center; padding: 7px 4px 9px; font-size: 0.9em; position: relative; }
+/* Narrow fixed columns are what let 40 lessons fit; the full title lives on title= and aria-label. */
+.gb .gb-col { width: 3.4rem; min-width: 3.4rem; text-align: center; font-size: 0.76em;
+  letter-spacing: 0.01em; padding: 4px 2px; }
+.gb .gb-cell { text-align: center; padding: 3px 2px 5px; font-size: 0.84em; position: relative;
+  line-height: 1.15; }
 
 /* Colour layer (director request): cell tint = understanding, bottom bar = effort, both on the
    0–5 rollup ramp (--s1..--s5), both fed by inline --u / --e custom properties. Optional by
    construction — a cell with neither signal carries neither class and reads as a plain number.
-   Kept intentionally light: this grid's subject is the numbers, and a saturated fill behind every
-   one would bury them. The tint survives row-hover by blending into the hover surface rather than
-   being overpainted — hover is exactly when a grader is reading that row's colours. */
-.gb .gb-cell.gb-tint          { background: color-mix(in srgb, var(--u) 18%, transparent); }
-.gb tr:hover .gb-cell.gb-tint { background: color-mix(in srgb, var(--u) 18%, var(--surface-hover)); }
+   The tint survives row-hover by blending into the hover surface rather than being overpainted —
+   hover is exactly when a grader is reading that row's colours. */
+.gb .gb-cell.gb-tint          { background: color-mix(in srgb, var(--u) 34%, transparent); }
+.gb tr:hover .gb-cell.gb-tint { background: color-mix(in srgb, var(--u) 34%, var(--surface-hover)); }
 .gb .gb-ebar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--e);
   border-top-right-radius: 2px; pointer-events: none; }
 
@@ -1852,7 +1854,7 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
   transparent, transparent 5px, var(--surface-sunken) 5px, var(--surface-sunken) 6px); }
 
 .gb .gb-total { position: sticky; right: 0; background: var(--card); text-align: right;
-  white-space: nowrap; min-width: 92px; border-left: 1px solid var(--border); }
+  white-space: nowrap; min-width: 78px; border-left: 1px solid var(--border); }
 .gb thead .gb-total { background: var(--th-bg); z-index: 3; }
 .gb .gb-frac { display: block; font-size: 0.72em; color: var(--muted); font-weight: 400; }
 /* A 4px rail rather than a fill: a saturated background behind every total would dominate a

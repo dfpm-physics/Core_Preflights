@@ -28,15 +28,32 @@ point of P0.5.
 - A faculty account. Creating one is **not** something the tooling can do — no role available
   here has any privilege on schema `auth`. See roadmap P0.5.
 
+## Credentials live in the env, not on the command line
+
+The faculty account's email, password and UID are in the gitignored `supabase/admin/.env` as
+`PREP_TEST_FACULTY_EMAIL` / `_PASSWORD` / `_UID`, beside the DB role credentials. `env.mjs` reads
+them, and both harness scripts fall back to them — so the normal invocation carries **no secret**.
+`scripts/test_faculty_account.py` reads the same UID.
+
+The auth user is recreated in the Supabase dashboard whenever it is rebuilt, and that mints a new
+UID every time. When it does, update the three `PREP_TEST_FACULTY_*` lines in the `.env` — that one
+edit re-points every script. `--email` / `--password` still override for a one-off.
+
 ## Use
 
 ```bash
 # from the repo root
 python -m http.server 8000            # in one terminal
 
-node tests/browser-harness/pass.mjs --email <addr> --password <pw>
-node tests/browser-harness/pass.mjs --email <addr> --password <pw> --theme dark
-node tests/browser-harness/pass.mjs --student        # the test cadet, no credentials needed
+# credentials read from supabase/admin/.env — nothing secret on the line
+node tests/browser-harness/pass.mjs
+node tests/browser-harness/pass.mjs --theme dark
+node tests/browser-harness/pass.mjs --lesson <assignment-offering-uuid>   # also walk the rollup
+
+node tests/browser-harness/pass.mjs --student        # the test cadet instead of faculty
+
+# the targeted P0.5 assertions, one run per tier (flip tiers with test_faculty_account.py)
+node tests/browser-harness/checks.mjs --tier director --lesson <uuid>
 ```
 
 ## Screenshots go to the scratchpad, never the repo

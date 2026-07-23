@@ -154,7 +154,7 @@ from the committed `.template`:
 |---|---|---|
 | `~/.claude/skills/preflight-analyze/config.json` | `supabase_url`, `supabase_service_key` (service_role — bypasses RLS), `textbook_base_path`, `default_course_id` | `.ai/skills/preflight-analyze/config.json.template` |
 | `supabase/admin/config.json` | `claude_code_recker` DB role creds (Session pooler host) | `supabase/admin/config.json.template` |
-| `supabase/admin/.env` | The three `prep_app_*` role credentials for schema `app` (same pooler host) | — generated when `app_schema_bootstrap.sql` is run |
+| `supabase/admin/.env` | The three `prep_app_*` role credentials for schema `app` (same pooler host), plus the temporary `PREP_TEST_FACULTY_*` login for the P0.5 browser walkthrough | — generated when `app_schema_bootstrap.sql` is run |
 
 Notes:
 - The first path is **Claude-branded but agent-neutral in practice** — the Python scripts read it via
