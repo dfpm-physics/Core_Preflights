@@ -1824,17 +1824,21 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 .gb tr:hover .gb-name, .gb tr:hover .gb-pick { background: var(--surface-hover); }
 
 /* Compact by default — a term is ~40 columns, so every px of row height and column width is
-   multiplied many times over. The specific cell/column rules below tighten further still. */
-.gb th, .gb td { border-bottom: 1px solid var(--border); padding: 4px 8px; }
+   multiplied many times over. Everything is vertically centred, so a one-line name, a lone grade
+   number and the total all sit on the same midline across the row. */
+.gb th, .gb td { border-bottom: 1px solid var(--border); padding: 2px 8px; vertical-align: middle; }
 .gb .gb-name a { color: var(--blue); text-decoration: none; font-weight: 600; }
 .gb .gb-name a:hover { text-decoration: underline; }
 .gb .gb-sec { color: var(--muted); font-size: 0.82em; white-space: nowrap; }
 
 /* Narrow fixed columns are what let 40 lessons fit; the full title lives on title= and aria-label. */
 .gb .gb-col { width: 3.4rem; min-width: 3.4rem; text-align: center; font-size: 0.76em;
-  letter-spacing: 0.01em; padding: 4px 2px; }
-.gb .gb-cell { text-align: center; padding: 3px 2px 9px; font-size: 0.84em; position: relative;
-  line-height: 1.15; }
+  letter-spacing: 0.01em; padding: 3px 2px; }
+/* The grade number is centred in the space ABOVE the effort band: a small top pad, a bottom pad
+   equal to the band's height, and vertical-align:middle centres the digit between them so it never
+   crowds the black divider. A cell with no band still centres normally. */
+.gb .gb-cell { text-align: center; padding: 2px 2px 7px; font-size: 0.84em; position: relative;
+  line-height: 1.1; }
 
 /* Colour layer (director request): the cell is filled with the SOLID understanding colour straight
    off the 0–5 rollup ramp (--s1..--s5) — the same colours the legend swatch shows, no transparency
@@ -1864,7 +1868,10 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 .gb .gb-total { position: sticky; right: 0; background: var(--card); text-align: right;
   white-space: nowrap; min-width: 78px; border-left: 1px solid var(--border); }
 .gb thead .gb-total { background: var(--th-bg); z-index: 3; }
-.gb .gb-frac { display: block; font-size: 0.72em; color: var(--muted); font-weight: 400; }
+/* Inline, not a second line — a stacked fraction forced every graded row taller than a blank one,
+   which read as "the numbered cells are too tall". The percentage leads; the raw fraction trails it
+   quietly on the same line. */
+.gb .gb-frac { font-size: 0.72em; color: var(--muted); font-weight: 400; margin-left: 5px; }
 /* A 4px rail rather than a fill: a saturated background behind every total would dominate a
    screen whose subject is the cells, and it keeps the number readable in both themes. */
 .gb .gb-total[class*="band-"] { border-right: 4px solid var(--border); }
