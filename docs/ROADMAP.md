@@ -124,7 +124,7 @@ auth user fails rather than tidying up.)*
 Worth doing sooner than the seal: **duplicate unconfirmed users on the same address are the most
 likely reason the second account would not authenticate with a correctly copy-pasted password.**
 
-### P0.14 — The interactive path produces no grade · **BUILT 2026-07-23, migration not yet applied**
+### P0.14 — The interactive path produces no grade · ✅ **DONE 2026-07-23 (migration applied)**
 
 *Director's observation: interactive submitters get no grade and no mark in the gradebook matrix,
 and their student page shows no points.* **Confirmed against live `app` the same day — the
@@ -148,15 +148,19 @@ observation is exact, and the roadmap had been asserting the opposite.**
   a single Save would have overwritten their effort grade with 0. `test-grade.mjs` (14 checks)
   pins it, counterfactual included.
 
-**Not yet applied — needs a human (CORE.md §0):** migration
+**Applied 2026-07-23 as `prep_app_owner`:** migration
 `supabase/migrations/app/014_effort_grades_per_row.sql` re-keys the effort trigger on the grade
 **row** (`NEW.effort IS NOT NULL`) instead of the offering's `grading_mode`, and adds a
 `grades_one_grading_mechanism` CHECK (`effort IS NULL OR question_scores = '{}'`) so the
 written/effort split is enforced by the database rather than by prose. This is what lets a
 **choice** offering grade a written taker by `question_scores` and an interactive taker by effort
-*on the same offering* — the case `preflight-03`/`-04` already present. Applying it needs
-`prep_app_owner` unsealed → migrate → re-seal. Every existing grade row satisfies the new CHECK
-(all 64 have `effort IS NULL`), verified before writing it.
+*on the same offering* — the case `preflight-03`/`-04` already present. All 64 existing rows
+satisfied the CHECK; verified live afterward (a points-mode offering now derives points from
+effort, an effort-NULL row is left alone, and an effort+`question_scores` row is rejected).
+
+**⚠ Re-seal the owner (CORE.md §0, human-only).** `prep_app_owner` was unsealed to apply this and
+should go back to `NOLOGIN` — `ALTER ROLE prep_app_owner NOLOGIN;` as `postgres`. Folds into P0.2,
+which already seals it once and for all before term.
 
 **Verification gap to close during P0.5:** the new interactive Grade-tab card has **not** been seen
 in a browser, because no committed interactive submission exists in the term yet (the only

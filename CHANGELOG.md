@@ -8,12 +8,27 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
-## 2026-07-23 — Matthew Recker via Claude (P0.14 — the interactive grade writer, built)
+## 2026-07-23 — Matthew Recker via Claude (P0.14 — the interactive grade writer, built + migration applied)
+
+### Schema — migration `app/014_effort_grades_per_row.sql` APPLIED
+
+Applied to live `app` as `prep_app_owner` (unsealed by the director for this change). It re-keys
+`grades_points_from_effort()` on the grade **row** (`NEW.effort IS NOT NULL`) instead of the
+offering's `grading_mode`, and adds the `grades_one_grading_mechanism` CHECK
+(`effort IS NULL OR question_scores = '{}'`). Before/after captured: the function stopped
+referencing `grading_mode`, the constraint now exists, and all 64 existing grade rows satisfied it
+(every one has `effort IS NULL`). Verified live in rolled-back transactions afterward — a
+`grading_mode='points'` offering now derives points from effort (0→0, 2→1, 5→2), an effort-NULL row
+keeps its own `points_earned`, and an `effort` + non-empty `question_scores` row is rejected by the
+CHECK. The full `grade_interactive_test.py` (49) and app-schema (339) suites pass against the
+migrated database.
+
+**⚠ Owner needs re-sealing (human-only, CORE.md §0):** `prep_app_owner` is currently `LOGIN`.
+`ALTER ROLE prep_app_owner NOLOGIN;` as `postgres` closes it again — folds into P0.2.
 
 ### Added — carry an interactive submission's effort up to its grade
 
-The gap diagnosed earlier today (entry below) is closed on the frontend + tooling side; the one
-DDL step is written and waiting for a human to apply.
+The gap diagnosed earlier today (entry below) is closed end to end.
 
 - **`supabase/admin/grade_interactive.py`** — the writer the interactive path never had. For a
   committed, `graded`, chosen interactive submission it reads `effort` from
@@ -40,17 +55,11 @@ DDL step is written and waiting for a human to apply.
   checks, registered in `run.mjs`) pins the exclusion and includes the counterfactual proving the
   bug was real. Full app-schema suite green.
 
-**Migration `supabase/migrations/app/014_effort_grades_per_row.sql` — WRITTEN, NOT APPLIED.** It
-re-keys `grades_points_from_effort()` on the grade **row** (`NEW.effort IS NOT NULL`) rather than the
-offering's `grading_mode`, and adds a `grades_one_grading_mechanism` CHECK
-(`effort IS NULL OR question_scores = '{}'`) that makes the written/effort split a database
-invariant instead of a documented convention. This is what lets a **choice** offering
-(`preflight-03`/`-04` already are) grade a written taker by `question_scores` and an interactive
-taker by effort on the *same* offering. Applying it needs `prep_app_owner` unsealed → migrate →
-re-seal (CORE.md §0); every existing grade row satisfies the new CHECK (all 64 have `effort IS
-NULL`), verified before writing it. It also dissolves the zeroing hazard flagged earlier: the
-`grading_mode='effort'`-on-a-choice-offering trap stops existing once the trigger ignores
-`grading_mode`.
+Migration `supabase/migrations/app/014_effort_grades_per_row.sql` (**applied** — see the schema
+section above) is what makes a **choice** offering (`preflight-03`/`-04` already are) grade a written
+taker by `question_scores` and an interactive taker by effort on the *same* offering. It also
+dissolves the zeroing hazard flagged earlier: the `grading_mode='effort'`-on-a-choice-offering trap
+stops existing once the trigger ignores `grading_mode`.
 
 **Known verification limit (CORE.md §2):** the new interactive Grade-tab card is logic- and
 syntax-verified but has **not** been seen in a browser — no committed interactive submission exists
