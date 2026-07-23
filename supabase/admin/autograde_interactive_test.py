@@ -111,11 +111,20 @@ def main():
         check("no question_scores", g["question_scores"] == {})
     conn.rollback(); cur.execute("SET search_path TO app, public;")
 
-    print("\n2. PRACTICE interactive: committing creates NO grade")
+    print("\n2. PRACTICE interactive: the commit itself is refused (so never a grade)")
     fx = setup(cur)
     set_role(cur, fx, "practice"); reset_grade_and_content(cur, fx, 5)
-    commit(cur, fx)
-    check("no grade for a practice commit", grade(cur, fx) is None)
+    # An existing guard, submissions_check_gradable() (001_core_model.sql), rejects choosing a
+    # practice activity for credit BEFORE our trigger would ever run. So "practice earns no grade"
+    # is enforced a layer up; our trigger's practice check is redundant defense-in-depth. Confirm
+    # the upstream refusal here.
+    from psycopg2 import errors
+    try:
+        commit(cur, fx)
+        check("committing a practice activity is refused", False, "no exception raised")
+    except errors.RaiseException as e:
+        check("committing a practice activity is refused upstream",
+              "practice" in str(e).lower())
     conn.rollback(); cur.execute("SET search_path TO app, public;")
 
     print("\n3. §5.2 cap: a non-meaningful reflection caps effort at 2 (half credit)")

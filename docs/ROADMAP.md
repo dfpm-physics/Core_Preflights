@@ -124,7 +124,7 @@ auth user fails rather than tidying up.)*
 Worth doing sooner than the seal: **duplicate unconfirmed users on the same address are the most
 likely reason the second account would not authenticate with a correctly copy-pasted password.**
 
-### P0.16 — Interactive grades itself on commit; student nav gating · **BUILT 2026-07-23, one migration pending apply**
+### P0.16 — Interactive grades itself on commit; student nav gating · ✅ **DONE 2026-07-23 (015 applied)**
 
 *Director follow-up to P0.14: the interactive grade should appear on its own — no run — and be
 auto-final, but only when the interactive path is an ALLOWED (graded) mode; and the student-facing
@@ -137,11 +137,10 @@ choice/navigation had several defects.*
   activity, copies the report effort (with the §5.2 cap re-applied) onto a **finalized, derived**
   grade — student-visible immediately, no review step, matching the legacy `public` behaviour the
   director wanted. Practice commits get **no** grade. A finalized instructor/imported grade is never
-  clobbered ("auto-grade as long as there wasn't a response already graded"). **NOT APPLIED:** the
-  live-DDL apply was refused by the harness permission classifier while the director was away; the
-  migration is written and logic-verified and needs the director to apply it (unseal → migrate →
-  re-seal) or approve the command. `autograde_interactive_test.py` verifies it live the moment it
-  lands.
+  clobbered ("auto-grade as long as there wasn't a response already graded"). **APPLIED 2026-07-23**
+  on the director's return; `autograde_interactive_test.py` passes 12/12 live. A "no usable effort"
+  guard bug (`<>` vs `IS DISTINCT FROM`, which let an absent effort create a NULL-effort grade) was
+  caught by that test and fixed before use.
 - `grade_interactive.py` + its 49-check suite re-aligned to the auto-final policy (`source='derived'`,
   `is_finalized=true`); the script is now a **backfill** tool writing the identical row the trigger
   writes. Until 015 is applied, a committed interactive submission still produces no grade on its own

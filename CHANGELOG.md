@@ -18,16 +18,19 @@ written but not yet applied (the harness blocked the live-DDL apply — see belo
 Follows the director's decision that an interactive grade should appear on its own, immediately,
 finalized, **only when the interactive path is a graded (allowed) mode**.
 
-- **`supabase/migrations/app/015_interactive_autograde.sql` — WRITTEN, NOT APPLIED.** A
+- **`supabase/migrations/app/015_interactive_autograde.sql` — APPLIED 2026-07-23.** A
   `SECURITY DEFINER` trigger (`grade_interactive_on_commit`): when a submission commits to a
   **graded** interactive activity, it copies the report effort (re-applying the §5.2 reading-
   reflection cap server-side) onto a **finalized, derived** grade — student-visible at once, no
-  review step. Practice commits produce no grade. A finalized instructor/imported grade is never
+  review step. Practice commits produce no grade (and `submissions_check_gradable` already blocks
+  committing a practice activity a layer up). A finalized instructor/imported grade is never
   overwritten (a prior *derived* one is, so re-submits work). RLS-safe: `grades` has RLS enabled but
   not forced, so the owning definer writes past the student's policy; scoped to the firing
-  submission's own enrolment. **The live apply was refused by the harness permission classifier**
-  while the director was away — it is logic-verified and needs the director to apply it (unseal →
-  migrate → re-seal) or approve the command.
+  submission's own enrolment. Applied on the director's return; `autograde_interactive_test.py`
+  passes 12/12 live. **One bug was caught by that test and fixed before use:** the "no usable
+  effort" guard used `<>` where SQL three-valued logic let an absent effort fall through and create
+  a NULL-effort grade — corrected to `IS DISTINCT FROM` and re-applied (the trigger is a pure
+  `CREATE OR REPLACE` function with no dependents yet).
 - **`grade_interactive.py` + its 49-check suite re-aligned to auto-final** (`source='derived'`,
   `is_finalized=true`). The script is now a **backfill** tool that writes the identical row the
   trigger writes; until 015 is applied it is the interim way an interactive submission gets a grade.

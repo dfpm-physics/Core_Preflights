@@ -94,9 +94,12 @@ BEGIN
    WHERE sa.submission_id = NEW.id AND sa.activity_id = NEW.chosen_activity_id;
 
   -- Accept effort only as a plain integer 0-5; anything else means "no gradable effort", so leave
-  -- the submission ungraded rather than inventing a score. jsonb_typeof guards a non-number value.
+  -- the submission ungraded rather than inventing a score. IS DISTINCT FROM (not <>) is load-
+  -- bearing: when 'effort' is absent, jsonb_typeof(...) is SQL NULL, and `NULL <> 'number'` is
+  -- NULL — which is not TRUE, so a plain <> would fall THROUGH the guard and grade a NULL effort.
+  -- IS DISTINCT FROM treats NULL as a value, so an absent or json-null effort is rejected here.
   IF v_content IS NULL
-     OR jsonb_typeof(v_content->'effort') <> 'number'
+     OR jsonb_typeof(v_content->'effort') IS DISTINCT FROM 'number'
      OR (v_content->>'effort') !~ '^-?\d+$' THEN
     RETURN NEW;
   END IF;
