@@ -66,10 +66,16 @@ is the default, not a special case.
 - **Tint survives row-hover** by blending into the hover surface rather than being overpainted —
   hover is exactly when a grader is reading that row's colours.
 
-**Adjusted same day, on the director's eye:** the first cut was too faint and the cells too large.
-Tint bumped 18% → 34% (clearly readable in both themes while the numbers stay legible), and the grid
-tightened — columns 4.6rem → 3.4rem, row padding roughly halved, name column 190px → 144px — so more
-of a ~40-lesson term is visible without scrolling. CSS only; re-screenshotted in both themes.
+**Adjusted on the director's eye (two passes):** the first cut was too faint and the cells too
+large, so the grid tightened — columns 4.6rem → 3.4rem, row padding roughly halved, name column
+190px → 144px — and the tint went from a transparent wash to the **solid ramp colour** (the same
+five the legend swatch shows, no `color-mix`), with the number set near-black so it stays legible
+across red→green in both themes. The effort bar became a **band pinned to the cell's bottom edge,
+a full-width black line dividing it from the understanding region**, still well shorter than the
+cell; its fill length and colour both encode effort on a neutral track so it reads even when effort
+and understanding land on the same colour. CSS + one markup change; verified **signed in against
+real Fall data** (21 students, both themes, no console errors) and re-screenshotted synthetically to
+see the full ramp the live cohort doesn't span.
 
 *Verified:* `test-gradebook.mjs` **96/0** (23 new — `zoneIndex` boundaries, `cellSignals` across both
 paths and the degradation cases, and that `buildMatrix` attaches signals to the cell) · full

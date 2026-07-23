@@ -212,9 +212,10 @@
       const tintCls = uIdx != null ? ' gb-tint' : '';
       const style = uIdx != null ? ` style="--u:${zoneCss(uIdx)}"` : '';
       // Width AND colour both encode effort, so it reads at a glance and does not rely on colour
-      // alone (a red/green-blind grader still sees a short bar for low effort).
+      // alone (a red/green-blind grader still sees a short bar for low effort). A full-width band
+      // with a black top line is the region divider; the fill inside it is the level.
       const bar = eIdx != null
-        ? `<span class="gb-ebar" style="width:${Math.round((c.effort / 5) * 100)}%;--e:${zoneCss(eIdx)}"></span>`
+        ? `<span class="gb-eband"><span class="gb-efill" style="width:${Math.round((c.effort / 5) * 100)}%;--e:${zoneCss(eIdx)}"></span></span>`
         : '';
       const parts = [];
       if (c.effort != null) parts.push(`effort ${c.effort}/5`);
@@ -260,7 +261,7 @@
         <span><b class="gb-key gb-ungraded">·</b> submitted, ungraded</span>
         <span><b class="gb-key gb-draft">2<sup>?</sup></b> AI suggestion, not finalized</span>
         <span><b class="gb-key">⏰</b> arrived late</span>
-        <span class="gb-leg-sep">cell tint = understanding · bottom bar = effort ${rampSwatch()} low→high</span>
+        <span class="gb-leg-sep">cell colour = understanding · bottom bar = effort ${rampSwatch()} low→high</span>
         <span class="muted">Blank = not due yet, and not counted.</span>
         <span class="grow"></span>
         <span class="muted">Median ${stats.median == null ? '—' : Math.round(stats.median * 100) + '%'}

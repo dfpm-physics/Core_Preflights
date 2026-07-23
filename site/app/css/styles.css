@@ -1833,18 +1833,26 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 /* Narrow fixed columns are what let 40 lessons fit; the full title lives on title= and aria-label. */
 .gb .gb-col { width: 3.4rem; min-width: 3.4rem; text-align: center; font-size: 0.76em;
   letter-spacing: 0.01em; padding: 4px 2px; }
-.gb .gb-cell { text-align: center; padding: 3px 2px 5px; font-size: 0.84em; position: relative;
+.gb .gb-cell { text-align: center; padding: 3px 2px 9px; font-size: 0.84em; position: relative;
   line-height: 1.15; }
 
-/* Colour layer (director request): cell tint = understanding, bottom bar = effort, both on the
-   0–5 rollup ramp (--s1..--s5), both fed by inline --u / --e custom properties. Optional by
-   construction — a cell with neither signal carries neither class and reads as a plain number.
-   The tint survives row-hover by blending into the hover surface rather than being overpainted —
-   hover is exactly when a grader is reading that row's colours. */
-.gb .gb-cell.gb-tint          { background: color-mix(in srgb, var(--u) 34%, transparent); }
-.gb tr:hover .gb-cell.gb-tint { background: color-mix(in srgb, var(--u) 34%, var(--surface-hover)); }
-.gb .gb-ebar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--e);
-  border-top-right-radius: 2px; pointer-events: none; }
+/* Colour layer (director request): the cell is filled with the SOLID understanding colour straight
+   off the 0–5 rollup ramp (--s1..--s5) — the same colours the legend swatch shows, no transparency
+   — and a thin effort band sits along the bottom, a black line dividing the two regions. Both are
+   optional: a cell with neither signal carries neither class and reads as a plain number.
+   The number goes near-black so it stays legible across the whole ramp (red through green) in both
+   themes, and the tint holds its colour on row-hover rather than washing out to the hover surface. */
+.gb .gb-cell.gb-tint          { background: var(--u); color: #17191d; }
+.gb tr:hover .gb-cell.gb-tint { background: var(--u); }
+.gb .gb-cell.gb-tint .gb-draft, .gb .gb-cell.gb-draft.gb-tint { color: #17191d; }
+
+/* The effort band: a short progress track pinned to the bottom edge, well shorter than the cell,
+   with a full-width black line separating it from the understanding region above. The fill length
+   AND colour both encode effort 0–5, on a neutral track so the fill reads even when effort and
+   understanding land on the same ramp colour. */
+.gb .gb-eband { position: absolute; left: 0; right: 0; bottom: 0; height: 5px;
+  border-top: 1px solid #000; background: var(--track); pointer-events: none; }
+.gb .gb-efill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--e); }
 
 .gb .gb-missing  { color: var(--red); font-weight: 700; }
 .gb .gb-ungraded { color: var(--muted); font-weight: 700; }
