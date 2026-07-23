@@ -149,19 +149,31 @@
       // so the student still deserves the warning before, not after.
       writtenAnswers = 0;
       let offered = null;
+      let item = null;
       if (offering) {
         offered = offering.activities.find(a => a.id === activity.id) || null;
         const items = await loadAssignmentStatuses(ctx);
-        const item = items.find(i => i.offeringId === offering.offeringId);
+        item = items.find(i => i.offeringId === offering.offeringId) || null;
         if (item?.written) {
           const saved = item.submission?.activities?.[item.written.id]?.content || null;
           writtenAnswers = answeredCount(saved, questionsOf(item.written));
         }
       }
 
+      // Two hard stops on submitting for a grade, both from the student's own resolved status
+      // (loadAssignmentStatuses honours the section deadline and any extension). An interactive
+      // grade is auto-final and has no instructor review to catch a late or duplicate submission,
+      // so these are enforced BEFORE submit, not after:
+      //   pastDue      — the deadline has passed; a report can't be handed in late for credit.
+      //   alreadyFinal — a finalized grade already exists; the first submitted report is the one
+      //                  that counts, so a later one can't overwrite it.
+      // (Practice is a separate, softer case handled below — it records but never grades.)
+      const pastDue      = !!item?.isPast;
+      const alreadyFinal = !!item?.grade?.is_finalized;
+
       // Stored markdown is a user-controllable blob — sanitize at render time, never execute.
       const preview = DOMPurify.sanitize(marked.parse(payload.markdown));
-      const canSubmit = !!(payload.id && activity && offering);
+      const canSubmit = !!(payload.id && activity && offering) && !pastDue && !alreadyFinal;
 
       let banner = '';
       if (!payload.id) {
@@ -174,6 +186,14 @@
         banner = `<div class="alert alert-warn">This assignment exists, but it isn’t published for your class
           this term, so there’s nowhere to record it. You can read your report below — check with your
           instructor before re-running the interactive lesson.</div>`;
+      } else if (alreadyFinal) {
+        banner = `<div class="alert alert-warn">This assignment has already been <strong>graded</strong>, so a new
+          report can’t be submitted. You can still read it below. If you think this is wrong, ask your
+          instructor — they can reopen the assignment.</div>`;
+      } else if (pastDue) {
+        banner = `<div class="alert alert-warn">The <strong>deadline for this assignment has passed</strong>, so
+          this report can no longer be submitted for a grade. You can read it below, and you can still launch the
+          lesson any time to study. If you had an extension that should still be open, ask your instructor.</div>`;
       } else if (offered?.gradingRole === 'practice') {
         banner = `<div class="alert alert-info">This assignment is set up as <strong>practice</strong> this term,
           so the written preflight is what carries your grade. Your report is still saved and your instructor

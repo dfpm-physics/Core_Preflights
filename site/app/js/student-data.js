@@ -348,6 +348,24 @@ export async function resolveActivityBySlug(ctx, slug) {
 export async function submitInteractionReport(ctx, { activity, offering, markdown, data }) {
   if (!offering) return { error: new Error('This assignment is not scheduled for you this term.') };
 
+  // Data-layer backstop for "already graded": an interactive grade is auto-final, so the first
+  // submitted report is the one that counts and a later one must not overwrite it. The submit page
+  // blocks this in the UI, but interaction-submit.html is a public receiver URL, so the rule is
+  // re-checked here where it cannot be skipped. (Past-due is enforced in the UI today; a DB-level
+  // deadline guard is a hardening follow-up — see CHANGELOG 2026-07-23.)
+  const enrollmentId = myEnrollmentIds(ctx)[0];
+  if (enrollmentId) {
+    const { data: g } = await db.from('grades')
+      .select('is_finalized')
+      .eq('enrollment_id', enrollmentId)
+      .eq('assignment_offering_id', offering.offeringId)
+      .maybeSingle();
+    if (g?.is_finalized) {
+      return { error: new Error('This assignment has already been graded and can’t be resubmitted. '
+                              + 'Ask your instructor to reopen it if you need to.') };
+    }
+  }
+
   const { data: submission, error } = await ensureSubmission(ctx, offering.offeringId);
   if (error || !submission) return { error: error || new Error('Could not open a submission.') };
 

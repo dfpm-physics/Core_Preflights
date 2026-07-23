@@ -8,6 +8,38 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-23 — Matthew Recker via Claude (interactive submit: deny late / already-graded · a documented limitation)
+
+### Changed — an interactive report can't be submitted late or over a finished grade
+
+The artifact offers the student a "for a grade" choice and hands them an import link, so the receiver
+(`interaction-submit.html`) must decide whether that link may actually produce a grade. Two hard
+stops added, using the student's own resolved status (`loadAssignmentStatuses`, which already honours
+the section deadline and any extension) — enforced *before* submit because an interactive grade is
+auto-final and has no instructor review to catch a late or duplicate hand-in:
+
+- **Past due** → the report can be read but not submitted for credit. (A student with an extension
+  still open is not past due, because the deadline is the effective one.)
+- **Already graded** (a finalized grade exists) → no new report can overwrite it; the first submitted
+  report is the one that counts. Also enforced in the data layer (`submitInteractionReport` in
+  `student-data.js`), because the receiver is a public URL and the UI check alone is skippable.
+
+Practice is unchanged (it records the report, never grades — a softer, existing case). *Past-due
+enforcement is UI + status-derived today; a DB-level deadline guard on commit is a hardening
+follow-up.*
+
+### Known limitation — a graded interactive choice is sticky (accepted 2026-07-23)
+
+Once a student's interactive submission is **committed and graded**, reverting the assignment's
+configuration (e.g. student-choice back to free-response-only) does **not** vacate those grades or
+un-commit the submissions. The grade already exists and, like any committed choice under
+`switch_policy`, it stands. This is a deliberate limitation, not a bug: automatically deleting graded
+work as a side effect of a config toggle is more dangerous than leaving it. To undo one, an
+instructor reopens/removes the grade by hand. (Surfaced when `preflight-02` was flipped to
+student-choice, the eight test interactives graded, then flipped back — the grades remained.)
+
+---
+
 ## 2026-07-23 — Matthew Recker via Claude (rollup counts graded-path only · backfill grades existing interactive drafts)
 
 ### Fixed — the rollup no longer counts practice work as "complete"
