@@ -52,7 +52,7 @@
 
       <!-- Written activity ------------------------------------------------- -->
       <div class="lb-section" id="lb-preflight">
-        <div class="lb-head"><span class="lb-ttl">Free-Response Preflight</span><span class="grow"></span>
+        <div class="lb-head"><button type="button" class="lb-collapse" data-collapse="written" aria-expanded="false" title="Expand or collapse this section" style="background:none;border:none;cursor:pointer;color:var(--text-soft);font-size:0.9em;padding:0 6px 0 0">▸</button><span class="lb-ttl">Free-Response Preflight</span><span class="grow"></span>
           <div class="seg" id="f-pf-source" role="tablist" aria-label="Include written questions">
             <button type="button" data-pfsrc="none" aria-pressed="false">Not this term</button>
             <button type="button" data-pfsrc="new"  aria-pressed="true">Include</button>
@@ -84,7 +84,7 @@
 
       <!-- Interactive activity ---------------------------------------------- -->
       <div class="lb-section" id="lb-interaction">
-        <div class="lb-head"><span class="lb-ttl">AI Interaction</span><span class="grow"></span>
+        <div class="lb-head"><button type="button" class="lb-collapse" data-collapse="interactive" aria-expanded="false" title="Expand or collapse this section" style="background:none;border:none;cursor:pointer;color:var(--text-soft);font-size:0.9em;padding:0 6px 0 0">▸</button><span class="lb-ttl">AI Interaction</span><span class="grow"></span>
           <div class="seg" id="f-i-source" role="tablist" aria-label="Include AI interaction">
             <button type="button" data-isrc="none" aria-pressed="false">Not this term</button>
             <button type="button" data-isrc="new"  aria-pressed="true">Include</button>
@@ -623,6 +623,10 @@
       renderInteractiveFields();
       renderDueDays();
 
+      // Fresh open → both sections collapsed; the director expands what they need.
+      sectionCollapsed.written = true;
+      sectionCollapsed.interactive = true;
+
       updateSourceSegs();
       applyComponentVisibility();
       updatePolicyAvailability();     // also refreshes the policy segmented control + hint
@@ -676,9 +680,26 @@
       document.querySelectorAll('#f-i-source button').forEach(b =>
         b.setAttribute('aria-pressed', String(b.dataset.isrc === iSrc)));
     }
+    // Each section starts collapsed when the editor opens (director, 2026-07-23) — the two bodies
+    // are long and made the form unruly. The chevron in each header expands one when needed. This
+    // is UI state only; it is never saved and does not change what "Include / Not this term" means.
+    const sectionCollapsed = { written: true, interactive: true };
+
     function applyComponentVisibility() {
-      document.getElementById('lb-pf-new').style.display = model.written.include ? '' : 'none';
-      document.getElementById('lb-i-new').style.display  = model.interactive.include ? '' : 'none';
+      const pfOpen = model.written.include && !sectionCollapsed.written;
+      const iOpen  = model.interactive.include && !sectionCollapsed.interactive;
+      document.getElementById('lb-pf-new').style.display = pfOpen ? '' : 'none';
+      document.getElementById('lb-i-new').style.display  = iOpen ? '' : 'none';
+      // Chevron reflects state; hidden entirely when the section is not included (nothing to expand).
+      const chevron = (sel, open, include) => {
+        const b = document.querySelector(sel);
+        if (!b) return;
+        b.textContent = open ? '▾' : '▸';
+        b.setAttribute('aria-expanded', String(open));
+        b.style.visibility = include ? '' : 'hidden';
+      };
+      chevron('[data-collapse="written"]', pfOpen, model.written.include);
+      chevron('[data-collapse="interactive"]', iOpen, model.interactive.include);
       // "Not this term" detaches, it does not delete — say so where the director just clicked.
       document.getElementById('lb-pf-detached').style.display =
         (!model.written.include && model.assignmentId) ? '' : 'none';
@@ -705,11 +726,12 @@
     }
     function setWrittenIncluded(on) {
       model.written.include = on;
-      if (on) { ensureDefaultQuestions(); renderQuestions(); }
+      if (on) { ensureDefaultQuestions(); renderQuestions(); sectionCollapsed.written = false; }
       updateSourceSegs(); applyComponentVisibility(); updatePolicyAvailability();
     }
     function setInteractiveIncluded(on) {
       model.interactive.include = on;
+      if (on) sectionCollapsed.interactive = false;   // just chose to include it → show it
       updateSourceSegs(); applyComponentVisibility(); updatePolicyAvailability();
     }
 
@@ -888,6 +910,13 @@
 
       backdrop.addEventListener('click', (e) => {
         if (e.target === backdrop || e.target.closest('[data-close]')) { closeModal(); return; }
+        const collapseBtn = e.target.closest('[data-collapse]');
+        if (collapseBtn) {
+          const k = collapseBtn.dataset.collapse;
+          sectionCollapsed[k] = !sectionCollapsed[k];
+          applyComponentVisibility();
+          return;
+        }
         const policyBtn = e.target.closest('[data-policy]');
         if (policyBtn) {
           if (policyBtn.disabled) return;                     // mode not attached — ignore
