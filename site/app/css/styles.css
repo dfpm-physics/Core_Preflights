@@ -1982,3 +1982,75 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 .fb-err { color: var(--red); font-size: 0.8em; min-height: 1em; margin-top: 4px; }
 /* Standard form footer: dismiss on the left, the primary action on the right. */
 .fb-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+/* =============================================================
+ *  Feedback resolution matrix  (faculty/feedback.html — site admins only)
+ *  A page x decision cross-tab whose cells filter the list beneath it, then one card per comment
+ *  carrying the decision controls. Status colour is the ONE signal repeated in three places (the
+ *  matrix cell, the card's left rail, the chosen segment) so a row's state reads the same wherever
+ *  you meet it. Tokens only; theme-aware.
+ * ============================================================= */
+.fbm-card { padding: 18px 20px; }
+.fbm { width: 100%; font-variant-numeric: tabular-nums; }
+.fbm th { background: var(--th-bg); color: #fff; padding: 6px 10px; }
+.fbm td { padding: 4px 10px; vertical-align: middle; border-bottom: 1px solid var(--border); }
+.fbm .fbm-page { text-align: left; max-width: 320px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 0.86em; }
+.fbm .fbm-num { text-align: center; width: 5.2rem; }
+.fbm tfoot .fbm-total td { border-bottom: none; border-top: 2px solid var(--border); font-weight: 700; }
+
+/* A count is a button because its whole purpose is to filter. Zero is not — there is nothing to
+   look at, and a clickable 0 that yields an empty list is a small betrayal. */
+.fbm-cell { min-width: 2.2rem; padding: 3px 8px; border-radius: var(--radius-sm); cursor: pointer;
+  border: 1px solid transparent; background: var(--surface-sunken); color: var(--text);
+  font-weight: 700; font-size: 0.86em; transition: border-color .12s, background .12s; }
+.fbm-cell:hover { border-color: var(--blue-lt); }
+.fbm-cell.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+.fbm-zero { color: var(--muted); }
+/* Untriaged is the only count that should pull the eye — it is the page's actual to-do. */
+.fbm-new  { background: color-mix(in srgb, var(--gold) 26%, var(--surface-sunken)); }
+.fbm-accepted  { background: color-mix(in srgb, var(--green) 22%, var(--surface-sunken)); }
+.fbm-declined  { background: color-mix(in srgb, var(--red) 18%, var(--surface-sunken)); }
+.fbm-duplicate { background: var(--surface-sunken); color: var(--muted); }
+
+.fb-pending { margin-bottom: 16px; }
+.fb-controls { gap: 10px; align-items: center; margin-bottom: 14px; }
+.fb-search { width: auto; min-width: 260px; flex: 0 1 340px; }
+
+/* One comment, one card. */
+.fb-item { padding: 14px 16px; margin-bottom: 12px; border-left: 4px solid var(--border); }
+.fb-item.fb-st-new       { border-left-color: var(--gold); }
+.fb-item.fb-st-accepted  { border-left-color: var(--green); }
+.fb-item.fb-st-declined  { border-left-color: var(--red); }
+.fb-item.fb-st-duplicate { border-left-color: var(--muted); }
+.fb-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px;
+  font-size: 0.88em; }
+.fb-item-page { font-size: 0.8em; color: var(--blue); background: var(--surface-sunken);
+  border-radius: 999px; padding: 2px 9px; }
+.fb-sent-chip { font-size: 0.95em; }
+/* The comment is the subject of the page, so it is the largest thing on the card and is never
+   truncated — a resolution decision made against a clipped sentence is a guess. */
+.fb-item-msg { font-size: 0.95em; line-height: 1.5; white-space: pre-wrap; margin-bottom: 12px;
+  padding: 10px 12px; background: var(--surface-sunken); border-radius: var(--radius-sm); }
+
+.fb-item-res { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px; }
+.fb-seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  overflow: hidden; }
+.fb-stbtn { padding: 5px 12px; font-size: 0.8em; cursor: pointer; background: var(--card);
+  border: none; border-right: 1px solid var(--border); color: var(--text-soft); }
+.fb-stbtn:last-child { border-right: none; }
+.fb-stbtn:hover { background: var(--surface-hover); color: var(--text); }
+.fb-stbtn.on { color: #fff; font-weight: 700; }
+.fb-stbtn-new.on       { background: var(--gold); }
+.fb-stbtn-accepted.on  { background: var(--green); }
+.fb-stbtn-declined.on  { background: var(--red); }
+.fb-stbtn-duplicate.on { background: var(--muted); }
+
+.fb-ref { width: auto; flex: 0 1 220px; font-size: 0.84em; padding: 5px 9px; }
+.fb-ref:disabled { opacity: 0.5; cursor: not-allowed; }
+/* An explicit height, because the global textarea rule outweighs rows="2" and left the note box
+   taller than the comment it annotates. Still resizable for the rare long rationale. */
+.fb-note { width: 100%; font-size: 0.86em; padding: 6px 10px; margin-bottom: 8px;
+  height: 46px; min-height: 46px; resize: vertical; }
+.fb-item-foot { gap: 10px; align-items: center; }
+.fb-item-foot .error-msg { margin: 0; }

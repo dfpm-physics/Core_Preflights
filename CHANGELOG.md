@@ -8,6 +8,56 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-23 — Matthew Recker via Claude (feedback resolution matrix, site admins only)
+
+### Added — every comment now reaches a decision, and accepted ones get a destination
+
+The other half of the feedback box. 012 gave people somewhere to put a comment; nothing gave anyone
+somewhere to answer one, and a suggestion box that is never visibly acted on stops being used by
+about week three. `site/app/faculty/feedback.html` (new, admin-only nav entry) is a **page × decision
+matrix**: a cross-tab of where comments came from against what was decided, whose cells filter the
+list beneath it, then one card per comment carrying the decision controls.
+
+**Migration `013_feedback_resolution.sql` — applied.** Adds `status`
+(`new`/`accepted`/`declined`/`duplicate`, default `new` so the widget's INSERT keeps knowing nothing
+about any of this), `resolution_note`, `roadmap_ref`, `resolved_by`/`resolved_at`, `updated_at`, plus
+an admin-only UPDATE policy and a partial index on the pending work list.
+
+**The handoff contract for the roadmap skill — which is deliberately NOT built yet.** Accepted
+feedback is meant to be rolled into `docs/ROADMAP.md` by a skill, and that skill needs an unambiguous
+work list. It is exactly:
+
+```sql
+SELECT * FROM app.feedback WHERE status = 'accepted' AND roadmap_ref IS NULL;
+```
+
+There is deliberately **no `roadmapped` status**: a status would have to be kept in step with the
+roadmap by hand, whereas `roadmap_ref IS NULL` cannot drift from the thing it describes. Stamping the
+ref is what removes a row from the list, a CHECK confines a ref to accepted rows so a declined item
+can never enter it, and `resolutionPatch` writes NULL rather than `''` for a blank — an empty string
+would look right in the UI while silently failing `IS NULL` and stranding the item forever. That last
+one has its own test.
+
+**Two deliberate narrowings.** Resolution is **site admins only** (`is_admin()`), not directors —
+feedback routinely names a colleague's screen as confusing, and letting every director resolve a
+comment about somebody else's page invites the argument the box exists to avoid. And there is **no
+DELETE policy for anyone, including admins**: the strongest reason someone would want a comment
+erased is the worst reason to permit it, so saying no is `declined` with a note that stays on the
+record. Both are pinned by RLS persona checks.
+
+*Only free responses need resolving, and that needs no filter:* `message` is NOT NULL with a
+non-blank CHECK while the reaction is optional, so a bare-reaction row cannot exist — every row
+already is a comment. The sentiment renders beside the text as context, never as the subject.
+
+*Verified:* `test-feedback-admin.mjs` **44/0** (matrix cross-tab and its sort order, the pending work
+list including the empty-string trap, filtering, and every constraint mirrored into a sentence) ·
+`app_rls_test.py` **56/0** with six new feedback checks (student and non-admin instructor both denied
+resolution, admin allowed, ref-on-declined refused, delete refused for everyone) · full
+`tests/app-schema` **339/0**, exit 0 · and **signed in as a site admin in both themes**: nav entry
+present, matrix rendered, a cell click filtered 6 → 2, and a real accept + roadmap ref round-tripped
+to the database with attribution stamped. Test rows removed and the account's admin flag restored
+afterwards.
+
 ## 2026-07-23 — Matthew Recker via Claude (feedback box: sentiment + comment)
 
 Reworked the feedback controls, same day: the six-category single-select had heavy overlap (a

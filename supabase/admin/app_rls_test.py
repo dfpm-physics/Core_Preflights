@@ -421,6 +421,10 @@ def main():
                     VALUES (%s,%s,'dislike','spoofed')""", (teacher_uid, FB_PAGE))
         check("CANNOT read any feedback — SELECT is admin-only",
               p.count("SELECT count(*) FROM feedback WHERE page=%s", (FB_PAGE,)) == 0)
+        # Migration 013: resolution is an admin act. A cadet must not be able to mark a comment
+        # about them as declined.
+        p.denied("CANNOT resolve feedback",
+                 "UPDATE feedback SET status='declined' WHERE page=%s", (FB_PAGE,))
 
     with Persona(cur, teacher_uid, "teacher — feedback") as p:
         p.allowed("CAN file feedback as themselves",
@@ -428,6 +432,12 @@ def main():
                      VALUES (%s,%s,'add','want a CSV export')""", (teacher_uid, FB_PAGE))
         check("a non-admin instructor also reads no feedback",
               p.count("SELECT count(*) FROM feedback WHERE page=%s", (FB_PAGE,)) == 0)
+        # The deliberate narrowing recorded in 013: resolution is site-admin only, NOT director.
+        # Feedback frequently names a colleague's page as confusing, and letting every director
+        # resolve a comment about somebody else's screen invites the argument the box exists to
+        # avoid. Note this persona is a section instructor, so this also proves the obvious case.
+        p.denied("CANNOT resolve feedback either — resolution is site-admin only",
+                 "UPDATE feedback SET status='accepted' WHERE page=%s", (FB_PAGE,))
 
     # Admin-can-read is the whole point of the poll, so verify it against a real global admin when
     # one exists (the suite otherwise avoids admin personas because is_admin() short-circuits — here
@@ -439,6 +449,20 @@ def main():
         with Persona(cur, str(admin_row[0]), "global admin — feedback") as p:
             check("a global admin CAN read the feedback (the poll)",
                   p.count("SELECT count(*) FROM feedback WHERE page=%s", (FB_PAGE,)) >= 1)
+            # Migration 013 — the resolution matrix's whole write path.
+            p.allowed("a global admin CAN resolve a comment",
+                      """UPDATE feedback SET status='accepted', resolution_note='agreed'
+                         WHERE page=%s""", (FB_PAGE,))
+            # The handoff contract the (not yet built) roadmap skill keys on: a ref may only ride
+            # on an accepted row, so a declined item can never appear in its work list.
+            p.denied("CANNOT stamp a roadmap ref on a NON-accepted row (013 CHECK)",
+                     """UPDATE feedback SET status='declined', roadmap_ref='P1.16'
+                        WHERE page=%s""", (FB_PAGE,))
+            # There is no DELETE policy anywhere on this table, deliberately: the strongest reason
+            # anyone would want to erase a comment is the worst reason to permit it. Saying no is
+            # 'declined' with a note, which stays on the record.
+            p.denied("CANNOT delete feedback — not even an admin; declining is the way to say no",
+                     "DELETE FROM feedback WHERE page=%s", (FB_PAGE,))
     else:
         check("(skipped: no global admin to test the admin-read path with)", True)
 

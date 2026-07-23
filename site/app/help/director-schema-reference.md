@@ -423,22 +423,35 @@ row costs you your settings and nothing else.
 
 ### feedback
 
-What people type into the floating feedback box that appears on every page — a like, a dislike, a
-request to add or remove something, or a general comment — with the page they were on and their name
-recorded alongside it. Meant to be read later to decide what gets built next.
+What people type into the floating feedback box that appears on every page — an optional like or
+dislike plus a comment — with the page they were on and their name recorded alongside it. Every entry
+carries a written comment; the reaction is optional. Meant to be read later to decide what gets built
+next.
 
 | Field | Holds |
 |---|---|
 | `submitted_by` | The account that sent it. Recorded from the sign-in itself, so it cannot be filed under someone else's name |
 | `submitter_name`, `role` | The person's name and whether they are staff or a student, kept for readability |
 | `page`, `page_title` | Which page they were on when they wrote it |
-| `category` | One of like, dislike, feature, add, remove, or other |
+| `category` | The reaction: like, dislike, or other when none was given. (feature, add and remove are also permitted, held in reserve) |
 | `message` | What they wrote, up to 4000 characters |
+| `status` | The decision: new, accepted, declined, or duplicate |
+| `resolution_note` | Why it was decided that way — the field that answers "why was this declined?" months later |
+| `roadmap_ref` | The roadmap item an accepted request became, e.g. `P1.16`. Only an accepted entry may carry one |
+| `resolved_by`, `resolved_at` | Who made the decision and when. Cleared if the entry is put back to new |
 
-**Only a system administrator can read it back.** Anyone signed in can send feedback, but the
-collected feedback is not a board that instructors or students browse — it can name pages and people
-in passing, and it is steering data for whoever runs the product. A submission cannot be edited or
-deleted through the site; a change of mind is simply a new entry.
+**Only a system administrator can read it back, or decide it.** Anyone signed in can send feedback,
+but the collected feedback is not a board that instructors or students browse — it can name pages and
+people in passing, and it is steering data for whoever runs the product. Deciding is deliberately
+narrower than reading a course: not even a course director can resolve an entry, because feedback
+routinely names a colleague's screen as confusing.
+
+**Nothing can delete an entry — not even an administrator.** The strongest reason someone would want
+a comment to disappear is the worst reason to allow it, so saying no is `declined` with a note, which
+stays on the record. A submitter cannot edit their own entry either; a change of mind is a new one.
+
+Site administrators work through these on the **Feedback** page, which lays them out as a page-by-
+decision matrix. Accepted entries still needing to be written up are the ones with no `roadmap_ref`.
 
 ## What the database will not allow
 

@@ -62,6 +62,9 @@ const FACULTY_LINKS = [
   // number someone is meant to check every few weeks inside an export page hides it.
   { key: 'extensions',   label: 'Extensions',   href: 'extensions.html',        icon: 'assignments',   emoji: '📅', directorOnly: true },
   { key: 'admin',        label: 'Admin',        href: 'admin.html',             icon: 'settings',      emoji: '⚙️', directorOnly: true },
+  // Site admins only, matching the RLS on app.feedback (is_admin()). The nav entry is convenience,
+  // not the boundary — a director who types the URL gets an empty list from the database.
+  { key: 'feedback',     label: 'Feedback',     href: 'feedback.html',          icon: 'info',          emoji: '💬', adminOnly: true },
   { key: 'system',       label: 'System',       href: 'system.html',            icon: 'settings',      emoji: '🛠️', adminOnly: true },
 ];
 

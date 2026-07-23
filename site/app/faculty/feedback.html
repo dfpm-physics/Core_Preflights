@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feedback · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+</head>
+<body>
+  <header id="topnav"></header>
+  <main class="page-wide" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Loading feedback…</span></div>
+  </main>
+
+  <script type="module">
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { runPage, esc, fmtDateTime } from '../js/util.js';
+    import * as FB from '../js/faculty-feedback.js';
+
+    const ctx = await bootstrap({ require: 'faculty' });
+    runPage(ctx, init);
+
+    let rows = [];
+    let filter = { status: null, page: null, q: '' };
+    const dirty = new Map();      // id -> pending edits, so a row survives a re-render mid-edit
+
+    async function init() {
+      initTheme();
+      renderNav(ctx, { active: 'feedback' });
+      // Convenience guard only — RLS is the real boundary and returns nothing to a non-admin.
+      if (!ctx.instructorRow?.is_global_admin) {
+        document.getElementById('main').innerHTML = `
+          <div class="page-head"><h1>Feedback</h1></div>
+          <div class="alert alert-info">Feedback review is available to site administrators.</div>`;
+        return;
+      }
+      await load();
+    }
+
+    async function load() {
+      const root = document.getElementById('main');
+      root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading feedback…</span></div>`;
+      const res = await FB.loadFeedback();
+      if (res.error) {
+        root.innerHTML = `<div class="alert alert-error">Could not load feedback: ${esc(res.error.message)}</div>`;
+        return;
+      }
+      rows = res.rows;
+      render();
+    }
+
+    function render() {
+      const root = document.getElementById('main');
+      const { pages, totals } = FB.buildMatrix(rows);
+      const pending = FB.pendingRoadmap(rows);
+      const shown = FB.filterRows(rows, filter);
+
+      root.innerHTML = `
+        <div class="page-head">
+          <h1>Feedback</h1>
+          <div class="sub">${totals.total} comment${totals.total === 1 ? '' : 's'} from instructors and cadets.
+            Every one needs a decision; accepted ones get rolled into the roadmap.</div>
+        </div>
+        ${totals.total ? matrixHTML(pages, totals) : ''}
+        ${pending.length ? `<div class="alert alert-info fb-pending">
+            <strong>${pending.length}</strong> accepted item${pending.length === 1 ? '' : 's'} not yet in the roadmap.
+            Give each a roadmap reference once written up.</div>` : ''}
+        ${totals.total ? controlsHTML(shown.length) : ''}
+        ${totals.total ? shown.map(cardHTML).join('') || emptyFilter() : emptyState()}`;
+
+      wire();
+    }
+
+    /* ── the matrix: page × status ───────────────────────────────────────────
+     * The thing that makes a pile of comments legible. Cells are buttons: clicking one filters the
+     * list below to that page and status, which is the whole reason to render a cross-tab rather
+     * than a list of counts.
+     */
+    function matrixHTML(pages, totals) {
+      const head = `<tr><th class="fbm-page">Page</th>
+        ${FB.STATUSES.map(s => `<th class="fbm-num" title="${esc(s.hint)}">${esc(s.label)}</th>`).join('')}
+        <th class="fbm-num">All</th></tr>`;
+
+      const body = pages.map(p => `<tr>
+        <td class="fbm-page" title="${esc(p.path)}">${esc(p.page)}</td>
+        ${FB.STATUSES.map(s => {
+          const n = p[s.key];
+          const on = filter.page === p.page && filter.status === s.key;
+          return `<td class="fbm-num">${n
+            ? `<button class="fbm-cell${on ? ' on' : ''} fbm-${esc(s.key)}"
+                  data-page="${esc(p.page)}" data-status="${esc(s.key)}"
+                  title="${esc(p.page)} — ${esc(s.label)}">${n}</button>`
+            : '<span class="fbm-zero">·</span>'}</td>`;
+        }).join('')}
+        <td class="fbm-num"><button class="fbm-cell fbm-all${filter.page === p.page && !filter.status ? ' on' : ''}"
+              data-page="${esc(p.page)}" data-status="">${p.total}</button></td></tr>`).join('');
+
+      const foot = `<tr class="fbm-total"><td class="fbm-page">All pages</td>
+        ${FB.STATUSES.map(s => `<td class="fbm-num">${totals[s.key]
+          ? `<button class="fbm-cell${!filter.page && filter.status === s.key ? ' on' : ''} fbm-${esc(s.key)}"
+                data-page="" data-status="${esc(s.key)}">${totals[s.key]}</button>`
+          : '<span class="fbm-zero">·</span>'}</td>`).join('')}
+        <td class="fbm-num"><button class="fbm-cell fbm-all${!filter.page && !filter.status ? ' on' : ''}"
+              data-page="" data-status="">${totals.total}</button></td></tr>`;
+
+      return `<div class="card fbm-card"><div class="card-title">Resolution matrix</div>
+        <div class="card-meta">Comments by page and decision. Click a number to filter the list below.</div>
+        <div class="table-wrap"><table class="fbm">
+          <thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div></div>`;
+    }
+
+    function controlsHTML(n) {
+      const active = filter.status || filter.page || filter.q;
+      return `<div class="row wrap fb-controls">
+        <input type="search" id="fb-q" class="fb-search" placeholder="Search comments…"
+               value="${esc(filter.q || '')}" aria-label="Search comments">
+        ${active ? `<button class="btn btn-ghost btn-sm" id="fb-clear">Clear filter</button>` : ''}
+        <div class="grow"></div>
+        <span class="muted" style="font-size:.82em">${n} shown</span>
+      </div>`;
+    }
+
+    const SENT = { like: '👍', dislike: '👎' };
+
+    function cardHTML(r) {
+      const d = dirty.get(r.id) || {};
+      const status = d.status ?? (r.status || 'new');
+      const note = d.resolution_note ?? (r.resolution_note || '');
+      const ref = d.roadmap_ref ?? (r.roadmap_ref || '');
+      const sent = SENT[r.category] || '';
+
+      return `<div class="card fb-item fb-st-${esc(status)}" data-id="${esc(r.id)}">
+        <div class="fb-item-head">
+          <span class="fb-st-dot" aria-hidden="true"></span>
+          <strong>${esc(r.submitter_name || 'Unknown')}</strong>
+          ${r.role ? `<span class="score-badge pending">${esc(r.role)}</span>` : ''}
+          <span class="fb-item-page" title="${esc(r.page || '')}">${esc(FB.pageKey(r))}</span>
+          ${sent ? `<span class="fb-sent-chip" title="${esc(r.category)}">${sent}</span>` : ''}
+          <div class="grow"></div>
+          <span class="muted" style="font-size:.78em">${esc(fmtDateTime(new Date(r.created_at)))}</span>
+        </div>
+
+        <div class="fb-item-msg">${esc(r.message)}</div>
+
+        <div class="fb-item-res">
+          <div class="fb-seg" role="group" aria-label="Decision">
+            ${FB.STATUSES.map(s => `<button type="button" class="fb-stbtn fb-stbtn-${esc(s.key)}${status === s.key ? ' on' : ''}"
+                data-set-status="${esc(s.key)}" aria-pressed="${status === s.key}"
+                title="${esc(s.hint)}">${esc(s.label)}</button>`).join('')}
+          </div>
+          <input class="fb-ref" data-ref maxlength="60" placeholder="Roadmap ref (e.g. P1.16)"
+                 value="${esc(ref)}" ${status === 'accepted' ? '' : 'disabled'}
+                 title="${status === 'accepted' ? 'The roadmap item this became' : 'Only an accepted item can carry a roadmap reference'}">
+        </div>
+        <textarea class="fb-note" data-note rows="2" maxlength="2000"
+          placeholder="Why this decision? (the field that answers &quot;why was this declined?&quot; months later)">${esc(note)}</textarea>
+
+        <div class="row fb-item-foot">
+          <span class="error-msg" data-err></span>
+          <div class="grow"></div>
+          ${r.resolved_at ? `<span class="muted" style="font-size:.76em">decided ${esc(fmtDateTime(new Date(r.resolved_at)))}</span>` : ''}
+          <button class="btn btn-primary btn-sm" data-save ${dirty.has(r.id) ? '' : 'disabled'}>Save</button>
+        </div>
+      </div>`;
+    }
+
+    function emptyState() {
+      return `<div class="empty-state"><div class="es-ic">💬</div><h3>No feedback yet</h3>
+        <p>When someone uses the feedback box, their comment lands here for a decision.</p></div>`;
+    }
+    function emptyFilter() {
+      return `<div class="empty-state"><div class="es-ic">🔍</div><h3>Nothing matches</h3>
+        <p>No comments match this filter.</p></div>`;
+    }
+
+    /* ── wiring ───────────────────────────────────────────────────────────── */
+    function wire() {
+      const root = document.getElementById('main');
+
+      root.querySelectorAll('.fbm-cell').forEach(b => b.addEventListener('click', () => {
+        const page = b.dataset.page || null;
+        const status = b.dataset.status || null;
+        // Clicking the active cell clears it, so the matrix is a toggle rather than a trap.
+        if (filter.page === page && filter.status === status) { filter.page = null; filter.status = null; }
+        else { filter.page = page; filter.status = status; }
+        render();
+      }));
+
+      root.querySelector('#fb-clear')?.addEventListener('click', () => {
+        filter = { status: null, page: null, q: '' }; render();
+      });
+
+      const q = root.querySelector('#fb-q');
+      if (q) {
+        q.addEventListener('input', () => { filter.q = q.value; render();
+          const again = document.getElementById('fb-q');
+          // Re-rendering replaces the input, so put the caret back or typing loses focus each key.
+          if (again) { again.focus(); again.setSelectionRange(again.value.length, again.value.length); }
+        });
+      }
+
+      root.querySelectorAll('.fb-item').forEach(card => {
+        const id = card.dataset.id;
+        const row = rows.find(r => r.id === id);
+        const mark = (patch) => {
+          dirty.set(id, { ...(dirty.get(id) || {}), ...patch });
+          card.querySelector('[data-save]').disabled = false;
+        };
+
+        card.querySelectorAll('[data-set-status]').forEach(b => b.addEventListener('click', () => {
+          mark({ status: b.dataset.setStatus });
+          render();
+        }));
+        card.querySelector('[data-note]')?.addEventListener('input', (e) => mark({ resolution_note: e.target.value }));
+        card.querySelector('[data-ref]')?.addEventListener('input', (e) => mark({ roadmap_ref: e.target.value }));
+        card.querySelector('[data-save]')?.addEventListener('click', () => save(id, row, card));
+      });
+    }
+
+    async function save(id, row, card) {
+      const d = dirty.get(id) || {};
+      const err = card.querySelector('[data-err]');
+      const btn = card.querySelector('[data-save]');
+      const payload = {
+        status: d.status ?? (row.status || 'new'),
+        resolutionNote: d.resolution_note ?? (row.resolution_note || ''),
+        roadmapRef: d.roadmap_ref ?? (row.roadmap_ref || ''),
+      };
+      const problem = FB.validateResolution(payload);
+      if (problem) { err.textContent = problem; return; }
+
+      err.textContent = '';
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner on-dark"></span> Saving…';
+      const { error } = await FB.saveResolution(id,
+        FB.resolutionPatch({ ...payload, adminId: ctx.user?.id }));
+      if (error) {
+        btn.disabled = false; btn.textContent = 'Save';
+        err.textContent = 'Save failed: ' + error.message;
+        return;
+      }
+      dirty.delete(id);
+      await load();
+    }
+  </script>
+</body>
+</html>

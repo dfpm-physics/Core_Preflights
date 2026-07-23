@@ -1688,9 +1688,87 @@ export const DB_SCHEMA = {
           "generated": false,
           "comment": null,
           "pk": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": "'new'::text",
+          "maxLength": null,
+          "generated": false,
+          "comment": "Triage decision: new | accepted | declined | duplicate. There is deliberately no 'roadmapped' state — an accepted item is \"written down\" exactly when roadmap_ref is non-NULL.",
+          "pk": false
+        },
+        {
+          "name": "resolution_note",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Why it was decided this way — the field that answers \"why was this declined?\" months later.",
+          "pk": false
+        },
+        {
+          "name": "roadmap_ref",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "The roadmap item this became (e.g. P1.16), stamped by the roadmap skill. The skill's work list is: status = 'accepted' AND roadmap_ref IS NULL. Only valid on an accepted row.",
+          "pk": false
+        },
+        {
+          "name": "resolved_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "resolved_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
         }
       ],
-      "foreignKeys": [],
+      "foreignKeys": [
+        {
+          "name": "feedback_resolved_by_fkey",
+          "columns": [
+            "resolved_by"
+          ],
+          "refTable": "instructors",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        }
+      ],
       "enums": {
         "category": [
           "like",
@@ -1703,11 +1781,18 @@ export const DB_SCHEMA = {
         "role": [
           "faculty",
           "student"
+        ],
+        "status": [
+          "new",
+          "accepted",
+          "declined",
+          "duplicate"
         ]
       },
       "policyCommands": [
         "INSERT",
-        "SELECT"
+        "SELECT",
+        "UPDATE"
       ],
       "writable": true
     },

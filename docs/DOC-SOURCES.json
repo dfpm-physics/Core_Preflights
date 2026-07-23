@@ -170,7 +170,8 @@
         "supabase/migrations/app/009_analysis_runs.sql",
         "supabase/migrations/app/010_user_preferences.sql",
         "supabase/migrations/app/011_ei_sessions.sql",
-        "supabase/migrations/app/012_feedback.sql"
+        "supabase/migrations/app/012_feedback.sql",
+        "supabase/migrations/app/013_feedback_resolution.sql"
       ],
       "note": "Every table and field transcribed from the app-schema migrations and verified against information_schema on the live database. Owns the enforced-rules list and the exact accepted values. Inline SVG depends on the .sf-* classes in styles.css. Omits RLS policy predicates - help docs are world-readable at every tier. SOURCES MUST LIST EVERY MIGRATION: the list stopped at 006 until 2026-07-22, so 007-009 landed without ever flagging this page and analysis_runs went undocumented for two days. Add the new file here whenever a migration is added. ei_sessions states its staff-only access rule in plain language and nothing more: that absence of a student policy is load-bearing (notes may hold a candid read of a cadet), so do not delete the sentence - and do not 'complete' it by pasting the policy SQL either."
     },
