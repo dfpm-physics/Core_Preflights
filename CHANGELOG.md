@@ -8,6 +8,22 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-23 — Matthew Recker via Claude (feedback box: sentiment + comment)
+
+Reworked the feedback controls, same day: the six-category single-select had heavy overlap (a
+"feature request" is an "add") and forcing one exclusive pick was more friction than signal. Now the
+panel is an **optional Like / Dislike reaction** (fills green / red when chosen, deselectable) plus a
+**comment box whose prompt invites what to add, remove, or request** — richer input for less effort,
+and a clean like-vs-dislike ratio to poll.
+
+**No migration.** `category` already accepts `like`/`dislike`/`other`; the UI now only sends those
+three, and `feedbackRow` defaults an un-reacted comment to `other` and coerces any stray value, so
+the NOT NULL + CHECK column always gets something valid. The fuller `feature`/`add`/`remove` values
+stay valid for a future control. `validateFeedback` now requires only the comment (sentiment is
+optional). *Verified:* `test-feedback.mjs` **27/0** (category-default and coercion cases added), full
+suite exit 0, and re-checked end to end signed in — a Like + comment stored `category='like'`, test
+row cleaned up, panel screenshotted.
+
 ## 2026-07-23 — Matthew Recker via Claude (in-app feedback box)
 
 The app is going to instructors to test, so it needed a way to hear back. A floating **Feedback**

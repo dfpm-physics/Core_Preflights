@@ -17,29 +17,29 @@ globalThis.window.db = makeClient();
 const F = await import('../../site/app/js/feedback.js');
 
 /* ══════════════════════════════════════════════════════════════════════════ */
-section('categories — the six the migration CHECK allows, and no more');
+section('categories — the DB-valid set, and the two shown sentiments');
 
-const KEYS = F.FEEDBACK_CATEGORIES.map((c) => c.key);
-eq('exactly the six categories, in order', KEYS,
+eq('the DB-parity set is exactly the migration-012 CHECK values', F.FEEDBACK_CATEGORIES,
    ['like', 'dislike', 'feature', 'add', 'remove', 'other']);
-check('every category has a label and an icon',
-      F.FEEDBACK_CATEGORIES.every((c) => c.label && c.icon));
+eq('the panel shows only the two sentiments', F.FEEDBACK_SENTIMENTS.map((s) => s.key),
+   ['like', 'dislike']);
+check('each sentiment has a label and an icon',
+      F.FEEDBACK_SENTIMENTS.every((s) => s.label && s.icon));
 
 /* ══════════════════════════════════════════════════════════════════════════ */
-section('validateFeedback — mirrors the migration-012 constraints');
+section('validateFeedback — the comment is the only required field');
 
-eq('a valid submission passes', F.validateFeedback({ category: 'feature', message: 'Add CSV export' }), null);
-check('no category is rejected', !!F.validateFeedback({ category: null, message: 'hi' }));
-check('a category outside the six is rejected',
-      !!F.validateFeedback({ category: 'rave', message: 'hi' }));
-check('an empty message is rejected', !!F.validateFeedback({ category: 'like', message: '' }));
+// Sentiment is optional now, so validation is about the message alone — the category default is
+// feedbackRow's job, tested below.
+eq('a comment with no sentiment passes', F.validateFeedback({ message: 'Add CSV export' }), null);
+check('an empty message is rejected', !!F.validateFeedback({ message: '' }));
 check('a whitespace-only message is rejected (matches the btrim CHECK)',
-      !!F.validateFeedback({ category: 'like', message: '   ' }));
+      !!F.validateFeedback({ message: '   ' }));
 check('a message over 4000 chars is rejected (matches the length CHECK)',
-      !!F.validateFeedback({ category: 'like', message: 'x'.repeat(4001) }));
-eq('exactly 4000 chars is allowed', F.validateFeedback({ category: 'like', message: 'x'.repeat(4000) }), null);
-check('every rejection returns a human sentence, not a boolean',
-      typeof F.validateFeedback({ category: 'like', message: '' }) === 'string');
+      !!F.validateFeedback({ message: 'x'.repeat(4001) }));
+eq('exactly 4000 chars is allowed', F.validateFeedback({ message: 'x'.repeat(4000) }), null);
+check('a rejection returns a human sentence, not a boolean',
+      typeof F.validateFeedback({ message: '' }) === 'string');
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 section('feedbackRow — identity, page, and trimming');
@@ -76,13 +76,27 @@ const ctx = {
 }
 
 {
+  // Category defaulting — the NOT NULL + CHECK column must always get an accepted value even when
+  // the person left the sentiment untouched.
+  eq('no sentiment defaults the category to other',
+     F.feedbackRow(ctx, { message: 'just a comment', page: '/p' }).category, 'other');
+  eq('a null category defaults to other',
+     F.feedbackRow(ctx, { category: null, message: 'x', page: '/p' }).category, 'other');
+  eq('a stray category is coerced to other (never sent raw to the CHECK)',
+     F.feedbackRow(ctx, { category: 'rave', message: 'x', page: '/p' }).category, 'other');
+  eq('a real sentiment passes through', F.feedbackRow(ctx, { category: 'like', message: 'x', page: '/p' }).category, 'like');
+  eq('the fuller set is still accepted for a future control',
+     F.feedbackRow(ctx, { category: 'add', message: 'x', page: '/p' }).category, 'add');
+}
+
+{
   // Degradation: an anonymous/unknown ctx must not throw — the mount guard blocks this in practice,
   // but the builder should still be total.
-  const bare = F.feedbackRow(null, { category: 'other', message: 'hi', page: '/p' });
+  const bare = F.feedbackRow(null, { message: 'hi', page: '/p' });
   eq('a null ctx yields a null submitter rather than throwing', bare.submitted_by, null);
   eq('and a null name', bare.submitter_name, null);
   eq('a very long user agent is capped at 500 chars',
-     F.feedbackRow(ctx, { category: 'like', message: 'x', page: '/p', userAgent: 'u'.repeat(900) })
+     F.feedbackRow(ctx, { message: 'x', page: '/p', userAgent: 'u'.repeat(900) })
        .user_agent.length, 500);
 }
 

@@ -15,24 +15,25 @@
 
 import { esc } from './util.js';
 
-export const FEEDBACK_CATEGORIES = [
+// Every value app.feedback.category accepts (migration 012 CHECK). The box collects a like/dislike
+// SENTIMENT and folds "add / remove / feature request" into the free-text comment — the placeholder
+// asks for exactly those — so the UI only ever sends 'like', 'dislike', or 'other'. The fuller set
+// stays valid so a later control can use it without a migration; this is the DB-parity list.
+export const FEEDBACK_CATEGORIES = ['like', 'dislike', 'feature', 'add', 'remove', 'other'];
+
+// The two optional sentiment buttons the panel shows. A comment with no sentiment is a valid
+// submission (it becomes 'other') — a feature request is not necessarily a like or a dislike.
+export const FEEDBACK_SENTIMENTS = [
   { key: 'like',    label: 'Like',    icon: '👍' },
   { key: 'dislike', label: 'Dislike', icon: '👎' },
-  { key: 'feature', label: 'Feature', icon: '💡' },
-  { key: 'add',     label: 'Add',     icon: '➕' },
-  { key: 'remove',  label: 'Remove',  icon: '➖' },
-  { key: 'other',   label: 'Other',   icon: '💬' },
 ];
 
-const CATEGORY_KEYS = FEEDBACK_CATEGORIES.map((c) => c.key);
-
 /**
- * Validate the form. Returns a sentence to show, or null when it is fine. Every rule mirrors a
- * migration-012 constraint so the person gets words, not a Postgres error — the same courtesy the
- * extension and EI modals already extend.
+ * Validate the form. Returns a sentence to show, or null when it is fine. The comment is the only
+ * required field — sentiment is optional — and the length rule mirrors the migration-012 CHECK so
+ * the person gets words, not a Postgres error.
  */
-export function validateFeedback({ category, message }) {
-  if (!CATEGORY_KEYS.includes(category)) return 'Pick a category first.';
+export function validateFeedback({ message }) {
   const m = (message || '').trim();
   if (!m) return 'Add a sentence or two so we know what you mean.';
   if (m.length > 4000) return 'That is longer than 4000 characters — trim it a little.';
@@ -46,6 +47,9 @@ export function validateFeedback({ category, message }) {
  * `submitted_by` is the auth uid; the migration's INSERT policy pins it to the caller's JWT, so a
  * forged value is rejected by the database regardless of what this builds. `submitter_name` and
  * `role` are readable hints captured alongside it.
+ *
+ * Category defaults to 'other' when no sentiment was chosen, and any stray value is coerced to it,
+ * so the NOT NULL + CHECK column always receives something it accepts.
  */
 export function feedbackRow(ctx, { category, message, page, pageTitle, userAgent }) {
   return {
@@ -54,7 +58,7 @@ export function feedbackRow(ctx, { category, message, page, pageTitle, userAgent
     role: ctx?.role || null,
     page: page || '',
     page_title: pageTitle || null,
-    category,
+    category: FEEDBACK_CATEGORIES.includes(category) ? category : 'other',
     message: (message || '').trim(),
     user_agent: userAgent ? String(userAgent).slice(0, 500) : null,
   };
@@ -89,15 +93,15 @@ export function mountFeedback(ctx) {
         <button type="button" class="fb-x" aria-label="Close">×</button>
       </div>
       <div class="fb-sub" id="fb-sub"></div>
-      <label class="fb-label">Type of feedback</label>
-      <div class="fb-cats" role="radiogroup" aria-label="Type of feedback">
-        ${FEEDBACK_CATEGORIES.map((c) =>
-          `<button type="button" class="fb-cat" data-cat="${esc(c.key)}" role="radio" aria-checked="false">
+      <label class="fb-label">Reaction <span class="fb-opt">(optional)</span></label>
+      <div class="fb-cats" role="group" aria-label="Reaction">
+        ${FEEDBACK_SENTIMENTS.map((c) =>
+          `<button type="button" class="fb-cat fb-cat-${esc(c.key)}" data-cat="${esc(c.key)}" aria-pressed="false">
              <span aria-hidden="true">${c.icon}</span> ${esc(c.label)}</button>`).join('')}
       </div>
       <label class="fb-label" for="fb-msg">Your feedback</label>
       <textarea class="fb-msg" id="fb-msg" rows="4" maxlength="4000"
-        placeholder="What works, what doesn't, what you'd add or remove…"></textarea>
+        placeholder="Tell us anything — what to add, what to remove, a feature you'd like, or what's working well."></textarea>
       <div class="fb-err" id="fb-err"></div>
       <div class="fb-foot">
         <button type="button" class="btn btn-secondary btn-sm fb-cancel">Cancel</button>
@@ -132,19 +136,25 @@ export function mountFeedback(ctx) {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) close(); });
 
   root.querySelectorAll('.fb-cat').forEach((b) => b.addEventListener('click', () => {
-    chosen = b.dataset.cat;
+    const already = b.classList.contains('on');
     root.querySelectorAll('.fb-cat').forEach((x) => {
-      const on = x === b;
-      x.classList.toggle('on', on);
-      x.setAttribute('aria-checked', on ? 'true' : 'false');
+      x.classList.remove('on'); x.setAttribute('aria-pressed', 'false');
     });
+    // Clicking the active reaction clears it — the sentiment is optional, so it must be
+    // deselectable, not a one-way choice.
+    if (already) {
+      chosen = null;
+    } else {
+      chosen = b.dataset.cat;
+      b.classList.add('on'); b.setAttribute('aria-pressed', 'true');
+    }
     err.textContent = '';
   }));
 
   root.querySelector('.fb-send').addEventListener('click', async () => {
     if (sending) return;
     err.textContent = '';
-    const problem = validateFeedback({ category: chosen, message: msg.value });
+    const problem = validateFeedback({ message: msg.value });
     if (problem) { err.textContent = problem; return; }
 
     sending = true;
