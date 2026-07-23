@@ -8,7 +8,25 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
-## 2026-07-23 — Matthew Recker via Claude (interactive submit: deny late / already-graded · a documented limitation)
+## 2026-07-23 — Matthew Recker via Claude (interactive grades now carry understanding → gradebook can tint)
+
+An interactive grade recorded only effort, so the gradebook — which tints a cell by
+**understanding** — had nothing to colour and interactive cells showed no background. The report's
+schema:1 payload already holds `overall_understanding`; it just never reached the grade.
+
+- **Migration 015 trigger updated (re-applied):** `grade_interactive_on_commit` now writes the
+  report's schema:1 content into `grades.diagnostic`, the same shape `/preflight-analyze` writes for
+  a written taker. So the gradebook and per-student page read an interactive taker's understanding
+  (and misconceptions) the same way they read a written one's, without either page fetching
+  `submission_activities`. The rollup still reads the artifact's copy on the submission — the same
+  two-producer arrangement the written path already uses. `autograde_interactive_test.py` asserts it
+  (13/13 live).
+- **`grade_interactive.py`** (the backfill) writes the identical `diagnostic`, so the script and the
+  trigger stay byte-identical. `grade_interactive_test.py` 49/49. Both suites' rollback proofs and
+  live fixtures were updated to account for the eight real interactive grades now in production
+  (baseline-compare instead of expecting zero; reset a fixture that is now committed+graded).
+- **Backfilled** the eight existing `lesson-02` derived grades' `diagnostic` from their reports
+  (understanding 1–5; Tatum has none, correctly), so they tint too.
 
 ### Changed — an interactive report can't be submitted late or over a finished grade
 

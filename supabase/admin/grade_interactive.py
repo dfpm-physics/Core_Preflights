@@ -68,6 +68,7 @@ Usage (from repo root, project venv):
   .venv/Scripts/python supabase/admin/grade_interactive.py run --activity lesson-03-… --commit
 """
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -258,15 +259,16 @@ def cmd_status(args, conn):
 # never a finalized instructor/imported one.
 UPSERT_GRADE = """
     INSERT INTO grades (enrollment_id, assignment_offering_id, submission_id,
-                        effort, points_earned, points_possible, question_scores,
+                        effort, points_earned, points_possible, question_scores, diagnostic,
                         source, is_finalized)
-         VALUES (%(enr)s, %(off)s, %(sub)s, %(eff)s, %(pts)s, %(poss)s, '{}'::jsonb,
+         VALUES (%(enr)s, %(off)s, %(sub)s, %(eff)s, %(pts)s, %(poss)s, '{}'::jsonb, %(diag)s::jsonb,
                  'derived', true)
     ON CONFLICT (enrollment_id, assignment_offering_id) DO UPDATE
             SET effort          = EXCLUDED.effort,
                 points_earned   = EXCLUDED.points_earned,
                 submission_id   = EXCLUDED.submission_id,
                 question_scores = '{}'::jsonb,
+                diagnostic      = EXCLUDED.diagnostic,
                 source          = 'derived',
                 is_finalized    = true,
                 updated_at      = now()
@@ -275,11 +277,17 @@ UPSERT_GRADE = """
 
 
 def write_grade(cur, row):
-    """Upsert one grade row. Returns rows affected (0 when a finalized grade blocked it)."""
+    """Upsert one grade row. Returns rows affected (0 when a finalized grade blocked it).
+
+    `diagnostic` gets the report's schema:1 content — the same shape /preflight-analyze writes for a
+    written taker — so the gradebook and per-student page read an interactive taker's understanding
+    the same way. Mirrors the migration-015 trigger exactly.
+    """
     cur.execute(UPSERT_GRADE, {
         "enr": row["enrollment_id"], "off": row["assignment_offering_id"],
         "sub": row["submission_id"], "eff": row["effort"],
         "pts": row["points"], "poss": row["points_possible"],
+        "diag": json.dumps(row.get("content") or {}),
     })
     return cur.rowcount
 

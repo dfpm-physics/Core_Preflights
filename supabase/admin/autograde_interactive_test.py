@@ -54,8 +54,12 @@ def reset_grade_and_content(cur, fx, effort, meaningful=None):
     import json
     cur.execute("UPDATE submission_activities SET content = %s::jsonb WHERE id=%s",
                 (json.dumps(content), fx["sa_id"]))
-    # Make sure it's uncommitted so the commit below is what fires the trigger.
-    cur.execute("""UPDATE submissions SET status='draft', chosen_activity_id=NULL
+    # Make sure it's uncommitted so the commit below is what fires the trigger. A fixture may
+    # already be committed (e.g. graded by the backfill), so this is an un-commit — the lock guard
+    # (006) needs unlocked_by; current_uid() is NULL on the DML connection, so any instructor id
+    # satisfies it. Rolled back with everything else.
+    cur.execute("""UPDATE submissions SET status='draft', chosen_activity_id=NULL,
+                          unlocked_by=(SELECT id FROM instructors LIMIT 1), unlocked_at=now()
                     WHERE id=%s""", (fx["submission_id"],))
 
 
@@ -71,7 +75,7 @@ def commit(cur, fx):
 
 
 def grade(cur, fx):
-    cur.execute("""SELECT effort, points_earned, source, is_finalized, question_scores
+    cur.execute("""SELECT effort, points_earned, source, is_finalized, question_scores, diagnostic
                      FROM grades WHERE enrollment_id=%s AND assignment_offering_id=%s""",
                 (fx["enrollment_id"], fx["off"]))
     return cur.fetchone()
@@ -92,6 +96,11 @@ def main():
         conn.close(); sys.exit(1)
     print("trigger present.\n")
 
+    # Baseline: real derived grades already exist in production (committed interactive takers), so
+    # the rollback proof compares against this count rather than expecting zero.
+    cur.execute("SELECT count(*) AS n FROM app.grades WHERE source='derived'")
+    baseline_derived = cur.fetchone()["n"]
+
     fx = setup(cur)
     if not fx:
         print("[skip] no interactive work with content to build a fixture on."); conn.close(); return
@@ -109,6 +118,10 @@ def main():
         check("auto-final (student-visible)", g["is_finalized"] is True)
         check("source is derived", g["source"] == "derived", str(g["source"]))
         check("no question_scores", g["question_scores"] == {})
+        # The report's schema:1 lands in diagnostic so the gradebook can read understanding.
+        check("diagnostic carries the report (schema:1)",
+              isinstance(g["diagnostic"], dict) and g["diagnostic"].get("schema") == 1,
+              str(g["diagnostic"])[:60])
     conn.rollback(); cur.execute("SET search_path TO app, public;")
 
     print("\n2. PRACTICE interactive: the commit itself is refused (so never a grade)")
@@ -157,8 +170,9 @@ def main():
                 (fx["enrollment_id"], fx["off"]))
     cur.execute("""UPDATE submission_activities SET content='{"schema":1}'::jsonb WHERE id=%s""",
                 (fx["sa_id"],))
-    cur.execute("UPDATE submissions SET status='draft', chosen_activity_id=NULL WHERE id=%s",
-                (fx["submission_id"],))
+    cur.execute("""UPDATE submissions SET status='draft', chosen_activity_id=NULL,
+                          unlocked_by=(SELECT id FROM instructors LIMIT 1), unlocked_at=now()
+                    WHERE id=%s""", (fx["submission_id"],))
     commit(cur, fx)
     check("no effort in the report -> no grade", grade(cur, fx) is None)
     conn.rollback()
@@ -166,7 +180,8 @@ def main():
     # Prove nothing persisted.
     cur.execute("SELECT count(*) AS n FROM app.grades WHERE source='derived'")
     leftover = cur.fetchone()["n"]
-    check("rollback left no derived grades", leftover == 0, str(leftover))
+    check("rollback added no derived grades", leftover == baseline_derived,
+          f"{leftover} vs baseline {baseline_derived}")
     conn.close()
 
     passed = sum(1 for x in res if x)

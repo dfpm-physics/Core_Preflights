@@ -160,6 +160,16 @@ def test_live_write(conn):
         return
     print(f"  fixture: {row['activity_slug']} (submission {str(row['submission_id'])[:8]}…)")
 
+    # Reset the fixture to a clean ungraded draft first — real interactive takers are committed and
+    # graded now (the live trigger + backfill), so without this the fixture already has a finalized
+    # grade and classify() would skip it. The un-commit needs unlocked_by (lock guard 006); the DML
+    # connection has a NULL current_uid(), so any instructor id satisfies it. All rolled back.
+    cur.execute("DELETE FROM grades WHERE enrollment_id=%s AND assignment_offering_id=%s",
+                (row["enrollment_id"], row["assignment_offering_id"]))
+    cur.execute("""UPDATE submissions SET status='draft', chosen_activity_id=NULL,
+                          unlocked_by=(SELECT id FROM instructors LIMIT 1), unlocked_at=now()
+                    WHERE id=%s""", (row["submission_id"],))
+
     # Promote to the state a real graded interactive lesson will be in. Both writes are undone.
     cur.execute("""UPDATE offering_activities SET grading_role = 'graded'
                     WHERE assignment_offering_id = %s AND activity_id = %s""",
@@ -167,6 +177,12 @@ def test_live_write(conn):
     cur.execute("""UPDATE submissions
                       SET chosen_activity_id = %s, status = 'committed', committed_at = now()
                     WHERE id = %s""", (row["activity_id"], row["submission_id"]))
+
+    # That commit fires the live migration-015 trigger, which auto-grades it. This script is the
+    # BACKFILL for work that committed BEFORE the trigger existed, so delete the trigger's grade to
+    # recreate that "committed but ungraded" state — which is what the script is meant to fill.
+    cur.execute("DELETE FROM grades WHERE enrollment_id=%s AND assignment_offering_id=%s",
+                (row["enrollment_id"], row["assignment_offering_id"]))
 
     # The script's own selection, over the scenario we just built.
     cur.execute(SELECT_WORK, {"activity": row["activity_slug"], "course": None})
@@ -229,14 +245,22 @@ def main():
     test_classify()
 
     conn = _connect()
+    # Baselines BEFORE the test — real interactive takers are committed and graded in production now,
+    # so the rollback proof compares against these counts rather than expecting zero.
+    bcur = conn.cursor()
+    bcur.execute("SELECT count(*) FROM app.grades WHERE effort IS NOT NULL")
+    base_effort = bcur.fetchone()[0]
+    bcur.execute("""SELECT count(*) FROM app.submissions s
+                     JOIN app.activities a ON a.id = s.chosen_activity_id
+                    WHERE a.modality = 'interactive'""")
+    base_committed = bcur.fetchone()[0]
+    # No rollback here: it would revert the search_path _connect() set. These were read-only.
     try:
         test_live_write(conn)
     finally:
         conn.rollback()
-        # Prove the rollback, rather than asserting it in a comment.
-        # Schema-qualified deliberately: a plain `SET search_path` is itself transactional, so the
-        # rollback that just proved the point also reverted the search_path that would have found
-        # these tables.
+        # Prove the rollback added nothing. Schema-qualified deliberately: a plain `SET search_path`
+        # is itself transactional, so the rollback that just proved the point also reverted it.
         cur = conn.cursor()
         cur.execute("SELECT count(*) FROM app.grades WHERE effort IS NOT NULL")
         left = cur.fetchone()[0]
@@ -245,11 +269,12 @@ def main():
                         WHERE a.modality = 'interactive'""")
         committed = cur.fetchone()[0]
         conn.close()
-        print(f"\n[rollback] grades carrying an effort: {left} (expected 0)")
+        clean = left == base_effort and committed == base_committed
+        print(f"\n[rollback] grades carrying an effort: {left} (baseline {base_effort})")
         print(f"[rollback] submissions committed to an interactive activity: {committed} "
-              f"(expected 0)")
-        _results.append(left == 0 and committed == 0)
-        print(f"{OK if left == 0 and committed == 0 else FAIL} nothing persisted")
+              f"(baseline {base_committed})")
+        _results.append(clean)
+        print(f"{OK if clean else FAIL} rollback added nothing")
 
     passed, total = sum(1 for r in _results if r), len(_results)
     print(f"\n{passed}/{total} checks passed.")

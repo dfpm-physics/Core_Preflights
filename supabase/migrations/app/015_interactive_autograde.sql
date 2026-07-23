@@ -116,14 +116,21 @@ BEGIN
   -- Rules 2 + 4: write a finalized derived grade, but never over a human-graded one. 014's
   -- grades_effort trigger derives points_earned from the effort we set here; question_scores stays
   -- '{}' so grades_one_grading_mechanism is satisfied.
+  --
+  -- `diagnostic` gets the report's schema:1 payload, the same shape /preflight-analyze writes for a
+  -- written taker. That is what lets the gradebook and per-student page read an interactive taker's
+  -- UNDERSTANDING (and misconceptions) the same way they read a written one's — without either page
+  -- fetching submission_activities. The rollup still reads the artifact's copy on the submission;
+  -- this copy is the graded one, exactly the two-producer arrangement the written path already uses.
   INSERT INTO grades (enrollment_id, assignment_offering_id, submission_id,
-                      effort, points_possible, question_scores, source, is_finalized)
+                      effort, points_possible, question_scores, diagnostic, source, is_finalized)
        VALUES (NEW.enrollment_id, NEW.assignment_offering_id, NEW.id,
-               v_effort, v_pp, '{}'::jsonb, 'derived', true)
+               v_effort, v_pp, '{}'::jsonb, v_content, 'derived', true)
   ON CONFLICT (enrollment_id, assignment_offering_id) DO UPDATE
         SET effort          = EXCLUDED.effort,
             submission_id   = EXCLUDED.submission_id,
             question_scores = '{}'::jsonb,
+            diagnostic      = EXCLUDED.diagnostic,
             source          = 'derived',
             is_finalized    = true,
             updated_at      = now()
