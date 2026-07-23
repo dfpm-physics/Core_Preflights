@@ -8,7 +8,26 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
-## 2026-07-23 — Matthew Recker via Claude (interactive grades now carry understanding → gradebook can tint)
+## 2026-07-23 — Matthew Recker via Claude (student two-box view for required-written · gradebook drops the effort bar)
+
+### Changed — student assignment view: one layout for both-loaded assignments
+
+An assignment that loads **both** a written and an interactive activity now always shows the
+side-by-side "Choose how to complete" two-box layout while it is still open, not only when it is a
+graded choice (`site/app/student/lessons.html`). When the interactive is a graded choice, both boxes
+are live and the student picks. When the **written is required** (interactive is practice), the same
+layout renders with the interactive box **greyed and disabled** — "Available after you submit your
+written responses" — and the heading reads *Complete the written preflight*. Once they submit, the
+interactive opens as practice through the existing study card. This is the view the director asked
+for (their screenshots): the choice layout, with the interactive locked until submission.
+
+### Changed — gradebook cell: number = effort, colour = understanding, no more bar
+
+The gradebook cell drew an **effort bar** under the score and tinted by **understanding**. But the
+score (0/1/2) already *is* the effort — the bar re-encoded it — so the bar is gone
+(`site/app/faculty/gradebook.html`). One indicator each now: the number carries effort, the cell
+colour carries understanding (unchanged 0–5 ramp), effort stays in the hover tooltip. Legend updated.
+Interactive grades tint correctly now that they carry `diagnostic` (previous entry).
 
 An interactive grade recorded only effort, so the gradebook — which tints a cell by
 **understanding** — had nothing to colour and interactive cells showed no background. The report's

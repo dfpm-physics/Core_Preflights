@@ -259,8 +259,13 @@
           ${l.description ? `<div style="font-size:0.9em;color:var(--muted);margin-top:6px">${esc(l.description)}</div>` : ''}
         </div>`;
 
-      // A still-open choice: let them pick. Neither option is primary.
-      if (l.canChoose) {
+      // Both paths loaded and still open (nothing submitted) → show them side by side. When the
+      // interactive is a graded choice, both are live and the student picks. When the written is
+      // required (interactive is practice), the same two-box layout renders with the interactive
+      // GREYED until they submit — the view the director asked for (STUDENT-LESSON-VIEW §5).
+      const bothOpen = l.preflight && l.interaction
+        && (l.state === STATE.NOT_STARTED || l.state === STATE.DRAFT);
+      if (bothOpen) {
         root.innerHTML = header + choiceBlock(l);
         wire(l);
         window.scrollTo(0, 0);
@@ -277,11 +282,33 @@
 
     function choiceBlock(l) {
       const qn = l.preflight?.questions?.length ?? 0;
+      // A real choice only when the interactive is itself a graded path. Otherwise the written is
+      // required and the interactive is practice, locked until they submit.
+      const isChoice = l.interactiveGraded;
+      const writtenLabel = l.state === STATE.DRAFT ? 'Resume writing' : 'Start writing';
+
+      const heading = isChoice ? 'Choose how to complete this assignment'
+                               : 'Complete the written preflight';
+      const sub = isChoice
+        ? `Both are worth the same ${l.points ?? 2} points, and both are graded on effort — not on
+           getting the physics right. Pick whichever suits you.`
+        : `Answer the written preflight. The interactive lesson opens as practice once you’ve
+           submitted — it doesn’t change your grade.`;
+
+      const interactiveAction = isChoice
+        ? `<button class="btn btn-secondary" id="choice-launch">Launch ↗</button>`
+        : `<button class="btn btn-secondary" disabled title="Available after you submit">Launch ↗</button>
+           <div class="study-note" style="margin-top:8px">Available after you submit your written responses.</div>`;
+
+      const switchNote = isChoice
+        ? `<div class="study-note">You can switch later — but once you submit an interactive report it
+             becomes your grade for this assignment, your written answers stop counting, and you can't
+             switch back.</div>`
+        : '';
+
       return `<div class="card">
-        <div class="card-title">Choose how to complete this assignment</div>
-        <div style="font-size:0.9em;color:var(--text-soft);margin-top:6px">
-          Both are worth the same ${l.points ?? 2} points, and both are graded on effort — not on
-          getting the physics right. Pick whichever suits you.</div>
+        <div class="card-title">${heading}</div>
+        <div style="font-size:0.9em;color:var(--text-soft);margin-top:6px">${sub}</div>
         <div class="choice-grid">
           <div class="choice-card">
             <div class="choice-head">
@@ -293,24 +320,22 @@
             </div>
             <div class="choice-body">Answer in your own words. Your work saves as you type, and you
               can come back and change it any time before the deadline.</div>
-            <a class="btn btn-secondary" href="${esc(writtenHref(l))}">Start writing</a>
+            <a class="btn btn-primary" href="${esc(writtenHref(l))}">${writtenLabel}</a>
           </div>
-          <div class="choice-card">
+          <div class="choice-card"${isChoice ? '' : ' aria-disabled="true" style="opacity:0.55"'}>
             <div class="choice-head">
               <div class="choice-ic">⚡</div>
               <div class="choice-titles">
-                <div class="choice-title">Interactive lesson</div>
+                <div class="choice-title">Interactive lesson${isChoice ? '' : ' <span class="tag">practice</span>'}</div>
                 <div class="choice-meta">Guided conversation</div>
               </div>
             </div>
             <div class="choice-body">Work through the material with an AI tutor that asks you
               questions and responds as you go, then sends a report back here.</div>
-            <button class="btn btn-secondary" id="choice-launch">Launch ↗</button>
+            ${interactiveAction}
           </div>
         </div>
-        <div class="study-note">You can switch later — but once you submit an interactive report it
-          becomes your grade for this assignment, your written answers stop counting, and you can't
-          switch back.</div>
+        ${switchNote}
       </div>`;
     }
 
