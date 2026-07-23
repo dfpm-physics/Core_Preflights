@@ -89,17 +89,19 @@ export function mountFeedback(ctx) {
         <button type="button" class="fb-x" aria-label="Close">×</button>
       </div>
       <div class="fb-sub" id="fb-sub"></div>
-      <div class="fb-cats" role="group" aria-label="Category">
+      <label class="fb-label">Type of feedback</label>
+      <div class="fb-cats" role="radiogroup" aria-label="Type of feedback">
         ${FEEDBACK_CATEGORIES.map((c) =>
-          `<button type="button" class="fb-cat" data-cat="${esc(c.key)}">
+          `<button type="button" class="fb-cat" data-cat="${esc(c.key)}" role="radio" aria-checked="false">
              <span aria-hidden="true">${c.icon}</span> ${esc(c.label)}</button>`).join('')}
       </div>
-      <textarea class="fb-msg" rows="4" maxlength="4000"
+      <label class="fb-label" for="fb-msg">Your feedback</label>
+      <textarea class="fb-msg" id="fb-msg" rows="4" maxlength="4000"
         placeholder="What works, what doesn't, what you'd add or remove…"></textarea>
       <div class="fb-err" id="fb-err"></div>
-      <div class="fb-actions">
-        <button type="button" class="btn btn-primary btn-sm fb-send">Send</button>
-        <span class="fb-note" id="fb-note"></span>
+      <div class="fb-foot">
+        <button type="button" class="btn btn-secondary btn-sm fb-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm fb-send">Send feedback</button>
       </div>
     </div>`;
   document.body.appendChild(root);
@@ -108,7 +110,6 @@ export function mountFeedback(ctx) {
   const launch = root.querySelector('.fb-launch');
   const msg = root.querySelector('.fb-msg');
   const err = root.querySelector('#fb-err');
-  const note = root.querySelector('#fb-note');
 
   const pageTitle = (document.title || '').replace(/\s*·\s*PREP\s*$/, '').trim();
   root.querySelector('#fb-sub').textContent = pageTitle ? `About: ${pageTitle}` : 'About this page';
@@ -127,17 +128,22 @@ export function mountFeedback(ctx) {
 
   launch.addEventListener('click', toggle);
   root.querySelector('.fb-x').addEventListener('click', close);
+  root.querySelector('.fb-cancel').addEventListener('click', close);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) close(); });
 
   root.querySelectorAll('.fb-cat').forEach((b) => b.addEventListener('click', () => {
     chosen = b.dataset.cat;
-    root.querySelectorAll('.fb-cat').forEach((x) => x.classList.toggle('on', x === b));
+    root.querySelectorAll('.fb-cat').forEach((x) => {
+      const on = x === b;
+      x.classList.toggle('on', on);
+      x.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
     err.textContent = '';
   }));
 
   root.querySelector('.fb-send').addEventListener('click', async () => {
     if (sending) return;
-    err.textContent = ''; note.textContent = '';
+    err.textContent = '';
     const problem = validateFeedback({ category: chosen, message: msg.value });
     if (problem) { err.textContent = problem; return; }
 
@@ -158,15 +164,13 @@ export function mountFeedback(ctx) {
       if (error) throw error;
       // Collapse the form to a thank-you rather than clearing it in place — a reset textarea reads
       // like the click did nothing.
-      panel.querySelector('.fb-cats').style.display = 'none';
-      msg.style.display = 'none';
-      send.style.display = 'none';
-      note.textContent = '';
+      panel.querySelectorAll('.fb-label, .fb-cats, .fb-msg, .fb-err, .fb-foot')
+        .forEach((el) => { el.style.display = 'none'; });
       root.querySelector('#fb-sub').textContent = 'Thanks — that went to the team.';
       setTimeout(close, 1400);
     } catch (e) {
       err.textContent = 'Could not send: ' + (e?.message || 'unknown error') + '. Please try again.';
-      send.disabled = false; send.textContent = 'Send';
+      send.disabled = false; send.textContent = 'Send feedback';
     } finally {
       sending = false;
     }

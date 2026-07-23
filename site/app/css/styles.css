@@ -1962,15 +1962,20 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
   cursor: pointer; padding: 0 2px; }
 .fb-sub { font-size: 0.8em; color: var(--muted); margin-bottom: 10px; }
 
-.fb-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+/* A field label above each control, so the panel reads as a form rather than a loose cluster. */
+.fb-label { display: block; font-size: 0.72em; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+
+.fb-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .fb-cat { display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
   background: var(--surface-sunken); border: 1px solid var(--border); color: var(--text-soft);
-  border-radius: 999px; padding: 4px 10px; font-size: 0.8em; }
-.fb-cat:hover { border-color: var(--blue-lt); }
-.fb-cat.on { background: var(--mc-sel-bg, var(--surface-hover)); border-color: var(--blue);
-  color: var(--text); font-weight: 600; }
+  border-radius: 999px; padding: 5px 11px; font-size: 0.8em; transition: background .12s, border-color .12s; }
+.fb-cat:hover { border-color: var(--blue-lt); color: var(--text); }
+/* Selected reads unmistakably: the chosen type fills with the brand colour while the rest stay
+   outlined — the standard single-select "pick one" pattern. */
+.fb-cat.on { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 600; }
 
-.fb-msg { width: 100%; font-size: 0.88em; resize: vertical; min-height: 68px; }
+.fb-msg { width: 100%; font-size: 0.88em; resize: vertical; min-height: 72px; }
 .fb-err { color: var(--red); font-size: 0.8em; min-height: 1em; margin-top: 4px; }
-.fb-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
-.fb-note { font-size: 0.8em; color: var(--muted); }
+/* Standard form footer: dismiss on the left, the primary action on the right. */
+.fb-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
