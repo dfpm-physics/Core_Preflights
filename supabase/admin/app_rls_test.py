@@ -400,6 +400,48 @@ def main():
                   """INSERT INTO ei_sessions (enrollment_id,instructor_id,started_at,duration_minutes)
                      VALUES (%s,%s,now(),30)""", (enr_b, director_uid))
 
+    # ---------------- feedback (migration 012) ----------------
+    #
+    # Two security properties, both must hold: a signed-in user can file feedback but ONLY as
+    # themselves (the WITH CHECK on submitted_by), and a non-admin can read NONE of it (SELECT is
+    # is_admin() only). The second is why feedback can safely name pages and people — a cohort peer
+    # cannot browse it. Rows are marked with a sentinel page so reads are scoped to this test and
+    # never measure live feedback.
+    FB_PAGE = "__rls_test_feedback__"
+    cur.execute("RESET ROLE")
+    cur.execute("""INSERT INTO feedback (submitted_by,page,category,message)
+                   VALUES (%s,%s,'feature','seeded by the RLS suite')""", (teacher_uid, FB_PAGE))
+
+    with Persona(cur, student_a_uid, "student A — feedback") as p:
+        p.allowed("CAN file feedback as themselves",
+                  """INSERT INTO feedback (submitted_by,page,category,message)
+                     VALUES (%s,%s,'like','the dashboard is clear')""", (student_a_uid, FB_PAGE))
+        p.denied("CANNOT file feedback as someone else (WITH CHECK on submitted_by)",
+                 """INSERT INTO feedback (submitted_by,page,category,message)
+                    VALUES (%s,%s,'dislike','spoofed')""", (teacher_uid, FB_PAGE))
+        check("CANNOT read any feedback — SELECT is admin-only",
+              p.count("SELECT count(*) FROM feedback WHERE page=%s", (FB_PAGE,)) == 0)
+
+    with Persona(cur, teacher_uid, "teacher — feedback") as p:
+        p.allowed("CAN file feedback as themselves",
+                  """INSERT INTO feedback (submitted_by,page,category,message)
+                     VALUES (%s,%s,'add','want a CSV export')""", (teacher_uid, FB_PAGE))
+        check("a non-admin instructor also reads no feedback",
+              p.count("SELECT count(*) FROM feedback WHERE page=%s", (FB_PAGE,)) == 0)
+
+    # Admin-can-read is the whole point of the poll, so verify it against a real global admin when
+    # one exists (the suite otherwise avoids admin personas because is_admin() short-circuits — here
+    # that short-circuit IS the behaviour under test).
+    cur.execute("RESET ROLE")
+    cur.execute("SELECT id FROM instructors WHERE is_global_admin ORDER BY created_at LIMIT 1")
+    admin_row = cur.fetchone()
+    if admin_row:
+        with Persona(cur, str(admin_row[0]), "global admin — feedback") as p:
+            check("a global admin CAN read the feedback (the poll)",
+                  p.count("SELECT count(*) FROM feedback WHERE page=%s", (FB_PAGE,)) >= 1)
+    else:
+        check("(skipped: no global admin to test the admin-read path with)", True)
+
     cur.execute("RESET ROLE")
     conn.rollback()
     cur.execute("SELECT count(*) FROM app.courses WHERE code='__r-215'")

@@ -12,6 +12,7 @@
 import { iconHTML, initials, esc } from './util.js';
 import { updateToggleButtons } from './theme.js';
 import { mountRunBanners } from './run-banner.js';
+import { mountFeedback } from './feedback.js';
 
 // All nav-rendering pages live one level deep (student/ , faculty/), so same-role links are
 // bare filenames. The nav no longer links out to the legacy site at all (see FACULTY_LINKS),
@@ -202,6 +203,11 @@ export function renderNav(ctx, opts = {}) {
   // renderNav is synchronous and every page depends on it, so a slow or failing query must not
   // hold up the chrome. The strip appears a beat later or not at all.
   mountRunBanners(ctx);
+
+  // The floating feedback box, on every signed-in page. Idempotent and un-awaited for the same
+  // reason as the banners: it must never hold up the chrome, and it appends its own fixed element
+  // to <body> rather than living in the nav.
+  mountFeedback(ctx);
 }
 
 /* ── Legacy Actions ────────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@
 //
 // tests/app-schema/test-db-schema.mjs fails when this file drifts from live.
 //
-// Source: scripts/app/gen_db_schema.py · schema `app` · 25 tables
+// Source: scripts/app/gen_db_schema.py · schema `app` · 26 tables
 // Shape per table: { name, comment, rls, primaryKey[], labelColumn, columns[], foreignKeys[],
 //                    enums{col:[values]}, policyCommands[], writable }
 //
@@ -1566,6 +1566,147 @@ export const DB_SCHEMA = {
       "enums": {},
       "policyCommands": [
         "ALL",
+        "SELECT"
+      ],
+      "writable": true
+    },
+    "feedback": {
+      "name": "feedback",
+      "comment": "In-app feedback from the floating box on every page: one immutable row per submission, tagged with the submitter's auth uid (non-forgeable via RLS), a readable name, the page, and a category (like/dislike/feature/add/remove/other). Meant to be polled to steer future work. STAFF-INVISIBLE except global admins — it is steering data, not a peer-readable board.",
+      "rls": true,
+      "primaryKey": [
+        "id"
+      ],
+      "labelColumn": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": true
+        },
+        {
+          "name": "submitted_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Submitter auth uid; the INSERT policy pins it to current_uid() so feedback cannot be filed as another person. This is identity — submitter_name/role are only hints captured alongside it.",
+          "pk": false
+        },
+        {
+          "name": "submitter_name",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "role",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "page",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "page_title",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "category",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "message",
+          "type": "text",
+          "udt": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "user_agent",
+          "type": "text",
+          "udt": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": false,
+          "default": "now()",
+          "maxLength": null,
+          "generated": false,
+          "comment": null,
+          "pk": false
+        }
+      ],
+      "foreignKeys": [],
+      "enums": {
+        "category": [
+          "like",
+          "dislike",
+          "feature",
+          "add",
+          "remove",
+          "other"
+        ],
+        "role": [
+          "faculty",
+          "student"
+        ]
+      },
+      "policyCommands": [
+        "INSERT",
         "SELECT"
       ],
       "writable": true

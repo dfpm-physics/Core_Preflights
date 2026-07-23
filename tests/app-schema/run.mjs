@@ -76,7 +76,7 @@ for (const s of OFFLINE) {
 for (const suite of ['test-imports.mjs', 'test-rollup.mjs', 'test-system-prefs.mjs',
                      'test-run-banner.mjs', 'test-help-status.mjs', 'test-prefs.mjs',
                      'test-tasks.mjs', 'test-gradebook.mjs', 'test-ei.mjs',
-                     'test-student-detail.mjs']) {
+                     'test-student-detail.mjs', 'test-feedback.mjs']) {
   const r = spawnSync(process.execPath, [resolve(import.meta.dirname, suite)],
                       { encoding: 'utf8' });
   process.stdout.write(r.stdout || '');

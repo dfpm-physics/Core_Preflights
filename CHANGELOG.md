@@ -8,6 +8,57 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-23 — Matthew Recker via Claude (in-app feedback box)
+
+The app is going to instructors to test, so it needed a way to hear back. A floating **Feedback**
+box now rides the chrome onto every signed-in page; a submission records who said it and the page
+they were on, into a new `app.feedback` table meant to be polled to steer future work.
+
+### Schema — `012_feedback.sql`, **applied** to `app`
+
+One immutable row per submission: `submitted_by` (auth uid), `submitter_name`/`role` (readable
+hints), `page` + `page_title`, `category` (CHECK `like`/`dislike`/`feature`/`add`/`remove`/`other`),
+`message` (non-blank, ≤4000), `user_agent`, `created_at`. No `updated_at` and no UPDATE/DELETE
+policy — a submission is an utterance, write-once through the API; a correction is a new row.
+
+**RLS is the whole security model:**
+
+- **INSERT is self-only** — `WITH CHECK (submitted_by = current_uid())`, so a caller cannot file
+  feedback as someone else. The UI supplies the uid but the database re-checks it against the JWT.
+- **SELECT is `is_admin()` only.** Feedback is steering data, and it can name pages and people in
+  ways a cohort peer should not browse, so it is invisible to everyone but a global admin. Opening
+  it to directors later is additive; starting open would be the breaking direction. This is why the
+  `notes`-like candour is safe to collect.
+
+No FK to `auth.users` (the app owner cannot reference schema `auth`, per 010's reasoning) and no
+`GRANT`s (default privileges + the two policies are the whole story, per 008's convention). Indexed
+for the poll: `created_at DESC`, and by `page` and `category`.
+
+### Widget — `js/feedback.js`, mounted from `nav.js`
+
+A launcher pill bottom-right opens a small panel: the six category chips, a message box, and Send.
+It names the page you're on ("About: Dashboard") and, on success, collapses to a thank-you.
+
+- **Mounted from `renderNav`**, un-awaited and idempotent, exactly like the run banners — so it
+  appears on every faculty and student page without touching each one, and a re-render never stacks
+  a second copy.
+- **`supabase.js` is imported lazily** inside submit, never at module scope — `nav.js` is on every
+  page (and in the offline nav test), and a static client import would be the exact dependency
+  `run-banner.js` documents avoiding.
+- **The pure parts are separated and tested** — `validateFeedback` mirrors the migration CHECKs so
+  the person gets a sentence rather than a Postgres error, and `feedbackRow` builds the row from
+  injected page/agent values so it is unit-testable.
+
+### Verification
+
+`012` dry-run clean then applied; table verified (10 columns, RLS on, both policies). `db-schema.js`
+regenerated (26 tables). New coverage: `app_invariant_test.py` **41/41** (was 33 — category/message/
+role CHECKs, write-once shape), `app_rls_test.py` **51/51** (was 45 — **a non-admin can neither read
+feedback nor file it as another user; a global admin can read it**), `test-feedback.mjs` **23/0**,
+full `tests/app-schema` exit 0. **End-to-end signed in against the live DB:** the box mounted on the
+dashboard, a marked submission landed in `app.feedback` with the right uid/page/category, and the
+test row was deleted. Panel screenshotted open in both themes.
+
 ## 2026-07-23 — Matthew Recker via Claude (test-faculty creds → the untracked env)
 
 ### Changed — the P0.5 test login lives in `supabase/admin/.env`, not in source or on the line

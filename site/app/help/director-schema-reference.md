@@ -5,9 +5,10 @@ The diagram shows the tables in those four layers. Blue marks the four that carr
 system — an assignment is defined, scheduled, worked, and graded. Two later additions to delivery,
 `review_signoffs` and `ei_sessions`, are described below but not drawn.
 
-Three tables sit outside the layers because they describe the *system* rather than the coursework:
-`grade_events` and `analysis_runs` are audit trails, and `user_preferences` holds one row of view
-settings per person. All three are covered further down; none of them can affect a grade.
+Four tables sit outside the layers because they describe the *system* rather than the coursework:
+`grade_events` and `analysis_runs` are audit trails, `user_preferences` holds one row of view
+settings per person, and `feedback` collects what people type into the in-app feedback box. All four
+are covered further down; none of them can affect a grade.
 
 <svg class="schema-fig" viewBox="0 0 900 480" role="img" aria-label="The four layers of the PREP data model and the tables in each">
 
@@ -419,6 +420,25 @@ course data, and a director reading another director's saved filters has no legi
 Nothing in it is ever consulted for permission. It decides what a page shows you *first*; what you
 are *allowed* to see is decided by the same rules as everything else in this document. Losing the
 row costs you your settings and nothing else.
+
+### feedback
+
+What people type into the floating feedback box that appears on every page — a like, a dislike, a
+request to add or remove something, or a general comment — with the page they were on and their name
+recorded alongside it. Meant to be read later to decide what gets built next.
+
+| Field | Holds |
+|---|---|
+| `submitted_by` | The account that sent it. Recorded from the sign-in itself, so it cannot be filed under someone else's name |
+| `submitter_name`, `role` | The person's name and whether they are staff or a student, kept for readability |
+| `page`, `page_title` | Which page they were on when they wrote it |
+| `category` | One of like, dislike, feature, add, remove, or other |
+| `message` | What they wrote, up to 4000 characters |
+
+**Only a system administrator can read it back.** Anyone signed in can send feedback, but the
+collected feedback is not a board that instructors or students browse — it can name pages and people
+in passing, and it is steering data for whoever runs the product. A submission cannot be edited or
+deleted through the site; a change of mind is simply a new entry.
 
 ## What the database will not allow
 

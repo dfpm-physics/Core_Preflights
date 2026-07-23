@@ -130,6 +130,10 @@ export const CURATED_COLUMNS = {
   // the operator chose, which is the only step that discards data.
   roster_imports:        ['course_offering_id', 'imported_by', 'filename', 'created_at'],
 
+  // Feedback (migration 012). submitter_name + page + category + the words are what a human
+  // reading the poll wants; the uuid submitter_by and user_agent stay one click away.
+  feedback:              ['created_at', 'submitter_name', 'role', 'page', 'category', 'message'],
+
   // Analysis
   analysis_reports:      ['scope', 'scope_id', 'kind', 'generated_at'],
   // status and invoked_by first: the audit question is almost always "did the overnight run

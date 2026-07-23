@@ -21,6 +21,7 @@ than asserted:
   9. flipping grading_role mid-term redirects NEW choices without breaking existing rows
      (the "if the interactive breaks, kick everyone over to the questions" case)
  10. ei_sessions is repeatable, bounded, batch-groupable, and dies with its enrolment
+ 11. feedback enforces its category/message/role constraints and is write-once
 
 Usage:
   .venv/Scripts/python supabase/admin/app_invariant_test.py
@@ -333,6 +334,41 @@ def main():
           cur.fetchone()[0] == 2)
 
     cur.execute("ROLLBACK TO SAVEPOINT ei")
+
+    print("\n--- 11. feedback (migration 012) ---")
+    cur.execute("SAVEPOINT fb")
+
+    expect_ok(cur, "a well-formed feedback row inserts",
+              """INSERT INTO feedback (submitted_by,page,category,message)
+                 VALUES (%s,'/site/app/faculty/gradebook.html','feature','Add a CSV export')""",
+              (instructor,))
+    expect_error(cur, "an unknown category is refused",
+                 """INSERT INTO feedback (submitted_by,page,category,message)
+                    VALUES (%s,'/x','rave','nice')""", (instructor,))
+    expect_error(cur, "a blank message is refused",
+                 """INSERT INTO feedback (submitted_by,page,category,message)
+                    VALUES (%s,'/x','like','   ')""", (instructor,))
+    expect_error(cur, "a message over 4000 chars is refused",
+                 """INSERT INTO feedback (submitted_by,page,category,message)
+                    VALUES (%s,'/x','like',%s)""", (instructor, "x" * 4001))
+    expect_error(cur, "submitted_by is required (identity is not optional)",
+                 """INSERT INTO feedback (page,category,message)
+                    VALUES ('/x','like','hi')""")
+    expect_error(cur, "an unknown role value is refused",
+                 """INSERT INTO feedback (submitted_by,page,category,message,role)
+                    VALUES (%s,'/x','like','hi','robot')""", (instructor,))
+
+    cur.execute("""SELECT created_at IS NOT NULL FROM feedback
+                    WHERE submitted_by=%s ORDER BY created_at DESC LIMIT 1""", (instructor,))
+    check("created_at defaults to now()", cur.fetchone()[0] is True)
+
+    # Write-once by design: there is no UPDATE/DELETE policy, but the columns themselves carry no
+    # updated_at either, so nothing here even implies mutability. Assert the shape.
+    cur.execute("""SELECT count(*) FROM information_schema.columns
+                    WHERE table_schema='app' AND table_name='feedback' AND column_name='updated_at'""")
+    check("feedback has no updated_at — a submission is an immutable utterance", cur.fetchone()[0] == 0)
+
+    cur.execute("ROLLBACK TO SAVEPOINT fb")
 
     conn.rollback()
     cur.execute("SELECT count(*) FROM app.courses WHERE code='__t-215'")
