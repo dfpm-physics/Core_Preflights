@@ -10,9 +10,14 @@ and a short piece of feedback for each question.
 
 ## What the AI does not do
 
-**It does not decide your grade.** Every AI suggestion arrives in your instructor's grading panel
-marked as *not final*. An instructor reviews it and finalizes it. Nothing reaches you until a person
-has looked at it.
+**It does not decide your grade on written work.** Every AI suggestion on your written answers
+arrives in your instructor's grading panel marked as *not final*. An instructor reviews it and
+finalizes it. No written score reaches you until a person has looked at it.
+
+**Interactive lessons work differently, and you should know which one you are doing.** When an
+interactive lesson counts for credit, finishing it grades you straight away — the points appear
+without an instructor step, because the lesson is scored on effort and there is nothing for a
+person to decide. Your instructor can still see the session report and change the grade afterwards.
 
 ## How answers are scored
 
@@ -37,8 +42,19 @@ not a real attempt is capped.
 When you finish, the lesson sends a report of your session back to your record. Your instructor can
 read it, and the class's answers may be summarized in aggregate to plan the next lesson.
 
+Some lessons are offered as **practice**. Practice work is never graded — you can run it as many
+times as you like, and it earns no points either way. The assignment page says which it is before
+you start.
+
 ## Your data
 
 Your responses, scores, and interactive-lesson reports are stored in the course database and are
 visible to your instructors and the course director. They are used to grade your work and to shape
-instruction. Questions about how your work is handled go to the course director.
+instruction.
+
+Alongside your grade, the AI also records a short read on your work that is **not** a grade: how
+much engagement your answers showed, what you appear to have understood, and any physics
+misconceptions they suggest. It never changes your points, and no page shows it to you — it exists
+so your instructor can see what the class as a whole found hard before teaching the lesson.
+
+Questions about how your work is handled go to the course director.

@@ -34,12 +34,21 @@ everyone else, immediately.
 
 | Schema | Status | Holds |
 |---|---|---|
-| `public` | **Live.** Serves every page in `site/`. Authoritative for anything student-facing today. | The original model — `assignments` / `responses` / `scores`, `interactions`, `lessons` |
-| `app` | **Built, tested, not yet wired to any page.** | The PREP v2 redesign, holding the real Fall 2026 content and roster |
+| `public` | **Live.** Serves the legacy pages at `site/*.html`, which are still the URLs students and instructors are pointed at. | The original model — `assignments` / `responses` / `scores`, `interactions`, `lessons` |
+| `app` | **Live, and read by every page under `site/app/`** — `site/app/js/config.js:25-26` binds that client to `db: { schema: 'app' }`. Not yet on the public URLs. | The PREP v2 redesign, holding the real Fall 2026 content and roster |
 
-`app` is not dead code and `public` is not obsolete. The app refactor in `site/app/` will cut over
-to `app`; until it does, a change to student-visible behaviour belongs in `public`. See
-[`docs/architecture/`](../../docs/architecture/) for the v2 model and why it is shaped that way.
+`app` is not dead code and `public` is not obsolete. **Both are live; the distinction is which URLs
+reach them.** `site/app/` is a complete, working portal already reading and writing `app` — what has
+not happened is the promotion that puts it on the paths people actually visit (roadmap P0.1). So a
+change to what a student sees *today, at the URL they were given* belongs in `public`; a change to
+the system everyone will be using after the cutover belongs in `site/app/`, and that is where new
+work goes. See [`docs/architecture/`](../../docs/architecture/) for the v2 model and why it is
+shaped that way.
+
+*(This row read "built, tested, not yet wired to any page" until 2026-07-27. That was true when it
+was written and had been false for some time: it predates `site/app/` being pointed at `app`, and
+survived because nothing re-read it. It is the reason `PREP-V2-CUTOVER.md` also still said the
+procedure had never been run.)*
 
 - **Nothing an agent "remembers" privately is shared.** Claude Code has a private per-project
   memory store outside the repo; Codex has its own session state. **Neither is visible to the
@@ -184,7 +193,7 @@ The canonical domain procedures are agent-neutral Markdown runbooks under `.ai/s
 |---|---|
 | `lesson-cycle` | **The normal entry point.** Runs `preflight-analyze` then `lesson-aggregate` for one lesson and one day track, after that day's deadline. Adds the checks that only make sense between them (deadline passed, grading produced the assessments aggregation consumes, whole-course scope written only once every section exists). Also the entry point for an unattended scheduled run — the repo schedules nothing itself; see its SKILL.md. |
 | `preflight-analyze` | **Per-student, and nothing else.** Fetch responses for an assignment, grade free-response (3-state full/warn/zero, liberal), read reference PDFs for RAG, write suggested `grades` (`is_finalized=false`) + the per-student `schema: 1` assessment into `grades.diagnostic`. Writes **no** cohort output — its per-instructor `by_question` rows were retired 2026-07-21. Run whenever work needs grading; may be run per day filter (M/T). |
-| `lesson-aggregate` | **Per-cohort, and owns all of it.** Every AI panel for one lesson — readiness summary (including the common threads across the graded questions), misconception trends, the one-line recommendation, showcase quotes → `analysis_reports`. Modality-blind: folds the `schema: 1` assessment from *both* paths (the artifact's, on the submission; `preflight-analyze`'s, on the grade). Aggregates **by section first**, then synthesizes the whole-course scope from those section scopes. Run **after each day track's deadline** with `--day`. Renamed from `interaction-aggregate` 2026-07-21. |
+| `lesson-aggregate` | **Per-cohort, and owns all of it.** Every AI panel for one lesson — readiness summary (including the common threads across the graded questions), the one-line recommendation, showcase quotes → `analysis_reports`. Modality-blind: folds the `schema: 1` assessment from *both* paths (the artifact's, on the submission; `preflight-analyze`'s, on the grade). Writes **three scope kinds** — section (recommendation + quotes), `instr:<uuid>` (the readiness summary, across every section that instructor teaches), and `__all__` (written only once every section has a scope). Run **after each day track's deadline** with `--day`. Renamed from `interaction-aggregate` 2026-07-21. *(`misconception_trends` was retired 2026-07-22 and listed here in error until 2026-07-27 — do not write it.)* |
 | `interaction-backfill` | Repair reports missing `report_data` by reconstructing schema-1 from `report_markdown`. Interactive path only — the written path's equivalent is a `preflight-analyze` re-run. |
 | `setup-preflight` | First-time machine setup — writes the config file above. |
 | `docs-author` | Decide whether a concept warrants documentation and which kind, then write it — in-app help docs (`site/app/help/`) or design docs (`docs/`). Read before adding any `.md` to either. |

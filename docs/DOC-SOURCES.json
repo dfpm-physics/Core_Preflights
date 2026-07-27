@@ -20,7 +20,7 @@
       "doc": "site/app/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-07-23",
+      "reviewed": "2026-07-27",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -37,7 +37,7 @@
       "doc": "site/app/help/ai-and-your-work.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-07-21",
+      "reviewed": "2026-07-27",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -51,7 +51,7 @@
       "doc": "site/app/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-07-23",
+      "reviewed": "2026-07-27",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -66,7 +66,7 @@
       "doc": "site/app/help/director-ai-rules.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-07-23",
+      "reviewed": "2026-07-27",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -81,7 +81,7 @@
       "doc": "site/app/help/admin-system-operations.md",
       "kind": "help",
       "tier": "admin",
-      "reviewed": "2026-07-21",
+      "reviewed": "2026-07-27",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -93,7 +93,7 @@
       "doc": "site/app/help/README.md",
       "kind": "reference",
       "tier": null,
-      "reviewed": "2026-07-21",
+      "reviewed": "2026-07-27",
       "sources": [
         "site/app/js/help.js",
         "site/app/help/MANIFEST.json"
@@ -117,7 +117,7 @@
       "doc": "docs/operations/PREP-V2-CUTOVER.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-07-21",
+      "reviewed": "2026-07-27",
       "sources": [
         "supabase/admin/app_schema_bootstrap.sql",
         "scripts/app_migration/migrate_public_to_app.py",
@@ -131,7 +131,7 @@
       "doc": ".ai/skills/docs-author/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-07-21",
+      "reviewed": "2026-07-27",
       "sources": [
         "site/app/help/README.md",
         "site/app/js/help.js",
@@ -144,7 +144,7 @@
       "doc": "site/app/help/director-course-structure.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-07-21",
+      "reviewed": "2026-07-27",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/003_term_calendar.sql",
@@ -152,13 +152,13 @@
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md"
       ],
-      "note": "Conceptual companion to director-schema-reference.md, which owns the field-level detail and the enforced-rules list; this page links out rather than restating them, after a restated unlock rule drifted and contradicted the reference. Deliberately contains no UI procedures - site/app/ does not read the app schema yet."
+      "note": "Conceptual companion to director-schema-reference.md, which owns the field-level detail and the enforced-rules list; this page links out rather than restating them, after a restated unlock rule drifted and contradicted the reference. Deliberately contains no UI procedures - it explains the model, not the screens, so a page rename cannot invalidate it. (This note used to justify that by saying site/app/ does not read the app schema yet; it has read it since 2026-07-21 - the reason stands, the justification did not.)"
     },
     {
       "doc": "site/app/help/director-schema-reference.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-07-23",
+      "reviewed": "2026-07-27",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/002_rls.sql",
@@ -173,7 +173,9 @@
         "supabase/migrations/app/010_user_preferences.sql",
         "supabase/migrations/app/011_ei_sessions.sql",
         "supabase/migrations/app/012_feedback.sql",
-        "supabase/migrations/app/013_feedback_resolution.sql"
+        "supabase/migrations/app/013_feedback_resolution.sql",
+        "supabase/migrations/app/014_effort_grades_per_row.sql",
+        "supabase/migrations/app/015_interactive_autograde.sql"
       ],
       "note": "Every table and field transcribed from the app-schema migrations and verified against information_schema on the live database. Owns the enforced-rules list and the exact accepted values. Inline SVG depends on the .sf-* classes in styles.css. Omits RLS policy predicates - help docs are world-readable at every tier. SOURCES MUST LIST EVERY MIGRATION: the list stopped at 006 until 2026-07-22, so 007-009 landed without ever flagging this page and analysis_runs went undocumented for two days. Add the new file here whenever a migration is added. ei_sessions states its staff-only access rule in plain language and nothing more: that absence of a student policy is load-bearing (notes may hold a candid read of a cadet), so do not delete the sentence - and do not 'complete' it by pasting the policy SQL either."
     },
@@ -181,7 +183,7 @@
       "doc": "site/app/help/instructor-accounts.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-07-23",
+      "reviewed": "2026-07-27",
       "sources": [
         ".ai/instructions/PROJECT.md",
         "site/app/js/roster-import.js",

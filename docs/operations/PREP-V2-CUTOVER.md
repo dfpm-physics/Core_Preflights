@@ -1,6 +1,26 @@
 # PREP v2 cutover — bootstrap, migrate, promote
 
-**Status:** procedure — not yet executed against the live database
+**Status:** **Phases 1–3 are DONE against the live database. Phase 4 has not run.**
+*(Corrected 2026-07-27 — this line read "not yet executed against the live database" until then,
+which stopped being true around 2026-07-21 and was the roadmap's P0.1 note that nobody had actioned.
+Anyone reading it since has been told the schema does not exist yet.)*
+
+| Phase | State |
+|---|---|
+| 1 — bootstrap schema and roles | **Done.** `app` exists; the three `prep_app_*` roles exist |
+| 2 — invariant + RLS suites | **Done.** Both green (22/22 and 35/35, 2026-07-22) |
+| 3 — migrate content and roster | **Done.** `app` holds the real Fall 2026 content and roster; the chain is applied through `015` |
+| 4 — promote the front end | **NOT RUN.** This is the live cutover, and the one-way step |
+
+**What "done" does and does not mean.** `site/app/` is a complete portal already reading and writing
+`app` (`site/app/js/config.js` binds `db: { schema: 'app' }`). What has not happened is putting it
+on the URLs people visit. Until Phase 4 runs, students and instructors are still pointed at the
+legacy pages at `site/*.html`, which read `public`.
+
+**Two things below are stale in a way worth knowing before you follow them:** the chain in step 2
+now runs past `003` to `015`, and step 11 ("seal the owner") has been done and undone several times
+since — `prep_app_owner` is unsealed whenever a migration is applied and must be re-sealed after.
+Roadmap **P0.2** is the standing item to seal it for good.
 
 *Authored 2026-07-20 by Casey (via Claude). Operational companion to
 [`../decisions/PREP-V2-SCHEMA.md`](../decisions/PREP-V2-SCHEMA.md) (why a parallel schema),
@@ -42,8 +62,9 @@ See [`../../CHANGELOG.md`](../../CHANGELOG.md).*
    none of these roles is granted anything on `public`. Replace the three `REPLACE_ME_*` passwords
    first, and record them where `supabase/admin/config.json` expects them. Running as `postgres`
    requires `SET ROLE` membership on `prep_app_owner` for the two statements the script flags.
-2. **Apply the migration chain** as `prep_app_owner`, in order:
-   `001_core_model.sql` → `002_rls.sql` → `003_term_calendar.sql`. This chain is numbered
+2. **Apply the migration chain** as `prep_app_owner`, in order, from `001_core_model.sql` through
+   the highest-numbered file in `supabase/migrations/app/` — `001` → `002` → `003` was the chain
+   when this was written; it now runs to `015`, and `016` is filed unapplied. This chain is numbered
    independently of `supabase/migrations/*.sql` (the `public` chain); the numbers do not correspond.
 3. **Add the `auth.users` foreign keys** (bootstrap §6) as `postgres`. `students.auth_user_id` and
    `instructors.id` are declared as plain `uuid` columns because `postgres` cannot delegate
@@ -100,14 +121,27 @@ each role connects and holds exactly the privileges it should, and no more.
 
 Everything above is reversible by dropping schema `app`. This phase changes the live site.
 
-12. **Point the front end at `app`.** The `site/app/` portal becomes the schema's client. Confirm it
-    reads and writes `app`, not `public`.
+12. ~~**Point the front end at `app`.**~~ **Done.** `site/app/js/config.js` binds the client to
+    `db: { schema: 'app' }`; every query from `site/app/` goes to the v2 model.
 13. **Promote the app tree** so the real pages land on the frozen contract paths
     `site/student/interaction-submit.html` and `site/faculty/lessons.html`, overwriting the
     forwarding stubs. **The public URLs must be identical before and after** — if the promotion
-    cannot preserve them exactly, abort rather than change a contract URL. The promotion deletes the
-    legacy `admin.html`, so the two still-legacy-only director tools (instructor management, export)
-    must be native in `site/app/` first, or the course loses them.
+    cannot preserve them exactly, abort rather than change a contract URL.
+
+    **Use `scripts/promote_app.py`.** It is dry-run by default and refuses to run on a dirty tree, a
+    non-`main` branch, divergence from `origin/main`, or a missing frozen-contract source. It plans
+    **98 individual file moves** rather than moving directories, because four targets already exist
+    in `site/` and `git mv` of a directory onto an existing one *nests* it — which would leave the
+    stub in place and the real receiver one level too deep, a silent 404 on the URL every deployed
+    artifact posts to. It asserts both frozen paths are covered before it will move anything, and it
+    **does not commit or push**: pushing is the cutover, and that stays a human act (CORE.md §5).
+
+    The blocker this step used to carry is cleared — the promotion deletes the legacy `admin.html`,
+    and its replacements (Staff and Export in `site/app/faculty/admin.html`) shipped 2026-07-20.
+
+    `site/app/*.md` — the internal design notes — route to `docs/app/` rather than into the published
+    tree, and `docs/DOC-SOURCES.json` references some of the moved files and must be updated in the
+    **same commit**.
 14. **Push** — a push to `main` rebuilds GitHub Pages (~1–2 min) and is the live cutover.
 
 ---

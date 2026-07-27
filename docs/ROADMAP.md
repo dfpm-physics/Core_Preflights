@@ -126,24 +126,9 @@ likely reason the second account would not authenticate with a correctly copy-pa
 
 ## 2. P1 — First weeks of term
 
-### P1.12 — Bulk / whole-section extensions · ✅ **PARTLY DONE 2026-07-22** — granting moved onto the rollup
-
-*Bulk granting now exists, on the rollup — where the list of who needs one already was.*
-
-**Shipped 2026-07-22:** the "Did not submit" panel grants extensions inline, per row (a quiet
-`Extend` that appears on hover) and in bulk (checkboxes, select-all, `Extend selected (N)`), through
-a modal defaulting to a week out at 2359 local. It calls the Grade tab's own `setExtension()` rather
-than composing a second upsert, so the two surfaces cannot drift on what an extension is, and
-re-granting amends rather than duplicating (the `(enrollment, offering)` UNIQUE key).
-
-One reason covers a batch — `reason` is NOT NULL and non-blank-checked
-(`007_extension_governance_and_review.sql:79-82`), and a group extended together shares the cause
-that prompted it. Writes are sequential so a partial failure is reportable per student rather than
-collapsing into one rejected promise.
-
-**Still open:** a *whole-section* grant that does not go through the not-submitted list — e.g.
-extending every student in a section after a cancelled class, including those who already submitted.
-And `faculty/extensions.html` remains **read + revoke only**; it is the natural home for that.
+**Empty as of 2026-07-27.** The last entry, P1.12's whole-section half, was **descoped by the
+director** rather than built — the reasoning is in [P3.17](#p317--whole-section-extension-grant--s--parked-not-planned)
+and the shipped half is in [§8](#p112--bulk--whole-section-extensions---done-2026-07-22--remainder-descoped-2026-07-27).
 
 ---
 
@@ -450,6 +435,36 @@ dropped in favour of doing it by hand in the matrix.
 Depends on: nothing further — the data and the matrix are live. See `.ai/skills/docs-author/` before
 adding it, and `CORE.md` §4 for where a runbook lives.
 
+### P3.17 — Whole-section extension grant · **S** · *parked, not planned*
+
+*Was the open half of [P1.12](#p112--bulk--whole-section-extensions---done-2026-07-22--remainder-descoped-2026-07-27).
+Moved out of P1 on 2026-07-27 by the director, who does not think it is needed.*
+
+The idea was a grant that covers an entire section without going through the not-submitted list —
+extending everyone after a cancelled class, including students who already handed in. **Three
+reasons it is not P1 work, and possibly not work at all:**
+
+- **The event it exists for is a section-wide one, and a section-wide event is a due-date change.**
+  If a class is cancelled, the deadline moved; editing `assignment_due_dates` for that section says
+  so directly and reads correctly to every student, rather than manufacturing 18 per-student
+  exceptions to a date that is no longer the real date. Extensions are the per-student mechanism
+  and the per-section override already exists beside them (`effectiveDue()` precedence: extension →
+  section → offering).
+- **A single section receiving a genuine blanket extension is not an expected event** (director).
+- **The rollup already reaches a whole section anyway.** Select-all on the "Did not submit" panel
+  covers every student who has a reason to want one; the only people it misses are those who
+  already submitted, who by definition do not need more time.
+
+**Falsification — what would bring this back:** a term in which somebody actually reaches for it
+and finds the due-date edit wrong for their case. The likeliest such case is a section-wide
+extension that must be *auditable as an exception* — `extensions` carries a NOT NULL `reason` and
+grant/revocation provenance, and editing a due date carries none of that. If a chain-of-custody
+question ever lands on a moved deadline, this becomes real; until then it is a second way to do
+something there is already a right way to do.
+
+If it is ever built, `faculty/extensions.html` is the home — that page is still **read + revoke
+only**, and a page that can revoke in bulk but not grant is the asymmetry that would make the case.
+
 ---
 
 ## 5. C — Cleanup and debt
@@ -461,19 +476,20 @@ port-status rows · `site/app/README.md` "Not yet ported" · `student/interactio
 
 | Item | Where | Note |
 |---|---|---|
-| ⚠️ **`check_doc_sources.py` is red — 7 documents flagged** | run it | **Pre-existing, not caused by any 2026-07-22/23 batch.** Dominated by a `CORE.md` edit on 2026-07-22 plus the skills touched by it. *(Was 11; the docs batch cleared four.)* Deliberately *not* cleared by bulk-bumping `reviewed` dates — that is precisely the failure the mechanism exists to prevent. Clearing it properly means reading each of the 7 against its sources; it overlaps the help-doc stub expansion below, so do them together. **Verified harmless for the gradebook:** no help doc states a points value, so the `question_scores` correction did not invalidate any of them. *(The sixth batch, 2026-07-23, briefly showed 10: `instructor-grading.md` and `instructor-accounts.md` were genuinely invalidated by P1.14 and P1.9 and were **rewritten**, not bumped — the Grade page has no nav entry now and the roster import moved to Enrollment, and both docs said otherwise. `instructor-grading.md` also carried a claim that predates this batch: it described interactive effort grades as arriving unfinalized and needing review, which migration 015 stopped being true. `director-schema-reference.md` flagged on a `styles.css` edit that did not touch its `.sf-*` classes. All three clear on commit — the mechanism working as designed.)* |
+| ~~⚠️ **`check_doc_sources.py` is red — 7 documents flagged**~~ | run it | ✅ **CLEARED 2026-07-27 by reading all 7, not by bumping dates.** Five were wrong and were **fixed**; two (`help/README.md`, `docs-author/SKILL.md`) were current and were bumped. **The exercise was worth more than the red check suggested — the sources were wronger than the documents.** `CORE.md` still said schema `app` was "not yet wired to any page" when every page under `site/app/` has read it since 2026-07-21, which is also why `PREP-V2-CUTOVER.md` still announced itself as never executed. `PROJECT.md` still listed `misconception_trends` as a live output — retired 2026-07-22 — and still described the readiness summary as per *section* when it is per *instructor*, in an example whose shape the writer would now **reject as a validation error**. Both were corrected, which cascaded to four more help docs; those were read too. Full account in the CHANGELOG. **Three findings worth keeping separately:** (1) migration 015's auto-final interactive grade contradicted the *student-facing* promise "nothing reaches you until a person has looked at it" — the same claim was caught in `instructor-grading.md` on 2026-07-23 and the student page was missed; (2) `director-schema-reference.md` told a director that switching `grading_mode` to `effort` was "a teaching decision", which is the exact change P0.14 identifies as zeroing every written taker — and it could never have been flagged, because its source list **stopped at migration `013`** and the semantics changed in `014`; (3) `SYSTEM_GUIDE.md` told anyone deploying from scratch to deploy **two** edge functions when there are five, so both password paths and account provisioning would silently be missing |
 | ~~`lesson_aggregate.py` misdiagnoses a cross-course slug collision as a stale offering~~ | `supabase/admin/lesson_aggregate.py` `_ambiguous_slug_message` | ✅ **FIXED 2026-07-22.** The message now splits the two cases: same-term/different-course lists each course with its course-scoped activity slug and says *do not deactivate either one*; different-term keeps the deactivation advice, which is correct only there. Covered by `aggregate_summarize_test.py` |
 | ~~`status --lesson` cannot report a question-only lesson~~ | `supabase/admin/lesson_aggregate.py` `cmd_status` | ✅ **FIXED 2026-07-22 — and it was worse than recorded.** The join was *inner*, so written-only offerings were absent from the **unfiltered** listing too, not merely unfilterable. Since most of a term is written-only, `/lesson-cycle`'s verify step was reporting "No analysis_reports rows yet" for lessons that had aggregated fine. Now keyed on the assignment, with activities resolved by offering id so a shared slug cannot abort the listing. **Not yet run against the live DB** — needs a connection |
-| ⚠️ **The dashboard ignores extensions when computing status** | `faculty-data.js:148` | Found while building P1.1. It calls `effectiveDue(offering, sectionId, **null**)` — the extension argument hardcoded — so a student holding an active extension can show as `overdue`/`pending` on the dashboard. `faculty-grade.js` and the new `faculty-gradebook.js` both do it correctly; this is the one caller that does not. **S**, and it needs a test, not just a fix |
+| ~~⚠️ **The dashboard ignores extensions when computing status**~~ | `faculty-data.js` `buildLessonRows` | ✅ **FIXED 2026-07-27.** It called `effectiveDue(offering, sectionId, **null**)` — the extension argument hardcoded — so a student holding an active extension showed as `overdue` on the dashboard, in the outstanding-tasks panel and in the due-out row. The loader now fetches `extensions` (filtered `revoked_at IS NULL`, three columns) alongside submissions and grades in the same chunked pass. **The row-building was extracted into a pure exported `buildLessonRows()`, which is the actual repair**: the rule was unreachable to a test because it lived inside an async loader needing a faculty session, which is why it survived being found *twice*, months apart, without ever being caught. `test-dashboard-rows.mjs` pins it at 12 checks, counterfactuals included (an expired extension, one belonging to another offering, one belonging to another student). `faculty-gradebook.js`'s header cited this bug as its reason for not reusing the dashboard loader; that comment is now corrected to the reason that actually remains, which is payload size |
+| ~~⚠️ **A generated file was hand-edited, and the check that exists to catch that went red**~~ | `site/app/js/db-schema.js` | ✅ **RESOLVED 2026-07-27** — *and it is the single failing check in `tests/app-schema`, not a pre-existing mystery.* The 2026-07-23 `enrolment` → `enrollment` sweep edited four strings inside `db-schema.js`, whose header reads **"GENERATED FILE. Do not edit by hand."** Those four are copies of Postgres `COMMENT ON` text, so the sweep corrected the copy and left the original — and `gen_db_schema.py --check` correctly reported the file as stale from that day on. Regenerated (it now matches live and reads `enrolment` again), with the real correction filed as **`supabase/migrations/app/016_comment_spelling.sql`, written and deliberately NOT applied**: `COMMENT ON` is DDL and `app` is sealed (CORE.md §0). Four comment strings do not justify unsealing; fold it into the next window that opens for another reason. **Worth generalizing:** a sweep that matches on a word will hit generated files, and a generated file is the one place where being right about the text is being wrong about the source |
 | Scope control is now copied in **three** places | `report.html` `renderScope()` · `faculty-dashboard.js` `scopeControl()` · `gradebook.html` | `faculty-dashboard.js:230-241` said extraction becomes worth arguing for at the third caller. It has arrived. Deliberately **not** done in the P1.1 pass: refactoring two shipped, browser-verified surfaces in the same change that adds a third is how you break all three at once. Extract into a shared module as its own change, with the existing suites green before and after |
 | All three `prep_app_*` roles carry `BYPASSRLS`, including the SELECT-only read role | CHANGELOG:704 | The read role should not bypass RLS |
 | `main` predates the `extensions.reason` NOT NULL constraint | CHANGELOG:706-709 | Harmless today (zero extensions); resolved by P0.1 |
 | Edge functions never exercised on a successful path | CHANGELOG:473-475 | Covered by P0.5 |
 | Remove `scripts/training/seed_training_preflight02.py` data | script header | **Before the real roster upload** — ordering matters. Sharper than recorded: the seed draws from a small template pool, so **16 distinct answers are shared by up to 4 students each**. The rollup's showcase panel therefore renders visibly duplicate quotes (seen during P0.5), which reads as a sampler bug and is not one |
-| Five help docs still carry the "Starter stub" blockquote | docs-author SKILL.md:155-160 | `ai-and-your-work.md` needs director review before term |
+| **Three** help docs still carry the "Starter stub" blockquote | `admin-system-operations.md` · `ai-and-your-work.md` · `director-ai-rules.md` | Was recorded as five, and the skill said "every current help doc" — both wrong as of 2026-07-27 (there are 8 served docs; 5 have been expanded). Corrected in `docs-author/SKILL.md`. All three had real errors fixed in them on 2026-07-27, so the remaining work is **expansion and the director's review of the wording**, not correction. `ai-and-your-work.md` is the one that matters — it is the student-facing promise about AI, and it is now the only page that tells a cadet a graded interactive lesson scores itself with no human in the loop |
 | `$PREP_CONFIG` neutralization (decided, not executed) | CORE.md:162-165 | One coordinated PR across every script + skill + doc |
 | No spacing/size scale token — padding is hand-tuned px | DESIGN.md:487-491 | Radius, shadow, color are tokenized; spacing is not |
-| Section lifecycle CRUD (create/rename/retire) | PLAN-2026-07-16-ADMIN.md:236-237 | Sections are only ever born as a side effect of roster upload |
+| Section lifecycle CRUD (create/rename/retire) | PLAN-2026-07-16-ADMIN.md:236-237 · `faculty-roster.js:325` | Sections are only ever born as a side effect of roster upload. **Half-built, found 2026-07-27:** `createSection()` is exported and has **zero callers** — the working path is `createSections()` (plural), which the import calls with the codes the file referenced. So the function exists and no screen reaches it. `admin-system-operations.md` listed "section creation" as a start-of-semester step until 2026-07-27; it is now documented as a consequence of the import, which is what it actually is |
 | `js/ui.js` — real confirm/toast replacing `alert()`/`confirm()` | PLAN-2026-07-16-ADMIN.md:242-243 | Worth it once more destructive operations exist |
 | Zero-point questions are a hidden, undocumented mode switch | LEGACY-AUDIT:92-100 | Load-bearing (`grade.html:207,215` hides them); make explicit in the lesson creator |
 | Q1 anonymity is hard-coded by **position**, not by question property | LEGACY-AUDIT:102-108 | Attach the property to the question |
@@ -606,8 +622,9 @@ Three things that pass forward:
 
 **Also 2026-07-23 (sixth batch): P1.8 · P1.9 · P1.10 · P1.11 · P1.14** — the EI panel, the roster
 folded into Course Admin, drag-and-drop section coverage, the offering-wide count, and the Grade
-queue that replaces the late filter. Frontend only; no DDL, no live data touched. **P1 is now empty
-except P1.12's whole-section half.**
+queue that replaces the late filter. Frontend only; no DDL, no live data touched. **P1 is now
+empty** — its last entry, P1.12's whole-section half, was descoped on 2026-07-27 rather than built
+(P3.17).
 
 Five things pass forward, and two of them are the kind of finding a roadmap entry cannot contain:
 
@@ -1193,6 +1210,31 @@ but **have not been looked at**, and each is a visual change that only an eye ca
 ---
 
 ### P1 — first weeks of term
+
+#### P1.12 — Bulk / whole-section extensions · ✅ **DONE 2026-07-22** — remainder descoped 2026-07-27
+
+*Bulk granting exists, on the rollup — where the list of who needs one already was. The
+whole-section half is **not being built**; it moved to [P3.17](#p317--whole-section-extension-grant--s--parked-not-planned)
+with the director's reasoning, which is that a section-wide event is a due-date change and the
+select-all on the rollup already reaches a whole section.*
+
+**Shipped 2026-07-22:** the "Did not submit" panel grants extensions inline, per row (a quiet
+`Extend` that appears on hover) and in bulk (checkboxes, select-all, `Extend selected (N)`), through
+a modal defaulting to a week out at 2359 local. It calls the Grade tab's own `setExtension()` rather
+than composing a second upsert, so the two surfaces cannot drift on what an extension is, and
+re-granting amends rather than duplicating (the `(enrollment, offering)` UNIQUE key).
+
+One reason covers a batch — `reason` is NOT NULL and non-blank-checked
+(`007_extension_governance_and_review.sql:79-82`), and a group extended together shares the cause
+that prompted it. Writes are sequential so a partial failure is reportable per student rather than
+collapsing into one rejected promise.
+
+**Worth keeping from the descoping:** the item read as one feature with two halves, and it was two
+features with one name. Granting to *people who missed a deadline* and moving a deadline *for a
+class that did not happen* are different events with different audit consequences, and merging them
+under "extensions" is what made the second half look like remaining work rather than a design
+question. The tell was that the second half had no natural home — it kept being described as
+belonging to a page that does not grant anything.
 
 #### P1.14 — Grade tab: a "needs grading by hand" queue, replacing the late filter · ✅ **DONE 2026-07-23**
 

@@ -7,9 +7,14 @@
 of inactivity — a paused database looks exactly like a broken site. Unpause it from the Supabase
 dashboard before students arrive.
 
-Then: roster import, section creation, section→instructor assignment, and student account
-provisioning (bulk-creates auth accounts for everyone in the course who lacks one — it runs
+Then, in order: **roster import**, **section→instructor assignment**, and **student account
+provisioning** (bulk-creates auth accounts for everyone in the course who lacks one — it runs
 serially and reports per-student failures rather than aborting).
+
+**Sections are not created as a separate step.** They are created for you from the section codes the
+roster file references, which is why the import comes first. There is no control anywhere for
+creating, renaming, or retiring a section on its own — a section that no roster row mentions does
+not come into existence.
 
 **Provisioning depends on the roster carrying real email addresses.** A cadet's login is the
 address on their roster row, taken from the registrar's export; anyone imported without one is
@@ -27,9 +32,16 @@ add one. (Optional developer tooling may use Node locally; nothing on the deploy
 
 ## Migrations
 
-SQL lives in `supabase/migrations/`, numbered. **Adding a migration file is not applying it.**
-Applying one is coordinated in advance — never two at once, and never while another operator is
-mid-run — and recorded in `CHANGELOG.md`.
+**There are two chains, numbered independently, and they must not be interleaved.**
+`supabase/migrations/*.sql` is the chain for the original schema; `supabase/migrations/app/*.sql` is
+the chain for the PREP v2 schema. A `014` in one has nothing to do with a `014` in the other.
+
+**Adding a migration file is not applying it.** Applying one is coordinated in advance — never two
+at once, and never while another operator is mid-run — and recorded in `CHANGELOG.md`.
+
+Applying anything in the v2 chain needs one extra step: the role that owns that schema is
+deliberately left unable to log in, so a schema change there starts with a person re-enabling it and
+ends with them sealing it again. That is intentional friction, not an obstacle to route around.
 
 ## Frozen contracts
 

@@ -248,12 +248,17 @@ Each run:
 
 The cohort-level panels on the lesson rollup — the readiness summary (written per instructor across
 the sections they teach), the teaching recommendation under the misconception bars, and the showcase
-quotes — are **not** written by this run. They come from a separate lesson-aggregation run made once
-after the deadline across the whole class, covering students who took the interactive lesson and
-students who answered the question set together. *(A separate misconception-trends paragraph was
-retired 2026-07-22 — the bars now carry each misconception's own description and student evidence.)* Splitting them is deliberate: grading runs
-per day (M, then T), and a cohort summary written over one day's students would describe half a
-class.
+quotes — are **not** written by this run. They come from a separate lesson-aggregation run, covering
+students who took the interactive lesson and students who answered the question set together.
+*(A separate misconception-trends paragraph was retired 2026-07-22 — the bars now carry each
+misconception's own description and student evidence.)*
+
+**That run is also per day track, not one run for the class.** It is made after each day's deadline
+with a `--day` filter, exactly like grading: it writes a scope for each section that day covers and
+for each instructor teaching one, and it writes the whole-course scope only once every section in
+the course has been covered. So a lesson with split M/T deadlines is closed out by two runs, and the
+second one completes it. Splitting grading from aggregation is deliberate for the same reason:
+a cohort summary written over one day's students would describe half a class.
 
 The AI run **does not publish grades to students**. It only writes unfinalized suggestions. After the run, instructors log into the admin panel, go to the **Grade** tab, review green/yellow/red suggestions, edit feedback if needed, click **Save**, then click **Finalize & Publish** to make grades visible to students.
 
@@ -369,7 +374,15 @@ This section documents what was done to deploy the system — only needed if sta
 
 ### Deploy the Edge Functions
 
-Two edge functions handle instructor account creation and removal securely. They only need to be deployed once (or after any code change to them).
+**Five** edge functions run server-side work a browser session must not be trusted with. They only need to be deployed once (or after any code change to them).
+
+| Function | Why it cannot live in the browser |
+|---|---|
+| `create-instructor` | Creates an auth user plus its access rows, and rolls back a partial failure |
+| `remove-instructor` | Removes course access, or clears the global-admin flag |
+| `provision-students` | Bulk-creates cadet auth accounts from the roster |
+| `reset-student-password` | Derives the default password server-side, and **rejects** a request that carries one — so nobody can set a cadet's password to a value they then know |
+| `set-own-password` | Re-verifies the current password (`updateUser` does not) and clears the forced-rotation flag, which lives in `app_metadata` where a browser session cannot write it |
 
 **1. Install the Supabase CLI**
 
@@ -385,14 +398,21 @@ supabase login
 supabase link --project-ref shzvpmlnqfmzfmuxkowi
 ```
 
-**3. Deploy both functions**
+**3. Deploy every function**
 
 ```bash
 supabase functions deploy create-instructor
 supabase functions deploy remove-instructor
+supabase functions deploy provision-students
+supabase functions deploy reset-student-password
+supabase functions deploy set-own-password
 ```
 
 That's it — the functions run on Supabase's servers from that point on. No one else needs the CLI.
+
+> This list said "both functions" and named only the first two until 2026-07-27. Deploying from
+> scratch against that list would have left account provisioning and both password paths missing,
+> which fails at the point a cadet cannot sign in. Add any new function here when you write it.
 
 ### Run the RLS Migrations
 

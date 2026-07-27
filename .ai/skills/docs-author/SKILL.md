@@ -152,12 +152,15 @@ re-identify someone in a small section (FERPA covers indirect identifiers) · an
 descriptions of a security control or how to bypass one. Content that must genuinely be restricted
 belongs behind Supabase RLS.
 
-### The five existing docs are stubs
+### Three of the eight docs are still stubs
 
-Every current help doc opens with a `>` blockquote saying so. That marker is fine as a temporary
-flag, but **it is not a pattern to copy for real content**: required information must never live in
-a callout. Google bars notices for prerequisites and necessary steps; Microsoft says outright that
-readers skip boxes. When you expand a stub, delete the blockquote and give the content a real heading.
+`admin-system-operations.md`, `ai-and-your-work.md` and `director-ai-rules.md` open with a `>`
+blockquote saying so; the other five have been expanded. That marker is fine as a temporary flag,
+but **it is not a pattern to copy for real content**: required information must never live in a
+callout. Google bars notices for prerequisites and necessary steps; Microsoft says outright that
+readers skip boxes. When you expand a stub, delete the blockquote and give the content a real
+heading — and update the count here, which said "the five existing docs" and "every current help
+doc" until 2026-07-27, by which point both were false.
 
 ---
 
@@ -194,8 +197,18 @@ as an orphan.
    An unregistered help doc will silently rot the first time `CORE.md` or a skill moves. **Do not
    register a `docs/decisions/` or `docs/contracts/` doc** — those are point-in-time and superseded,
    not refreshed.
-5. **Update `CHANGELOG.md`** — newest first, `## YYYY-MM-DD — <Human> via <Agent>`, what and why.
-6. Push only when asked (CORE.md §5). `main` is live; a push rebuilds the production site.
+5. **Refresh the reader-facing staleness snapshot and commit it with your change:**
+   ```
+   python scripts/docs/check_doc_sources.py status --write
+   ```
+   The Help page shows a "may be out of date" banner on flagged topics, but a browser cannot run
+   `git` — so the verdict comes from `site/app/help/DOC-STATUS.json`, computed on your machine and
+   committed. **A stale snapshot is a silent all-clear, which is worse than no banner**: it tells
+   readers a page was checked when it was not. It is generated from committed history only, so your
+   working tree does not affect what readers see, and `check` prints a reminder when the published
+   file and the live verdict disagree.
+6. **Update `CHANGELOG.md`** — newest first, `## YYYY-MM-DD — <Human> via <Agent>`, what and why.
+7. Push only when asked (CORE.md §5). `main` is live; a push rebuilds the production site.
 
 ---
 

@@ -55,6 +55,19 @@ already earned a grade keep it.
 Changing these settings affects one semester. The library entry stays as it is, so other semesters
 are unaffected.
 
+## A graded interactive lesson grades itself
+
+Marking an interactive activity **graded** has a consequence worth deciding on deliberately: a
+student who finishes it is graded the moment they submit, from the effort the lesson assessed, and
+that grade is final and visible to them immediately. Nobody reviews it first, because effort is
+what the lesson measures and there is nothing left to judge. You can still change the grade
+afterwards, and a grade you have finalized by hand is never overwritten.
+
+Marking it **practice** produces no grade at all, however much work the student does.
+
+Written activities are the opposite: the AI suggests a score, and it stays invisible to the student
+until an instructor finalizes it.
+
 ## Why a student can only be graded once
 
 A student earns exactly one grade per assignment offering, whichever activity they used. A student
@@ -112,7 +125,8 @@ automatically direct it in Spring 2027.
   and staff.
 - System administrators have that access across every course.
 
-Students see only their own work, and only their own scores once an instructor finalizes them.
+Students see only their own work, and a score only once it is final — which an instructor does for
+written work, and which a graded interactive lesson does for itself on submission.
 
 ## Freezing a semester
 

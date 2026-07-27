@@ -8,6 +8,142 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-27 — Matthew Recker via Claude (cleanup batch: the extensions bug, the doc-sources red, P1.12 descoped)
+
+Roadmap §5 cleanup. **No live data touched, no DDL applied, no schema change.** One migration file
+is added and deliberately left unapplied.
+
+### Fixed — the dashboard ignored extensions, and could not have been tested
+
+`faculty-data.js` called `effectiveDue(offering, sectionId, **null**)` with the extension argument
+hardcoded, so a cadet holding an active extension read as `overdue` on the faculty dashboard, in the
+outstanding-tasks panel, and in the due-out row — for work that was not late. `faculty-grade.js` and
+`faculty-gradebook.js` both did it correctly; this was the one caller that did not, and
+`faculty-gradebook.js`'s own header cited the bug as its reason for not reusing this loader.
+
+The loader now fetches `extensions` in the same chunked pass as submissions and grades — three
+columns, filtered `revoked_at IS NULL`, because a revoked extension is not an extension and
+filtering is the caller's job.
+
+**The repair that matters is the extraction, not the argument.** The rule lived inside an async
+loader that needed a faculty session, so no test could reach it — which is why it survived being
+found *twice*, months apart, and fixed neither time. It is now a pure exported
+`buildLessonRows()`, and `tests/app-schema/test-dashboard-rows.mjs` pins it with 12 checks
+including the counterfactuals that would otherwise pass vacuously: an extension whose own date has
+expired, one belonging to a different offering, one belonging to a different student, and the
+baseline `overdue` without which the other three prove nothing.
+
+`faculty-gradebook.js`'s header comment is corrected: the two loaders still stay separate, but on
+payload size (it pulls every report blob and every `question_scores` for the whole roster), not on
+correctness.
+
+### Fixed — a generated file had been hand-edited, and the check that catches that was red
+
+`site/app/js/db-schema.js` reads **"GENERATED FILE. Do not edit by hand."** The 2026-07-23
+`enrolment` → `enrollment` sweep edited four strings inside it. Those four are copies of Postgres
+`COMMENT ON` text, so the sweep corrected the copy and left the original — and
+`gen_db_schema.py --check` correctly reported the file as stale from that day on. It was the single
+failing check in `tests/app-schema` (358/1); the suite is now green.
+
+Regenerated, so the file matches live again and reads `enrolment`. The real correction is filed as
+**`supabase/migrations/app/016_comment_spelling.sql` and is NOT applied**: `COMMENT ON` is DDL,
+`app` is sealed (CORE.md §0), and four comment strings do not justify unsealing `prep_app_owner`.
+Fold it into the next window that opens for another reason, then regenerate and commit the result.
+
+*Generalize:* a spelling sweep that matches on a word will hit generated files, and a generated file
+is the one place where being right about the text is being wrong about the source.
+
+### Fixed — `check_doc_sources.py` cleared by reading all seven, and the sources were wronger than the docs
+
+Five of the seven flagged documents were wrong and were **rewritten**; two (`help/README.md`,
+`.ai/skills/docs-author/SKILL.md`) were current and had their `reviewed` date bumped. Reading them
+against their sources found the sources at fault more often than the documents:
+
+- **`CORE.md` said schema `app` was "built, tested, not yet wired to any page."** Every page under
+  `site/app/` has read it since 2026-07-21 (`config.js` binds `db: { schema: 'app' }`). The row now
+  says both schemas are live and the distinction is which URLs reach them. This one error is also
+  why **`PREP-V2-CUTOVER.md`** still announced itself as "not yet executed against the live
+  database" when Phases 1–3 are done — a runbook telling its reader the schema does not exist yet.
+- **`PROJECT.md` listed `misconception_trends` as a live output.** It was retired 2026-07-22 and
+  nothing writes or renders it. Worse, its `analysis_reports` example put `readiness_summary` on a
+  *section* scope, which the writer now **rejects as a validation error** — the summary is written
+  per *instructor*, across every section they teach, and there is a third scope kind the example did
+  not have.
+- **`PROJECT.md` said a locked-out cadet asks "any instructor of their section, who restores the
+  default from the Roster page."** The Roster page was folded into Course Admin → Students on
+  2026-07-23, and the page carrying that control has *always* been director-gated, so an instructor
+  has never had the button. (`instructor-accounts.md` was corrected on 2026-07-23; PROJECT.md was
+  not, and `student-getting-started.md` still told cadets their instructor could do it.)
+
+Correcting the two sources cascaded to four more help docs, which were read as well rather than left
+for the next person:
+
+- **`ai-and-your-work.md` (student-facing) promised "nothing reaches you until a person has looked
+  at it."** Migration 015 made a graded interactive lesson grade itself, finalized and visible, with
+  no review — so the page most likely to be quoted back at us was wrong about the one thing it
+  exists to promise. The identical claim was caught in `instructor-grading.md` on 2026-07-23 and the
+  student page was missed, which is the pattern worth noticing: a policy change gets chased through
+  the staff docs and stops there.
+- **`director-ai-rules.md`** stated "A human finalizes every grade" as a bright line, and described
+  effort→points as depending on an assignment-level `points`/`effort` setting with the analysis run
+  applying the scale. Migrations 014 and 015 made all three false. The exception is now stated
+  explicitly rather than left implied, with the reason it is acceptable (no judgement is delegated —
+  a 0–5 effort score and a fixed rule).
+- **`director-schema-reference.md` told a director that moving an assignment to `grading_mode =
+  'effort'` was "a teaching decision rather than a settings change."** That is the exact change
+  roadmap P0.14 identifies as silently rewriting every *written* taker on the assignment to **0
+  points**. It now says do not touch the column and why. **This doc could never have been flagged:
+  its source list stopped at migration `013`, and the semantics changed in `014`.** `014` and `015`
+  are now indexed against it — a stale index entry is a check that reports all-clear on a document
+  nobody is watching.
+- **`student-getting-started.md`** — password reset routed to the wrong person; corrected, and
+  phrased so a cadet still asks their instructor first.
+
+Also fixed while in there:
+
+- **`SYSTEM_GUIDE.md`** told anyone deploying from scratch to deploy **two** edge functions. There
+  are five; the missing three are account provisioning and both password paths, so the failure would
+  surface as cadets unable to sign in. It also described aggregation as one run over the whole
+  class — it is per day track, like grading.
+- **`admin-system-operations.md`** described migrations as one numbered directory (there are two
+  independent chains, and the v2 one needs a human to unseal a role), and listed "section creation"
+  as a start-of-semester step. Sections have no create/rename/retire control anywhere:
+  `createSection()` is exported from `faculty-roster.js` with **zero callers**, and sections are
+  really created as a side effect of the roster import.
+- **`docs-author/SKILL.md`** said "the five existing docs are stubs" and "every current help doc"
+  carries the marker — there are 8 served docs and 3 stubs. Its verification steps also never
+  mentioned `check_doc_sources.py status --write`, so a new doc could be registered while leaving
+  the reader-facing staleness banner asserting a review that did not happen.
+
+**`site/app/help/DOC-STATUS.json` still needs regenerating after this lands** — it is built from
+committed history, so it cannot be refreshed before the commit exists. Run
+`python scripts/docs/check_doc_sources.py status --write` and commit the result.
+
+### Changed — P1.12's whole-section extension half is descoped, not deferred
+
+At the director's call: a section-wide event is a **due-date change**, not 18 per-student
+exceptions to a date that is no longer the real date; a single section receiving a genuine blanket
+extension is not an expected event; and the rollup's select-all already reaches everyone in a
+section who has a reason to want one. Moved to **P3.17** as parked-with-a-falsification-condition,
+and P1.12 moves to §8 completed. **P1 is now empty.**
+
+*The item read as one feature with two halves and was two features with one name.* The tell was
+that the second half had no natural home — it kept being described as belonging to a page that does
+not grant anything.
+
+### Verification
+
+`tests/app-schema/run.mjs` green — **359 offline checks plus every isolated suite**, up from 358
+with 1 failing. `node --check` on both changed modules; both JSON indexes re-parsed; the six edited
+help docs linted for front matter (the Jekyll trap) and raw HTML.
+
+**Not verified in a browser.** Per CORE.md §2 that is stated rather than glossed: the help-doc
+changes are content and the code change has a targeted suite, but nothing here has been seen
+rendered by a signed-in user. That debt is now owed for three batches — see the roadmap §7 note
+about running `tests/browser-harness/pass.mjs` **before** P0.2 deletes the test faculty account.
+
+---
+
 ## 2026-07-23 — Matthew Recker via Claude (roster folds into Course Admin · `enrolment` → `enrollment`)
 
 Two corrections to the batch below, both the director's call.

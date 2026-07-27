@@ -11,13 +11,16 @@ corner and choose **Account**.
 
 ## If you forget your password
 
-**Ask any instructor who teaches your section.** PREP cannot email you a reset link — it has no mail
-server — so there is no "forgot password" link to click and no code to wait for.
+**Ask an instructor who teaches your section**, in person. PREP cannot email you a reset link — it
+has no mail server — so there is no "forgot password" link to click and no code to wait for.
 
-Your instructor can put your password back to the default, the last six digits of your cadet ID.
-You then choose a new one as soon as you sign in. They cannot look up your current password and
-they cannot pick a new one for you; nobody, instructors and course directors included, can see
-your password.
+Your password can be put back to the default, the last six digits of your cadet ID, and you then
+choose a new one as soon as you sign in. The reset itself is done by your **course director**, so
+your instructor may need to pass the request along — worth knowing so you ask early rather than the
+morning something is due.
+
+Nobody can look up your current password or pick a new one for you — not an instructor, not the
+course director, not a system administrator.
 
 ## Finding your work
 

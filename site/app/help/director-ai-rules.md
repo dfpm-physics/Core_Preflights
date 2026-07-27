@@ -2,8 +2,12 @@
 > project reference (`.ai/instructions/PROJECT.md`). Those files remain authoritative — if this page
 > and they ever disagree, they win, and this page is the bug. Review before the semester opens.
 
-Two AI workflows touch course data, and a third simply runs them in order. None can publish a grade
-on its own.
+Two AI workflows touch course data, and a third simply runs them in order. **Neither of the two can
+publish a grade on its own** — everything they write is a suggestion an instructor finalizes.
+
+There is one AI-derived grade that *is* published without review, and it does not come from these
+workflows: a **graded interactive lesson** grades itself from the effort the lesson assessed, the
+moment a student submits. *How effort becomes points*, below, covers it.
 
 ## Preflight analysis
 
@@ -69,12 +73,29 @@ them: effort is one measurement across both paths (the reading reflection is the
 either way), while understanding is reported per objective for the artifact and as a single
 free-response measure for the question set.
 
+## How effort becomes points
+
 Interactive lessons are graded on **effort** (0–5); a reading reflection that is not a genuine
-attempt caps effort. How effort becomes points depends on how the assignment is set up for the
-semester: an assignment set to **effort** grading has the database convert it automatically, while
-one set to **points** — which is how every Fall 2026 preflight is currently scheduled — has the
-analysis run apply the same 0–5 scale when it writes the score. The scale is identical either way;
-only who applies it differs.
+attempt caps effort at 2, so at most half credit however much work went in elsewhere.
+
+**The database converts effort to points, and it does so on any grade that carries an effort
+score** — 0 earns nothing, 1–2 earns half, 3 or more earns full. It does *not* depend on how the
+assignment is configured for the semester. That matters because an assignment can offer both paths
+for credit at once, and one setting on the assignment could not describe two modalities: a written
+student is graded from their question scores and an interactive student from their effort, on the
+same assignment, in the same week.
+
+**A graded interactive lesson writes that grade for itself, finalized, the moment the student
+submits.** There is no review step and nothing for you to publish — effort is what the lesson
+measured, and the conversion above is arithmetic rather than judgement. You can still change the
+grade afterwards, and a grade you have already finalized by hand is never overwritten by it.
+
+An interactive activity marked **practice** produces no grade at all, however much work a student
+does on it.
+
+> Until 2026-07-27 this section said the conversion depended on an assignment-level *effort* or
+> *points* setting, and that the analysis run applied the scale for points-mode assignments. Both
+> stopped being true on 2026-07-23; the analysis run has never graded interactive work.
 
 **Grading and aggregation are separate steps on purpose.** Grading is per student and happens
 whenever work needs scoring. Aggregation is per section and happens after that section's deadline —
@@ -93,9 +114,15 @@ unattended run deliberately stops short of publishing anything to the live site.
 
 ## The line that does not move
 
-**A human finalizes every grade.** AI output is a first pass in the grading panel and nothing
-more. Suggested scores are invisible to students until an instructor reviews and finalizes them,
-and an instructor can overwrite any of it.
+**A human finalizes every grade the AI *suggests*.** Everything preflight analysis writes is a
+first pass in the grading panel and nothing more: suggested scores are invisible to students until
+an instructor reviews and finalizes them, and an instructor can overwrite any of it.
+
+The one exception is deliberate and narrow, and it is worth stating rather than leaving implied: a
+**graded interactive lesson** publishes its own effort grade on submission, unreviewed. What makes
+that acceptable is that no judgement is being delegated — the lesson reports a 0–5 effort score and
+a fixed rule turns it into points. An instructor can change it afterwards like any other grade.
+Nothing else in PREP publishes a grade without a person.
 
 **The traffic is one-way: a re-run never overwrites a person's work.** It skips any grade an
 instructor has finalized, and any grade an instructor has edited — including one saved as a draft

@@ -13,11 +13,15 @@
 //   to explain them; a grid cell cannot.
 //
 // WHY NOT loadFacultyDashboard()
-//   It is close, and it is wrong in one specific way: faculty-data.js:148 calls
-//   effectiveDue(offering, sectionId, null) with the extension argument hardcoded null. Its status
-//   therefore calls a student overdue who holds an active extension. On a dashboard tile that is a
-//   rounding error; on a gradebook it is a red cell against a cadet who did nothing wrong.
-//   faculty-grade.js does it correctly and this follows that instead.
+//   Payload, now that the correctness objection is gone. When this was written that loader called
+//   effectiveDue() with the extension argument hardcoded null, so its status called a student
+//   overdue who held an active extension — a rounding error on a dashboard tile, a red cell
+//   against a blameless cadet on a grid. That is FIXED (faculty-data.js buildLessonRows, ROADMAP
+//   §5), and both modules now honour extensions identically.
+//   What remains is the reason in "Selects" below: the dashboard pulls SUBMISSION_SELECT and
+//   GRADE_SELECT — every interactive report blob, every question_scores and diagnostic — for the
+//   whole roster. A cell needs five fields. At 400 students x 40 lessons that difference is the
+//   page, so the two loaders stay separate on cost, not on truth.
 
 import { db } from './supabase.js';
 import {

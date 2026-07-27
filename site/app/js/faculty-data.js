@@ -9,8 +9,8 @@
 // THE BIG SIMPLIFICATION: the legacy dashboard fetched every published interaction and then
 // issued one report query PER LESSON (loadInteractionData in a Promise.all over lessons) —
 // N+1 by construction, and the reason the page slowed as the term went on. The v2 model
-// reaches everything through the offering, so the whole term is three queries regardless of
-// how many lessons exist.
+// reaches everything through the offering, so the query count is fixed regardless of how many
+// lessons exist.
 
 import { db } from './supabase.js';
 import {
@@ -18,6 +18,96 @@ import {
   shapeOffering, shapeSubmission, effectiveDue, deriveStatus, lessonNumber, chunked,
   effortSignal, writtenSignals,
 } from './schema.js';
+
+// Only the three columns a deadline needs. Deliberately not schema.js's EXTENSION_SELECT, which
+// carries the grant/revocation provenance the extensions REPORT is about; a status calculation
+// needs the date and nothing else. Same shape faculty-gradebook.js fetches, for the same reason.
+const DASH_EXTENSION_SELECT = 'enrollment_id,assignment_offering_id,extended_due_at';
+
+const rowKey = (enrollmentId, offeringId) => `${enrollmentId}|${offeringId}`;
+
+/**
+ * The dashboard's per-lesson rows.
+ *
+ * Pure, and separated from the loader for one reason: the deadline rule below was wrong for
+ * months and nothing could catch it. `effectiveDue` was called with the extension argument
+ * hardcoded `null`, so a student holding an active extension was reported `overdue` — on the
+ * dashboard, in the outstanding-tasks panel, and in the due-out row — for work that was not
+ * late. faculty-grade.js and faculty-gradebook.js both did it correctly; this was the one
+ * caller that did not, and faculty-gradebook.js's header says so as its reason for not reusing
+ * this loader. Extracting it is what lets a test pin the rule without a database.
+ *
+ * `extensions` must already be filtered to non-revoked rows — same contract as effectiveDue().
+ *
+ * @param {object[]} submissions  shapeSubmission() results
+ * @param {object[]} lessons      the ordered lesson list (each with .offeringId)
+ * @param {object[]} offerings    shapeOffering() results
+ * @param {object[]} grades       raw grades rows
+ * @param {object[]} extensions   ACTIVE extension rows
+ * @param {Record<string,string>} sectionOf  enrollment id -> section id (in-scope roster only)
+ * @param {Record<string,number>} studentOf  enrollment id -> registrar student id
+ * @param {Date} [now]  injected so tests are not clock-dependent
+ * @returns {Record<string, object[]>} rows keyed by offering id
+ */
+export function buildLessonRows({ submissions, lessons, offerings, grades, extensions,
+                                  sectionOf, studentOf, now = new Date() }) {
+  const gradeBy = new Map((grades || [])
+    .map(g => [rowKey(g.enrollment_id, g.assignment_offering_id), g]));
+  const extBy = new Map((extensions || [])
+    .map(x => [rowKey(x.enrollment_id, x.assignment_offering_id), x.extended_due_at]));
+  const offeringById = Object.fromEntries((offerings || []).map(o => [o.offeringId, o]));
+
+  const rowsByLesson = {};
+  (lessons || []).forEach(l => { rowsByLesson[l.offeringId] = []; });
+
+  (submissions || []).forEach(s => {
+    const bucket = rowsByLesson[s.offeringId];
+    if (!bucket) return;                       // a submission for an unpublished offering
+    const sectionId = sectionOf[s.enrollmentId];
+    if (!sectionId) return;                    // outside the in-scope roster
+    const offering = offeringById[s.offeringId];
+    const grade = gradeBy.get(rowKey(s.enrollmentId, s.offeringId)) || null;
+    const extensionISO = extBy.get(rowKey(s.enrollmentId, s.offeringId)) || null;
+    const { isPast } = effectiveDue(offering, sectionId, extensionISO, now);
+
+    // The interactive report's schema:1 payload — where the artifact's claimed effort lives (a
+    // student cannot write a grades row, so the receiver stores it on the submission).
+    const interactiveWork = offering?.interactive ? s.activities?.[offering.interactive.id] : null;
+    const writtenWork     = offering?.written     ? s.activities?.[offering.written.id]     : null;
+    const reportData = interactiveWork?.content || null;
+
+    // Effort resolves the same way for both paths — grade, then the analysis diagnostic
+    // (`q2_effort`, the only place a written preflight's effort exists), then the artifact's
+    // claim. Before this, a written student's effort was always null: they scored nothing in
+    // `grades.effort` and had no report_data, so they fell into "not assessed" and vanished
+    // from the effort tile, the histogram and every section average.
+    const { effort, source: effortSource } = effortSignal(grade, reportData);
+    const { understanding: frUnderstanding } = writtenSignals(grade);
+
+    bucket.push({
+      student_id: studentOf[s.enrollmentId],
+      enrollmentId: s.enrollmentId,
+      sectionId,
+      status: deriveStatus({ submission: s, grade, isPast }),
+      chosenModality: offering?.activities.find(a => a.id === s.chosenActivityId)?.modality || null,
+      effort,
+      effortSource,
+      points: grade?.points_earned == null ? null : Number(grade.points_earned),
+      isFinalized: !!grade?.is_finalized,
+      report_data: reportData,
+      // Free-response understanding, present only when they answered the questions.
+      understanding: writtenWork ? frUnderstanding : null,
+      hasReport: !!interactiveWork,
+      hasWritten: !!writtenWork,
+      // Which path this student actually took, independent of what the offering allows.
+      workedPath: interactiveWork && writtenWork ? 'both'
+                : interactiveWork ? 'interactive'
+                : writtenWork ? 'written' : null,
+    });
+  });
+
+  return rowsByLesson;
+}
 
 /**
  * Just-in-Time-Teaching dashboard model.
@@ -118,69 +208,26 @@ export async function loadFacultyDashboard(ctx) {
     }
   }
 
-  // 4) All work and all grades for the in-scope roster, in one pass each. Chunked so the
+  // 4) All work, grades and extensions for the in-scope roster, in one pass each. Chunked so the
   //    .in() URL stays under GET length limits on a large course.
-  const submissions = [], grades = [];
+  const submissions = [], grades = [], extensions = [];
   for (const ids of chunked(enrollmentIds)) {
-    const [s, g] = await Promise.all([
+    const [s, g, x] = await Promise.all([
       db.from('submissions').select(SUBMISSION_SELECT).in('enrollment_id', ids),
       db.from('grades').select(GRADE_SELECT).in('enrollment_id', ids),
+      // A revoked extension is not an extension — the row survives revocation so the director's
+      // report can still count it, so the filter is the caller's job. See effectiveDue().
+      db.from('extensions').select(DASH_EXTENSION_SELECT).in('enrollment_id', ids)
+        .is('revoked_at', null),
     ]);
     submissions.push(...(s.data || []).map(shapeSubmission));
     grades.push(...(g.data || []));
+    extensions.push(...(x.data || []));
   }
 
-  const gradeKey = (enr, off) => `${enr}|${off}`;
-  const gradeBy = Object.fromEntries(grades.map(g => [gradeKey(g.enrollment_id, g.assignment_offering_id), g]));
-  const offeringById = Object.fromEntries(offerings.map(o => [o.offeringId, o]));
-
   // 5) Group per lesson, tagged with the student's section — the shape the view aggregates.
-  const rowsByLesson = {};
-  lessons.forEach(l => { rowsByLesson[l.offeringId] = []; });
-
-  submissions.forEach(s => {
-    const bucket = rowsByLesson[s.offeringId];
-    if (!bucket) return;                       // a submission for an unpublished offering
-    const sectionId = sectionOf[s.enrollmentId];
-    if (!sectionId) return;                    // outside the in-scope roster
-    const offering = offeringById[s.offeringId];
-    const grade = gradeBy[gradeKey(s.enrollmentId, s.offeringId)] || null;
-    const { isPast } = effectiveDue(offering, sectionId, null);
-
-    // The interactive report's schema:1 payload — where the artifact's claimed effort lives (a
-    // student cannot write a grades row, so the receiver stores it on the submission).
-    const interactiveWork = offering?.interactive ? s.activities?.[offering.interactive.id] : null;
-    const writtenWork     = offering?.written     ? s.activities?.[offering.written.id]     : null;
-    const reportData = interactiveWork?.content || null;
-
-    // Effort resolves the same way for both paths — grade, then the analysis diagnostic
-    // (`q2_effort`, the only place a written preflight's effort exists), then the artifact's
-    // claim. Before this, a written student's effort was always null: they scored nothing in
-    // `grades.effort` and had no report_data, so they fell into "not assessed" and vanished
-    // from the effort tile, the histogram and every section average.
-    const { effort, source: effortSource } = effortSignal(grade, reportData);
-    const { understanding: frUnderstanding } = writtenSignals(grade);
-
-    bucket.push({
-      student_id: studentOf[s.enrollmentId],
-      enrollmentId: s.enrollmentId,
-      sectionId,
-      status: deriveStatus({ submission: s, grade, isPast }),
-      chosenModality: offering?.activities.find(a => a.id === s.chosenActivityId)?.modality || null,
-      effort,
-      effortSource,
-      points: grade?.points_earned == null ? null : Number(grade.points_earned),
-      isFinalized: !!grade?.is_finalized,
-      report_data: reportData,
-      // Free-response understanding, present only when they answered the questions.
-      understanding: writtenWork ? frUnderstanding : null,
-      hasReport: !!interactiveWork,
-      hasWritten: !!writtenWork,
-      // Which path this student actually took, independent of what the offering allows.
-      workedPath: interactiveWork && writtenWork ? 'both'
-                : interactiveWork ? 'interactive'
-                : writtenWork ? 'written' : null,
-    });
+  const rowsByLesson = buildLessonRows({
+    submissions, lessons, offerings, grades, extensions, sectionOf, studentOf,
   });
 
   return {

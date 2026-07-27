@@ -23,10 +23,18 @@ lesson interactions at USAFA. Replaces GradeScope for two courses: Physics 110 a
 - **Auth**: Supabase Auth for both instructors and students, email/password. A student's sign-in
   address is the **real address from the registrar export** (`app.students.email`); their first
   password is the last 6 digits of their cadet ID and they are forced to change it on first
-  sign-in. **There is no password reset by email — PREP has no SMTP.** A locked-out cadet asks any
-  instructor of their section, who restores the default from the Roster page; instructors cannot
-  view or choose a password. *(Cadets provisioned before 2026-07-21 still sign in with the
-  fabricated `cadetID@usafa.edu` address that predates the registrar import.)*
+  sign-in. **There is no password reset by email — PREP has no SMTP.** A locked-out cadet asks a
+  **course director**, who restores the default from `site/app/faculty/admin.html` → **Students**;
+  nobody can view or choose a password, because `reset-student-password` derives it and rejects a
+  request carrying one. *(Cadets provisioned before 2026-07-21 still sign in with the fabricated
+  `cadetID@usafa.edu` address that predates the registrar import.)*
+
+  > **Corrected 2026-07-27.** This said "asks any instructor of their section, who restores the
+  > default from the Roster page". Two errors: the Roster page was folded into Course Admin →
+  > Students on 2026-07-23, and the page carrying the control has always been director-gated, so an
+  > *instructor* has never had the button. The edge function does admit any staff member of the
+  > offering — the restriction is the UI's, not the function's — which is why this read as true for
+  > so long. Same claim, same correction, in `instructor-accounts.md`.
 - **Analysis**: `preflight-analyze` shared AI skill (see `.ai/skills/preflight-analyze/`)
 
 > **No Node dependency or build step in the shipped site — do not introduce one** (full rule in
@@ -141,33 +149,60 @@ added by migration 022. There was no structured-assessment equivalent.)*
 
 **`app.analysis_reports.payload`** — written by `/lesson-aggregate` only, read by the lesson rollup.
 One row per offering (`scope='assignment_offering'`, `audience_id=NULL`, `kind='readiness'`), with
-every scope inside the payload:
+every scope inside the payload.
+
+**Three kinds of scope, carrying different fields.** This split landed 2026-07-22 and writing the
+wrong field on the wrong scope is a validation error, not a silent no-op
+(`.ai/skills/lesson-aggregate/SKILL.md` §"Step 3" is authoritative):
+
+| Key | Scope | Carries |
+|---|---|---|
+| a section uuid | one section | `misconception_recommendation`, `selected_quotes` |
+| `"instr:<instructor uuid>"` | one instructor, across every section they teach | `readiness_summary`, `section_notes[]` |
+| `"__all__"` | the whole course | `readiness_summary`, `misconception_recommendation` |
+
 ```json
 {
   "kind": "readiness",
   "scopes": {
     "{section uuid}": {
       "section_code": "M1A",
-      "readiness_summary": "…",
-      "misconception_trends": "…",
       "misconception_recommendation": "one teaching action, rendered as its own line",
       "selected_quotes": [{ "student_id": 3000990009, "section_id": "{section uuid}" }],
-      "meta": { "n": 18, "generated_by": "lesson-aggregate@2026-07-21",
+      "meta": { "n": 18, "generated_by": "lesson-aggregate@2026-07-22",
                 "source_fingerprint": "…", "day": "M" }
     },
-    "__all__": { "…same, but no quotes…": null }
+    "instr:{instructor uuid}": {
+      "readiness_summary": "…",
+      "section_notes": [{ "section_id": "{section uuid}", "note": "…" }]
+    },
+    "__all__": { "readiness_summary": "…", "misconception_recommendation": "…" }
   }
 }
 ```
+
+**The readiness summary is per INSTRUCTOR, not per section** — two sections taught by one person
+used to get two isolated paragraphs, neither of which could say whether a gap was the cohort's or
+that one section's. A single-section view borrows its instructor's summary and keeps its own
+numbers, quotes and recommendation.
+
 The writer **merges** — scopes it wasn't sent survive — which is what lets an M-day run and a T-day
-run write the same row without colliding. Sections are aggregated first; `__all__` is synthesized
-from those section scopes and is written only once every section has one. Its *numbers*, though,
-are always recomputed over every live row (medians and means do not recombine from sections).
+run write the same row without colliding. `__all__` is written only once every section has a scope.
+Its *numbers*, though, are always recomputed over every live row (medians and means do not
+recombine from sections).
+
+> **`misconception_trends` is RETIRED (2026-07-22) — do not write it.** The prevalence bars now
+> carry each misconception's own `description` and verbatim student `evidence` in a popover, which
+> is what the paragraph existed to say; restating the bars beside the bars cost a full AI panel and
+> added nothing. The clustering it used to describe became data (`misconception_aliases`). The
+> field is still *accepted* by the writer so a replayed file does not fail, and historical rows keep
+> it, but nothing renders it. *(This reference listed it as a current output until 2026-07-27.)*
 
 *(The retired `public` equivalent was `assignments.analysis_report`, grouped `by_instructor` with
 per-question bullet summaries. `/preflight-analyze` also wrote `kind='by_question'` rows in `app`
-until 2026-07-21; both are gone — an instructor is not a unit of analysis, and the per-question
-material now lives inside `readiness_summary`.)*
+until 2026-07-21; both are gone — the per-question material now lives inside `readiness_summary`.
+Note this is not a return to `by_instructor`: the instructor scope carries prose about a cohort the
+instructor can act on, where the retired shape made the instructor the unit of *analysis*.)*
 
 ## Edge Functions
 
@@ -234,13 +269,14 @@ link's `id` must equal the artifact's `#i=` slug. Full spec + builder: `docs/con
   Directors/admins read all reports; instructors read their own sections.
 
 **The cohort aggregator is `/lesson-aggregate`** (renamed from `/interaction-aggregate`
-2026-07-21). It produces **every** AI panel on the rollup — readiness summary, misconception
-trends, the one-line recommendation, AI-picked showcase quotes — into `app.analysis_reports`, and
+2026-07-21). It produces **every** AI panel on the rollup — the readiness summary (per instructor),
+the one-line teaching recommendation, AI-picked showcase quotes — into `app.analysis_reports`, and
 it is **modality-blind**: it reads the `schema: 1` assessment from `submission_activities.content`
 for artifact takers and from `grades.diagnostic` for question-set takers, so a question-only lesson
-and a mixed cohort both get a full rollup. It aggregates **per section**, then synthesizes the
-whole-course scope from those section scopes, so a lesson with split deadlines is closed out in two
-cheap day-scoped runs. Driven by `supabase/admin/lesson_aggregate.py`
+and a mixed cohort both get a full rollup. It writes **three kinds of scope** (section, instructor,
+`__all__` — see the payload above), and `__all__` is written only once every section has one, so a
+lesson with split deadlines is closed out in two cheap day-scoped runs. Driven by
+`supabase/admin/lesson_aggregate.py`
 (`pull --day` → `write-analysis` → `status`). Original design:
 `docs/decisions/INTERACTION-AGGREGATION.md` (written against the retired `interaction_analysis`
 table); output contract: `docs/decisions/ROLLUP-AGREEMENT.md`. Distinct from

@@ -244,7 +244,7 @@ and costs the student nothing — so the legitimate case wins.
 | `course_offering_id` | Which semester of which course |
 | `assignment_id` | Which library assignment is being run |
 | `points_possible` | What it is worth this semester |
-| `grading_mode` | `points` scores each question; `effort` converts a 0–5 effort rating to points |
+| `grading_mode` | Largely vestigial since 2026-07-23 — see below. Leave it on `points` |
 | `switch_policy` | Whether a student may change activity after committing |
 | `due_at` | Default deadline, overridden per section |
 | `is_published` | Whether students can see it |
@@ -253,13 +253,27 @@ and costs the student nothing — so the legitimate case wins.
 
 #### grading_mode
 
-`points` scores each question and adds them up — how written preflights have always worked.
-`effort` takes a 0–5 engagement rating and converts it to points: 3 or above earns full marks, 1 or
-2 earns half, 0 or nothing earns none. Correctness still gets recorded, as a diagnostic that carries
-no credit.
+**Do not change this. There is nothing to gain by it and one specific way to lose.**
 
-Every Fall 2026 offering is `points`. Moving an assignment to `effort` changes what a score means to
-a student, so it is a teaching decision rather than a settings change.
+The column predates assignments that offer both paths for credit, and it cannot describe one: an
+assignment where a student may either write the preflight or work the interactive lesson needs two
+grading mechanisms at once, and this is a single value on the offering. Since 2026-07-23 the
+database no longer consults it. Each grade row is scored by whichever mechanism it actually carries
+— question scores for a written student, a 0–5 effort rating for an interactive one — and a
+constraint refuses a row that tries to carry both.
+
+Effort still converts the same way: 3 or above earns full marks, 1 or 2 earns half, 0 earns none.
+Correctness on the interactive path is still recorded, as a diagnostic that carries no credit.
+
+**Why not to set it to `effort`.** Every Fall 2026 offering is `points`, and switching one to
+`effort` was the obvious-looking way to make interactive lessons grade themselves before the
+database change made it unnecessary. It would have zeroed every *written* student on that
+assignment — their grade rows correctly carry no effort rating, and the old conversion read a
+missing rating as zero. The behaviour it was meant to enable now happens on its own.
+
+*(This section described `grading_mode` as the live switch between the two mechanisms until
+2026-07-27, and told you that moving an assignment to `effort` was a teaching decision. It was a
+data-loss bug.)*
 
 #### switch_policy
 
@@ -346,12 +360,16 @@ An unlock must record who performed it. The database refuses an anonymous one.
 | `enrollment_id`, `assignment_offering_id` | Who, and for what |
 | `submission_id` | The work behind it. Empty for a score imported from elsewhere |
 | `points_earned`, `points_possible` | The score, and the maximum |
-| `effort` | 0–5 rating, used when the assignment is graded on effort |
-| `question_scores` | Per-question score, status, and feedback |
+| `effort` | 0–5 rating. Present on a grade earned through the interactive path, empty on a written one — and its presence is what selects the effort conversion |
+| `question_scores` | Per-question score, status, and feedback. The written path's mechanism |
 | `diagnostic` | Understanding, misconceptions, and flags. **Never affects points** |
-| `source` | `instructor`, `ai_suggested`, `derived`, or `imported` |
+| `source` | `instructor`, `ai_suggested`, `derived`, or `imported`. `derived` is a grade the database computed for itself, which today means an interactive lesson's effort grade |
 | `is_finalized` | Whether the student can see it |
-| `graded_by`, `graded_at` | Who finalized it |
+| `graded_by`, `graded_at` | Who finalized it. Empty on a `derived` grade — nobody did |
+
+**A grade carries one mechanism or the other, never both.** A row holding an effort rating *and*
+question scores is rejected by the database rather than silently scored twice. This is what lets a
+single assignment grade a written student and an interactive student side by side.
 
 ## Analysis
 
