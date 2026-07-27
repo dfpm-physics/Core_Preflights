@@ -8,6 +8,48 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-27 — Matthew Recker via Claude (migration `app/016` applied — comment spelling)
+
+**DDL applied to live `app`.** `supabase/migrations/app/016_comment_spelling.sql`, run as
+`prep_app_owner` at the director's instruction. Four `COMMENT ON TABLE` statements —
+`ei_sessions`, `enrollments`, `grades`, `submissions` — now spell **enrollment**. No columns, no
+policies, no data, no behaviour.
+
+This closes the 2026-07-23 sweep properly. That sweep corrected four copies of this text inside
+`site/app/js/db-schema.js` — a generated file — instead of the source, which is why
+`gen_db_schema.py --check` went red and stayed red. The file was regenerated on 2026-07-27 (back to
+`enrolment`, matching live); this makes the correction real at the source so the next regeneration
+keeps it.
+
+**No unseal was required, and that is worth stating plainly:** `prep_app_owner` was **already
+`LOGIN`** — unsealed for migrations 014/015 on 2026-07-23 and never re-sealed, as five prior
+CHANGELOG entries flagged. Verified by connecting before running anything. The migration's own
+header claims the role is `NOLOGIN` and that it is waiting for a window; that header was stale.
+**The role is still unsealed. Re-sealing remains outstanding and is human-only** —
+`ALTER ROLE prep_app_owner NOLOGIN;` as `postgres`, folded into roadmap P0.2.
+
+Verification, in order: read the four comments before (all `enrolment`) → apply → read back (all
+`enrollment`) → `gen_db_schema.py --check` **red**, correctly, since the generated file was now
+stale → regenerate → **green**. The regenerated diff is exactly 4 lines, all comment strings.
+`tests/app-schema` 347/1.
+
+**⚠️ That one failure is pre-existing, unrelated, and worse than a red check looks.**
+`test-student.mjs` reports `found an offering with two graded activities` — its `else` branch,
+meaning it could not find a fixture rather than that something is broken. It is independent of this
+change (the file imports only `harness.mjs`; nothing in its path reads `db-schema.js`), and the data
+is not the problem: **34 published offerings carry two graded activities**, verified live. The
+selection path is. What that `if` gates is the security half of the file — a student cannot unlock
+their own commit, cannot attribute an unlock to an instructor who did not perform it, cannot reopen
+a commit by reverting `status` — the two bypasses migration 006 closed. **Those assertions are
+currently running nowhere.** Filed in ROADMAP §5.
+
+*Worth keeping:* a migration file's own header is a claim about the world, written once and never
+re-read. This one said the door was locked; the door had been open for four days. Check the state
+before trusting the note that describes it — the same failure mode as the stale roadmap entry
+corrected earlier today.
+
+---
+
 ## 2026-07-27 — Matthew Recker via Claude (sixth-batch UI verified on the live site; P0.2 unblocked)
 
 **Documentation only. No code, no schema, no data.**

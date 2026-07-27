@@ -1135,7 +1135,7 @@ export const DB_SCHEMA = {
     },
     "ei_sessions": {
       "name": "ei_sessions",
-      "comment": "Extra-instruction sessions, one row per student per sitting, keyed on the enrolment so a record belongs to a student's place in a section in a term. STAFF-ONLY: there is no student read policy and that absence is deliberate (ROADMAP Q3) — `notes` may hold an instructor's candid assessment. Repeatable by design: no unique key. A bulk log shares one batch_id.",
+      "comment": "Extra-instruction sessions, one row per student per sitting, keyed on the enrollment so a record belongs to a student's place in a section in a term. STAFF-ONLY: there is no student read policy and that absence is deliberate (ROADMAP Q3) — `notes` may hold an instructor's candid assessment. Repeatable by design: no unique key. A bulk log shares one batch_id.",
       "rls": true,
       "primaryKey": [
         "id"
@@ -1275,7 +1275,7 @@ export const DB_SCHEMA = {
     },
     "enrollments": {
       "name": "enrollments",
-      "comment": "The multi-course fix, and the anchor for ALL student work. Because grades hang off the enrolment rather than the student, moving someone between sections no longer silently re-attributes their history.",
+      "comment": "The multi-course fix, and the anchor for ALL student work. Because grades hang off the enrollment rather than the student, moving someone between sections no longer silently re-attributes their history.",
       "rls": true,
       "primaryKey": [
         "id"
@@ -1905,7 +1905,7 @@ export const DB_SCHEMA = {
     },
     "grades": {
       "name": "grades",
-      "comment": "Exactly one grade per enrolment per assignment offering, bounded by that offering's value. These two constraints replace a whole class of bug: the old model spread a lesson's grade across scores, preflight_interaction_reports.score, and lesson_completions.points with nothing relating earned points to possible points anywhere.",
+      "comment": "Exactly one grade per enrollment per assignment offering, bounded by that offering's value. These two constraints replace a whole class of bug: the old model spread a lesson's grade across scores, preflight_interaction_reports.score, and lesson_completions.points with nothing relating earned points to possible points anywhere.",
       "rls": true,
       "primaryKey": [
         "id"
@@ -3155,7 +3155,7 @@ export const DB_SCHEMA = {
     },
     "submissions": {
       "name": "submissions",
-      "comment": "One row per enrolment per assignment offering. The choice, the lock, and the identity of the attempt live together here — which is what makes double-credit structurally impossible rather than merely defended against in application code.",
+      "comment": "One row per enrollment per assignment offering. The choice, the lock, and the identity of the attempt live together here — which is what makes double-credit structurally impossible rather than merely defended against in application code.",
       "rls": true,
       "primaryKey": [
         "id"
