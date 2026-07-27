@@ -8,6 +8,54 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-27 — Matthew Recker via Claude (training sandbox seeded with fake student work for lessons 03 and 04)
+
+**Live DML on `app`, training sandbox only.** 140 synthetic submissions written into the
+phys-215 × `training-fall-2026` offering (`ce946b19-…`) so instructors have something to practise
+grading on. New script `scripts/training/seed_training_lessons_03_04.py` — dry-run by default,
+`--commit` to write, `--clean` to remove (snapshots first).
+
+This is the `app`-schema successor to `scripts/training/seed_training_preflight02.py`, which seeds
+the retired `public` model and is left alone.
+
+### Why these two lessons, and why the data differs between them
+
+The two lessons are wired to **opposite graded paths** in this offering, which is what makes the
+pair worth seeding — between them they exercise both halves of the pipeline:
+
+| lesson | graded path | practice path | seeded work | how it gets a grade |
+|---|---|---|---|---|
+| `preflight-03` | **written** | interactive | q1/q2/q3 free-response answers | `/preflight-analyze` |
+| `preflight-04` | **interactive** | written | short artifact reports (`report_markdown` + `schema:1`) | migration `015` trigger, on commit |
+
+70 submissions each, out of a roster of 80. **2–3 non-submitters per section**, chosen per lesson
+so the same cadets are not missing from both. `ZZ Test Cadet` is deliberately left without a
+submission in both, counting toward M1A's quota, so the browser-walkthrough account stays free for
+a live end-to-end submit.
+
+### Two things the script gets right that are easy to get wrong
+
+- **Write order.** `grade_interactive_on_commit()` reads `submission_activities.content` at the
+  moment a submission flips to `committed`. So each student is written the way the browser writes
+  them (`student-data.js`): insert the submission as a **draft**, insert the work, *then* commit.
+  Committing first fires the trigger against a missing report and leaves the cadet silently
+  ungraded.
+- **The offering guard.** The clean Fall 2026 phys-215 offering shares the course, so the script
+  refuses to run against any offering whose term label does not contain `TRAINING`. A mistyped id
+  cannot seed fake work into the real term.
+
+Verified after commit: preflight-03 → 70 committed submissions, **0** grade rows (correct — it
+waits for grading); preflight-04 → 70 committed submissions and **70** auto-graded rows, all
+`source='derived'`, `is_finalized=true`, with effort→points landing exactly on the contract's
+table (effort 2 → 1 pt ×3, effort 3/4/5 → 2 pts ×67). No submission is late against its section's
+per-day deadline.
+
+**The data is fake and says so.** Every `schema:1` payload carries
+`source_provenance.generated_by = "seed-training-lessons-03-04@2026-07-27"`, and each report's
+Markdown ends with a line stating it is synthetic.
+
+---
+
 ## 2026-07-27 — Matthew Recker via Claude (per-day deadlines; phys-215 split into a training sandbox and a clean Fall 2026 offering)
 
 **Live DDL + live DML on `app`.** Migration `017` applied, and the phys-215 offering split in two.
