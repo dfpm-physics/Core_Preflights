@@ -8,6 +8,34 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-27 — Matthew Recker via Claude (P0.15 staff roles verified — no repair was needed)
+
+**Read-only against live `app`. Nothing was written.**
+
+The director confirmed the intended roles for the two records P0.15 flagged as corrupted:
+`Kimberly de La Harpe` → **instructor** in phys-215, `TJ Hardy` → **director**. Live already
+matches both, so no change was applied.
+
+- **Kim** holds 3 `staff_assignments` rows — offering-wide, T1A, T3A — **all `instructor`**, so
+  `director_offerings()` does not return her.
+- **TJ** holds 3 rows — offering-wide, M1A, M3A — **all `director`**.
+- Neither is `is_global_admin`; neither holds any row in phys-110.
+
+Somebody re-selected both roles in Staff after the 2026-07-23 fix landed, which was the remedy the
+roadmap proposed. The fixed `setRole()` updates every row a person holds and then guarantees the
+offering-wide one, which is why the result is uniform rather than half-repaired.
+
+**Swept the whole database for the corruption signature — no staff member holds more than one
+distinct role within a single course.** The query is recorded on P0.15 and is worth re-running after
+any bulk staffing change.
+
+*Worth keeping:* the roadmap asserted a live-data defect for four days after it had been repaired. A
+recorded data defect is a claim about the *present*, unlike the rest of that file, and it goes stale
+silently — the repair happens in a UI that does not know the roadmap exists. Verify before acting on
+one, which is the only reason this entry is not a privilege change made on stale information.
+
+---
+
 ## 2026-07-27 — Matthew Recker via Claude (cleanup batch: the extensions bug, the doc-sources red, P1.12 descoped)
 
 Roadmap §5 cleanup. **No live data touched, no DDL applied, no schema change.** One migration file

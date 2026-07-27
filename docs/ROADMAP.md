@@ -723,12 +723,34 @@ guarantees the offering-wide row — so a demotion actually clears every directo
 (rolled back): the old logic left a mixed director/instructor state and `director_offerings()` still
 returned the person; the new logic demotes cleanly and promote-back still works.
 
-**⚠ Two live records are already corrupted by the old bug and need the director's call:**
-`Kimberly de La Harpe` and `TJ Hardy` both hold an offering-wide `instructor` row with section rows
-still `director`, so they currently read as (and have the privileges of) directors despite a
-half-completed demotion. I did **not** auto-repair them — whether they should be directors or
-instructors is a privilege decision, not something to guess. Resolve by re-selecting their role in
-Staff (the fixed `setRole` will clean it up), or tell me the intended role and I'll apply it.
+~~**⚠ Two live records are already corrupted by the old bug and need the director's call:**~~
+✅ **RESOLVED — verified clean 2026-07-27, and no write was needed.** The director's intent was
+`Kimberly de La Harpe` → **instructor** in phys-215, `TJ Hardy` → **director**. Live `app` already
+matches: Kim holds 3 rows (offering-wide + T1A + T3A), **all `instructor`**, so
+`director_offerings()` does not return her; TJ holds 3 rows (offering-wide + M1A + M3A), **all
+`director`**. Neither is `is_global_admin`, and neither holds any row in phys-110.
+
+Somebody re-selected both roles in Staff after the fix landed, which is exactly the remedy this
+entry proposed — the fixed `setRole()` updates every row the person holds and then guarantees the
+offering-wide one, which is why the result is uniform rather than half-repaired.
+
+**A whole-database sweep for the corruption signature found none** — no staff member holds more than
+one distinct role within a single course. That query is the cheap way to re-check this, and worth
+re-running after any bulk staffing change:
+
+```sql
+SELECT i.name, c.code, count(DISTINCT sa.role)
+  FROM app.staff_assignments sa
+  JOIN app.instructors i ON i.id = sa.instructor_id
+  JOIN app.course_offerings co ON co.id = sa.course_offering_id
+  JOIN app.courses c ON c.id = co.course_id
+ GROUP BY i.id, i.name, c.code HAVING count(DISTINCT sa.role) > 1;
+```
+
+*Worth keeping:* the roadmap asserted a live-data defect for four days after it had been repaired.
+A recorded data defect is a **claim about the present**, unlike the rest of this file, and it goes
+stale silently — the repair happens in a UI that does not know the roadmap exists. Verify before
+acting on one.
 
 #### P0.14 — The interactive path produces no grade · ✅ **DONE 2026-07-23 (migration applied)**
 
