@@ -13,6 +13,7 @@
 // requires window.db. Hence the shim below — and hence run.mjs spawning this suite in its own
 // process, so the client binding cannot leak into the live suites.
 
+import { readFileSync } from 'node:fs';
 import { check, eq, section, installBrowser, summary } from './harness.mjs';
 import {
   writtenSignals, writtenReport, effortSignal, FREE_RESPONSE_KEY, FREE_RESPONSE_LABEL, int05,
@@ -27,7 +28,19 @@ installBrowser();
 // that queries, and what it must do with the rows it gets back is exactly what we are testing.
 let ANALYSIS_ROWS = [];
 const chain = () => {
-  const c = { select: () => c, eq: () => c, then: (res) => res({ data: ANALYSIS_ROWS, error: null }) };
+  const c = {};
+  // Every filter/modifier returns the chain. Listed explicitly rather than proxied so an
+  // unstubbed method still fails loudly — a silent `undefined` here would make a query look
+  // like it returned nothing instead of like it was never stubbed.
+  for (const m of ['select', 'eq', 'in', 'is', 'not', 'neq', 'gt', 'lt', 'gte', 'lte',
+                   'order', 'limit', 'filter', 'or'])
+    c[m] = () => c;
+  // The row-terminators resolve to an empty result. That is enough for the entry-point checks at
+  // the bottom of this file: an offering that resolves to null makes each read return its empty
+  // value, which is a resolution rather than a throw — the property under test.
+  c.maybeSingle = () => Promise.resolve({ data: null, error: null });
+  c.single = () => Promise.resolve({ data: null, error: null });
+  c.then = (res) => res({ data: ANALYSIS_ROWS, error: null });
   return c;
 };
 globalThis.window.db = { from: () => chain() };
@@ -760,5 +773,59 @@ eq('student count is per student, not per flag', residualCohort.flags.otherStude
 // asserts a meaning the system has not agreed to.
 eq('residuals do not leak into the recognized tallies',
    [residualCohort.flags.needs_follow_up, residualCohort.flags.notable], [1, 1]);
+
+/* ── The query entry points must RESOLVE, not throw (2026-07-27) ──────────────
+ *
+ * On 2026-07-27 `activitiesOf()` grew a call to `offeringSections(ctx)` inside a function that
+ * had no `ctx` parameter and no `ctx` in scope. A free variable in a module is strict mode, so
+ * that is a ReferenceError on EVERY call — and it took three exported reads down with it:
+ * loadInteractionData (the rollup's numbers), loadReport (the per-student markdown viewer) and
+ * buildLessonCorpus.
+ *
+ * It shipped unnoticed because report.html awaited those promises with no rejection handler. The
+ * panel simply read "Computing course-wide summary…" forever, which looks like a slow query
+ * rather than a crash — so nobody could tell which of the day's changes had caused it, and the
+ * console error was the only evidence.
+ *
+ * These are not tests of what the functions RETURN — the stub client returns nothing useful. They
+ * assert only that calling them does not throw, which is precisely the property that was lost and
+ * precisely the one no amount of reading the diff made obvious. Any future free variable on these
+ * paths fails here instead of in front of an instructor.
+ */
+section('faculty-rollup.js — the query entry points resolve rather than throw');
+
+const { loadInteractionData, loadReport, buildLessonCorpus } =
+  await import('../../site/app/js/faculty-rollup.js');
+
+// Shaped like the real thing (auth.js): sectionsById is what offeringSections() reads.
+const ctxStub = {
+  currentOffering: 'off-1',
+  sectionIds: ['sec-1'],
+  sectionsById: { 'sec-1': { id: 'sec-1', code: 'M1A', meeting_days: ['M'] } },
+  sectionCodeOf: (id) => (id === 'sec-1' ? 'M1A' : id),
+  staff: [],
+};
+
+const resolves = async (label, fn) => {
+  try { await fn(); check(label, true); }
+  catch (err) { check(`${label} — threw ${err.constructor.name}: ${err.message}`, false); }
+};
+
+await resolves('loadInteractionData(ctx, offeringId, studentIds)',
+               () => loadInteractionData(ctxStub, 'off-1', [3000990009]));
+await resolves('loadReport(ctx, offeringId, studentId)',
+               () => loadReport(ctxStub, 'off-1', 3000990009));
+await resolves('buildLessonCorpus(ctx, offeringId)',
+               () => buildLessonCorpus(ctxStub, 'off-1'));
+
+// The guard that made the bug invisible rather than merely present. report.html must attach a
+// rejection handler to the structured-data load, or a throw anywhere beneath it is indistinguishable
+// from a query that is still running.
+const reportSrc = readFileSync(
+  new URL('../../site/app/faculty/report.html', import.meta.url), 'utf8');
+check('report.html catches a loadInteractionData rejection',
+      /loadInteractionData\(ctx,[\s\S]{0,600}?\.catch\(/.test(reportSrc));
+check('…and renders it as an error rather than leaving "Computing…" up',
+      /reportLoadError/.test(reportSrc));
 
 process.exitCode = summary() ? 0 : 1;

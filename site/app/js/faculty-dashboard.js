@@ -430,8 +430,20 @@ function spotlight(a, ctx) {
   const dueChip = st === 'today' ? `⏳ ${dueTxt}` : st === 'past' ? `✓ ${dueTxt}` : `🔭 ${dueTxt}`;
 
   const scopeCtl = dir() ? scopeControl() : '';
-  const todayBtn = st !== 'today'
-    ? `<button class="btn btn-ghost btn-sm" data-today="1" title="Back to the current preflight">↩ Today</button>` : '';
+  /* ALWAYS RENDERED, DISABLED WHEN THERE IS NOWHERE TO GO (2026-07-27).
+   *
+   * It used to be conditional — present only off the current preflight — and it sits in a flex row
+   * immediately before "Open full rollup →", so arrowing to another assignment made that link jump
+   * sideways. A control that moves under the cursor is worse than a control that is greyed out,
+   * and the reader was aiming at the rollup link, not at this.
+   *
+   * Disabling rather than reserving a fixed-width slot is deliberate: the two nav arrows in this
+   * same header already do exactly that at the ends of the list, so this is the convention the
+   * component already has rather than a second one. It also needs no magic width that would go
+   * stale the moment the label changes. */
+  const onToday = st === 'today';
+  const todayBtn = `<button class="btn btn-ghost btn-sm" data-today="1" ${onToday ? 'disabled' : ''}
+      title="${onToday ? 'You are on the current preflight' : 'Back to the current preflight'}">↩ Today</button>`;
 
   return `<div class="spot-shell">
     <button class="spot-arrow left"  data-nav="prev" ${vIdx === 0 ? 'disabled' : ''} aria-label="Previous assignment"><span class="arrow-tab">◀</span></button>
@@ -610,8 +622,11 @@ function wire() {
     if (ni >= 0 && ni < MODEL.lessons.length) { STATE.viewLesson = MODEL.lessons[ni].id; rerender(); }
   });
 
+  // Guarded like the arrows above: the button is now always in the DOM and disabled on the
+  // current preflight, so the handler must not act on a click the browser would not deliver
+  // anyway — belt and braces, and it keeps the two nav controls reading the same way.
   const td = ROOT.querySelector('[data-today]');
-  if (td) td.onclick = () => { STATE.viewLesson = MODEL.activeId; rerender(); };
+  if (td) td.onclick = () => { if (td.disabled) return; STATE.viewLesson = MODEL.activeId; rerender(); };
 
   setupWings();
 }

@@ -222,8 +222,17 @@ export async function loadManager(ctx) {
  * ════════════════════════════════════════════════════════════════════════════ */
 
 /** Both activity ids for one offering, either of which may be null. Used by the reads that
- *  summarize the whole cohort and so must not care how a given student worked the lesson. */
-async function activitiesOf(offeringId) {
+ *  summarize the whole cohort and so must not care how a given student worked the lesson.
+ *
+ *  TAKES ctx, and that is the whole point of this signature. The `offeringSections(ctx)` call
+ *  below arrived with migration 017's per-day deadlines (2026-07-27) inside a function that had
+ *  no `ctx` in scope and no parameter for one — a free variable, which under a module's strict
+ *  mode is a ReferenceError on every single call, not a silent undefined. It took the rollup's
+ *  numbers, the per-student markdown viewer and the corpus builder with it; see loadInteractionData.
+ *  ctx is threaded rather than kept in a module-level global so the dependency is visible in every
+ *  signature that has it, which is the convention loadManager() and buildLessonCorpus() already
+ *  follow. */
+async function activitiesOf(ctx, offeringId) {
   const { data } = await db.from('assignment_offerings')
     .select(OFFERING_SELECT).eq('id', offeringId).maybeSingle();
   const offering = withResolvedDue(shapeOffering(data), offeringSections(ctx));
@@ -240,15 +249,15 @@ async function activitiesOf(offeringId) {
  *  neither of which a written submission can satisfy (there is no report to show or to feed to
  *  the analysis AI). Returning null here is what makes those two degrade rather than break on a
  *  question-only lesson. */
-async function interactiveActivityOf(offeringId) {
-  const found = await activitiesOf(offeringId);
+async function interactiveActivityOf(ctx, offeringId) {
+  const found = await activitiesOf(ctx, offeringId);
   return found?.interactiveId ? { offering: found.offering, activityId: found.interactiveId } : null;
 }
 
 /** One student's report markdown for a lesson (the caller sanitizes before rendering — the
  *  payload originated in a URL hash and is stored inert, per INTERACTION-DATA-CONTRACT.md). */
-export async function loadReport(offeringId, studentId) {
-  const found = await interactiveActivityOf(offeringId);
+export async function loadReport(ctx, offeringId, studentId) {
+  const found = await interactiveActivityOf(ctx, offeringId);
   if (!found) return null;
 
   const { data: enroll } = await db.from('enrollments')
@@ -287,9 +296,9 @@ export async function loadReport(offeringId, studentId) {
  * @returns {Promise<Array<{student_id, enrollment_id, path, effort, effortSource, understanding,
  *                          score, report_data, report_markdown, updated_at}>>}
  */
-export async function loadInteractionData(offeringId, studentIds) {
+export async function loadInteractionData(ctx, offeringId, studentIds) {
   if (!studentIds?.length) return [];
-  const found = await activitiesOf(offeringId);
+  const found = await activitiesOf(ctx, offeringId);
   if (!found || (!found.interactiveId && !found.writtenId)) return [];
   // Resolved once per lesson, not per student: which written question is the reading reflection.
   const reflectionQid = reflectionQuestionId(found.offering?.written);
@@ -884,7 +893,7 @@ export function summarizeReports(rows, possible = 2, opts = {}) {
  * @returns {{ title, interactionId, studentCount, text }}
  */
 export async function buildLessonCorpus(ctx, offeringId) {
-  const found = await interactiveActivityOf(offeringId);
+  const found = await interactiveActivityOf(ctx, offeringId);
   const title = found?.offering?.interactive?.title || found?.offering?.title || 'Assignment';
   const base = { title, interactionId: offeringId, studentCount: 0, text: '' };
   if (!found || !ctx.sectionIds?.length) return base;

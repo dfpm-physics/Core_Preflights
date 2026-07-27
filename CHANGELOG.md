@@ -8,6 +8,82 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-27 — Matthew Recker via Claude (the lesson rollup was dead: `ReferenceError: ctx is not defined`)
+
+**The assignment rollup showed "Computing course-wide summary…" and never resolved.** So did the
+per-student Markdown report viewer (a spinner) and the AI corpus builder. One line caused all three.
+
+### What broke
+
+`activitiesOf()` in `faculty-rollup.js` grew a call to `offeringSections(ctx)` — but it takes no
+`ctx` parameter and has none in scope. Every other use of `ctx` in that module is inside a function
+that receives it. A free variable in an ES module is strict mode, so this is a **ReferenceError on
+every call**, not a silent `undefined`.
+
+It reached three exported reads, all of which funnel through it:
+
+| Export | Surface that died |
+|---|---|
+| `loadInteractionData` | the rollup's numbers — completion, effort, understanding, misconceptions |
+| `loadReport` | the per-student Markdown report modal |
+| `buildLessonCorpus` | the AI corpus builder |
+
+Introduced by `418fbbe` (per-day deadlines, migration 017) earlier the same day — **not** by the
+faculty-beta commit that landed after it, which touched no rollup file. Verified by `git blame`,
+by `git log -S`, and by reproducing the throw against the live database before changing anything.
+
+### Why nobody could tell which change did it
+
+`report.html` awaited both loads with **no rejection handler**. A throw left `reportRows` at `null`,
+`renderAggregate()` took its early return, and the panel printed its "computing" placeholder
+indefinitely. A crash was therefore indistinguishable from a slow query, and the only evidence was
+a console error nobody had reason to open.
+
+That is the more important half of this fix. Both loads now `.catch()`, and a rejection renders as
+an error naming the message — a wrong answer that announces itself beats a right-looking one that
+never arrives. A failed load is also now distinct from an empty one: "no submissions yet" is a fact
+about the cohort, "the query failed" is a fault to report.
+
+### The fix
+
+`ctx` is threaded through `activitiesOf` → `interactiveActivityOf` → the three exports, matching the
+convention `loadManager(ctx)` and `buildLessonCorpus(ctx, …)` already follow. Not a module-level
+global: the dependency belongs in the signatures that have it. `report.html`'s two call sites pass
+`ctx`.
+
+**Verified live**, signed in against production: `loadInteractionData` returns **71 rows** for
+`preflight-02` — 63 written, 8 interactive — summarizing to avg effort 4.35 and understanding 3.96.
+Before the fix the same call threw.
+
+### Regression test
+
+`test-rollup.mjs` gains an entry-point block asserting the three exports **resolve rather than
+throw**. It is not a test of what they return — the stub client returns nothing useful — it tests
+exactly the property that was lost. Confirmed to fail with `ReferenceError: ctx is not defined` when
+the fix is reverted, and to pass with it. Two further checks pin the rejection handler and the error
+state in `report.html`, so the *invisibility* cannot come back either. The suite's stub client was
+widened to the methods these paths use.
+
+### Also: the dashboard's "↩ Today" button no longer shifts the layout
+
+It was rendered only when you were off the current preflight, and sits immediately before
+**Open full rollup →** in a flex row — so arrowing to another assignment made that link jump
+sideways under the cursor. It is now always present and **disabled** on the current preflight, which
+is the convention the two nav arrows in that same header already use at the ends of the list. No
+reserved-width slot, which would have gone stale the moment the label changed.
+
+### Unrelated pre-existing failure, left alone
+
+`supabase/admin/aggregate_summarize_test.py` fails one assertion —
+*"a cross-TERM match may be a stale offering, and says so"*. Commit `57fdae3` added an
+`elif len(terms) > 1` branch whose wording is *"If one of these terms is **genuinely** over,
+deactivating…"*, so the literal substring `"is over, deactivate"` the test greps for is no longer
+present. The advice is intact; only the assertion's literal is stale. Confirmed present without the
+changes in this entry, and **not fixed here** — it is another session's in-flight work and CORE.md §0
+is explicit about two agents editing one area. Fix is one word, in either the test or the message.
+
+---
+
 ## 2026-07-27 — Matthew Recker via Claude (`lesson_aggregate.py --term`; lessons 03 and 04 closed out in the training sandbox)
 
 **Code change plus four analysis runs.** The runs themselves are recorded in `app.analysis_runs`,

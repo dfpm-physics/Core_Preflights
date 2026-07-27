@@ -136,6 +136,10 @@
     // canonical id (the clustering /lesson-aggregate used to do in prose and throw away);
     // `reportGlossary` backfills a label/description for ids whose raw rows carried none.
     let reportAliases = null, reportGlossary = null;
+    // Set when the structured-data query REJECTED, as opposed to returning nothing. The panel has
+    // to be able to tell those apart: "no submissions yet" is a fact about the cohort, and "the
+    // query failed" is a fault the reader should report rather than plan a lesson around.
+    let reportLoadError = null;
 
     function init() {
       initTheme();
@@ -213,16 +217,29 @@
       reportScope = (section && vm.sections.some(s => s.id === section)) ? section : defaultScope();
 
       reportRows = null; reportByStudent = {}; reportAnalysis = null;   // null → summary shows "computing…"
+      reportLoadError = null;
       renderScope();
       renderAggregate();
 
       // Pull structured data for the whole roster once; the summary, flag lists, and responses
       // panel all read it. RLS scopes which rows actually come back.
       const allIds = vm.sections.flatMap(s => s.students.map(st => st.student_id));
-      I.loadInteractionData(interactionId, allIds).then(rows => {
+      I.loadInteractionData(ctx, interactionId, allIds).then(rows => {
         if (reportInteraction !== interactionId) return;   // navigated to another lesson
         reportRows = rows;
         reportByStudent = Object.fromEntries(rows.map(r => [String(r.student_id), r]));
+        renderAggregate();
+      }).catch(err => {
+        // A REJECTION MUST BE VISIBLE. Without this the placeholder below is the only symptom:
+        // `reportRows` stays null, renderAggregate() takes its early return, and the panel reads
+        // "Computing course-wide summary…" for as long as anyone is willing to wait. That is
+        // exactly how a one-line ReferenceError in activitiesOf() (shipped 2026-07-27 with the
+        // per-day deadlines) looked like a hung computation rather than a crash — and why nobody
+        // could tell which of the day's changes had done it.
+        if (reportInteraction !== interactionId) return;
+        console.error('[report] loadInteractionData failed:', err);
+        reportLoadError = err?.message || String(err);
+        reportRows = [];                       // stop claiming to be computing
         renderAggregate();
       });
       // Pull the cohort AI synthesis once (one row per scope). Loads independently of the numeric
@@ -232,6 +249,13 @@
         reportAnalysis = res.scopes;
         reportAliases = res.aliases;
         reportGlossary = res.glossary;
+        renderAggregate();
+      }).catch(err => {
+        // Same contract. The AI panels already degrade to "not generated yet" when this is null,
+        // so the cost of a silent failure is lower here — but "the rollup was never run" and
+        // "the query for it broke" are different problems and must not look identical.
+        if (reportInteraction !== interactionId) return;
+        console.error('[report] loadAnalysis failed:', err);
         renderAggregate();
       });
     }
@@ -420,6 +444,17 @@
       const roster = rosterInScope();
       renderCompBadge(roster.filter(st => done.has(st.student_id)).length, roster.length);
 
+      if (reportLoadError) {
+        document.getElementById('rm-flagbar').innerHTML =
+          `<span class="muted" style="font-size:.82em">unavailable</span>`;
+        el.innerHTML = `<div class="alert alert-error">
+          <strong>The rollup data could not be loaded.</strong>
+          Nothing is wrong with this lesson's submissions — the query for them failed, so there is
+          nothing to summarize. Tell your course director, with this message:
+          <div class="muted" style="margin-top:6px;font-family:var(--mono,monospace);font-size:.9em">${esc(reportLoadError)}</div>
+        </div>`;
+        return;
+      }
       if (reportRows === null) {
         document.getElementById('rm-flagbar').innerHTML = `<span class="muted" style="font-size:.82em">Computing…</span>`;
         el.innerHTML = `<div class="summary-placeholder">Computing course-wide summary…</div>`;
@@ -1288,7 +1323,18 @@
       const body = document.getElementById('fr-body');
       body.innerHTML = `<div class="center-load"><span class="spinner"></span></div>`;
       document.getElementById('fullreport-modal').classList.add('open');
-      const md = await I.loadReport(reportInteraction, studentId);
+      // This viewer was broken by the same ReferenceError as the rollup — it reaches the activity
+      // through activitiesOf() too — and showed a spinner forever for the same reason: an awaited
+      // rejection with nothing to catch it. Distinguish "no report" from "could not load one".
+      let md = null;
+      try {
+        md = await I.loadReport(ctx, reportInteraction, studentId);
+      } catch (err) {
+        console.error('[report] loadReport failed:', err);
+        body.innerHTML = `<div class="alert alert-error">Could not load this student's report.
+          <div class="muted" style="margin-top:6px;font-size:.9em">${esc(err?.message || String(err))}</div></div>`;
+        return;
+      }
       // Report markdown is an inert, user-controllable blob — sanitize at render time.
       body.innerHTML = md ? DOMPurify.sanitize(marked.parse(md))
         : `<div class="alert alert-info">This student hasn't submitted a report for this interaction yet.</div>`;
