@@ -8,6 +8,61 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-27 — Matthew Recker via Claude (`lesson_aggregate.py --term`; lessons 03 and 04 closed out in the training sandbox)
+
+**Code change plus four analysis runs.** The runs themselves are recorded in `app.analysis_runs`,
+not here (CORE.md §5); this entry is for the code change and the gap that forced it.
+
+### `--term` on `pull` / `write-analysis` / `status`
+
+**The 2026-07-27 offering split made `lesson_aggregate.py` unable to name the lesson it was asked
+to aggregate.** `_lesson_meta()` refuses to guess when a slug matches more than one *active*
+offering, and correctly told the operator to disambiguate with the course-scoped activity slug.
+But phys-215's training sandbox and its real Fall 2026 offering **point at the same shared
+activities**, so `phys-215-preflight-03-written` matches both and the suggested remedy resolves to
+the same tie. The only escape the message then offered was `is_active = false` on a
+`course_offering` — i.e. taking the live course offline in order to aggregate the training one.
+
+`--term <terms.code>` is the disambiguator that actually works here. Additive: omitted, every
+existing invocation resolves exactly as before, including the refusal. The ambiguity message now
+detects the one-course/two-terms case and names `--term` instead of sending the reader in a circle.
+Wired through all three subcommands that resolve a lesson — including `cmd_status`, which builds
+its own query and would otherwise have accepted the flag and silently ignored it.
+
+Regression-checked: an unambiguous slug still resolves with no `--term`, the three-way
+`preflight-03` ambiguity still refuses, `worklist` is untouched, and an unmatched `--term` fails
+with a message that names the flag.
+
+### The four runs (training sandbox only)
+
+`/lesson-cycle` for `preflight-03` and `preflight-04`, M then T, over the synthetic work seeded
+earlier today. 14 analysis scopes per lesson, no stale flags. The pair is worth noting because the
+two lessons exercise **opposite halves of the pipeline**, which is the whole reason the sandbox
+holds both:
+
+- **`preflight-03`** — written graded. 70 answers graded across two runs, each writing
+  `question_scores` plus the `schema:1` assessment into `grades.diagnostic`, read back and compared
+  field by field. Misconceptions resolved against PROJECT.md's Preflight-3 table
+  (`scalar-sum`, `ambiguous-direction`); one new id coined — **`equal-charge-equal-force`**, for
+  students who reach the right answer by assuming equal charges give equal forces regardless of
+  separation. Dominant finding: 29 of 70 earned full credit on an answer that never states the
+  forces must oppose.
+- **`preflight-04`** — interactive graded. **Grading was correctly skipped both runs**: the written
+  activity is `practice`, so migration `015`'s trigger had already written all 70 finalized
+  `derived` grades at commit. Aggregation alone, exactly the case `lesson-cycle` Step 2 describes.
+
+**Both runs were FORCED past the deadline check** — these lessons are due 2026-08-12/17 and today
+is 2026-07-27 — and each `analysis_runs` row says so in its summary, following the precedent set by
+the 2026-07-22 `preflight-02` run on the same sandbox.
+
+**Grading ran on `prep_app_dml`, not the service key.** `~/.claude/skills/preflight-analyze/config.json`
+does not exist on this machine, and `/preflight-analyze` Step 0 says to stop when it is missing. The
+rows written are identical and the credential is narrower (DML on `app`, nothing in `public`); every
+affected `analysis_runs.detail` records the substitution. **The config is still the documented path
+— set it up before the real term.**
+
+---
+
 ## 2026-07-27 — Matthew Recker via Claude (faculty beta feedback — fifteen changes across grading, the assignment editor, and course administration)
 
 A faculty beta produced a list of small, concrete complaints. They are grouped below by the screen

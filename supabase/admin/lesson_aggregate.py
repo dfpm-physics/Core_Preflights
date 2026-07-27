@@ -602,6 +602,13 @@ def _ambiguous_slug_message(slug, rows):
         lines.append("Same term, different courses — BOTH ARE LIVE. This is not a stale offering; "
                      "do not deactivate either one. Re-run with one of the course-scoped activity "
                      "slugs above.")
+    elif len(terms) > 1:
+        # One course, two live terms — the training-sandbox case. The activity slugs above are
+        # SHARED between those offerings, so they cannot separate them and suggesting them alone
+        # would send the operator in a circle. --term is the disambiguator that works here.
+        lines.append("Re-run with --term to name one of: " + ", ".join(sorted(terms)) + ".")
+        lines.append("(If one of these terms is genuinely over, deactivating its course_offering "
+                     "is the tidier fix — but only a human knows which.)")
     else:
         lines.append("If one of these terms is over, deactivate its course_offering "
                      "(course_offerings.is_active = false) and re-run. Otherwise re-run with one "
@@ -609,7 +616,7 @@ def _ambiguous_slug_message(slug, rows):
     return "\n".join(lines)
 
 
-def _lesson_meta(conn, slug):
+def _lesson_meta(conn, slug, term=None):
     """The LESSON — one assignment offering — plus both activity ids, either of which may be None.
 
     Keyed on the offering, not on an interactive activity, because a lesson can be worked two
@@ -619,6 +626,13 @@ def _lesson_meta(conn, slug):
 
     An assignment can be re-offered in a later term, so the offering is not implied by the slug;
     this refuses to guess when more than one active offering claims it.
+
+    `term` (a `terms.code`) narrows to one of them. It exists because ONE COURSE CAN HAVE TWO
+    ACTIVE TERMS: the 2026-07-27 split gave phys-215 a `training-fall-2026` sandbox alongside the
+    real `fall-2026`, and both offerings point at the SAME shared activities — so the activity
+    slug the ambiguity message suggests resolves to both and cannot separate them. Without this,
+    the only remaining remedy was `is_active = false` on a live offering, i.e. taking the real
+    course offline to aggregate the training one.
     """
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
@@ -640,6 +654,7 @@ def _lesson_meta(conn, slug):
           join offering_activities  oa on oa.assignment_offering_id = ao.id
           join activities           act on act.id = oa.activity_id
          where co.is_active
+           and (%(term)s is null or t.code = %(term)s)
            and ao.id in (
                  select oa2.assignment_offering_id
                    from offering_activities oa2
@@ -649,7 +664,7 @@ def _lesson_meta(conn, slug):
                   where act2.slug = %(slug)s or a2.slug = %(slug)s)
          group by ao.id, ao.points_possible, ao.grading_mode, ao.is_published,
                   a.slug, a.title, co.id, c.code, t.code
-    """, {"slug": slug})
+    """, {"slug": slug, "term": term})
     rows = cur.fetchall()
     if not rows:
         return None
@@ -930,10 +945,11 @@ def _existing_payload(conn, offering_id):
 
 # ── pull ─────────────────────────────────────────────────────────────────────────────
 def cmd_pull(args, conn):
-    meta = _lesson_meta(conn, args.activity)
+    meta = _lesson_meta(conn, args.activity, getattr(args, "term", None))
     if not meta:
         sys.exit(f"No lesson '{args.activity}' in an active offering "
-                 f"(tried it as both an assignment slug and an activity slug).")
+                 f"(tried it as both an assignment slug and an activity slug)."
+                 + (f" --term {args.term} may not match any active term." if getattr(args, "term", None) else ""))
     refl_qid = _reflection_question_id(meta.get("written_content"))
     response_qs = _graded_response_questions(meta.get("written_content"))
     reports = _load_reports(conn, meta["offering_id"], meta["interactive_id"],
@@ -1295,7 +1311,7 @@ def cmd_write(args, conn):
 
     def ctx(slug):
         if slug not in cache:
-            meta = _lesson_meta(conn, slug)
+            meta = _lesson_meta(conn, slug, getattr(args, "term", None))
             if not meta:
                 return None
             rows = _load_reports(conn, meta["offering_id"], meta["interactive_id"],
@@ -1589,7 +1605,9 @@ def cmd_status(args, conn):
           join assignments          a  on a.id  = ao.assignment_id
           join course_offerings     co on co.id = ao.course_offering_id
           join courses              c  on c.id  = co.course_id
+          join terms                t  on t.id  = co.term_id
          where ar.scope = %(scope)s and ar.kind = %(kind)s and ar.audience_id is null
+           and (%(term)s is null or t.code = %(term)s)
            and (%(activity)s is null
                 or a.slug = %(activity)s
                 or exists (select 1
@@ -1598,7 +1616,8 @@ def cmd_status(args, conn):
                             where oa.assignment_offering_id = ao.id
                               and act.slug = %(activity)s))
          order by c.code, a.slug
-    """, {"scope": SCOPE, "kind": KIND, "activity": args.activity})
+    """, {"scope": SCOPE, "kind": KIND, "activity": args.activity,
+          "term": getattr(args, "term", None)})
     rows = cur.fetchall()
     if not rows:
         print("No analysis_reports rows yet." if args.activity is None
@@ -1676,6 +1695,9 @@ def main():
     pl.add_argument("--lesson", "--activity", "--interaction", dest="activity", required=True,
                     help="assignment slug (preferred) or activity slug of the lesson to aggregate")
     pl.add_argument("--out", help="write JSON here (UTF-8) instead of stdout")
+    pl.add_argument("--term", help="terms.code, when one course has two active terms (e.g. "
+                                   "training-fall-2026 alongside fall-2026). Only needed to "
+                                   "break a tie the activity slug cannot")
     # No `choices=` on purpose. 001_core_model.sql records that the old ^[MT][135][A-D]$ section
     # CHECK was deliberately dropped for hardcoding a two-course meeting pattern; baking M|T into
     # the CLI would put it straight back. Validated against the offering's real meeting_days.
@@ -1692,6 +1714,8 @@ def main():
     w.add_argument("--invoked-by", dest="invoked_by", default="human",
                    choices=["human", "scheduled"],
                    help="who started this run — recorded in analysis_runs")
+    w.add_argument("--term", help="terms.code, when one course has two active terms — must match "
+                                  "the --term the pull used, or this writes to the other offering")
     # Deliberately NO --day here: the input file names its scopes and the writer merges. A flag
     # would be a second source of truth about which scopes this run touches.
 
@@ -1707,6 +1731,7 @@ def main():
     st.add_argument("--lesson", "--activity", "--interaction", dest="activity",
                     help="limit to one lesson (assignment or activity slug)")
     st.add_argument("--day", help="limit to sections meeting on this day, plus the course scope")
+    st.add_argument("--term", help="terms.code, when one course has two active terms")
 
     args = p.parse_args()
     conn = _connect()
