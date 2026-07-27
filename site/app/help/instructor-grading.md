@@ -3,10 +3,17 @@
 There is no **Grade** entry in the top navigation. Grading is work that arrives rather than a place
 you browse to, so the routes to it are the places that already know you have some:
 
-- the **Needs your attention** boxes on your dashboard — *Review grades* and *Review AI grades* —
-  which appear only when there is something in them;
+- the **Needs your attention** boxes on your dashboard, which appear only when there is something in
+  them. **There is one box per assignment** — *4 · Review · Preflight 3* — and selecting it opens
+  the Grade page on exactly that assignment, already loaded;
 - the **Grade page →** link beside those boxes, which is always there even when they are not;
 - a student's name in the **gradebook**.
+
+Past six assignments the boxes collapse back into one summary — *Review grades* — which opens the
+Grade page with the assignment picker empty. Six named lessons is a worklist; sixteen is wallpaper.
+
+*(Before 2026-07-27 there was one box for all of it, and it landed on an empty picker: the count
+told you there was work and not where.)*
 
 ## Scope: what you can see
 
@@ -16,8 +23,16 @@ two ways, and which one you have decides what the filter shows:
 - **Assigned to specific sections** — you see those sections and no others.
 - **Assigned to the whole course** (how a director is recorded) — you see *every* section in it.
 
-The **— all my sections —** filter on the Grade tab means whichever of those applies to you, so a
-director sees the full course under it rather than an empty list.
+**— all my sections —** means the sections you personally *teach*. For an instructor that is
+everything you can see. For a director it is narrower than what you can see: your course-wide access
+is not a teaching assignment, so this filter gives you the sections you were actually assigned to on
+Course administration → Section coverage. Use **All sections (entire course)** for the rest.
+
+A director assigned to no section at all is the exception — that filter would be empty, which reads
+as "nothing to grade", so it falls back to the whole course.
+
+*(Corrected 2026-07-27. This said a director "sees the full course under it", which was accurate as
+a description of a bug: the filter and the All-sections option loaded exactly the same students.)*
 
 Access is per semester. Directing a course in one term does not carry into the next.
 
@@ -62,42 +77,46 @@ their questions yourself.
 
 ## Students who did the interactive lesson
 
-Some assignments let a student choose the interactive lesson instead of the written preflight. A
-student who committed to the interactive path shows a read-only card marked **Interactive** — there
-are no question toggles and no feedback boxes, because there are no written answers to mark.
+Some assignments let a student choose the interactive lesson instead of the written preflight.
+**Those students are not on the Grade tab at all.** A short line above the cards says how many were
+left out, so the count you see and the roster still add up.
 
 Their grade comes from **effort**, scored 0–5 from the lesson report: 0 earns no points, 1–2 earns
 half, 3–5 earns full. A reading reflection that is not meaningful caps effort at 2 (so at most half
-credit), regardless of engagement elsewhere. The card shows the effort and the points it earned.
+credit), regardless of engagement elsewhere.
 
 **Unlike the written path, this grade is automatic and final.** It is written the moment the student
 commits, from the report, and the student sees it immediately — there is no review step and nothing
 for you to publish. That is deliberate: the effort rule above is arithmetic, not a judgement, so
 holding the result back would delay a grade nobody was going to change.
 
-Two consequences worth knowing. These students never appear in your *Needs grading by hand* row —
-there is nothing to do. And if you *do* need to change an effort score, open the student's page from
-the gradebook; it is not editable on the Grade tab. A card that reads *not yet graded* means the
-lesson report has not been turned into a grade yet, which today means it predates the automatic
-grading — tell your director rather than scoring it by hand.
+They are likewise absent from your *Needs grading by hand* row. If you *do* need to change an effort
+score, open the student's page from the gradebook.
 
-## Saving, publishing, and marking a section reviewed
+*(Until 2026-07-27 these students appeared here as a read-only card marked **Interactive**. It was
+accurate and it was in the way: a card you cannot mark, in the middle of a screen for marking, which
+you had to identify and skip on every pass. Their grade is unchanged — only the card is gone.)*
 
-Three separate actions, deliberately:
+## Saving and publishing
+
+Two actions:
 
 | Action | What it does | Who sees it |
 |---|---|---|
 | **Save draft** | Stores your scores and feedback, unpublished. | Only staff. |
 | **Finalize & publish** | Releases scores and feedback. | **Students, immediately.** |
-| **Mark section reviewed** | Records that you have been through the proposed grades and made your changes. | Your director. Publishes nothing. |
 
 Publishing tells you how many grades it will write and which sections they span — check that line
 if you have the section filter set wide, because "All sections" means the whole course.
 
-**Mark section reviewed** is separate from publishing on purpose: you can finish reviewing without
-releasing anything, and your director can see who is done before grades go out. If grades in a
-section change after you sign off, the marker reads *reviewed, then changed* — sign off again once
-you are happy.
+**You publish your own sections.** You do not need a director to release grades; Finalize & publish
+writes exactly the students currently loaded, which is the sections you staff.
+
+> A third button, **Mark section reviewed**, sat here until 2026-07-27. It recorded that you had
+> been through the AI's proposals, for a director who was going to publish afterwards. There is no
+> second person in that sequence — you publish — so it was a note to yourself sitting one click from
+> the button that actually releases the grades. It is gone; nothing you did with it is lost, and
+> nothing now depends on it.
 
 ## Needs grading by hand
 

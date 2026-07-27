@@ -25,6 +25,22 @@ Only a System Admin can create another System Admin.
 
 ## Adding an Instructor
 
+> **This section describes the admin panel that is live today (`site/admin.html`, schema `public`).**
+> The PREP v2 app (`site/app/faculty/admin.html` → **Staff**) replaced it, and two differences will
+> bite whoever follows the steps below after the cutover:
+>
+> - **You no longer type a temporary password, and there is no field for one.** The account is
+>   created on a derived default — the person's last name plus `1234`, lowercase, cut at the first
+>   hyphen — and PREP forces them to replace it before they can do anything. Tell them in person.
+>   A director can restore that default later with **Reset password** on the Staff row.
+> - **Adding a colleague who already has a PREP login does not create a second account.** Search
+>   for them in the Add-staff panel; a duplicate would split their grading history across two
+>   identities with no way to rejoin it.
+>
+> The **Grader** role was withdrawn on 2026-07-27. It meant "grades only, no authoring", but
+> authoring has always been gated on *director*, so it granted exactly what *instructor* grants.
+> Existing rows keep working; no new ones can be created.
+
 Everything is done from the admin panel — no SQL required.
 
 1. Log into the admin panel as a Course Director or System Admin
@@ -400,14 +416,15 @@ This section documents what was done to deploy the system — only needed if sta
 
 ### Deploy the Edge Functions
 
-**Five** edge functions run server-side work a browser session must not be trusted with. They only need to be deployed once (or after any code change to them).
+**Six** edge functions run server-side work a browser session must not be trusted with. They only need to be deployed once (or after any code change to them).
 
 | Function | Why it cannot live in the browser |
 |---|---|
-| `create-instructor` | Creates an auth user plus its access rows, and rolls back a partial failure |
+| `create-instructor` | Creates an auth user plus its access rows, and rolls back a partial failure. **Derives** the staff default password (last name + `1234`) and flags the account for forced rotation — the caller supplies no password (2026-07-27) |
 | `remove-instructor` | Removes course access, or clears the global-admin flag |
 | `provision-students` | Bulk-creates cadet auth accounts from the roster |
 | `reset-student-password` | Derives the default password server-side, and **rejects** a request that carries one — so nobody can set a cadet's password to a value they then know |
+| `reset-staff-password` | The same for a staff account, against the same derived default. Directors and system admins only, and a director cannot reset a system admin (2026-07-27) |
 | `set-own-password` | Re-verifies the current password (`updateUser` does not) and clears the forced-rotation flag, which lives in `app_metadata` where a browser session cannot write it |
 
 **1. Install the Supabase CLI**
@@ -431,6 +448,7 @@ supabase functions deploy create-instructor
 supabase functions deploy remove-instructor
 supabase functions deploy provision-students
 supabase functions deploy reset-student-password
+supabase functions deploy reset-staff-password
 supabase functions deploy set-own-password
 ```
 

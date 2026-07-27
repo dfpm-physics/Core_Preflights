@@ -113,14 +113,20 @@
       <!-- This term: points, deadlines, publish ----------------------------- -->
       <div class="lb-section" id="lb-term">
         <div class="lb-head"><span class="lb-ttl">This term</span><span class="grow"></span></div>
+        <!-- A "Grading" select (Points per question / Effort 0–5) sat between Points and the
+             commit rule until 2026-07-27. It was withdrawn on faculty-beta feedback, and the
+             feedback was right twice over: it offered a choice the current assignment types do
+             not have, and it described a mechanism that stopped being real in migration 014.
+             `grades_points_from_effort()` keys on whether the GRADE ROW carries an effort, not on
+             this column — which is exactly what lets one offering grade an interactive taker by
+             effort and a written taker by question_scores at the same time. The control could
+             therefore say "Effort" over a lesson graded by points, and change nothing.
+             Every saved offering is `grading_mode='points'` and this now writes that constant;
+             see saveLesson()'s payload. Bring a control back only when a new assignment type
+             genuinely needs one. -->
         <div class="row wrap" style="gap:14px">
           <div class="field" style="min-width:110px;flex:0 0 110px"><label for="f-pts">Points</label>
             <input id="f-pts" type="number" min="0" step="0.5" value="2"></div>
-          <div class="field" style="min-width:150px"><label for="f-mode">Grading</label>
-            <select id="f-mode">
-              <option value="points">Points (per question)</option>
-              <option value="effort">Effort (0–5 → points)</option>
-            </select></div>
           <div class="field grow" style="min-width:190px" id="f-switch-wrap"><label for="f-switch">Once a student commits</label>
             <select id="f-switch">
               <option value="lock_on_commit">Lock the choice (instructor can unlock)</option>
@@ -466,9 +472,11 @@
       (vm.sections || []).forEach(s => {
         const iso = l.dueBySection?.[s.id] || l.dueAt;
         if (!iso) return;
-        (s.meeting_days || ['_all']).forEach(d => { if (!dueByDay[d]) dueByDay[d] = String(iso).slice(0, 10); });
+        // L.toEditorDue(), not a slice of the ISO: the stored value is UTC, and slicing it showed
+        // a Denver evening deadline as the FOLLOWING day's date. See its header.
+        (s.meeting_days || ['_all']).forEach(d => { if (!dueByDay[d]) dueByDay[d] = L.toEditorDue(iso); });
       });
-      if (!Object.keys(dueByDay).length && l.dueAt) dueByDay._all = String(l.dueAt).slice(0, 10);
+      if (!Object.keys(dueByDay).length && l.dueAt) dueByDay._all = L.toEditorDue(l.dueAt);
 
       const w = l.written, i = l.interactive;
       return {
@@ -614,7 +622,6 @@
       document.getElementById('f-desc').value  = pick(prefill?.desc, existing?.description ?? libraryRow?.description);
       document.getElementById('f-pub').checked = prefill && prefill.pub != null ? prefill.pub : !!existing?.isPublished;
       document.getElementById('f-pts').value    = model.pointsPossible;
-      document.getElementById('f-mode').value   = model.gradingMode;
       document.getElementById('f-switch').value = model.switchPolicy;
 
       renderRefPdfSelect();
@@ -651,17 +658,56 @@
       document.getElementById('f-i-desc').value  = model.interactive.description;
     }
 
-    // One date input per meeting-day letter the offering's sections actually use, so a course
-    // meeting W/F needs no code change. No meeting-day data at all → one plain due date.
+    /* One date+time pair per meeting-day letter the offering's sections actually use, so a course
+     * meeting W/F needs no code change. No meeting-day data at all → one plain deadline.
+     *
+     * THE TIME BOX IS NEW (2026-07-27, faculty beta). It was a bare date until then and the hour
+     * was hardcoded to 2359 — fine as a default, wrong as the only option: a preflight due before
+     * an 0750 class had no way to say so.
+     *
+     * A SEPARATE TIME INPUT, NOT ONE `datetime-local`. The requirement is "default to 11:59 pm for
+     * the date selected", and datetime-local cannot express that — it hands back either an empty
+     * value or midnight, so the common case (pick a date, accept the default) would need the
+     * director to type 23:59 on every single row. Two boxes let the time carry its default while
+     * the date starts empty, which is the way round that matches how the form is actually filled in.
+     */
+    const DEFAULT_DUE_TIME = '23:59';
+    const dueDatePart = (v) => String(v || '').slice(0, 10);
+    const dueTimePart = (v) => (String(v || '').length > 10 ? String(v).slice(11, 16) : DEFAULT_DUE_TIME);
+
     function renderDueDays() {
       const days = (vm.meetingDays && vm.meetingDays.length) ? vm.meetingDays : ['_all'];
-      document.getElementById('f-due-days').innerHTML = days.map(d =>
-        `<div class="field grow" style="min-width:150px"><label for="f-due-${esc(d)}">${esc(DAY_LABEL[d] || d + '-day')} due date</label>
-           <input id="f-due-${esc(d)}" type="date" data-due="${esc(d)}" value="${esc(model.dueByDay[d] || '')}"></div>`).join('');
+      document.getElementById('f-due-days').innerHTML = days.map(d => {
+        const cur = model.dueByDay[d] || '';
+        return `<div class="field grow" style="min-width:230px">
+          <label for="f-due-${esc(d)}">${esc(DAY_LABEL[d] || d + '-day')} due date &amp; time</label>
+          <div class="row" style="gap:8px">
+            <input id="f-due-${esc(d)}" type="date" data-due="${esc(d)}" style="flex:1 1 140px"
+                   value="${esc(dueDatePart(cur))}">
+            <input id="f-duet-${esc(d)}" type="time" data-duetime="${esc(d)}" style="flex:0 0 116px"
+                   value="${esc(dueTimePart(cur))}" aria-label="${esc(DAY_LABEL[d] || d)} due time">
+          </div></div>`;
+      }).join('');
       const secs = (vm.sections || []).filter(s => (s.meeting_days || []).length);
-      document.getElementById('f-due-hint').textContent = secs.length
-        ? `A student's deadline comes from their section's meeting day (${secs.map(s => `${s.code}=${(s.meeting_days || []).join('/')}`).join(', ')}).`
-        : 'Sections in this term declare no meeting days, so one deadline applies to everyone.';
+      document.getElementById('f-due-hint').textContent =
+        (secs.length
+          ? `A student's deadline comes from their section's meeting day (${secs.map(s => `${s.code}=${(s.meeting_days || []).join('/')}`).join(', ')}).`
+          : 'Sections in this term declare no meeting days, so one deadline applies to everyone.')
+        + ' Leave the time at 11:59 pm for the usual night-before deadline.';
+    }
+
+    /**
+     * Fold the two boxes for one day back into the single 'YYYY-MM-DDTHH:MM' the model stores.
+     *
+     * Clearing the DATE clears the day entirely — that is how a director removes a deadline, and
+     * a time with no date is not a deadline. The reverse is not symmetric: a blank time falls back
+     * to 2359 rather than to midnight, so emptying that box cannot silently make everything due at
+     * the start of the day.
+     */
+    function readDueDay(day) {
+      const date = document.getElementById(`f-due-${day}`)?.value || '';
+      const time = document.getElementById(`f-duet-${day}`)?.value || DEFAULT_DUE_TIME;
+      model.dueByDay[day] = date ? `${date}T${time}` : '';
     }
 
     // ── Components & policy ───────────────────────────────────────────────
@@ -810,6 +856,12 @@
           </div>`;
         }
         // Q2 reading reflection: pinned second, editable text + AI guidance, identical to the interaction. No remove.
+        //
+        // It carries a Points box like any other question as of 2026-07-27 (faculty beta). It has
+        // always been worth 1 — ensureDefaultQuestions() creates it that way and the Fall builders
+        // write the same — but the value was invisible and unreachable, so a director who wanted a
+        // 2-point reflection had no way to say so and no way to discover that 1 was the number.
+        // Default unchanged; only the control is new.
         if (q.role === 'reading_reflection') {
           return `<div class="lb-q">
             <div class="lb-q-head">
@@ -820,6 +872,8 @@
             <div class="field-hint" style="margin:-2px 0 8px">Standard prompt, identical to the AI Interaction — auto-filled, editable, and can't be removed.</div>
             <div class="field"><label>Question text</label>
               <textarea rows="2" data-q="${i}" data-f="text">${esc(q.text || '')}</textarea></div>
+            <div class="field" style="max-width:130px"><label>Points</label>
+              <input type="number" min="0" step="0.1" data-q="${i}" data-f="points" value="${q.points ?? 1}"></div>
             <div class="field" style="margin-bottom:0"><label>AI guidance — judge whether the reflection is meaningful (not shown to students)</label>
               <textarea rows="2" data-q="${i}" data-f="expected_response">${esc(q.expected_response || '')}</textarea></div>
           </div>`;
@@ -886,7 +940,8 @@
           else                           q[ds.f] = t.value;
           return;
         }
-        if (ds.due) { model.dueByDay[ds.due] = t.value || ''; return; }
+        if (ds.due)     { readDueDay(ds.due); return; }
+        if (ds.duetime) { readDueDay(ds.duetime); return; }
         if (ds.pf)  { model.written[ds.pf] = t.value; return; }
         if (ds.i)   { if (ds.i === 'slug') interactionSlugTouched = true; model.interactive[ds.i] = t.value; return; }
       });
@@ -903,8 +958,11 @@
         const t = e.target;
         if (t.id === 'f-pf-refpdf-sel') { handleRefSelect(t.value); return; }
         if (t.id === 'f-pts')    { model.pointsPossible = parseFloat(t.value) || 0; return; }
-        if (t.id === 'f-mode')   { model.gradingMode = t.value; return; }
         if (t.id === 'f-switch') { model.switchPolicy = t.value; return; }
+        // `change` (not `input`) is what a date/time picker fires when it is driven by its own
+        // calendar UI rather than typed into, so both events have to reach readDueDay().
+        if (t.dataset.due)     { readDueDay(t.dataset.due); return; }
+        if (t.dataset.duetime) { readDueDay(t.dataset.duetime); return; }
         if (t.dataset.figfile != null)  { const f = t.files?.[0]; if (f) handleFigureFile(+t.dataset.figfile, f); return; }
       });
 
@@ -1056,7 +1114,10 @@
         objectives: [],
         policy: model.policy,
         pointsPossible: parseFloat(document.getElementById('f-pts').value) || 0,
-        gradingMode: document.getElementById('f-mode').value,
+        // Constant since the Grading select was withdrawn — see the note beside the Points field.
+        // Written explicitly rather than omitted: the column is NOT NULL DEFAULT 'effort'
+        // (001_core_model.sql), so leaving it out of an INSERT would create effort-mode offerings.
+        gradingMode: 'points',
         switchPolicy: document.getElementById('f-switch').value,
         isPublished: document.getElementById('f-pub').checked,
         dueByDay: model.dueByDay,

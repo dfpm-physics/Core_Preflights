@@ -261,4 +261,46 @@ eq('a submission for an unknown offering is dropped',
 eq('a submission for an unknown enrollment is dropped',
    runQ({ students: [], submissions: [qSub(16)] }), []);
 
+/* ── "— all my sections —" means the sections you TEACH (2026-07-27) ──────────
+ * mySectionIds() returned ctx.sectionIds, which for an instructor is right and for a DIRECTOR is
+ * every section of the offering — because their offering-wide staff row carries section_id NULL
+ * and staff_sections() expands it. So the picker's "all my sections" silently loaded the whole
+ * course, byte-identical to the "All sections (entire course)" option beside it, and the faculty
+ * beta reported exactly that: picking one section filters, picking "mine" does not.
+ *
+ * The failure is invisible on screen — a director who teaches two sections sees a longer list and
+ * no reason to think it is wrong — which is what makes it worth a test rather than a re-read. */
+section('faculty-grade.js — mySectionIds');
+
+const teaches = (rows) => ({
+  currentOffering: 'off-1',
+  sectionIds: ['sec-a', 'sec-b', 'sec-c'],
+  staff: rows,
+});
+
+eq('a director gets only the sections they personally teach',
+   G.mySectionIds(teaches([
+     { course_offering_id: 'off-1', section_id: null,    role: 'director' },   // sees everything
+     { course_offering_id: 'off-1', section_id: 'sec-b', role: 'director' },   // teaches this one
+   ])), ['sec-b']);
+
+eq('an instructor is unaffected — what they see IS what they teach',
+   G.mySectionIds({ currentOffering: 'off-1', sectionIds: ['sec-a', 'sec-b'],
+     staff: [{ course_offering_id: 'off-1', section_id: 'sec-a', role: 'instructor' },
+             { course_offering_id: 'off-1', section_id: 'sec-b', role: 'instructor' }] }),
+   ['sec-a', 'sec-b']);
+
+// The fallback, and the half that would otherwise fail silently: a pure director teaching nothing
+// must get the whole course rather than an empty page that looks like "nothing to grade".
+eq('a director who teaches nothing still gets everything they staff',
+   G.mySectionIds(teaches([{ course_offering_id: 'off-1', section_id: null, role: 'director' }])),
+   ['sec-a', 'sec-b', 'sec-c']);
+
+// Another term's staff row must not widen or narrow this one.
+eq('a staff row in a different offering is ignored',
+   G.mySectionIds(teaches([
+     { course_offering_id: 'off-1', section_id: 'sec-a', role: 'instructor' },
+     { course_offering_id: 'off-2', section_id: 'sec-z', role: 'director' },
+   ])), ['sec-a']);
+
 process.exit(summary() ? 0 : 1);

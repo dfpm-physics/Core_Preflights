@@ -76,11 +76,14 @@ for (const s of OFFLINE) {
 //                 student-facing portal — different page, opposite audience, easy to confuse.
 //   test-dashboard-rows  same for faculty-data.js — buildLessonRows and, above all, that its
 //                 deadline honours a per-student extension
+//   test-lesson-due  imports faculty-lessons.js and faculty-admin.js — the editor's deadline
+//                 arithmetic (a naive string was being stored as UTC) and the staff default
+//                 password, whose three copies it checks against each other
 for (const suite of ['test-imports.mjs', 'test-rollup.mjs', 'test-system-prefs.mjs',
                      'test-run-banner.mjs', 'test-help-status.mjs', 'test-prefs.mjs',
                      'test-tasks.mjs', 'test-gradebook.mjs', 'test-grade.mjs', 'test-ei.mjs',
                      'test-dashboard-rows.mjs', 'test-student-detail.mjs', 'test-feedback.mjs',
-                     'test-feedback-admin.mjs']) {
+                     'test-feedback-admin.mjs', 'test-lesson-due.mjs']) {
   const r = spawnSync(process.execPath, [resolve(import.meta.dirname, suite)],
                       { encoding: 'utf8' });
   process.stdout.write(r.stdout || '');

@@ -24,6 +24,7 @@ import {
   OFFERING_SELECT, GRADE_SELECT, SUBMISSION_SELECT, EXTENSION_SELECT,
   shapeOffering, withResolvedDue, offeringSections,
   shapeSubmission, questionsOf, effectiveDue, submissionLateness,
+  actionableSections,
 } from './schema.js';
 
 /** Scheduled assignments for the current offering, for the picker. */
@@ -43,8 +44,21 @@ export async function gradeAssignmentList(ctx) {
   }));
 }
 
-/** Sections the caller personally staffs — already resolved by auth.js from staff_sections(). */
-export function mySectionIds(ctx) { return ctx.sectionIds || []; }
+/**
+ * The sections behind the picker's "— all my sections —" option.
+ *
+ * This returned `ctx.sectionIds` until 2026-07-27, and for an instructor that was right. For a
+ * DIRECTOR it was not, and the difference was invisible: a director's offering-wide staff row
+ * makes `staff_sections()` (and therefore ctx.sectionIds) every section of the offering, so
+ * "all my sections" silently loaded the entire course — byte-identical to the "All sections
+ * (entire course)" option sitting next to it. Picking one section filtered correctly, picking
+ * "mine" did not, which is exactly what the beta reported.
+ *
+ * `actionableSections()` is the same predicate the dashboard's due-out row and the grading queue
+ * already use — taught ∩ visible, falling back to visible so a director who teaches nothing gets
+ * the course rather than an empty page.
+ */
+export function mySectionIds(ctx) { return actionableSections(ctx).ids; }
 
 /** Every section in the current offering (directors/admins see all of them anyway). */
 export async function allSectionIds(ctx) {
@@ -441,60 +455,29 @@ export async function courseExtensions(ctx, sectionIds) {
   }).filter(r => r.offeringId in offeringOf);   // other offerings' rows are not this report
 }
 
-/* ── Review sign-off (migration 007) ─────────────────────────────────────────
- * "I have read the AI's proposed grades and comments for this section and made my changes."
- * Deliberately NOT is_finalized, which publishes to students.
- */
-export async function loadSignoffs(ctx, offeringId, sectionIds) {
-  if (!offeringId || !sectionIds?.length) return {};
-  const [signoffs, staff] = await Promise.all([
-    db.from('review_signoffs')
-      .select('id, assignment_offering_id, section_id, reviewed_by, reviewed_at, note')
-      .eq('assignment_offering_id', offeringId).in('section_id', sectionIds),
-    db.from('instructors').select('id, name'),
-  ]);
-  const nameOf = Object.fromEntries((staff.data || []).map(i => [i.id, i.name]));
-  return Object.fromEntries((signoffs.data || []).map(s => [s.section_id, {
-    id: s.id,
-    sectionId: s.section_id,
-    reviewedAt: s.reviewed_at,
-    reviewedBy: s.reviewed_by,
-    reviewedByName: nameOf[s.reviewed_by] || 'Unknown instructor',
-    note: s.note || '',
-  }]));
-}
-
-/**
- * Sign off one section. reviewed_by MUST be the caller: review_signoffs_require_self()
- * rejects an attestation naming anyone else, for the same reason 006 rejects a
- * misattributed unlock.
- */
-export function signOffSection(ctx, offeringId, sectionId, note = null) {
-  return db.from('review_signoffs').upsert({
-    assignment_offering_id: offeringId,
-    section_id: sectionId,
-    reviewed_by: ctx.user.id,
-    reviewed_at: new Date().toISOString(),
-    note: note || null,
-  }, { onConflict: 'assignment_offering_id,section_id' });
-}
-
-export function clearSignoff(offeringId, sectionId) {
-  return db.from('review_signoffs').delete()
-    .eq('assignment_offering_id', offeringId).eq('section_id', sectionId);
-}
-
-/**
- * A sign-off stops holding once the grades move under it.
+/* ── Review sign-off (migration 007): WITHDRAWN 2026-07-27 ───────────────────
  *
- * Derived rather than stored (see the 007 header): grades_touch maintains grades.updated_at,
- * so "stale" is exactly `some grade in this section changed after the attestation`.
+ * `loadSignoffs()`, `signOffSection()`, `clearSignoff()` and `signoffStale()` lived here and
+ * backed the Grade page's "Mark section reviewed" button, the pill bar under it, and the
+ * `review_signoffs` table.
+ *
+ * WHAT IT ASSUMED. Two roles and two steps: the instructor attests "I have read the AI's
+ * proposals for my section", and then somebody else — the director — publishes. The attestation
+ * existed so that second person could see who was ready.
+ *
+ * WHY IT IS GONE. Faculty beta, 2026-07-27: there is no second person. Finalizing publishes
+ * exactly the sections currently loaded, and `grades_staff_write` has always admitted any
+ * staff member of those sections, so an instructor pressing **Finalize & publish** releases
+ * their own section and nothing else — which is the whole authorization argument. With the
+ * instructor doing both, the attestation is a note-to-self placed one click from the button
+ * that actually does the work, and a second control that publishes nothing is a control people
+ * click by mistake.
+ *
+ * THE TABLE IS NOT DROPPED. DDL on `app` is sealed (CORE.md §0), and dropping it would also
+ * discard the rows already written. It is simply no longer read or written; nothing renders it.
+ * If a two-step review is ever wanted again, this is the git history to start from — but note
+ * that it should not come back as a button beside Finalize.
  */
-export function signoffStale(signoff, gradeUpdatedISOs) {
-  if (!signoff?.reviewedAt) return false;
-  const at = new Date(signoff.reviewedAt).getTime();
-  return (gradeUpdatedISOs || []).some(iso => iso && new Date(iso).getTime() > at);
-}
 
 /* ── Worklists ───────────────────────────────────────────────────────────────
  * The queues answer the question the Grade tab could not: not "how do I grade THIS
@@ -530,16 +513,21 @@ export async function pastDueUngraded(ctx, sectionIds, now = new Date()) {
   const sectionOf = Object.fromEntries((enrolRows || []).map(e => [e.id, e.section_id]));
   if (!enrollmentIds.length) return [];
 
+  // offering_activities rides along so the WRITTEN activity id is known per offering — the only
+  // way to tell an interactive taker from a written one, and since 2026-07-27 the Grade page
+  // does not show interactive takers at all. A box counting work that is not on the page it
+  // links to is the same confusion the queue exists to prevent.
   const { data: offerings } = await db.from('assignment_offerings')
     .select('id, due_at, due_by_day, position, is_published, assignments!inner(slug, title),' +
-            'assignment_due_dates(section_id, due_at)')
+            'assignment_due_dates(section_id, due_at),' +
+            'offering_activities(activity_id, activities(id, modality))')
     .eq('course_offering_id', ctx.currentOffering).eq('is_published', true);
 
   const offeringIds = (offerings || []).map(o => o.id);
   if (!offeringIds.length) return [];
 
   const [subs, grds, exts] = await Promise.all([
-    db.from('submissions').select('enrollment_id, assignment_offering_id, status')
+    db.from('submissions').select('enrollment_id, assignment_offering_id, status, chosen_activity_id')
       .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds),
     db.from('grades').select('enrollment_id, assignment_offering_id, is_finalized')
       .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds),
@@ -563,11 +551,16 @@ export async function pastDueUngraded(ctx, sectionIds, now = new Date()) {
     // meeting day's deadline rather than the offering default (migration 017).
     const shaped = withResolvedDue(
       { dueAt: o.due_at, dueBySection, dueByDay: o.due_by_day || {} }, offeringSections(ctx));
+    const writtenActivityId =
+      (o.offering_activities || []).find(oa => oa.activities?.modality === 'written')?.activity_id || null;
 
     let outstanding = 0, ungraded = 0, waiting = 0;
     for (const s of (subs.data || []).filter(x => x.assignment_offering_id === o.id)) {
       const k = key(s.enrollment_id, o.id);
       if (finalized.has(k)) continue;
+      // Committed to the interactive path — auto-graded on commit (migration 015) and not shown
+      // on the Grade page. A draft (nothing chosen) stays in: they may yet land on the written one.
+      if (s.chosen_activity_id && s.chosen_activity_id !== writtenActivityId) continue;
       // A student still inside an extension is not a backlog item yet — they show up in the
       // extensions queue when their own clock runs out.
       const { isPast } = effectiveDue(shaped, sectionOf[s.enrollment_id], extBy[k] || null, now);

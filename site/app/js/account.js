@@ -102,7 +102,9 @@ async function facultyIdentity(ctx) {
     byOffering.set(o.id, prev);
   });
 
-  const ROLE = { director: 'Director', instructor: 'Instructor', grader: 'Grader' };
+  // 'grader' is retired (2026-07-27) but rows may still carry it — label it rather than render
+  // a bare slug. See ROLE_LABEL in faculty-admin.js.
+  const ROLE = { director: 'Director', instructor: 'Instructor', grader: 'Grader (retired)' };
   [...byOffering.values()].forEach(v => {
     const scope = v.wide ? 'all sections' : (v.sections.sort().join(', ') || 'no sections yet');
     rows.push([v.label, `${ROLE[v.role] || v.role} — ${scope}`, '']);
@@ -257,7 +259,9 @@ export async function renderAccount(ctx, root) {
 
     ${rotate ? `<div class="alert alert-warn">
       <strong>Choose a new password to continue.</strong>
-      Your account is on its default password — the last 6 digits of your ID — which means
+      Your account is on its default password — ${isFaculty
+        ? 'your last name followed by <code>1234</code>'
+        : 'the last 6 digits of your ID'} — which means
       someone else knows it. Pick your own below and the rest of PREP unlocks.</div>` : ''}
 
     <div class="card">
@@ -288,7 +292,10 @@ export async function renderAccount(ctx, root) {
       <div class="muted" style="font-size:0.82em;margin-top:10px">Forgot your current one?
         ${ctx.role === 'student'
           ? 'Ask your instructor to reset it. They can put it back to the default — the last 6 digits of your ID — but cannot look up or choose a password for you.'
-          : 'Ask a system admin to reset it. PREP cannot send recovery email.'}</div>
+          // Staff recovery stopped being a Supabase-dashboard errand on 2026-07-27: a derivable
+          // default (last name + 1234) means a director can restore it without choosing anything,
+          // which is the same bargain cadets have always had. See faculty-admin.js.
+          : 'Ask your course director to reset it from Course administration → Staff. They can put it back to the default — your last name followed by 1234 — but cannot look up or choose a password for you.'}</div>
     </div>
 
     <div class="card">

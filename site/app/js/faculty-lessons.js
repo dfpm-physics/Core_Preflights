@@ -191,8 +191,56 @@ export async function getLibraryAssignment(assignmentId) {
  * Due dates — per meeting-day, materialized per section
  * ════════════════════════════════════════════════════════════════════════════ */
 
-/** 'YYYY-MM-DD' -> the end-of-day local ISO the DB stores as timestamptz. */
-const endOfDay = (d) => (d ? `${d}T23:59:59` : null);
+/**
+ * An editor due value -> the UTC ISO timestamp the DB stores.
+ *
+ * ── WHAT THE EDITOR SENDS ────────────────────────────────────────────────────────────────
+ * 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM', both in the DIRECTOR'S LOCAL time. The time half is new
+ * (2026-07-27, faculty beta): the field was a bare date and the hour was hardcoded, which is fine
+ * as a default and wrong as the only option — a preflight due before an 0750 class had no way to
+ * say so. A bare date still means 2359, so every stored deadline and every prefill link
+ * (`due_m=`/`due_t=`, a FROZEN contract — docs/contracts/INTERACTION-PREFILL-LINK.md) keeps
+ * meaning exactly what it meant.
+ *
+ * ── AND WHY IT IS CONVERTED HERE RATHER THAN PASSED THROUGH ──────────────────────────────
+ * This used to return the naive string unchanged: `'2026-08-24' -> '2026-08-24T23:59:59'`.
+ * PostgREST hands that to a `timestamptz` column, and Postgres resolves a literal with no offset
+ * using the SESSION time zone — UTC on Supabase. So "due 2359" was stored as 23:59 UTC and
+ * enforced at 1659 in Denver: every lesson whose deadline was set in this editor was silently due
+ * six hours early, and the students who lost the evening had no way to see why.
+ *
+ * (Fall 2026 is not affected. Those deadlines came from `scripts/fall2026/build_fall_preflights.py`,
+ * which does the zoneinfo conversion CORE.md §2 requires. This was only ever the editor's path.)
+ *
+ * `new Date('YYYY-MM-DDTHH:MM:SS')` — no offset, with a time — is parsed as LOCAL by every engine,
+ * so one Date round-trip is the whole conversion. It is the browser's zone rather than the
+ * course's, which is the same trade the extension modal already makes (grade.html saveExt) and
+ * right for the case that matters: a director scheduling from their desk in Colorado.
+ *
+ * Seconds are pinned to :59 — a deadline is inclusive of its minute, and :00 would make the last
+ * 59 seconds of it late.
+ */
+const endOfDay = (d) => {
+  if (!d) return null;
+  const s = String(d);
+  const local = s.length <= 10 ? `${s}T23:59:59` : `${s.slice(0, 16)}:59`;
+  const at = new Date(local);
+  return isNaN(at) ? null : at.toISOString();
+};
+
+/**
+ * The inverse, for loading a stored deadline back into the editor: UTC ISO -> local
+ * 'YYYY-MM-DDTHH:MM'. Built from the local getters rather than from the string, because the
+ * string is UTC and slicing it would put a Denver evening deadline on the following day —
+ * which is what the date-only editor did, visibly, before the time box existed.
+ */
+export function toEditorDue(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 /**
  * Turn the editor's per-day map ({M:'2026-08-24', T:'2026-08-25'}) into one
@@ -213,10 +261,17 @@ export function dueRowsFor(offeringId, dueByDay, sections) {
   return rows;
 }
 
-/** The offering's DEFAULT deadline: the earliest per-day date, so nobody's default is late. */
+/**
+ * The offering's DEFAULT deadline: the earliest per-day value, so nobody's default is late.
+ *
+ * Sorted as strings, which is exact for both accepted shapes: 'YYYY-MM-DD' and
+ * 'YYYY-MM-DDTHH:MM' are both lexicographically ordered by time. Mixing them is ordered too —
+ * '2026-08-24' sorts before '2026-08-24T08:00', and a bare date means 2359, so a date-only entry
+ * would in fact be the LATER of the two. Resolve to full timestamps before comparing.
+ */
 export function defaultDueFrom(dueByDay) {
-  const all = Object.values(dueByDay || {}).filter(Boolean).sort();
-  return all.length ? endOfDay(all[0]) : null;
+  const all = Object.values(dueByDay || {}).filter(Boolean).map(endOfDay).sort();
+  return all.length ? all[0] : null;
 }
 
 /**

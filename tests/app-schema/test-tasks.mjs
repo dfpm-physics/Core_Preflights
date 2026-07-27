@@ -120,6 +120,35 @@ await withSources([
   eq('a director who teaches nothing still sees everything they staff', sawPure, ['s1', 's2', 's3']);
 });
 
+/* ── A source may return SEVERAL tasks (2026-07-27) ──────────────────────────
+ * "9 · Review grades" was one box for three lessons' worth of work, linking to a Grade page that
+ * took no assignment parameter — so the reader landed on an empty picker and had to work out which
+ * three. The grading sources now emit one entry per lesson, each deep-linking to it. The registry
+ * is what flattens them, and the two properties worth pinning are that ids stay distinct (or the
+ * boxes are indistinguishable to `only:` filtering and to these tests) and that a zero-count entry
+ * inside an array is still dropped. */
+section('faculty-tasks.js — a source returning several tasks');
+
+await withSources([
+  { id: 'multi', severity: 'alert', icon: '📝', load: async () => ([
+    { idSuffix: 'off-1', count: 4, action: 'Review', text: 'four on lesson 1', link: 'grade.html?a=off-1' },
+    { idSuffix: 'off-2', count: 0, action: 'Review', text: 'none on lesson 2', link: 'grade.html?a=off-2' },
+    { idSuffix: 'off-3', count: 2, action: 'Review', text: 'two on lesson 3', link: 'grade.html?a=off-3' },
+  ]) },
+], async () => {
+  const tasks = await T.loadTasks(ctx);
+  eq('an array becomes one task per entry, in the order emitted',
+     tasks.map(t => t.id), ['multi:off-1', 'multi:off-3']);
+  eq('…a zero-count entry inside the array is still dropped', tasks.length, 2);
+  eq('…and each keeps its own deep link', tasks[0].link, 'grade.html?a=off-1');
+  eq('…and inherits the source severity and icon', [tasks[1].severity, tasks[1].icon], ['alert', '📝']);
+  check('…and idSuffix does not leak into the rendered task', !('idSuffix' in tasks[0]));
+});
+
+// The deep link is the whole point of the split: a box that links to a bare grade.html sends the
+// reader back to the picker it was meant to skip.
+check('MAX_PER_SOURCE is a real cap, not a placeholder', T.MAX_PER_SOURCE > 0);
+
 await withSources([
   { id: 'ok', severity: 'warn', icon: '⚑', load: async () => ({ count: 3, text: 'three', link: 'a.html' }) },
   { id: 'boom', severity: 'alert', icon: '✖', load: async () => { throw new Error('query died'); } },
@@ -180,6 +209,16 @@ check('the panel counts itself', html.includes('count-pill">2<'));
 check('the box shows the short action', html.includes('>Review AI grades<'));
 check('…and the full sentence is the tooltip',
       html.includes('title="9 submissions past due and not finalized"'));
+
+// Per-lesson boxes carry a query string, and the href is built by interpolation — an unescaped
+// one would break the attribute on any title with a quote in it.
+const deep = T.renderTasks([
+  { id: 'to-grade:o1', severity: 'alert', icon: '📝', count: 4, action: 'Review · Preflight 3',
+    text: '4 submissions past due on Preflight 3', link: 'grade.html?a=o1' },
+], { esc });
+check('a per-lesson box links to the lesson, not to the bare page',
+      deep.includes('href="grade.html?a=o1"'));
+check('…and names the lesson on its face', deep.includes('>Review · Preflight 3<'));
 
 // A source written before `action` existed must still render rather than print "undefined".
 const legacy = T.renderTasks([

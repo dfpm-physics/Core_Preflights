@@ -123,6 +123,97 @@ export function updateStudentSection(enrollmentId, sectionId) {
   return db.from('enrollments').update({ section_id: sectionId }).eq('id', enrollmentId);
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+ * Adding one cadet at a time (faculty beta, 2026-07-27)
+ * ════════════════════════════════════════════════════════════════════════════
+ * The roster import is the right tool for a registrar export and the wrong one for the cadet who
+ * transfers in during week three. Until now that cadet meant either hand-editing a CSV or asking
+ * for a fresh export, so in practice it meant they were missing from PREP.
+ *
+ * ── DOES ADDING SOMEBODY WHO ALREADY EXISTS CREATE A SECOND RECORD? NO. ────────────────────
+ * `students` is keyed on the CADET ID (`student_id bigint PRIMARY KEY`, 001_core_model.sql) — the
+ * person, independent of any course — and `enrollments` is what attaches them to a section. So a
+ * cadet taking both Physics 110 and Physics 215 is ONE students row with TWO enrollments, and
+ * everything per-student (submissions, grades, extensions) hangs off the enrollment, which is what
+ * keeps the two courses' work from colliding. Adding an existing cadet to a second course MERGES:
+ * it enrolls the record that is already there and leaves the person untouched.
+ *
+ * That is not a new property of this function — `commitRoster()` has always upserted people on
+ * `student_id` with `ignoreDuplicates` for the same reason. It is stated here because this is the
+ * screen where somebody will wonder.
+ */
+
+/**
+ * Find cadets by name or cadet ID, for the "add someone who is already in PREP" picker.
+ *
+ * WHAT THIS CAN AND CANNOT SEE, because the limit is load-bearing and invisible from the UI:
+ * `students_read_staff` (002_rls.sql) exposes a student only through an enrollment in a section
+ * the caller staffs. So this returns cadets from the caller's OTHER offerings — the case the
+ * picker exists for, a director who runs both courses — and returns nothing for a cadet who has
+ * only ever taken somebody else's class. That cadet is not unreachable: typing their cadet ID into
+ * the new-student fields still merges onto their existing record, because the upsert below keys on
+ * a primary key RLS does not hide.
+ *
+ * @param {string} query  a name fragment or a (partial) cadet ID
+ * @param {number} [limit]
+ */
+export async function searchStudents(query, limit = 20) {
+  const q = String(query || '').trim();
+  if (q.length < 2) return [];
+  // Numeric input is matched as an id PREFIX rather than by equality: a director types the first
+  // few digits off a form, and 3000990009 is not a number anyone recalls in full.
+  const filter = /^\d+$/.test(q)
+    ? `student_id::text.like.${q}%`
+    : `name.ilike.%${q}%`;
+  const { data } = await db.from('students')
+    .select('student_id, name, email, squadron')
+    .or(filter)
+    .order('name')
+    .limit(limit);
+  return data || [];
+}
+
+/**
+ * Enroll one cadet in one section of the current offering, creating the person if they are new.
+ *
+ * Two writes, in this order, and neither is a blind overwrite:
+ *
+ *   1. The PERSON. `ignoreDuplicates` on the `student_id` primary key, so an existing record is
+ *      left exactly as it is — this screen enrolls people, it does not edit them, and quietly
+ *      rewriting a name or an address the operator was never shown is what the import's whole
+ *      review step exists to prevent. Editing a record is the roster import's job.
+ *   2. The ENROLLMENT. Also idempotent (`student_id,section_id` is UNIQUE), so re-adding somebody
+ *      who is already in that section reports success rather than an error about a duplicate key.
+ *
+ * @returns {{ error, created }} `created` = a new person was written, vs. an existing one enrolled
+ */
+export async function addStudentToOffering(ctx, { student_id, name, email, squadron, section_id }) {
+  const sid = Number(student_id);
+  if (!Number.isInteger(sid)) return { error: { message: 'Cadet ID must be a number.' } };
+  // Mirrors students_cadet_id_range so the operator gets a sentence instead of a constraint name.
+  if (sid < 3000000000 || sid > 3009999999) {
+    return { error: { message: 'That is not a cadet ID — it must be a 10-digit number starting 300.' } };
+  }
+  if (!section_id) return { error: { message: 'Choose a section.' } };
+
+  const { data: person, error: pErr } = await db.from('students')
+    .upsert([{ student_id: sid, name: String(name || '').trim() || String(sid),
+               email: (email || '').trim() || null, squadron: (squadron || '').trim() || null }],
+            { onConflict: 'student_id', ignoreDuplicates: true })
+    .select('student_id');
+  if (pErr) return { error: pErr };
+
+  const { error: eErr } = await db.from('enrollments').upsert(
+    [{ student_id: sid, section_id, status: 'active' }],
+    { onConflict: 'student_id,section_id', ignoreDuplicates: true });
+  if (eErr) return { error: eErr };
+
+  // Empty `person` means ON CONFLICT DO NOTHING fired: the cadet already existed, here or in a
+  // course this director cannot see. Their record was not touched, and they are now enrolled —
+  // which is the merge the header describes, and worth saying out loud on screen.
+  return { error: null, created: (person || []).length > 0 };
+}
+
 /* ── Roster import ───────────────────────────────────────────────────────────
  * Parsing and reconciliation moved to roster-import.js, which is pure and unit-tested
  * (tests/app-schema/test-roster-import.mjs). What remains here is the part that touches the

@@ -60,18 +60,17 @@
       No answers match the lit lamps. Click a lamp to bring those answers back.
     </div>
 
+    <!-- "Mark section reviewed" stood between these two until 2026-07-27 (faculty beta). It
+         assumed an instructor reviewed and a DIRECTOR published; there is no second person, and
+         Finalize publishes exactly the sections loaded here — which any staff member of those
+         sections has always been entitled to do (grades_staff_write). See faculty-grade.js. -->
     <div class="grade-actions" id="grade-actions" style="display:none">
       <button class="btn btn-primary" id="save-btn">Save draft</button>
       <button class="btn btn-secondary" id="finalize-btn">Finalize &amp; publish</button>
-      <!-- Separate from publishing on purpose: an instructor must be able to finish reviewing
-           without releasing grades, and a director must be able to see who is done before
-           anything goes out. See migration 007. -->
-      <button class="btn btn-secondary" id="signoff-btn">Mark section reviewed</button>
       <span id="save-status" class="muted" style="font-size:0.85em"></span>
       <span class="grow"></span>
       <span class="muted" style="font-size:0.78em">Yellow = full credit flagged for review · click a credit chip to cycle</span>
     </div>
-    <div class="signoff-bar" id="signoff-bar" hidden></div>
   </main>
 
   <div class="modal-backdrop" id="ext-modal">
@@ -93,21 +92,6 @@
     </div>
   </div>
 
-  <div class="modal-backdrop" id="signoff-modal">
-    <div class="modal" style="max-width:460px">
-      <div class="modal-head"><h2>Mark section reviewed</h2><button class="modal-close" data-close>×</button></div>
-      <p class="muted" style="font-size:0.88em;margin-bottom:14px" id="signoff-scope"></p>
-      <div class="field"><label for="signoff-note">Note <span class="muted">(optional)</span></label>
-        <input type="text" id="signoff-note" maxlength="200"
-               placeholder="Anything the director should know."></div>
-      <div class="error-msg" id="signoff-error" style="min-height:1em"></div>
-      <div class="row" style="gap:10px;margin-top:8px">
-        <button class="btn btn-primary" id="signoff-save">Mark reviewed</button>
-        <button class="btn btn-secondary" data-close>Cancel</button>
-      </div>
-    </div>
-  </div>
-
   <script type="module">
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
@@ -123,9 +107,16 @@
     // ── State ──
     let gradeData = {}, current = null, extensionMap = {}, scoreMap = {}, responseMap = {};
     // `current` is now an assignment OFFERING (shapeOffering), not an assignment row.
+    // currentStudents holds only the students this page can actually grade — interactive takers
+    // are dropped in loadView(), so nothing downstream (render, save, finalize scope) has to
+    // remember to exclude them again. `interactiveCount` is what was dropped, for the note.
     let currentStudents = [], enrollmentOf = {}, questions = [], submissionMap = {};
-    let maxTotal = 0, extSid = null;
-    let cachedMy = [], cachedAll = [], signoffs = {};
+    let maxTotal = 0, extSid = null, interactiveCount = 0;
+    let cachedMy = [], cachedAll = [];
+    // ?a=<assignment offering uuid> — how the dashboard's per-lesson due-out boxes and the
+    // gradebook land you on the lesson they were counting, instead of on an empty picker.
+    // Consumed once, on the first populate(), then forgotten so a course switch does not re-apply it.
+    let deepLink = new URLSearchParams(location.search).get('a') || '';
 
     const asgnSel = () => document.getElementById('asgn');
     const secSel  = () => document.getElementById('section');
@@ -142,9 +133,7 @@
       wireLamps();
       document.getElementById('save-btn').addEventListener('click', doSave);
       document.getElementById('finalize-btn').addEventListener('click', doFinalize);
-      document.getElementById('signoff-btn').addEventListener('click', openSignoff);
       wireExtModal();
-      wireSignoffModal();
       wireQueue();
       await populate(false);
     }
@@ -158,7 +147,12 @@
       ]);
       cachedMy = my; cachedAll = all;
 
-      const keepA = reset ? '' : asgnSel().value;
+      // A ?a= deep link wins over the retained pick, once. It is dropped if it names an
+      // assignment this offering does not hold — a link built for phys-215 opened after a course
+      // switch would otherwise leave the picker on a value with nothing behind it.
+      const linked = deepLink && asgns.some(a => a.id === deepLink) ? deepLink : '';
+      deepLink = '';
+      const keepA = linked || (reset ? '' : asgnSel().value);
       asgnSel().innerHTML = '<option value="">— select assignment —</option>' +
         asgns.map(a => `<option value="${esc(a.id)}"${a.id === keepA ? ' selected' : ''}>${esc(a.title)}</option>`).join('');
 
@@ -168,6 +162,10 @@
         + (director ? '<option value="__all__">All sections (entire course)</option>' : '')
         // A section id is a uuid now; the CODE is what an instructor recognises.
         + list.map(s => `<option value="${esc(s)}">${esc(ctx.sectionCodeOf(s))}</option>`).join('');
+
+      // An arriving deep link must load even on the first paint, where `reset` is false and the
+      // retained value was empty — the branch below would otherwise fall through to renderQueue().
+      if (linked) { await loadView(); return; }
 
       if (reset) {
         container().innerHTML = `<div class="muted">Select an assignment to begin grading.</div>`;
@@ -196,8 +194,25 @@
       const data = await G.loadGradingData(ctx, asgnId, resolveSectionIds());
       if (!data.offering) { container().innerHTML = `<div class="alert alert-error">Assignment not found.</div>`; actions.style.display = 'none'; return; }
       current = data.offering; responseMap = data.responseMap; scoreMap = data.gradeMap; extensionMap = data.extensionMap;
-      currentStudents = data.students; submissionMap = data.submissionMap;
-      signoffs = await G.loadSignoffs(ctx, asgnId, resolveSectionIds());
+      submissionMap = data.submissionMap;
+
+      /* INTERACTIVE TAKERS ARE NOT ON THIS PAGE (faculty beta, 2026-07-27).
+       *
+       * They used to get a read-only card explaining that their effort grade came from the lesson
+       * report and to adjust it elsewhere. Every word of that was true and it was still wrong: it
+       * put a card that cannot be graded in the middle of a screen whose entire purpose is grading,
+       * for a student who is already finalized (migration 015 grades them on commit). Faculty read
+       * a section of 18 cards, four of which do nothing, and had to re-learn which four each time.
+       *
+       * Dropping them HERE rather than inside buildGradeData() is deliberate: `currentStudents` is
+       * what render, save, finalize and the finalize-scope message all read, so filtering once at
+       * the source is what keeps the four of them from disagreeing. A draft — nothing chosen yet —
+       * stays, because that student may still land on the written path.
+       */
+      const gradable = data.students.filter(st => !G.isEffortGraded(current, data.submissionMap[st.student_id]));
+      interactiveCount = data.students.length - gradable.length;
+      currentStudents = gradable;
+
       // Enrollment is the key for every per-student write now (grades, extensions), so keep
       // the map the click handlers need — they only ever have a student id to hand.
       enrollmentOf = Object.fromEntries(data.students.map(s => [s.student_id, s.enrollment_id]));
@@ -206,14 +221,22 @@
       // against exactly that column, not against the sum of the question list.
       maxTotal = Number(current.pointsPossible ?? 0);
 
-      if (!data.students.length) { container().innerHTML = `<div class="alert alert-warn">No students found for the selected section(s).</div>`; actions.style.display = 'none'; return; }
+      if (!gradable.length) {
+        container().innerHTML = interactiveCount
+          ? `<div class="alert alert-info">Nothing to grade by hand here — all ${interactiveCount}
+               student${interactiveCount === 1 ? '' : 's'} in view took the interactive lesson, which
+               is graded automatically from the lesson report.</div>`
+          : `<div class="alert alert-warn">No students found for the selected section(s).</div>`;
+        actions.style.display = 'none';
+        renderQueue();
+        return;
+      }
 
-      // submissionMap is passed so interactive takers are excluded — they are graded by effort,
-      // not by these questions. See buildGradeData()'s header for what happens without it.
-      gradeData = G.buildGradeData(current, data.students, responseMap, scoreMap, submissionMap);
-      render(data.students);
+      // submissionMap is still passed: buildGradeData()'s own exclusion is the second line of
+      // defence for the same rule, and its header explains what a stray entry would cost.
+      gradeData = G.buildGradeData(current, gradable, responseMap, scoreMap, submissionMap);
+      render(gradable);
       actions.style.display = 'flex';
-      renderSignoffBar();
       // Deliberately not awaited: the queue is cross-assignment and reloads from scratch, and the
       // grading view the reader asked for must not wait on a panel above it.
       renderQueue();
@@ -229,10 +252,21 @@
       return questions.reduce((s, q) => s + (Number(gradeData[sid][q.id]?.score) || 0), 0);
     }
 
+    /* Say how many students are missing from this list and why. Without it the count silently
+       disagrees with the roster and with the dashboard, and "where is Cadet Doe" is a support
+       question rather than a sentence on the page. Omitted entirely when nothing was hidden. */
+    function hiddenNote() {
+      if (!interactiveCount) return '';
+      return `<div class="muted" style="font-size:0.85em;margin-bottom:12px">
+        ${interactiveCount} student${interactiveCount === 1 ? '' : 's'} took the interactive lesson
+        and ${interactiveCount === 1 ? 'is' : 'are'} not shown — those are graded automatically from
+        the lesson report on submission. Adjust one on the student's own page.</div>`;
+    }
+
     function render(students) {
       const qs = questions;
       const displayQs = qs.filter(q => !isZeroPointQuestion(q));
-      container().innerHTML = students.map(st => {
+      container().innerHTML = hiddenNote() + students.map(st => {
         const sid = st.student_id;
         const finalized = scoreMap[sid]?.finalized;
         const ext = extensionMap[sid];
@@ -265,32 +299,9 @@
             <button class="btn btn-ghost btn-sm" data-act="ext-remove" data-sid="${sid}" data-name="${nm}">Remove</button>`
             : `<button class="btn btn-ghost btn-sm" data-act="ext" data-sid="${sid}" data-name="${nm}">Grant extension</button>`}`;
 
-        // This student worked the interactive lesson, so there is nothing here to mark. Show what
-        // they were graded on instead of a column of "No answer submitted" — which is what the
-        // written controls would render, and which reads as a failing student rather than one who
-        // took the other path. The card stays read-only by construction: no toggles, no feedback
-        // boxes, and no gradeData entry for Save to pick up.
-        if (!gradeData[sid]) {
-          const eff = scoreMap[sid]?.effort;
-          const body = eff == null
-            ? `<div class="grade-answer empty">Interactive lesson submitted — not yet graded.
-                 Effort arrives from the lesson report; run <code>grade_interactive.py</code> or
-                 wait for the analysis pass.</div>`
-            : `<div class="grade-answer">Graded on <strong>effort ${eff}/5</strong> from the
-                 interactive lesson report — ${total.toFixed(2)} of ${maxTotal.toFixed(2)} points.
-                 <div class="muted" style="margin-top:6px;font-size:.9em">Effort 0 → 0 pts ·
-                 1–2 → half · 3–5 → full. A reading reflection that is not meaningful caps effort
-                 at 2. Adjust it on the student's page, not here.</div></div>`;
-          return `<div class="grade-card${finalized ? ' finalized' : ''}" id="gc-${sid}">
-            <div class="gc-head">
-              <span class="gc-name">${nm}</span><span class="tag">Sec ${esc(ctx.sectionCodeOf(st.section_id))}</span>
-              <span class="tag tag-ai">Interactive</span>
-              ${headExtras}
-              <span class="gc-total" id="tot-${sid}">${total.toFixed(2)} / ${maxTotal.toFixed(2)} pts</span>
-            </div>
-            <div class="gc-body"><div class="grade-q">${body}</div></div>
-          </div>`;
-        }
+        // A read-only "graded on effort N/5" card used to be rendered here for interactive takers.
+        // They no longer reach render() at all — loadView() filters them out — so the branch is
+        // gone with them. `gradeData[sid]` is therefore always present below.
 
         const rows = displayQs.map(q => {
           const idx = qs.indexOf(q);
@@ -554,12 +565,6 @@
       document.getElementById('ext-save').addEventListener('click', saveExt);
     }
 
-    function wireSignoffModal() {
-      const m = document.getElementById('signoff-modal');
-      m.addEventListener('click', (e) => { if (e.target.id === 'signoff-modal' || e.target.dataset.close !== undefined) m.classList.remove('open'); });
-      document.getElementById('signoff-save').addEventListener('click', saveSignoff);
-    }
-
     function wireQueue() {
       // Delegated on #gq rather than on #main: the queue re-renders on every load, and one
       // listener on the stable host survives that where per-card listeners would not.
@@ -615,55 +620,6 @@
       loadView();
     }
 
-    // ── Review sign-off ──
-    function currentSectionIds() { return [...new Set(currentStudents.map(s => s.section_id))]; }
-
-    function renderSignoffBar() {
-      const bar = document.getElementById('signoff-bar');
-      const ids = currentSectionIds();
-      if (!ids.length) { bar.hidden = true; return; }
-      bar.hidden = false;
-      bar.innerHTML = ids.map(id => {
-        const s = signoffs[id];
-        const code = esc(ctx.sectionCodeOf(id));
-        if (!s) return `<span class="signoff-pill none">${code} · not reviewed</span>`;
-        // Grades that moved after the attestation retire it — derived, never stored.
-        const updates = currentStudents
-          .filter(st => st.section_id === id)
-          .map(st => scoreMap[st.student_id]?.updatedAt)
-          .filter(Boolean);
-        const stale = G.signoffStale(s, updates);
-        return `<span class="signoff-pill ${stale ? 'stale' : 'done'}"
-          title="${esc(s.note || '')}">${code} · ${stale ? 'reviewed, then changed' : 'reviewed'}
-          by ${esc(s.reviewedByName)} ${esc(fmtDate(s.reviewedAt))}</span>`;
-      }).join('');
-    }
-
-    function openSignoff() {
-      const ids = currentSectionIds();
-      if (!ids.length) { flash('Nothing to review.'); return; }
-      const codes = ids.map(id => ctx.sectionCodeOf(id)).sort();
-      document.getElementById('signoff-scope').textContent =
-        `You are attesting that you have read the proposed grades and comments for ` +
-        `${codes.length === 1 ? `section ${codes[0]}` : `${codes.length} sections (${codes.join(', ')})`} ` +
-        `and made any changes you want. This does not publish anything to students.`;
-      document.getElementById('signoff-note').value = '';
-      document.getElementById('signoff-error').textContent = '';
-      document.getElementById('signoff-modal').classList.add('open');
-    }
-
-    async function saveSignoff() {
-      const note = document.getElementById('signoff-note').value.trim();
-      const err = document.getElementById('signoff-error');
-      const ids = currentSectionIds();
-      const results = await Promise.all(
-        ids.map(id => G.signOffSection(ctx, current.offeringId, id, note || null)));
-      const bad = results.find(r => r.error);
-      if (bad) { err.textContent = 'Could not record it: ' + bad.error.message; return; }
-      document.getElementById('signoff-modal').classList.remove('open');
-      flash(`✓ Marked reviewed (${ids.length} section${ids.length === 1 ? '' : 's'})`);
-      loadView();
-    }
   </script>
 </body>
 </html>

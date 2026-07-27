@@ -27,15 +27,16 @@ at, so it reveals nothing — but the only page carrying the button has always b
 in practice an instructor asks their director. If that turns out to make lockouts last a day, the
 fix is to expose the Students tab read-only to instructors, not to hand out a password field.
 
-## Why you cannot choose a password for them
+## Why you cannot choose a password for anyone
 
-There is no field to type one, anywhere, by design. An instructor who knows a cadet's password
-holds a working credential for that account — and at the database level, a session opened with it
-is indistinguishable from the cadet's own. Every submission, every honor statement, and every
-grade appeal made under it would be too.
+There is no field to type one, anywhere, by design — for cadets and for staff alike. Somebody who
+knows another person's password holds a working credential for that account, and at the database
+level a session opened with it is indistinguishable from theirs. Every submission, every honor
+statement, every grade appeal — and for a staff account, every grade published — would be too.
 
-Resetting to the derived default avoids that entirely: you learn nothing you did not already know
-from the roster, and the cadet replaces it at their next sign-in.
+Resetting to the derived default avoids that entirely. You learn nothing you did not already know
+(a cadet ID on the roster, a surname on the staff list), and the account is forced onto a password
+only its owner knows at the next sign-in. Deriving is safe precisely because choosing is not.
 
 ## Signing in, for cadets
 
@@ -49,8 +50,19 @@ the same predictable default, so until they change it, it is not really private.
 
 ## If you are the one locked out
 
-Instructor accounts have no cadet ID, so there is no default to restore and no equivalent button.
-Ask a system admin, who resets staff accounts from the Supabase dashboard.
+**Ask your course director**, who resets staff accounts from **Admin → Staff → Reset password**.
+It works exactly like the cadet one: it restores your default and nothing else, and PREP forces you
+to pick a new password before you can do anything.
+
+**A staff default is your last name followed by `1234`** — `doe1234` for Jane Doe, lowercase. A
+hyphenated or two-part surname uses the first part only: Jane Smith-Jones gets `smith1234`.
+
+The same is true of a brand-new account: whoever adds you does not type a password, and cannot.
+You are created on that default and made to replace it the first time you sign in.
+
+*(Corrected 2026-07-27. This said instructor accounts had no default to restore, so recovery meant
+a system admin in the Supabase dashboard. That was true while the only derivable default was a
+cadet ID; staff now have one from their name, which is what made a delegated reset safe.)*
 
 ## Importing a roster
 
@@ -77,7 +89,36 @@ can change, not a rule the system keeps applying: **if a section's code does not
 it meets, open it and correct the meeting days**, or it will fall back to each assignment's default
 deadline instead of its own day's.
 
-Once the import lands, **Provision accounts** on the same tab creates a login for every enrolled
-cadet who does not have one, with the default password already set. **Move** and **Remove** on each
-row handle the rest of add/drop — moving a cadet between sections carries their submissions and
-grades with them, because those hang off the enrollment rather than the section.
+**Logins are created for you.** As of 2026-07-27 the import provisions every new cadet the moment it
+lands, and reports how many logins it made. **Provision accounts** is still on the tab and is still
+worth knowing: a cadet with no email address on file is *skipped*, not given a fabricated one, so
+after adding the missing address you use that button to finish the job.
+
+**Move** and **Remove** on each row handle the rest of add/drop — moving a cadet between sections
+carries their submissions and grades with them, because those hang off the enrollment rather than
+the section.
+
+## Adding one cadet
+
+The import is for a registrar export; **+ Add student** on the same tab is for the cadet who
+transfers in during week three.
+
+Start by searching. If they are already in PREP — usually because they are in your other course —
+select them and they are enrolled with the record they already have. **Nothing about the person
+changes**, which is the point: their name, address and squadron stay as they are, and you only add
+them to a section here. Use the roster import if a detail actually needs correcting.
+
+If the search finds nobody, fill in the cadet ID, name, email and section and they are created.
+Either way the login is provisioned straight away.
+
+### Does adding an existing cadet create a second record?
+
+**No — it merges.** A cadet is one record, keyed on their cadet ID, and being in a course is a
+separate thing attached to it. So somebody taking both Physics 110 and Physics 215 is *one* cadet
+with *two* enrolments, and their work in each course is attached to the right one. Adding them to a
+second course adds the enrolment and leaves the person alone.
+
+This holds even when the search cannot see them. It only finds cadets from courses you staff, so a
+cadet who has only ever taken somebody else's class comes back empty — type their cadet ID into the
+fields anyway and it still merges onto the record they already have, because the ID is what
+identifies them.

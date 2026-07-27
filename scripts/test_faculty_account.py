@@ -142,8 +142,13 @@ def main():
                     help="insert the instructors row (idempotent)")
     ap.add_argument("--remove", action="store_true",
                     help="delete the staff rows and the instructors row")
+    # 'grader' was withdrawn from the UI on 2026-07-27 (privilege-identical to 'instructor'; see
+    # ROLE_LABEL in site/app/js/faculty-admin.js). The CHECK constraint still admits it, so it stays
+    # available HERE — this script exists to put the P0.5 walkthrough account into a given state,
+    # including a legacy one nobody can create through the app any more.
     ap.add_argument("--role", choices=["director", "instructor", "grader"],
-                    help="rewrite the staff assignment rows to this tier")
+                    help="rewrite the staff assignment rows to this tier "
+                         "('grader' is retired in the UI; kept here to reproduce a legacy row)")
     ap.add_argument("--admin", dest="admin", action="store_true", default=None,
                     help="set is_global_admin = true")
     ap.add_argument("--no-admin", dest="admin", action="store_false",

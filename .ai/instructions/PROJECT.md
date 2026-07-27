@@ -29,6 +29,18 @@ lesson interactions at USAFA. Replaces GradeScope for two courses: Physics 110 a
   request carrying one. *(Cadets provisioned before 2026-07-21 still sign in with the fabricated
   `cadetID@usafa.edu` address that predates the registrar import.)*
 
+  **Staff work the same way as of 2026-07-27.** A staff account's default is **last name + `1234`**
+  (lowercase; a hyphenated or two-part surname uses the first part), derived from
+  `instructors.name`. `create-instructor` sets it — the caller supplies no password — and
+  `reset-staff-password` restores it from admin.html → **Staff**. Both set
+  `app_metadata.must_change_password`, which `auth.js` enforces for **both roles**: every page
+  redirects to that role's `account.html` until the user picks their own.
+  *This reversed a standing decision.* Staff recovery was deliberately unbuilt because an
+  instructor account had no derivable default, so a reset would have meant one person CHOOSING
+  another's credential. The prohibition on choosing is unchanged and structural — no parameter
+  exists in either function. What changed is that a default can now be derived, which is the same
+  bargain cadets have always had.
+
   > **Corrected 2026-07-27.** This said "asks any instructor of their section, who restores the
   > default from the Roster page". Two errors: the Roster page was folded into Course Admin →
   > Students on 2026-07-23, and the page carrying the control has always been director-gated, so an
@@ -93,6 +105,18 @@ Three tiers, enforced in `site/admin.html` via `isDirectorForCurrent()`:
 
 `isDirectorForCurrent()` returns true if `is_global_admin` OR `role = 'director'` for `currentCourse`.
 "— all my sections —" filter in Grade/Report tabs shows **only sections personally assigned** to the logged-in instructor; admins/directors with no assigned sections must use "All sections" to see students.
+
+In `app` the equivalent is `staff_assignments.role`, whose CHECK admits a **fourth** value,
+`grader`. It is **retired as of 2026-07-27** and no UI offers it: it meant "grades only, no
+authoring", but authoring is gated on *director* everywhere it is gated at all, so it was
+privilege-identical to `instructor`. The constraint is unchanged (DDL on `app` is sealed) and any
+existing row keeps working, labelled as retired rather than silently shown as something else.
+
+The `app` "— all my sections —" scope is `actionableSections()` (schema.js) — sections you *teach*,
+intersected with what you may see, falling back to what you may see when you teach none. That
+fallback is why a pure director gets the course rather than an empty page. *(faculty-grade.js
+`mySectionIds()` returned the raw visible set until 2026-07-27, which for a director is every
+section of the offering — so the filter was indistinguishable from "All sections".)*
 
 ## JSONB Structures
 
@@ -210,8 +234,9 @@ Deployed to Supabase (`supabase/functions/`). All verify the caller's JWT and au
 
 | Function | Purpose |
 |---|---|
-| `create-instructor` | Creates Supabase Auth user + `instructors` row + `instructor_course_access` row; handles all three roles; rolls back on partial failure |
+| `create-instructor` | Creates Supabase Auth user + `instructors` row + `staff_assignments` row; rolls back on partial failure. **Derives** the password (last name + `1234`, surname cut at the first hyphen/space) and sets `must_change_password` — the caller sends none, and one is accepted only from a global admin (the unbuilt tier D). Roles are `director`/`instructor`/`system_admin`; **`grader` is refused** as of 2026-07-27 |
 | `remove-instructor` | Removes course access or clears `is_global_admin`; only SAs can remove other SAs |
+| `reset-staff-password` | Puts one staff member back on that derived default and flags them for forced rotation. **Accepts no password parameter and rejects a request carrying one**, exactly like the student equivalent. Narrower authorization, though: **directors and system admins only** (not any staff member), and a director may not reset a system admin |
 | `provision-students` | Bulk-creates Supabase Auth accounts for enrolled students where `auth_user_id IS NULL`; **email = the real address in `students.email`** (a student without one is skipped, not given a fabricated address), password = last 6 digits of the cadet ID, and the account is flagged `must_change_password`; runs serially; continues on individual failures; returns `{ success, count, errors, skipped_no_email }` |
 | `reset-student-password` | Puts one cadet back on the default password (last 6 digits of their cadet ID) and flags them for forced rotation. **Accepts no password parameter and rejects a request carrying one** — the value is derived, so an instructor cannot choose a credential and then sign in as the student. Any staff member of the offering may call it; the target must be reachable through an enrollment in that offering |
 | `set-own-password` | Change your own password. Exists because the forced-rotation flag lives in `app_metadata`, which a browser session cannot write — a direct `auth.updateUser()` would leave a rotated user flagged forever. Re-verifies the current password server-side (`updateUser` does not), skipping that check only under forced rotation |

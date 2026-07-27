@@ -167,7 +167,7 @@ One semester's run, and the people in it:
 | `offering_activities` | Which activities are live this semester, and which carries credit |
 | `assignment_due_dates` | Per-section deadline overrides |
 | `extensions` | Per-student deadline overrides, attached to their enrollment |
-| `review_signoffs` | One instructor attestation per section per assignment: "I have reviewed this" |
+| `review_signoffs` | One instructor attestation per section per assignment: "I have reviewed this". **Retired 2026-07-27** — the table still exists and its rows are intact, but nothing reads or writes it |
 | `ei_sessions` | A log of extra instruction — one row per student per sitting |
 
 ### Which deadline applies
@@ -188,15 +188,20 @@ appears on the director's extensions report, but the deadline reverts to the sec
 | `granted_by` | The instructor who granted it |
 | `revoked_at` / `revoked_by` / `revoked_reason` | Set together when a director revokes it, or all empty |
 
-### review_signoffs
+### review_signoffs — retired 2026-07-27
 
-Records that an instructor has read the proposed grades and comments for one section of one
-assignment and made their changes. **This is not the same as finalizing** — finalizing publishes
-to students, a sign-off publishes nothing. One row per section per assignment.
+Recorded that an instructor had read the proposed grades and comments for one section of one
+assignment and made their changes. **This was never the same as finalizing** — finalizing publishes
+to students, a sign-off published nothing. One row per section per assignment.
 
-A sign-off is not stored as still-valid or expired; it is compared against the grades themselves.
-If any grade in that section changed after the attestation, the site reports it as *reviewed, then
-changed*, so a stored marker can never disagree with the grades it claims to cover.
+**Nothing reads or writes it any more.** It assumed two people: an instructor who reviews and a
+director who then publishes. There is no second person — the instructor publishes their own
+sections — so the attestation was a note to oneself sitting beside the button that actually
+releases the grades, and the faculty beta asked for it to go.
+
+The table and its rows are untouched. Schema changes on `app` are a coordinated, human-unsealed
+operation, and dropping it would also discard the record of who reviewed what while it was live.
+Read it directly if you need that history.
 
 ### ei_sessions
 
@@ -244,7 +249,7 @@ and costs the student nothing — so the legitimate case wins.
 | `course_offering_id` | Which semester of which course |
 | `assignment_id` | Which library assignment is being run |
 | `points_possible` | What it is worth this semester |
-| `grading_mode` | Largely vestigial since 2026-07-23 — see below. Leave it on `points` |
+| `grading_mode` | Vestigial since 2026-07-23 — see below. Always `points`; the assignment editor stopped offering a choice on 2026-07-27 |
 | `switch_policy` | Whether a student may change activity after committing |
 | `due_at` | Default deadline, overridden per section |
 | `is_published` | Whether students can see it |
@@ -253,7 +258,14 @@ and costs the student nothing — so the legitimate case wins.
 
 #### grading_mode
 
-**Do not change this. There is nothing to gain by it and one specific way to lose.**
+**There is no control for this any more, and that is the fix.** The assignment editor offered a
+*Grading* dropdown — *Points (per question)* / *Effort (0–5 → points)* — beside the points field
+until 2026-07-27. It described a mechanism that had stopped being real four days earlier, so it
+could read *Effort* over an assignment graded by points and changing it did nothing but arm the
+data-loss case below. It was withdrawn on faculty-beta feedback; new offerings are written
+`points`.
+
+The rest of this section is why, and is still worth reading before anyone sets the column by hand.
 
 The column predates assignments that offer both paths for credit, and it cannot describe one: an
 assignment where a student may either write the preflight or work the interactive lesson needs two
@@ -315,6 +327,12 @@ old grades attached to the old section, because grades hang off the enrollment.
 
 `staff_assignments` with no section covers the whole offering — that is how a director is recorded.
 With a section, it covers that section only.
+
+`role` accepts `director`, `instructor`, or `grader`. **`grader` is retired** (2026-07-27): it was
+defined as "grades only, no authoring", but authoring has always been gated on *director*, so it
+granted exactly what `instructor` grants. The constraint still admits it and any existing row keeps
+working — it is simply no longer offered, and the Staff table labels one as retired rather than
+quietly showing it as something else.
 
 #### When a student drops or changes section
 

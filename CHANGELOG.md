@@ -8,6 +8,164 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-27 — Matthew Recker via Claude (faculty beta feedback — fifteen changes across grading, the assignment editor, and course administration)
+
+A faculty beta produced a list of small, concrete complaints. They are grouped below by the screen
+they were made about. Nothing here is a schema change: `app` DDL is sealed (CORE.md §0), and two
+retirements (`review_signoffs`, the `grader` role) are therefore **UI withdrawals** — the table and
+the CHECK constraint are untouched and existing rows keep working.
+
+**Not yet deployed:** `supabase functions deploy create-instructor reset-staff-password`. The two
+edge functions are written and committed; until they are deployed, adding staff still demands a
+password (and rejects the request without one) and the staff reset button returns a 404. Everything
+else is static site code and is live on push.
+
+**Verification is Node-only, and CORE.md §2 says to say so.** What ran: the full `tests/app-schema`
+suite (one pre-existing live-DB failure, `bootstrap returned a context`, unrelated and present on
+`main` before this), a `node --check` pass over every changed module and every page's module script,
+plus two throwaway static passes — every `getElementById('literal')` resolves to markup that exists,
+and every `NS.member` on a changed page resolves to a real export. **No browser walkthrough was
+done.** So the logic is verified and the *rendering* is not: the new add-student and add-staff
+modals, the date+time pair in the assignment editor, the Grade page with its sign-off bar and
+interactive cards removed, and the per-lesson due-out boxes have never been looked at. Someone with
+a faculty login should open each before the next teaching day.
+
+### Grade page
+
+- **Interactive takers are no longer listed.** They were rendered as a read-only card marked
+  *Interactive*, explaining that their effort grade came from the lesson report. Accurate, and in
+  the way: a card that cannot be graded, in the middle of a screen for grading, for a student
+  migration 015 already finalized on commit. Faculty were re-identifying and skipping the same four
+  cards on every pass. They are filtered out in `loadView()` — at the source, so `render`, save,
+  finalize and the finalize-scope message cannot disagree about who is in scope — and a one-line
+  note says how many were left out, so the count still reconciles with the roster. A *draft* (no
+  choice committed) still appears; that student may yet take the written path.
+- **"— all my sections —" now means the sections you teach.** `mySectionIds()` returned
+  `ctx.sectionIds`, which is correct for an instructor and wrong for a director: their
+  offering-wide staff row makes `staff_sections()` every section, so the filter loaded the entire
+  course — byte-identical to the "All sections (entire course)" option beside it. It is
+  `actionableSections()` now, the same predicate the dashboard's due-out row and the grading queue
+  already used. A director who teaches nothing still falls back to the whole course, because an
+  empty page reads as "nothing to grade".
+- **"Mark section reviewed" is gone, with `review_signoffs`.** It assumed an instructor reviews and
+  a *director* publishes. There is no second person — `grades_staff_write` has always admitted any
+  staff member of the sections loaded, so Finalize & publish releases your own sections and nothing
+  else. The attestation was a note to oneself one click from the button that actually releases
+  grades. The button, its modal, the pill bar and four functions are removed; the table and its
+  rows are intact and documented as retired.
+
+### Dashboard
+
+- **One due-out box per assignment, deep-linked.** "9 · Review grades" was three lessons' work in
+  one number, linking to a Grade page that took no assignment parameter — so it landed on an empty
+  picker and the reader re-derived which three. A task source may now return an array; `to-grade`
+  and `ai-unfinalized` emit one entry per lesson (`4 · Review · Preflight 3`) linking to
+  `grade.html?a=<offering>`, which the page consumes on first load. Past **six** lessons they
+  collapse back to one summary box — six named lessons is a worklist, sixteen is wallpaper.
+- `pastDueUngraded()` now excludes interactive takers, so the number on the box matches what the
+  page it links to actually shows.
+
+### Assignment editor
+
+- **The Grading dropdown is withdrawn.** *Points (per question)* / *Effort (0–5 → points)*
+  described a mechanism that stopped being real in migration 014: `grades_points_from_effort()`
+  keys on whether the grade ROW carries an effort, not on the column, which is exactly what lets
+  one offering grade an interactive taker by effort and a written taker by points simultaneously.
+  The control could read *Effort* over a points-graded assignment and change nothing. Offerings are
+  written `grading_mode: 'points'` explicitly — the column is `NOT NULL DEFAULT 'effort'`, so
+  omitting it from an INSERT would have created effort-mode rows.
+- **Q2 (the reading reflection) has a Points box.** It has always been worth 1 and always will be
+  by default; the value was simply invisible and unreachable, so a director wanting a 2-point
+  reflection had no way to say so or to discover what the number was.
+- **Deadlines carry a time.** A date + time pair per meeting day, the time defaulting to 23:59. Two
+  boxes rather than one `datetime-local` because that control cannot express "default to 11:59 pm
+  for the date selected" — it yields empty or midnight, so the common case would mean typing 23:59
+  on every row.
+
+  **This fixed a live bug nobody had reported.** `endOfDay()` returned the naive string
+  `'2026-08-24T23:59:59'`, and Postgres resolves a `timestamptz` literal with no offset against the
+  session zone — UTC on Supabase. Every deadline set in this editor was therefore enforced at 16:59
+  Denver, and the cadets who lost the evening had no way to see why. It now converts through a real
+  `Date` (local → UTC), with `toEditorDue()` as its inverse for loading. Fall 2026 is unaffected:
+  those deadlines came from `build_fall_preflights.py`, which does the `zoneinfo` conversion CORE.md
+  §2 requires. A bare date still means 2359, so every stored deadline and the frozen `due_m=`/`due_t=`
+  prefill contract keep meaning what they meant.
+
+### Course administration — students
+
+- **+ Add student**, for the cadet who transfers in during week three. Search first: an existing
+  cadet is *enrolled*, not edited — silently rewriting a name the operator never compared is what
+  the import's review step exists to prevent.
+- **Adding an existing cadet merges; it does not duplicate.** `students` is keyed on the cadet ID
+  and `enrollments` attaches them to a section, so one person taking both courses is one record
+  with two enrolments. This was already true of `commitRoster()`; it is now stated on the screen
+  and in the help doc, because this is where somebody will wonder. It holds even for a cadet the
+  search cannot see (RLS exposes students only through sections you staff) — their cadet ID still
+  merges onto the record that exists.
+- **Accounts provision themselves.** Both the import and the individual add call
+  `provision-students` afterwards. It is idempotent (`auth_user_id IS NULL` only), so this is cheap
+  and safe. The manual button stays, because a cadet with no email address is deliberately
+  *skipped* and that needs a visible retry. Provisioning on *first login* — the other half of the
+  question — is not possible: signing in IS the account, so a cadet without one cannot reach a page
+  to trigger anything.
+
+### Course administration — staff
+
+- **The Sections column lists only what is assigned**, and is headed *Teaches*. It printed "All
+  sections" for anyone holding an offering-wide row — every director, and everyone "+ Add staff"
+  had ever created — while the coverage grid twenty pixels below showed the same people on one
+  section each. They were answering different questions (what may I *see* vs what do I *grade*);
+  only the second belongs in that column. The per-person "Sections" tick-box modal is removed with
+  it: the grid has done that job since P1.10, and two controls writing one fact is how they
+  disagree.
+- **The `grader` role is retired.** "Grades only, no authoring" — but authoring is gated on
+  *director* everywhere it is gated at all, so it granted exactly what `instructor` grants. A third
+  option that changes nothing is a question the director has to answer every time. Existing rows
+  render as *Grader (retired)* rather than being relabelled, because a control that misreports the
+  row it sits on is how P0.15 happened.
+- **Add staff can add somebody who already has a login.** The modal only ever created accounts, so
+  adding a colleague from the other course meant a second identity — and grades, extensions and
+  unlocks are attributed to `instructors.id`, so their history would split with no way to rejoin
+  it. One `staff_assignments` row; `staff_write` already admits exactly the caller who may do it.
+- **No more typed temporary password.** The field was pre-filled with the literal `prep-temp-2026`:
+  one shared credential across every account anybody accepted the default for, with nothing forcing
+  a change. `create-instructor` now derives **last name + `1234`** and sets
+  `must_change_password`; `reset-staff-password` (new) restores the same default.
+
+  **This reverses a standing decision, and only its premise changed.** Staff recovery was
+  deliberately unbuilt on the grounds that an instructor account had no derivable default, so a
+  reset would mean one person *choosing* another's credential — and whoever knows a colleague's
+  password is indistinguishable, at the database level, from that colleague, including for grade
+  finalization. That argument is about *choosing*, and it still holds: no password parameter exists
+  in either function, and one arriving at the reset endpoint is refused rather than ignored. What
+  changed is that a default can now be *derived* from a name the director is already looking at,
+  which is the same bargain cadets have always had. The other half is what makes it safe at all:
+  the account is flagged, so the shared-knowledge default survives exactly one sign-in. Neither
+  half works alone.
+
+  `reset-staff-password` is deliberately narrower than the student equivalent: **directors and
+  system admins only**, where the cadet reset admits any staff member. The cadet is locked out
+  today and standing in front of whoever teaches them; a colleague is not, and the account being
+  reset can publish grades. A director cannot reset a system admin, mirroring `remove-instructor`.
+- **Forced rotation now covers faculty.** `auth.js` already redirected both roles — what was
+  missing is that nothing ever *set* the flag on a staff account. Both functions set it, and the
+  account page's copy is role-aware.
+
+### Tests and docs
+
+- `tests/app-schema/test-lesson-due.mjs` (new, 34 checks) — the deadline round trip through a real
+  timezone, back-compatibility of bare dates, and the staff password rule. Its last block reads the
+  two edge functions as text and asserts they still derive the password identically: three copies
+  exist because a Deno function and a browser module share no import path, and a drift between them
+  is an account nobody can sign into.
+- `test-tasks.mjs` — array-returning sources, id uniqueness, zero-entry dropping, deep links.
+- `test-grade.mjs` — `mySectionIds()` for a director who teaches some, all, and no sections.
+- Six indexed documents re-checked and corrected against these changes: `instructor-grading.md`,
+  `instructor-accounts.md`, `admin-system-operations.md`, `director-schema-reference.md`,
+  `SYSTEM_GUIDE.md`, `student-getting-started.md`. Two carry explicit correction notes where the
+  old text was *accurate about a bug* — the Grade page's section scope, and staff having no
+  derivable default.
+
 ## 2026-07-27 — Matthew Recker via Claude (training sandbox seeded with fake student work for lessons 03 and 04)
 
 **Live DML on `app`, training sandbox only.** 140 synthetic submissions written into the

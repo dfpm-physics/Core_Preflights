@@ -7,9 +7,12 @@
 of inactivity — a paused database looks exactly like a broken site. Unpause it from the Supabase
 dashboard before students arrive.
 
-Then, in order: **roster import**, **section→instructor assignment**, and **student account
-provisioning** (bulk-creates auth accounts for everyone in the course who lacks one — it runs
-serially and reports per-student failures rather than aborting).
+Then, in order: **roster import** and **section→instructor assignment**. **Student account
+provisioning runs by itself** as of 2026-07-27 — the import creates a login for every new cadet and
+reports how many. The **Provision accounts** button is still there and still matters: it is how you
+finish the job after supplying an address for anyone the import had to skip (below). It
+bulk-creates auth accounts for everyone in the course who lacks one, runs serially, and reports
+per-student failures rather than aborting.
 
 **Sections are not created as a separate step.** They are created for you from the section codes the
 roster file references, which is why the import comes first. There is no control anywhere for
@@ -25,8 +28,12 @@ deadline rather than its own day's.
 **Provisioning depends on the roster carrying real email addresses.** A cadet's login is the
 address on their roster row, taken from the registrar's export; anyone imported without one is
 skipped rather than given a fabricated address, and the count is reported back. New accounts start
-on the last six digits of the cadet ID and are forced to change it at first sign-in. There is no
-password reset by email anywhere in PREP — see
+on the last six digits of the cadet ID and are forced to change it at first sign-in.
+
+**Staff accounts work the same way** (2026-07-27): a new instructor is created on a derived default
+— their last name plus `1234` — is forced to replace it before PREP will do anything, and can be
+put back on it by a course director from **Admin → Staff**. Nobody types or is shown a password at
+any point, for either role. There is no password reset by email anywhere in PREP — see
 [Student accounts and passwords](help.html?doc=accounts).
 
 ## Deploys

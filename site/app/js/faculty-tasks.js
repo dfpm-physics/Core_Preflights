@@ -9,10 +9,20 @@
 // The shape each source returns — `{ severity, text, link, count }` — is fixed by P1.6 and is
 // the reason the panel can render sources it knows nothing about.
 //
-// ── ONE BOX PER KIND, NOT ONE PER ITEM ───────────────────────────────────────────
-// P1.15 is explicit about this and it is the thing that keeps the panel usable in week ten: a
-// box says "9 · Review grades" and clicking it goes to the page that clears them. A list of nine
-// rows here would duplicate the Grade tab badly and push everything else off screen.
+// ── ONE BOX PER KIND — EXCEPT GRADING, WHICH IS ONE PER LESSON ───────────────────
+// P1.15 said one box per kind, and for most sources that is still right: "2 · Assign instructors"
+// is one errand however many sections are behind it.
+//
+// GRADING IS NOT LIKE THAT, and the faculty beta (2026-07-27) named why. "9 · Review grades" is
+// not one errand, it is three lessons' worth of them, and the box could not say which — the Grade
+// page took no assignment parameter, so the link landed on an empty picker and the reader had to
+// re-derive which lesson the 9 came from. A source may now return an ARRAY, one entry per lesson,
+// each deep-linking to `grade.html?a=<offering>`: the box names the lesson, and clicking it opens
+// exactly the work it counted.
+//
+// The cap is what keeps that from becoming the list P1.15 objected to — past MAX_PER_SOURCE
+// lessons the entries collapse back into one summary box. In week ten with a term's backlog, six
+// named lessons is a worklist and sixteen is wallpaper.
 //
 // ── ZERO IS THE COMMON STATE, SO ZERO RENDERS NOTHING ────────────────────────────
 // Most of these are empty most of the term. A box sitting at `0` trains people to ignore the
@@ -51,7 +61,41 @@ import { pastDueUngraded } from './faculty-grade.js';
 /** A run still marked 'running' this long after it started did not finish (mirrors run-banner.js). */
 const STALE_RUNNING_H = 2;
 
+/** Past this many lessons a per-lesson source collapses to one summary box — see the header. */
+export const MAX_PER_SOURCE = 6;
+
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/** grade.html deep link for one assignment offering. The page reads `?a=` in populate(). */
+const gradeLinkFor = (offeringId) => `grade.html?a=${encodeURIComponent(offeringId)}`;
+
+/**
+ * Per-lesson boxes, or one summary box when there are too many to read at a glance.
+ *
+ * @param {Array} lessons  [{ offeringId, title, count }] — already ordered most-urgent first
+ * @param {object} opts    { action, summaryAction, summaryText, textFor }
+ */
+function perLesson(lessons, { action, summaryAction, summaryText, textFor }) {
+  const total = lessons.reduce((s, l) => s + l.count, 0);
+  if (!total) return null;
+  if (lessons.length > MAX_PER_SOURCE) {
+    return {
+      count: total,
+      action: summaryAction,
+      text: summaryText(total, lessons.length),
+      link: 'grade.html',
+    };
+  }
+  return lessons.map(l => ({
+    // The suffix keeps each box's id stable and distinct — `only:` filtering and the tests key
+    // on the source id, and three boxes sharing one would be indistinguishable to both.
+    idSuffix: l.offeringId,
+    count: l.count,
+    action: `${action} · ${l.title}`,
+    text: textFor(l),
+    link: gradeLinkFor(l.offeringId),
+  }));
+}
 
 /* ══════════════════════════════════════════════════════════════════════════════
  * The registry
@@ -61,7 +105,10 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
  *   severity   'alert' | 'warn' | 'info' — drives colour only, never order
  *   icon       emoji; the dashboard's stat tiles already use this vocabulary
  *   director   true = only a director/admin sees it
- *   load(ctx)  → { count, action, text, link } | null
+ *   load(ctx)  → { count, action, text, link } | an ARRAY of those | null
+ *
+ * An array becomes several boxes, each rendered exactly like a single one. Entries may carry an
+ * `idSuffix` so their ids stay distinct; loadTasks() folds it into `id` and drops the field.
  *
  * `text` is written by the source rather than assembled from a template, because "3 lessons
  * need aggregating" and "3 sections have nobody assigned" want different words and a generic
@@ -81,20 +128,19 @@ export const SOURCES = [
     icon: '📝',
     director: false,
     async load(ctx) {
-      const rows = await pastDueUngraded(ctx, ctx.sectionIds);
-      const count = rows.reduce((sum, r) => sum + r.outstanding, 0);
-      if (!count) return null;
-      const lessons = rows.length;
-      return {
-        count,
-        action: 'Review grades',
-        text: `${plural(count, 'submission', 'submissions')} past due and not finalized`
-            + ` · ${plural(lessons, 'assignment', 'assignments')}`,
-        // Plain grade.html: the page takes no assignment parameter today, so deep-linking to
-        // the oldest one would be a URL that silently does nothing. When P1.14 gives it a
-        // queue, this is where that link goes.
-        link: 'grade.html',
-      };
+      // pastDueUngraded() returns one row per assignment, oldest deadline first — which is the
+      // order these should be worked, so it is also the order they are rendered in.
+      const rows = (await pastDueUngraded(ctx, ctx.sectionIds)).filter(r => r.outstanding > 0);
+      return perLesson(
+        rows.map(r => ({ offeringId: r.offeringId, title: r.title, count: r.outstanding })), {
+          action: 'Review',
+          textFor: (l) => `${plural(l.count, 'submission', 'submissions')} past due and not`
+                        + ` finalized on ${l.title} — click to grade it`,
+          summaryAction: 'Review grades',
+          summaryText: (total, n) =>
+            `${plural(total, 'submission', 'submissions')} past due and not finalized`
+            + ` · ${plural(n, 'assignment', 'assignments')}`,
+        });
     },
   },
 
@@ -112,22 +158,42 @@ export const SOURCES = [
       const ids = (enroll || []).map(e => e.id);
       if (!ids.length) return null;
 
+      // The offering is embedded so each box can NAME the lesson it counted and deep-link to it.
+      // Without the title the box would read "4 · Review AI grades" and send the reader to a
+      // picker to work out which four, which is what the beta objected to.
       const { data, error } = await db.from('grades')
-        .select('id, assignment_offering_id')
+        .select('id, assignment_offering_id,'
+              + 'assignment_offerings!inner(id, due_at, assignments!inner(title, slug))')
         .in('enrollment_id', ids)
         .eq('is_finalized', false)
         .eq('source', 'ai_suggested');
       if (error) throw error;
-      const count = (data || []).length;
-      if (!count) return null;
-      const lessons = new Set((data || []).map(g => g.assignment_offering_id)).size;
-      return {
-        count,
-        action: 'Review AI grades',
-        text: `${plural(count, 'AI-suggested grade', 'AI-suggested grades')} awaiting your review`
-            + ` · ${plural(lessons, 'assignment', 'assignments')}`,
-        link: 'grade.html',
-      };
+      if (!(data || []).length) return null;
+
+      const byOffering = new Map();
+      (data || []).forEach(g => {
+        const o = g.assignment_offerings;
+        const cur = byOffering.get(g.assignment_offering_id) || {
+          offeringId: g.assignment_offering_id,
+          title: o?.assignments?.title || o?.assignments?.slug || 'this assignment',
+          dueAt: o?.due_at || null,
+          count: 0,
+        };
+        cur.count++;
+        byOffering.set(g.assignment_offering_id, cur);
+      });
+      const lessons = [...byOffering.values()]
+        .sort((a, b) => new Date(a.dueAt || 0) - new Date(b.dueAt || 0));
+
+      return perLesson(lessons, {
+        action: 'Review AI',
+        textFor: (l) => `${plural(l.count, 'AI-suggested grade', 'AI-suggested grades')} awaiting`
+                      + ` your review on ${l.title} — click to grade it`,
+        summaryAction: 'Review AI grades',
+        summaryText: (total, n) =>
+          `${plural(total, 'AI-suggested grade', 'AI-suggested grades')} awaiting your review`
+          + ` · ${plural(n, 'assignment', 'assignments')}`,
+      });
     },
   },
 
@@ -246,6 +312,10 @@ export const SOURCES = [
 /**
  * Run every source the caller is entitled to, concurrently, and return the non-empty ones.
  *
+ * A source may return one task or an array of them (see the registry header). Arrays are
+ * flattened in place, so SOURCES order is preserved and a per-lesson source's entries stay
+ * adjacent and in the order it emitted them.
+ *
  * @param {object} ctx  the auth context
  * @param {object} opts `{ only }` — restrict to these source ids (tests, and future filtering)
  * @returns {Promise<Array<{id, severity, icon, count, text, link}>>} in SOURCES order
@@ -267,16 +337,21 @@ export async function loadTasks(ctx, opts = {}) {
   const settled = await Promise.all(eligible.map(async (src) => {
     try {
       const out = await src.load(scoped);
-      if (!out || !out.count) return null;
-      return { id: src.id, severity: src.severity, icon: src.icon, ...out };
+      if (!out) return [];
+      return [out].flat()
+        .filter(t => t && t.count)
+        .map(({ idSuffix, ...t }) => ({
+          id: idSuffix ? `${src.id}:${idSuffix}` : src.id,
+          severity: src.severity, icon: src.icon, ...t,
+        }));
     } catch (err) {
       // Deliberately swallowed — see the header. One dead query must not cost the dashboard.
       console.warn(`[tasks] source "${src.id}" failed:`, err?.message || err);
-      return null;
+      return [];
     }
   }));
 
-  return settled.filter(Boolean);
+  return settled.flat();
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════

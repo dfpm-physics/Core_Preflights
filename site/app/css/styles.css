@@ -474,7 +474,14 @@ main { flex: 1 0 auto; }
   color: var(--accent, var(--blue-lt));
   background: color-mix(in srgb, var(--accent, var(--blue-lt)) 16%, transparent);
 }
-.duo-act { font-size: 0.86em; font-weight: 600; white-space: nowrap; }
+/* A grading box names its lesson ("Review · Preflight 3 — Superposition", 2026-07-27), so the
+   label is no longer two words and an unbounded title would stretch one pill across the row.
+   Clipped rather than wrapped: the pills read as a row of chips, and the full sentence is the
+   box's `title` — one hover away, which is where the detail already lived. */
+.duo-act {
+  font-size: 0.86em; font-weight: 600; white-space: nowrap;
+  max-width: 28ch; overflow: hidden; text-overflow: ellipsis;
+}
 /* Under the spotlight the row is a footnote to the page, not its headline — so the heading is
    quieter here than the section headings that introduce real content below it. */
 .dash-tasks { margin-top: -8px; }
@@ -1027,15 +1034,10 @@ tr:last-child td { border-bottom: none; }
 .hq-state.ai-only { background: var(--alert-info-bg); color: var(--alert-info-fg); }
 .hq-state.draft { background: var(--surface-hover); color: var(--muted); }
 
-.signoff-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.signoff-pill {
-  font-size: 0.76em; font-weight: 600; padding: 3px 10px; border-radius: 999px;
-  border: 1px solid var(--border); background: var(--surface-hover); color: var(--muted);
-}
-.signoff-pill.done  { background: var(--alert-ok-bg);   color: var(--alert-ok-fg);   border-color: transparent; }
-/* "Reviewed, then changed": the attestation is derived-stale, not cleared, so it keeps the
-   reviewer's name while warning the claim no longer covers the current grades. */
-.signoff-pill.stale { background: var(--alert-warn-bg); color: var(--alert-warn-fg); border-color: transparent; }
+/* `.signoff-bar` and `.signoff-pill` (the "reviewed / reviewed, then changed" pills under the
+   Grade actions) were removed on 2026-07-27 with the "Mark section reviewed" button — the
+   instructor publishes their own sections, so there was nobody the attestation was addressed to.
+   See faculty-grade.js for the full reasoning; the `review_signoffs` table itself is untouched. */
 
 /* Jump target from a queue row. */
 @keyframes cardFlash { 0%, 100% { box-shadow: none; } 30% { box-shadow: 0 0 0 3px var(--blue-lt); } }
@@ -1224,6 +1226,20 @@ tr:last-child td { border-bottom: none; }
    BOTH paths ship. Drag-only is a keyboard trap and useless on the tablet an instructor is
    actually holding; the dropdown is the real control and the drag is the fast one. Native HTML5
    drag events — no SortableJS, because CORE.md §2 forbids a runtime dependency. */
+/* Type-to-filter result list, shared by the "add a student" and "add staff" modals (2026-07-27).
+   A plain <select> was the alternative and does not survive a 400-cadet roster — a picker you
+   scroll is a picker people give up on, which is how you end up with a duplicate record. Capped
+   in height so the list never pushes the form's own fields off the bottom of the modal. */
+.pick-list { max-height: 190px; overflow-y: auto; margin-top: 6px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.pick-item { display: block; width: 100%; text-align: left; border: 0; background: transparent;
+  cursor: pointer; padding: 7px 11px; font-size: 0.88em; color: inherit;
+  border-bottom: 1px solid var(--border); }
+.pick-item:last-child { border-bottom: 0; }
+.pick-item:hover, .pick-item:focus-visible { background: var(--surface-sunken); }
+.pick-item .pi-sub { display: block; font-size: 0.82em; color: var(--muted); margin-top: 1px; }
+.pick-empty { padding: 8px 11px; font-size: 0.85em; color: var(--muted); }
+
 .cov-wide { font-size: 0.86em; margin-bottom: 12px; }
 .cov-pool { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px;
   padding: 10px; border: 1px dashed var(--border); border-radius: var(--radius);

@@ -12,13 +12,60 @@
 //   instructors.is_director   ->  gone; is_global_admin is the only flag on the person
 //   scores                    ->  grades, reached through enrollments
 //
-// Plan: site/app/PLAN-2026-07-16-ADMIN.md §4. Roles are director | instructor | grader.
+// Plan: site/app/PLAN-2026-07-16-ADMIN.md §4.
 
 import { db } from './supabase.js';
 import { lastFirst } from './util.js';
 import { gradeAssignmentList } from './faculty-grade.js';
 
-export const ROLE_LABEL = { director: 'Director', instructor: 'Instructor', grader: 'Grader' };
+/* ── Roles: TWO, as of 2026-07-27 ─────────────────────────────────────────────
+ * `grader` is withdrawn. It was defined as "grades only, no authoring" and never meant anything:
+ * authoring is gated on DIRECTOR everywhere it is gated at all (lessons.html, admin.html, the
+ * `*_write` policies in 002_rls.sql all key on director_offerings()), so a grader and an
+ * instructor had byte-identical privileges. A third option that changes nothing is a question the
+ * director has to answer, wrongly or rightly, every time they add somebody.
+ *
+ * THE CHECK CONSTRAINT STILL ALLOWS IT — `role IN ('director','instructor','grader')`, and DDL on
+ * `app` is sealed (CORE.md §0), so this is a UI withdrawal, not a schema change. Any row that
+ * still says 'grader' keeps working and is shown as such (see LEGACY_ROLE_LABEL) rather than being
+ * silently relabelled: a row saying one thing while the screen says another is how P0.15 happened.
+ */
+export const ROLE_LABEL = { director: 'Director', instructor: 'Instructor' };
+
+/** Roles no longer offered, but still renderable when a pre-existing row carries one. */
+export const LEGACY_ROLE_LABEL = { grader: 'Grader (retired — change to Instructor)' };
+
+/**
+ * A staff account's default password: last name + `1234`.
+ *
+ * "First word before any hyphen and space" (director, 2026-07-27): the surname is the last
+ * whitespace-separated token of the full name, and a compound one is cut at its first hyphen or
+ * space — `Jane Smith-Jones` -> `smith1234`.
+ *
+ * ── WHY A DERIVABLE DEFAULT IS SAFE, WHEN A CHOSEN PASSWORD IS NOT ───────────────────────
+ * This module argued until today that staff had no default and therefore no delegated reset,
+ * because resetting one would mean a person CHOOSING another person's password — and someone who
+ * knows a colleague's password is indistinguishable, at the database level, from that colleague,
+ * including for grade finalization. That argument is about CHOOSING, and it still holds: nothing
+ * here or in `reset-staff-password` accepts a password parameter.
+ *
+ * Deriving is different, and it is the same argument that has always licensed the cadet reset: the
+ * director learns nothing, because the input is the person's name, which they are already looking
+ * at. What makes it hold is the other half — the account is flagged `must_change_password`, so the
+ * shared-knowledge default survives exactly one sign-in and every page bounces the user to their
+ * account until they replace it (auth.js). Neither half works alone.
+ *
+ * Duplicated in `create-instructor` and `reset-staff-password`, which are the ENFORCING copies —
+ * a Deno edge function and a browser module share no import path. This copy exists so the page can
+ * TELL the director what to say to the new instructor; it never travels over the wire.
+ */
+export function defaultStaffPassword(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  const surname = parts.length ? parts[parts.length - 1] : '';
+  const stem = surname.split(/[-\s]/)[0].replace(/[^A-Za-z0-9]/g, '').toLowerCase();
+  // A name with nothing alphanumeric in its surname would otherwise derive the password "1234".
+  return stem ? `${stem}1234` : '';
+}
 
 /* ══════════════════════════════════════════════════════════════════════════════
  * Staff
@@ -63,6 +110,7 @@ export async function loadStaff(ctx) {
     if (!r.section_id) cur.wide = true;
     else if (codeOf[r.section_id]) cur.sections.push({ id: r.section_id, code: codeOf[r.section_id] });
     if (r.role === 'director') cur.role = 'director';
+    // 'grader' is retired but rows may still carry it; instructor outranks it, as it always did.
     else if (r.role === 'instructor' && cur.role === 'grader') cur.role = 'instructor';
     byPerson.set(r.instructor_id, cur);
   });
@@ -85,16 +133,62 @@ export async function loadStaff(ctx) {
 }
 
 /**
- * Add someone to this offering, creating their login if they do not have one.
+ * Create a NEW account and add it to this offering.
+ *
+ * No `password` is sent — and there is no parameter for one as of 2026-07-27. The edge function
+ * derives `defaultStaffPassword(name)` itself and flags the account for forced rotation, which is
+ * what makes the value safe to know (see that function's header). Before this, the director typed
+ * a temporary password into a form field pre-filled with the literal string `prep-temp-2026`: one
+ * shared credential across every account anybody accepted the default for, with nothing forcing a
+ * change afterwards.
  *
  * The edge function owns authorization, and it is stricter than the client can be: only a global
  * admin may pass role 'system_admin', which is a real fix over legacy — `site/admin.html` sent
  * the dropdown value straight through with no check, so any course director could mint a system
  * admin. See create-instructor/index.ts.
  */
-export function addStaff(ctx, { name, email, password, role }) {
+export function addStaff(ctx, { name, email, role }) {
   return db.functions.invoke('create-instructor', {
-    body: { name, email, password, role, course_offering_id: ctx.currentOffering },
+    body: { name, email, role, course_offering_id: ctx.currentOffering },
+  });
+}
+
+/**
+ * Add somebody who ALREADY has a PREP login to this offering.
+ *
+ * The common case at the start of a term and, until 2026-07-27, the one the page could not do:
+ * "+ Add staff" only ever created accounts, so adding a colleague who already teaches the other
+ * course meant creating a second login for the same person under a second address. That is not a
+ * cosmetic duplicate — grades, extensions and unlocks are attributed to `instructors.id`, so their
+ * history would split across two identities with no way to rejoin it.
+ *
+ * No edge function: this writes one `staff_assignments` row, and `staff_write` (002_rls.sql)
+ * already admits exactly the caller who may do it — a director of this offering. Nothing about the
+ * PERSON changes, which is the point.
+ *
+ * Offering-wide (`section_id NULL`), matching what create-instructor writes by default. Which
+ * sections they actually teach is the Section Coverage grid below the table.
+ */
+export function addExistingStaff(ctx, instructorId, role) {
+  return db.from('staff_assignments').upsert({
+    instructor_id: instructorId,
+    course_offering_id: ctx.currentOffering,
+    section_id: null,
+    role: role || 'instructor',
+  }, { onConflict: 'instructor_id,course_offering_id,section_id' });
+}
+
+/**
+ * Put one staff member back on the default password (last name + 1234) and force a rotation.
+ *
+ * The student equivalent with the same shape and the same constraint: no password parameter
+ * exists, so the caller cannot choose a credential and then sign in as a colleague. See
+ * `defaultStaffPassword()` for why deriving is safe where choosing is not, and
+ * supabase/functions/reset-staff-password/index.ts for the authorization.
+ */
+export function resetStaffPassword(ctx, instructorId) {
+  return db.functions.invoke('reset-staff-password', {
+    body: { course_offering_id: ctx.currentOffering, instructor_id: instructorId },
   });
 }
 
@@ -194,25 +288,25 @@ export function removeStaffSection(ctx, instructorId, sectionId) {
     .eq('section_id', sectionId);
 }
 
-/* ── Staff password recovery: removed, not relocated ──────────────────────────
+/* ── Staff password recovery: the history, because the reasoning changed twice ─
  *
- * `sendResetEmail()` used to live here and called Supabase's public recovery endpoint. It was
- * deleted on 2026-07-21 because PREP has no SMTP: the mail it triggered was never delivered,
- * and the button reported success regardless. It also took the target address as free text
- * typed by the operator, so it would happily send a recovery mail for any address at all.
+ * `sendResetEmail()` lived here and called Supabase's public recovery endpoint. Deleted
+ * 2026-07-21: PREP has no SMTP, so the mail was never delivered and the button reported success
+ * regardless. It also took the target address as free text, so it would happily "send" a recovery
+ * mail for any address at all.
  *
- * There is deliberately NO replacement here. Students are covered by
- * `reset-student-password` (any staff member of the offering, default password only), because
- * the default is derived from a cadet ID the instructor is already looking at — the reset
- * reveals nothing.
+ * It was then left with NO replacement, on this argument: an instructor account has no cadet ID
+ * and therefore no derivable default, so any staff reset would mean one person CHOOSING another
+ * person's password — and whoever knows a colleague's password is indistinguishable, at the
+ * database level, from that colleague, including for grade finalization. Staff recovery was a
+ * Supabase-dashboard action by a system admin.
  *
- * That argument does not carry over to instructors. An instructor account has no cadet ID and
- * therefore no derivable default, so any staff reset would mean one person CHOOSING another
- * person's password — and an instructor who knows a colleague's password is indistinguishable,
- * at the database level, from that colleague, including for grade finalization. Until the
- * system-admin-only tier in PLAN-2026-07-20-ACCOUNTS.md §3 (tier D) is built, staff recovery
- * is a Supabase-dashboard action by a system admin. That is a real gap, and it is a smaller one
- * than a button that hands out working credentials for a grader account.
+ * `resetStaffPassword()` above replaces it (2026-07-27), and note WHAT changed: not the argument,
+ * its premise. Staff now DO have a derivable default — `defaultStaffPassword()`, from the name the
+ * director is already looking at — so the reset can restore one without anybody choosing anything.
+ * The prohibition on choosing is intact and enforced by the absence of a parameter, in both the
+ * client and the edge function. The unbuilt "set an arbitrary password" tier
+ * (PLAN-2026-07-20-ACCOUNTS.md §3, tier D) is still unbuilt and still a system-admin action.
  */
 
 /* ══════════════════════════════════════════════════════════════════════════════
