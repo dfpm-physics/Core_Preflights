@@ -8,6 +8,37 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-27 — Matthew Recker via Claude (sixth-batch UI verified on the live site; P0.2 unblocked)
+
+**Documentation only. No code, no schema, no data.**
+
+The director walked the 2026-07-23 batch on the deployed site and reports it works. That retires the
+verification debt `ROADMAP.md` §7 had been carrying in two places — the "one thing still owed, and
+it is now owed twice" paragraph, and the ⚠️ gap note on the P1.1/P1.2/P1.4 entry. Both named the
+same two surfaces, and both are confirmed: the Course Admin coverage grid's **drag-and-drop** and
+the merged **Students tab** (now the only route to a roster import).
+
+**The consequence that matters is an ordering one.** Both notes required
+`tests/browser-harness/pass.mjs` to run **before P0.2 deletes the test faculty account**, because
+re-minting that account needs a human in the Supabase dashboard — the thing that made P0.5 take
+three attempts. That constraint is dropped. P0.2 can now run whenever P0.1 is done, and the P0 path
+is: apply migration `016` while `prep_app_owner` is still unsealed → run the cutover → seal and
+delete the account.
+
+**One item deliberately does not close.** The Grade queue has still never been seen against
+genuinely **late work**, because nothing in the term is late yet (the active preflight is due
+Aug 9). Recorded as a data blocker, not a looking blocker — no walkthrough can fix it and it
+re-checks itself in week one. Same for EI bulk logging, which has no real data either.
+
+*Worth keeping:* the roadmap assumed this verification had to arrive as a harness run, and it did
+not. `tests/browser-harness/` exists to catch what a human misses — a console error on a page that
+renders fine, a request 404ing quietly — which is a **narrower** claim than "a person used this and
+it worked", not a stronger one. Walking the deployed site is also the better environment, since
+`site/app/` has been live against schema `app` since 2026-07-21. When a doc names a specific tool as
+the way to close a gap, check what the gap actually is before treating the tool as the only key.
+
+---
+
 ## 2026-07-27 — Matthew Recker via Claude (P0.15 staff roles verified — no repair was needed)
 
 **Read-only against live `app`. Nothing was written.**

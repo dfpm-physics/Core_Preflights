@@ -649,14 +649,22 @@ Five things pass forward, and two of them are the kind of finding a roadmap entr
   where it *lands* before asking how to split it. A test now asserts the bar's shape, including that
   every href resolves to a file that exists.
 
-**The one thing still owed, and it is now owed twice:** none of the sixth batch has been seen
-rendered by a signed-in faculty user either — 200-odd new assertions and a clean syntax pass are not
-the same claim, and this batch is unusually visual (a drag target, a card strip, a rebuilt tab).
-**Run `tests/browser-harness/pass.mjs` before P0.2 deletes the test faculty account** — after that
-it needs a human in the Supabase dashboard again, which is what made P0.5 take three attempts.
-Specifically unverified: the coverage grid's drag-and-drop, the Grade queue against genuinely late
-work (still nothing late in the term — same blocker P0.5 hit), and the merged Students tab, which is
-now the only route to a roster import.
+~~**The one thing still owed, and it is now owed twice**~~ ✅ **CLOSED 2026-07-27 — walked on the
+live site by the director.** Both surfaces the entry named as unverified work: the coverage grid's
+**drag-and-drop** and the merged **Students tab**. The harness run is therefore no longer owed, and
+**the ordering constraint it imposed on P0.2 is dropped** — deleting the test faculty account no
+longer blocks anything.
+
+**One item does not close, and it is a data blocker rather than a looking blocker:** the Grade
+queue has never been seen against **genuinely late work**, because nothing in the term is late yet.
+No amount of walking fixes that; it re-checks itself in week one. Same blocker P0.5 hit.
+
+*Worth keeping:* the entry assumed the verification had to arrive as a harness run, and it did not.
+`tests/browser-harness/` catches the class of failure a human misses — a console error on a page
+that renders fine, a request 404ing quietly — which is a **narrower** claim than "a person used
+this and it worked", not a stronger one. Walking the deployed site is also the better environment,
+since `site/app/` is live against schema `app` already. Ask what a check is *for* before treating
+it as the only way to satisfy the thing it was written to satisfy.
 
 **Start P2.1 (Blackboard) during P1.** Its risk is entirely in round-trip testing with a real file,
 and that lead time cannot be compressed at term end.
@@ -1520,14 +1528,14 @@ matters because `notes` holds an instructor's candid read of a cadet.
 *Verified:* `app_invariant_test.py` **33/33** (11 new) · `app_rls_test.py` **45/45** (10 new,
 including *a student cannot read their own EI log*) · `test-ei.mjs` **82/0**.
 
-> ⚠️ **The one real gap across all three.** Neither page has been **seen rendered by a signed-in
-> faculty user**. A boot check proves every module parses, evaluates and redirects cleanly in both
-> themes, and every assertion above is real — but none of it proves the grid *looks* right, and none
-> ran against live Fall 2026 data. There is also **no EI data and no late work in the term yet**
-> (the active preflight is due Aug 9), so bulk logging and the late chip are exercised by fixtures
-> only. This wants a `tests/browser-harness/pass.mjs` run with the test faculty credentials —
-> the same gap P0.5 closed for the previous batch, and it should close the same way **before P0.2
-> deletes that account.**
+> ⚠️ ~~**The one real gap across all three.**~~ **Partly closed 2026-07-27** — the director walked
+> these pages on the live site and they work, which retires the "never seen rendered by a signed-in
+> faculty user" half for good. A harness run is no longer wanted and **no longer gates P0.2's
+> deletion of the test faculty account.**
+>
+> **What remains is a data gap, not a looking gap:** there is still **no EI data and no late work in
+> the term** (the active preflight is due Aug 9), so bulk logging and the late chip are exercised by
+> fixtures only. That cannot be walked into existence — re-check in week one.
 
 <details><summary>Original scoping — P1.1, P1.2, P1.4</summary>
 
