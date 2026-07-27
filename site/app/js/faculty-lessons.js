@@ -219,6 +219,24 @@ export function defaultDueFrom(dueByDay) {
   return all.length ? endOfDay(all[0]) : null;
 }
 
+/**
+ * The editor's per-day map as the `due_by_day` column wants it: real day letters only, each a
+ * full timestamp.
+ *
+ * `_all` is dropped deliberately. The editor invents that key when the offering's sections declare
+ * no meeting days at all, to render a single plain date box — it is a UI placeholder, not a day,
+ * and storing it would create a key no section's `meeting_days` can ever match. `due_at` already
+ * carries that case, which is exactly what level 4 of the precedence is for.
+ */
+export function dueByDayRow(dueByDay) {
+  const out = {};
+  Object.entries(dueByDay || {}).forEach(([day, date]) => {
+    if (!date || day === '_all') return;
+    out[day] = endOfDay(date);
+  });
+  return out;
+}
+
 /* ══════════════════════════════════════════════════════════════════════════════
  * Retroactive grade correction
  * ════════════════════════════════════════════════════════════════════════════ */
@@ -413,6 +431,11 @@ export async function saveLesson(ctx, model, editingOfferingId) {
     grading_mode: model.gradingMode || 'points',
     switch_policy: model.switchPolicy || 'lock_on_commit',
     due_at: defaultDueFrom(model.dueByDay),
+    // The per-day schedule, stored (migration 017). Until this existed, the M/T split lived ONLY
+    // in the materialized assignment_due_dates rows, so a section created later had nothing to
+    // derive its deadline from and silently took due_at — the M-day date. Persisting it here is
+    // what lets a section added after scheduling be correct with no lesson re-save.
+    due_by_day: dueByDayRow(model.dueByDay),
     is_published: !!model.isPublished,
     position: model.lessonNumber == null ? null : model.lessonNumber,
   };

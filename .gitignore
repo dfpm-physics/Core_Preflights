@@ -42,3 +42,7 @@ node_modules/
 # Supabase service key files (kept in ~/.claude/skills/ only)
 *.service_key
 .ai/integrations/custom-gpt/privacy.html
+
+# Pre-change JSON snapshots taken by scripts/ before a live mutation. Local safety artifacts:
+# they carry live offering/staff structure and are regenerated on demand, never reviewed in a diff.
+_snapshots/

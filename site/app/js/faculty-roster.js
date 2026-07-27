@@ -17,6 +17,10 @@
 // instead of by shape.
 
 import { db } from './supabase.js';
+// Pure, DOM-free, and therefore testable without a browser shim — same reason the
+// parsing rules live there rather than here.
+import { sectionDefaultsFrom } from './roster-import.js';
+export { sectionDefaultsFrom };
 import { lastFirst } from './util.js';
 
 /** Sections of the current offering, keyed both ways for import and display. */
@@ -167,8 +171,7 @@ export async function createSections(ctx, codes) {
   const { error } = await db.from('sections').insert(codes.map(code => ({
     course_offering_id: ctx.currentOffering,
     code: code.toUpperCase(),
-    meeting_days: [],
-    period: null,
+    ...sectionDefaultsFrom(code),
   })));
   return { created: error ? 0 : codes.length, error };
 }

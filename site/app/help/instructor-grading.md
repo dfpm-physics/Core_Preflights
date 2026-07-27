@@ -139,9 +139,16 @@ work is in would only turn an on-time submission into a late one. If you need to
 back rather than correct an error, that is your director's call — they revoke it, which keeps it on
 the record with their reason attached.
 
-Otherwise each section carries its own deadline — 2359 the night before that section meets — set
-per section on the assignment rather than inferred from the section's name. An assignment may also
-carry a default deadline used by any section without one of its own.
+Otherwise each section's deadline is 2359 the night before that section meets, resolved in three
+steps. The assignment carries a deadline **for each meeting day** — an M-day date and a T-day date
+— and a section takes the one matching the days it meets. A section may also be given its own
+explicit deadline on the assignment, which overrides the day's; that is the exception, for
+something like a cancelled class. If neither applies, the assignment's default deadline is used.
+
+Meeting days are stored on the section, so a section added part-way through the term gets the right
+deadline for every assignment as soon as it exists — nothing has to be re-saved. They are *stored*
+rather than read off the section's name each time, which is what lets a course meeting on any other
+pattern work at all.
 
 ## The Report tab
 

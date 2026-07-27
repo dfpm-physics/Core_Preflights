@@ -9,7 +9,9 @@ import {
   parseDelimited, sniffDelimiter, mapHeaders, normalizeName, emailProblem,
   studentIdProblem, rowMatchesCourse, parseRosterFile, reconcile, summarize,
   REQUIRED_FIELDS,
+  sectionDefaultsFrom,
 } from '../../site/app/js/roster-import.js';
+
 
 /* ── Delimited parsing ─────────────────────────────────────────────────────── */
 section('parseDelimited');
@@ -208,3 +210,23 @@ eq('counts the matched rows', sum.matched, 2);
 eq('counts the skipped rows', sum.skipped, 5);
 eq('counts the ones needing a human decision', sum.needsDecision, 1);
 eq('lists the sections touched', sum.sections.join(','), 'M1A,T3A');
+
+/* ── section defaults inferred from the code (the import path) ─────────────── */
+section('sectionDefaultsFrom');
+
+// This is the fix for the silent one-day-early bug: createSections() used to write
+// meeting_days: [], which made resolveDueBySection() unable to place the section, so it inherited
+// the offering default — the M-day date — on every lesson.
+eq('M1A is an M-day section, period 1', sectionDefaultsFrom('M1A'), { meeting_days: ['M'], period: 1 });
+eq('T3B is a T-day section, period 3', sectionDefaultsFrom('T3B'), { meeting_days: ['T'], period: 3 });
+eq('lowercase is normalised', sectionDefaultsFrom('t1a'), { meeting_days: ['T'], period: 1 });
+eq('W/R/F are recognised too, so this is not hardcoded to M and T',
+   sectionDefaultsFrom('W2C'), { meeting_days: ['W'], period: 2 });
+
+// The guard that keeps this a DEFAULT rather than the old read-time sniffing: a code that does
+// not follow the convention must not be given an invented meeting day.
+eq('a non-day letter yields no meeting day rather than an invented one',
+   sectionDefaultsFrom('A1B'), { meeting_days: [], period: 1 });
+eq('a code with no digit still infers the day', sectionDefaultsFrom('MA'), { meeting_days: ['M'], period: null });
+eq('an empty code is survivable', sectionDefaultsFrom(''), { meeting_days: [], period: null });
+eq('null is survivable', sectionDefaultsFrom(null), { meeting_days: [], period: null });

@@ -20,7 +20,8 @@
 import { db } from './supabase.js';
 import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT,
-  shapeOffering, shapeSubmission, effectiveDue, deriveStatus, isOpen,
+  shapeOffering, shapeOfferings, withResolvedDue, offeringSections,
+  shapeSubmission, effectiveDue, deriveStatus, isOpen,
   questionsOf, questionPoints, displayPoints, isActivityAvailable, answeredCount,
 } from './schema.js';
 
@@ -54,7 +55,7 @@ export async function loadAssignmentStatuses(ctx) {
     .eq('is_published', true)
     .order('position', { ascending: true, nullsFirst: false });
 
-  const offerings = (offeringRows || []).map(shapeOffering).filter(Boolean);
+  const offerings = shapeOfferings(offeringRows, ctx);
   if (!offerings.length) return [];
 
   // Their work + their grades + any extension. Scoped by enrollment, which is what every
@@ -325,7 +326,7 @@ export async function resolveActivityBySlug(ctx, slug) {
     .eq('course_offering_id', ctx.currentOffering)
     .eq('is_published', true);
 
-  const offering = (offeringRows || []).map(shapeOffering)[0] || null;
+  const offering = shapeOfferings(offeringRows, ctx)[0] || null;
   return { activity: data, offering, error: null };
 }
 

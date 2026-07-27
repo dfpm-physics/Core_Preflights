@@ -321,38 +321,64 @@ Figures are stored as URLs in the database — no file upload to Supabase is nee
 
 ## Starting a New Semester
 
-Use the same assignments with updated due dates. The process clears all student data and submissions while keeping assignments intact.
+> **Rewritten 2026-07-27.** The previous version of this section told you to run
+> `TRUNCATE TABLE scores; TRUNCATE TABLE responses; DELETE FROM students;` in the SQL editor.
+> **Do not do that.** It was written for the legacy `public` schema, where a term's data and the
+> course itself were the same rows, so the only way to start a term was to destroy the last one.
+> Schema `app` separates them, and running those statements today would delete live data to
+> accomplish nothing.
 
-**Step 1 — Clear last semester's data**
+**Nothing is cleared. A term is a row.** `course_offerings` is one course's run of one term, and
+every piece of student work — enrollments, submissions, grades, reports — hangs off it. A new
+semester is a new `course_offerings` row, so last term keeps its data intact and nothing has to be
+deleted for this term to start empty.
 
-Run the following in the [Supabase SQL editor](https://supabase.com/dashboard/project/shzvpmlnqfmzfmuxkowi/sql):
+Assignments are deliberately term-agnostic: `assignments` is the container, `activities` holds the
+content, and `assignment_offerings` schedules one assignment into one term. Scheduling the same
+assignment into a new offering therefore **reuses the same content** rather than copying it, which
+is why past cohorts keep working — their `content_snapshot` was frozen at publish.
 
-```sql
--- Clear in this order to respect foreign key constraints
-TRUNCATE TABLE scores;
-TRUNCATE TABLE responses;
-DELETE FROM students;
-```
+**Step 1 — Create the new offering and copy the schedule**
 
-**Step 2 — Upload the new roster**
+`scripts/fall2026/split_training_offering.py` is the worked example (it created the clean Fall 2026
+phys-215 offering on 2026-07-27). It copies `assignment_offerings` and their `offering_activities`
+into a fresh offering and deliberately copies **no** student data. Dry-run by default; `--commit`
+to write. Adapt the term codes for the new semester.
 
-Follow the Roster Upload steps above with the new semester's CSV.
+Note the unique constraint: `course_offerings` is `UNIQUE (course_id, term_id)`, so a course can
+have exactly one offering per term. If you want the old one to stay reachable, give it its own
+term — which is how the training sandbox was made, since `course_offerings` has no name column and
+the **term label** is what the UI shows.
 
-**Step 3 — Reassign instructor sections**
+**Step 2 — Update the due dates**
 
-Go to the **Sections** tab in the admin panel and update the instructor assignment for each section. Section IDs (e.g., `M1A`, `T3B`) stay the same across semesters — just change who is assigned to each one.
+Each scheduled assignment carries a per-meeting-day schedule in `assignment_offerings.due_by_day`
+(`{"M": …, "T": …}`) plus a fallback `due_at`. Edit them in **Lessons** — the editor shows one date
+box per meeting day the offering's sections actually use, so a course meeting W/F needs no code
+change. Saving rewrites the per-section rows for every current section.
 
-**Step 4 — Add or remove instructors as needed**
+**Step 3 — Upload the new roster**
 
-Use the **Instructors** tab to add new instructors or remove those no longer teaching the course.
+Follow the Roster Upload steps above. **Sections are created by the import** — if the file names a
+section the offering does not have, the preview offers to create it. There is no separate
+section-creation screen and none is needed.
 
-**Step 5 — Update assignment due dates**
+A created section gets its meeting days guessed from its code (`M1A` → M-day, `T3B` → T-day). That
+guess is a starting value, not a rule: it is stored on the section and can be corrected, and every
+deadline is resolved from the stored value, never from the code. **Check it for any section whose
+code does not follow the `[MT][135][A-D]` convention** — a section with no meeting day falls back
+to the assignment's default deadline.
 
-Go to the **Assignments** tab and update the M-day and T-day due dates for each assignment. Assignments stay published — students will see them as soon as the due dates are current.
+**Step 4 — Staff the offering**
 
-**Step 6 — Verify**
+Add instructors in **Course Admin → Staff**, and assign sections on the Section Coverage grid.
+Staff rows are per offering, so last term's staffing does not carry over — which is the point:
+"director of Physics 215 in Fall 2026" should not mean "director of it forever".
 
-Open the student page at https://dfpm-physics.github.io/Core_Preflights/site/ and enter a test student ID to confirm the assignment list looks correct.
+**Step 5 — Verify**
+
+Open the student view and confirm the assignment list and deadlines look right for both an M-day
+and a T-day section.
 
 ---
 

@@ -71,6 +71,11 @@ Two things the upload does that are worth knowing:
   have — a stale export should not quietly overwrite a correction somebody made by hand.
 
 If the file names a section that does not exist yet, the preview offers to create it and re-check.
+A section created this way has its meeting days filled in from its code — `M1A` becomes an M-day
+section, `T3B` a T-day one — so its deadlines are right immediately. That is a starting value you
+can change, not a rule the system keeps applying: **if a section's code does not start with the day
+it meets, open it and correct the meeting days**, or it will fall back to each assignment's default
+deadline instead of its own day's.
 
 Once the import lands, **Provision accounts** on the same tab creates a login for every enrolled
 cadet who does not have one, with the default password already set. **Move** and **Remove** on each

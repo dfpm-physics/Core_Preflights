@@ -71,6 +71,7 @@
 import { db } from './supabase.js';
 import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT,
+  shapeOfferings, withResolvedDue, offeringSections,
   shapeOffering, shapeSubmission, artifactUrlOf, chunked,
   int05, writtenSignals, writtenReport, effortSignal, FREE_RESPONSE_KEY, FREE_RESPONSE_LABEL,
   minutes, median, READING_BUCKETS, reflectionQuestionId,
@@ -122,7 +123,7 @@ export async function loadManager(ctx) {
   // question-only lesson had no rollup at all, and a mixed lesson's rollup silently described
   // only the half of the cohort that took the artifact. Both modalities now produce effort and
   // understanding (schema.js, "Learner signals"), so the filter was hiding real data.
-  const offerings = (offeringRows || []).map(shapeOffering).filter(Boolean)
+  const offerings = shapeOfferings(offeringRows, ctx)
     .filter(o => o.interactive || o.written);
 
   const enrollments = enrolRows || [];
@@ -225,7 +226,7 @@ export async function loadManager(ctx) {
 async function activitiesOf(offeringId) {
   const { data } = await db.from('assignment_offerings')
     .select(OFFERING_SELECT).eq('id', offeringId).maybeSingle();
-  const offering = shapeOffering(data);
+  const offering = withResolvedDue(shapeOffering(data), offeringSections(ctx));
   if (!offering) return null;
   return {
     offering,

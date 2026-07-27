@@ -26,6 +26,7 @@
 import { db } from './supabase.js';
 import {
   chunked, lessonNumber, effectiveDue, submissionLateness,
+  withResolvedDue, offeringSections,
   effortSignal, writtenSignals, writtenReport, int05,
 } from './schema.js';
 
@@ -38,7 +39,7 @@ import {
 // app, and a grid renders none of it. P3.7 asks for a performance budget before this page is
 // built rather than after; this is that, applied.
 export const GB_OFFERING_SELECT =
-  'id,points_possible,grading_mode,due_at,is_published,position,'
+  'id,points_possible,grading_mode,due_at,due_by_day,is_published,position,'
   + 'assignments!inner(id,slug,title),'
   + 'assignment_due_dates(section_id,due_at)';
 
@@ -356,6 +357,10 @@ function shapeLightOffering(row) {
     dueAt: row.due_at,
     position: row.position,
     dueBySection,
+    // Carried so resolveDueBySection() can fold the per-day schedule in for sections with no
+    // explicit row — the light shape needs the same level-3 source the full shape has.
+    dueByDay: (row.due_by_day && typeof row.due_by_day === 'object' && !Array.isArray(row.due_by_day))
+      ? row.due_by_day : {},
   };
 }
 
@@ -385,13 +390,18 @@ export async function loadGradebook(ctx, sectionIds) {
   if (enrRes.error) return { error: enrRes.error };
   if (offRes.error) return { error: offRes.error };
 
+  // Fold the per-day schedule into each offering, so a section with no explicit
+  // assignment_due_dates row still resolves to its own meeting day's deadline (migration 017).
+  const gbSections = offeringSections(ctx);
+
   const enrollments = (enrRes.data || []).map((e) => ({
     enrollmentId: e.id,
     studentId: e.student_id,
     sectionId: e.section_id,
     name: e.students?.name || String(e.student_id),
   }));
-  const offerings = (offRes.data || []).map(shapeLightOffering);
+  const offerings = (offRes.data || []).map(shapeLightOffering)
+    .map((o) => withResolvedDue(o, gbSections));
   const ids = enrollments.map((e) => e.enrollmentId);
 
   const grades = [], submissions = [], extensions = [];

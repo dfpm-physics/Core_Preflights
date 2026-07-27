@@ -4,6 +4,7 @@
 import { check, eq, section } from './harness.mjs';
 import {
   shapeOffering, shapeSubmission, effectiveDue, isOpen, deriveStatus,
+  resolveDueBySection, withResolvedDue,
   canSwitchActivity, isActivityAvailable, pointsFromEffort, displayPoints,
   questionsOf, questionPoints, answeredCount, lessonNumber, chunked,
   taughtSectionIds, actionableSections,
@@ -96,6 +97,71 @@ check('null deadline is never past',
       effectiveDue({ dueBySection: {}, dueAt: null }, null, null, NOW).isPast === false);
 eq('an unparseable date degrades to none rather than an Invalid Date',
    effectiveDue({ dueBySection: {}, dueAt: 'not-a-date' }, null, null, NOW).source, 'none');
+
+/* ── the per-day schedule: level 3 of the precedence (migration 017) ───────── */
+section('due_by_day → per-section resolution');
+
+// The bug this exists for: a section created AFTER the lessons were scheduled has no
+// assignment_due_dates row, so it fell through to the offering's due_at — which on every Fall
+// 2026 row is the M-day date. A new T-day section was therefore silently one day early.
+const M_DUE = '2026-08-12T23:59:59Z';
+const T_DUE = '2026-08-13T23:59:59Z';
+const dayOff = () => ({
+  dueAt: M_DUE,                       // the offering default IS the M date — that is the trap
+  dueBySection: { 'sec-explicit': LATER },
+  dueByDay: { M: M_DUE, T: T_DUE },
+});
+const SECTIONS = [
+  { id: 'sec-explicit', meeting_days: ['T'] },   // has its own row: the override must win
+  { id: 'sec-newT',     meeting_days: ['T'] },   // added later: the actual bug
+  { id: 'sec-newM',     meeting_days: ['M'] },
+  { id: 'sec-noDays',   meeting_days: [] },      // roster-import default before the fix
+  { id: 'sec-W',        meeting_days: ['W'] },   // a day the schedule does not mention
+];
+
+const r = resolveDueBySection(dayOff(), SECTIONS);
+eq('a NEW T-day section resolves to the T deadline, not the M-day default',
+   r.dueBySection['sec-newT'], T_DUE);
+eq('a new M-day section resolves to the M deadline', r.dueBySection['sec-newM'], M_DUE);
+eq('an EXPLICIT per-section row still wins over the per-day schedule',
+   r.dueBySection['sec-explicit'], LATER);
+check('the explicit section is not marked derived', !r.dueDerivedFor.has('sec-explicit'));
+check('the new T section IS marked derived', r.dueDerivedFor.has('sec-newT'));
+check('a section declaring no meeting days gets no derived date',
+      r.dueBySection['sec-noDays'] === undefined);
+check('a section whose day the schedule omits gets no derived date',
+      r.dueBySection['sec-W'] === undefined);
+
+// The counterfactual that proves the fix is load-bearing: without the per-day map, the same
+// new T-day section reads the offering default and lands on the M date.
+const noMap = resolveDueBySection({ dueAt: M_DUE, dueBySection: {}, dueByDay: {} }, SECTIONS);
+check('WITHOUT due_by_day the new T section has no date of its own (the old bug)',
+      noMap.dueBySection['sec-newT'] === undefined);
+eq('...and effectiveDue then hands it the M-day default',
+   effectiveDue({ dueAt: M_DUE, dueBySection: noMap.dueBySection }, 'sec-newT', null, NOW).due.toISOString(),
+   new Date(M_DUE).toISOString());
+
+const resolved = withResolvedDue(dayOff(), SECTIONS);
+eq('effectiveDue reports source "day" for a derived deadline',
+   effectiveDue(resolved, 'sec-newT', null, NOW).source, 'day');
+eq('...and still reports "section" for an explicit row',
+   effectiveDue(resolved, 'sec-explicit', null, NOW).source, 'section');
+eq('...and "extension" still outranks a derived deadline',
+   effectiveDue(resolved, 'sec-newT', '2026-12-01T00:00:00Z', NOW).source, 'extension');
+eq('a section with no derivable date falls back to the offering default',
+   effectiveDue(resolved, 'sec-W', null, NOW).source, 'offering');
+
+// An offering that never went through the resolver behaves exactly as before.
+eq('un-resolved offerings keep the old two-source behaviour',
+   effectiveDue(off, 'sec-M', null, NOW).source, 'section');
+eq('a malformed due_by_day (array) is ignored rather than throwing',
+   resolveDueBySection({ dueAt: M_DUE, dueBySection: {}, dueByDay: [] }, SECTIONS)
+     .dueBySection['sec-newT'], undefined);
+check('resolveDueBySection does not mutate the offering it was given', (() => {
+  const o = dayOff();
+  resolveDueBySection(o, SECTIONS);
+  return Object.keys(o.dueBySection).length === 1;
+})());
 
 /* ── isOpen ────────────────────────────────────────────────────────────────── */
 section('isOpen');

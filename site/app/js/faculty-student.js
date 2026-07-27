@@ -23,7 +23,7 @@
 
 import { db } from './supabase.js';
 import {
-  GRADE_SELECT, SUBMISSION_SELECT, shapeSubmission, shapeOffering, OFFERING_SELECT,
+  GRADE_SELECT, SUBMISSION_SELECT, shapeSubmission, shapeOffering, shapeOfferings, OFFERING_SELECT,
   EXTENSION_SELECT, effectiveDue, submissionLateness, lateBy, writtenReport, writtenSignals,
   effortSignal, questionsOf, chunked, int05,
 } from './schema.js';
@@ -76,7 +76,7 @@ export async function loadStudentDetail(ctx, enrollmentId) {
   if (gradeRes.error) return { error: gradeRes.error };
   if (subRes.error) return { error: subRes.error };
 
-  const offerings = (offRes.data || []).map(shapeOffering);
+  const offerings = shapeOfferings(offRes.data, ctx);
   const grades = gradeRes.data || [];
   const submissions = (subRes.data || []).map(shapeSubmission);
   const extensions = extRes.data || [];

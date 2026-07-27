@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-07-22",
+  "updated": "2026-07-27",
   "_comment": [
     "Dependency index for documents that MUST STAY CURRENT. Each entry names the authoritative",
     "sources a document was derived from, and the date it was last checked against them.",

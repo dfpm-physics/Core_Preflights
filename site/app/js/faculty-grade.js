@@ -22,7 +22,8 @@ import { db } from './supabase.js';
 import { lastFirst } from './util.js';
 import {
   OFFERING_SELECT, GRADE_SELECT, SUBMISSION_SELECT, EXTENSION_SELECT,
-  shapeOffering, shapeSubmission, questionsOf, effectiveDue, submissionLateness,
+  shapeOffering, withResolvedDue, offeringSections,
+  shapeSubmission, questionsOf, effectiveDue, submissionLateness,
 } from './schema.js';
 
 /** Scheduled assignments for the current offering, for the picker. */
@@ -68,7 +69,7 @@ export async function loadGradingData(ctx, offeringId, sectionIds) {
 
   const { data: offeringRow } = await db.from('assignment_offerings')
     .select(OFFERING_SELECT).eq('id', offeringId).maybeSingle();
-  const offering = shapeOffering(offeringRow);
+  const offering = withResolvedDue(shapeOffering(offeringRow), offeringSections(ctx));
   if (!offering) return empty;
 
   const scope = (sectionIds && sectionIds.length) ? sectionIds : ['00000000-0000-0000-0000-000000000000'];
@@ -530,7 +531,7 @@ export async function pastDueUngraded(ctx, sectionIds, now = new Date()) {
   if (!enrollmentIds.length) return [];
 
   const { data: offerings } = await db.from('assignment_offerings')
-    .select('id, due_at, position, is_published, assignments!inner(slug, title),' +
+    .select('id, due_at, due_by_day, position, is_published, assignments!inner(slug, title),' +
             'assignment_due_dates(section_id, due_at)')
     .eq('course_offering_id', ctx.currentOffering).eq('is_published', true);
 
@@ -558,7 +559,10 @@ export async function pastDueUngraded(ctx, sectionIds, now = new Date()) {
   for (const o of offerings) {
     const dueBySection = Object.fromEntries(
       (o.assignment_due_dates || []).map(d => [d.section_id, d.due_at]));
-    const shaped = { dueAt: o.due_at, dueBySection };
+    // Same level-3 fold as everywhere else: a section with no explicit row takes its own
+    // meeting day's deadline rather than the offering default (migration 017).
+    const shaped = withResolvedDue(
+      { dueAt: o.due_at, dueBySection, dueByDay: o.due_by_day || {} }, offeringSections(ctx));
 
     let outstanding = 0, ungraded = 0, waiting = 0;
     for (const s of (subs.data || []).filter(x => x.assignment_offering_id === o.id)) {
@@ -711,21 +715,23 @@ export async function gradingQueue(ctx, sectionIds, now = new Date()) {
   // offering_activities is embedded so the written activity id is known per offering — that is
   // what separates an interactive taker from a written one, and there is no other source for it.
   const { data: offeringRows } = await db.from('assignment_offerings')
-    .select('id, due_at, position, assignments!inner(slug, title),' +
+    .select('id, due_at, due_by_day, position, assignments!inner(slug, title),' +
             'assignment_due_dates(section_id, due_at),' +
             'offering_activities(activity_id, activities(id, modality))')
     .eq('course_offering_id', ctx.currentOffering).eq('is_published', true);
 
-  const offerings = (offeringRows || []).map(o => ({
+  const gradeSections = offeringSections(ctx);
+  const offerings = (offeringRows || []).map(o => withResolvedDue({
     id: o.id,
     dueAt: o.due_at,
     position: o.position ?? 0,
     slug: o.assignments?.slug || '',
     title: o.assignments?.title || o.assignments?.slug || '—',
     dueBySection: Object.fromEntries((o.assignment_due_dates || []).map(d => [d.section_id, d.due_at])),
+    dueByDay: o.due_by_day || {},
     writtenActivityId:
       (o.offering_activities || []).find(oa => oa.activities?.modality === 'written')?.activity_id || null,
-  }));
+  }, gradeSections));
   const offeringIds = offerings.map(o => o.id);
   if (!offeringIds.length) return [];
 

@@ -758,6 +758,17 @@ export const DB_SCHEMA = {
           "generated": false,
           "comment": "When the snapshot was frozen. NULL = not yet frozen and still tracking live content. Non-NULL makes content_snapshot immutable (see assignment_offerings_snapshot_guard).",
           "pk": false
+        },
+        {
+          "name": "due_by_day",
+          "type": "jsonb",
+          "udt": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb",
+          "maxLength": null,
+          "generated": false,
+          "comment": "Per-meeting-day deadlines for this scheduled assignment, keyed by the day letters used in sections.meeting_days: {\"M\": timestamptz, \"T\": timestamptz}. The DEFAULT deadline source for a section, resolved as due_by_day[day] for each day in that section's meeting_days. A section added after scheduling is therefore correct with no lesson re-save. Precedence: student extension > assignment_due_dates (explicit per-section override) > due_by_day > due_at. `{}` means no per-day schedule and due_at applies to everyone.",
+          "pk": false
         }
       ],
       "foreignKeys": [

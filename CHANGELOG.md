@@ -8,6 +8,98 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-27 — Matthew Recker via Claude (per-day deadlines; phys-215 split into a training sandbox and a clean Fall 2026 offering)
+
+**Live DDL + live DML on `app`.** Migration `017` applied, and the phys-215 offering split in two.
+
+### The bug this starts from
+
+A section created **after** the lessons were scheduled had no deadline of its own. Per-section
+deadlines live in `assignment_due_dates`, and those rows are written **only** when a director saves
+that lesson in the editor — so a new section fell through to `assignment_offerings.due_at`, which on
+every Fall 2026 row is the **M-day** date. **A newly imported T-day section was therefore silently
+one day early on all 37 lessons**, with no error and nothing to notice.
+
+It was about to matter: `createSections()` — the path a **roster import** uses — wrote
+`meeting_days: []`, and an empty meeting pattern is invisible to the whole deadline system. The
+editor then renders one plain date box and states *"Sections in this term declare no meeting days,
+so one deadline applies to everyone"*, reporting the broken state as a normal configuration. So the
+next roster upload into a fresh offering would have produced exactly this.
+
+Two things the director's framing corrected, and they were right both times: **moving a student
+between sections was never affected** (the lookup is keyed on their *current* section), and
+materializing the rows buys **no** historical accuracy, because lateness is computed live at read
+time (`schema.js` `submissionLateness`). The rows are a cache that can go stale.
+
+### What changed
+
+- **Migration `app/017_due_by_day.sql` (applied).** `assignment_offerings.due_by_day jsonb` stores
+  the per-meeting-day schedule — `{"M": …, "T": …}`, keyed by the letters in `sections.meeting_days`,
+  **not** hardcoded to M/T, so a course meeting W/F needs no change. Backfilled from the rows that
+  exist: 37 offerings filled, 37 left `{}` (phys-110, which has no sections to derive from).
+  A CHECK pins it to a JSON object.
+- **New precedence, `schema.js`:** extension > explicit per-section row > **per-day schedule** >
+  offering default. `resolveDueBySection()` folds level 3 in **at load time**, which is what let all
+  six `effectiveDue()` call sites stay untouched instead of each growing a `meeting_days` argument.
+  `effectiveDue` reports the new source as `'day'`. Wired into all 8 shaping sites; `ctx.sectionsById`
+  already carried `meeting_days` for students and faculty alike, so this costs **no extra query**.
+- **`assignment_due_dates` is now an OVERRIDE, not the normal path** — which is what it should
+  always have been: the deliberate cancelled-class exception (ROADMAP P3.17's one legitimate case).
+- **`createSections()` derives `meeting_days` and `period` from the section code** — `M1A` → `['M']`,
+  period 1. **A default, not a rule**, and the distinction is the whole point: `isMDay()` and
+  `dueDateForSection()` were deleted from `util.js` precisely because they sniffed the code at *read*
+  time. This writes a visible, editable value once and never consults the code again. An
+  unrecognised letter yields `[]` rather than an invented day. Moved to `roster-import.js` so it is
+  testable without a browser shim.
+- **The editor persists `due_by_day` on save**, dropping the `_all` placeholder key the UI invents
+  when no section declares a meeting day — storing it would create a key no section can match.
+
+### The offering split
+
+`scripts/fall2026/split_training_offering.py` (dry-run by default, `--commit` to write, snapshots
+first). The 81 students in phys-215 are **seeded, not real** — names like `Amara Larsen`, and
+`email IS NULL` on every row, so none of them could even be provisioned an account.
+
+- New term `training-fall-2026`, labelled **TRAINING SANDBOX — Fall 2026**, dates copied from
+  `fall-2026`. The **existing** offering was repointed at it: one `UPDATE`, and nothing moved —
+  sections, enrollments, submissions, grades and analysis runs all hang off the offering id.
+- **Why a term and not a flag:** `course_offerings` has no name column and is
+  `UNIQUE (course_id, term_id)`, so two phys-215 offerings cannot share `fall-2026` and there is
+  nothing on the offering to rename. The **term label** is what the UI shows (`nav.js` groups the
+  course switcher by it). `is_active` was not an option — `auth.js` selects it and never filters on
+  it, so it hides nothing. **That column is decorative today; treat it as such until it is wired.**
+- New clean phys-215 × `fall-2026` offering `b9e6b3da-776e-4a8f-8355-e107bea63f9a`: 37
+  `assignment_offerings` (with `due_at` **and** `due_by_day`) + 42 `offering_activities` pointing at
+  the **same shared activities**, and 8 offering-wide staff rows. Verified in-transaction to hold
+  **zero** sections, enrollments, submissions and grades before committing.
+- **No sections were created, on the director's instruction** — the roster import makes them. That
+  is only safe *because* of the two changes above; before them every imported T-day section would
+  have been a day early. The ordering was deliberate.
+- `PREP Test Faculty` stays **training-only** and is being kept, not deleted — so ROADMAP **P0.2 is
+  now the seal alone**. Adding it to the real offering is one click in Staff if wanted.
+
+### Verification
+
+`tests/app-schema` **371 passed / 1 failed** — up from 347, and the single failure is the
+pre-existing unrelated one (`found an offering with two graded activities`, ROADMAP §5). 24 new
+checks: the derived T-day deadline, the explicit row still winning, extension still outranking a
+derived date, a malformed `due_by_day`, non-mutation, and **the counterfactual that without
+`due_by_day` the same section lands on the M-day date** — the bug itself, pinned. `gen_db_schema.py
+--check` green after regenerating.
+
+**Docs corrected, not merely re-dated.** `SYSTEM_GUIDE.md`'s "Starting a New Semester" told the
+reader to run `TRUNCATE TABLE scores; TRUNCATE TABLE responses; DELETE FROM students;` — written
+for legacy `public`, where a term and the course were the same rows. In `app` that destroys live
+data to accomplish nothing, and it is the opposite of how the rollover just happened. Rewritten
+around "a term is a row". Also `instructor-grading.md` (the three-step deadline), plus
+`instructor-accounts.md` and `admin-system-operations.md` (imported sections get a meeting day, and
+when to correct it).
+
+**⚠ `prep_app_owner` is STILL unsealed** — 017 was applied through the door 014/015 left open.
+`ALTER ROLE prep_app_owner NOLOGIN;` as `postgres` remains outstanding (P0.2, human-only).
+
+---
+
 ## 2026-07-27 — Matthew Recker via Claude (migration `app/016` applied — comment spelling)
 
 **DDL applied to live `app`.** `supabase/migrations/app/016_comment_spelling.sql`, run as

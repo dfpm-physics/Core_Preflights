@@ -435,3 +435,32 @@ export function summarize(parsed, reconciled) {
     sections: [...new Set(parsed.rows.map(r => r.section_code))].sort(),
   };
 }
+
+/**
+ * Guess a section's meeting pattern and period from its code — `M1A` -> `['M']`, period 1.
+ *
+ * A DEFAULT, NOT A RULE, and the distinction is the whole point. `isMDay()` and
+ * `dueDateForSection()` were deleted from util.js precisely because they sniffed the first letter
+ * of a section code at READ time, which only ever worked for the two courses using `[MT][135][A-D]`.
+ * Nothing here is consulted again after the row is written: the value lands in `meeting_days`,
+ * where it is visible, editable, and authoritative. A course meeting W/F stores W/F and every
+ * reader keeps working, because no reader asks about the code.
+ *
+ * The alternative was what this replaced — writing `[]` — which is not neutral. An empty
+ * meeting_days means `dueRowsFor()` skips the section and `resolveDueBySection()` cannot place it,
+ * so it silently inherits the offering default: on Fall 2026 that is the M-day date, making every
+ * imported T-day section one day early on every lesson, with nothing to notice. A wrong guess is
+ * visible and one click to fix; no guess was invisible and nobody fixed it.
+ *
+ * Unrecognised codes get `[]` — the honest answer for a pattern we cannot read, and identical to
+ * the old behaviour for exactly the codes the old behaviour was defensible for.
+ */
+export function sectionDefaultsFrom(code) {
+  const c = String(code || '').trim().toUpperCase();
+  const m = c.match(/^([A-Z])(\d)?/);
+  const letter = m?.[1] || '';
+  const digit = m?.[2] ? Number(m[2]) : null;
+  // Only the day letters this convention actually uses. 'A1B' must not become an 'A-day' section.
+  const meeting_days = ['M', 'T', 'W', 'R', 'F'].includes(letter) ? [letter] : [];
+  return { meeting_days, period: Number.isFinite(digit) ? digit : null };
+}

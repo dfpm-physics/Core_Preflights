@@ -22,7 +22,7 @@
 /** An assignment offering with everything needed to render it: the library definition,
  *  which activities are live and in what role, and any per-section deadline overrides. */
 export const OFFERING_SELECT =
-  'id,points_possible,grading_mode,switch_policy,opens_at,due_at,is_published,position,' +
+  'id,points_possible,grading_mode,switch_policy,opens_at,due_at,due_by_day,is_published,position,' +
   'course_offering_id,' +
   'assignments!inner(id,slug,title,description,objectives,kind_id,course_id),' +
   'offering_activities(grading_role,available_after,is_visible,position,' +
@@ -117,6 +117,10 @@ export function shapeOffering(row) {
     switchPolicy: row.switch_policy,
     opensAt: row.opens_at,
     dueAt: row.due_at,
+    // The per-day schedule (migration 017). resolveDueBySection() folds this into dueBySection
+    // for any section that has no explicit row of its own.
+    dueByDay: (row.due_by_day && typeof row.due_by_day === 'object' && !Array.isArray(row.due_by_day))
+      ? row.due_by_day : {},
     isPublished: row.is_published,
     position: row.position,
     activities,
@@ -232,12 +236,80 @@ export function questionPoints(activity) {
  * ════════════════════════════════════════════════════════════════════════════ */
 
 /**
+ * Resolve every section's deadline for one offering, folding the per-day schedule in.
+ *
+ * WHY THIS EXISTS. `assignment_due_dates` rows are written only when a director saves the lesson
+ * in the editor, so a section created AFTER scheduling had no row and fell through to the
+ * offering's `due_at` — which on every Fall 2026 row is the M-day date. A new T-day section was
+ * therefore silently one day early on every lesson. `due_by_day` (migration 017) records the
+ * per-day schedule as a stored fact, so a section's deadline can be derived from its own
+ * `meeting_days` the moment it exists, with no lesson re-save and nothing to regenerate.
+ *
+ * An explicit row still wins, which is what keeps `assignment_due_dates` meaningful: it is now a
+ * deliberate per-section OVERRIDE (the cancelled-class case) rather than the normal path.
+ *
+ * Call this once after shaping, wherever sections are already in hand, and assign the result onto
+ * the offering. Every effectiveDue() caller then gets the derived dates without changing its own
+ * signature — the alternative was threading `meeting_days` through six call sites.
+ *
+ * @param {object} offering  a shapeOffering() result
+ * @param {Array}  sections  [{ id, meeting_days }] — the offering's sections
+ * @returns {{ dueBySection: object, dueDerivedFor: Set<string> }}
+ */
+export function resolveDueBySection(offering, sections) {
+  const dueBySection = { ...(offering?.dueBySection || {}) };
+  const dueDerivedFor = new Set();
+  const byDay = offering?.dueByDay || {};
+  (sections || []).forEach(sec => {
+    if (!sec?.id || dueBySection[sec.id]) return;          // an explicit row always wins
+    // First meeting day carrying a date wins, matching dueRowsFor(): a section meeting M/W/F
+    // takes the M date. `meeting_days` is NOT NULL default '{}', so [] means "no day declared"
+    // and the offering default is the honest answer for it.
+    const day = (sec.meeting_days || []).find(d => byDay[d]);
+    if (!day) return;
+    dueBySection[sec.id] = byDay[day];
+    dueDerivedFor.add(sec.id);
+  });
+  return { dueBySection, dueDerivedFor };
+}
+
+/** Apply resolveDueBySection() to an offering in place, and return it. */
+export function withResolvedDue(offering, sections) {
+  if (!offering) return offering;
+  const { dueBySection, dueDerivedFor } = resolveDueBySection(offering, sections);
+  offering.dueBySection = dueBySection;
+  offering.dueDerivedFor = dueDerivedFor;
+  return offering;
+}
+
+/**
+ * Every section of the current offering, as resolveDueBySection() wants them.
+ *
+ * auth.js populates `ctx.sectionsById` with {id, code, meeting_days, period} for the WHOLE
+ * offering, for students and faculty alike — so folding the per-day schedule in costs no extra
+ * query anywhere. (`ctx.sectionIds` is the narrower "which do I teach / sit in" scope and is the
+ * wrong input here: a deadline must resolve for any section the data mentions, not only mine.)
+ */
+export const offeringSections = (ctx) => Object.values(ctx?.sectionsById || {});
+
+/** Shape a list of offering rows and fold in the per-day deadlines. The common case. */
+export const shapeOfferings = (rows, ctx) =>
+  (rows || []).map(shapeOffering).filter(Boolean)
+    .map(o => withResolvedDue(o, offeringSections(ctx)));
+
+/**
  * The deadline that actually applies to one student.
  *
  * Precedence, highest first:
  *   1. a per-student extension          (app.extensions)
- *   2. a per-section override           (app.assignment_due_dates)
- *   3. the offering's default           (assignment_offerings.due_at)
+ *   2. an explicit per-section override (app.assignment_due_dates)
+ *   3. the per-day schedule             (assignment_offerings.due_by_day × section.meeting_days)
+ *   4. the offering's default           (assignment_offerings.due_at)
+ *
+ * Level 3 is applied by resolveDueBySection() BEFORE this runs — it folds the derived dates into
+ * `dueBySection` and records which ids it derived, so this function stays a plain lookup and the
+ * six call sites did not have to grow a `meeting_days` argument. An offering that never went
+ * through that step simply has no level 3, which is exactly the old behaviour.
  *
  * This replaces the old due_date_m / due_date_t pair and the `isMDay()` string sniffing
  * that went with it: the meeting pattern is now data on the section, and the override is
@@ -252,7 +324,8 @@ export function questionPoints(activity) {
  * @param {string|null} sectionId
  * @param {string|null} extensionISO  an ACTIVE extension's date, or null
  * @param {Date} [now]  injected so tests are not clock-dependent
- * @returns {{ due: Date|null, isPast: boolean, source: 'extension'|'section'|'offering'|'none' }}
+ * @returns {{ due: Date|null, isPast: boolean,
+ *            source: 'extension'|'section'|'day'|'offering'|'none' }}
  */
 export function effectiveDue(offering, sectionId, extensionISO, now = new Date()) {
   let raw = null;
@@ -260,7 +333,8 @@ export function effectiveDue(offering, sectionId, extensionISO, now = new Date()
   if (extensionISO) {
     raw = extensionISO; source = 'extension';
   } else if (sectionId && offering?.dueBySection?.[sectionId]) {
-    raw = offering.dueBySection[sectionId]; source = 'section';
+    raw = offering.dueBySection[sectionId];
+    source = offering?.dueDerivedFor?.has?.(sectionId) ? 'day' : 'section';
   } else if (offering?.dueAt) {
     raw = offering.dueAt; source = 'offering';
   }

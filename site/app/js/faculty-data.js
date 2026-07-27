@@ -15,7 +15,8 @@
 import { db } from './supabase.js';
 import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT,
-  shapeOffering, shapeSubmission, effectiveDue, deriveStatus, lessonNumber, chunked,
+  shapeOffering, shapeOfferings, withResolvedDue, offeringSections,
+  shapeSubmission, effectiveDue, deriveStatus, lessonNumber, chunked,
   effortSignal, writtenSignals,
 } from './schema.js';
 
@@ -169,7 +170,7 @@ export async function loadFacultyDashboard(ctx) {
   // 3) The lesson sequence, ordered by the deadline that actually applies. Section overrides
   //    differ per section, so the dashboard orders by the offering's own due_at — the one
   //    date that is the same for everyone looking at this list.
-  const offerings = (offeringRows || []).map(shapeOffering).filter(Boolean);
+  const offerings = shapeOfferings(offeringRows, ctx);
   const lessons = offerings
     .slice()
     .sort((a, b) => {
@@ -299,7 +300,7 @@ export async function loadFacultyInteractions(ctx) {
 export async function loadInteractionData(ctx, offeringId) {
   const { data: offeringRow } = await db.from('assignment_offerings')
     .select(OFFERING_SELECT).eq('id', offeringId).maybeSingle();
-  const offering = shapeOffering(offeringRow);
+  const offering = withResolvedDue(shapeOffering(offeringRow), offeringSections(ctx));
   if (!offering?.interactive) return [];
 
   const { data: enrolRows } = await db.from('enrollments')
