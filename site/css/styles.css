@@ -2022,6 +2022,16 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 .gb-legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 12px;
   font-size: 0.78em; color: var(--text-soft); }
 .gb-legend .gb-key { display: inline-block; min-width: 1.4em; text-align: center; font-weight: 700; }
+/* The legend keys carry the same classes as the cells they describe, but the cell colours are
+   scoped `.gb .gb-*` — and the legend is a SIBLING of the table, not inside it, so none of them
+   ever applied and every key rendered in the same grey. A legend whose swatches do not match the
+   thing they label is worse than no legend. Repeated here rather than un-scoping the cell rules,
+   which would leak `.gb-missing` into any page that happens to reuse the name. */
+.gb-legend .gb-key.gb-missing  { color: var(--red); }
+.gb-legend .gb-key.gb-missing.gb-nosub { color: var(--muted); }
+.gb-legend .gb-key.gb-ungraded { color: var(--gold); }
+.gb-legend .gb-key.gb-draft    { color: var(--text-soft); font-style: italic; }
+.gb-legend .gb-key.gb-draft sup { color: var(--gold); font-style: normal; }
 .gb-legend .gb-leg-sep { padding-left: 14px; border-left: 1px solid var(--border); }
 /* The 0–5 ramp swatch, identical tokens and order to the rollup charts (low → high). */
 .gb-ramp { display: inline-flex; vertical-align: middle; margin: 0 4px; border-radius: 3px;

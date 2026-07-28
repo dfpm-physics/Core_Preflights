@@ -351,7 +351,17 @@ export function buildMatrix({ enrollments, offerings, grades, submissions, exten
       // The two 0–5 signals live alongside the state, not inside it: a colour is a property of the
       // cell, but it is not what the cell IS (its state is), and cellState has a wall of tests
       // pinning exactly what it returns.
-      return { ...cell, ...cellSignals(grade) };
+      const signals = cellSignals(grade);
+      // A graded non-submission demonstrated NOTHING, and "not demonstrated" is literally 0 on the
+      // understanding scale (INTERACTION-DATA-CONTRACT §5.1) — it is not "unknown", which is what
+      // null means and what leaves a cell uncoloured. Without this the hard zeros were the only
+      // uncoloured cells in an otherwise coloured column, reading as "no data" when they are the
+      // most definite data on the row. Note the guard: this only ever fills a gap, so a diagnostic
+      // that somehow exists on a missing cell still wins.
+      if (cell.state === CELL.MISSING && cell.columnGraded && signals.understanding == null) {
+        signals.understanding = 0;
+      }
+      return { ...cell, ...signals };
     });
     const totals = totalsFor(cells);
     return { ...en, cells, totals, band: bandOf(totals.pct) };

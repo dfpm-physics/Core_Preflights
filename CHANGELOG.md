@@ -84,6 +84,28 @@ means "still needs you" on this grid. The dash keeps red only for the settled ze
 one is muted, since a wall of red on an ungraded column reads as a class in trouble rather than an
 instructor with work to do.
 
+Three follow-ups from the director's first look, same day:
+
+- **The zero is colour-coded as understanding 0.** It was the one uncoloured cell in an otherwise
+  coloured column, reading as "no data" when it is the most definite data on the row — a
+  non-submission demonstrated *nothing*, which is literally 0 on the understanding scale
+  (contract §5.1) rather than the `null` that means "not assessed". Filled in `buildMatrix` and
+  only where nothing else supplied a value. **Effort deliberately stays null**: no effort was
+  measured, which is not the same claim as zero effort.
+- **`0` dropped from the legend.** A number in a gradebook explains itself. What needs a legend is
+  everything that is *not* a number — the dash, the tick, the draft marker, the clock, the blank.
+- **Legend keys were never actually coloured.** They carry the cell classes, but the cell colours
+  are scoped `.gb .gb-*` and the legend is a *sibling* of the table, so every key rendered in the
+  same grey — a legend whose swatches do not match what they label. Given `.gb-legend` rules of
+  their own rather than un-scoping the cell rules, which would leak `.gb-missing` into any page
+  reusing the name. Pre-existing; found while removing the `0`.
+
+**Why no dashes are visible yet, since it will be asked again:** every published Fall 2026 offering
+is due in August. A cell with no submission *before* its deadline is `PENDING`, not `MISSING` — it
+renders blank, because absence means nothing until the deadline passes, and counting it would put
+every cadet at 0% on day one. The dash and the zero both become reachable at the first deadline
+(`preflight-02`, 10 Aug). Verified read-only against the live database.
+
 **5. The JSON backup's PII warning was wrong twice.** It said *"Contains student PII and every
 free-response answer"*. `buildBackup()` reads `assignment_offerings`, `enrollments`, `submissions`
 and `grades` and never touches `submission_activities` — so there is **no student writing in the

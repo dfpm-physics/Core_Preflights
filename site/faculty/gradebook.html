@@ -239,11 +239,16 @@
         case GB.CELL.UNGRADED:
           return `<td class="gb-cell gb-ungraded" title="${esc(t)} — submitted, not yet graded">✓${late}</td>`;
         // Nothing submitted. A dash while the column is still being graded; a hard 0 once it has
-        // been (GB.gradedScopes) — which is what the student's total has counted all along.
-        case GB.CELL.MISSING:
-          return c.columnGraded
-            ? `<td class="gb-cell gb-missing" title="${esc(t)} — nothing submitted; graded as 0 of ${c.possible}">0</td>`
-            : `<td class="gb-cell gb-missing gb-nosub" title="${esc(t)} — nothing submitted, not yet graded">—</td>`;
+        // been (GB.gradedScopes) — which is what the student's total has counted all along. The
+        // zero is tinted like every other graded cell: buildMatrix gives it understanding 0, so it
+        // takes the bottom of the ramp rather than being the one blank-coloured cell in the column.
+        case GB.CELL.MISSING: {
+          if (!c.columnGraded) {
+            return `<td class="gb-cell gb-missing gb-nosub" title="${esc(t)} — nothing submitted, not yet graded">—</td>`;
+          }
+          const d = decor(c);
+          return `<td class="gb-cell gb-missing${d.tintCls}"${d.style} title="${esc(t + ' — nothing submitted; graded as 0 of ' + c.possible + d.sig)}">0</td>`;
+        }
         default:
           return `<td class="gb-cell gb-pending" title="${esc(t)} — not due yet"></td>`;
       }
@@ -257,10 +262,13 @@
         + `</span>`;
     }
 
+    // A legend earns its space by explaining what is NOT self-evident. `0` is a number in a
+    // gradebook and needs nobody's help (director, 2026-07-28), so it is not listed — the tooltip
+    // on the cell still says it was a non-submission. What does need explaining is everything that
+    // is not a number: the dash, the tick, the draft marker, the clock, and the blank.
     function legend(stats) {
       return `<div class="gb-legend">
         <span><b class="gb-key gb-missing gb-nosub">—</b> not submitted, not yet graded</span>
-        <span><b class="gb-key gb-missing">0</b> not submitted, graded</span>
         <span><b class="gb-key gb-ungraded">✓</b> submitted, awaiting grading</span>
         <span><b class="gb-key gb-draft">2<sup>?</sup></b> AI suggestion, not finalized</span>
         <span><b class="gb-key">⏰</b> arrived late</span>

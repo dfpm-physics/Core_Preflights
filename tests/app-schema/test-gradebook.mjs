@@ -220,6 +220,38 @@ eq('a graded column does not put a 0 on work that is not due yet',
 eq('…nor does an active extension, which makes the cell PENDING',
    G.cellState({ grade: null, submission: null, offering: offering(), sectionId: SEC_M,
                  extensionISO: FUTURE, columnGraded: true, now: NOW }).points, null);
+/* The colour of that zero. "Not demonstrated" is 0 on the understanding scale, not null — null
+ * means "not assessed" and leaves the cell uncoloured, which made the hard zeros the only blank-
+ * coloured cells in an otherwise coloured column. Asserted through buildMatrix because that is
+ * where the fill happens; cellState stays purely about state. */
+const missingCol = { offeringId: 'o-missing', slug: 'preflight-09', title: 'PF9',
+                     pointsPossible: 2, dueAt: PAST, position: 9, dueBySection: {}, dueByDay: {} };
+const zeroMatrix = G.buildMatrix({
+  enrollments: [{ enrollmentId: 'e-1', sectionId: SEC_M, name: 'Nobody Home' },
+                { enrollmentId: 'e-2', sectionId: SEC_M, name: 'Did The Work' }],
+  offerings: [missingCol],
+  // e-2 is graded and finalized, which is what marks the column graded for this section.
+  grades: [{ enrollment_id: 'e-2', assignment_offering_id: 'o-missing', points_earned: 2,
+             points_possible: 2, is_finalized: true, source: 'instructor', diagnostic: {} }],
+  submissions: [{ enrollment_id: 'e-2', assignment_offering_id: 'o-missing',
+                  status: 'committed', committed_at: PAST }],
+  extensions: [], now: NOW,
+});
+const zeroCell = zeroMatrix.rows[0].cells[0];
+eq('the non-submitter is MISSING in a graded column', zeroCell.state, G.CELL.MISSING);
+eq('…and is coloured as understanding 0, not left uncoloured', zeroCell.understanding, 0);
+eq('…which is the bottom of the ramp', G.zoneIndex(zeroCell.understanding), 0);
+// Effort is a different claim: nobody measured any, so it stays absent rather than being invented.
+eq('…while effort stays null — no effort was measured, which is not the same as zero effort',
+   zeroCell.effort, null);
+
+const ungradedCol = G.buildMatrix({
+  enrollments: [{ enrollmentId: 'e-1', sectionId: SEC_M, name: 'Nobody Home' }],
+  offerings: [missingCol], grades: [], submissions: [], extensions: [], now: NOW,
+});
+eq('a missing cell in an UNGRADED column stays uncoloured — nothing has been judged yet',
+   ungradedCol.rows[0].cells[0].understanding, null);
+
 eq('the total is identical either way — this is a display change, not an arithmetic one',
    G.totalsFor([G.cellState({ grade: null, submission: null, offering: offering(),
                               sectionId: SEC_M, columnGraded: true, now: NOW })]).pct,
