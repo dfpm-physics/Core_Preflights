@@ -10,6 +10,45 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-28 — Matthew Recker via Claude
 
+### Faculty can launch an assignment's AI Interaction from the Assignments page
+
+Every assignment card that carries an interactive activity now shows **Launch interaction ↗** beside
+**Preview**, opening the artifact in a new tab.
+
+**It is the interactive twin of Preview, and it sits outside the director gate for the same reason.**
+An artifact is a claude.ai / ChatGPT page this site cannot render — `preview-modal` says so in as
+many words — so *opening it* is the only preview it has. Until now there was none: the URL was
+stored on the interactive activity and visible only inside the editor's Interaction URL field, which
+means an instructor about to teach off a lesson had no way to run it, and a director had to enter an
+edit session and cancel out of it to read one. Reading a lesson is not an edit, which is exactly the
+argument that put Preview on every card.
+
+**Four states, deliberately distinguished:**
+
+- No interactive activity → **no control at all.** A permanently-disabled button on the majority of
+  cards is noise, and the badge row already says whether an assignment has an AI Interaction.
+- A stored `http(s)` URL → a real `<a target="_blank" rel="noopener">`, so middle-click and
+  copy-link work the way they do for the rollup links elsewhere.
+- An interaction with no URL stored → disabled, saying so. Only reachable on rows predating the
+  editor's URL requirement (`saveLesson()` has refused an empty one since it was written).
+- A stored URL that is not `http(s)` → disabled, saying so. This is also what keeps a `javascript:`
+  value out of an `href`: the field is free text, and while only a director can type into it, an
+  inert refusal costs one regex.
+
+Changed: `site/faculty/lessons.html` only — `card()` gained the control and the module imports
+`artifactUrlOf` from the shipped `schema.js` rather than reaching into `content` by hand. No data
+model, no query, no CSS: `a.btn` is already a supported shape (`styles.css:664`, `display:inline-flex`
+and `text-decoration:none`), used by the dashboard's rollup link and the student lesson cards.
+
+**Verified:** the real `card()` source was sliced out of the shipped file and rendered against all
+four states plus a quote-injection URL, as both director and instructor — the launch control appears
+only where intended, the `javascript:` case produces no `href`, a quoted URL stays escaped inside the
+attribute, Preview survives in every case, and the manage buttons stay director-only. Also
+`test-imports` (339 named imports resolve, which is what proves the new `artifactUrlOf` import),
+`test-lesson-isolation` 27/27, `test-lesson-due` 34/34, and `node --check` on the extracted inline
+module. **Node-only — not exercised in a browser**, so the visual placement of the button in the
+card's action row is unproven.
+
 ### The library picker is gone from the Assignments page
 
 The strip of draggable cards headed "Schedule an assignment from the library" — the last surviving

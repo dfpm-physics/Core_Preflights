@@ -246,7 +246,7 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { esc, fmtDate, runPage } from '../js/util.js';
-    import { questionsOf } from '../js/schema.js';
+    import { questionsOf, artifactUrlOf } from '../js/schema.js';
     import * as L from '../js/faculty-lessons.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
@@ -371,6 +371,23 @@
       const preview = nq
         ? `<button class="btn btn-ghost btn-sm" data-prev="${esc(l.offeringId)}">Preview</button>`
         : `<button class="btn btn-ghost btn-sm" disabled title="This assignment has no free-response questions — the AI Interaction can't be previewed here.">Preview</button>`;
+      // The interactive twin of Preview, and outside the director gate for the same reason: an
+      // artifact is a claude.ai/ChatGPT page this site cannot render, so opening it IS the preview,
+      // and an instructor about to teach off a lesson has every reason to run it first. Absent
+      // entirely when the assignment has no interactive activity — there is nothing to launch and a
+      // permanently-disabled button on most cards is noise. Present-but-disabled only in the two
+      // states where an interaction exists and still can't be opened: no URL stored (possible only
+      // on rows predating the editor's URL check), or one that isn't http(s) — which is also what
+      // keeps a `javascript:` value out of an href.
+      const iurl = artifactUrlOf(l.interactive);
+      const launchable = /^https?:\/\//i.test(iurl || '');
+      const launch = !l.interactive ? ''
+        : launchable
+          ? `<a class="btn btn-ghost btn-sm" href="${esc(iurl)}" target="_blank" rel="noopener"
+                title="Open this assignment's AI Interaction in a new tab">Launch interaction ↗</a>`
+          : `<button class="btn btn-ghost btn-sm" disabled title="${iurl
+                ? 'This assignment\'s AI Interaction URL is not a web address (must start with http:// or https://) — fix it with Edit.'
+                : 'This assignment\'s AI Interaction has no URL stored — add one with Edit.'}">Launch interaction ↗</button>`;
       const manage = isDirector() ? `
         <button class="btn btn-ghost btn-sm" data-edit="${esc(l.offeringId)}">Edit</button>
         <button class="btn btn-ghost btn-sm" data-pub="${esc(l.offeringId)}">${l.isPublished ? 'Unpublish' : 'Publish'}</button>
@@ -389,7 +406,7 @@
             </div>
           </div>
         </div>
-        <div class="row wrap" style="gap:8px;margin-top:14px">${preview}${manage}</div>
+        <div class="row wrap" style="gap:8px;margin-top:14px">${preview}${launch}${manage}</div>
       </div>`;
     }
 
