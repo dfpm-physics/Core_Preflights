@@ -475,6 +475,7 @@ next.
 | `resolution_note` | Why it was decided that way — the field that answers "why was this declined?" months later |
 | `roadmap_ref` | The roadmap item an accepted request became, e.g. `P1.16`. Only an accepted entry may carry one |
 | `resolved_by`, `resolved_at` | Who made the decision and when. Cleared if the entry is put back to new |
+| `completed_at`, `completed_by` | When the accepted request was actually built, and who marked it so. Empty until then. Only an accepted entry may be marked done, and withdrawing the acceptance clears it |
 
 **Only a system administrator can read it back, or decide it.** Anyone signed in can send feedback,
 but the collected feedback is not a board that instructors or students browse — it can name pages and
@@ -488,6 +489,14 @@ stays on the record. A submitter cannot edit their own entry either; a change of
 
 Site administrators work through these on the **Feedback** page, which lays them out as a page-by-
 decision matrix. Accepted entries still needing to be written up are the ones with no `roadmap_ref`.
+
+**The decision and the outcome are separate.** `status` records what was decided about a request;
+`completed_at` records whether it was then built. They are kept apart because an entry can be agreed
+to long before anyone works on it, and a list that cannot tell those apart fills up with items that
+look outstanding but are finished. On the Feedback page a completed entry drops out of the working
+list into a **Resolved** drawer at the bottom, alongside the declined and duplicate ones. Marking
+something done does **not** remove it from the "needs writing up" list — the roadmap records what
+shipped as well as what is planned.
 
 ## What the database will not allow
 

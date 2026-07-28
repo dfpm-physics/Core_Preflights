@@ -2134,8 +2134,17 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 /* Untriaged is the only count that should pull the eye — it is the page's actual to-do. */
 .fbm-new  { background: color-mix(in srgb, var(--gold) 26%, var(--surface-sunken)); }
 .fbm-accepted  { background: color-mix(in srgb, var(--green) 22%, var(--surface-sunken)); }
+/* Done is green like accepted, but drained — the same family, visibly spent. */
+.fbm-completed { background: color-mix(in srgb, var(--green) 10%, var(--surface-sunken));
+  color: var(--text-soft); }
 .fbm-declined  { background: color-mix(in srgb, var(--red) 18%, var(--surface-sunken)); }
 .fbm-duplicate { background: var(--surface-sunken); color: var(--muted); }
+
+/* One rule divides work from archive: the divider lands on the FIRST closed column, whichever it
+   is, so reordering BUCKETS in faculty-feedback.js moves the line rather than stranding it. */
+.fbm th:not(.fbm-th-closed) + th.fbm-th-closed,
+.fbm td:not(.fbm-closed-col) + td.fbm-closed-col { border-left: 2px solid var(--border); }
+.fbm th.fbm-th-closed { opacity: 0.75; }
 
 .fb-pending { margin-bottom: 16px; }
 .fb-controls { gap: 10px; align-items: center; margin-bottom: 14px; }
@@ -2145,6 +2154,7 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 .fb-item { padding: 14px 16px; margin-bottom: 12px; border-left: 4px solid var(--border); }
 .fb-item.fb-st-new       { border-left-color: var(--gold); }
 .fb-item.fb-st-accepted  { border-left-color: var(--green); }
+.fb-item.fb-st-completed { border-left-color: color-mix(in srgb, var(--green) 45%, var(--border)); }
 .fb-item.fb-st-declined  { border-left-color: var(--red); }
 .fb-item.fb-st-duplicate { border-left-color: var(--muted); }
 .fb-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px;
@@ -2170,6 +2180,22 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 .fb-stbtn-declined.on  { background: var(--red); }
 .fb-stbtn-duplicate.on { background: var(--muted); }
 
+/* The completion tick. Sits outside the decision segment on purpose: status and done are two
+   different questions, and a fifth segment would have read as a fifth mutually-exclusive decision
+   — which is exactly the confusion migration 018 refused to build into the database. */
+.fb-donebtn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px;
+  font-size: 0.8em; cursor: pointer; background: var(--card); color: var(--text-soft);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  transition: background .12s, border-color .12s, color .12s; }
+.fb-donebtn:hover:not(:disabled) { background: var(--surface-hover); color: var(--text);
+  border-color: var(--green); }
+.fb-donebtn.on { background: var(--green); border-color: var(--green); color: #fff; font-weight: 700; }
+.fb-donebtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.fb-donebtn-tick { font-size: 0.95em; line-height: 1; }
+.fb-done-chip { font-size: 0.72em; font-weight: 700; letter-spacing: 0.03em; padding: 2px 8px;
+  border-radius: 999px; background: color-mix(in srgb, var(--green) 18%, var(--surface-sunken));
+  color: var(--green); }
+
 .fb-ref { width: auto; flex: 0 1 220px; font-size: 0.84em; padding: 5px 9px; }
 .fb-ref:disabled { opacity: 0.5; cursor: not-allowed; }
 /* An explicit height, because the global textarea rule outweighs rows="2" and left the note box
@@ -2178,3 +2204,21 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
   height: 46px; min-height: 46px; resize: vertical; }
 .fb-item-foot { gap: 10px; align-items: center; }
 .fb-item-foot .error-msg { margin: 0; }
+
+/* The resolved drawer — finished work, one line until asked for. Native <details> so it is
+   keyboard-operable and screen-reader-announced without any JS of ours. */
+.fb-drawer { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 12px; }
+.fb-drawer-sum { display: flex; align-items: center; gap: 10px; cursor: pointer;
+  list-style: none; padding: 8px 12px; border-radius: var(--radius-sm);
+  font-size: 0.88em; color: var(--text-soft); background: var(--surface-sunken); }
+.fb-drawer-sum::-webkit-details-marker { display: none; }
+.fb-drawer-sum:hover { color: var(--text); }
+.fb-drawer-sum:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.fb-drawer-caret { display: inline-block; transition: transform .15s; color: var(--muted); }
+.fb-drawer[open] .fb-drawer-caret { transform: rotate(90deg); }
+.fb-drawer-sum .muted { font-size: 0.9em; }
+/* Resolved cards are context, not the subject — dimmed until pointed at, so the open list above
+   keeps the eye. */
+.fb-drawer-body { padding-top: 12px; }
+.fb-drawer-body .fb-item { opacity: 0.72; transition: opacity .12s; }
+.fb-drawer-body .fb-item:hover, .fb-drawer-body .fb-item:focus-within { opacity: 1; }

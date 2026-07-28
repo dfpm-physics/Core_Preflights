@@ -26,8 +26,11 @@
     runPage(ctx, init);
 
     let rows = [];
-    let filter = { status: null, page: null, q: '' };
+    let filter = { bucket: null, page: null, q: '' };
     const dirty = new Map();      // id -> pending edits, so a row survives a re-render mid-edit
+    // The completed drawer's open state, kept out here so a save (which re-renders) does not
+    // slam it shut under the person who just opened it.
+    let doneOpen = false;
 
     async function init() {
       initTheme();
@@ -59,21 +62,51 @@
       const { pages, totals } = FB.buildMatrix(rows);
       const pending = FB.pendingRoadmap(rows);
       const shown = FB.filterRows(rows, filter);
+      // The split this page is built around: finished work drops out of the list and into a
+      // drawer, so what is left on screen is only what somebody still has to act on.
+      const { open, closed } = FB.splitByClosure(shown);
+      // Never leave a blank screen: if the current filter matches only finished items, the drawer
+      // is the whole answer, so it opens itself.
+      const expanded = doneOpen || (!open.length && closed.length > 0);
 
       root.innerHTML = `
         <div class="page-head">
           <h1>Feedback</h1>
-          <div class="sub">${totals.total} comment${totals.total === 1 ? '' : 's'} from instructors and cadets.
+          <div class="sub">${totals.total} comment${totals.total === 1 ? '' : 's'} from instructors and cadets,
+            ${totals.open} still open.
             Every one needs a decision; accepted ones get rolled into the roadmap.</div>
         </div>
         ${totals.total ? matrixHTML(pages, totals) : ''}
         ${pending.length ? `<div class="alert alert-info fb-pending">
             <strong>${pending.length}</strong> accepted item${pending.length === 1 ? '' : 's'} not yet in the roadmap.
             Give each a roadmap reference once written up.</div>` : ''}
-        ${totals.total ? controlsHTML(shown.length) : ''}
-        ${totals.total ? shown.map(cardHTML).join('') || emptyFilter() : emptyState()}`;
+        ${totals.total ? controlsHTML(open.length, closed.length) : ''}
+        ${totals.total
+          ? (open.map(cardHTML).join('') || (closed.length ? '' : emptyFilter())) + drawerHTML(closed, expanded)
+          : emptyState()}`;
 
       wire();
+    }
+
+    /* ── the completed drawer ─────────────────────────────────────────────────
+     * Everything finished — done, declined, duplicate — collapsed to one line. It is still fully
+     * editable inside, because the way you undo a wrong "done" is to open it and untick it.
+     */
+    function drawerHTML(closed, expanded) {
+      if (!closed.length) return '';
+      const by = {};
+      closed.forEach(r => { const k = FB.bucketOf(r); by[k] = (by[k] || 0) + 1; });
+      const parts = FB.BUCKETS.filter(b => b.closed && by[b.key])
+        .map(b => `${by[b.key]} ${esc(b.label.toLowerCase())}`);
+
+      return `<details class="fb-drawer" id="fb-drawer"${expanded ? ' open' : ''}>
+        <summary class="fb-drawer-sum">
+          <span class="fb-drawer-caret" aria-hidden="true">▸</span>
+          <strong>${closed.length} resolved</strong>
+          <span class="muted">${esc(parts.join(' · '))}</span>
+        </summary>
+        <div class="fb-drawer-body">${closed.map(cardHTML).join('')}</div>
+      </details>`;
     }
 
     /* ── the matrix: page × status ───────────────────────────────────────────
@@ -83,45 +116,47 @@
      */
     function matrixHTML(pages, totals) {
       const head = `<tr><th class="fbm-page">Page</th>
-        ${FB.STATUSES.map(s => `<th class="fbm-num" title="${esc(s.hint)}">${esc(s.label)}</th>`).join('')}
+        ${FB.BUCKETS.map(b => `<th class="fbm-num${b.closed ? ' fbm-th-closed' : ''}"
+             title="${esc(b.hint)}">${esc(b.label)}</th>`).join('')}
         <th class="fbm-num">All</th></tr>`;
 
       const body = pages.map(p => `<tr>
         <td class="fbm-page" title="${esc(p.path)}">${esc(p.page)}</td>
-        ${FB.STATUSES.map(s => {
-          const n = p[s.key];
-          const on = filter.page === p.page && filter.status === s.key;
-          return `<td class="fbm-num">${n
-            ? `<button class="fbm-cell${on ? ' on' : ''} fbm-${esc(s.key)}"
-                  data-page="${esc(p.page)}" data-status="${esc(s.key)}"
-                  title="${esc(p.page)} — ${esc(s.label)}">${n}</button>`
+        ${FB.BUCKETS.map(b => {
+          const n = p[b.key];
+          const on = filter.page === p.page && filter.bucket === b.key;
+          return `<td class="fbm-num${b.closed ? ' fbm-closed-col' : ''}">${n
+            ? `<button class="fbm-cell${on ? ' on' : ''} fbm-${esc(b.key)}"
+                  data-page="${esc(p.page)}" data-bucket="${esc(b.key)}"
+                  title="${esc(p.page)} — ${esc(b.label)}">${n}</button>`
             : '<span class="fbm-zero">·</span>'}</td>`;
         }).join('')}
-        <td class="fbm-num"><button class="fbm-cell fbm-all${filter.page === p.page && !filter.status ? ' on' : ''}"
-              data-page="${esc(p.page)}" data-status="">${p.total}</button></td></tr>`).join('');
+        <td class="fbm-num"><button class="fbm-cell fbm-all${filter.page === p.page && !filter.bucket ? ' on' : ''}"
+              data-page="${esc(p.page)}" data-bucket="">${p.total}</button></td></tr>`).join('');
 
       const foot = `<tr class="fbm-total"><td class="fbm-page">All pages</td>
-        ${FB.STATUSES.map(s => `<td class="fbm-num">${totals[s.key]
-          ? `<button class="fbm-cell${!filter.page && filter.status === s.key ? ' on' : ''} fbm-${esc(s.key)}"
-                data-page="" data-status="${esc(s.key)}">${totals[s.key]}</button>`
+        ${FB.BUCKETS.map(b => `<td class="fbm-num${b.closed ? ' fbm-closed-col' : ''}">${totals[b.key]
+          ? `<button class="fbm-cell${!filter.page && filter.bucket === b.key ? ' on' : ''} fbm-${esc(b.key)}"
+                data-page="" data-bucket="${esc(b.key)}">${totals[b.key]}</button>`
           : '<span class="fbm-zero">·</span>'}</td>`).join('')}
-        <td class="fbm-num"><button class="fbm-cell fbm-all${!filter.page && !filter.status ? ' on' : ''}"
-              data-page="" data-status="">${totals.total}</button></td></tr>`;
+        <td class="fbm-num"><button class="fbm-cell fbm-all${!filter.page && !filter.bucket ? ' on' : ''}"
+              data-page="" data-bucket="">${totals.total}</button></td></tr>`;
 
       return `<div class="card fbm-card"><div class="card-title">Resolution matrix</div>
-        <div class="card-meta">Comments by page and decision. Click a number to filter the list below.</div>
+        <div class="card-meta">Comments by page and decision. Click a number to filter the list below.
+          The three columns right of the divider are finished, and live in the drawer at the bottom.</div>
         <div class="table-wrap"><table class="fbm">
           <thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div></div>`;
     }
 
-    function controlsHTML(n) {
-      const active = filter.status || filter.page || filter.q;
+    function controlsHTML(nOpen, nClosed) {
+      const active = filter.bucket || filter.page || filter.q;
       return `<div class="row wrap fb-controls">
         <input type="search" id="fb-q" class="fb-search" placeholder="Search comments…"
                value="${esc(filter.q || '')}" aria-label="Search comments">
         ${active ? `<button class="btn btn-ghost btn-sm" id="fb-clear">Clear filter</button>` : ''}
         <div class="grow"></div>
-        <span class="muted" style="font-size:.82em">${n} shown</span>
+        <span class="muted" style="font-size:.82em">${nOpen} open${nClosed ? ` · ${nClosed} resolved` : ''}</span>
       </div>`;
     }
 
@@ -133,14 +168,22 @@
       const note = d.resolution_note ?? (r.resolution_note || '');
       const ref = d.roadmap_ref ?? (r.roadmap_ref || '');
       const sent = SENT[r.category] || '';
+      // Only an accepted item can be done (feedback_completed_accepted_ck). Un-accepting therefore
+      // unticks it here rather than saving something the DB would reject.
+      const accepted = status === 'accepted';
+      const done = accepted && (d.completed ?? FB.isCompleted(r));
+      // The card's colour follows the BUCKET, so a finished item reads as finished at a glance
+      // rather than as an outstanding accepted one.
+      const bucket = done ? 'completed' : status;
 
-      return `<div class="card fb-item fb-st-${esc(status)}" data-id="${esc(r.id)}">
+      return `<div class="card fb-item fb-st-${esc(bucket)}" data-id="${esc(r.id)}">
         <div class="fb-item-head">
           <span class="fb-st-dot" aria-hidden="true"></span>
           <strong>${esc(r.submitter_name || 'Unknown')}</strong>
           ${r.role ? `<span class="score-badge pending">${esc(r.role)}</span>` : ''}
           <span class="fb-item-page" title="${esc(r.page || '')}">${esc(FB.pageKey(r))}</span>
           ${sent ? `<span class="fb-sent-chip" title="${esc(r.category)}">${sent}</span>` : ''}
+          ${done ? '<span class="fb-done-chip">✓ Done</span>' : ''}
           <div class="grow"></div>
           <span class="muted" style="font-size:.78em">${esc(fmtDateTime(new Date(r.created_at)))}</span>
         </div>
@@ -153,9 +196,14 @@
                 data-set-status="${esc(s.key)}" aria-pressed="${status === s.key}"
                 title="${esc(s.hint)}">${esc(s.label)}</button>`).join('')}
           </div>
+          <button type="button" class="fb-donebtn${done ? ' on' : ''}" data-toggle-done
+              aria-pressed="${done}" ${accepted ? '' : 'disabled'}
+              title="${accepted ? 'Built — move this into the resolved drawer' : 'Accept the item first; only an accepted item can be done'}">
+            <span class="fb-donebtn-tick" aria-hidden="true">${done ? '✓' : '○'}</span> Done
+          </button>
           <input class="fb-ref" data-ref maxlength="60" placeholder="Roadmap ref (e.g. P1.16)"
-                 value="${esc(ref)}" ${status === 'accepted' ? '' : 'disabled'}
-                 title="${status === 'accepted' ? 'The roadmap item this became' : 'Only an accepted item can carry a roadmap reference'}">
+                 value="${esc(ref)}" ${accepted ? '' : 'disabled'}
+                 title="${accepted ? 'The roadmap item this became' : 'Only an accepted item can carry a roadmap reference'}">
         </div>
         <textarea class="fb-note" data-note rows="2" maxlength="2000"
           placeholder="Why this decision? (the field that answers &quot;why was this declined?&quot; months later)">${esc(note)}</textarea>
@@ -164,6 +212,7 @@
           <span class="error-msg" data-err></span>
           <div class="grow"></div>
           ${r.resolved_at ? `<span class="muted" style="font-size:.76em">decided ${esc(fmtDateTime(new Date(r.resolved_at)))}</span>` : ''}
+          ${r.completed_at ? `<span class="muted" style="font-size:.76em">done ${esc(fmtDateTime(new Date(r.completed_at)))}</span>` : ''}
           <button class="btn btn-primary btn-sm" data-save ${dirty.has(r.id) ? '' : 'disabled'}>Save</button>
         </div>
       </div>`;
@@ -184,15 +233,20 @@
 
       root.querySelectorAll('.fbm-cell').forEach(b => b.addEventListener('click', () => {
         const page = b.dataset.page || null;
-        const status = b.dataset.status || null;
+        const bucket = b.dataset.bucket || null;
         // Clicking the active cell clears it, so the matrix is a toggle rather than a trap.
-        if (filter.page === page && filter.status === status) { filter.page = null; filter.status = null; }
-        else { filter.page = page; filter.status = status; }
+        if (filter.page === page && filter.bucket === bucket) { filter.page = null; filter.bucket = null; }
+        else { filter.page = page; filter.bucket = bucket; }
         render();
       }));
 
       root.querySelector('#fb-clear')?.addEventListener('click', () => {
-        filter = { status: null, page: null, q: '' }; render();
+        filter = { bucket: null, page: null, q: '' }; render();
+      });
+
+      // Remember the drawer across the re-render a save triggers.
+      root.querySelector('#fb-drawer')?.addEventListener('toggle', (e) => {
+        doneOpen = e.target.open;
       });
 
       const q = root.querySelector('#fb-q');
@@ -213,9 +267,17 @@
         };
 
         card.querySelectorAll('[data-set-status]').forEach(b => b.addEventListener('click', () => {
-          mark({ status: b.dataset.setStatus });
+          const next = b.dataset.setStatus;
+          // Withdrawing the acceptance withdraws the completion with it — the DB CHECK forbids the
+          // pair, and leaving the tick on would offer a save that could only fail.
+          mark(next === 'accepted' ? { status: next } : { status: next, completed: false });
           render();
         }));
+        card.querySelector('[data-toggle-done]')?.addEventListener('click', () => {
+          const cur = dirty.get(id)?.completed ?? FB.isCompleted(row);
+          mark({ completed: !cur });
+          render();
+        });
         card.querySelector('[data-note]')?.addEventListener('input', (e) => mark({ resolution_note: e.target.value }));
         card.querySelector('[data-ref]')?.addEventListener('input', (e) => mark({ roadmap_ref: e.target.value }));
         card.querySelector('[data-save]')?.addEventListener('click', () => save(id, row, card));
@@ -230,6 +292,7 @@
         status: d.status ?? (row.status || 'new'),
         resolutionNote: d.resolution_note ?? (row.resolution_note || ''),
         roadmapRef: d.roadmap_ref ?? (row.roadmap_ref || ''),
+        completed: d.completed ?? FB.isCompleted(row),
       };
       const problem = FB.validateResolution(payload);
       if (problem) { err.textContent = problem; return; }
@@ -238,7 +301,9 @@
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner on-dark"></span> Saving…';
       const { error } = await FB.saveResolution(id,
-        FB.resolutionPatch({ ...payload, adminId: ctx.user?.id }));
+        // The row's existing stamps ride along so an unrelated edit does not reset "done on".
+        FB.resolutionPatch({ ...payload, adminId: ctx.user?.id,
+                             completedAt: row.completed_at, completedBy: row.completed_by }));
       if (error) {
         btn.disabled = false; btn.textContent = 'Save';
         err.textContent = 'Save failed: ' + error.message;

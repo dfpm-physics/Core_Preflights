@@ -10,6 +10,12 @@
 // The rest pins the migration-013 constraints in the browser, so an admin gets a sentence instead
 // of a Postgres constraint name, and pins the matrix's sort order, which is the thing that makes a
 // pile of comments legible.
+//
+// The second handoff, added with migration 018, is DECISION vs OUTCOME. `status` stays the four
+// triage values; `completed_at` is a separate axis; the UI flattens the two into one five-way
+// bucket. Two ways that can silently go wrong, both checked below: completion leaking into the
+// roadmap work list (it must NOT — a shipped item still wants a ROADMAP §8 line), and a stamp that
+// re-dates itself on an unrelated edit, which would turn "done on" into "last touched".
 
 import { check, eq, section, summary, installBrowser, makeClient } from './harness.mjs';
 
@@ -29,8 +35,12 @@ const row = (o = {}) => ({
   status: o.status || 'new',
   roadmap_ref: o.roadmap_ref === undefined ? null : o.roadmap_ref,
   resolution_note: o.resolution_note || null,
+  completed_at: o.completed_at === undefined ? null : o.completed_at,
+  completed_by: o.completed_by === undefined ? null : o.completed_by,
   created_at: o.created_at || '2026-07-23T12:00:00.000Z',
 });
+
+const DONE = '2026-07-26T09:00:00.000Z';
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 section('statuses — the four triage decisions, and no more');
@@ -42,6 +52,49 @@ check('every status carries a label and a hint',
 // There is deliberately no 'roadmapped' status — being written down is roadmap_ref, not a state.
 check('there is no roadmapped status (that fact lives in roadmap_ref)',
       !F.STATUS_KEYS.includes('roadmapped'));
+// Nor a 'completed' one. 018 made completion a COLUMN precisely so it could not collide with
+// feedback_roadmap_ref_accepted_ck or silently drop rows out of the roadmap work list.
+check('completion is not a status — it is a separate axis (migration 018)',
+      !F.STATUS_KEYS.includes('completed'));
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+section('buckets — the two DB axes flattened into what a person reads');
+
+eq('five buckets, open first then closed', F.BUCKET_KEYS,
+   ['new', 'accepted', 'completed', 'declined', 'duplicate']);
+eq('an accepted item with no completion is still just accepted',
+   F.bucketOf(row({ status: 'accepted' })), 'accepted');
+eq('an accepted item that was built becomes its own bucket',
+   F.bucketOf(row({ status: 'accepted', completed_at: DONE })), 'completed');
+eq('the unrecognised-status rule survives bucketing',
+   F.bucketOf(row({ status: 'weird' })), 'new');
+// The CHECK forbids this pair in the database, so it can only arrive from a hand-edited row — but
+// bucketing it as 'declined' rather than 'completed' keeps the UI honest about the decision.
+eq('a stray completion on a non-accepted row does not promote it',
+   F.bucketOf(row({ status: 'declined', completed_at: DONE })), 'declined');
+eq('a null row buckets as new rather than throwing', F.bucketOf(null), 'new');
+
+check('completion is read from the timestamp, not a flag',
+      F.isCompleted(row({ completed_at: DONE })) && !F.isCompleted(row()));
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+section('splitByClosure — what the main list shows vs what the drawer holds');
+{
+  const { open, closed } = F.splitByClosure([
+    row({ id: 'n', status: 'new' }),
+    row({ id: 'a', status: 'accepted' }),
+    row({ id: 'c', status: 'accepted', completed_at: DONE }),
+    row({ id: 'd', status: 'declined' }),
+    row({ id: 'u', status: 'duplicate' }),
+  ]);
+  // The whole request: an item marked accepted AND completed leaves the main view.
+  eq('open is what still needs acting on', open.map((r) => r.id), ['n', 'a']);
+  eq('closed is everything finished', closed.map((r) => r.id), ['c', 'd', 'u']);
+  // Both halves feed lists that are meant to read newest-first, so neither may re-sort.
+  eq('input order is preserved within each half',
+     F.splitByClosure([row({ id: '1' }), row({ id: '2' })]).open.map((r) => r.id), ['1', '2']);
+  eq('a null list does not throw', F.splitByClosure(null).open.length, 0);
+}
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 section('pageKey — a readable, stable row label');
@@ -54,7 +107,7 @@ eq('an unknown page is labelled, not blank',
 eq('a null row does not throw', F.pageKey(null), '(unknown)');
 
 /* ══════════════════════════════════════════════════════════════════════════ */
-section('buildMatrix — page x status cross-tab');
+section('buildMatrix — page x bucket cross-tab');
 
 const rows = [
   row({ page_title: 'Gradebook · PREP', status: 'new' }),
@@ -95,6 +148,22 @@ eq('a null list is treated as empty', F.buildMatrix(null).pages.length, 0);
 eq('an unrecognised status is counted as new rather than dropped',
    F.buildMatrix([row({ status: 'weird' })]).totals.new, 1);
 
+{
+  // The Accepted column must mean "agreed to and STILL TO BUILD". If a completed item kept
+  // counting there, the column would say how much was ever agreed to rather than how much is
+  // left — which is the number an admin is actually reading it for.
+  const m2 = F.buildMatrix([
+    row({ page_title: 'P', status: 'accepted' }),
+    row({ page_title: 'P', status: 'accepted', completed_at: DONE }),
+    row({ page_title: 'P', status: 'new' }),
+  ]);
+  eq('a completed item leaves the Accepted column', m2.totals.accepted, 1);
+  eq('and lands in its own', m2.totals.completed, 1);
+  eq('the columns still sum to the total', m2.totals.total, 3);
+  eq('open counts only the unfinished buckets', m2.totals.open, 2);
+  eq('the per-page open count matches', m2.pages[0].open, 2);
+}
+
 /* ══════════════════════════════════════════════════════════════════════════ */
 section('pendingRoadmap — the work list the future skill consumes');
 
@@ -109,6 +178,11 @@ eq('only accepted-and-unwritten items are pending', pend.map((r) => r.id), ['a']
 check('an empty-string ref must NOT count as written down',
       F.pendingRoadmap([row({ id: 'e', status: 'accepted', roadmap_ref: '' })]).length === 1,
       'an empty string is not a roadmap reference');
+// Deliberate, and the thing most likely to be "fixed" by mistake: ROADMAP.md §8 records what
+// LANDED, so a shipped item still wants a line. Migration 018's header says the same about the
+// partial index — if this ever flips, flip both.
+eq('completion does NOT remove an item from the roadmap work list',
+   F.pendingRoadmap([row({ id: 'f', status: 'accepted', completed_at: DONE })]).length, 1);
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 section('filterRows — the matrix cells drive this');
@@ -119,10 +193,14 @@ const fr = [
   row({ id: '3', page_title: 'Gradebook · PREP', status: 'accepted', message: 'sticky column please' }),
 ];
 eq('no filter returns everything', F.filterRows(fr, {}).length, 3);
-eq('by status', F.filterRows(fr, { status: 'accepted' }).map((r) => r.id), ['2', '3']);
+eq('by bucket', F.filterRows(fr, { bucket: 'accepted' }).map((r) => r.id), ['2', '3']);
 eq('by page', F.filterRows(fr, { page: 'Gradebook · PREP' }).map((r) => r.id), ['1', '3']);
-eq('by page AND status together — what a matrix cell means',
-   F.filterRows(fr, { page: 'Gradebook · PREP', status: 'accepted' }).map((r) => r.id), ['3']);
+eq('by page AND bucket together — what a matrix cell means',
+   F.filterRows(fr, { page: 'Gradebook · PREP', bucket: 'accepted' }).map((r) => r.id), ['3']);
+// The Done cell has to reach its rows, or the column would be a count you cannot click through.
+eq('the completed bucket is filterable',
+   F.filterRows([...fr, row({ id: '4', status: 'accepted', completed_at: DONE })],
+                { bucket: 'completed' }).map((r) => r.id), ['4']);
 eq('search matches the comment text', F.filterRows(fr, { q: 'csv' }).map((r) => r.id), ['1']);
 eq('search is case-insensitive', F.filterRows(fr, { q: 'CSV' }).map((r) => r.id), ['1']);
 eq('search also matches the submitter', F.filterRows(fr, { q: 'ada' }).length, 3);
@@ -142,6 +220,11 @@ check('a roadmap ref over 60 chars is rejected (it is an id, not a description)'
 // Mirrors feedback_roadmap_ref_accepted_ck. Explaining WHY is the whole reason to duplicate it.
 check('a roadmap ref on a NON-accepted row is rejected',
       !!F.validateResolution({ status: 'declined', roadmapRef: 'P1.16' }));
+// Mirrors feedback_completed_accepted_ck (018).
+check('marking a NON-accepted row done is rejected',
+      !!F.validateResolution({ status: 'declined', completed: true }));
+eq('an accepted row may be marked done',
+   F.validateResolution({ status: 'accepted', completed: true }), null);
 check('every rejection is a human sentence',
       typeof F.validateResolution({ status: 'nope' }) === 'string');
 
@@ -179,6 +262,44 @@ const NOW = new Date('2026-07-23T18:00:00.000Z');
   eq('going back to new clears the decider', p.resolved_by, null);
   eq('going back to new clears the timestamp', p.resolved_at, null);
   eq('going back to new drops any ref', p.roadmap_ref, null);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+section('resolutionPatch — the completion stamp (migration 018)');
+{
+  const p = F.resolutionPatch({ status: 'accepted', completed: true, adminId: 'admin-1', now: NOW });
+  eq('completing stamps the time', p.completed_at, NOW.toISOString());
+  eq('and attributes it', p.completed_by, 'admin-1');
+}
+{
+  // The bug this prevents: fixing a typo in the note re-dates the completion, and "done on"
+  // quietly becomes "last touched". The row's existing stamp always wins.
+  const p = F.resolutionPatch({ status: 'accepted', completed: true, resolutionNote: 'edited later',
+                                completedAt: DONE, completedBy: 'admin-1',
+                                adminId: 'admin-2', now: NOW });
+  eq('an unrelated edit does not re-date an existing completion', p.completed_at, DONE);
+  eq('nor reassign who finished it', p.completed_by, 'admin-1');
+}
+{
+  const p = F.resolutionPatch({ status: 'accepted', completed: false, completedAt: DONE,
+                               completedBy: 'admin-1', adminId: 'a', now: NOW });
+  eq('unticking clears the stamp', p.completed_at, null);
+  eq('and the attribution with it', p.completed_by, null);
+}
+{
+  // Belt and braces with feedback_completed_accepted_ck: withdrawing the acceptance must withdraw
+  // the completion in the SAME write, or the CHECK rejects it and the admin sees a constraint name.
+  const p = F.resolutionPatch({ status: 'declined', completed: true, completedAt: DONE,
+                               completedBy: 'admin-1', adminId: 'a', now: NOW });
+  eq('un-accepting clears the completion', p.completed_at, null);
+  eq('un-accepting clears its attribution', p.completed_by, null);
+}
+{
+  // Every existing caller passes no completion fields at all. They must keep writing NULL rather
+  // than undefined — PostgREST would omit an undefined key and leave a stale stamp in place.
+  const p = F.resolutionPatch({ status: 'accepted', adminId: 'a', now: NOW });
+  eq('an omitted completion is written as NULL, not left out', p.completed_at, null);
+  check('the key is present', 'completed_at' in p && 'completed_by' in p);
 }
 
 summary();

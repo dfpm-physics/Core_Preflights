@@ -1765,9 +1765,42 @@ export const DB_SCHEMA = {
           "generated": false,
           "comment": null,
           "pk": false
+        },
+        {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "udt": "timestamptz",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "When the accepted item was actually built. NULL = agreed to, not done yet. Separate from status on purpose: status is the triage DECISION, this is the OUTCOME. Does NOT affect the roadmap work list (status = 'accepted' AND roadmap_ref IS NULL) — a shipped item still wants a ROADMAP.md §8 line.",
+          "pk": false
+        },
+        {
+          "name": "completed_by",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "Which admin marked it done. NULL when never completed, or when that admin's row was deleted.",
+          "pk": false
         }
       ],
       "foreignKeys": [
+        {
+          "name": "feedback_completed_by_fkey",
+          "columns": [
+            "completed_by"
+          ],
+          "refTable": "instructors",
+          "refColumns": [
+            "id"
+          ],
+          "onDelete": "set null"
+        },
         {
           "name": "feedback_resolved_by_fkey",
           "columns": [

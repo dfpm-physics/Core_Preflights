@@ -8,6 +8,89 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-28 — Matthew Recker via Claude (feedback: mark an accepted item done, and get it off the list)
+
+**Migration `app/018_feedback_completed.sql` added; see "Applying it" below for its status.**
+
+### The problem
+
+013 gave every comment a **decision**. It gave nobody a way to say the decision had been **acted
+on**, so an accepted item stayed in the triage list forever, indistinguishable from one agreed to
+five minutes ago. With the feedback box on every page that list only grows, and a list that only
+grows is one nobody opens — the failure 013 was written to prevent, one step further along.
+
+### Why a column and not a fifth status
+
+013's header refuses a `'done'` **status**, and that refusal still holds: status is the triage
+**decision**, and completion is an **outcome**. A fifth status would also have broken two things
+013 built:
+
+- `feedback_roadmap_ref_accepted_ck` (`roadmap_ref IS NULL OR status = 'accepted'`) would reject a
+  completed row carrying a roadmap ref — i.e. exactly the rows most likely to be done.
+- The roadmap skill's work list keys on `status = 'accepted'`, so completing an item would silently
+  drop it out of a query that has nothing to do with completion.
+
+As a separate axis neither happens, and every existing constraint, index and query is untouched.
+
+**The roadmap work list is deliberately unchanged.** `status = 'accepted' AND roadmap_ref IS NULL`
+still means "agreed to, not yet written down" — completion is **not** subtracted from it, because
+`docs/ROADMAP.md` §8 records what *landed*, so a shipped item still wants a line there. Stated in
+the migration header, in `pendingRoadmap()`, and pinned by a test, because it is the thing most
+likely to be "fixed" by mistake.
+
+### What changed
+
+- **`supabase/migrations/app/018_feedback_completed.sql`** — `feedback.completed_at` +
+  `completed_by` (FK to `instructors`, `ON DELETE SET NULL`), plus two CHECKs: only an accepted item
+  may be complete, and attribution cannot exist without a completion. No new index — the admin view
+  reads the whole table in one select and splits it in the browser, so an index would serve no query.
+- **`site/app/js/faculty-feedback.js`** — the two DB axes are flattened into one five-way display
+  **bucket** (`new` · `accepted` · `completed` · `declined` · `duplicate`) via `bucketOf()`. New
+  `BUCKETS`, `isCompleted()`, `isClosed()`, `splitByClosure()`. `filterRows()`'s `status` key is now
+  `bucket`. `resolutionPatch()` takes the row's existing stamps back in so an unrelated edit cannot
+  re-date "done on" into "last touched", and clears the completion when the acceptance is withdrawn
+  — same write, so the CHECK cannot reject it.
+- **`site/app/faculty/feedback.html`** — the matrix gains a **Done** column (so *Accepted* now means
+  "agreed and still to build" and the columns still sum to the total), with a rule dividing the open
+  columns from the finished ones. The list splits: open items stay on the page, finished ones
+  collapse into a **Resolved** drawer at the bottom, which opens itself rather than leaving a blank
+  screen when a filter matches only finished items. Cards get a **Done** toggle, disabled until the
+  item is accepted.
+- **`site/app/css/styles.css`** — `.fb-donebtn`, `.fb-done-chip`, `.fb-drawer*`, the `completed`
+  bucket colours, and the open/closed divider. The divider is a sibling selector on the *first*
+  closed column, so reordering `BUCKETS` moves the line rather than stranding it.
+- **`site/app/help/director-schema-reference.md`** — the two new fields, and a paragraph on
+  decision-vs-outcome. Its `DOC-SOURCES.json` entry was also missing migrations **016 and 017**,
+  which had landed without ever flagging the page; all three are now listed.
+
+### Verified
+
+`tests/app-schema/test-feedback-admin.mjs` extended to 75 checks, all passing — the new ones cover
+bucketing, the open/closed split, the roadmap-list invariant, and the four ways the completion stamp
+can be written wrong. Full suite: 330 passed, 1 failed — `test-student.mjs` "bootstrap returned a
+context", which is a test-cadet sign-in failure unrelated to this work (it imports only `auth.js`
+and `student-data.js`, neither touched here). The page's inline module passes `node --check`.
+**This is a Node-only verification so far** (CORE.md §2): the UI has not been clicked through in a
+browser, and cannot be until the migration is applied.
+
+### Applying it
+
+**Not applied.** `prep_app_owner` is unsealed and the apply was attempted, but the sandbox blocked
+the command. Run from the repo root:
+
+```
+.venv/Scripts/python scripts/app_migration/apply_app_migration.py 018_feedback_completed.sql
+.venv/Scripts/python scripts/app_migration/apply_app_migration.py 018_feedback_completed.sql --commit
+.venv/Scripts/python scripts/app/gen_db_schema.py
+```
+
+The third regenerates the committed `site/app/js/db-schema.js` catalogue, which
+`tests/app-schema/test-db-schema.mjs` checks for drift. **Until 018 is applied the Feedback page
+loads but every save fails** — the select asks for two columns that do not exist yet. Re-seal
+`prep_app_owner` afterwards if nothing else needs it.
+
+---
+
 ## 2026-07-27 — Matthew Recker via Claude (the lesson rollup was dead: `ReferenceError: ctx is not defined`)
 
 **The assignment rollup showed "Computing course-wide summary…" and never resolved.** So did the

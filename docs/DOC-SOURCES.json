@@ -161,7 +161,7 @@
       "doc": "site/app/help/director-schema-reference.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-07-27",
+      "reviewed": "2026-07-28",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/002_rls.sql",
@@ -178,7 +178,10 @@
         "supabase/migrations/app/012_feedback.sql",
         "supabase/migrations/app/013_feedback_resolution.sql",
         "supabase/migrations/app/014_effort_grades_per_row.sql",
-        "supabase/migrations/app/015_interactive_autograde.sql"
+        "supabase/migrations/app/015_interactive_autograde.sql",
+        "supabase/migrations/app/016_comment_spelling.sql",
+        "supabase/migrations/app/017_due_by_day.sql",
+        "supabase/migrations/app/018_feedback_completed.sql"
       ],
       "note": "Every table and field transcribed from the app-schema migrations and verified against information_schema on the live database. Owns the enforced-rules list and the exact accepted values. Inline SVG depends on the .sf-* classes in styles.css. Omits RLS policy predicates - help docs are world-readable at every tier. SOURCES MUST LIST EVERY MIGRATION: the list stopped at 006 until 2026-07-22, so 007-009 landed without ever flagging this page and analysis_runs went undocumented for two days. Add the new file here whenever a migration is added. ei_sessions states its staff-only access rule in plain language and nothing more: that absence of a student policy is load-bearing (notes may hold a candid read of a cadet), so do not delete the sentence - and do not 'complete' it by pasting the policy SQL either."
     },
