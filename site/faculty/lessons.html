@@ -26,6 +26,9 @@
       <div class="modal-head"><h2 id="lm-title">New assignment</h2><button class="modal-close" data-close>×</button></div>
       <div class="alert alert-error" id="lm-error" style="display:none"></div>
       <div class="alert alert-warn" id="lm-notice" style="display:none"></div>
+      <!-- Its own element rather than a second use of lm-notice: that one belongs to the
+           interaction-swap flow, which hides it whenever no swap is pending. -->
+      <div class="alert alert-warn" id="lm-copy-notice" style="display:none"></div>
 
       <div class="row wrap" style="gap:14px">
         <div class="field grow" style="min-width:180px"><label for="f-course">Course &amp; term</label><select id="f-course"></select></div>
@@ -366,11 +369,18 @@
       const bits = [];
       if (a.written) bits.push(`${a.questionCount} q`);
       if (a.interactive) bits.push('interactive');
+      // Already running elsewhere → scheduling it here COPIES it rather than sharing it, which
+      // changes what the director gets (their own questions to edit; no interaction). Saying so
+      // on the card is cheaper than explaining it after the save.
+      const elsewhere = (a.scheduledIn || []).length
+        ? `<span class="lb-orphan-meta">↳ copy of the one in ${esc(a.scheduledIn.join(', '))}</span>`
+        : '';
       return `<div class="lb-orphan ${a.interactive ? 'int' : 'pf'}" draggable="true"
                 data-oid="${esc(a.id)}" title="Drag into the box below, or click">
         <span class="lb-orphan-badge">${esc(a.slug)}</span>
         <span class="lb-orphan-title">${esc(a.title || a.slug)}</span>
         <span class="lb-orphan-meta">${esc(bits.join(' · ') || 'empty')}</span>
+        ${elsewhere}
       </div>`;
     }
     function composeRegion() {
@@ -498,6 +508,7 @@
     function blankModel() {
       return {
         assignmentId: null,
+        copyOf: null,                    // set when this pick will be copied — renderCopyNotice()
         policy: 'choice', questions: [],
         written:     { include: true, reference_pdf: '', reference_pages: '', reading_link: '' },
         interactive: { include: true, slug: '', title: '', artifact_url: '', description: '' },
@@ -554,15 +565,23 @@
       m.written.reference_pdf   = a.written?.content?.reference_pdf   || '';
       m.written.reference_pages = a.written?.content?.reference_pages || '';
       m.written.reading_link    = a.written?.content?.reading_link    || '';
-      m.interactive.include = !!a.interactive;
-      if (a.interactive) {
+
+      // Another term already runs this container, so saving makes THIS term its own copy
+      // (faculty-lessons.js saveLesson step 1). The questions copy; the interaction cannot —
+      // one artifact posts to one id in one term. Clear it here rather than let the director
+      // fill in a form whose interaction half the save would refuse.
+      m.copyOf = (a.scheduledIn || []).length ? { slug: a.slug, terms: a.scheduledIn.slice() } : null;
+
+      m.interactive.include = !!a.interactive && !m.copyOf;
+      if (a.interactive && !m.copyOf) {
         m.interactive.slug = a.interactive.slug;
         m.interactive.title = a.interactive.title || '';
         m.interactive.artifact_url = a.interactive.content?.artifact_url || '';
         m.interactive.description  = a.interactive.content?.description  || '';
         m.existingInteractive = { id: a.interactive.id, slug: a.interactive.slug };
       }
-      m.policy = (a.written && a.interactive) ? 'choice' : (a.interactive ? 'interaction' : 'preflight');
+      const hasInteractive = m.interactive.include;
+      m.policy = (a.written && hasInteractive) ? 'choice' : (hasInteractive ? 'interaction' : 'preflight');
       return m;
     }
 
@@ -603,6 +622,28 @@
       model.questions.sort((a, b) => roleRank(a) - roleRank(b));   // stable: time, reflection, rest
     }
 
+    /**
+     * Say, before the save rather than after it, that this pick becomes a COPY.
+     *
+     * Two things change and neither is guessable from the form: the questions become this term's
+     * own (editing them stops reaching the other term, which is the point), and the interaction
+     * has been dropped because an artifact posts to one id in one term. Both are consequences of
+     * per-offering content isolation — docs/decisions/PER-OFFERING-CONTENT-ISOLATION.md.
+     */
+    function renderCopyNotice() {
+      const el = document.getElementById('lm-copy-notice');
+      if (!el) return;
+      const c = model?.copyOf;
+      if (!c) { el.style.display = 'none'; el.textContent = ''; return; }
+      el.innerHTML = `<strong>This term gets its own copy.</strong> <code>${esc(c.slug)}</code> is `
+        + `already running in ${esc(c.terms.join(', '))}. Saving copies the questions into this `
+        + `term instead of sharing them, so editing them here never changes that term — and the `
+        + `id may gain the term's name if <code>${esc(c.slug)}</code> is taken. `
+        + `<strong>The AI interaction is not copied:</strong> a deployed artifact posts to one id `
+        + `in one term, so this copy needs a rebuilt artifact with a new id. Add it once you have one.`;
+      el.style.display = '';
+    }
+
     // id null → new; id set (an assignment-offering uuid) → edit. prefill overlays the base model
     // (from a library pick or an artifact link); for any field it omits, the existing row stands.
     async function openEdit(id, prefill) {
@@ -639,6 +680,7 @@
       const pick = (pv, ev) => (pv != null && pv !== '' ? pv : (ev ?? ''));
       document.getElementById('lm-error').style.display = 'none';
       document.getElementById('lm-notice').style.display = 'none';
+      renderCopyNotice();
       document.getElementById('lm-title').textContent =
         id ? 'Edit assignment' : (prefill ? 'New assignment — review & save' : 'New assignment');
 
@@ -1195,7 +1237,8 @@
       };
 
       busy(true);
-      const { error, rescored, unchosen } = await L.saveLesson(ctx, payload, editingId);
+      const { error, rescored, unchosen, copiedFrom, assignmentSlug } =
+        await L.saveLesson(ctx, payload, editingId);
       busy(false);
       if (error) {
         return fail(error.code === '23505'
@@ -1206,6 +1249,13 @@
       closeModal();
 
       const notes = [];
+      // The container was already running elsewhere, so this term got its own copy. Worth saying
+      // out loud: the id may have changed, and edits from here on affect only this term.
+      if (copiedFrom) {
+        notes.push(`${payload.slug} is also running in ${copiedFrom.terms.join(', ')}, so this term `
+          + `now has its own copy${assignmentSlug && assignmentSlug !== payload.slug ? `, saved as “${assignmentSlug}”` : ''}. `
+          + `Editing it here will not change that term's version.`);
+      }
       // A question's point value changed, so every already-graded row for this lesson was rewritten
       // to the new max. That silently changes cadets' totals — say so out loud.
       if (rescored > 0) {

@@ -153,9 +153,11 @@
         "supabase/migrations/app/003_term_calendar.sql",
         "supabase/migrations/app/004_content_snapshot.sql",
         ".ai/instructions/CORE.md",
-        ".ai/instructions/PROJECT.md"
+        ".ai/instructions/PROJECT.md",
+        "site/js/faculty-lessons.js",
+        "docs/decisions/PER-OFFERING-CONTENT-ISOLATION.md"
       ],
-      "note": "Conceptual companion to director-schema-reference.md, which owns the field-level detail and the enforced-rules list; this page links out rather than restating them, after a restated unlock rule drifted and contradicted the reference. Deliberately contains no UI procedures - it explains the model, not the screens, so a page rename cannot invalidate it. (This note used to justify that by saying site/app/ does not read the app schema yet; it has read it since 2026-07-21 - the reason stands, the justification did not.)"
+      "note": "Conceptual companion to director-schema-reference.md, which owns the field-level detail and the enforced-rules list; this page links out rather than restating them, after a restated unlock rule drifted and contradicted the reference. Deliberately contains no UI procedures - it explains the model, not the screens, so a page rename cannot invalidate it. (This note used to justify that by saying site/app/ does not read the app schema yet; it has read it since 2026-07-21 - the reason stands, the justification did not.) faculty-lessons.js became a source on 2026-07-28: whether reusing an assignment SHARES it or COPIES it is the content model, not a screen, and it is decided in saveLesson() rather than in any migration - this page said 'schedule the same library entry again instead of copying it', which was true until that day and is now the opposite of what happens. The decision doc is listed beside it because it is where the reasoning lives."
     },
     {
       "doc": "site/help/director-schema-reference.md",

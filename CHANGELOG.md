@@ -10,6 +10,75 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-28 — Matthew Recker via Claude
 
+### Two terms stop sharing one copy of a lesson
+
+The follow-through on the lesson that could not be re-pointed (entry below). That guard stopped the
+*delete*; this stops the *sharing* that made a delete reach into another term at all. Design record,
+including everything rejected: [`docs/decisions/PER-OFFERING-CONTENT-ISOLATION.md`](docs/decisions/PER-OFFERING-CONTENT-ISOLATION.md).
+
+**The defect.** `activities` (the content) hangs off `assignments` (the term-free container), so two
+offerings that schedule the same assignment shared one content row. Live, that meant: editing Fall
+2026's questions silently rewrote the training sandbox's; replacing an interaction was a cross-term
+delete of student reports; and `activities_write` — scoped by **course**, not by offering — let a
+director of either term write both. A census run this morning (read-only) found **all 37 phys-215
+containers and all 42 activities shared between the real Fall 2026 offering and the sandbox, with
+211 student reports hanging off shared rows.**
+
+**Why it was not simply a bug in the copy logic.** `mintWrittenSlug()` was `writtenSlugFor()` and
+returned `<course>-<slug>-written`, deterministically, while `activities.slug` is globally UNIQUE.
+A second copy of `preflight-02` could not be inserted at all. Sharing was not a choice the code
+made; it was the only arrangement the slug permitted. So the mint now appends 8 random hex — the
+same rule the interactive slug took in contract §3.2 — and copying becomes expressible.
+
+**What changed in the site** (`site/js/faculty-lessons.js`, `site/faculty/lessons.html`):
+
+- **Scheduling a container another offering already runs now COPIES it.** New `assignments` row,
+  new `activities` carrying the content, the offering scheduled against the copy. Editing a lesson
+  already scheduled here still never copies — its submissions point at the activity ids it has.
+  Re-attaching a container nobody else runs still never copies, which is the documented
+  unschedule-then-reschedule path.
+- **The interaction does not come with the copy.** Its slug is the frozen `#i=` surface and belongs
+  to the term whose deployed artifact posts to it, so the copy needs a *rebuilt* artifact with a
+  fresh id. Refused with that sentence instead of a unique-violation.
+- **The copy's own slug** takes the clean one when free, else term-qualifies it
+  (`preflight-02-spring-2027`). This is what lets isolation ship with **no DDL** — dropping
+  `assignments_slug_unique` is still the better end state and is deferred to the next unseal,
+  bundled with `origin_assignment_id` (decision doc §6, §11).
+- **The director is told before the save, not after.** A library card whose container runs elsewhere
+  says so, and the editor explains that this term gets its own copy and why the interaction was
+  dropped.
+
+**A help doc that had become a lie.** `director-course-structure.md` told directors "next semester
+you schedule the same library entry again **instead of copying it**" — the exact behaviour just
+reversed, on the page directors read to understand the model. Rewritten, along with the reuse
+section, which now says an interactive lesson cannot be copied and needs a rebuilt artifact. The
+staleness index did not catch it (`site/js/faculty-lessons.js` was not a source of that doc, because
+sharing-vs-copying used to look like a schema fact); `faculty-lessons.js` and the decision doc are
+now registered as sources so the next change to this rule flags the page.
+
+**New:** [`supabase/admin/content_isolation_check.py`](supabase/admin/content_isolation_check.py) —
+read-only, exits non-zero when any activity or container is scheduled in more than one offering.
+It runs as the `read` tier, which is not subject to RLS, so it sees the sharing the browser cannot:
+`ao_read_staff` hides offerings the caller does not staff, so copy-on-schedule silently does not
+trigger for a term run by somebody else. That limit is real, documented at both call sites, and this
+script is how it gets caught.
+
+**Not yet done.** The 42 already-shared rows are still shared — repairing them is a separate
+snapshot-gated operator run (decision doc §8 step 7), because it repoints a *published* offering
+with 375 enrolled cadets. Separately, the census found `PREP Test Faculty` is a director on
+`phys-110 / fall-2026` — a real offering, not just the sandbox, contrary to what the split script's
+header claims.
+
+**Verification:** `test-lesson-isolation.mjs` (new, 27 assertions, offline, asserting the writes
+`saveLesson()` issues rather than a proxy for them) 27/27; `test-lesson-due.mjs` 34/34;
+`test-imports.mjs` clean; both files syntax-checked. `content_isolation_check.py` run live and
+reporting the 42 shared rows as expected. **Node-only — no browser exercise.** The library card,
+the editor notice, and the copy path itself are unproven against a real click.
+
+---
+
+## 2026-07-28 — Matthew Recker via Claude
+
 ### Roster import corrections, the section-creation deadlock, and a lesson you could not re-point
 
 Four defects the director hit in one sitting on the faculty beta. The first two are the import

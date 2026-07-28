@@ -1,7 +1,7 @@
 PREP keeps **what a piece of work is** separate from **when you give it**. A preflight you write
 once is a permanent library entry; scheduling it into Fall 2026 creates a second, separate record
-that carries the due dates and points. Next semester you schedule the same library entry again
-instead of copying it.
+that carries the due dates and points. Next semester you schedule that library entry again, and
+PREP gives the new semester **its own copy** of the questions.
 
 That separation is why a preflight can run for years, why two courses can both have a
 `preflight-02` without colliding, and why last semester's grades stay attached to last semester.
@@ -52,8 +52,8 @@ lesson. Keeping the questions present as practice means that if the lesson has a
 mid-semester, you switch the two settings and the whole class moves to the questions. Students who
 already earned a grade keep it.
 
-Changing these settings affects one semester. The library entry stays as it is, so other semesters
-are unaffected.
+Changing these settings affects one semester. So does editing the questions themselves — each
+semester holds its own copy, so other semesters are unaffected either way.
 
 ## A graded interactive lesson grades itself
 
@@ -83,15 +83,27 @@ The full list of rules the database enforces, and what happens when each is test
 
 ## Reusing work next semester
 
-To run an assignment again, schedule the same assignment into the new course offering. Set new due
-dates and points there. The questions, objectives, and slug stay as they are.
+To run an assignment again, schedule the same assignment into the new course offering and set new
+due dates and points there.
 
-Interactive lessons work the same way, with one difference in practice. When you rebuild a lesson
-for a new semester, update the artifact link on the existing activity rather than creating a new
-one. The link changes; the name students and the system use stays the same, so nothing breaks.
+**Each semester gets its own copy of the questions.** When you schedule an assignment that another
+semester is already running, PREP copies it rather than sharing one set of questions between the
+two. The card in the library says so before you pick it, and the editor says so again before you
+save. Editing the questions afterwards changes only the semester you are in. If the plain id is
+already taken, the copy takes the semester's name as well — `preflight-02-spring-2027`.
 
-**Warning:** Rebuilding an artifact replaces the previous version permanently. Freeze the previous
-semester before you rebuild, or the record of what that class worked through is lost.
+That copy is why editing a lesson is safe. Until July 2026 both semesters shared one set of
+questions, so correcting a typo in one term rewrote the other, and deleting a lesson from one term
+deleted the other term's student work with it.
+
+**An interactive lesson is not copied, and cannot be.** A published artifact sends its results back
+under one id, that id belongs to one semester, and nothing can change that once cadets have the
+link. So a new semester needs a **rebuilt artifact with a new id** — ask the chat that produced the
+lesson to re-issue it, and it will generate one. Add it to the copied assignment when you have it.
+
+**Warning:** Replacing an interactive lesson's id deletes the reports already submitted under the
+old one. Freeze the previous semester before you rebuild, or the record of what that class worked
+through is lost. Changing only the artifact *link*, keeping the id, never loses anything.
 
 ## Sections and due dates
 

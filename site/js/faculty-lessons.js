@@ -31,9 +31,17 @@
 //
 // 3. SETTING A COMPONENT TO "NONE" NO LONGER DELETES IT.
 //    It removes the offering_activity row — the activity stays in the library and can be
-//    re-attached next term. Publish state moved with it: activities have no is_published, so
-//    unpublishing a lesson no longer reaches into shared content. That whole class of "a lesson
-//    silently unpublished a standalone assignment" bug is gone with the columns.
+//    re-attached to this same term's run. Publish state moved with it: activities have no
+//    is_published, so unpublishing a lesson no longer reaches into shared content. That whole
+//    class of "a lesson silently unpublished a standalone assignment" bug is gone with the columns.
+//
+// 4. SCHEDULING A CONTAINER ANOTHER TERM RUNS COPIES IT (2026-07-28).
+//    Cross-term REUSE is over; cross-term COPY replaces it. Two runs of a course each get their
+//    own `assignments` row and their own `activities`, because sharing one meant editing a lesson
+//    in one term rewrote it in the other and deleting it in one deleted the other's student
+//    reports. The interaction does not come along — its slug is the frozen `#i=` surface and
+//    belongs to the term whose artifact posts to it. See saveLesson() step 1 and
+//    docs/decisions/PER-OFFERING-CONTENT-ISOLATION.md.
 //
 // SAFETY NOTE ON DELETES. `submissions` and `grades` hang off the OFFERING with ON DELETE
 // CASCADE, so removing a scheduled lesson destroys this term's student work — which the old
@@ -69,15 +77,42 @@ export function roleFor(policy, modality) {
  * ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * The slug for a written activity, minted from the course code and the assignment slug.
+ * Eight random lowercase hex characters — the per-offering suffix of contract §3.2.
  *
- * `activities.slug` is globally unique, so it CANNOT just be the assignment slug —
- * phys-110 and phys-215 both have a `preflight-02`. This reproduces the namespacing the
- * migration used (`phys-110-preflight-31-written`), which is also why written slugs are
- * generated rather than typed: nothing external references them.
+ * `crypto.getRandomValues` in every browser and in Node 19+; the arithmetic fallback exists so a
+ * module imported under an older runtime still mints a slug rather than throwing. Uniqueness is
+ * enforced by the database either way (`activities.slug` is UNIQUE), so the fallback's weaker
+ * randomness costs a retry at worst, never a collision that lands.
  */
-export const writtenSlugFor = (courseCode, assignmentSlug) =>
-  `${courseCode || 'course'}-${assignmentSlug}-written`;
+function slugSuffix() {
+  const buf = new Uint8Array(4);
+  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(buf);
+  else for (let i = 0; i < buf.length; i++) buf[i] = Math.floor(Math.random() * 256);
+  return [...buf].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Mint the slug for a written activity: course code, assignment slug, and a random suffix.
+ *
+ * `activities.slug` is globally unique, so it cannot just be the assignment slug — phys-110 and
+ * phys-215 both have a `preflight-02`. It also cannot be DETERMINISTIC, which is what this used
+ * to be (`phys-215-preflight-02-written`, the namespacing the migration used).
+ *
+ * ── WHY THE SUFFIX (2026-07-28) ──────────────────────────────────────────────────────────────
+ * A deterministic mint means two runs of the same course cannot each hold their own copy of
+ * `preflight-02` — the second copy's slug collides with the first, so the only expressible
+ * arrangement was ONE activity row shared by both terms. That sharing is what let a director
+ * editing one term rewrite another's content, and put 8 student reports one confirm-click from
+ * deletion. Per-offering content needs per-offering slugs, so the mint is now random.
+ * See docs/decisions/PER-OFFERING-CONTENT-ISOLATION.md.
+ *
+ * Safe to change because nothing reconstructs this string: no page renders a written activity
+ * slug, `lesson_aggregate.py` reads it back off its own query, and the one place that ever
+ * rebuilt it (`scripts/app_migration/migrate_public_to_app.py`) is a one-time migration already
+ * run. The readable stem is kept so the slug stays greppable.
+ */
+export const mintWrittenSlug = (courseCode, assignmentSlug) =>
+  `${courseCode || 'course'}-${assignmentSlug}-written-${slugSuffix()}`;
 
 /**
  * An interactive activity's slug is the OPPOSITE case: it is the FROZEN contract surface.
@@ -113,7 +148,8 @@ export async function loadManager(ctx) {
     .order('position', { ascending: true, nullsFirst: false });
   if (!isDirector) offeringQ = offeringQ.eq('is_published', true);
 
-  const [{ data: offeringRows }, { data: libraryRows }, { data: sectionRows }] = await Promise.all([
+  const [{ data: offeringRows }, { data: libraryRows }, { data: sectionRows }, { data: elsewhereRows }] =
+    await Promise.all([
     offeringQ,
     // The catalogue for this course, with its activities — the "schedule an existing
     // assignment" picker. Archived containers are hidden; they are the v2 retirement flag.
@@ -125,6 +161,15 @@ export async function loadManager(ctx) {
     db.from('sections')
       .select('id,code,meeting_days,period')
       .eq('course_offering_id', ctx.currentOffering).order('code'),
+    // Which OTHER runs of this course already schedule each container. Picking one of those is
+    // not a plain re-attach: saveLesson() copies it so the two terms stop sharing content, and
+    // the card says so before the director commits. Same RLS limit as otherOfferingsUsing() —
+    // `ao_read_staff` scopes this to offerings the caller staffs, so a term run entirely by
+    // somebody else comes back invisible and the card simply does not mention it.
+    db.from('assignment_offerings')
+      .select('assignment_id, course_offering_id, course_offerings!inner(course_id, terms(label))')
+      .eq('course_offerings.course_id', ctx.currentCourse)
+      .neq('course_offering_id', ctx.currentOffering),
   ]);
 
   const lessons = (offeringRows || [])
@@ -140,6 +185,14 @@ export async function loadManager(ctx) {
                  || String(a.slug || '').localeCompare(String(b.slug || '')));
 
   const scheduled = new Set(lessons.map(l => l.assignmentId));
+  // assignment id -> the labels of the other terms running it, deduped.
+  const elsewhere = new Map();
+  (elsewhereRows || []).forEach(r => {
+    const label = r.course_offerings?.terms?.label || 'another term';
+    const seen = elsewhere.get(r.assignment_id) || [];
+    if (!seen.includes(label)) elsewhere.set(r.assignment_id, [...seen, label]);
+  });
+
   const library = (libraryRows || []).map(a => {
     const acts = (a.activities || []).slice()
       .sort((x, y) => (x.position ?? 0) - (y.position ?? 0));
@@ -158,6 +211,8 @@ export async function loadManager(ctx) {
       // Which offering in THIS term already runs it (null = free to schedule).
       scheduledAs: lessons.find(l => l.assignmentId === a.id)?.offeringId || null,
       isScheduled: scheduled.has(a.id),
+      // Other terms already running it. Non-empty means scheduling it here COPIES it.
+      scheduledIn: elsewhere.get(a.id) || [],
     };
   });
 
@@ -359,6 +414,73 @@ export async function retroactivelyUpdateGrades(offeringId, questions, pointsPos
  * Saving
  * ════════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * Which OFFERINGS schedule this library container, other than the one being saved into.
+ *
+ * A non-empty answer is what turns "schedule this from the library" into "copy this into my
+ * term" (see saveLesson step 1). Same RLS limit as otherOfferingsUsing(): `ao_read_staff` scopes
+ * `assignment_offerings` to offerings the caller staffs, so a term run entirely by somebody else
+ * is invisible here and the copy does not trigger. That fails to the OLD behaviour — shared
+ * content — rather than to a wrong write, and `app_invariant_test.py` reports any sharing that
+ * survives, from the operator tier, which is not subject to RLS.
+ *
+ * @returns {Array<{offeringId, courseOfferingId, label}>}
+ */
+export async function offeringsUsingAssignment(assignmentId, exceptCourseOfferingId) {
+  if (!assignmentId) return [];
+  const { data } = await db.from('assignment_offerings')
+    .select('id, course_offering_id, course_offerings(courses(code), terms(label))')
+    .eq('assignment_id', assignmentId);
+  return (data || [])
+    .filter(r => r.course_offering_id !== exceptCourseOfferingId)
+    .map(r => {
+      const co = r.course_offerings;
+      return {
+        offeringId: r.id,
+        courseOfferingId: r.course_offering_id,
+        label: [co?.courses?.code, co?.terms?.label].filter(Boolean).join(' · ') || 'another term',
+      };
+    });
+}
+
+/** The term code of an offering ('fall-2026'), used to qualify a copied container's slug. */
+async function termCodeOf(courseOfferingId) {
+  if (!courseOfferingId) return null;
+  const { data } = await db.from('course_offerings')
+    .select('terms(code)').eq('id', courseOfferingId).maybeSingle();
+  return data?.terms?.code || null;
+}
+
+/**
+ * A slug the copied container can actually take, given `assignments_slug_unique (course_id, slug)`.
+ *
+ * The clean slug when it is free; otherwise the term qualifies it (`preflight-02-spring-2027`),
+ * which is both unique and the thing a human would have written by hand. A random tail is the
+ * last resort, for a term that has already been copied into once.
+ *
+ * ── WHY QUALIFY RATHER THAN DROP THE CONSTRAINT ──────────────────────────────────────────────
+ * Dropping `assignments_slug_unique` is the cleaner end state and is recommended in
+ * docs/decisions/PER-OFFERING-CONTENT-ISOLATION.md §6 — but it is DDL, and DDL on `app` is sealed
+ * behind a human unsealing `prep_app_owner` (CORE.md §0). Qualifying the slug needs none of that,
+ * so per-offering content works today and the constraint can be dropped at the next unseal
+ * without any of this changing meaning. Unlike `activities.slug`, this one is read by humans —
+ * `/preflight-analyze phys-215 preflight-02 M` — so it keeps a readable shape rather than a uuid.
+ */
+async function freeAssignmentSlug(courseId, base, courseOfferingId) {
+  const { data, error } = await db.from('assignments').select('slug').eq('course_id', courseId);
+  if (error) return { error };
+  const taken = new Set((data || []).map(r => r.slug));
+  if (!taken.has(base)) return { slug: base };
+
+  const term = await termCodeOf(courseOfferingId);
+  const qualified = `${base}-${term || 'copy'}`;
+  if (!taken.has(qualified)) return { slug: qualified };
+
+  let candidate = `${qualified}-${slugSuffix().slice(0, 4)}`;
+  while (taken.has(candidate)) candidate = `${qualified}-${slugSuffix().slice(0, 4)}`;
+  return { slug: candidate };
+}
+
 /** Existing activities of a container, keyed by modality. */
 async function activitiesOf(assignmentId) {
   const { data } = await db.from('activities')
@@ -386,18 +508,51 @@ async function activitiesOf(assignmentId) {
  *   interactive: { include, slug, title, artifact_url, description },
  * }
  *
- * @returns {{ error, offeringId, rescored, unchosen }}
+ * @returns {{ error, offeringId, assignmentId, assignmentSlug, rescored, unchosen, copiedFrom }}
  *   rescored — grades rewritten because a question's point value changed (the page must SAY so;
  *              a silent bulk total rewrite is exactly what a director has to be told about).
  *   unchosen — students whose committed choice was cleared because the activity they picked was
  *              detached from the offering (the composite FK is ON DELETE SET NULL).
+ *   copiedFrom — set when the library container was already running in another term, so this term
+ *              got its own copy instead of sharing one: { assignmentId, terms[] }. The page says
+ *              so, because the copy's slug may be term-qualified and the interaction did not come
+ *              with it. See step 1.
  */
 export async function saveLesson(ctx, model, editingOfferingId) {
-  const out = { error: null, offeringId: editingOfferingId || null, rescored: 0, unchosen: 0 };
+  const out = { error: null, offeringId: editingOfferingId || null, rescored: 0, unchosen: 0,
+                copiedFrom: null };
   const courseOfferingId = model.courseOfferingId || ctx.currentOffering;
 
   /* 1 ── the CONTAINER (assignments). Term-free, reusable, carries no grading policy. */
   let assignmentId = model.assignmentId || null;
+  let containerSlug = model.slug;
+
+  /* ── COPY, DON'T SHARE (2026-07-28) ──────────────────────────────────────────────────────
+   * Scheduling a container that ANOTHER term already runs used to attach this term to the very
+   * same `assignments` row and the very same `activities` rows. Two terms then shared one copy
+   * of the content, which is the defect this branch exists to end: a director editing Fall 2026
+   * silently rewrote the sandbox's questions, a director swapping an interaction was one confirm
+   * from deleting the other term's student reports, and `activities_write` — scoped by COURSE,
+   * not by offering — meant a sandbox director could write real-term content at all.
+   * See docs/decisions/PER-OFFERING-CONTENT-ISOLATION.md.
+   *
+   * So this term gets its own copy. Only on SCHEDULING (`editingOfferingId` null): editing a
+   * lesson already scheduled here must never copy, because its submissions point at the activity
+   * ids it already has and a copy would strand them.
+   */
+  let copiedFrom = null;
+  if (assignmentId && !editingOfferingId) {
+    const others = await offeringsUsingAssignment(assignmentId, courseOfferingId);
+    if (others.length) {
+      const { slug, error } = await freeAssignmentSlug(model.courseId, model.slug, courseOfferingId);
+      if (error) return { ...out, error };
+      copiedFrom = assignmentId;
+      assignmentId = null;          // fall through to the INSERT below — a new container
+      containerSlug = slug;
+      out.copiedFrom = { assignmentId: copiedFrom, terms: others.map(o => o.label) };
+    }
+  }
+
   const container = {
     course_id: model.courseId,
     kind_id: model.kind || 'preflight',
@@ -410,11 +565,27 @@ export async function saveLesson(ctx, model, editingOfferingId) {
     if (error) return { ...out, error };
   } else {
     const { data, error } = await db.from('assignments')
-      .insert({ ...container, slug: model.slug }).select('id').single();
+      .insert({ ...container, slug: containerSlug }).select('id').single();
     if (error) return { ...out, error };
     assignmentId = data.id;
   }
   out.assignmentId = assignmentId;
+  out.assignmentSlug = containerSlug;
+
+  /* An interaction cannot be copied. Its slug is the frozen `#i=` contract surface, globally
+   * unique, and it belongs to the term whose deployed artifact posts to it — so the copy needs a
+   * REBUILT artifact with a fresh §3.2 slug, not this one. The page drops the interaction from
+   * the model when it knows a copy is coming; this catches the paths that don't (a prefill link
+   * carrying a slug someone pasted), with a sentence instead of a unique-violation. */
+  if (copiedFrom && model.interactive?.include) {
+    const { data: clash } = await db.from('activities')
+      .select('id').eq('slug', model.interactive.slug).maybeSingle();
+    if (clash) return { ...out, error: { message:
+      `The interaction id “${model.interactive.slug}” already belongs to another term's copy of ` +
+      `this assignment. An artifact posts to one id and one term — rebuild it with a new id ` +
+      `(see the interaction data contract §3.2), or save this assignment without the interaction ` +
+      `and add it once the new artifact exists.` } };
+  }
 
   /* 2 ── the ACTIVITIES (what is inside the container). */
   const existing = await activitiesOf(assignmentId);
@@ -442,7 +613,7 @@ export async function saveLesson(ctx, model, editingOfferingId) {
       const { data, error } = await db.from('activities').insert({
         assignment_id: assignmentId,
         modality: 'written',
-        slug: writtenSlugFor(model.courseCode, model.slug),
+        slug: mintWrittenSlug(model.courseCode, containerSlug),
         title: model.title,
         content,
         position: 0,

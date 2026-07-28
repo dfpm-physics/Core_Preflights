@@ -94,7 +94,7 @@ site/student/interaction-submit.html#t=interaction&i=<slug>&r=<lz>&d=<lz>
 | Key | Required | Contents |
 |---|---|---|
 | `t` | no (default `interaction`) | **Artifact type.** Reserved so this one endpoint can serve future artifact kinds. v1 defines only `interaction`; the receiver treats a missing `t` as `interaction`. |
-| `i` | **yes** | The interaction **slug** — must equal an existing `interactions.id` (e.g. `lesson-02-charge`). The one manual coordination point with the director (see `INTERACTION-PREFILL-LINK.md`). |
+| `i` | **yes** | The interaction **slug** — must equal an existing `activities.slug`. **Generated fresh per offering; see §3.2.** The one manual coordination point with the director (see `INTERACTION-PREFILL-LINK.md`). |
 | `r` | **yes** | The **full report**, Markdown, compressed (see codec). Always sent — the human-readable transcript is never dropped. |
 | `d` | **yes** | The **structured data** (§5), `JSON.stringify`'d then compressed. See below — this was "recommended" until 2026-07-28. |
 
@@ -140,6 +140,31 @@ it would be ignored, and RLS rejects any write that doesn't match the logged-in 
 keep arrays bounded (≤ 25 misconceptions, ≤ 20 objectives, ≤ 12 topics).
 
 ---
+
+### 3.2 The `i` slug is generated per offering, and never reused (added 2026-07-28)
+
+**Rule for whoever builds the artifact:**
+
+> The `#i=` slug must be **globally unique and used in exactly one course offering**. Build it as
+> `<readable-stem>-<8 random lowercase hex>`, e.g. `lesson-02-charge-a3f9c1e2`. Characters `a-z`,
+> `0-9`, `-` only. Generate the suffix **once per artifact build** and write that identical string
+> into both the artifact's `#i=` and the prefill link's `id=`. **Never reuse a slug from a previous
+> term** — a lesson rebuilt for a new offering gets a new suffix.
+
+**Why.** `activities.slug` is globally `UNIQUE`, and until now the same readable slug
+(`lesson-02-charge`) was reused across terms — so one `activities` row was shared by every offering
+that ran the lesson. Every student report from every term hung off that one row, which made
+replacing a rebuilt artifact a cross-term delete: the director editing Fall 2026 was one confirm
+away from destroying the sandbox's reports too, and the lock trigger's refusal was the only thing
+stopping it. A per-offering slug makes each term's lesson its own row, so nothing a director does
+in one term can reach another.
+
+**The trade this accepts:** one artifact can no longer serve two terms. Rebuild it, or ask the chat
+that produced it to re-issue with a fresh suffix.
+
+**The written modality needs nothing here.** Its `activities.slug` is minted by the site
+(`mintWrittenSlug()`), is never typed by a human, and nothing external references it — so it took
+the same random suffix on 2026-07-28 with no coordination and no contract implications.
 
 ## 4. `r` — the full report (kept, unchanged)
 
