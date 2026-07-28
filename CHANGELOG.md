@@ -10,6 +10,49 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-28 — Matthew Recker via Claude
 
+### A prefill link now asks which course and term before anything else
+
+**And it was answering that question wrong.** An AI-generated authoring link carries a course
+*code* (`course=phys-215`), which cannot name a term, so `resolveOffering()` picked an offering
+silently. The destination chooser then offered "add to an existing assignment" from `vm.lessons` —
+**which is always the offering currently on screen, not the one the link resolved to.** A
+`course=phys-110` link opened while looking at Physics 215 therefore listed Physics 215's
+assignments as places to attach a Physics 110 artifact. Nothing warned, and an artifact attached to
+the wrong course's lesson looks exactly like one attached correctly.
+
+The chooser now opens with a **course & term picker**, above the new-vs-existing choice:
+
+- It lists only offerings the person may **author** in — director or global admin. Authoring is
+  director-gated everywhere it is gated at all, so an offering they merely teach was never a legal
+  destination and is not offered as one.
+- Changing it **moves the page's scope** (`ctx.setCurrentOffering` + `load()`) rather than just
+  recording a preference, which is what keeps the assignment list underneath it honest. The chooser
+  reopens from the top afterwards: an assignment picked before the switch names a lesson in a
+  course we are no longer in.
+- The link's own course is applied the same way **before** the chooser opens, so the two can never
+  disagree at first paint.
+- A code naming a course this director does not run now **says so** ("not a course you run — pick
+  the right destination") instead of falling through to whatever was on screen.
+- `renderDestLessons()` names the course and term on the list itself. It is the one thing on screen
+  that is silently offering-specific.
+
+`switchOffering()` also repaints the nav, because the nav's own handler does that inline — so a
+switch driven from anywhere else left the course name beside the wordmark naming the course we just
+left, directly above the new course's assignments.
+
+Also: `init()` now **returns** its promise chain, so `runPage()`'s catch actually covers the prefill
+path. It was fire-and-forget, and that path now does real work whose failure would otherwise show
+as a page stuck on its spinner.
+
+`INTERACTION-PREFILL-LINK.md` "What the director experiences" updated — it still described the
+form opening directly, which stopped being true when the destination chooser landed. **The link
+format is untouched and stays frozen**; only what the page does with it changed.
+
+*Verification:* `resolveOffering()` and `authorableOfferings()` exercised offline against synthetic
+contexts (term-in-view preference, unknown code reporting `matched:false`, director-only filtering,
+global-admin passthrough) — 8 checks, all passing. Full suite unchanged at 340/0. **The chooser
+itself is not browser-verified.**
+
 ### Seven post-cutover corrections and fixes
 
 First pass over the promoted site. Four of these are things the system *said* that were not true —

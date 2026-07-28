@@ -175,11 +175,23 @@
   <!-- Prefill destination (directors). An AI-generated link carries an artifact but cannot know
        whether it is a brand-new lesson or a replacement for one that already exists — and guessing
        is destructive either way: guess "new" and a live lesson is silently duplicated; guess
-       "existing" and one is silently rewritten. So ask. Nothing is written until Save. -->
+       "existing" and one is silently rewritten. So ask. Nothing is written until Save.
+
+       WHICH COURSE comes first, and is asked rather than assumed. The link carries at most a course
+       CODE (`course=phys-215`), which cannot name a term, so the page resolved it to an offering
+       silently — and the "add to an existing assignment" list below was NOT re-scoped to match, it
+       always listed the offering currently in view. A phys-110 link opened while looking at phys-215
+       therefore offered phys-215's assignments to attach a phys-110 artifact to. Picking the
+       destination first makes the scope visible and keeps the list honest. -->
   <div class="modal-backdrop" id="dest-modal">
     <div class="modal" style="max-width:640px">
       <div class="modal-head"><h2>Where should this interaction go?</h2><button class="modal-close" data-destclose>×</button></div>
       <p class="muted" style="margin:0 0 14px;font-size:.88em" id="dest-sub"></p>
+      <div class="field" style="margin-bottom:16px">
+        <label for="dest-offering">Course &amp; term</label>
+        <select id="dest-offering"></select>
+        <div class="field-hint" id="dest-offering-hint"></div>
+      </div>
       <div class="dest-boxes">
         <button class="dest-box" data-dest="new">
           <span class="dest-box-ic">✚</span>
@@ -193,7 +205,7 @@
         </button>
       </div>
       <div class="dest-pick" id="dest-pick" style="display:none">
-        <div class="muted" style="font-size:.82em;margin-bottom:8px">Pick the assignment to add it to. Red cards already have an interaction — a different slug would replace it.</div>
+        <div class="muted" style="font-size:.82em;margin-bottom:8px" id="dest-pick-note">Pick the assignment to add it to. Red cards already have an interaction — a different slug would replace it.</div>
         <div class="lb-orphans" id="dest-lessons"></div>
       </div>
     </div>
@@ -292,7 +304,23 @@
       wireModal();
       wireDelete();
       loadRagManifest();
-      load().then(prefillFromQuery);
+      // Returned, not fired and forgotten: runPage()'s catch only covers what init() hands back,
+      // and this chain now does real work (a possible offering switch and a second load) whose
+      // failure would otherwise surface as a page stuck on its spinner.
+      return load().then(prefillFromQuery);
+    }
+
+    /* Move the whole page to another offering, the way the nav switcher does.
+     *
+     * The nav's own handler repaints the brand label itself after switching; a switch driven from
+     * anywhere ELSE has to, or the course name beside the wordmark keeps naming the course we just
+     * left — which on this page would sit directly above a list of the new course's assignments.
+     */
+    async function switchOffering(offeringId) {
+      if (!offeringId || offeringId === ctx.currentOffering) return;
+      await ctx.setCurrentOffering(offeringId);
+      renderNav(ctx, { active: 'lessons', onCourseChange: () => load() });
+      await load();
     }
 
     async function load() {
@@ -1275,28 +1303,56 @@
     //                    current term's offering of that course (see resolveOffering).
     //   due_m / due_t    were columns; they are now per-section rows, keyed off each section's
     //                    meeting_days, which is exactly what the M/T letters always meant.
-    function prefillFromQuery() {
+    async function prefillFromQuery() {
       const p = new URLSearchParams(location.search);
+      // Read the params BEFORE anything can await: history.replaceState below clears the query, and
+      // a switch-and-reload in between would otherwise leave nothing to read them from.
       if (!p.has('new') && !p.has('id') && !p.has('iid') && !p.has('title')) return;
-      if (isDirector()) {
-        openDestChooser({
-          id: p.get('id'), offeringId: resolveOffering(p.get('course')),
-          title: p.get('title'), desc: p.get('desc'),
-          policy: p.get('policy'), num: p.get('num'), due_m: p.get('due_m'), due_t: p.get('due_t'),
-          iid: p.get('iid'), iurl: p.get('url') ?? p.get('iurl'),
-          ititle: p.get('ititle'), idesc: p.get('idesc'),
-          pub: p.has('pub') ? ['1', 'true', 'yes'].includes((p.get('pub') || '').toLowerCase()) : null,
-        });
-      }
       history.replaceState(null, '', location.pathname);   // clean URL so refresh won't re-open
+      if (!isDirector()) return;
+
+      const scope = resolveOffering(p.get('course'));
+      // Move the page to the link's course BEFORE the chooser opens. The chooser's destination
+      // list is `vm.lessons`, which belongs to whatever offering is loaded — so without this the
+      // picker would say phys-110 while offering phys-215's assignments to attach to. Guarded on
+      // authorable, so a link naming somebody else's course leaves the scope alone and gets the
+      // warning in the hint instead.
+      if (authorableOfferings().some(c => c.offeringId === scope.offeringId)) {
+        await switchOffering(scope.offeringId);
+      }
+
+      openDestChooser({
+        id: p.get('id'), offeringId: scope.offeringId,
+        requestedCode: scope.requestedCode, codeMatched: scope.matched,
+        title: p.get('title'), desc: p.get('desc'),
+        policy: p.get('policy'), num: p.get('num'), due_m: p.get('due_m'), due_t: p.get('due_t'),
+        iid: p.get('iid'), iurl: p.get('url') ?? p.get('iurl'),
+        ititle: p.get('ititle'), idesc: p.get('idesc'),
+        pub: p.has('pub') ? ['1', 'true', 'yes'].includes((p.get('pub') || '').toLowerCase()) : null,
+      });
     }
 
-    /** A course code from a prefill link → an offering id. Prefers the term already in view; ctx.courses
-     *  is sorted newest term first, so the fallback lands on the current semester, not an old one. */
+    /** A course code from a prefill link → a starting offering, and whether the code was honoured.
+     *
+     *  Prefers the term already in view; ctx.courses is sorted newest term first, so the fallback
+     *  lands on the current semester, not an old one. `matched` is returned rather than swallowed:
+     *  a link naming a course this director does not run used to fall through to whatever was on
+     *  screen with nothing said, which is the quiet version of landing an artifact in the wrong
+     *  course. The chooser now says so and makes them pick.
+     */
     function resolveOffering(code) {
-      if (!code) return ctx.currentOffering;
+      if (!code) return { offeringId: ctx.currentOffering, requestedCode: null, matched: true };
       const here = ctx.courses.find(c => c.offeringId === ctx.currentOffering && c.courseCode === code);
-      return (here || ctx.courses.find(c => c.courseCode === code))?.offeringId || ctx.currentOffering;
+      const any = here || ctx.courses.find(c => c.courseCode === code);
+      return { offeringId: any?.offeringId || ctx.currentOffering,
+               requestedCode: code, matched: !!any };
+    }
+
+    /** The offerings this person may author in. Authoring is director-gated everywhere it is gated
+     *  at all, so an offering they merely teach must not appear as a destination. */
+    function authorableOfferings() {
+      const admin = !!ctx.instructorRow?.is_global_admin;
+      return (ctx.courses || []).filter(c => admin || c.role === 'director');
     }
 
     // ── Destination chooser ───────────────────────────────────────────────
@@ -1314,6 +1370,8 @@
         ? `“${prefill.ititle || prefill.title}”${known ? ` · an assignment already uses the id “${prefill.id}”` : ''}`
         : 'Choose where this artifact should land.';
 
+      renderDestOffering(prefill);
+
       modal.querySelector('[data-dest="new"]').onclick = () => {
         closeDest();
         openEdit(null, prefill);        // unchanged behavior: the full prefill authors a new lesson
@@ -1325,13 +1383,64 @@
       };
       modal.classList.add('open');
     }
+
+    /* The course-and-term picker, and the switch behind it.
+     *
+     * Changing it does NOT just record a preference — it moves the page's whole scope
+     * (`ctx.setCurrentOffering` + `load()`), because everything downstream reads `vm.lessons`, and
+     * a destination list belonging to a different offering than the one being written to is the
+     * defect this control exists to close. That also means the choice reopens the chooser from the
+     * top: an assignment picked before the switch names a lesson in a course we are no longer in.
+     */
+    function renderDestOffering(prefill) {
+      const sel  = document.getElementById('dest-offering');
+      const hint = document.getElementById('dest-offering-hint');
+      const options = authorableOfferings();
+
+      sel.innerHTML = options.map(c =>
+        `<option value="${esc(c.offeringId)}">${esc(c.courseTitle || c.courseCode)}${c.termLabel ? ' · ' + esc(c.termLabel) : ''}</option>`).join('');
+      // Fall back to what is on screen if the link's offering is not one this person may author in.
+      sel.value = options.some(c => c.offeringId === prefill.offeringId)
+        ? prefill.offeringId : ctx.currentOffering;
+      prefill.offeringId = sel.value;
+      sel.disabled = options.length < 2;
+
+      // Three things worth saying, in decreasing order of "you are about to make a mistake".
+      hint.textContent =
+        prefill.requestedCode && !prefill.codeMatched
+          ? `This link asked for “${prefill.requestedCode}”, which is not a course you run — pick the right destination before continuing.`
+        : options.length < 2
+          ? 'The only course and term you can author in.'
+          : 'Everything below is scoped to this. Change it first if the artifact belongs elsewhere.';
+
+      sel.onchange = async () => {
+        const id = sel.value;
+        if (id === ctx.currentOffering) { prefill.offeringId = id; return; }
+        sel.disabled = true;
+        hint.textContent = 'Switching…';
+        await switchOffering(id);
+        prefill.offeringId = id;
+        // The link's course code is settled once a human has chosen: keep the warning from
+        // reappearing over a destination they picked on purpose.
+        prefill.codeMatched = true;
+        openDestChooser(prefill);
+      };
+    }
+
     function closeDest() { document.getElementById('dest-modal').classList.remove('open'); }
 
     function renderDestLessons(prefill) {
       const wrap = document.getElementById('dest-lessons');
       const lessons = (vm.lessons || []).slice();
+      // Name the scope on the list itself. The picker is a few lines up, but this list is the only
+      // thing on screen that is silently offering-specific, and the failure it used to allow —
+      // attaching an artifact to the wrong course's assignment — is invisible once it has happened.
+      document.getElementById('dest-pick-note').innerHTML =
+        `Pick the assignment in <strong>${esc(ctx.courseTitleOf(ctx.currentOffering))}`
+        + `${ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''}</strong> to add it to. `
+        + `Red cards already have an interaction — a different slug would replace it.`;
       if (!lessons.length) {
-        wrap.innerHTML = `<div class="muted" style="font-size:.85em">No assignments yet — choose <strong>Create new assignment</strong>.</div>`;
+        wrap.innerHTML = `<div class="muted" style="font-size:.85em">No assignments in this course and term yet — choose <strong>Create new assignment</strong>, or pick a different course above.</div>`;
         return;
       }
       const iid = prefill.iid || prefill.id;

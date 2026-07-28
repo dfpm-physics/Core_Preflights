@@ -87,13 +87,23 @@ values yourself when you build it this way.
 
 ## What the director experiences
 
+> **Updated 2026-07-28.** The link format is unchanged and frozen; what the page does with it has
+> gained two questions, both because it used to *guess* and a wrong guess is invisible afterwards.
+
 1. Clicks the link (signs in if not already).
-2. The **"New lesson — review & save"** form opens, prefilled with your values (or the
-   **Edit lesson** form if that slug already exists).
-3. Reviews — especially the **slug** and **artifact URL** — and clicks **Save**.
+2. A **destination chooser** opens. Two things are settled here, in this order:
+   - **Course & term.** Your `course=` is a course *code*, which cannot name a term, so the page
+     resolves it to an offering — and now shows which one, as a dropdown of every course and term
+     this director may author in, so they can correct it. If the code names a course they do not
+     run, it says so instead of quietly using whatever was on screen.
+   - **New assignment, or add to an existing one.** The page will not guess: guessing "new"
+     duplicates a live assignment, guessing "existing" rewrites one, and both are silent. If they
+     choose *existing*, the list is scoped to the course and term chosen above.
+3. The **assignment form** opens, prefilled with your values. Reviews — especially the **slug** and
+   **artifact URL** — and clicks **Save**.
 4. Publishes when ready (or you set `pub=1` to prepublish).
 
-The query string is cleared from the address bar after the form opens, so a refresh won't
+The query string is cleared from the address bar as soon as it is read, so a refresh won't
 re-open or resubmit it.
 
 ## Notes & guardrails
@@ -102,9 +112,15 @@ re-open or resubmit it.
   lands on the page — the form won't open for them.
 - Nothing is saved until the director clicks **Save** — the link only prefills the form, so a
   crafted link can't write to the database on its own.
-- **Re-using a slug edits that lesson.** If the `id` already exists, the link opens it in the
-  edit form and Save patches it, keeping the same interaction row (and therefore the same `#i=`
-  slug) rather than erroring on a duplicate id. So regenerating an artifact and re-sending the
-  link with a fresh `url` cleanly refreshes the existing lesson instead of creating a duplicate.
+- **Re-using a slug is offered, not applied.** A slug that already exists is flagged in the
+  chooser, and picking that assignment patches it — keeping the same interaction row, and therefore
+  the same `#i=` slug, so every student report stays attached. Regenerating an artifact and
+  re-sending the link with a fresh `url` is still the clean way to refresh an existing lesson; the
+  difference since the chooser landed is that the director confirms it rather than the page
+  inferring it from the slug. *(This bullet said the link "opens it in the edit form" and Save
+  patches it. That was true before the chooser; the outcome is the same, the step is not.)*
+- **`course=` picks a course, never a term.** There is no parameter for the term and there should
+  not be — a link built in July for "phys-215" would otherwise silently target whichever term the
+  author had in mind. The director chooses the offering in the chooser.
 - Keep the slug **stable**: it's the permanent id and is referenced by every student report.
   Don't change it after the first reports come in.
