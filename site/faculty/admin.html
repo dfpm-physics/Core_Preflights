@@ -251,10 +251,13 @@
             <span class="muted" style="font-size:0.85em">— adds and updates cadets in bulk</span></summary>
           <div class="card-meta" style="margin-top:10px">The registrar's export, saved as
             <strong>CSV</strong> or tab-separated text. It must include <code>Cadet EMPLID</code>,
-            <code>Cadet Name</code>, <code>Email</code>, <code>Cadet Squadron</code>, and
-            <code>Section</code>; Term, Subject, Course Number, Majors, Sex, and Advisor Name are
-            used when present. Rows for other courses are filtered out, and you review anything that
-            would change an existing record before it is written.</div>
+            <code>Cadet Name</code>, <code>Email</code>, and <code>Section</code>;
+            <code>Cadet Squadron</code>, Term, Subject, Course Number, <code>Major 1</code>,
+            <code>Major 2</code>, <code>Major 3</code>, Sex, and Advisor Name are picked up when
+            present and skipped when they are not. Rows for other courses are filtered out, and you
+            review anything that would change an existing record before it is written.
+            <strong>A section the file names that this course does not have yet is offered for
+            creation in the preview</strong> — a first import into an empty course is expected.</div>
           <div class="dropzone" id="dropzone">
             <div class="dz-ic">📄</div><div><strong>Choose a file</strong> or drag &amp; drop it here</div>
           </div>
@@ -424,9 +427,23 @@
     }
 
     async function previewImport(text, filename) {
+      /* ALWAYS pass the section map, even when it is EMPTY (director, 2026-07-28).
+       *
+       * This used to send `null` when the offering had no sections, which turns the parser's
+       * unknown-section check off entirely — and it did that in precisely the case the check
+       * exists for. The result was a closed loop with no way out of it: every row parsed clean
+       * against a section that does not exist, `unknownSections` came back empty so the preview
+       * never offered to create any, and then commitRoster() refused the whole import with
+       * "Create them first, then re-run" — pointing at a Sections screen that, since the P1.10
+       * merge, only told the director to import a roster. A brand-new course could not be
+       * populated at all.
+       *
+       * An empty object is truthy, so the check runs, every row is classified `unknown-section`,
+       * and the preview's "Create these sections and re-check" button appears on the FIRST
+       * import — which is the moment it was always meant for. */
       const known = Object.fromEntries(offeringSections.map(x => [x.code.toUpperCase(), x]));
       const parsed = RI.parseRosterFile(text, {
-        knownSections: Object.keys(known).length ? known : null,
+        knownSections: known,
         courseCode: ctx.currentCourseCode,
       });
 
@@ -485,15 +502,28 @@
       const decidable = conflicts.filter(c => !c.trivial);
 
       // Unknown sections block the rows that reference them, so offer the fix inline rather
-      // than sending the operator somewhere else and back.
+      // than sending the operator somewhere else and back. A course with NO sections at all is
+      // the first-import case and gets its own sentence: "do not exist yet" reads as a typo when
+      // the honest answer is that nothing has been created yet, and the button is then the only
+      // way forward rather than a repair, so it leads.
+      const blocked = parsed.skipped.filter(k => k.code === 'unknown-section').length;
+      const firstImport = !offeringSections.length;
       const sectionOffer = parsed.unknownSections.length ? `
         <div class="alert alert-warn">
-          <strong>${parsed.unknownSections.length} section${parsed.unknownSections.length !== 1 ? 's' : ''} in this file do not exist yet:</strong>
-          ${esc(parsed.unknownSections.join(', '))}.
-          The ${parsed.skipped.filter(k => k.code === 'unknown-section').length} row(s) in them were left out.
+          ${firstImport
+            ? `<strong>This course has no sections yet.</strong> The file names
+               ${parsed.unknownSections.length}: ${esc(parsed.unknownSections.join(', '))}.
+               Create them and all ${blocked} row(s) can be imported — this is the normal way to
+               start a term.`
+            : `<strong>${parsed.unknownSections.length} section${parsed.unknownSections.length !== 1 ? 's' : ''} in this file do not exist yet:</strong>
+               ${esc(parsed.unknownSections.join(', '))}.
+               The ${blocked} row(s) in them were left out.`}
           <div style="margin-top:8px">
-            <button class="btn btn-secondary btn-sm" id="mk-sections">Create these sections and re-check</button>
+            <button class="btn ${firstImport ? 'btn-primary' : 'btn-secondary'} btn-sm" id="mk-sections">Create these sections and re-check</button>
           </div>
+          <div class="muted" style="font-size:0.85em;margin-top:6px">Meeting days are filled in
+            from each code — <code>M1A</code> becomes an M-day section — and you can correct them
+            on the Staff tab afterwards.</div>
         </div>` : '';
 
       const skippedByCode = {};
@@ -611,6 +641,9 @@
           <strong>${s.matched}</strong> of ${s.inFile} row(s) match this course —
           <strong>${fresh.length}</strong> new, <strong>${conflicts.length}</strong> already on file${trivialCount ? ` (${trivialCount} unchanged)` : ''}.
           Sections: ${esc(s.sections.join(', ') || '—')}.
+          ${parsed.noSquadron ? `<div class="muted" style="margin-top:4px">${parsed.noSquadron} of
+             them have no squadron. They are imported anyway — squadron is advisory and nothing
+             depends on it.</div>` : ''}
           ${skipSummary}
         </div>
         ${fresh.length ? `<details${fresh.length <= 12 ? ' open' : ''}>
@@ -620,14 +653,20 @@
             <tbody>${fresh.slice(0, 25).map(r => `<tr>
               <td>${r.student_id}</td><td>${esc(lastFirst(r.name))}</td>
               <td class="muted" style="font-size:0.9em">${esc(r.email)}</td>
-              <td>${esc(r.squadron)}</td><td>${esc(r.section_code)}</td></tr>`).join('')}
+              <td>${esc(r.squadron || '—')}</td><td>${esc(r.section_code)}</td></tr>`).join('')}
             ${fresh.length > 25 ? `<tr><td colspan="5" class="muted">…and ${fresh.length - 25} more</td></tr>` : ''}
             </tbody></table></div></details>` : ''}
         ${conflictBlock}
         ${returnBlock}
         ${departureBlock}
         <div class="row" style="gap:10px;margin-top:14px">
-          <button class="btn btn-primary" id="csv-commit">Import ${s.matched} student${s.matched !== 1 ? 's' : ''}${
+          <button class="btn btn-primary" id="csv-commit"${
+            // Nothing matched and nothing to remove: the only real action on screen is the section
+            // offer above. Leaving a primary "Import 0 students" beside it invites the click that
+            // writes an audit row saying nothing happened, and reads as the way forward when it
+            // is not.
+            s.matched || removing.length ? '' : ' disabled title="Nothing to import yet"'
+          }>Import ${s.matched} student${s.matched !== 1 ? 's' : ''}${
             removing.length ? `, remove ${removing.length}` : ''}</button>
           <button class="btn btn-secondary" id="csv-cancel">Cancel</button>
           <span id="csv-status" style="font-size:0.85em"></span>
@@ -670,6 +709,20 @@
     }
 
     /**
+     * Re-resolve ctx's section scope after a section is created.
+     *
+     * `ctx.sectionsById` and `ctx.sectionIds` are resolved ONCE at bootstrap, so a section created
+     * during this page's lifetime is invisible to `ctx.sectionCodeOf()` (it echoes the raw uuid)
+     * and missing from the section filters on Grade and Report until a reload. setCurrentOffering()
+     * re-runs that resolution and is idempotent when handed the offering already selected — it is
+     * the only exported route to it, which is why it is called with the current value rather than
+     * a new one.
+     */
+    function refreshCtxSections() {
+      return ctx.setCurrentOffering(ctx.currentOffering);
+    }
+
+    /**
      * Create the sections the file referenced, then re-parse the SAME file against them.
      * Re-parsing rather than patching the staged rows keeps one code path: the rows that were
      * skipped for an unknown section go through exactly the validation everything else did.
@@ -683,6 +736,7 @@
                    showImportError([`Could not create sections: ${error.message}`]); return; }
       const { sections } = await R.loadOfferingSections(ctx);
       offeringSections = sections;
+      await refreshCtxSections();
       staged.sectionsCreated = (staged.sectionsCreated || 0) + codes.length;
       const created = staged.sectionsCreated, name = staged.filename, text = staged.rawText;
       await previewImport(text, name);
@@ -778,8 +832,9 @@
 
     function openAddStudent() {
       if (!offeringSections.length) {
-        alert('This course has no sections yet. Import the registrar\'s roster below, or create a '
-            + 'section first — a cadet is enrolled INTO a section, not into the course.');
+        alert('This course has no sections yet — a cadet is enrolled INTO a section, not into the '
+            + 'course.\n\nEither import the registrar\'s roster below (it offers to create every '
+            + 'section the file names), or add one under Staff → Section coverage.');
         return;
       }
       clearAddPick();
@@ -1127,10 +1182,25 @@
       const pool = staff.slice().sort((a, b) => lastFirst(a.name).localeCompare(lastFirst(b.name)));
       const wide = staff.filter(s => !s.implicit && s.wide);
 
+      /* ── Where sections come from (director, 2026-07-28) ──────────────────────────────────
+       * This card used to say sections "are created by a roster import on the Students tab", and
+       * the Students tab refused an import naming a section that did not exist. Neither statement
+       * was wrong on its own; together they were a closed loop with no entrance, and a new course
+       * could not be set up through the UI at all.
+       *
+       * Both halves are open now, and they are for different jobs rather than redundant: the
+       * import creates the sections a registrar export names, in bulk, which is how a term
+       * starts; this button creates ONE, which is how a section added late gets added. */
+      const addBtn = `<button class="btn btn-secondary btn-sm" id="sec-add">+ Add section</button>`;
+
       if (!sections.length) {
-        return `<div class="card"><div class="card-title">Section coverage</div>
-          <div class="muted">No sections yet — they are created by a roster import on the
-          <a href="#" data-goto-tab="students">Students</a> tab.</div></div>`;
+        return `<div class="card">
+          <div class="row wrap" style="justify-content:space-between;gap:10px;align-items:center">
+            <div class="card-title" style="margin-bottom:0">Section coverage</div>${addBtn}</div>
+          <div class="muted" style="margin-top:10px">No sections yet. Add them one at a time here,
+            or let the roster import on the <a href="#" data-goto-tab="students">Students</a> tab
+            create every section the registrar's export names — that is the usual way to start a
+            term, and it offers to create them from the file itself.</div></div>`;
       }
 
       const chip = (s) => `<span class="cov-chip" draggable="true" data-person="${esc(s.instructorId)}"
@@ -1158,8 +1228,10 @@
       }).join('');
 
       return `<div class="card">
-        <div class="card-title">Section coverage</div>
-        <div class="card-meta">Drag a name onto a section, or use the section's dropdown. Each
+        <div class="row wrap" style="justify-content:space-between;gap:10px;align-items:center">
+          <div class="card-title" style="margin-bottom:0">Section coverage
+            <span class="muted" style="font-weight:500">· ${sections.length}</span></div>${addBtn}</div>
+        <div class="card-meta" style="margin-top:10px">Drag a name onto a section, or use the section's dropdown. Each
           person grades the sections they hold here — <code>staff_assignments</code> replaced
           <code>sections.instructor_id</code>, so adding staff and assigning a section are one
           action. Which <em>cadets</em> are in each section is the
@@ -1180,6 +1252,69 @@
       </div>`;
     }
 
+    /* ── Create one section ───────────────────────────────────────────────────────────────────
+     * Meeting days and period are DERIVED from the code as you type, and shown as editable
+     * controls rather than applied invisibly. That is the same bargain sectionDefaultsFrom() makes
+     * on the import path and it is worth restating: the derivation is a default, not a rule the
+     * system keeps enforcing, and a section whose code does not start with the day it meets
+     * (anything outside the `[MTWRF][135][A-D]` convention) gets NO meeting day rather than an
+     * invented one. Leaving meeting_days empty is not neutral — resolveDueBySection() cannot place
+     * such a section, so it silently inherits the offering's default deadline — so the form shows
+     * the operator exactly what it is about to write and lets them fix it before it is written,
+     * which is cheaper than discovering it one lesson later.
+     */
+    function openAddSection() {
+      const dayBoxes = ['M', 'T', 'W', 'R', 'F'].map(d =>
+        `<label class="check-inline" style="margin-right:10px">
+           <input type="checkbox" class="ns-day" value="${d}"> ${d}</label>`).join('');
+      openModal('Add a section',
+        `<div class="field"><label for="ns-code">Section code</label>
+           <input id="ns-code" type="text" autocomplete="off" placeholder="M1A" maxlength="20">
+           <div class="field-hint">The registrar's code for this section. It must be unique within
+             this course and term, and it is what a roster import matches rows against.</div></div>
+         <div class="field"><label>Meeting days</label>
+           <div id="ns-days" style="padding-top:4px">${dayBoxes}</div>
+           <div class="field-hint">Which day this section meets, so its deadlines land on its own
+             day rather than on the assignment's default.</div></div>
+         <div class="field" style="margin-bottom:0"><label for="ns-period">Period</label>
+           <input id="ns-period" type="number" min="1" max="9" step="1" placeholder="1"
+                  style="max-width:110px"></div>`,
+        'Create section',
+        async () => {
+          const code = document.getElementById('ns-code').value.trim().toUpperCase();
+          if (!code) return 'Enter a section code.';
+          if (cache.sections.some(s => String(s.code).toUpperCase() === code)) {
+            return `This course already has a section ${code}.`;
+          }
+          const days = [...document.querySelectorAll('.ns-day:checked')].map(b => b.value);
+          const periodRaw = document.getElementById('ns-period').value.trim();
+          const { error } = await R.createSection(ctx, code, days,
+                                                  periodRaw === '' ? null : parseInt(periodRaw, 10));
+          if (error) return error.message;
+          // ctx resolved its sections once at bootstrap — without this the new tile's own status
+          // line would print a uuid, and Grade/Report would not offer it until a reload.
+          await refreshCtxSections();
+          await renderStaff();
+          return null;
+        });
+
+      // Derive the defaults from the code as it is typed, and stop as soon as the operator
+      // touches either control by hand — re-deriving over an edit is how a form argues with the
+      // person filling it in. Untouched controls keep tracking the code.
+      const code = document.getElementById('ns-code');
+      const period = document.getElementById('ns-period');
+      let touched = false;
+      document.getElementById('ns-days').addEventListener('change', () => { touched = true; });
+      period.addEventListener('input', () => { touched = true; });
+      code.addEventListener('input', () => {
+        if (touched) return;
+        const d = R.sectionDefaultsFrom(code.value);
+        document.querySelectorAll('.ns-day').forEach(b => { b.checked = d.meeting_days.includes(b.value); });
+        period.value = d.period ?? '';
+      });
+      code.focus();
+    }
+
     function wireCoverage(panel) {
       const status = (msg, colour = 'var(--muted)') => {
         const el = document.getElementById('cov-status');
@@ -1188,6 +1323,8 @@
         if (colour !== 'var(--red)') setTimeout(() => { el.textContent = ''; }, 2600);
       };
       const personById = (id) => cache.staff.find(s => s.instructorId === id);
+
+      document.getElementById('sec-add')?.addEventListener('click', openAddSection);
 
       async function assign(personId, sectionId) {
         const who = personById(personId);

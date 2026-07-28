@@ -70,9 +70,19 @@ cadet ID; staff now have one from their name, which is what made a delegated res
 table. A course-director action.
 
 Use the registrar's export as-is — save it as CSV (or tab-separated text) and drop it on that
-panel. It must contain **Cadet EMPLID**, **Cadet Name**, **Email**, **Cadet Squadron**, and
-**Section**; Term, Subject, Course Number, majors, sex, and advisor are picked up when present and
-everything else is ignored.
+panel. It must contain **Cadet EMPLID**, **Cadet Name**, **Email**, and **Section**. **Cadet
+Squadron**, Term, Subject, Course Number, **Major 1**, **Major 2**, **Major 3**, Sex, and Advisor
+Name are picked up when present and skipped when they are not; everything else is ignored.
+
+There is no "Majors" column — the export carries Major 1, Major 2 and Major 3 as three separate
+columns, and a cadet may have one, two, three, or none.
+
+**A missing squadron does not cost a cadet their place.** Squadron is advisory information for
+instructors and nothing in PREP depends on it, so a blank cell — or an export with no squadron
+column at all — imports normally and the preview tells you how many came in without one.
+
+*(Corrected 2026-07-28. Squadron used to be required both as a column and per cadet, so one empty
+cell dropped that cadet's name, address and section from the import entirely.)*
 
 Three things the upload does that are worth knowing:
 
@@ -109,12 +119,28 @@ this course** list under the roster table, each with a **Re-enroll** button.
 them again puts them straight back with their work intact. You do not have to find them or fix
 anything by hand; the import tells you it re-enrolled them.
 
-If the file names a section that does not exist yet, the preview offers to create it and re-check.
+### Sections, and starting a course that has none
+
+**A brand-new course has no sections, and the import is how you create them.** If the file names a
+section this course does not have — which, on a first import, is every section in the file — the
+preview lists them and offers **Create these sections and re-check**. One click creates them and
+re-reads the same file against them; nothing is written to the roster until you then confirm the
+import itself.
+
 A section created this way has its meeting days filled in from its code — `M1A` becomes an M-day
 section, `T3B` a T-day one — so its deadlines are right immediately. That is a starting value you
 can change, not a rule the system keeps applying: **if a section's code does not start with the day
 it meets, open it and correct the meeting days**, or it will fall back to each assignment's default
 deadline instead of its own day's.
+
+**To add a single section later**, use **+ Add section** on **Admin → Staff → Section coverage**.
+The form derives the meeting days and period from the code as you type them and lets you correct
+either before it saves. The import is the tool for starting a term; this is the one for the section
+that appears in week three.
+
+*(Corrected 2026-07-28. These two screens used to point at each other: Section coverage said
+sections were created by a roster import, and the import refused any file naming a section that did
+not exist — so a new course could not be set up at all. Both routes work now.)*
 
 **Logins are created for you.** As of 2026-07-27 the import provisions every new cadet the moment it
 lands, and reports how many logins it made. **Provision accounts** is still on the tab and is still

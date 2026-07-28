@@ -1148,7 +1148,7 @@
         const ok = await promptSwapConfirm({ fromSlug: existingI.slug, reports });
         if (!ok) return;
         busy(true);
-        const { error } = await L.replaceInteractive(model.assignmentId, existingI.id, {
+        const { error } = await L.replaceInteractive(ctx, model.assignmentId, existingI.id, editingId, {
           slug: model.interactive.slug.trim(),
           title: (model.interactive.title || '').trim() || title,
           artifact_url: model.interactive.artifact_url.trim(),
@@ -1509,8 +1509,15 @@
           `“${swap.fromSlug}” is this assignment's interactive activity. An assignment holds only one, so saving a different slug deletes it and creates the new one.`;
         const n = swap.reports || 0;
         info.className = 'alert ' + (n > 0 ? 'alert-warn' : 'alert-info');
+        // "in every term the artifact ran" was the old warning, and it described something the
+        // save now REFUSES to do: replaceInteractive() stops if another offering schedules this
+        // activity, because destroying a different term's reports from inside this term's modal
+        // is not a thing to warn about and proceed with. What is left is this term, plus the
+        // consequence that used to be invisible — anyone who had committed to the interaction is
+        // released to choose again, because the activity they chose is gone.
         info.textContent = n > 0
-          ? `${n} student report${n === 1 ? '' : 's'} submitted against “${swap.fromSlug}” will be PERMANENTLY DELETED, in every term the artifact ran. `
+          ? `${n} student report${n === 1 ? '' : 's'} submitted against “${swap.fromSlug}” will be PERMANENTLY DELETED. `
+            + `Any student who had committed to it is released to choose again. `
             + `If the artifact was only rebuilt, cancel and keep the slug — changing just the URL preserves all of them.`
           : 'No student reports are attached to it yet, so nothing is lost.';
         const done = (val) => {

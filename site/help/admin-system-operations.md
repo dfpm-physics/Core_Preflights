@@ -14,10 +14,18 @@ finish the job after supplying an address for anyone the import had to skip (bel
 bulk-creates auth accounts for everyone in the course who lacks one, runs serially, and reports
 per-student failures rather than aborting.
 
-**Sections are not created as a separate step.** They are created for you from the section codes the
-roster file references, which is why the import comes first. There is no control anywhere for
-creating, renaming, or retiring a section on its own — a section that no roster row mentions does
-not come into existence.
+**Sections are normally created by the import**, from the section codes the roster file references,
+which is why the import comes first. On a first import into a brand-new course that is *every*
+section in the file: the preview lists them and offers **Create these sections and re-check** in one
+click, then imports the rows against them.
+
+For a section that appears later, **Admin → Staff → Section coverage → + Add section** creates one
+at a time. There is still no rename or retire control.
+
+*(Corrected 2026-07-28. This said sections could not be created on their own and that the import was
+the only route — while the import, on an offering with no sections at all, skipped its own
+unknown-section check and then refused to commit. A new course could not be populated by either
+path. Both work now.)*
 
 A section made this way also gets its **meeting days** filled in from its code, so its deadlines are
 correct straight away — `M1A` is an M-day section, `T3B` a T-day one. It is a starting value stored

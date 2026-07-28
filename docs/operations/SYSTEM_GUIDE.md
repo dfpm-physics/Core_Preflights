@@ -95,7 +95,8 @@ Any logged-in instructor can change their own password without contacting the co
 > **The current procedure is [`site/help/instructor-accounts.md`](../../site/help/instructor-accounts.md)
 > → "Importing a roster",** which is the in-app help page a director actually reads. In one
 > paragraph, what changed: the import takes the **registrar's export as-is** (not a hand-made
-> three-column CSV), requires **Cadet EMPLID / Cadet Name / Email / Cadet Squadron / Section**,
+> three-column CSV), requires **Cadet EMPLID / Cadet Name / Email / Section** (Cadet Squadron and
+> the three Major columns are optional — a cadet with no squadron imports normally),
 > filters out rows for other courses, reviews each returning cadet field by field, offers to create
 > sections the file names, provisions logins automatically, and — since 2026-07-28 — proposes
 > **removing cadets who are on the roster but not in the file**, listed by name for confirmation.
@@ -405,9 +406,16 @@ change. Saving rewrites the per-section rows for every current section.
 
 **Step 3 — Upload the new roster**
 
-Follow the Roster Upload steps above. **Sections are created by the import** — if the file names a
-section the offering does not have, the preview offers to create it. There is no separate
-section-creation screen and none is needed.
+Follow the Roster Upload steps above. **The import creates the sections** — if the file names a
+section the offering does not have (on a first import, that is all of them), the preview lists them
+and offers **Create these sections and re-check**. That is the bulk route and the one to use here.
+
+For a single section added later, **Course Admin → Staff → Section coverage → + Add section**.
+
+*(Corrected 2026-07-28. This said "there is no separate section-creation screen and none is needed",
+and the import's offer did not fire for an offering with **no** sections at all — it passed a null
+section map, which switches the check off — so a new course deadlocked: the import demanded sections
+that only the import could create. Both routes are real now.)*
 
 A created section gets its meeting days guessed from its code (`M1A` → M-day, `T3B` → T-day). That
 guess is a starting value, not a rule: it is stored on the section and can be corrected, and every

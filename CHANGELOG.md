@@ -10,6 +10,76 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-28 — Matthew Recker via Claude
 
+### Roster import corrections, the section-creation deadlock, and a lesson you could not re-point
+
+Four defects the director hit in one sitting on the faculty beta. The first two are the import
+being stricter than the data model; the third is a closed loop between two screens; the fourth
+made a real lesson uneditable and reported it as a database trigger.
+
+**1 — A cadet with no squadron is imported.** `roster-import.js` required `Cadet Squadron` both as
+a column and per row, and skipped any cadet whose cell was blank. `students.squadron` is a nullable
+text column carrying "advisory context for instructors" and no authorization meaning
+(`008_student_identity.sql`), so the check cost a real cadet's name, address and section to protect
+a field nothing reads. Dropped from `REQUIRED_FIELDS` and from the row loop together — they are the
+same rule at two scales, so an export that never carried the column imports too. A blank cell is
+stored as `NULL` rather than `''`, which is what keeps `reconcile()` from reading "the file said
+nothing" as "clear the squadron we hold". The preview counts how many came in without one.
+
+**2 — There is no "Majors" column.** The export carries **Major 1**, **Major 2** and **Major 3**,
+any of which may be absent. The parser always mapped all three correctly; the *labels* did not.
+`COMPARED_FIELDS` showed `major_1` as "Major" on the returning-cadet diff table, and the Students
+tab's copy said "Majors" — both naming a column a director cannot find in the spreadsheet they are
+being asked to check. Labels and copy now use the registrar's own names.
+
+**3 — A new course could not be given its first section.** Section coverage said sections "are
+created by a roster import on the Students tab"; the import refused any file naming a section that
+did not exist. The loop had no entrance, and the reason it survived is that the import's escape
+hatch was disabled in exactly the case it existed for: `previewImport()` passed
+`knownSections: null` when the offering had no sections, which turns the unknown-section check
+**off**. Every row then parsed clean against a section that does not exist, `unknownSections` came
+back empty so "Create these sections and re-check" never rendered, and `commitRoster()` refused the
+whole import with "Create them first, then re-run" — pointing at a screen that pointed back.
+
+Both halves are open now. The map is always passed, empty included, so the create-and-re-check
+offer appears on the **first** import and gets its own wording for that case. And
+`createSection()` — exported from `faculty-roster.js` with zero callers since P1.10 — is wired to
+a **+ Add section** control on the Section coverage card, which derives meeting days and period
+from the code as you type and lets you correct them before saving. Two routes for two jobs: the
+import creates a term's worth from the file, the button creates the one that turns up in week
+three. Both now re-resolve `ctx`'s section scope, so a new section is visible to Grade and Report
+without a reload.
+
+**4 — Replacing a lesson's interaction failed the moment a student had committed to it.**
+Reported as *"Could not replace the interaction: submission e02130b7…: an unlock must set
+unlocked_by so it is attributable"* on a lesson holding 8 reports.
+
+`submissions_activity_in_offering` is `ON DELETE SET NULL`, so deleting an activity makes Postgres
+null out `submissions.chosen_activity_id` by itself — and every caller was written against that.
+But that cascade is an `UPDATE` on `submissions`, which fires `submissions_lock_activity()`. The
+trigger sees a committed choice becoming NULL with no `unlocked_by`, and refuses. The statement
+rolls back. The trigger is right — migration 006 hardened it deliberately after a student was shown
+to be able to unlock themselves — and DDL on `app` is sealed, so the fix is on the client: these
+operations **are** unlocks and were simply never being performed as such.
+`unlockCommittedTo()` now releases the affected students first, attributed to the caller (which
+migration 006 requires), setting `status` back to `draft` the way `unlockSubmission()` does. Wired
+into `replaceInteractive()` *and* into `saveLesson()` step 4, which had the identical latent bug
+whenever a modality change detached an activity somebody had committed to.
+
+`replaceInteractive()` also now **refuses** when another offering schedules the same activity.
+An `activities` row hangs off the shared library assignment, not off one term, so the delete
+reached every term that scheduled it — the swap dialog even warned that reports would be deleted
+"in every term the artifact ran", which is not something to warn about and proceed with. This
+mirrors `deleteLessonAndContents()`, which has refused for that reason all along. Where RLS hides
+the other offering the guard cannot see it, so the trigger's refusal is caught and translated
+instead of forwarded — nothing is written either way.
+
+Docs: `instructor-accounts.md`, `admin-system-operations.md` and `SYSTEM_GUIDE.md` all stated the
+"sections are created by the import, and there is no other way" rule; all three corrected, with the
+deadlock recorded rather than quietly dropped. `tests/app-schema/test-roster-import.mjs` gains
+coverage for optional squadron at both scales and for the empty-vs-null section map (120 assertions,
+all passing). Verified with Node only — the browser paths (the + Add section modal, the first-import
+preview, the interaction swap) have **not** been exercised against the live database.
+
 ### A prefill link now asks which course and term before anything else
 
 **And it was answering that question wrong.** An AI-generated authoring link carries a course

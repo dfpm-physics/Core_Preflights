@@ -520,10 +520,16 @@ export async function saveLesson(ctx, model, editingOfferingId) {
   const wantIds = new Set(wanted.map(w => w.id));
   const stale = (currentOA || []).filter(r => !wantIds.has(r.activity_id));
   if (stale.length) {
-    out.unchosen = await countCommittedTo(offeringId, stale.map(r => r.activity_id));
+    const staleIds = stale.map(r => r.activity_id);
+    out.unchosen = await countCommittedTo(offeringId, staleIds);
+    // Release them BEFORE the delete. Letting the FK's ON DELETE SET NULL do it looks equivalent
+    // and is not: that cascade is an unattributed unlock, which submissions_lock_activity()
+    // refuses outright, failing the whole save. See unlockCommittedTo().
+    const { error: unlockErr } = await unlockCommittedTo(ctx, offeringId, staleIds);
+    if (unlockErr) return { ...out, error: unlockErr };
     const { error } = await db.from('offering_activities').delete()
       .eq('assignment_offering_id', offeringId)
-      .in('activity_id', stale.map(r => r.activity_id));
+      .in('activity_id', staleIds);
     if (error) return { ...out, error };
   }
 
@@ -564,6 +570,56 @@ async function countCommittedTo(offeringId, activityIds) {
     .eq('assignment_offering_id', offeringId)
     .in('chosen_activity_id', activityIds);
   return (data || []).length;
+}
+
+/**
+ * Release the students committed to activities that are about to be detached or deleted.
+ *
+ * ── THE BUG THIS FIXES, because "the FK does it for us" was wrong ────────────────────────────
+ * `submissions_activity_in_offering` is `ON DELETE SET NULL`, so removing an `offering_activities`
+ * row (or the `activities` row above it) makes Postgres NULL out `submissions.chosen_activity_id`
+ * by itself. Every caller here was written against that and needed no unlock step.
+ *
+ * But that cascade is an UPDATE on `submissions`, and `submissions_lock_activity()` fires on it.
+ * The trigger sees a committed choice becoming NULL — an unlock — with `unlocked_by` unset, and
+ * refuses:  *"submission <id>: an unlock must set unlocked_by so it is attributable"*. The whole
+ * statement rolls back. So the moment ONE student had committed, a director could no longer swap
+ * a broken interaction or change an assignment's modality, and the error they were shown named an
+ * internal trigger and a raw submission uuid.
+ *
+ * The trigger is right and is not the thing to change (migration 006 hardened it deliberately, and
+ * DDL on `app` is sealed — CORE.md §0). What was missing is that these operations ARE unlocks and
+ * were never being performed as such. Doing it explicitly, first, satisfies the trigger on its own
+ * terms — attributed to the caller, which is exactly who is performing it — and leaves the FK with
+ * nothing left to null when the delete lands.
+ *
+ * `status` goes back to `draft` alongside the cleared choice, matching unlockSubmission() in
+ * faculty-grade.js. A submission left `committed` with no chosen activity is a state no reader
+ * expects and nothing would ever clear.
+ *
+ * @returns {{ error, unlocked }} `unlocked` = how many students were released
+ */
+async function unlockCommittedTo(ctx, offeringId, activityIds) {
+  if (!activityIds?.length) return { error: null, unlocked: 0 };
+  let q = db.from('submissions')
+    .select('id')
+    .in('chosen_activity_id', activityIds);
+  // Scoped to one offering when the caller has one. replaceInteractive() deliberately does not:
+  // it deletes the library ACTIVITY, whose reach is every offering that schedules it.
+  if (offeringId) q = q.eq('assignment_offering_id', offeringId);
+  const { data: hits, error: readErr } = await q;
+  if (readErr) return { error: readErr, unlocked: 0 };
+  if (!hits?.length) return { error: null, unlocked: 0 };
+
+  const { error } = await db.from('submissions').update({
+    chosen_activity_id: null,
+    status: 'draft',
+    // MUST be the caller: migration 006 rejects an unlock attributed to anybody else, which is
+    // what stops one person's unlock from being recorded against a colleague.
+    unlocked_by: ctx.user.id,
+    unlocked_at: new Date().toISOString(),
+  }).in('id', hits.map(s => s.id));
+  return { error: error || null, unlocked: error ? 0 : hits.length };
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -667,6 +723,34 @@ export async function deleteLessonAndContents(lesson) {
 }
 
 /**
+ * Which OTHER offerings schedule this activity — i.e. whose work a delete here would also take.
+ *
+ * An `activities` row hangs off the library `assignment`, not off one term's offering, so several
+ * offerings can schedule the same one. Every caller that deletes an activity has to ask this
+ * first; `deleteLessonAndContents()` asks the same question one level up, about the assignment.
+ *
+ * ONLY SEES WHAT THE CALLER STAFFS. `oa_read_staff` (002_rls.sql) scopes offering_activities to
+ * offerings the caller staffs, so an offering run by somebody else comes back invisible and this
+ * returns an empty list. That is a real limit and not one this function can close from the
+ * browser — but it fails safe rather than silently: if a student in that hidden offering had
+ * committed, unlockCommittedTo() cannot reach them either, and the delete is then refused by
+ * submissions_lock_activity() with nothing written. replaceInteractive() translates that refusal
+ * rather than passing the trigger's wording through.
+ */
+async function otherOfferingsUsing(activityId, keepOfferingId) {
+  const { data } = await db.from('offering_activities')
+    .select('assignment_offering_id, ' +
+            'assignment_offerings!inner(id, course_offerings(courses(code), terms(label)))')
+    .eq('activity_id', activityId);
+  return (data || [])
+    .filter(r => r.assignment_offering_id !== keepOfferingId)
+    .map(r => {
+      const co = r.assignment_offerings?.course_offerings;
+      return [co?.courses?.code, co?.terms?.label].filter(Boolean).join(' · ') || 'another term';
+    });
+}
+
+/**
  * Replace an assignment's interactive activity with a different SLUG.
  *
  * UNIQUE(assignment_id, modality) means a container holds at most one interactive activity, so
@@ -676,10 +760,56 @@ export async function deleteLessonAndContents(lesson) {
  *
  * When the slug is UNCHANGED, never call this: saveLesson() updates the URL in place and every
  * report stays attached. That is the safe path and the one to prefer.
+ *
+ * ── TWO THINGS IT HAS TO DO BEFORE THE DELETE (2026-07-28) ───────────────────────────────────
+ * Both were missing, and the first made this function unusable in exactly the situation it exists
+ * for — a lesson students had already worked.
+ *
+ *   1. REFUSE when another offering schedules this activity. The activity belongs to the library
+ *      assignment, so the delete reaches every term that scheduled it, silently destroying a
+ *      different term's reports from inside this one's editing modal. This mirrors
+ *      deleteLessonAndContents(), which has always refused for the same reason. There is no
+ *      per-term slug in this model, so the honest answer is to say so rather than to pick a term
+ *      to damage.
+ *
+ *   2. UNLOCK the students committed to it, attributably. Otherwise the FK's ON DELETE SET NULL
+ *      performs an unattributed unlock, submissions_lock_activity() refuses it, and the delete
+ *      fails with a trigger message naming a raw submission uuid. That is the error a director
+ *      hit on a lesson with 8 reports. See unlockCommittedTo().
+ *
+ * @param {object} ctx
+ * @param {string} assignmentId    the library container
+ * @param {string} oldActivityId   the interactive activity being replaced
+ * @param {string} offeringId      the offering being edited — the ONE whose work may be affected
+ * @param {object} next            { slug, title, artifact_url, description }
  */
-export async function replaceInteractive(assignmentId, oldActivityId, next) {
+export async function replaceInteractive(ctx, assignmentId, oldActivityId, offeringId, next) {
   if (oldActivityId) {
+    const others = await otherOfferingsUsing(oldActivityId, offeringId);
+    if (others.length) {
+      const list = [...new Set(others)].join(', ');
+      return { error: { message:
+        `This interaction is also scheduled in ${list}. Changing its id here would delete it — ` +
+        `and every student report attached to it — from that term too, because the interaction ` +
+        `belongs to the shared library assignment rather than to one term. Remove it from the ` +
+        `other term first, or keep this id and change only the URL.` } };
+    }
+
+    const { error: unlockErr } = await unlockCommittedTo(ctx, null, [oldActivityId]);
+    if (unlockErr) return { error: unlockErr };
+
     const { error } = await db.from('activities').delete().eq('id', oldActivityId);
+    // Reaching the lock trigger here means a student committed to this activity in an offering
+    // the unlock above could not see — see otherOfferingsUsing() on the RLS limit. Nothing was
+    // written; say what happened instead of forwarding "an unlock must set unlocked_by", which
+    // names a column no director has heard of.
+    if (error && /unlocked_by|unlock a committed submission/i.test(error.message || '')) {
+      return { error: { message:
+        'A student in another term has committed to this interaction, and that term is not one ' +
+        'you staff — so it cannot be released from here and nothing was changed. Ask whoever ' +
+        'runs that offering to remove the interaction from it first, or keep this id and change ' +
+        'only the URL.' } };
+    }
     if (error) return { error };
   }
   return db.from('activities').insert({

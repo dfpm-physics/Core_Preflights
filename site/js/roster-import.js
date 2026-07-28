@@ -115,14 +115,30 @@ const HEADER_ALIASES = {
   course_number: ['coursenumber', 'coursenbr', 'catalognbr'],
   course_title:  ['coursetitle', 'title'],
   sex:           ['sex', 'gender'],
+  // THREE separate columns — "Major 1", "Major 2", "Major 3" — each of which may or may not be
+  // present in a given export. There is no single "Major"/"Majors" column; the bare `major` alias
+  // is a fallback for a hand-made file and binds to major_1 only (see mapHeaders).
   major_1:       ['major1', 'major'],
   major_2:       ['major2'],
   major_3:       ['major3'],
   advisor_name:  ['advisorname', 'advisor'],
 };
 
-/** Columns without which an import cannot proceed. Everything else is enrichment. */
-export const REQUIRED_FIELDS = ['student_id', 'name', 'email', 'squadron'];
+/**
+ * Columns without which an import cannot proceed. Everything else is enrichment.
+ *
+ * SQUADRON IS NOT ONE OF THEM (director, 2026-07-28). It was, and a cadet with an empty squadron
+ * cell was skipped outright — which is the wrong trade twice over: `students.squadron` is a
+ * nullable text column carrying "advisory context for instructors" and no authorization meaning
+ * (008_student_identity.sql), so refusing the row loses a real cadet's name, email and section to
+ * protect a field nothing reads. It is dropped from the ROW check and from the COLUMN check
+ * together, because those are the same rule at two scales: if one cadet may be imported without a
+ * squadron, so may a file whose export did not include the column at all.
+ *
+ * The three that remain are each load-bearing: `student_id` is the primary key, `name` is what
+ * every roster and grade page displays, and `email` becomes the cadet's sign-in identity.
+ */
+export const REQUIRED_FIELDS = ['student_id', 'name', 'email'];
 
 const normKey = (h) => String(h || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -237,8 +253,7 @@ export function parseRosterFile(text, opts = {}) {
 
   if (missing.length) {
     const LABEL = {
-      student_id: 'Cadet EMPLID', name: 'Cadet Name',
-      email: 'Email', squadron: 'Cadet Squadron',
+      student_id: 'Cadet EMPLID', name: 'Cadet Name', email: 'Email',
     };
     return blank(delimiter, [
       `The file is missing required column${missing.length > 1 ? 's' : ''}: ` +
@@ -291,7 +306,9 @@ export function parseRosterFile(text, opts = {}) {
     const emailErr = emailProblem(raw.email);
     if (emailErr) return skip(emailErr);
 
-    if (!raw.squadron) return skip('missing squadron');
+    // No squadron check here, deliberately — see REQUIRED_FIELDS. A blank cell is imported as
+    // NULL rather than as '', which is what keeps reconcile() from reading "the file said
+    // nothing" as "clear the squadron we already hold".
 
     const code = raw.section.toUpperCase();
     if (!code) return skip('missing section');
@@ -320,7 +337,7 @@ export function parseRosterFile(text, opts = {}) {
       student_id: id.value,
       name,
       email: raw.email,
-      squadron: raw.squadron,
+      squadron: raw.squadron || null,
       sex: raw.sex || null,
       major_1: raw.major_1 || null,
       major_2: raw.major_2 || null,
@@ -339,6 +356,11 @@ export function parseRosterFile(text, opts = {}) {
   if (unknownSections.length) {
     warnings.push(`${unknownSections.length} unknown section code(s): ${unknownSections.join(', ')}`);
   }
+  // Counted rather than skipped. Importing without a squadron is allowed, but it is still worth
+  // showing the operator a number — a whole file with no squadrons usually means the export
+  // dropped the column, which is something to notice and not something to block.
+  const noSquadron = rows.filter(r => !r.squadron).length;
+  if (noSquadron) warnings.push(`${noSquadron} row(s) have no squadron — imported without one.`);
   if (!rows.length && !skipped.length) warnings.push('The file has headers but no data rows.');
 
   return {
@@ -346,6 +368,7 @@ export function parseRosterFile(text, opts = {}) {
     headers: headerCells,
     unmatchedHeaders: headerCells.filter((h, i) => h && !Object.values(map).includes(i)),
     unknownSections,
+    noSquadron,
     delimiter,
   };
 }
@@ -353,7 +376,7 @@ export function parseRosterFile(text, opts = {}) {
 function blank(delimiter, errors) {
   return {
     rows: [], skipped: [], warnings: [], errors,
-    headers: [], unmatchedHeaders: [], unknownSections: [], delimiter,
+    headers: [], unmatchedHeaders: [], unknownSections: [], noSquadron: 0, delimiter,
   };
 }
 
@@ -361,13 +384,21 @@ function blank(delimiter, errors) {
  * Conflict reconciliation
  * ════════════════════════════════════════════════════════════════════════════════════ */
 
-/** Fields an import may overwrite on an existing student, with their display labels. */
+/**
+ * Fields an import may overwrite on an existing student, with their display labels.
+ *
+ * The labels are the registrar's own column names wherever there is one, because this list is
+ * rendered as "what would change" next to a cadet's name and the director's next move is to go
+ * look at that column in the spreadsheet. `major_1` was labelled "Major" until 2026-07-28; there
+ * is no Major column — the export carries **Major 1**, **Major 2** and **Major 3**, any of which
+ * may be absent — so the label named a column nobody could find.
+ */
 export const COMPARED_FIELDS = [
   ['name', 'Name'],
   ['email', 'Email'],
   ['squadron', 'Squadron'],
   ['sex', 'Sex'],
-  ['major_1', 'Major'],
+  ['major_1', 'Major 1'],
   ['major_2', 'Major 2'],
   ['major_3', 'Major 3'],
   ['advisor_name', 'Advisor'],

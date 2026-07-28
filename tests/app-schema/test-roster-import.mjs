@@ -162,9 +162,45 @@ check('the in-file duplicate names the line it collides with',
 
 // Missing required columns must stop the import outright, and say which.
 const short = parseRosterFile('Cadet EMPLID,Cadet Name\n3001234567,"Doe, Jane"', {});
-eq('a file without Email/Squadron is rejected', short.rows.length, 0);
-check('and the message names the missing columns',
-      /Email/.test(short.errors[0]) && /Squadron/.test(short.errors[0]), short.errors[0]);
+eq('a file without Email is rejected', short.rows.length, 0);
+check('and the message names the missing column',
+      /Email/.test(short.errors[0]), short.errors[0]);
+
+/* ── Squadron is optional, at BOTH scales (director, 2026-07-28) ──────────────────────────────
+ * It used to be required, and a cadet with an empty squadron cell was dropped from the import
+ * entirely — losing a real name, email and section to protect an advisory, nullable column that
+ * nothing reads. The row rule and the column rule go together: if one cadet may be imported
+ * without a squadron, so may a file whose export never carried the column. */
+check('Cadet Squadron is not a required column', !REQUIRED_FIELDS.includes('squadron'));
+
+const noSq = parseRosterFile([
+  'Section,Cadet EMPLID,Cadet Name,Email,Cadet Squadron',
+  'M1A,3001234567,"Doe, Jane",jane.doe@afacademy.af.edu,CS-07',
+  'M1A,3005555555,"Nosq, Sam",s.nosq@afacademy.af.edu,',
+].join('\n'), { knownSections: KNOWN });
+eq('a blank squadron cell no longer costs the cadet their row', noSq.rows.length, 2);
+eq('…and nobody is skipped for it', noSq.skipped.length, 0);
+eq('the blank is stored as NULL, not as an empty string', noSq.rows[1].squadron, null);
+eq('…which is counted for the preview', noSq.noSquadron, 1);
+eq('a squadron that IS present still lands', noSq.rows[0].squadron, 'CS-07');
+
+// The whole column absent is the same rule one scale up.
+const noSqCol = parseRosterFile([
+  'Section,Cadet EMPLID,Cadet Name,Email',
+  'M1A,3001234567,"Doe, Jane",jane.doe@afacademy.af.edu',
+].join('\n'), { knownSections: KNOWN });
+eq('a file with no Cadet Squadron column is accepted', noSqCol.errors.length, 0);
+eq('…and imports its rows', noSqCol.rows.length, 1);
+eq('…with a null squadron', noSqCol.rows[0].squadron, null);
+
+/* An EMPTY section map is not the same as no map. Passing null turns the unknown-section check
+ * off, which is what the admin page used to do for an offering with no sections yet — so a first
+ * import parsed clean, offered to create nothing, and was then refused at commit. */
+const firstImport = parseRosterFile(FILE, { knownSections: {}, courseCode: 'phys-215' });
+eq('an empty section map classifies every row as unknown-section, not as valid',
+   firstImport.rows.length, 0);
+eq('…and surfaces the codes so the page can offer to create them',
+   firstImport.unknownSections.slice().sort().join(','), 'M1A,T3A,Z9Z');
 
 eq('an empty file is rejected', parseRosterFile('', {}).errors.length, 1);
 

@@ -385,10 +385,18 @@ export async function commitRoster(ctx, fresh, conflicts, plan = {}, meta = {}) 
   const { byCode } = await loadOfferingSections(ctx);
   const all = [...fresh, ...conflicts.map(c => c.row)];
 
+  /* A last-line guard, and it should now be unreachable from the page: the preview parses against
+   * the offering's sections (an EMPTY map included, since 2026-07-28) and offers to create any it
+   * does not recognise, so a staged row always names a section that exists. It is kept because
+   * this is the function that would otherwise write an enrollment against `undefined.id`, and
+   * because the preview and the commit are separated by however long the operator spent reviewing.
+   * The message names both routes deliberately — it used to say only "create them first", which
+   * was the instruction a director could not act on. */
   const unknown = [...new Set(all.map(r => r.section_code).filter(c => !byCode[c]))];
   if (unknown.length) {
     return { error: { message: `Unknown section(s) for this course: ${unknown.join(', ')}. ` +
-                               `Create them first, then re-run the import.` } };
+                               `Re-upload the file and use "Create these sections and re-check" ` +
+                               `in the preview, or add them under Staff → Section coverage.` } };
   }
 
   const FIELDS = ['name', 'email', 'squadron', 'sex', 'major_1', 'major_2', 'major_3', 'advisor_name'];
@@ -529,7 +537,15 @@ export function resetStudentPassword(ctx, studentId) {
   });
 }
 
-/** Create a section in the current offering. */
+/**
+ * Create ONE section in the current offering — the Section coverage card's "+ Add section".
+ *
+ * Had zero callers until 2026-07-28, which is how the setup deadlock survived: Staff → Section
+ * coverage told the director sections came from a roster import, and the import refused any file
+ * naming a section that did not exist, so neither screen could produce the first one. The bulk
+ * path (createSections, from the file's own codes) is still the right tool for starting a term;
+ * this is the one for the section added in week three.
+ */
 export function createSection(ctx, code, meetingDays = [], period = null) {
   return db.from('sections').insert({
     course_offering_id: ctx.currentOffering,
