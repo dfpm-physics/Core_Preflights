@@ -70,24 +70,29 @@ bucketing, the open/closed split, the roadmap-list invariant, and the four ways 
 can be written wrong. Full suite: 330 passed, 1 failed — `test-student.mjs` "bootstrap returned a
 context", which is a test-cadet sign-in failure unrelated to this work (it imports only `auth.js`
 and `student-data.js`, neither touched here). The page's inline module passes `node --check`.
-**This is a Node-only verification so far** (CORE.md §2): the UI has not been clicked through in a
-browser, and cannot be until the migration is applied.
+Post-apply: `gen_db_schema.py --check` clean, `check_doc_sources.py` reports all 12 indexed
+documents current.
+
+**Looked at, signed in, against live data** — the course director walked the page in the browser
+the same day and confirmed it. That closes the gap the eight prior entries carry, for this surface
+only. Worth noting how it was closed: the browser harness could **not** do it, because
+`PREP Test Faculty` is not `is_global_admin` and the page is admin-gated, so the automated route
+would have meant granting a test account cross-course reach on the live database. A human with an
+admin account was the cheaper and safer path, and remains so for every admin-gated surface.
 
 ### Applying it
 
-**Not applied.** `prep_app_owner` is unsealed and the apply was attempted, but the sandbox blocked
-the command. Run from the repo root:
+**Applied to live `app` the same day**, by the course director, through the DDL window 014/015 left
+open — the agent session was blocked from running the apply itself. `site/app/js/db-schema.js` was
+regenerated in the same pass and `gen_db_schema.py --check` reports the committed catalogue matches
+live across all 26 tables.
+
+**⚠ `prep_app_owner` is STILL unsealed** — as it has been since 014. Re-seal it as `postgres` when
+nothing else needs the window:
 
 ```
-.venv/Scripts/python scripts/app_migration/apply_app_migration.py 018_feedback_completed.sql
-.venv/Scripts/python scripts/app_migration/apply_app_migration.py 018_feedback_completed.sql --commit
-.venv/Scripts/python scripts/app/gen_db_schema.py
+ALTER ROLE prep_app_owner NOLOGIN;
 ```
-
-The third regenerates the committed `site/app/js/db-schema.js` catalogue, which
-`tests/app-schema/test-db-schema.mjs` checks for drift. **Until 018 is applied the Feedback page
-loads but every save fails** — the select asks for two columns that do not exist yet. Re-seal
-`prep_app_owner` afterwards if nothing else needs it.
 
 ---
 
