@@ -176,6 +176,66 @@ How long do submissions live · who may read a prior term · when is `public` fi
 open in `PREP-V2-SCHEMA.md` §8) · what happens to a graduated cadet's record. FERPA-adjacent, and a
 decision rather than a build. Route to `docs/decisions/` when answered.
 
+### P2.4 — Confirm the course and term when an interaction report is submitted · **M** · *director: requested 2026-07-27*
+
+*Director's framing: "it shouldn't be tied to the student being in only one offering or the right
+semester — it should be tied to the submission having the right offering."* That is the correct
+target, and most of it is already true. What is missing is the **confirmation**, not the link.
+
+**A term column on `submissions` is NOT the fix, and would be a regression.** The link already
+exists and is already enforced:
+
+- `submissions.assignment_offering_id` → `assignment_offerings.course_offering_id` →
+  `course_offerings (course_id, term_id)` (`001_core_model.sql:250-253, 333-345`). Course and term
+  are one `JOIN` away and cannot be wrong.
+- `submissions_unique UNIQUE (enrollment_id, assignment_offering_id)` and the matching constraint on
+  `grades` (`:345`, `:407`) mean a student's work in Fall 2026 and their work in a sandbox or a
+  retake are separate rows by construction.
+- `submissions_activity_in_offering` (`:348-350`) is a **composite** FK into
+  `offering_activities (assignment_offering_id, activity_id)` — a student cannot commit to an
+  activity that is not offered in *that* offering. Structural, not conventional.
+
+Adding `term_id` beside `assignment_offering_id` would create a second source of truth for one fact,
+free to disagree with the first. That is the shape of the P0.15 bug (a role stored in two places,
+one of them stale), and it would also require unsealing `prep_app_owner` — a coordination event
+(CORE.md §0) — to buy nothing.
+
+**The actual gap is that the offering is INFERRED from session state.** The artifact posts a bare
+slug (`interaction-submit.html#i=<slug>`, a frozen contract that sends no course, term or student),
+and `resolveActivityBySlug()` (`student-data.js:315-330`) resolves it with
+`.eq('course_offering_id', ctx.currentOffering)` — whichever course the student's session happens to
+be on. For a cadet in one offering that is always right, and it is deliberately not left to RLS
+(the function says so). But it is silent: nothing tells the student, or records, *which* run of the
+lesson they just submitted to.
+
+**Build:**
+
+1. **Resolve to a set, not to one.** Return every published offering of that activity the student is
+   enrolled in, instead of filtering to `ctx.currentOffering` up front.
+2. **Confirm before the write.** One offering → name the course and term on the confirmation card
+   ("Physics 215 · Fall 2026") so the student sees the binding they are agreeing to. More than one →
+   they pick, and Submit stays disabled until they do. Zero → the existing "nothing scheduled for
+   you" state, unchanged.
+3. **Record the choice** on the submission that is created, which is already where it belongs.
+4. **Fix the same root cause in the tooling.** `interaction_reports.py::_locate()` matches
+   `act.slug = %s AND e.student_id = %s` and takes `fetchone()` with no offering scope, so it would
+   write `report_data` to an arbitrary one of a student's submissions. Verified 2026-07-27:
+   **0 students are affected today**, because nobody yet holds two submissions for one activity.
+   Give it the offering/term filter the other tools now have. `grade_interactive.py` is sound by
+   contrast (it sweeps rows, each carrying its own `assignment_offering_id`) but has no `--term`, so
+   a run currently reaches into the training sandbox as well — worth the same flag.
+
+**No DDL. No change to the frozen artifact contract** — the artifact keeps posting a bare slug; all
+of this happens on the receiving page, which is exactly where the student is present to answer.
+
+**Why P2 and not later.** Nothing is broken today. It breaks the first time one student holds two
+enrolments that share an activity, and there are three ways in: a Spring 2027 offering standing up
+while Fall 2026 is still `is_active`, a cadet repeating the course, or a real cadet added to the
+training sandbox for a demo. The first of those is planned *before* end of term. Measured
+2026-07-27: **3 active offerings, 37 assignment slugs live in more than one of them, 34 slugs
+present in two courses** — the ambiguity is already the normal case, and only the per-student half
+is still clean. Related: [P3.4](#p34--term-rollover--l--director-yes).
+
 ---
 
 ## 4. P3 — Between terms
