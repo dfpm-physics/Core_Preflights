@@ -10,6 +10,14 @@ optional fields are allowed within v1; everything else is a breaking change.
 of help (not mere disclosure) and `flags.notable` to mean **exemplary** work. No endpoint, hash-key, type,
 or wire-format change — `schema` stays `1`. See §5.6, §5.8, §9.*
 
+*v1 clarification — 2026-07-28 (Matthew Recker via Claude): **`d` is now REQUIRED of producers.** It was
+written as "recommended" when nothing downstream depended on it; three things now do, and a report without
+it is not gradable (§3, §7). Also: §7 rewritten against the `app` receiver that went live at the promotion —
+it described the retired `preflight_interaction_reports` path, including a "re-submitting overwrites" rule
+that is **no longer true**. Endpoint, hash keys, codec, and every `schema: 1` field meaning are unchanged;
+`schema` stays `1`. **Nothing in a deployed artifact breaks** — the receiver still accepts a `d`-less
+report, it just cannot grade it.*
+
 This is the contract between a **claude.ai lesson artifact** (the producer) and this
 repository's **static receiver** (the consumer). A Claude artifact runs a Just-in-Time
 Teaching (JiTT) conversation with a student, then hands the result back to the site by
@@ -52,6 +60,13 @@ the URL is byte-identical before and after, which is what this paragraph was ins
 one-character drift here (`students/`) would have broken the endpoint at precisely the moment it
 was supposed to keep working.
 
+> **Re-verified after the promotion, 2026-07-28.** Three things were checked rather than assumed,
+> because the cost of any one of them being wrong is a student doing the work and losing it:
+> the real receiver is on disk at `site/student/interaction-submit.html` (not a stub, not
+> `site/app/`); the URL above matches it character for character; and the reference artifact
+> (`.ai/artifacts/examples/lesson02_artifact.jsx`) builds its submit URL from that same string.
+> They agree. **The endpoint needs no change and must not be given one.**
+
 > **No legacy redirect.** The original endpoints — root `artifact-submit.html` and
 > `interaction-submit.html`, plus their `site/` counterparts — were **retired, not aliased**, in a
 > deliberate clean break on 2026-07-16 (all live artifacts were rebuilt against this URL before
@@ -81,7 +96,36 @@ site/student/interaction-submit.html#t=interaction&i=<slug>&r=<lz>&d=<lz>
 | `t` | no (default `interaction`) | **Artifact type.** Reserved so this one endpoint can serve future artifact kinds. v1 defines only `interaction`; the receiver treats a missing `t` as `interaction`. |
 | `i` | **yes** | The interaction **slug** — must equal an existing `interactions.id` (e.g. `lesson-02-charge`). The one manual coordination point with the director (see `INTERACTION-PREFILL-LINK.md`). |
 | `r` | **yes** | The **full report**, Markdown, compressed (see codec). Always sent — the human-readable transcript is never dropped. |
-| `d` | recommended | The **structured data** (§5), `JSON.stringify`'d then compressed. Optional so older artifacts that predate `d` still submit cleanly. |
+| `d` | **yes** | The **structured data** (§5), `JSON.stringify`'d then compressed. See below — this was "recommended" until 2026-07-28. |
+
+### 3.1 Send both. `r` alone is not a submission that works.
+
+**A report with `r` and no `d` reaches the database and earns nothing.** That is not a policy
+decision; it is what the pipeline does, and it is worth spelling out because "optional" invited
+exactly the artifact that omits it:
+
+1. **No grade.** The receiver stores `d` as `submission_activities.content`, and the auto-grade
+   trigger (`015_interactive_autograde.sql`) reads `content->'effort'` to write the grade. Absent
+   `d`, `content` is null, the trigger returns without writing, and the student's committed
+   submission sits ungraded until a human opens the transcript and scores it by hand.
+2. **No cohort rollup.** `/lesson-aggregate` folds the `schema: 1` assessment from
+   `submission_activities.content` for artifact takers. Without it the student contributes nothing
+   to the readiness summary, the misconception bars, or the class numbers — they are invisible in
+   the analysis while being visibly present on the roster, which is the worst of both.
+3. **No diagnostics anywhere.** Understanding, misconceptions, flags, the reflection judgment: all
+   of it lives in `d`. `r` carries the same material as prose a human can read, and nothing can
+   read prose at cohort scale without an AI pass nobody has budgeted.
+
+The repair path exists (`/interaction-backfill` reconstructs `schema: 1` from `report_markdown`)
+and is **not** a substitute: it is an AI re-reading of a report the artifact had already assessed,
+run after the fact, against a document written for humans. **Every Fall 2026 interactive submission
+before this date got its structured data that way**, because the reference artifact
+(`.ai/artifacts/examples/lesson02_artifact.jsx`) built its submit URL from `t`, `i` and `r` only —
+the omission this section exists to prevent from recurring.
+
+The receiver still **accepts** a report with no `d`, and that is not changing: an artifact deployed
+before this clarification must not start failing, and a payload problem must never cost a student
+their work (§7). "Required" here binds the producer, not the receiver.
 
 **Compression codec (exact):** lz-string 1.5.0 —
 `LZString.compressToEncodedURIComponent(text)` on the producer side,
@@ -315,26 +359,46 @@ intended grading behavior.
 
 ## 7. Receiver behavior (what the site guarantees)
 
+> **Rewritten 2026-07-28.** This section described the retired `public` receiver — the
+> `preflight_interaction_reports` table, a `report_data` column, and a `score` trigger — none of
+> which the live page has used since the `app` receiver replaced it. The **wire format it
+> documents is unchanged**; where the bytes land, and what happens next, are not. The old text
+> also stated "re-submitting overwrites", which is now false in the case that matters (step 6).
+
 1. Parse the hash; read `t` (default `interaction`), require `i` and `r`. Decompress `r`/`d`
-   with lz-string.
-2. Verify `i` matches an `interactions.id` (FK). Require a logged-in student session; resolve
-   `student_id` from it (never from the payload).
-3. If `d` is present: decompress + `JSON.parse`. If `schema` is unknown or the JSON is
-   malformed, **store it raw in `report_data` anyway** and continue — never block the
-   submission on structured-data problems. Write `report_data` and copy `d.effort` into the
-   `effort` column.
-4. Upsert into `preflight_interaction_reports` (`student_id`, `interaction_id`,
-   `report_markdown`, `report_data`, `effort`, `payload_bytes`), unique on
-   `(student_id, interaction_id)` — **re-submitting overwrites** the previous row. The `score`
-   column (0–2) is derived from `effort` by a DB trigger on every write, so it can't be set
-   independently of effort.
-5. Render the report sanitized (DOMPurify), never executed.
+   with lz-string. The payload is stashed in `sessionStorage` *before* any module runs, so a
+   sign-in round trip cannot discard a finished lesson.
+2. Resolve `i` — an `activities.slug`, globally unique for exactly this reason — to the activity
+   and to the offering scheduled for **this** student. Require a logged-in student session and
+   take `student_id` from it, never from the payload.
+3. If `d` is present: decompress + `JSON.parse`. If the JSON is malformed, **store it raw** under
+   `{ "_unparsed": "…" }` and continue — a payload problem must never cost a student their work.
+   An unknown `schema` is stored as-is for the same reason.
+4. **Nothing is written until the student clicks Submit.** The page renders the report first; the
+   artifact has no concept of submission.
+5. On Submit, upsert `submission_activities` (`submission_id`, `activity_id`, `report_markdown`,
+   `content` = the `d` object, `payload_bytes`), then commit the submission by setting
+   `chosen_activity_id`. `content` is where `d` lands, and it is what the auto-grade trigger and
+   `/lesson-aggregate` both read (§3.1).
+6. **The grade is written server-side, immediately, and is final.** A committed submission whose
+   chosen activity is interactive and `grading_role='graded'` fires
+   `grade_interactive_on_commit()` (migration 015), which copies `effort` onto a finalized
+   `grades` row — re-applying the §5.2 reflection cap itself, because the effort rode in a hash
+   the student controls. A `practice` path records the report and grades nothing.
+7. **Re-submitting does NOT overwrite, on the path that counts.** Because step 6 finalizes the
+   grade, both the page and the data layer refuse a second report for that offering: the first
+   submitted report is the one that stands, and only an instructor reopening the grade changes
+   that. A `practice` submission has no finalized grade, so re-running it does replace the stored
+   report. (Under the retired receiver every re-submission overwrote; artifacts that tell students
+   "you can always resubmit" are wrong and should stop.)
+8. Render the report sanitized (DOMPurify), never executed.
 
 The website's rollup layer treats `d` defensively: it coerces/ignores out-of-range or
 wrong-typed values (the data is LLM-produced and will occasionally be imperfect) and averages
-over non-null values only. Final grades remain **instructor-finalized** — the artifact's
-`effort` is the auto score the instructor confirms, and `r` is the transcript they verify it
-against.
+over non-null values only. An interactive grade is **auto-final rather than instructor-confirmed**
+— effort *is* the grade and there is nothing for a human to decide — but it is not unauditable:
+`source='derived'` marks how it was written, `r` is the transcript, and an instructor can reopen
+it from the Grade tab if a report looks tampered.
 
 ---
 
@@ -368,9 +432,10 @@ against.
 - **Reserved `t=` key** lets this single endpoint serve future artifact types (a different
   lesson format, a survey, a lab) without minting a new URL or breaking old artifacts.
 - **Effort integrity.** Because `effort` *is* the grade and the payload is student-controllable
-  in principle, two safeguards: (a) `r` keeps the transcript for instructor verification, and
-  (b) `score` is trigger-derived from `effort` server-side, so a student can't post a score
-  independent of effort. Effort tampering itself is possible but auditable against `r`.
+  in principle, three safeguards: (a) `r` keeps the transcript for instructor verification,
+  (b) points are trigger-derived from `effort` server-side, so a student can't post a score
+  independent of effort, and (c) the §5.2 reflection cap is re-applied in the database, not
+  trusted from the payload. Effort tampering itself is possible but auditable against `r`.
 - **Always populate the triage signals.** They drive the faculty rollup's flag pills with no AI pass, but
   they're optional — a report only shows a flag if the artifact set it. Emit `flags.needs_follow_up` /
   `flags.notable` (§5.8), `honor.status` (judged by the appropriateness rule in §5.6), and
@@ -385,3 +450,35 @@ against.
 - **Reflection lives in two places by design:** verbatim in `r` (human view) and in
   `reading_reflection.text` (clean machine input). The artifact should put the same text in
   both; the trend process reads only the structured field.
+
+---
+
+## 10. Producer checklist
+
+*Added 2026-07-28. Everything here is stated somewhere above; this is the list to run down before a
+lesson artifact goes to students, because the failure mode for most of it is silent.*
+
+The worked reference is [`.ai/artifacts/examples/lesson02_artifact.jsx`](../../.ai/artifacts/examples/lesson02_artifact.jsx),
+which sends both keys and hides the payload block from the cadet. Build from it rather than from
+memory.
+
+1. **Submit URL is exactly the §2 string.** Copy it; do not retype it. A wrong URL fails silently —
+   the cadet does the work, then loses it.
+2. **`i=` is the lesson's `activities.slug`**, the same string the director created. A slug that
+   does not exist cannot be resolved to an assignment and the report cannot be saved.
+3. **Send `d`, every time (§3.1).** The single most common defect, and the one that produced a
+   whole term of ungradable submissions. `r` alone earns the cadet nothing.
+4. **The payload is not shown to the cadet.** Strip the block from the Markdown before rendering it
+   *and* before compressing it into `r`; it should exist only in `d`.
+5. **`effort` is engagement, not correctness (§5.2)**, and the reflection cap is applied by the
+   artifact as well as by the server. If the two disagree the server wins, which means the cadet
+   sees a grade the artifact did not predict.
+6. **`null` for not-assessed, `0` for assessed-and-lowest (§5.1).** Writing `0` for a topic never
+   reached fabricates data and drags the class average.
+7. **`honor.status`, `flags.*`, `reading_reflection.meaningful` on every report (§9).** No numeric
+   proxy exists for the first and last; nothing can recover them afterwards.
+8. **Tell the cadet the truth about resubmission.** On a graded lesson the first submitted report
+   is the only one — the grade is finalized on commit (§7 step 7). An artifact that says "you can
+   always resubmit" is wrong.
+9. **Over-capture (§8).** A deployed artifact cannot be revised. A field you might want is free
+   now and impossible later.

@@ -147,7 +147,7 @@
 
       <div class="row" style="gap:10px;margin-top:18px">
         <button class="btn btn-primary" id="lm-save">Save assignment</button>
-        <button class="btn btn-secondary" id="lm-preview">Preview (student view)</button>
+        <button class="btn btn-secondary" id="lm-preview">Preview free response</button>
         <button class="btn btn-secondary" data-close>Cancel</button>
       </div>
     </div>
@@ -215,11 +215,15 @@
     </div>
   </div>
 
-  <!-- Student preview (questions only — never the interactive piece). -->
+  <!-- Student preview — the FREE RESPONSE, and only ever that. Named for what it shows rather
+       than for "questions", which read as though it might cover the interaction too: the AI
+       Interaction is a claude.ai artifact and cannot be rendered here at all. Opened from two
+       places now — the editor, and every assignment card, so seeing what a lesson asks does not
+       require entering an edit session you then have to cancel out of. -->
   <div class="modal-backdrop" id="preview-modal">
     <div class="modal" style="max-width:680px">
-      <div class="modal-head"><h2>Student preview — questions</h2><button class="modal-close" data-prevclose>×</button></div>
-      <div class="alert alert-info" style="margin-bottom:14px">How the free-response questions appear to students (read-only). The AI Interaction is not shown here.</div>
+      <div class="modal-head"><h2 id="preview-title">Student preview — free response</h2><button class="modal-close" data-prevclose>×</button></div>
+      <div class="alert alert-info" style="margin-bottom:14px">How the <strong>free-response</strong> questions appear to students (read-only). The AI Interaction is a claude.ai artifact and is not shown here.</div>
       <div id="preview-body"></div>
       <div class="row" style="margin-top:16px"><button class="btn btn-secondary" data-prevclose>Close</button></div>
     </div>
@@ -319,6 +323,7 @@
       root.innerHTML = head + composeHtml + body;
       wireNew();
       document.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openEdit(b.dataset.edit)));
+      document.querySelectorAll('[data-prev]').forEach(b => b.addEventListener('click', () => openCardPreview(b.dataset.prev)));
       document.querySelectorAll('[data-pub]').forEach(b => b.addEventListener('click', () => doTogglePublish(b.dataset.pub)));
       document.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => openDeleteModal(vm.lessons.find(x => x.offeringId === b.dataset.del))));
       if (isDirector()) wireCompose();
@@ -415,6 +420,14 @@
       // rather than a fixed M/T pair. One date for everyone collapses to a single entry.
       const dues = dueSummary(l);
       const nq = questionsOf(l.written).length;
+      // Preview sits OUTSIDE the director gate and first in the row. Reading what a lesson asks
+      // is not an edit, and an instructor has every reason to want it; before this the only way
+      // to see the questions was Edit → Preview → Cancel, which is a write-shaped path to a
+      // read-only answer and is director-only besides. Offered on every card, disabled with a
+      // reason when there is no written activity to show.
+      const preview = nq
+        ? `<button class="btn btn-ghost btn-sm" data-prev="${esc(l.offeringId)}">Preview</button>`
+        : `<button class="btn btn-ghost btn-sm" disabled title="This assignment has no free-response questions — the AI Interaction can't be previewed here.">Preview</button>`;
       const manage = isDirector() ? `
         <button class="btn btn-ghost btn-sm" data-edit="${esc(l.offeringId)}">Edit</button>
         <button class="btn btn-ghost btn-sm" data-pub="${esc(l.offeringId)}">${l.isPublished ? 'Unpublish' : 'Publish'}</button>
@@ -433,7 +446,7 @@
             </div>
           </div>
         </div>
-        ${manage ? `<div class="row wrap" style="gap:8px;margin-top:14px">${manage}</div>` : ''}
+        <div class="row wrap" style="gap:8px;margin-top:14px">${preview}${manage}</div>
       </div>`;
     }
 
@@ -1015,13 +1028,28 @@
       });
     }
 
-    // ── Student preview (questions only) ──────────────────────────────────
+    // ── Student preview (free response only) ──────────────────────────────
+    // Two entry points into one renderer. The editor previews the WORKING copy — unsaved edits
+    // included, which is the point of previewing while authoring. A card previews what is
+    // actually stored on the offering's written activity, which is what students would see right
+    // now. Same modal, different source, and the heading says which so the two can't be confused.
+    function showPreview(heading, title, questions) {
+      document.getElementById('preview-title').textContent = heading;
+      document.getElementById('preview-body').innerHTML = previewHtml(title, questions);
+      document.getElementById('preview-modal').classList.add('open');
+    }
+
     function openPreview() {
       if (model.written.include) ensureDefaultQuestions();
       const title = document.getElementById('f-title').value.trim();
-      document.getElementById('preview-body').innerHTML =
-        previewHtml(title, model.written.include ? model.questions : []);
-      document.getElementById('preview-modal').classList.add('open');
+      showPreview('Student preview — free response (unsaved edits included)',
+                  title, model.written.include ? model.questions : []);
+    }
+
+    function openCardPreview(offeringId) {
+      const l = vm.lessons.find(x => x.offeringId === offeringId);
+      if (!l) return;
+      showPreview('Student preview — free response', l.title, questionsOf(l.written));
     }
     function previewHtml(title, questions) {
       if (!questions.length)

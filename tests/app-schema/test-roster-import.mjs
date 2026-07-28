@@ -8,6 +8,7 @@ import { check, eq, section } from './harness.mjs';
 import {
   parseDelimited, sniffDelimiter, mapHeaders, normalizeName, emailProblem,
   studentIdProblem, rowMatchesCourse, parseRosterFile, reconcile, summarize,
+  departures, returning,
   REQUIRED_FIELDS,
   sectionDefaultsFrom,
 } from '../../site/js/roster-import.js';
@@ -203,6 +204,94 @@ const sparse = reconcile(
 eq('an identical row produces no diffs', sparse.conflicts[0].diffs.length, 0);
 check('and is marked trivial so the page need not ask', sparse.conflicts[0].trivial);
 
+/* ── Departures: who is enrolled but not in the file ─────────────────────────
+ *
+ * The dangerous direction. Every assertion here is a way an over-eager version of this function
+ * removes a cadet who never left — which is the failure mode that matters, because the operator's
+ * only defence is a confirmation list they are being trained to trust.
+ *
+ * Scope is the WHOLE offering, deliberately. An earlier cut restricted departures to sections the
+ * file itself covered, as a hedge against a partial export; the director's rule is that only
+ * directors import and they import a whole course at a time, so the hedge bought nothing and cost
+ * the reconciliation of any section the export omitted entirely.
+ */
+section('departures');
+
+const ENROLLED = [
+  { enrollment_id: 'en-1', status: 'active', student_id: 3001111111, name: 'Ann Alpha',  section_id: 's-m1a', section_code: 'M1A' },
+  { enrollment_id: 'en-2', status: 'active', student_id: 3002222222, name: 'Ben Bravo',  section_id: 's-m1a', section_code: 'M1A' },
+  { enrollment_id: 'en-3', status: 'active', student_id: 3003333333, name: 'Cal Charlie', section_id: 's-t3a', section_code: 'T3A' },
+  { enrollment_id: 'en-4', status: 'dropped', student_id: 3004444444, name: 'Dot Delta', section_id: 's-m1a', section_code: 'M1A' },
+];
+const row = (id, code) => ({ student_id: id, section_code: code });
+const file = (rows, skipped = []) => ({ rows, skipped });
+
+const gone = departures(file([row(3001111111, 'M1A')]), ENROLLED);
+eq('everyone the file does not name is a departure, in any section', gone.length, 2);
+eq('…carrying the enrollment ids to drop', gone.map(d => d.enrollment_id).sort().join(','), 'en-2,en-3');
+
+// The point of dropping the section scope: a whole-course export that has lost a section is
+// exactly the case a director needs reconciled, and the old rule made it invisible.
+check('a section absent from the file entirely is still reconciled',
+      gone.some(d => d.section_code === 'T3A'));
+eq('naming everybody proposes nobody',
+   departures(file([row(3001111111, 'M1A'), row(3002222222, 'M1A'), row(3003333333, 'T3A')]),
+              ENROLLED).length, 0);
+
+// Already dropped is already removed. Re-proposing them every import grows the list without
+// bound and is precisely how an operator learns to stop reading it.
+check('an already-dropped enrollment is never re-proposed',
+      !gone.some(d => d.enrollment_id === 'en-4'));
+
+/* THE ONE REMAINING GUARD, and the reason it is not the scope rule in disguise: zero matched rows
+ * is the signature of a WRONG FILE — bad course filter, wrong export, sections that do not exist
+ * yet — and reading it as "remove the entire roster" is the worst thing this function could do.
+ * The operator sees the parse errors instead. */
+eq('a file that matched nothing proposes no removals at all', departures(file([]), ENROLLED).length, 0);
+eq('…and so does a null parse', departures(null, ENROLLED).length, 0);
+eq('no enrollments, no departures', departures(file([row(3001111111, 'M1A')]), null).length, 0);
+
+/* A cadet named on a row that was SKIPPED for a data problem has not left — their row had a
+ * malformed email or a bad cadet ID, which is reported separately for the operator to fix. Letting
+ * a typo in one cell read as "this person left the course" is the subtle version of the same
+ * failure the guard above prevents loudly. */
+const skippedRow = { code: 'invalid', raw: { student_id: '3002222222' } };
+check('a cadet on a skipped row is protected, not removed',
+      !departures(file([row(3001111111, 'M1A')], [skippedRow]), ENROLLED)
+        .some(d => d.enrollment_id === 'en-2'));
+eq('…and a cadet ID with stray formatting still matches',
+   departures(file([row(3001111111, 'M1A')], [{ code: 'invalid', raw: { student_id: '300-222-2222' } }]),
+              ENROLLED).map(d => d.enrollment_id).join(','), 'en-3');
+// An `other-course` skip is a row for a DIFFERENT course. It says nothing about this one, so it
+// must not shield a cadet who really has left this offering.
+eq('an other-course skip does not protect anybody',
+   departures(file([row(3001111111, 'M1A')],
+                   [{ code: 'other-course', raw: { student_id: '3002222222' } }]), ENROLLED)
+     .map(d => d.enrollment_id).sort().join(','), 'en-2,en-3');
+
+// The file's ids arrive as numbers from studentIdProblem(); enrollment rows come back from
+// PostgREST where a bigint can be a string. A === between the two silently removes everybody.
+eq('a string student_id in the file still matches a numeric enrollment',
+   departures(file([{ student_id: '3001111111', section_code: 'M1A' },
+                    { student_id: '3002222222', section_code: 'M1A' },
+                    { student_id: '3003333333', section_code: 'T3A' }]), ENROLLED).length, 0);
+
+section('returning');
+
+// The inverse, and the reason it is not optional: the enrollment upsert in commitRoster is
+// ignoreDuplicates, so it finds a dropped row, changes nothing, and leaves them out of the course
+// no matter how many correct exports name them afterwards.
+const back = returning([row(3004444444, 'M1A')], ENROLLED);
+eq('a dropped cadet named in the file is returning', back.length, 1);
+eq('…carrying the enrollment id to reactivate', back[0].enrollment_id, 'en-4');
+eq('an active cadet named in the file is not "returning" — they never left',
+   returning([row(3001111111, 'M1A')], ENROLLED).length, 0);
+// No scope rule here on purpose: putting back a cadet the registrar still lists is the safe
+// direction, so it applies wherever the file names them.
+eq('a dropped cadet is returned even from a section the file otherwise covers differently',
+   returning([{ student_id: 3004444444, section_code: 'T3A' }], ENROLLED).length, 1);
+eq('nobody named, nobody returning', returning([], ENROLLED).length, 0);
+
 section('summarize');
 const sum = summarize(parsed, rec);
 eq('counts every line in the file', sum.inFile, 7);
@@ -210,6 +299,8 @@ eq('counts the matched rows', sum.matched, 2);
 eq('counts the skipped rows', sum.skipped, 5);
 eq('counts the ones needing a human decision', sum.needsDecision, 1);
 eq('lists the sections touched', sum.sections.join(','), 'M1A,T3A');
+eq('reports no departures when it is not given any', sum.departing, 0);
+eq('…and counts them when it is', summarize(parsed, rec, [{ enrollment_id: 'x' }]).departing, 1);
 
 /* ── section defaults inferred from the code (the import path) ─────────────── */
 section('sectionDefaultsFrom');

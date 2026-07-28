@@ -422,8 +422,94 @@ export function reconcile(rows, existing, enrolledIds = new Set()) {
   return { fresh, conflicts };
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════════════
+ * Departures — who is enrolled but no longer on the roster
+ * ════════════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Cadets holding an active enrollment that the file does not name.
+ *
+ * WHY THIS EXISTS. A registrar export is the roster, not an addition to it. Until now an import
+ * was purely additive, so a cadet who dropped in week two stayed enrolled forever: still on the
+ * roster page, still counted in every cohort denominator, still rendered as a red MISSING cell on
+ * every lesson after they left. Nobody noticed, because the only symptom is a number being
+ * slightly wrong.
+ *
+ * ── THE WHOLE OFFERING, NOT JUST THE SECTIONS IN THE FILE ────────────────────────────────────
+ * The first cut of this scoped departures to sections the file itself covered, as a hedge against
+ * a partial export proposing to empty a section it never mentioned. The director's rule
+ * (2026-07-28) is that this does not happen: **only directors import, and they import a whole
+ * course at a time.** The hedge therefore bought nothing and cost the thing the feature is for —
+ * a section that emptied out, or one the export dropped entirely, would never be reconciled.
+ *
+ * So a departure is anyone actively enrolled in the offering and absent from the file, wherever
+ * they sit. Two guards remain, and they are not the scope rule in disguise:
+ *
+ *   1. **A file that matched nothing proposes nothing.** Zero matched rows is the signature of a
+ *      wrong file — bad course filter, wrong export, sections that do not exist yet — and reading
+ *      it as "remove the entire roster" is the worst thing this function could do. The operator
+ *      sees the parse errors instead.
+ *   2. **A cadet named anywhere in the file is never a departure**, including on a row that was
+ *      SKIPPED for a data problem (a malformed email, a bad cadet ID). Those rows are reported
+ *      separately for the operator to fix; a typo in one cell must not read as "this person left".
+ *      Rows skipped as `other-course` do NOT protect anyone — a cadet appearing in the export only
+ *      under a different course genuinely is not in this one.
+ *
+ * Past those, the confirmation step is the control: the list is shown by name, individually
+ * un-tickable, and confirmed a second time before anything is written. And nothing here deletes —
+ * a removal is reversible by re-importing a file that names them.
+ *
+ * @param {object} parsed    the parseRosterFile result: { rows, skipped }
+ * @param {Array}  enrolled  every enrollment in the offering, active and dropped:
+ *                           { enrollment_id, status, student_id, name, section_id, section_code }
+ * @returns {Array} the same enrollment objects, for everyone the file does not name
+ */
+export function departures(parsed, enrolled) {
+  const rows = parsed?.rows || [];
+  if (!rows.length) return [];
+
+  const named = new Set(rows.map(r => Number(r.student_id)));
+  for (const s of parsed?.skipped || []) {
+    if (s.code === 'other-course') continue;
+    const id = Number(String(s.raw?.student_id ?? '').replace(/[^0-9]/g, ''));
+    if (Number.isFinite(id) && id > 0) named.add(id);
+  }
+
+  return (enrolled || [])
+    // Already dropped is already removed. Re-proposing them every import would grow the
+    // confirmation list without bound and train the operator to stop reading it.
+    .filter(e => e.status !== 'dropped')
+    .filter(e => !named.has(Number(e.student_id)))
+    .sort((a, b) => String(a.section_code).localeCompare(String(b.section_code))
+                 || String(a.name || '').localeCompare(String(b.name || '')));
+}
+
+/**
+ * Cadets the file names whose enrollment we had previously dropped.
+ *
+ * The exact inverse of departures(), and it exists for the same reason: once an import can remove
+ * somebody, it has to be able to put them back from the same kind of evidence. A cadet left off
+ * one week's export by mistake would otherwise be stuck outside the course permanently — the
+ * enrollment upsert in commitRoster() is `ignoreDuplicates`, so it finds their row, changes
+ * nothing, and leaves the `dropped` status exactly where it was.
+ *
+ * NO scope rule here, deliberately. departures() is narrow because removing somebody is the
+ * dangerous direction; putting a cadet the registrar still lists back into the course is the safe
+ * one, so it applies wherever the file names them.
+ *
+ * @param {Array} rows      staged rows from parseRosterFile
+ * @param {Array} enrolled  every enrollment in the offering, active and dropped
+ */
+export function returning(rows, enrolled) {
+  const named = new Set((rows || []).map(r => Number(r.student_id)));
+  return (enrolled || [])
+    .filter(e => e.status === 'dropped' && named.has(Number(e.student_id)))
+    .sort((a, b) => String(a.section_code).localeCompare(String(b.section_code))
+                 || String(a.name || '').localeCompare(String(b.name || '')));
+}
+
 /** Summary counts for the preview header. */
-export function summarize(parsed, reconciled) {
+export function summarize(parsed, reconciled, departing = []) {
   const decidable = reconciled.conflicts.filter(c => !c.trivial);
   return {
     inFile: parsed.rows.length + parsed.skipped.length,
@@ -432,6 +518,7 @@ export function summarize(parsed, reconciled) {
     fresh: reconciled.fresh.length,
     conflicts: reconciled.conflicts.length,
     needsDecision: decidable.length,
+    departing: departing.length,
     sections: [...new Set(parsed.rows.map(r => r.section_code))].sort(),
   };
 }

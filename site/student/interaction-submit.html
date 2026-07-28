@@ -229,6 +229,9 @@
               <button class="btn btn-primary" id="submit-btn">Submit this report</button>
             </div>` : ''}
           </div>
+          ${canSubmit && offered?.gradingRole === 'graded' ? `<div class="muted" style="font-size:0.85em;margin-top:10px">
+            Submitting grades this assignment straight away, so this report is the one that counts —
+            you can’t replace it by running the lesson again.</div>` : ''}
           <div id="submit-status" class="muted" style="font-size:0.85em;margin-top:10px;display:none"></div>
         </div>
         <div class="card">
@@ -274,10 +277,19 @@
         ? ` Your instructor will see an effort rating of ${payload.effort}/5` +
           (committed ? ` (about ${effortPoints(payload.effort, possible)} of ${possible} pts).` : '.')
         : '';
+      // WHAT HAPPENS IF THEY RUN THE LESSON AGAIN — and it is NOT "it overwrites", which is what
+      // this said until 2026-07-28. A graded interactive submission auto-finalizes its grade the
+      // moment it commits (migration 015), and both this page and submitInteractionReport() refuse
+      // a report once a finalized grade exists. So for the graded path the first report is the
+      // only report, and telling a student otherwise invites them to redo the lesson expecting a
+      // second chance they do not have. Practice is the one case where a re-run does replace the
+      // stored report — nothing finalizes, so the upsert lands.
+      const again = committed
+        ? ' This is now your graded submission and can’t be replaced — ask your instructor if you need to redo it.'
+        : ' You can run the lesson again and submit a new report; it replaces this one.';
       status.textContent = (committed
         ? 'Saved — this assignment is now the one that counts for your grade.'
-        : `Saved to your record${role === 'practice' ? ' as practice' : ''}.`) + pts +
-        ' Re-submitting will overwrite it.';
+        : `Saved to your record${role === 'practice' ? ' as practice' : ''}.`) + pts + again;
       status.style.color = 'var(--green)';
     }
   </script>

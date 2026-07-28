@@ -201,9 +201,19 @@ export const CELL = {
  * distinct rendering, and PENDING is the only one that renders as nothing.
  *
  * `extensionISO` must already be filtered to non-revoked rows — same contract as effectiveDue().
+ *
+ * `columnGraded` — has this column been graded for THIS student's section (see gradedScopes)? It
+ * changes nothing about the arithmetic and only one thing about the display: a MISSING cell reads
+ * `—` while grading is still outstanding and `0` once it is done. That distinction is the
+ * director's (2026-07-28) and it is a real one. Before grading, `—` says "nothing arrived", which
+ * is a fact about the student and still provisional — an instructor may yet accept late work or
+ * grant an extension. After grading it is settled, and what the student has is not an absence but
+ * a zero. The old display said `—` forever, so the gradebook never showed the number the student's
+ * total was already built from: MISSING has always counted as zero-out-of-full (see totalsFor),
+ * which meant a column of dashes silently summed to a percentage nobody could reconcile.
  */
 export function cellState({ grade, submission, offering, sectionId, extensionISO = null,
-                            now = new Date() }) {
+                            columnGraded = false, now = new Date() }) {
   const { due, isPast } = effectiveDue(offering, sectionId, extensionISO, now);
   const committed = submission && submission.status === 'committed' && submission.committed_at;
 
@@ -218,6 +228,7 @@ export function cellState({ grade, submission, offering, sectionId, extensionISO
       isFinalized: !!grade.is_finalized,
       source: grade.source || null,
       late: !!late.late,
+      columnGraded,
       due,
     };
   }
@@ -225,14 +236,45 @@ export function cellState({ grade, submission, offering, sectionId, extensionISO
     const late = submissionLateness(offering, sectionId, extensionISO, submission.committed_at);
     return { state: CELL.UNGRADED, points: null,
              possible: Number(offering?.pointsPossible ?? 0),
-             isFinalized: false, source: null, late: !!late.late, due };
+             isFinalized: false, source: null, late: !!late.late, columnGraded, due };
   }
   return {
     state: isPast ? CELL.MISSING : CELL.PENDING,
-    points: null,
+    // A graded-out column makes the zero explicit. Before that it stays null, because "we have
+    // not looked at this yet" and "we looked, and there was nothing" are different claims and the
+    // cell should not make the stronger one early. Either way totalsFor() reads it as 0 — the
+    // number moved onto the screen, it did not move into the arithmetic.
+    points: (isPast && columnGraded) ? 0 : null,
     possible: Number(offering?.pointsPossible ?? 0),
-    isFinalized: false, source: null, late: false, due,
+    isFinalized: false, source: null, late: false, columnGraded, due,
   };
+}
+
+/**
+ * Which (section, offering) pairs have been graded — the input `columnGraded` above needs.
+ *
+ * "Graded" = at least one FINALIZED grade exists for that section on that column. Finalized is the
+ * right test rather than "a grade row exists", because an unconfirmed AI suggestion is exactly the
+ * state where an instructor has not yet decided anything, and turning a classmate's dash into a
+ * zero off the back of a draft would be announcing a decision nobody made.
+ *
+ * Per SECTION, not per column, because grading runs section by section on split M/T deadlines: an
+ * M-day section finished on Tuesday must not turn the T-day section's absences into zeros a day
+ * before that section's work is even due.
+ *
+ * One finalized row is enough. An instructor finalizes a section's column in one pass, and
+ * requiring "all submitters graded" would mean a single reopened grade flipped a whole column of
+ * zeros back to dashes — noisier, and wrong in the more alarming direction.
+ */
+export function gradedScopes(enrollments, grades) {
+  const sectionOf = new Map((enrollments || []).map((e) => [e.enrollmentId, e.sectionId]));
+  const out = new Set();
+  for (const g of grades || []) {
+    if (!g?.is_finalized) continue;
+    const section = sectionOf.get(g.enrollment_id);
+    if (section) out.add(`${section}|${g.assignment_offering_id}`);
+  }
+  return out;
 }
 
 /**
@@ -292,6 +334,7 @@ export function buildMatrix({ enrollments, offerings, grades, submissions, exten
   const subBy = new Map((submissions || []).map((s) => [key(s.enrollment_id, s.assignment_offering_id), s]));
   const extBy = new Map((extensions || []).map((x) =>
     [key(x.enrollment_id, x.assignment_offering_id), x.extended_due_at]));
+  const graded = gradedScopes(enrollments, grades);
 
   const rows = (enrollments || []).map((en) => {
     const cells = columns.map((c) => {
@@ -302,6 +345,7 @@ export function buildMatrix({ enrollments, offerings, grades, submissions, exten
         offering: c.offering,
         sectionId: en.sectionId,
         extensionISO: extBy.get(key(en.enrollmentId, c.offeringId)) || null,
+        columnGraded: graded.has(key(en.sectionId, c.offeringId)),
         now,
       });
       // The two 0–5 signals live alongside the state, not inside it: a colour is a property of the

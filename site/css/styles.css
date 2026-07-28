@@ -1988,8 +1988,15 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
   border-top: 1px solid #000; background: var(--track); pointer-events: none; }
 .gb .gb-efill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--e); }
 
+/* Two faces of "nothing was submitted". The hard 0 (grading is done) keeps the red — it is a real
+   score against the student. The dash (grading still outstanding) is deliberately quieter: it is a
+   provisional absence, not yet a verdict, and a wall of red on an ungraded column reads as a class
+   in trouble rather than as an instructor with work to do. */
 .gb .gb-missing  { color: var(--red); font-weight: 700; }
-.gb .gb-ungraded { color: var(--muted); font-weight: 700; }
+.gb .gb-missing.gb-nosub { color: var(--muted); }
+/* Gold, not muted: this is the INSTRUCTOR's backlog, and gold means "still needs you" on this grid
+   (see .gb-draft sup). It was --muted and a middle dot, and vanished. */
+.gb .gb-ungraded { color: var(--gold); font-weight: 700; }
 .gb .gb-draft    { color: var(--text-soft); font-style: italic; }
 .gb .gb-draft sup { color: var(--gold); font-style: normal; }
 .gb .gb-pending  { background: repeating-linear-gradient(135deg,

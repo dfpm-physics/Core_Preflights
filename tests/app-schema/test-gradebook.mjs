@@ -202,6 +202,55 @@ eq('…while the un-overridden section stays MISSING against the default',
    G.cellState({ grade: null, submission: null, offering: splitFutureForT,
                  sectionId: SEC_M, now: NOW }).state, G.CELL.MISSING);
 
+/* ── "—" vs "0": a missing cell only becomes a zero once the column has been graded ──────
+ * Director, 2026-07-28. The distinction is display-only and must stay that way: MISSING has always
+ * counted as zero-out-of-full in the total, so if `columnGraded` ever reached totalsFor() a
+ * student's percentage would move when an instructor finished grading rather than when the work
+ * did or did not arrive. The last two assertions here are what pin that. */
+eq('a missing cell shows no number while the column is still being graded',
+   G.cellState({ grade: null, submission: null, offering: offering(),
+                 sectionId: SEC_M, columnGraded: false, now: NOW }).points, null);
+eq('…and becomes an explicit 0 once it has been graded',
+   G.cellState({ grade: null, submission: null, offering: offering(),
+                 sectionId: SEC_M, columnGraded: true, now: NOW }).points, 0);
+// PENDING must never pick up the zero: the work is not due, so there is nothing to be missing.
+eq('a graded column does not put a 0 on work that is not due yet',
+   G.cellState({ grade: null, submission: null, offering: offering({ dueAt: FUTURE }),
+                 sectionId: SEC_M, columnGraded: true, now: NOW }).points, null);
+eq('…nor does an active extension, which makes the cell PENDING',
+   G.cellState({ grade: null, submission: null, offering: offering(), sectionId: SEC_M,
+                 extensionISO: FUTURE, columnGraded: true, now: NOW }).points, null);
+eq('the total is identical either way — this is a display change, not an arithmetic one',
+   G.totalsFor([G.cellState({ grade: null, submission: null, offering: offering(),
+                              sectionId: SEC_M, columnGraded: true, now: NOW })]).pct,
+   G.totalsFor([G.cellState({ grade: null, submission: null, offering: offering(),
+                              sectionId: SEC_M, columnGraded: false, now: NOW })]).pct);
+
+section('faculty-gradebook.js — gradedScopes');
+
+const ENR = [
+  { enrollmentId: 'e-m1', sectionId: SEC_M },
+  { enrollmentId: 'e-m2', sectionId: SEC_M },
+  { enrollmentId: 'e-t1', sectionId: SEC_T },
+];
+const scopes = G.gradedScopes(ENR, [
+  { enrollment_id: 'e-m1', assignment_offering_id: 'o1', is_finalized: true },
+  { enrollment_id: 'e-t1', assignment_offering_id: 'o1', is_finalized: false },
+  { enrollment_id: 'e-m1', assignment_offering_id: 'o2', is_finalized: false },
+]);
+check('one finalized grade marks that section+column graded', scopes.has(`${SEC_M}|o1`));
+// The M/T split is the whole reason this is per-section: an M-day section finished on Tuesday
+// must not turn the T-day section's absences into zeros before that section's work is even due.
+check('…and does not mark the other section of the same column', !scopes.has(`${SEC_T}|o1`));
+// A draft is exactly the state where the instructor has decided nothing. Announcing a classmate's
+// zero off the back of an unconfirmed AI suggestion would be reporting a decision nobody made.
+check('an unfinalized grade does not count as graded', !scopes.has(`${SEC_M}|o2`));
+check('a column with no grades at all is not graded', !scopes.has(`${SEC_M}|o3`));
+eq('a grade for an enrollment outside the scope is ignored rather than throwing',
+   G.gradedScopes(ENR, [{ enrollment_id: 'nobody', assignment_offering_id: 'o1',
+                          is_finalized: true }]).size, 0);
+eq('no enrollments, no grades, no scopes', G.gradedScopes(null, null).size, 0);
+
 /* ══ 5. countsTowardTotal / totalsFor ═════════════════════════════════════════ */
 
 section('faculty-gradebook.js — totals');

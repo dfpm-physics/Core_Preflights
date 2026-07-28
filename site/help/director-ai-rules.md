@@ -93,6 +93,13 @@ grade afterwards, and a grade you have already finalized by hand is never overwr
 An interactive activity marked **practice** produces no grade at all, however much work a student
 does on it.
 
+**That also makes the first report the only report.** Because the grade is finalized on submission,
+a student who runs the lesson again cannot replace it — the submit page refuses, and so does the
+database behind it. If a report needs redoing, reopen the grade and the student can submit again.
+This is the opposite of the retired system, where every re-submission silently overwrote the last
+one, so an artifact that still tells cadets "you can always resubmit" is wrong and should be
+rebuilt.
+
 > Until 2026-07-27 this section said the conversion depended on an assignment-level *effort* or
 > *points* setting, and that the analysis run applied the scale for points-mode assignments. Both
 > stopped being true on 2026-07-23; the analysis run has never graded interactive work.

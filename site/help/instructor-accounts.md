@@ -74,13 +74,40 @@ panel. It must contain **Cadet EMPLID**, **Cadet Name**, **Email**, **Cadet Squa
 **Section**; Term, Subject, Course Number, majors, sex, and advisor are picked up when present and
 everything else is ignored.
 
-Two things the upload does that are worth knowing:
+Three things the upload does that are worth knowing:
 
 - **Rows for other courses are filtered out** by subject and course number, and it shows you which
   ones and why rather than dropping them silently.
 - **Cadets you already have are flagged for review.** For each, you choose whether to keep the
   record you have or take the file's version, field by field. The default is to keep what you
   have — a stale export should not quietly overwrite a correction somebody made by hand.
+- **Cadets who are no longer on the roster are proposed for removal.** The export *is* the roster,
+  so anyone enrolled here but absent from the file has left. They are listed by name, ticked, and
+  you un-tick anyone who should stay; you then confirm the removals a second time before anything
+  is written. See below for what removal means.
+
+### Who can be removed, and what removal does
+
+**Import the whole course.** The check covers every section of the offering, so anyone enrolled and
+absent from the file is proposed for removal wherever they sit — which is the point, since a
+section the export dropped entirely is exactly the case worth catching. Uploading a partial export
+would therefore propose removing everybody it left out, so do not: export the course.
+
+Two things the import will not do on its own. **A file that matches no rows proposes no removals** —
+that is the signature of the wrong file, and you get the parse errors instead. And **a cadet whose
+row was skipped for a data problem is never treated as having left**; a malformed email address is
+something to fix, not a departure.
+
+**Nothing is deleted.** A removed cadet's enrollment is marked *dropped*: they come off the roster,
+out of grading, out of the gradebook, and out of every class average — removed from the course in
+every sense that matters — while their account, their submissions and their grades stay exactly
+where they were. That matters beyond this course: the same cadet may be taking your other one, and
+their record belongs to them rather than to one offering. They appear in a collapsed **removed from
+this course** list under the roster table, each with a **Re-enroll** button.
+
+**And it undoes itself.** If a cadet was removed by mistake, importing a later export that names
+them again puts them straight back with their work intact. You do not have to find them or fix
+anything by hand; the import tells you it re-enrolled them.
 
 If the file names a section that does not exist yet, the preview offers to create it and re-check.
 A section created this way has its meeting days filled in from its code — `M1A` becomes an M-day
@@ -94,9 +121,16 @@ lands, and reports how many logins it made. **Provision accounts** is still on t
 worth knowing: a cadet with no email address on file is *skipped*, not given a fabricated one, so
 after adding the missing address you use that button to finish the job.
 
-**Move** and **Remove** on each row handle the rest of add/drop — moving a cadet between sections
+**Move** and **Remove** on each row handle the rest of add/drop. Moving a cadet between sections
 carries their submissions and grades with them, because those hang off the enrollment rather than
-the section.
+the section. **Remove** does exactly what the import's removals do — the cadet comes off the roster
+and out of every class number, and their record and work are kept — so nothing on this page can
+destroy a term of somebody's work by accident.
+
+*(Corrected 2026-07-28. Remove used to delete the enrollment outright, taking every submission and
+grade with it. That was defensible as the only removal on the page; it stopped being defensible the
+moment a bulk file upload could do the same thing to twenty people at once, so both paths now do
+the reversible thing.)*
 
 ## Adding one cadet
 

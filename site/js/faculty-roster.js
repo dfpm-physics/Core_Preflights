@@ -52,18 +52,19 @@ export async function loadOfferingSections(ctx) {
  *   at the offering. The argument narrows the query; it does not secure it.
  */
 export async function loadRoster(ctx, scope = null) {
-  if (!ctx.currentOffering) return { students: [], sections: [], total: 0, unprovisioned: 0 };
+  const blank = { students: [], dropped: [], sections: [], total: 0, unprovisioned: 0 };
+  if (!ctx.currentOffering) return blank;
   const { sections, byId } = await loadOfferingSections(ctx);
   const inScope = scope?.length ? new Set(scope.map(String)) : null;
   const sectionIds = sections.map(s => s.id).filter(id => !inScope || inScope.has(String(id)));
-  if (!sectionIds.length) return { students: [], sections, total: 0, unprovisioned: 0 };
+  if (!sectionIds.length) return { ...blank, sections };
 
   const { data } = await db.from('enrollments')
     .select('id, status, student_id, section_id, ' +
             'students!inner(student_id, name, email, squadron, auth_user_id)')
     .in('section_id', sectionIds);
 
-  const students = (data || [])
+  const all = (data || [])
     .map(e => ({
       enrollment_id: e.id,
       status: e.status,
@@ -78,8 +79,21 @@ export async function loadRoster(ctx, scope = null) {
     .sort((a, b) => a.section_code.localeCompare(b.section_code)
                  || lastFirst(a.name).localeCompare(lastFirst(b.name)));
 
+  /* ── Why this now splits on status (2026-07-28) ────────────────────────────────────────────
+   * It did not, and that was the one place in the app where it did not. Every other reader —
+   * grading, the gradebook, the dashboard, the rollup, EI, the task list — filters
+   * `status = 'active'`, so a dropped cadet already vanishes from grading and from every cohort
+   * denominator. Only this page still listed them, indistinguishable from everybody else, which
+   * made `dropped` look like a status that did nothing and left the roster page contradicting
+   * the rest of the system. It does something; the roster page just was not reading it.
+   *
+   * Splitting rather than filtering because "who did I remove" is a question worth being able to
+   * answer, and a dropped enrollment still holds that cadet's submissions and grades. */
+  const students = all.filter(s => s.status !== 'dropped');
   return {
-    students, sections,
+    students,
+    dropped: all.filter(s => s.status === 'dropped'),
+    sections,
     total: students.length,
     unprovisioned: students.filter(s => !s.auth_user_id).length,
   };
@@ -96,23 +110,23 @@ export function provision(ctx) {
   });
 }
 
-/**
- * Remove a student from THIS offering.
+/* `removeEnrollment()` — a hard DELETE of the enrollment row — was here and is GONE (2026-07-28).
  *
- * Deletes the enrollment, not the person: `students` is the human, independent of any course,
- * and someone may legitimately be enrolled elsewhere. The cascade from enrollments removes
- * their submissions and grades for this offering only — which is destructive, so the page
- * confirms first. Prefer dropStudent() when the intent is "they withdrew".
+ * Do not reintroduce it. Director's rule: **a student is never deleted, because they may be in
+ * another course.** Deleting the enrollment would not touch the `students` row, so on a strict
+ * reading it never endangered the other course — but it cascaded away every submission and grade
+ * for THIS one, irreversibly, from a button sitting next to a search box. It stopped being
+ * defensible the moment a file upload could do the same thing to twenty people at once.
+ *
+ * `dropEnrollments()` below achieves everything anybody means by "remove" and is reversible.
+ * If a row genuinely must be purged — test residue, a cadet attached to the wrong course before
+ * they did anything — that is an operator-tier script action (see `tests/app-schema/cleanup.py`
+ * for the pattern), taken deliberately, not a click.
  */
-export function removeEnrollment(enrollmentId) {
-  return db.from('enrollments').delete().eq('id', enrollmentId);
-}
 
-/** The non-destructive alternative: mark them dropped and keep the history. */
+/** One-student form of dropEnrollments(). Same semantics; see that function's header. */
 export function dropStudent(enrollmentId) {
-  return db.from('enrollments')
-    .update({ status: 'dropped', dropped_at: new Date().toISOString() })
-    .eq('id', enrollmentId);
+  return dropEnrollments([enrollmentId]);
 }
 
 /**
@@ -247,13 +261,78 @@ export async function loadExistingStudents(studentIds) {
   return { students: out, error: null };
 }
 
-/** Which of these cadets already hold an enrollment in this offering. */
-export async function loadEnrolledIds(ctx) {
-  const { sections } = await loadOfferingSections(ctx);
-  if (!sections.length) return new Set();
+/**
+ * Every enrollment in this offering, with the section code and the person's name.
+ *
+ * Replaces the old `loadEnrolledIds()`, which returned bare ids. The import needs three different
+ * things out of this one read and only one of them was expressible as a Set:
+ *
+ *   - `alreadyEnrolled` on a conflict row — was all the Set was for;
+ *   - the DEPARTURE list (departures() in roster-import.js) — needs the enrollment id to drop, the
+ *     name to show a director before they confirm, and the section code to apply the scope rule;
+ *   - the RETURNING list — a cadet the file names whose enrollment is currently `dropped`, which
+ *     is invisible in a Set of ids and would otherwise stay dropped forever (the enrollment upsert
+ *     in commitRoster is `ignoreDuplicates`, so it cannot revive a row).
+ *
+ * Both statuses come back, tagged. A caller that wants "who is currently in the course" filters
+ * on `status === 'active'`; nothing here does that for them, because the returning case is
+ * precisely the one that cares about the rows an active-only filter would drop.
+ */
+export async function loadEnrollmentState(ctx) {
+  const { sections, byId } = await loadOfferingSections(ctx);
+  if (!sections.length) return [];
   const { data } = await db.from('enrollments')
-    .select('student_id').in('section_id', sections.map(s => s.id));
-  return new Set((data || []).map(e => Number(e.student_id)));
+    .select('id, status, student_id, section_id, students!inner(name)')
+    .in('section_id', sections.map(s => s.id));
+  return (data || []).map(e => ({
+    enrollment_id: e.id,
+    status: e.status,
+    student_id: Number(e.student_id),
+    name: e.students?.name || String(e.student_id),
+    section_id: e.section_id,
+    section_code: byId[e.section_id]?.code || '—',
+  }));
+}
+
+/**
+ * Drop a batch of enrollments — the bulk form of dropStudent().
+ *
+ * DROP, NOT DELETE, and the distinction is the point. The director's instruction was "remove them
+ * from the course, do not delete their accounts", and there are two ways to read that. The
+ * per-student Remove button takes the destructive one (DELETE the enrollment; submissions and
+ * grades cascade with it) behind a confirm that says so. A bulk path reached by uploading a file
+ * must not: an export that is stale, partial, or exported before an add/drop deadline would
+ * silently take a term of work with it, and nothing would be recoverable.
+ *
+ * `dropped` is the whole answer here rather than a compromise. Every reader in the app already
+ * filters `status = 'active'` (see loadRoster's header), so a dropped cadet is out of grading, out
+ * of the gradebook, out of the dashboard, out of every cohort denominator — removed from the
+ * course in every sense a person would mean — while their record and their work survive.
+ */
+export async function dropEnrollments(enrollmentIds) {
+  const ids = [...new Set((enrollmentIds || []).map(String))];
+  if (!ids.length) return { dropped: 0, error: null };
+  const { error } = await db.from('enrollments')
+    .update({ status: 'dropped', dropped_at: new Date().toISOString() })
+    .in('id', ids);
+  return { dropped: error ? 0 : ids.length, error };
+}
+
+/**
+ * Put dropped enrollments back — the other half of dropEnrollments(), and not optional.
+ *
+ * Once an import can drop somebody, it must be able to undo that from the same evidence, or a
+ * cadet mistakenly left off one export is stuck outside the course no matter how many correct
+ * exports follow. `dropped_at` is cleared rather than kept as history: the column means "when did
+ * this enrollment end", and an enrollment that is running again did not end.
+ */
+export async function reactivateEnrollments(enrollmentIds) {
+  const ids = [...new Set((enrollmentIds || []).map(String))];
+  if (!ids.length) return { reactivated: 0, error: null };
+  const { error } = await db.from('enrollments')
+    .update({ status: 'active', dropped_at: null })
+    .in('id', ids);
+  return { reactivated: error ? 0 : ids.length, error };
 }
 
 /** Create any sections the file referenced that the offering does not have yet. */
@@ -273,9 +352,11 @@ export async function createSections(ctx, codes) {
  * @param {object} ctx
  * @param {Array}  fresh      rows for cadets we have not seen — always written in full
  * @param {Array}  conflicts  reconciled conflicts, each carrying the operator's `resolution`
+ * @param {object} plan       { departing[], returning[] } — enrollment rows the operator confirmed
+ *                            for removal, and dropped enrollments the file re-names
  * @param {object} meta       { filename } for the audit row
  *
- * THREE WRITES, IN THIS ORDER, AND THE ORDER MATTERS.
+ * FIVE WRITES, IN THIS ORDER, AND THE ORDER MATTERS.
  *
  *   1. INSERT the people we do not have. Never an upsert: an insert that collides tells us
  *      the reconciliation was computed against a roster that has since changed (another
@@ -286,15 +367,21 @@ export async function createSections(ctx, codes) {
  *      bulk upsert cannot express "these ten yes, those thirty no" without also re-writing the
  *      thirty, which is exactly the data loss `attach` exists to prevent.
  *   3. UPSERT enrollments for everyone in the file regardless of resolution, because being in
- *      the file IS the enrollment claim. ignoreDuplicates keeps a re-import idempotent rather
- *      than resurrecting a dropped enrollment.
+ *      the file IS the enrollment claim. ignoreDuplicates keeps a re-import idempotent — and it
+ *      is also why step 4 has to exist, because a row that already exists is left exactly as it
+ *      was, `dropped` status included.
+ *   4. REACTIVATE the dropped enrollments the file names. Being in the file is the same claim it
+ *      was in step 3; step 3 simply cannot express it for a row that already exists.
+ *   5. DROP the departures the operator confirmed. LAST, so a failure anywhere above leaves the
+ *      roster additive-only — the state it was in before this feature existed — rather than a
+ *      roster that has removed people without adding their replacements.
  *
  * This is deliberately NOT a transaction, because PostgREST has no way to express one from the
  * browser. A failure part-way leaves people created but not enrolled — recoverable by simply
  * re-importing the same file, which is why step 1 is the only step that can fail hard and why
- * step 3 is idempotent. The audit row is written last and records what actually landed.
+ * steps 3–5 are idempotent. The audit row is written last and records what actually landed.
  */
-export async function commitRoster(ctx, fresh, conflicts, meta = {}) {
+export async function commitRoster(ctx, fresh, conflicts, plan = {}, meta = {}) {
   const { byCode } = await loadOfferingSections(ctx);
   const all = [...fresh, ...conflicts.map(c => c.row)];
 
@@ -343,6 +430,21 @@ export async function commitRoster(ctx, fresh, conflicts, meta = {}) {
   });
   if (eErr) return { error: eErr };
 
+  // 4 — cadets the file names whose enrollment we had dropped. See reactivateEnrollments().
+  const { reactivated, error: rErr } =
+    await reactivateEnrollments((plan.returning || []).map(e => e.enrollment_id));
+  if (rErr) return { error: rErr };
+
+  // 5 — the departures the operator confirmed, one at a time in the UI or in bulk. `dropped`,
+  // never deleted: their work stays, and every other reader in the app already ignores them.
+  const { dropped, error: dErr } =
+    await dropEnrollments((plan.departing || []).map(e => e.enrollment_id));
+  if (dErr) {
+    return { error: { message: `The roster imported, but removing ${(plan.departing || []).length} `
+                             + `departed cadet(s) failed: ${dErr.message}. Re-run the import to `
+                             + `retry — nothing else will be written twice.` } };
+  }
+
   // `created` is what the database actually inserted, not what we asked it to. The two differ
   // when a "fresh" cadet already existed but was invisible to this director — RLS only exposes
   // a student through an enrollment in an offering you direct, so someone who has only ever
@@ -356,6 +458,20 @@ export async function commitRoster(ctx, fresh, conflicts, meta = {}) {
     enrollments_created: enrollments.length,
   };
 
+  /* The drop and reactivate counts go in `notes`, not in columns of their own. DDL on schema `app`
+   * is sealed (CORE.md §0: `prep_app_owner` is NOLOGIN and a human has to unseal it), so adding
+   * two integer columns for this would mean a coordinated migration. A sentence in the free-text
+   * column that already exists carries the same audit fact today, and the columns can follow the
+   * next time the schema is opened for another reason. */
+  const notes = [
+    invisible ? `${invisible} cadet(s) already existed outside this director's visibility and `
+              + `were enrolled without changing their record.` : null,
+    dropped ? `${dropped} enrollment(s) dropped — on the roster but not in this file. Their `
+            + `records and work were kept.` : null,
+    reactivated ? `${reactivated} previously dropped enrollment(s) reactivated — named in this `
+                + `file again.` : null,
+  ].filter(Boolean);
+
   // The audit row is best-effort on purpose. The roster landed; failing the whole import
   // because the log did not is the wrong trade, and the operator would have no way to act on
   // it. Surfaced as a warning instead.
@@ -366,14 +482,12 @@ export async function commitRoster(ctx, fresh, conflicts, meta = {}) {
     rows_in_file: meta.rowsInFile ?? all.length,
     rows_matched: all.length,
     sections_created: meta.sectionsCreated || 0,
-    notes: invisible
-      ? `${invisible} cadet(s) already existed outside this director's visibility and were ` +
-        `enrolled without changing their record.`
-      : null,
+    notes: notes.length ? notes.join(' ') : null,
     ...counts,
   });
 
-  return { error: null, counts, invisible, auditWarning: aErr ? aErr.message : null };
+  return { error: null, counts, invisible, dropped, reactivated,
+           auditWarning: aErr ? aErr.message : null };
 }
 
 /**

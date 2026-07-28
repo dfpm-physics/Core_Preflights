@@ -21,6 +21,31 @@ const ENDPOINT = "https://api.anthropic.com/v1/messages";
 /* ── Per-lesson submit slug (generated from lesson number + topic) ── */
 const INTERACTION_ID = "lesson-02-electric-charge-and-coulombs-law";
 
+/* ── The structured-data block ───────────────────────────────────────────────────────────────
+ * The report ends with a fenced ```json block carrying the schema-1 assessment
+ * (INTERACTION-DATA-CONTRACT §5). It is machine payload: it rides in the submit URL's `d` key and
+ * is hidden everywhere a human looks, so it lives in exactly one place rather than being pasted
+ * into a report the cadet then reads.
+ *
+ * LAST fenced block, not the first: a conversation that happened to discuss JSON could leave one
+ * earlier in the message, and by contract the payload is the final thing in the report.
+ * A block that will not parse yields `data: null` and the report still submits with `r` alone —
+ * a malformed payload must never cost a cadet their work, which is the same tolerance rule the
+ * receiver applies (§7 step 3).
+ */
+function splitStructured(text) {
+  const src = String(text || "");
+  const blocks = [...src.matchAll(/```json\s*([\s\S]*?)```/g)];
+  const last = blocks[blocks.length - 1];
+  if (!last) return { markdown: src, data: null };
+  let data = null;
+  try { data = JSON.parse(last[1]); } catch (_) { data = null; }
+  const stripped = (src.slice(0, last.index) + src.slice(last.index + last[0].length)).trimEnd();
+  // Take the now-empty "## Structured Data" heading with it.
+  return { markdown: stripped.replace(/\n#{1,6}[ \t]*Structured Data[ \t]*$/i, "").trimEnd(), data };
+}
+const stripStructured = (text) => splitStructured(text).markdown;
+
 /* ── Probe-topic count (injected into the pacing note) ── */
 const PROBE_TOPIC_COUNT = 4;
 
@@ -640,7 +665,9 @@ const REPORT_FORMAT = `
 OUTPUT_REPORT_FORMAT
 
 The block below is the exact report you produce at the end. Begin it with the literal line
-"# JiTT Conversation Report". Do not wrap it in code fences. Nothing comes after "Tutor's Honest Notes".
+"# JiTT Conversation Report". Do not wrap it in code fences. After "Tutor's Honest Notes" comes
+exactly one more thing: the STRUCTURED DATA block described at the bottom of this format. Nothing
+follows that.
 
 # JiTT Conversation Report
 
@@ -708,6 +735,59 @@ Pick one:
 ## Tutor's Honest Notes
 
 A 2–4 sentence narrative summary in the AI's voice — what the conversation was actually like, what stood out, anything the structured fields above do not capture.
+
+## Structured Data
+
+MANDATORY. Everything above is prose for a human; this block is the same assessment in the shape
+the website can actually read. Emit it as the last thing in the report, as a fenced JSON code block
+tagged \`json\`, exactly once. The app strips it out before showing the report to the cadet — it is
+not something they read, and it is not optional.
+
+If you omit it the cadet's work is recorded and **earns no grade**: the site derives the grade from
+\`effort\` in this block, and there is no other source for it. The prose above cannot be parsed.
+Spec: docs/contracts/INTERACTION-DATA-CONTRACT.md §5.
+
+\`\`\`json
+{
+  "schema": 1,
+  "producer": "lesson-02-electric-charge-and-coulombs-law@2026-07",
+  "effort": 0,
+  "effort_rationale": "one line on why this score — engagement, NOT correctness",
+  "completed": true,
+  "duration_min": 0,
+  "message_count": 0,
+  "overall_understanding": 0,
+  "objectives": [
+    { "key": "short-slug", "label": "the probe topic in words", "understanding": 0, "confidence": 0 }
+  ],
+  "misconceptions": [
+    { "id": "short-slug", "label": "short name", "description": "one sentence on the wrong model",
+      "objective_key": "short-slug", "severity": "major", "evidence": "a clause in the cadet's own words" }
+  ],
+  "reading_reflection": {
+    "text": "the cadet's reflection, verbatim — the same words quoted above",
+    "meaningful": true, "engagement": 0, "topics": ["short-slug"], "sentiment": "neutral"
+  },
+  "honor": { "status": "none", "note": null },
+  "ai_summary": "one or two sentences",
+  "key_strengths": "…",
+  "recommended_review": "…",
+  "flags": { "needs_follow_up": false, "notable": false, "note": null }
+}
+\`\`\`
+
+Rules for the block, each of which the website depends on:
+- **Scales are integers 0–5.** \`effort\` measures ENGAGEMENT, not correctness — a cadet who worked
+  through everything and understood little still scores high. Understanding: 0 = not demonstrated,
+  1–2 = struggling/misconception, 3 = partial, 4–5 = solid.
+- **\`null\` is not \`0\`.** A topic never reached is \`null\` — \`0\` means assessed and lowest, and
+  writing \`0\` for "not reached" drags the class averages down with data you did not collect.
+- **\`reading_reflection.meaningful: false\` caps effort at 2**, per the reading-reflection gate.
+  Apply the cap yourself; the server re-applies it, and the two must agree.
+- **Set \`honor.status\` and the two \`flags\` on every report.** They drive the instructor's triage
+  pills directly, and \`honor\` in particular has no numeric proxy — nothing can infer it later.
+- **Use \`[]\`, not null, for empty lists**, and keep them bounded: ≤ 20 objectives,
+  ≤ 25 misconceptions, ≤ 12 topics.
 `;
 
 /* =============================================================================
@@ -811,7 +891,7 @@ Produce the report EXACTLY per OUTPUT_REPORT_FORMAT. Do not edit, soften, or omi
 - Stay structured — even if the conversation was chaotic, follow the exact format.
 - Do not editorialize about the cadet's effort or attitude — stick to what they understood.
 - If a section truly has nothing to report, say so explicitly rather than padding.
-Begin the report with the literal line "# JiTT Conversation Report" so the app can detect it. Do not wrap it in code fences; nothing comes after "Tutor's Honest Notes".
+Begin the report with the literal line "# JiTT Conversation Report" so the app can detect it. Do not wrap the report itself in code fences. End it with the mandatory Structured Data block (a fenced \`json\` block, exactly once) — the grade is derived from that block and from nothing else, so a report without it earns the cadet zero. Nothing comes after it.
 
 === AFTER THE REPORT — EXTENSION (UNTIMED) ===
 The report is its OWN message — do NOT append the extension offer after the report. Once you have delivered the report, the app will send a separate trigger for you to deliver the extension offer as its own message. In that message: note the timed portion is complete and the cadet may stop, then offer the classic problems with a one-line summary of each so the cadet can pick. Help ONLY by Socratic probing and the scaffold ladder — do not solve. Reveal a worked solution ONLY after the cadet has worked to a conclusion and is checking. Be ready to draft additional related problems on the fly if the cadet wants more variety. Use the extension to deepen conceptual understanding, not to drill. No additional reports — the submitted report covers the assignment.
@@ -1054,15 +1134,31 @@ export default function Lesson02Preflight() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   }
 
-  // ── Footer wiring (graded) ──
-  const reportMarkdown = hasReport
+  /* ── Footer wiring (graded) ──────────────────────────────────────────────────────────────
+   * THIS SENDS BOTH `r` AND `d`, and until 2026-07-28 it sent only `r`.
+   *
+   * That omission is why every Fall 2026 interactive submission needed /interaction-backfill: with
+   * no `d`, the receiver stores a null `content`, the auto-grade trigger has no `effort` to read
+   * and writes no grade, and /lesson-aggregate sees the student contribute nothing to the cohort.
+   * The artifact had ALREADY assessed all of it — it just never sent the machine-readable copy, so
+   * the assessment was reconstructed afterwards by an AI re-reading prose written for humans.
+   * INTERACTION-DATA-CONTRACT §3.1. Any artifact derived from this file must keep both keys.
+   */
+  const rawReport = hasReport
     ? reportText.slice(reportText.indexOf("# JiTT Conversation Report"))
     : "";
+
+  // `r` is the report WITHOUT the payload block; `d` is the payload. See splitStructured().
+  const { markdown: reportMarkdown, data: structured } = splitStructured(rawReport);
+
   const submitUrl = (hasReport && lzReady)
     ? "https://dfpm-physics.github.io/Core_Preflights/site/student/interaction-submit.html"
         + "#t=interaction"
         + "&i=" + INTERACTION_ID
         + "&r=" + window.LZString.compressToEncodedURIComponent(reportMarkdown)
+        + (structured
+            ? "&d=" + window.LZString.compressToEncodedURIComponent(JSON.stringify(structured))
+            : "")
     : null;
 
   // ── Render: START SCREEN ──
@@ -1165,10 +1261,14 @@ export default function Lesson02Preflight() {
             const bubbleClass = isReport ? "bubble assistant report-bubble"
               : isExt ? "bubble assistant extension-bubble"
               : `bubble ${m.role}`;
+            // The structured-data block is machine payload, not something the cadet reads. It is
+            // hidden here and stripped from `r` (see the submit wiring), so it exists in exactly
+            // one place: the `d` key of the submit URL.
+            const shown = isReport ? stripStructured(m.content) : m.content;
             return (
               <div key={idx} className={`bubble-wrap ${m.role}`}>
                 <div className={bubbleClass}>
-                  <RichText text={m.content} />
+                  <RichText text={shown} />
                 </div>
               </div>
             );

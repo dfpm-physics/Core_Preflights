@@ -271,11 +271,16 @@ An AI skill will later summarize trends by section.
    claude.ai. *(This was `site/interactions.html` until the 2026-07-28 promotion deleted it —
    students now navigate by assignment, not by modality.)*
 3. On finish, the artifact opens
-   `site/student/interaction-submit.html#i=<slug>&r=<lz-string payload>` — data rides in the
-   **URL hash** (GitHub Pages is static and can't accept a POST; the hash also keeps payloads
-   out of logs).
-4. The receiver decompresses the report, requires student login, and upserts into
-   `preflight_interaction_reports` — but only when the student clicks **Submit**.
+   `site/student/interaction-submit.html#t=interaction&i=<slug>&r=<lz report>&d=<lz json>` — data
+   rides in the **URL hash** (GitHub Pages is static and can't accept a POST; the hash also keeps
+   payloads out of logs). **Both `r` and `d` are required of the artifact.** `d` was written as
+   "recommended" until 2026-07-28 and the reference artifact never sent it, which is why every
+   Fall 2026 interactive submission needed `/interaction-backfill` to reconstruct its structured
+   data after the fact. Without `d` there is no `effort`, so the auto-grade trigger writes no grade
+   and the student contributes nothing to the cohort rollup — see contract §3.1.
+4. The receiver decompresses the report, requires student login, and — only when the student
+   clicks **Submit** — writes `submission_activities` (`report_markdown` = `r`, `content` = `d`)
+   and commits the submission, which auto-grades it (migration 015).
 
 **The artifact↔site contract:** the artifact's `#i=` slug **must match** an `interactions.id`
 the director created — otherwise the foreign key rejects the write. This is the one manual
@@ -287,8 +292,19 @@ the `schema: 1` structured-data spec — effort-graded, understanding diagnostic
 refactor, and since the 2026-07-28 promotion the real page at that same path, so the URL never
 changed. The pre-2026-07-16 endpoints (`artifact-submit.html` and `interaction-submit.html`, at
 root and under `site/`) were **retired without a redirect** and now 404; source is kept in
-`_archive/artifact-receiver-v1/`. Effort (0–5) auto-derives a 0–2 `score` via DB trigger
-(migration `013`); a non-meaningful reading reflection caps effort at 2.
+`_archive/artifact-receiver-v1/`. Effort (0–5) derives the points via the `app` trigger chain
+(migration `014` turns effort into points, `015` creates the finalized grade the moment an
+interactive submission commits); a non-meaningful reading reflection caps effort at 2, re-applied
+server-side because the value rides in a hash the student controls. *(The `public` equivalent was
+migration `013`'s 0–2 `score` trigger.)*
+
+**Re-submitting does not overwrite, on the graded path.** Migration 015 finalizes the grade on
+commit, and both the receiver page and the data layer refuse a second report once a finalized grade
+exists — the first submitted report is the one that counts, and only an instructor reopening the
+grade changes that. A `practice` path grades nothing, so re-running it *does* replace the stored
+report. The retired `public` receiver overwrote in every case, which is where the old
+"re-submitting will overwrite it" wording came from; it was removed from the submit page and from
+contract §7 on 2026-07-28.
 
 **Prefill links:** a Claude artifact can hand the director a one-click link that opens
 `site/faculty/lessons.html` with the New Interaction form already filled in

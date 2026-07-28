@@ -85,13 +85,24 @@ Any logged-in instructor can change their own password without contacting the co
 
 ## Adding Students (Roster Upload)
 
-> **This section describes the admin panel that is live today (`site/admin.html`, schema `public`),
-> and it is accurate for it.** The PREP v2 app (`site/`, schema `app`) replaced this whole
-> procedure on 2026-07-21 and takes the **registrar's export** instead of a hand-made three-column
-> CSV — real email addresses, squadron, majors, and advisor, with a per-student review step for
-> returning cadets, and no password reset by email. None of that is live until the cutover
-> ([`PREP-V2-CUTOVER.md`](PREP-V2-CUTOVER.md)); at that point everything below is superseded in one
-> go. See the 2026-07-21 entry in [`../../CHANGELOG.md`](../../CHANGELOG.md) for the new model.
+> ## ⚠ SUPERSEDED — the cutover happened on 2026-07-28
+>
+> **Everything in this section describes `site/admin.html`, which no longer exists.** The promotion
+> deleted it and put the PREP v2 app on the public paths. This banner used to say "none of that is
+> live until the cutover; at that point everything below is superseded in one go" — that is the
+> event, and this is the go.
+>
+> **The current procedure is [`site/help/instructor-accounts.md`](../../site/help/instructor-accounts.md)
+> → "Importing a roster",** which is the in-app help page a director actually reads. In one
+> paragraph, what changed: the import takes the **registrar's export as-is** (not a hand-made
+> three-column CSV), requires **Cadet EMPLID / Cadet Name / Email / Cadet Squadron / Section**,
+> filters out rows for other courses, reviews each returning cadet field by field, offers to create
+> sections the file names, provisions logins automatically, and — since 2026-07-28 — proposes
+> **removing cadets who are on the roster but not in the file**, listed by name for confirmation.
+> That check covers the whole offering, so **export the whole course**, not one section.
+> Sign-in is the cadet's **real registrar address**, not `studentID@usafa.edu`.
+>
+> The text below is kept only as a record of the retired `public` procedure. Do not follow it.
 
 Students are uploaded via CSV at the start of each semester.
 
@@ -118,6 +129,18 @@ After uploading, the Roster tab shows how many students lack login accounts. Cli
 ---
 
 ## Editing or Removing a Student
+
+> **⚠ SUPERSEDED with the section above** — there is no Roster tab. The live equivalents are
+> **Course Admin → Students**: **Move** for a section change, **Remove** for a departure. As of
+> 2026-07-28 **Remove no longer deletes anything, and nothing in the UI does** — a student may be
+> enrolled in another course, and their record is theirs rather than one offering's. Remove marks
+> the enrollment `dropped`, which takes the cadet out of the roster, grading, the gradebook and
+> every class number while keeping their account, submissions and grades. Removed cadets sit in a
+> collapsed list under the roster table with a **Re-enroll** button, and a roster import that names
+> them again brings them back automatically. Purging a row outright is an operator-tier script
+> action, not a button.
+>
+> The retired `public` procedure follows.
 
 Both actions are available directly in the **Roster** tab — no SQL required.
 
@@ -179,8 +202,15 @@ Use the **Manage Interactions** page: `…/interactions-admin.html`
 
 ### Student experience
 
-Students open `…/interactions.html`, click **Launch** on a lesson, complete the artifact,
-then sign in on the submit page to save their report. They can re-submit to overwrite.
+Students open `…/site/student/lessons.html`, click **Launch** on a lesson, complete the artifact,
+then sign in on the submit page to save their report.
+
+**They cannot re-submit a graded lesson.** This said "they can re-submit to overwrite" until
+2026-07-28, which was true of the retired receiver and is not true now: an interactive submission
+grades itself the moment it commits, and both the submit page and the database refuse a second
+report once a finalized grade exists. The first report is the one that counts. If a cadet needs
+another attempt, reopen their grade in the Grade tab. A lesson set up as **practice** grades
+nothing, so re-running that one does replace the stored report.
 
 ---
 

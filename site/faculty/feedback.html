@@ -45,9 +45,36 @@
       await load();
     }
 
-    async function load() {
+    /* ── Keeping the page still ──────────────────────────────────────────────
+     * Every interaction here re-renders the whole list, and this page is long: triaging item 40
+     * used to fire the page back to the top on every status click and again on save, so the
+     * reviewer had to re-find their place after each decision. Two causes, both fixed here:
+     *
+     *   1. `load()` replaced the list with a one-line spinner. That collapses the document to
+     *      about 100px, the browser clamps scrollTop to the new maximum, and the position is
+     *      GONE before the fetch even returns — restoring it afterwards cannot help. So a
+     *      refresh after a save is `quiet`: the old list stays on screen until the new one is
+     *      ready. The spinner still shows on first load, where there is nothing to preserve.
+     *   2. innerHTML replacement itself. Height is usually close enough that re-applying
+     *      scrollY lands in the same place; it is re-applied twice because the first assignment
+     *      happens before the browser has laid the new content out, so a taller list would clamp.
+     *
+     * Deliberately NOT scrollIntoView on the saved card: a resolved item drops out of the open
+     * list into the drawer, so following it would move the page as much as the jump it replaces.
+     * Holding the viewport still is what "nothing moved" actually means.
+     */
+    function keepScroll(fn) {
+      const y = window.scrollY;
+      fn();
+      window.scrollTo(0, y);
+      requestAnimationFrame(() => window.scrollTo(0, y));
+    }
+
+    async function load({ quiet = false } = {}) {
       const root = document.getElementById('main');
-      root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading feedback…</span></div>`;
+      if (!quiet) {
+        root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading feedback…</span></div>`;
+      }
       const res = await FB.loadFeedback();
       if (res.error) {
         root.innerHTML = `<div class="alert alert-error">Could not load feedback: ${esc(res.error.message)}</div>`;
@@ -58,6 +85,10 @@
     }
 
     function render() {
+      keepScroll(renderNow);
+    }
+
+    function renderNow() {
       const root = document.getElementById('main');
       const { pages, totals } = FB.buildMatrix(rows);
       const pending = FB.pendingRoadmap(rows);
@@ -310,7 +341,9 @@
         return;
       }
       dirty.delete(id);
-      await load();
+      // Quiet: the spinner would collapse the page and throw the scroll position away before the
+      // refetch returns. See keepScroll() above.
+      await load({ quiet: true });
     }
   </script>
 </body>

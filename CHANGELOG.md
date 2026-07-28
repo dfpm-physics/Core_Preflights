@@ -10,6 +10,135 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-28 — Matthew Recker via Claude
 
+### Seven post-cutover corrections and fixes
+
+First pass over the promoted site. Four of these are things the system *said* that were not true —
+which is the more expensive kind of defect here, because a director acts on them.
+
+**1. The submit page told students the opposite of what happens.** After saving an interaction
+report it said *"Re-submitting will overwrite it."* That was true of the retired `public` receiver
+and has been false since migration 015: a graded interactive submission finalizes its own grade on
+commit, and both the page and `submitInteractionReport()` then refuse a second report. The first
+report is the only report. It now says so — before submitting as well as after, since the point of
+knowing is to know beforehand — and correctly distinguishes **practice**, which grades nothing and
+therefore *does* replace on a re-run. Same correction in `INTERACTION-DATA-CONTRACT.md` §7,
+`PROJECT.md`, `SYSTEM_GUIDE.md`, `director-ai-rules.md`, and `student-getting-started.md`.
+
+**2. A roster import now removes cadets who are no longer on the roster.** The registrar's export
+*is* the roster, but the import was purely additive, so a cadet who dropped in week two stayed
+enrolled forever — on the roster page, in every cohort denominator, and rendered as a missing cell
+on every lesson after they left. The preview now lists everyone enrolled but absent from the file,
+ticked, un-tickable one at a time, and confirms by name before writing.
+
+Three decisions worth keeping:
+
+- **Scope is the whole offering.** The first cut restricted departures to sections the file itself
+  covered, hedging against a partial export proposing to empty a section it never mentioned. The
+  director's rule is that this cannot arise — *only directors import, and they import a whole
+  course at a time* — so the hedge bought nothing and cost the case most worth catching: a section
+  the export dropped entirely would never have been reconciled. Two guards remain and are not the
+  scope rule in disguise: **a file that matched no rows proposes nothing** (that is the signature
+  of the wrong file, and the operator gets the parse errors instead), and **a cadet named on a row
+  that was skipped for a data problem is never a departure** — a malformed email is something to
+  fix, not evidence somebody left. An `other-course` skip deliberately protects nobody.
+- **Dropped, never deleted.** The director's rule again: *a student is never deleted, because they
+  may be in another course.* `status='dropped'` is the whole answer rather than a compromise:
+  *every* other reader in the app already filters `status = 'active'` — grading, gradebook,
+  dashboard, rollup, EI, tasks — so a dropped cadet is out of the course in every sense a person
+  means, while their record and work survive a stale export. `loadRoster()` was the one reader that
+  ignored `status`, which is why `dropped` looked like a status that did nothing; it splits now,
+  and removed cadets sit in a drawer under the roster with a **Re-enroll** button.
+- **It undoes itself.** A cadet named in a later export is reactivated automatically
+  (`returning()`), because the enrollment upsert is `ignoreDuplicates` and would otherwise find
+  their dropped row, change nothing, and leave them outside the course permanently.
+
+**Also changed: the per-student Remove button no longer deletes, and `removeEnrollment()` is
+gone.** It cascaded away every submission and grade for the offering, irreversibly, from a button
+beside a search box — defensible as the only removal on the page, and not for a moment after a file
+upload could do the same to twenty people. Both paths now drop. Purging a row outright is an
+operator-tier script action (the `tests/app-schema/cleanup.py` pattern), taken deliberately.
+
+**3. Preview on every assignment card.** Seeing what a lesson asks required Edit → Preview →
+Cancel — a write-shaped path to a read-only answer, and director-only besides. The card button sits
+outside the director gate. Both entry points are relabelled **free response** (the modal said
+"questions", which read as though it might include the interaction; it cannot — that is a claude.ai
+artifact), and the editor's heading now says its preview includes unsaved edits, since the two
+sources differ.
+
+**4. Gradebook: a missing cell becomes an explicit `0` once the column is graded.** Director's
+call, and a real distinction: before grading, `—` says "nothing arrived" and is still provisional —
+late work may yet be accepted. After grading it is settled, and what the student has is not an
+absence but a zero. The old display said `—` forever, so the grid never showed the number the total
+was already built from (MISSING has always counted zero-out-of-full). **Display only** —
+`gradedScopes()` feeds `cellState()` and never reaches `totalsFor()`, pinned by a test, because a
+percentage that moved when an instructor finished grading rather than when work arrived would be
+worse than the thing being fixed. Scoped per *section*, so an M-day section finished on Tuesday
+does not zero out the T-day section a day before its work is due, and keyed on a **finalized**
+grade, because announcing a classmate's zero off an unconfirmed AI draft reports a decision nobody
+made.
+
+The ungraded-submission indicator was a middle dot in `--muted`, which at 0.84em in a grid of
+0/1/2 was indistinguishable from an empty cell — so the one state representing the *instructor's*
+backlog was the least visible thing on the page. It is now a **✓ in gold**, the colour that already
+means "still needs you" on this grid. The dash keeps red only for the settled zero; the provisional
+one is muted, since a wall of red on an ungraded column reads as a class in trouble rather than an
+instructor with work to do.
+
+**5. The JSON backup's PII warning was wrong twice.** It said *"Contains student PII and every
+free-response answer"*. `buildBackup()` reads `assignment_offerings`, `enrollments`, `submissions`
+and `grades` and never touches `submission_activities` — so there is **no student writing in the
+file at all** — and name + cadet ID + score are explicitly not treated as PII in this system
+(`faculty-rollup.js:882`, contract §4). Calling it a disclosure made the one export a director
+should be able to take routinely look like a liability. It now says what the file is: a gradebook.
+
+**6. Saving a feedback item no longer jumps the page to the top.** Two causes. `load()` replaced
+the list with a one-line spinner, which collapses the document and makes the browser clamp
+scrollTop *before* the refetch returns — restoring afterwards cannot help, so a post-save refresh
+is now quiet. And every status click re-rendered; `render()` preserves and re-applies `scrollY`
+around the innerHTML swap. The roster import's departure checkboxes were written the same way for
+the same reason — they update the commit button rather than re-rendering a hundred-row table under
+the person reading it.
+
+**7. The artifact contract, opened.** Two things were wrong and one needed confirming.
+
+- **`d` is now REQUIRED of producers** (contract §3.1). It was "recommended", written when nothing
+  depended on it; three things now do. Without `d` the receiver stores a null `content`, migration
+  015's trigger has no `effort` and writes **no grade**, and `/lesson-aggregate` sees the student
+  contribute nothing to the cohort — a report that lands and earns zero. **The reference artifact
+  built its submit URL from `t`, `i` and `r` only**, which is exactly why every Fall 2026
+  interactive submission needed `/interaction-backfill`: the artifact had already assessed all of
+  it and simply never sent the machine-readable copy, so it was reconstructed afterwards by an AI
+  re-reading prose written for humans. Fixed at the source — the report format now mandates a
+  trailing fenced `json` block, and the artifact extracts it into `d`, strips it from `r`, and
+  hides it from the cadet. A malformed block degrades to an `r`-only submission rather than costing
+  anyone their work. The **receiver still accepts** a `d`-less report and always will: "required"
+  binds the producer, not the receiver, so no deployed artifact breaks.
+- **§7 described a receiver that has not existed for months** — `preflight_interaction_reports`, a
+  `report_data` column, a `score` trigger — including the "re-submitting overwrites" rule from
+  item 1. Rewritten against the live `app` receiver. The wire format it documents is unchanged.
+- **The endpoint is correct post-promotion, verified rather than assumed** (§2). The real receiver
+  is on disk at `site/student/interaction-submit.html`, the contract URL matches it character for
+  character, and the reference artifact builds from that same string. All three agree; nothing
+  needs changing and nothing may be changed.
+- Added **§10, a producer checklist** — the nine things to check before a lesson artifact goes to
+  students, because the failure mode for most of them is silent.
+
+**Verification.** `tests/app-schema/run.mjs`: **339 passed, 0 failed**, including new coverage for
+`departures()`/`returning()` (the scope rule, the empty-file case, already-dropped rows, string-vs-
+number cadet ids) and `gradedScopes()`/`cellState()` (per-section scoping, finalized-only, and that
+the totals are byte-identical either way). The two live suites that touch a signed-in student
+(`test-student`, `test-isolation`) fail at sign-in with *Invalid login credentials* — **confirmed
+pre-existing** by re-running them against a stashed tree; the test cadet's account needs attention,
+unrelated to this work. Every inline `<script type="module">` on the five edited pages was parsed
+with `node --check` (this caught one real defect: a backtick inside a template literal in
+`admin.html`). **Not verified in a browser** — CORE.md §2 asks that this be said plainly, and the
+UI changes (roster departure table, gradebook cells, card preview, feedback scroll) want a pass at
+`python -m http.server 8000` before anyone relies on them.
+
+**`site/help/DOC-STATUS.json` needs regenerating after this commit** —
+`check_doc_sources.py status --write` records a commit hash, so running it against a dirty tree
+would ship a snapshot claiming everything is stale.
+
 ### PREP v2 cutover, Phase 4: `site/app/` promoted to `site/`
 
 **The redesign is now the site.** `site/app/` no longer exists — its 109 files moved up to `site/`,

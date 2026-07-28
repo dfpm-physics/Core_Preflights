@@ -231,10 +231,19 @@
           const d = decor(c);
           return `<td class="gb-cell gb-draft${d.tintCls}"${d.style} title="${esc(t + ' — suggested, not finalized' + d.sig)}">${c.points}<sup>?</sup>${late}</td>`;
         }
+        // Submitted, waiting on the instructor. Was a middle dot, which at 0.84em in a grid of
+        // 0/1/2 was indistinguishable from an empty cell — so the one state that represents the
+        // INSTRUCTOR's backlog was the least visible thing on the page. A tick says "work is in"
+        // at a glance and cannot be misread as a score, and it carries the same gold the draft
+        // marker uses, which already means "still needs you" everywhere else on this grid.
         case GB.CELL.UNGRADED:
-          return `<td class="gb-cell gb-ungraded" title="${esc(t)} — submitted, not yet graded">·${late}</td>`;
+          return `<td class="gb-cell gb-ungraded" title="${esc(t)} — submitted, not yet graded">✓${late}</td>`;
+        // Nothing submitted. A dash while the column is still being graded; a hard 0 once it has
+        // been (GB.gradedScopes) — which is what the student's total has counted all along.
         case GB.CELL.MISSING:
-          return `<td class="gb-cell gb-missing" title="${esc(t)} — nothing submitted">—</td>`;
+          return c.columnGraded
+            ? `<td class="gb-cell gb-missing" title="${esc(t)} — nothing submitted; graded as 0 of ${c.possible}">0</td>`
+            : `<td class="gb-cell gb-missing gb-nosub" title="${esc(t)} — nothing submitted, not yet graded">—</td>`;
         default:
           return `<td class="gb-cell gb-pending" title="${esc(t)} — not due yet"></td>`;
       }
@@ -250,8 +259,9 @@
 
     function legend(stats) {
       return `<div class="gb-legend">
-        <span><b class="gb-key gb-missing">—</b> not submitted</span>
-        <span><b class="gb-key gb-ungraded">·</b> submitted, ungraded</span>
+        <span><b class="gb-key gb-missing gb-nosub">—</b> not submitted, not yet graded</span>
+        <span><b class="gb-key gb-missing">0</b> not submitted, graded</span>
+        <span><b class="gb-key gb-ungraded">✓</b> submitted, awaiting grading</span>
         <span><b class="gb-key gb-draft">2<sup>?</sup></b> AI suggestion, not finalized</span>
         <span><b class="gb-key">⏰</b> arrived late</span>
         <span class="gb-leg-sep">cell colour = understanding ${rampSwatch()} low→high · number = effort (0/1/2)</span>
