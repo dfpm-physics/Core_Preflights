@@ -129,7 +129,7 @@ Reusable definitions, independent of any semester:
 | `slug` | Short name, unique per course — `preflight-02`. Two courses may both use it |
 | `title`, `description` | What faculty and students see |
 | `objectives` | The shared list of learning objectives both activities report against |
-| `is_archived` | Retired from the library without deleting history |
+| `is_archived` | Marks an assignment retired without deleting its history. Nothing reads it since the library picker was removed (July 2026) — it is a flag kept for the record, not a control |
 
 An assignment carries **no due date, no points, and no grading policy**. Those are all per-semester.
 

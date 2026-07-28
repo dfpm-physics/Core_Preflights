@@ -1,10 +1,10 @@
-PREP keeps **what a piece of work is** separate from **when you give it**. A preflight you write
-once is a permanent library entry; scheduling it into Fall 2026 creates a second, separate record
-that carries the due dates and points. Next semester you schedule that library entry again, and
-PREP gives the new semester **its own copy** of the questions.
+PREP keeps **what a piece of work is** separate from **when you give it**. The questions are one
+record; the semester's run of them — due dates, points, publish state — is a second record pointing
+at the first. Each semester holds **its own copy** of the questions.
 
-That separation is why a preflight can run for years, why two courses can both have a
-`preflight-02` without colliding, and why last semester's grades stay attached to last semester.
+That separation is why two courses can both have a `preflight-02` without colliding, why editing a
+question changes only the semester you are in, and why last semester's grades stay attached to last
+semester.
 
 ## The four things you work with
 
@@ -81,25 +81,25 @@ unlock records who performed it, and the database refuses an anonymous one.
 The full list of rules the database enforces, and what happens when each is tested, is in
 [Data model reference](help.html?doc=schema-reference).
 
-## Reusing work next semester
+## Running the same work next semester
 
-To run an assignment again, schedule the same assignment into the new course offering and set new
-due dates and points there.
+**Assignments belong to the semester they were created in.** The Assignments page builds this
+semester's assignments and nothing else — there is no picker offering last semester's, because
+picking one would be ambiguous about whose questions you were then editing.
 
-**Each semester gets its own copy of the questions.** When you schedule an assignment that another
-semester is already running, PREP copies it rather than sharing one set of questions between the
-two. The card in the library says so before you pick it, and the editor says so again before you
-save. Editing the questions afterwards changes only the semester you are in. If the plain id is
-already taken, the copy takes the semester's name as well — `preflight-02-spring-2027`.
+A new semester's schedule is built one of two ways: authored in the editor with **+ New
+assignment**, or built in bulk by the course-build script (`scripts/fall2026/`), which is how a
+40-lesson term is normally set up. Either way the new semester ends up with its own questions, and
+editing them changes nothing anywhere else.
 
-That copy is why editing a lesson is safe. Until July 2026 both semesters shared one set of
-questions, so correcting a typo in one term rewrote the other, and deleting a lesson from one term
-deleted the other term's student work with it.
+That isolation is the point. Until July 2026 two semesters shared one set of questions, so
+correcting a typo in one rewrote the other, and deleting a lesson from one deleted the other's
+student work with it.
 
-**An interactive lesson is not copied, and cannot be.** A published artifact sends its results back
-under one id, that id belongs to one semester, and nothing can change that once cadets have the
-link. So a new semester needs a **rebuilt artifact with a new id** — ask the chat that produced the
-lesson to re-issue it, and it will generate one. Add it to the copied assignment when you have it.
+**An interactive lesson always needs rebuilding for a new semester.** A published artifact sends
+its results back under one id, that id belongs to one semester, and nothing can change that once
+cadets have the link. Ask the chat that produced the lesson to re-issue it — it will generate a new
+id — then add it to the new semester's assignment.
 
 **Warning:** Replacing an interactive lesson's id deletes the reports already submitted under the
 old one. Freeze the previous semester before you rebuild, or the record of what that class worked

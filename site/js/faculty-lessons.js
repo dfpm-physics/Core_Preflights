@@ -126,19 +126,29 @@ export const isValidSlug = (s) => /^[a-z0-9-]+$/.test(String(s || '').trim());
  * ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Everything the Lessons page renders.
+ * Everything the Lessons page renders: what is SCHEDULED in ctx.currentOffering, and the sections
+ * whose deadlines the editor sets.
  *
- * Two lists, because v2 separates the two questions the old single list conflated:
- *   lessons — what is SCHEDULED in ctx.currentOffering (this term's run)
- *   library — assignments in ctx.currentCourse NOT scheduled here yet (available to schedule)
+ * ── THE SECOND LIST IS GONE (2026-07-28) ─────────────────────────────────────────────────────
+ * This also returned a `library` — every assignment of the course not scheduled in THIS offering,
+ * which the page rendered as a strip of pickable cards. It was the last survivor of the old
+ * "orphan" model, where a lesson was assembled from loose preflight and interaction rows, and it
+ * had stopped telling the truth: after each term got its own copy of its content, every OTHER
+ * term's containers showed up in that strip, labelled as unscheduled material to pick from. They
+ * are not unscheduled — they belong to a different run of the course.
+ *
+ * Removing the list removes the query. Assignments are now authored for the term they are in
+ * (the editor, or scripts/fall2026/), which is what per-offering content isolation already made
+ * true underneath. saveLesson() still refuses to SHARE a container across offerings if some
+ * future caller hands it one — see its step 1; that is a data-layer guarantee, not a UI feature.
  *
  * Directors see drafts; instructors see only published offerings (RLS already enforces the
  * read side — the filter narrows the query, it does not secure it).
  *
- * @returns {{ noCourse?, isDirector, lessons:[], library:[], meetingDays:[], sections:[] }}
+ * @returns {{ noCourse?, isDirector, lessons:[], meetingDays:[], sections:[] }}
  */
 export async function loadManager(ctx) {
-  const empty = { noCourse: true, isDirector: false, lessons: [], library: [], meetingDays: [], sections: [] };
+  const empty = { noCourse: true, isDirector: false, lessons: [], meetingDays: [], sections: [] };
   if (!ctx.currentOffering || !ctx.currentCourse) return empty;
   const isDirector = ctx.isDirectorForCurrent();
 
@@ -148,28 +158,11 @@ export async function loadManager(ctx) {
     .order('position', { ascending: true, nullsFirst: false });
   if (!isDirector) offeringQ = offeringQ.eq('is_published', true);
 
-  const [{ data: offeringRows }, { data: libraryRows }, { data: sectionRows }, { data: elsewhereRows }] =
-    await Promise.all([
+  const [{ data: offeringRows }, { data: sectionRows }] = await Promise.all([
     offeringQ,
-    // The catalogue for this course, with its activities — the "schedule an existing
-    // assignment" picker. Archived containers are hidden; they are the v2 retirement flag.
-    db.from('assignments')
-      .select('id,course_id,kind_id,slug,title,description,objectives,is_archived,' +
-              'activities(id,slug,modality,title,content,position)')
-      .eq('course_id', ctx.currentCourse).eq('is_archived', false)
-      .order('slug'),
     db.from('sections')
       .select('id,code,meeting_days,period')
       .eq('course_offering_id', ctx.currentOffering).order('code'),
-    // Which OTHER runs of this course already schedule each container. Picking one of those is
-    // not a plain re-attach: saveLesson() copies it so the two terms stop sharing content, and
-    // the card says so before the director commits. Same RLS limit as otherOfferingsUsing() —
-    // `ao_read_staff` scopes this to offerings the caller staffs, so a term run entirely by
-    // somebody else comes back invisible and the card simply does not mention it.
-    db.from('assignment_offerings')
-      .select('assignment_id, course_offering_id, course_offerings!inner(course_id, terms(label))')
-      .eq('course_offerings.course_id', ctx.currentCourse)
-      .neq('course_offering_id', ctx.currentOffering),
   ]);
 
   const lessons = (offeringRows || [])
@@ -184,62 +177,13 @@ export async function loadManager(ctx) {
     .sort((a, b) => (a.lessonNumber ?? 1e9) - (b.lessonNumber ?? 1e9)
                  || String(a.slug || '').localeCompare(String(b.slug || '')));
 
-  const scheduled = new Set(lessons.map(l => l.assignmentId));
-  // assignment id -> the labels of the other terms running it, deduped.
-  const elsewhere = new Map();
-  (elsewhereRows || []).forEach(r => {
-    const label = r.course_offerings?.terms?.label || 'another term';
-    const seen = elsewhere.get(r.assignment_id) || [];
-    if (!seen.includes(label)) elsewhere.set(r.assignment_id, [...seen, label]);
-  });
-
-  const library = (libraryRows || []).map(a => {
-    const acts = (a.activities || []).slice()
-      .sort((x, y) => (x.position ?? 0) - (y.position ?? 0));
-    return {
-      id: a.id,
-      slug: a.slug,
-      title: a.title,
-      description: a.description,
-      courseId: a.course_id,
-      kind: a.kind_id,
-      objectives: Array.isArray(a.objectives) ? a.objectives : [],
-      activities: acts,
-      written: acts.find(x => x.modality === 'written') || null,
-      interactive: acts.find(x => x.modality === 'interactive') || null,
-      questionCount: (acts.find(x => x.modality === 'written')?.content?.questions || []).length,
-      // Which offering in THIS term already runs it (null = free to schedule).
-      scheduledAs: lessons.find(l => l.assignmentId === a.id)?.offeringId || null,
-      isScheduled: scheduled.has(a.id),
-      // Other terms already running it. Non-empty means scheduling it here COPIES it.
-      scheduledIn: elsewhere.get(a.id) || [],
-    };
-  });
-
   const sections = sectionRows || [];
   // The distinct meeting-day letters actually present in this offering. The old page hardcoded
   // M and T; the pattern is data on the section now, so the due-date UI is generated from it
   // and a course meeting W/F needs no code change.
   const meetingDays = [...new Set(sections.flatMap(s => s.meeting_days || []))].sort();
 
-  return { noCourse: false, isDirector, lessons, library, sections, meetingDays };
-}
-
-/** One library assignment with its activities — used when the editor opens a container. */
-export async function getLibraryAssignment(assignmentId) {
-  if (!assignmentId) return null;
-  const { data } = await db.from('assignments')
-    .select('id,course_id,kind_id,slug,title,description,objectives,is_archived,' +
-            'activities(id,slug,modality,title,content,position)')
-    .eq('id', assignmentId).maybeSingle();
-  if (!data) return null;
-  const acts = data.activities || [];
-  return {
-    ...data,
-    objectives: Array.isArray(data.objectives) ? data.objectives : [],
-    written: acts.find(a => a.modality === 'written') || null,
-    interactive: acts.find(a => a.modality === 'interactive') || null,
-  };
+  return { noCourse: false, isDirector, lessons, sections, meetingDays };
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -415,14 +359,17 @@ export async function retroactivelyUpdateGrades(offeringId, questions, pointsPos
  * ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Which OFFERINGS schedule this library container, other than the one being saved into.
+ * Which OFFERINGS schedule this container, other than the one being saved into.
  *
- * A non-empty answer is what turns "schedule this from the library" into "copy this into my
- * term" (see saveLesson step 1). Same RLS limit as otherOfferingsUsing(): `ao_read_staff` scopes
- * `assignment_offerings` to offerings the caller staffs, so a term run entirely by somebody else
- * is invisible here and the copy does not trigger. That fails to the OLD behaviour — shared
- * content — rather than to a wrong write, and `app_invariant_test.py` reports any sharing that
- * survives, from the operator tier, which is not subject to RLS.
+ * A non-empty answer means saveLesson() must COPY rather than attach (step 1). No UI path reaches
+ * that branch any more — the library picker that did was removed 2026-07-28 — so this is what
+ * keeps the guarantee true for whatever calls saveLesson() next, not a live flow.
+ *
+ * Same RLS limit as otherOfferingsUsing(): `ao_read_staff` scopes `assignment_offerings` to
+ * offerings the caller staffs, so a term run entirely by somebody else is invisible here and the
+ * copy does not trigger. That fails to the OLD behaviour — shared content — rather than to a wrong
+ * write, and `supabase/admin/content_isolation_check.py` reports any sharing that survives, from
+ * the operator tier, which is not subject to RLS.
  *
  * @returns {Array<{offeringId, courseOfferingId, label}>}
  */
@@ -513,10 +460,10 @@ async function activitiesOf(assignmentId) {
  *              a silent bulk total rewrite is exactly what a director has to be told about).
  *   unchosen — students whose committed choice was cleared because the activity they picked was
  *              detached from the offering (the composite FK is ON DELETE SET NULL).
- *   copiedFrom — set when the library container was already running in another term, so this term
- *              got its own copy instead of sharing one: { assignmentId, terms[] }. The page says
- *              so, because the copy's slug may be term-qualified and the interaction did not come
- *              with it. See step 1.
+ *   copiedFrom — set when the container handed in was already running in another term, so this
+ *              term got its own copy instead of sharing one: { assignmentId, terms[] }. Nothing in
+ *              the page can produce this today; it is reported rather than swallowed so a caller
+ *              that does gets told the slug may be term-qualified. See step 1.
  */
 export async function saveLesson(ctx, model, editingOfferingId) {
   const out = { error: null, offeringId: editingOfferingId || null, rescored: 0, unchosen: 0,
@@ -860,9 +807,11 @@ export async function countActivityReports(activityId) {
 /**
  * Unschedule: delete the assignment_offering only.
  *
- * The library assignment and its activities survive and can be scheduled again — that is the
- * v2 equivalent of "delete the container, keep the parts". What does NOT survive is this
- * term's submissions and grades, which cascade. countLessonWork() first, always.
+ * The assignment and its activities survive, belonging to no term — the v2 equivalent of "delete
+ * the container, keep the parts". Since the library picker was removed (2026-07-28) nothing
+ * schedules them again, so this leaves content no page reads; deleteLessonAndContents() is the
+ * one that clears it too. What does NOT survive is this term's submissions and grades, which
+ * cascade. countLessonWork() first, always.
  */
 export function unscheduleLesson(offeringId) {
   return db.from('assignment_offerings').delete().eq('id', offeringId);

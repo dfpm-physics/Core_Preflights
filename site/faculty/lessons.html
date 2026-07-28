@@ -26,9 +26,6 @@
       <div class="modal-head"><h2 id="lm-title">New assignment</h2><button class="modal-close" data-close>×</button></div>
       <div class="alert alert-error" id="lm-error" style="display:none"></div>
       <div class="alert alert-warn" id="lm-notice" style="display:none"></div>
-      <!-- Its own element rather than a second use of lm-notice: that one belongs to the
-           interaction-swap flow, which hides it whenever no swap is pending. -->
-      <div class="alert alert-warn" id="lm-copy-notice" style="display:none"></div>
 
       <div class="row wrap" style="gap:14px">
         <div class="field grow" style="min-width:180px"><label for="f-course">Course &amp; term</label><select id="f-course"></select></div>
@@ -258,7 +255,6 @@
     let vm = null, editingId = null, model = null, interactionSlugTouched = false;
     // Set only when saving would REPLACE an existing interactive activity with a different slug.
     let pendingSwap = null;   // { activityId, fromSlug, fromTitle, reports }
-    let compose = { assignmentId: null };   // the "schedule an existing assignment" selection
     let ragManifest = [];                   // approved RAG reference paths (shared manifest)
     const isDirector = () => ctx.isDirectorForCurrent();
 
@@ -330,120 +326,29 @@
       const root = document.getElementById('main');
       root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
       vm = await L.loadManager(ctx);
-      compose = { assignmentId: null };
 
       const newBtn = isDirector() ? `<button class="btn btn-primary" id="new-btn">+ New assignment</button>` : '';
       const head = `<div class="page-head">
         <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
           <div><h1>Assignments</h1>
-            <div class="sub">${isDirector() ? 'Schedule library content or author new — then publish' : 'Published assignments'} for ${esc(ctx.courseTitleOf(ctx.currentOffering))}${ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''}.</div></div>
+            <div class="sub">${isDirector() ? 'Author this term\'s assignments — then publish' : 'Published assignments'} for ${esc(ctx.courseTitleOf(ctx.currentOffering))}${ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''}.</div></div>
           ${newBtn}
         </div></div>`;
 
       if (vm.noCourse) { root.innerHTML = head + `<div class="alert alert-warn">No course access found.</div>`; return; }
 
-      const composeHtml = isDirector() ? composeRegion() : '';
       const body = vm.lessons.length
         ? vm.lessons.map(card).join('')
         : `<div class="empty-state"><div class="es-ic">📚</div><h3>No assignments scheduled this term</h3>
-             <p>${isDirector()
-                  ? (composeHtml ? 'Pick an assignment from the library above to schedule it, or click <strong>+ New assignment</strong>.'
-                                 : 'Click <strong>+ New assignment</strong> to create one.')
-                  : 'Nothing has been published yet.'}</p></div>`;
+             <p>${isDirector() ? 'Click <strong>+ New assignment</strong> to create one.'
+                               : 'Nothing has been published yet.'}</p></div>`;
 
-      root.innerHTML = head + composeHtml + body;
+      root.innerHTML = head + body;
       wireNew();
       document.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openEdit(b.dataset.edit)));
       document.querySelectorAll('[data-prev]').forEach(b => b.addEventListener('click', () => openCardPreview(b.dataset.prev)));
       document.querySelectorAll('[data-pub]').forEach(b => b.addEventListener('click', () => doTogglePublish(b.dataset.pub)));
       document.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => openDeleteModal(vm.lessons.find(x => x.offeringId === b.dataset.del))));
-      if (isDirector()) wireCompose();
-    }
-
-    // ── Schedule from the library (main page) ─────────────────────────────
-    // The old page dragged an orphan preflight and an orphan interaction into two boxes and
-    // stapled them together. In `app` the written questions and the artifact are both activities
-    // OF ONE assignment container, so there is one thing to pick — the container — and its
-    // activities come with it. See the header of faculty-lessons.js.
-    function libraryCard(a) {
-      const bits = [];
-      if (a.written) bits.push(`${a.questionCount} q`);
-      if (a.interactive) bits.push('interactive');
-      // Already running elsewhere → scheduling it here COPIES it rather than sharing it, which
-      // changes what the director gets (their own questions to edit; no interaction). Saying so
-      // on the card is cheaper than explaining it after the save.
-      const elsewhere = (a.scheduledIn || []).length
-        ? `<span class="lb-orphan-meta">↳ copy of the one in ${esc(a.scheduledIn.join(', '))}</span>`
-        : '';
-      return `<div class="lb-orphan ${a.interactive ? 'int' : 'pf'}" draggable="true"
-                data-oid="${esc(a.id)}" title="Drag into the box below, or click">
-        <span class="lb-orphan-badge">${esc(a.slug)}</span>
-        <span class="lb-orphan-title">${esc(a.title || a.slug)}</span>
-        <span class="lb-orphan-meta">${esc(bits.join(' · ') || 'empty')}</span>
-        ${elsewhere}
-      </div>`;
-    }
-    function composeRegion() {
-      const free = (vm.library || []).filter(a => !a.isScheduled);
-      if (!free.length) return '';
-      return `<div class="lb-compose" id="lb-compose">
-        <div class="lb-compose-head"><strong>Schedule an assignment from the library</strong>
-          <div class="muted" style="font-size:.82em;margin-top:2px">These exist in <code>${esc(ctx.currentCourseCode || '')}</code> but are not scheduled this term. Drop one into the box (or click it), then schedule it — you set its points, deadline, and which activity carries credit.</div></div>
-        <div class="lb-orphans">${free.map(libraryCard).join('')}</div>
-        <div class="lb-drops">
-          <div class="lb-drop" data-drop="assignment" id="drop-asg">
-            <div class="lb-drop-label">Assignment to schedule</div>
-            <div class="lb-drop-slot empty" id="slot-asg">Drop an assignment here</div></div>
-        </div>
-        <div class="row" style="gap:10px;margin-top:12px;align-items:center">
-          <button class="btn btn-primary" id="compose-make" disabled>Schedule this term →</button>
-          <button class="btn btn-ghost btn-sm" id="compose-clear">Clear</button>
-        </div>
-      </div>`;
-    }
-    function renderComposeSlots() {
-      const slot = document.getElementById('slot-asg');
-      if (!slot) return;
-      const a = (vm.library || []).find(x => x.id === compose.assignmentId);
-      if (!a) {
-        slot.innerHTML = 'Drop an assignment here';
-        slot.classList.add('empty'); slot.classList.remove('filled');
-      } else {
-        slot.innerHTML = `<span class="lb-slot-title">${esc(a.title || a.slug)}</span>`
-          + `<button class="lb-slot-x" data-clear="1" title="Remove">×</button>`;
-        slot.classList.remove('empty'); slot.classList.add('filled');
-      }
-      document.querySelectorAll('.lb-orphan[data-oid]').forEach(c =>
-        c.classList.toggle('selected', compose.assignmentId === c.dataset.oid));
-      const make = document.getElementById('compose-make');
-      if (make) make.disabled = !compose.assignmentId;
-    }
-    function wireCompose() {
-      const region = document.getElementById('lb-compose');
-      if (!region) return;
-      region.querySelectorAll('.lb-orphan[data-oid]').forEach(cardEl => {
-        cardEl.addEventListener('dragstart', e => {
-          e.dataTransfer.setData('text/plain', cardEl.dataset.oid);
-          e.dataTransfer.effectAllowed = 'copy';
-        });
-        cardEl.addEventListener('click', () => { compose.assignmentId = cardEl.dataset.oid; renderComposeSlots(); });
-      });
-      const box = region.querySelector('.lb-drop');
-      box.addEventListener('dragover',  e => { e.preventDefault(); box.classList.add('over'); });
-      box.addEventListener('dragleave', () => box.classList.remove('over'));
-      box.addEventListener('drop', e => {
-        e.preventDefault(); box.classList.remove('over');
-        const id = e.dataTransfer.getData('text/plain');
-        if (!id) return;
-        compose.assignmentId = id; renderComposeSlots();
-      });
-      region.addEventListener('click', e => {
-        if (e.target.closest('[data-clear]')) { compose.assignmentId = null; renderComposeSlots(); }
-      });
-      document.getElementById('compose-clear').addEventListener('click', () => { compose.assignmentId = null; renderComposeSlots(); });
-      document.getElementById('compose-make').addEventListener('click', () => {
-        if (compose.assignmentId) openEdit(null, { assignmentId: compose.assignmentId });
-      });
     }
 
     function comp(ok, label) {
@@ -508,7 +413,6 @@
     function blankModel() {
       return {
         assignmentId: null,
-        copyOf: null,                    // set when this pick will be copied — renderCopyNotice()
         policy: 'choice', questions: [],
         written:     { include: true, reference_pdf: '', reference_pages: '', reading_link: '' },
         interactive: { include: true, slug: '', title: '', artifact_url: '', description: '' },
@@ -556,35 +460,6 @@
       };
     }
 
-    /** Editor model from a library assignment being scheduled for the first time. */
-    function modelFromLibrary(a) {
-      const m = blankModel();
-      m.assignmentId = a.id;
-      m.written.include = !!a.written;
-      m.questions = JSON.parse(JSON.stringify(a.written?.content?.questions || []));
-      m.written.reference_pdf   = a.written?.content?.reference_pdf   || '';
-      m.written.reference_pages = a.written?.content?.reference_pages || '';
-      m.written.reading_link    = a.written?.content?.reading_link    || '';
-
-      // Another term already runs this container, so saving makes THIS term its own copy
-      // (faculty-lessons.js saveLesson step 1). The questions copy; the interaction cannot —
-      // one artifact posts to one id in one term. Clear it here rather than let the director
-      // fill in a form whose interaction half the save would refuse.
-      m.copyOf = (a.scheduledIn || []).length ? { slug: a.slug, terms: a.scheduledIn.slice() } : null;
-
-      m.interactive.include = !!a.interactive && !m.copyOf;
-      if (a.interactive && !m.copyOf) {
-        m.interactive.slug = a.interactive.slug;
-        m.interactive.title = a.interactive.title || '';
-        m.interactive.artifact_url = a.interactive.content?.artifact_url || '';
-        m.interactive.description  = a.interactive.content?.description  || '';
-        m.existingInteractive = { id: a.interactive.id, slug: a.interactive.slug };
-      }
-      const hasInteractive = m.interactive.include;
-      m.policy = (a.written && hasInteractive) ? 'choice' : (hasInteractive ? 'interaction' : 'preflight');
-      return m;
-    }
-
     // Two questions are always pinned first when authoring written questions: Q1 is a reading-time
     // diagnostic (0 pts, names hidden) and Q2 is the shared reading reflection (the meaningful-gate,
     // identical to the interaction).
@@ -622,43 +497,14 @@
       model.questions.sort((a, b) => roleRank(a) - roleRank(b));   // stable: time, reflection, rest
     }
 
-    /**
-     * Say, before the save rather than after it, that this pick becomes a COPY.
-     *
-     * Two things change and neither is guessable from the form: the questions become this term's
-     * own (editing them stops reaching the other term, which is the point), and the interaction
-     * has been dropped because an artifact posts to one id in one term. Both are consequences of
-     * per-offering content isolation — docs/decisions/PER-OFFERING-CONTENT-ISOLATION.md.
-     */
-    function renderCopyNotice() {
-      const el = document.getElementById('lm-copy-notice');
-      if (!el) return;
-      const c = model?.copyOf;
-      if (!c) { el.style.display = 'none'; el.textContent = ''; return; }
-      el.innerHTML = `<strong>This term gets its own copy.</strong> <code>${esc(c.slug)}</code> is `
-        + `already running in ${esc(c.terms.join(', '))}. Saving copies the questions into this `
-        + `term instead of sharing them, so editing them here never changes that term — and the `
-        + `id may gain the term's name if <code>${esc(c.slug)}</code> is taken. `
-        + `<strong>The AI interaction is not copied:</strong> a deployed artifact posts to one id `
-        + `in one term, so this copy needs a rebuilt artifact with a new id. Add it once you have one.`;
-      el.style.display = '';
-    }
-
     // id null → new; id set (an assignment-offering uuid) → edit. prefill overlays the base model
-    // (from a library pick or an artifact link); for any field it omits, the existing row stands.
+    // (an artifact link); for any field it omits, the existing row stands.
     async function openEdit(id, prefill) {
       editingId = id;
       pendingSwap = null;              // the destination chooser re-arms this after openEdit returns
       const existing = id ? vm.lessons.find(x => x.offeringId === id) : null;
 
-      let libraryRow = null;
-      if (!existing && prefill?.assignmentId) {
-        libraryRow = (vm.library || []).find(a => a.id === prefill.assignmentId)
-                  || await L.getLibraryAssignment(prefill.assignmentId);
-      }
-      model = existing ? modelFromLesson(existing)
-            : libraryRow ? modelFromLibrary(libraryRow)
-            : blankModel();
+      model = existing ? modelFromLesson(existing) : blankModel();
 
       if (prefill) {
         if (['preflight', 'interaction', 'choice'].includes(prefill.policy)) model.policy = prefill.policy;
@@ -674,13 +520,12 @@
         if (prefill.due_m) model.dueByDay.M = prefill.due_m;
         if (prefill.due_t) model.dueByDay.T = prefill.due_t;
       }
-      interactionSlugTouched = !!id || !!libraryRow || !!(prefill && prefill.iid != null);
+      interactionSlugTouched = !!id || !!(prefill && prefill.iid != null);
       ensureDefaultQuestions();
 
       const pick = (pv, ev) => (pv != null && pv !== '' ? pv : (ev ?? ''));
       document.getElementById('lm-error').style.display = 'none';
       document.getElementById('lm-notice').style.display = 'none';
-      renderCopyNotice();
       document.getElementById('lm-title').textContent =
         id ? 'Edit assignment' : (prefill ? 'New assignment — review & save' : 'New assignment');
 
@@ -693,16 +538,16 @@
       courseSel.disabled = !!id;                     // an offering cannot move between terms
 
       const idField = document.getElementById('f-id');
-      idField.value = existing?.slug ?? libraryRow?.slug ?? pick(prefill?.id, '');
-      // The slug identifies the library container. Fixed once the container exists — whether we
-      // are editing this term's run or scheduling one someone else already authored.
-      idField.disabled = !!(existing || libraryRow);
+      idField.value = existing?.slug ?? pick(prefill?.id, '');
+      // The slug identifies the assignment container. Fixed once the container exists: activities
+      // and grades hang off it, and nothing downstream expects it to move.
+      idField.disabled = !!existing;
       document.getElementById('f-id-hint').textContent = idField.disabled
-        ? 'The library id cannot be changed after creation.'
+        ? 'The assignment id cannot be changed after creation.'
         : 'Lowercase letters, numbers, hyphens.';
       document.getElementById('f-num').value   = pick(prefill?.num, existing?.lessonNumber);
-      document.getElementById('f-title').value = pick(prefill?.title, existing?.title ?? libraryRow?.title);
-      document.getElementById('f-desc').value  = pick(prefill?.desc, existing?.description ?? libraryRow?.description);
+      document.getElementById('f-title').value = pick(prefill?.title, existing?.title);
+      document.getElementById('f-desc').value  = pick(prefill?.desc, existing?.description);
       document.getElementById('f-pub').checked = prefill && prefill.pub != null ? prefill.pub : !!existing?.isPublished;
       document.getElementById('f-pts').value    = model.pointsPossible;
       document.getElementById('f-switch').value = model.switchPolicy;
@@ -1237,8 +1082,7 @@
       };
 
       busy(true);
-      const { error, rescored, unchosen, copiedFrom, assignmentSlug } =
-        await L.saveLesson(ctx, payload, editingId);
+      const { error, rescored, unchosen } = await L.saveLesson(ctx, payload, editingId);
       busy(false);
       if (error) {
         return fail(error.code === '23505'
@@ -1249,13 +1093,6 @@
       closeModal();
 
       const notes = [];
-      // The container was already running elsewhere, so this term got its own copy. Worth saying
-      // out loud: the id may have changed, and edits from here on affect only this term.
-      if (copiedFrom) {
-        notes.push(`${payload.slug} is also running in ${copiedFrom.terms.join(', ')}, so this term `
-          + `now has its own copy${assignmentSlug && assignmentSlug !== payload.slug ? `, saved as “${assignmentSlug}”` : ''}. `
-          + `Editing it here will not change that term's version.`);
-      }
       // A question's point value changed, so every already-graded row for this lesson was rewritten
       // to the new max. That silently changes cadets' totals — say so out loud.
       if (rescored > 0) {
@@ -1302,7 +1139,8 @@
           ? `This term's ${work.join(', ')} will be permanently deleted.`
           : `No student work has been recorded for it yet.`;
         info.innerHTML = `<strong>Remove from this term</strong> unschedules the assignment. ${workTxt} `
-          + `The question set and artifact stay in the library and can be scheduled again.<br><br>`
+          + `The question set and artifact are kept, belonging to no term — this page schedules `
+          + `nothing from a library, so nothing will use them again.<br><br>`
           + `<strong>Delete library copy too</strong> also removes the reusable assignment and its activities `
           + `for every term — including every student report ever submitted against the artifact. `
           + `This cannot be undone — hold the button for 5&nbsp;seconds.`;

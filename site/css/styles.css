@@ -1783,47 +1783,26 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 
 
 /* =============================================================
- *  Lesson composer + delete dialog
- *  Orphan (unassigned) content renders as draggable thumbnail cards that drop into two boxes;
- *  the delete dialog offers container-only (a click) or all-contents (a 5-second hold).
+ *  Lesson picker cards + delete dialog
+ *  .lb-orphan is a compact card for "one thing you can pick". It was built for the lesson
+ *  composer's strip of unscheduled ("orphan") content, which was removed on 2026-07-28 along with
+ *  the drag-and-drop boxes, the .lb-compose wrapper and the .lb-slot-* chips it filled. What
+ *  survives is the CARD, still used by the prefill destination chooser below (.les) and copied in
+ *  spirit by grade.html's hand-grading queue. The delete dialog offers container-only (a click)
+ *  or all-contents (a 5-second hold).
  *  Tokens only; theme-aware via the same custom properties as the rest of the app.
  * ============================================================= */
-.lb-compose { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px;
-  margin-bottom: 20px; background: var(--surface-sunken); }
-.lb-compose-head { margin-bottom: 12px; }
-
 .lb-orphans { display: flex; flex-wrap: wrap; gap: 8px; max-height: 220px; overflow-y: auto;
   padding: 2px; margin-bottom: 14px; }
 .lb-orphan { display: flex; flex-direction: column; gap: 2px; min-width: 150px; max-width: 240px;
   border: 1px solid var(--border); border-left: 3px solid var(--blue); border-radius: var(--radius-sm);
-  background: var(--card); padding: 8px 10px; cursor: grab; user-select: none;
-  transition: box-shadow .12s, opacity .12s, transform .06s; }
+  background: var(--card); padding: 8px 10px; cursor: pointer; user-select: none;
+  transition: box-shadow .12s, opacity .12s; }
 .lb-orphan:hover { box-shadow: var(--shadow-sm); }
-.lb-orphan:active { cursor: grabbing; transform: scale(0.98); }
-.lb-orphan.int { border-left-color: var(--green); }
-.lb-orphan.selected { opacity: 0.4; }
 .lb-orphan-badge { font-size: 0.66em; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--blue-lt); }
-.lb-orphan.int .lb-orphan-badge { color: var(--green); }
 .lb-orphan-title { font-size: 0.84em; font-weight: 600; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-orphan-meta { font-size: 0.72em; color: var(--muted); }
-
-.lb-drops { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (max-width: 560px) { .lb-drops { grid-template-columns: 1fr; } }
-.lb-drop { border: 2px dashed var(--border); border-radius: var(--radius); padding: 12px 14px;
-  transition: border-color .12s, background .12s; }
-.lb-drop.over { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 8%, transparent); }
-.lb-drop.reject { border-color: var(--red); animation: lb-shake .4s; }
-@keyframes lb-shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
-.lb-drop-label { font-size: 0.74em; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
-  color: var(--muted); margin-bottom: 8px; }
-.lb-drop-slot { display: flex; align-items: center; gap: 8px; min-height: 34px; font-size: 0.86em; }
-/* Empty, the box is a pure call-to-action target, so label + slot center — matching .dropzone
-   and .lb-figdrop (DESIGN.md §Layout → Alignment). Filled, it holds real content and reverts
-   to the left-aligned default. */
-.lb-drop:has(.lb-drop-slot.empty) { text-align: center; }
-.lb-drop-slot.empty { justify-content: center; color: var(--muted); font-style: italic; }
-.lb-drop-slot.filled { color: var(--text); font-weight: 600; }
 
 /* Prefill destination chooser — two large boxes, then a lesson picker in the orphan-card style. */
 .dest-boxes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -1838,16 +1817,11 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 .dest-box-d { font-size: 0.78em; color: var(--muted); }
 .dest-pick { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
 
-/* Lesson cards reuse .lb-orphan, but they are click-to-pick rather than draggable. */
-.lb-orphan.les { cursor: pointer; border-left-color: var(--gold); }
-.lb-orphan.les:active { transform: none; cursor: pointer; }
+/* Lesson cards in the chooser: gold, and red when picking one means REPLACING its interaction. */
+.lb-orphan.les { border-left-color: var(--gold); }
 .lb-orphan.les .lb-orphan-badge { color: var(--gold); }
 .lb-orphan.les.swap { border-left-color: var(--red); }
 .lb-orphan.les.swap .lb-orphan-badge { color: var(--red); }
-.lb-slot-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lb-slot-x { margin-left: auto; border: none; background: transparent; color: var(--muted);
-  cursor: pointer; font-size: 1.1em; line-height: 1; padding: 2px 6px; border-radius: 6px; }
-.lb-slot-x:hover { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
 
 /* delete dialog: container-only click vs. hold-to-delete-all */
 .lb-del-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }

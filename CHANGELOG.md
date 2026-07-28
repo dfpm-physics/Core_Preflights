@@ -10,6 +10,50 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-28 — Matthew Recker via Claude
 
+### The library picker is gone from the Assignments page
+
+The strip of draggable cards headed "Schedule an assignment from the library" — the last surviving
+piece of the old *orphan* model, where a lesson was assembled by dragging a loose preflight and a
+loose interaction into two boxes.
+
+**It had started lying.** It listed every assignment of the course not scheduled in the current
+term, described as unscheduled material available to pick. After the content-isolation work earlier
+today, each term owns its own containers — so the strip filled up with the *other* term's
+assignments, presented as orphans. They are not orphans; they belong to a different run of the
+course. The director reported it, and the reading is right: the list was showing other sections'
+assignments as if they were spare parts.
+
+**Removing it rather than filtering it**, because the workflow it served is over. Assignments are
+authored for the term they are in — the editor, or `scripts/fall2026/` for a whole 40-lesson term —
+which is what per-offering content isolation already made true underneath. Cross-term reuse was the
+picker's only remaining purpose, and this morning's work converted that from *sharing* to *copying*
+precisely because sharing was unsafe; today's conclusion is that the copy is better made where the
+term is built.
+
+Removed: the compose region and its drag-and-drop, `modelFromLibrary()`, the copy notice and card
+badge added earlier today (they lived only on this path), `getLibraryAssignment()`, the `library`
+list and both queries behind it in `loadManager()`, and the `.lb-compose` / `.lb-drop*` /
+`.lb-slot-*` CSS. `.lb-orphan` itself stays — the prefill destination chooser still renders lesson
+cards with it.
+
+**Kept deliberately: `saveLesson()` still refuses to share a container across offerings.** No UI
+path can reach that branch now, and it stays anyway — it is the data-layer guarantee, not a feature
+of the removed screen, and `test-lesson-isolation.mjs` still holds it to it.
+
+**Two consequences worth knowing.** There is no longer any UI route to schedule an existing
+assignment into a term, by design. And "Remove from this term" now leaves an assignment nothing will
+ever schedule again — the modal says so instead of offering the old "can be scheduled again", and
+"Delete library copy too" is the button that clears it. `assignments.is_archived` also lost its only
+reader; the schema reference says so rather than implying it still hides things.
+
+**Verification:** `test-lesson-isolation.mjs` 27/27, `test-lesson-due.mjs` 34/34, `test-imports.mjs`
+clean (338 named imports, no identifier used without being imported), both files syntax-checked.
+**Node-only — the page has not been opened in a browser.**
+
+---
+
+## 2026-07-28 — Matthew Recker via Claude
+
 ### DATA: the live Fall 2026 offering was given its own content
 
 `scripts/fall2026/isolate_offering_content.py --commit`, as the DML tier, one transaction,
