@@ -8,12 +8,12 @@
   <!-- Director-only gate (internal design sandboxes). -->
   <script>document.documentElement.style.opacity='0'</script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../../site/app/js/config.js"></script>
+  <script src="../../site/js/config.js"></script>
   <script type="module" src="./guard.js"></script>
   <!-- Uses the LIVE design system AND the LIVE render module so this preview tracks the real app:
-       site/app/js/faculty-dashboard.js is rendered with a hardcoded synthetic model via its render-only
+       site/js/faculty-dashboard.js is rendered with a hardcoded synthetic model via its render-only
        entry (renderModel). No DB, no CDN, no login — window.db is stubbed and never called. -->
-  <link rel="stylesheet" href="../../site/app/css/styles.css">
+  <link rel="stylesheet" href="../../site/css/styles.css">
   <style>
     .sandbox-strip { max-width: 1180px; margin: 14px auto -2px; padding: 8px 20px; display: flex;
       align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.8em; color: var(--muted); }
@@ -40,9 +40,9 @@
   <main class="page-wide" id="main"></main>
 
   <script type="module">
-    import { renderModel } from '../../site/app/js/faculty-dashboard.js';
-    import { setIconBase } from '../../site/app/js/util.js';
-    setIconBase('../../site/app/media/icons/');   // sandbox lives in tests/browser/, not under site/app/<role>/ — point icons home
+    import { renderModel } from '../../site/js/faculty-dashboard.js';
+    import { setIconBase } from '../../site/js/util.js';
+    setIconBase('../../site/media/icons/');   // sandbox lives in tests/browser/, not under site/<role>/ — point icons home
 
     /* ── deterministic synthetic data shaped exactly like loadFacultyDashboard() ── */
     const LESSONS = [

@@ -19,10 +19,10 @@
 import { check, eq, section, installBrowser } from './harness.mjs';
 
 // Must precede the import: system-prefs.js touches localStorage on first read.
-installBrowser({ pathname: '/site/app/faculty/system.html' });
+installBrowser({ pathname: '/site/faculty/system.html' });
 
-const P = await import('../../site/app/js/system-prefs.js');
-const { DB_SCHEMA, TABLE_NAMES, tableMeta } = await import('../../site/app/js/db-schema.js');
+const P = await import('../../site/js/system-prefs.js');
+const { DB_SCHEMA, TABLE_NAMES, tableMeta } = await import('../../site/js/db-schema.js');
 
 section('system-prefs.js — display names');
 

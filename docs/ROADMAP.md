@@ -14,7 +14,7 @@ decisions and a verification pass against the code. Unlike `docs/decisions/`, th
 *Authored 2026-07-22 by Casey (via Claude). Consolidates the outstanding-work sweep of the repo
 with the course director's feature requests and decisions. Companion to
 [`operations/PREP-V2-CUTOVER.md`](operations/PREP-V2-CUTOVER.md),
-[`../site/app/LEGACY-AUDIT-2026-07-20.md`](../site/app/LEGACY-AUDIT-2026-07-20.md), and
+[`../docs/app/LEGACY-AUDIT-2026-07-20.md`](app/LEGACY-AUDIT-2026-07-20.md), and
 [`../CHANGELOG.md`](../CHANGELOG.md).*
 
 > **Nothing in this file is authorization to build.** Items are scoped and ordered, not approved.
@@ -48,12 +48,19 @@ answer no — they are needed within weeks, not on day one.
 
 ## 1. P0 — Ship-blocking for 2026-08-10
 
-### P0.1 — Complete the v2 cutover (Phase 4) · **PREPARED, NOT EXECUTED** (2026-07-22)
+### P0.1 — Complete the v2 cutover (Phase 4) · ✅ **DONE 2026-07-28**
 
-**`scripts/promote_app.py` now exists** — dry-run by default, refuses on a dirty tree, a non-`main`
-branch, divergence from `origin/main`, or a missing frozen-contract source. It moves the tree and
-**does not commit or push**, because pushing *is* the cutover (CORE.md §5) and that stays a human
-act. Run it, review `git status`, run the verification checklist, then commit and push yourself.
+`site/app/` is gone: 109 files moved up to `site/`, the four legacy pages were deleted, and both
+frozen contract URLs were verified byte-identical before and after. Record:
+[`docs/operations/PREP-V2-CUTOVER.md`](operations/PREP-V2-CUTOVER.md).
+
+**What the preparation got right, and what it missed.** The three findings below all held. What no
+one had checked was everything *outside* `site/` that hardcoded a path *into* it — and that turned
+out to be the bulk of the work: the doc index, two generator scripts, and **three** separate Node
+test harnesses (`tests/app-schema/`, `tests/browser-harness/`, `tests/browser/`), the last of which
+holds `<script src>` paths in HTML sandboxes that would have broken silently in a browser rather
+than loudly in a runner. `promote_app.py` itself also had two latent bugs that only fire on a real
+run; both are fixed. The general lesson: *the script moves files, and nothing else knows they moved.*
 
 **Three things the preparation established that were not obvious:**
 
@@ -74,8 +81,6 @@ act. Run it, review `git status`, run the verification checklist, then commit an
   instead — same repo, out of the published tree. `help/*.md` and `media/icons/ICONS.md` correctly
   stay, since the app serves them. **`docs/DOC-SOURCES.json` references some of the moved files and
   must be updated in the same commit.**
-
-Remaining, and deliberately left for a human: run it, verify in a browser, commit, push.
 
 <details><summary>Original scoping</summary>
 
@@ -321,7 +326,7 @@ this term. Past cohorts are protected by `content_snapshot`, frozen at publish (
 **So the director is right that reuse is handled.** Two real gaps remain:
 
 - **No duplicate/clone.** Confirmed absent from `site/app/`, and already a known gap
-  (`site/app/README.md:94`, `PLAN-2026-07-16-ADMIN.md:45`, legacy had `duplicateAssignment`). Reuse
+  (`docs/app/README.md:94`, `PLAN-2026-07-16-ADMIN.md:45`, legacy had `duplicateAssignment`). Reuse
   ≠ making a *variant* of a lesson.
 - **No rollover flow.** Creating next term's offering, scheduling 40 assignments into it, and
   recomputing 40 deadlines is currently the term-specific
@@ -455,7 +460,7 @@ nearly free — but it is polish. Last.
 
 *Director's request, deliberately deferred when the resolution matrix was built the same day.* The
 collecting and the deciding both shipped 2026-07-23 — the in-app feedback box (migration `012`) and
-the site-admin **resolution matrix** at `site/app/faculty/feedback.html` (migration `013`). What is
+the site-admin **resolution matrix** at `site/faculty/feedback.html` (migration `013`). What is
 missing is the last hop: an accepted comment still has to be written into this file by hand.
 
 **The input contract already exists and is enforced, so this skill starts from a fixed point:**
@@ -532,7 +537,7 @@ only**, and a page that can revoke in bulk but not grant is the asymmetry that w
 **Cleared 2026-07-22:** `PROJECT.md`'s `question_scores` example (now `grades.question_scores` at
 0/1/1, with an explicit warning not to "correct" the 0–5 diagnostics alongside it) ·
 `LESSON-UNIFICATION.md` supersession banner · `COURSE-ADMIN-INVENTORY.md` §2D and its stale
-port-status rows · `site/app/README.md` "Not yet ported" · `student/interactions.html` deleted.
+port-status rows · `docs/app/README.md` "Not yet ported" · `student/interactions.html` deleted.
 
 | Item | Where | Note |
 |---|---|---|
@@ -540,7 +545,7 @@ port-status rows · `site/app/README.md` "Not yet ported" · `student/interactio
 | ~~`lesson_aggregate.py` misdiagnoses a cross-course slug collision as a stale offering~~ | `supabase/admin/lesson_aggregate.py` `_ambiguous_slug_message` | ✅ **FIXED 2026-07-22.** The message now splits the two cases: same-term/different-course lists each course with its course-scoped activity slug and says *do not deactivate either one*; different-term keeps the deactivation advice, which is correct only there. Covered by `aggregate_summarize_test.py` |
 | ~~`status --lesson` cannot report a question-only lesson~~ | `supabase/admin/lesson_aggregate.py` `cmd_status` | ✅ **FIXED 2026-07-22 — and it was worse than recorded.** The join was *inner*, so written-only offerings were absent from the **unfiltered** listing too, not merely unfilterable. Since most of a term is written-only, `/lesson-cycle`'s verify step was reporting "No analysis_reports rows yet" for lessons that had aggregated fine. Now keyed on the assignment, with activities resolved by offering id so a shared slug cannot abort the listing. **Not yet run against the live DB** — needs a connection |
 | ~~⚠️ **The dashboard ignores extensions when computing status**~~ | `faculty-data.js` `buildLessonRows` | ✅ **FIXED 2026-07-27.** It called `effectiveDue(offering, sectionId, **null**)` — the extension argument hardcoded — so a student holding an active extension showed as `overdue` on the dashboard, in the outstanding-tasks panel and in the due-out row. The loader now fetches `extensions` (filtered `revoked_at IS NULL`, three columns) alongside submissions and grades in the same chunked pass. **The row-building was extracted into a pure exported `buildLessonRows()`, which is the actual repair**: the rule was unreachable to a test because it lived inside an async loader needing a faculty session, which is why it survived being found *twice*, months apart, without ever being caught. `test-dashboard-rows.mjs` pins it at 12 checks, counterfactuals included (an expired extension, one belonging to another offering, one belonging to another student). `faculty-gradebook.js`'s header cited this bug as its reason for not reusing the dashboard loader; that comment is now corrected to the reason that actually remains, which is payload size |
-| ~~⚠️ **A generated file was hand-edited, and the check that exists to catch that went red**~~ | `site/app/js/db-schema.js` | ✅ **RESOLVED 2026-07-27** — *and it is the single failing check in `tests/app-schema`, not a pre-existing mystery.* The 2026-07-23 `enrolment` → `enrollment` sweep edited four strings inside `db-schema.js`, whose header reads **"GENERATED FILE. Do not edit by hand."** Those four are copies of Postgres `COMMENT ON` text, so the sweep corrected the copy and left the original — and `gen_db_schema.py --check` correctly reported the file as stale from that day on. Regenerated (it now matches live and reads `enrolment` again), with the real correction filed as **`supabase/migrations/app/016_comment_spelling.sql`, written and deliberately NOT applied**: `COMMENT ON` is DDL and `app` is sealed (CORE.md §0). Four comment strings do not justify unsealing; fold it into the next window that opens for another reason. **Worth generalizing:** a sweep that matches on a word will hit generated files, and a generated file is the one place where being right about the text is being wrong about the source |
+| ~~⚠️ **A generated file was hand-edited, and the check that exists to catch that went red**~~ | `site/js/db-schema.js` | ✅ **RESOLVED 2026-07-27** — *and it is the single failing check in `tests/app-schema`, not a pre-existing mystery.* The 2026-07-23 `enrolment` → `enrollment` sweep edited four strings inside `db-schema.js`, whose header reads **"GENERATED FILE. Do not edit by hand."** Those four are copies of Postgres `COMMENT ON` text, so the sweep corrected the copy and left the original — and `gen_db_schema.py --check` correctly reported the file as stale from that day on. Regenerated (it now matches live and reads `enrolment` again), with the real correction filed as **`supabase/migrations/app/016_comment_spelling.sql`, written and deliberately NOT applied**: `COMMENT ON` is DDL and `app` is sealed (CORE.md §0). Four comment strings do not justify unsealing; fold it into the next window that opens for another reason. **Worth generalizing:** a sweep that matches on a word will hit generated files, and a generated file is the one place where being right about the text is being wrong about the source |
 | ⚠️ **The migration-006 submission-lock assertions have stopped running, and the suite reports it as one failed check** | `tests/app-schema/test-student.mjs:155,215` | Found 2026-07-27 while applying migration 016. `test-student.mjs:155` needs an offering the **test cadet's dashboard** shows as `isChoice` with both a written and an interactive activity; it finds none and fails with `found an offering with two graded activities`. **The data is not the problem — 34 published offerings carry two graded activities** (`preflight-02` … `-41`, verified live), so this is the test's own selection path, not the term's content. **It matters more than one red check looks:** everything gated behind that `if` is the *security* half of the file — that a student cannot unlock their own committed submission, cannot attribute an unlock to an instructor who did not perform it, and cannot reopen a commit by reverting `status` to draft. Those are the two bypasses migration 006 closed, and they are currently **asserted nowhere**. The `else` branch failing loudly rather than skipping is the design working; it is why this was visible at all. Fix the selection, do not delete the branch |
 | Scope control is now copied in **three** places | `report.html` `renderScope()` · `faculty-dashboard.js` `scopeControl()` · `gradebook.html` | `faculty-dashboard.js:230-241` said extraction becomes worth arguing for at the third caller. It has arrived. Deliberately **not** done in the P1.1 pass: refactoring two shipped, browser-verified surfaces in the same change that adds a third is how you break all three at once. Extract into a shared module as its own change, with the existing suites green before and after |
 | All three `prep_app_*` roles carry `BYPASSRLS`, including the SELECT-only read role | CHANGELOG:704 | The read role should not bypass RLS |
@@ -555,7 +560,7 @@ port-status rows · `site/app/README.md` "Not yet ported" · `student/interactio
 | Zero-point questions are a hidden, undocumented mode switch | LEGACY-AUDIT:92-100 | Load-bearing (`grade.html:207,215` hides them); make explicit in the lesson creator |
 | Q1 anonymity is hard-coded by **position**, not by question property | LEGACY-AUDIT:102-108 | Attach the property to the question |
 | No delete-assignment control anywhere | LEGACY-AUDIT:119-124 | "An oversight, not a decision" |
-| No lesson duplicate/clone | `site/app/README.md:94` | Reuse works; making a *variant* does not. Feeds P3.4 |
+| No lesson duplicate/clone | `docs/app/README.md:94` | Reuse works; making a *variant* does not. Feeds P3.4 |
 | Tier D system-admin password reset — mocked, unbuilt | PLAN-2026-07-20-ACCOUNTS.md:3 | Decide whether it stays a known gap |
 | 81 cadets keep fabricated `<id>@usafa.edu` addresses | CHANGELOG:411-412 | Needs a decision plus a migrate-login-emails action |
 | ~~Is `faculty/interactions.html` deleted once the rollup absorbs its panels?~~ | CHANGELOG:1352-1353 | ✅ **Answered — it already was**, on 2026-07-20 (`nav.js:22`). Discovered 2026-07-22 while retiring the *student* page. Several docs still describe it as present and load-bearing (`COURSE-ADMIN-INVENTORY.md` §2E "cannot be deleted until that moves", `PLAN-2026-07-16-ADMIN.md` T2.1) — **worth a sweep**, since anything reasoning from those will reach wrong conclusions about what promotion still costs |
@@ -1015,7 +1020,7 @@ the system worse. Recorded in full so it is not "fixed" again later.*
 
 | Flagged | Verdict |
 |---|---|
-| `site/app/reset.html` — "orphaned, delete it" | **KEPT.** It is not an email-reset flow; it is the page that tells a locked-out person there *is* no email reset and who to ask instead. Its own header explains why it outlived the flow: the login page linked there for a year, so bookmarks and history still point at it, and a 404 is the worst possible answer at the moment someone is locked out. Deleting it would remove the one thing that redirects them correctly. |
+| `site/reset.html` — "orphaned, delete it" | **KEPT.** It is not an email-reset flow; it is the page that tells a locked-out person there *is* no email reset and who to ask instead. Its own header explains why it outlived the flow: the login page linked there for a year, so bookmarks and history still point at it, and a 404 is the worst possible answer at the moment someone is locked out. Deleting it would remove the one thing that redirects them correctly. |
 | `DOC-SOURCES.json` listing `reset.html` as a source | **KEPT.** A correct dependency — `student-getting-started.md` was written from that page. Not a stale entry. |
 | Help docs mentioning reset | **KEPT.** Every mention is a *denial* ("PREP cannot email you a reset link", "there is no reset link to send"). They are the tombstones, correctly phrased. |
 | `tests/browser/test-account.html` | **KEPT.** Already carries a "Superseded 2026-07-21" banner and a comment reading *"Kept as the design record of the emailed-code flow, NOT as a picture of the system."* Deliberate archive. |
@@ -1703,7 +1708,7 @@ Timezone: reuse the `zoneinfo` America/Denver handling from
 #### P1.3 — Persist user and account settings · ✅ **DONE 2026-07-22**
 
 Built as scoped. `app.user_preferences` (migration `010`, **applied**) — `user_id` PK, one jsonb
-`prefs`, RLS self-only on all four verbs. `site/app/js/prefs.js` is the write-through cache:
+`prefs`, RLS self-only on all four verbs. `site/js/prefs.js` is the write-through cache:
 localStorage stays the read path, the row is the durability path, `hydrate()` runs inside
 `bootstrap()` before anything reads a preference.
 
@@ -1750,7 +1755,7 @@ integer bars go spiky, and the `?kde=1` tuner (P0.10) still tunes it.
 Built as the registry P1.6 describes, rendered in the shape P1.15 asked for, because P1.15 says to.
 Treating them as two items would have produced two panels answering one question.
 
-`site/app/js/faculty-tasks.js` — `SOURCES` is an array of `{id, severity, icon, director, load()}`,
+`site/js/faculty-tasks.js` — `SOURCES` is an array of `{id, severity, icon, director, load()}`,
 and adding the sixth is an entry, not a rewrite. All five scoped sources shipped: work past due and
 unfinalized · AI-suggested grades awaiting review · lessons past due with no readiness rollup ·
 sections with nobody assigned · failed or stalled scheduled runs.

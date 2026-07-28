@@ -2,7 +2,7 @@
 //
 // Two boundaries, both of which the `public` schema got wrong and 002_rls.sql exists to fix:
 //   1. anon gets nothing at all — there is not a single policy granting the anon role
-//      anything, because every page in site/app/ authenticates first.
+//      anything, because every page in site/ authenticates first.
 //   2. the app client cannot see `public`, so wiring the portal to `app` genuinely moved it
 //      rather than leaving a foot in both models.
 

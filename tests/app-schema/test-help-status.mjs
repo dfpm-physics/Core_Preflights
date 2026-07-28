@@ -32,7 +32,7 @@ const STATUS = {
   generated: '2026-07-22',
   stale: {
     'a.md': { reviewed: '2026-07-21', tier: 'student',
-              sources: ['.ai/instructions/CORE.md', 'site/app/js/auth.js'] },
+              sources: ['.ai/instructions/CORE.md', 'site/js/auth.js'] },
     'g.md': { reviewed: '2026-07-21', tier: 'instructor',
               sources: ['.ai/instructions/PROJECT.md'] },
   },
@@ -87,7 +87,7 @@ async function mount(ctx, { status = STATUS, search = '' } = {}) {
   installFetch(status);
   globalThis.location.search = search;
   globalThis.window.location.search = search;
-  const mod = await import(`../../site/app/js/help.js?case=${++n}`);
+  const mod = await import(`../../site/js/help.js?case=${++n}`);
   const root = fakeRoot();
   await mod.mountHelp(ctx, root);
   return root;
@@ -95,7 +95,7 @@ async function mount(ctx, { status = STATUS, search = '' } = {}) {
 
 // installBrowser() is not used: it stubs a location whose `search` is fixed at construction, and
 // these cases need to vary it per mount.
-globalThis.location = { pathname: '/site/app/student/help.html', search: '', hash: '' };
+globalThis.location = { pathname: '/site/student/help.html', search: '', hash: '' };
 globalThis.window = { location: globalThis.location };
 
 /* ── The index ─────────────────────────────────────────────────────────────── */

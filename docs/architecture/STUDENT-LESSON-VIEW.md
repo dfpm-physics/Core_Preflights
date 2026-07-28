@@ -4,7 +4,7 @@
 built. This is **Phase 5** of [`LESSON-UNIFICATION.md`](LESSON-UNIFICATION.md) §15, and the first
 document to specify what a student actually sees. Companions:
 [`LESSON-UNIFICATION.md`](LESSON-UNIFICATION.md) (the data model and lifecycle rules — what is
-*true*), [`site/app/DESIGN.md`](../../site/app/DESIGN.md) (the visual language — how it *looks*),
+*true*), [`docs/app/DESIGN.md`](../../docs/app/DESIGN.md) (the visual language — how it *looks*),
 and [`INTERACTION-DATA-CONTRACT.md`](../contracts/INTERACTION-DATA-CONTRACT.md) (frozen).*
 
 Everything here is composition of existing components. **No new CSS is expected** — the faculty
@@ -16,16 +16,16 @@ pages already carry every primitive this needs.
 
 The student side is still the pre-unification world: two parallel lists, one per modality.
 
-- [`student/assignments.html`](../../site/app/student/assignments.html) lists `assignments`.
-- [`student/interactions.html`](../../site/app/student/interactions.html) lists `interactions`.
+- [`student/assignments.html`](../../site/student/assignments.html) lists `assignments`.
+- [`student/interactions.html`](../../site/student/interactions.html) lists `interactions`.
 - The dashboard renders **both**, with two separate to-do counts
-  ([`student-data.js`](../../site/app/js/student-data.js) `stats.toDo` and
+  ([`student-data.js`](../../site/js/student-data.js) `stats.toDo` and
   `stats.interactionsToDo`).
 
 So a `choice` lesson — one piece of work, two ways to do it — appears to a cadet as **two
 assignments**, counted twice, each looking independently mandatory. Nothing on screen says they're
 alternatives, and nothing says doing one closes the other. The faculty side already thinks in
-lessons ([`faculty/lessons.html`](../../site/app/faculty/lessons.html)); the student side has never
+lessons ([`faculty/lessons.html`](../../site/faculty/lessons.html)); the student side has never
 heard of them.
 
 **The fix is a wrapper, not a rewrite.** A lesson list and a lesson detail sit *above* the existing
@@ -58,7 +58,7 @@ make credit-equivalence obvious and lead with the difference in experience.**
 `assignments.html` is **kept, not deleted**: it stays the written-preflight surface (the question
 form, autosave, Submit), reached from a lesson rather than from the nav. That preserves everything
 already built and tested. Orphan assignments with no owning lesson — which
-[`COURSE-ADMIN-INVENTORY`](../../site/app/COURSE-ADMIN-INVENTORY.md) and the faculty orphan view
+[`COURSE-ADMIN-INVENTORY`](../../docs/app/COURSE-ADMIN-INVENTORY.md) and the faculty orphan view
 exist to drain — keep resolving there directly, so nothing 404s mid-transition.
 
 New files: `student/lessons.html`, `js/student-lessons.js`.
@@ -142,7 +142,7 @@ two are Phase 5; the third is **already built** (migration 021 + the receiver).
 |---|---|---|---|
 | 1 | Choice modal footer | Always, on a `choice` lesson | Static line (§5) |
 | 2 | **Before launching the artifact** | Launching when written answers exist | Confirm dialog — *"You have N answers saved on the written version. If you submit an interactive report, those answers stop counting and this becomes your grade. You can still launch it to study without submitting."* |
-| 3 | **On the submission page** | Submitting when written answers exist | Amber banner + confirm — ✅ **built** ([`interaction-submit.html`](../../site/app/student/interaction-submit.html)) |
+| 3 | **On the submission page** | Submitting when written answers exist | Amber banner + confirm — ✅ **built** ([`interaction-submit.html`](../../site/student/interaction-submit.html)) |
 
 Warning 2 is the one this doc adds. It fires on the **launch**, not the submit, because by the time
 a cadet reaches the receiver they've already done the interaction — warning them there and having
@@ -205,7 +205,7 @@ since a student has exactly one section and therefore one deadline.
 
 ## 9. Data layer
 
-New: `js/student-lessons.js`, mirroring [`student-data.js`](../../site/app/js/student-data.js)'s
+New: `js/student-lessons.js`, mirroring [`student-data.js`](../../site/js/student-data.js)'s
 shape — batched, no N+1, one view-model.
 
 ```js
@@ -221,7 +221,7 @@ loadLessonStatuses(ctx) -> [{
 ```
 
 `state` is computed **once, in the data layer** — not re-derived in each renderer. Today's
-[`student-data.js:43-48`](../../site/app/js/student-data.js#L43-L48) already does this for
+[`student-data.js:43-48`](../../site/js/student-data.js#L43-L48) already does this for
 assignments (`status`), and that pattern is why the dashboard and the list can't disagree. Keep it.
 
 Queries: `lessons` (published, course) → components by id → `responses` + `lesson_completions` +
@@ -237,7 +237,7 @@ already handles the M/T split and an extension override.
 
 ## 10. Component mapping
 
-Everything is already in [`DESIGN.md`](../../site/app/DESIGN.md). Nothing new.
+Everything is already in [`DESIGN.md`](../../docs/app/DESIGN.md). Nothing new.
 
 | Need | Existing |
 |---|---|

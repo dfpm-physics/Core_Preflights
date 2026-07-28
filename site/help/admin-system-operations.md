@@ -59,9 +59,10 @@ ends with them sealing it again. That is intentional friction, not an obstacle t
 ## Frozen contracts
 
 Two URLs may not move: the endpoint an interactive lesson posts its report to, and the authoring
-page that AI-generated prefill links target. Both are currently stubs forwarding into the app and
-become the real pages at promotion, so the public URL survives unchanged. Changing either means
-rebuilding every deployed lesson artifact by hand — a between-semesters operation, never mid-term.
+page that AI-generated prefill links target. Both were forwarding stubs until the site redesign was
+promoted onto the public URLs on 2026-07-28; each is now the real page, at the identical address,
+which is what the stubs existed to guarantee. Changing either means rebuilding every deployed lesson
+artifact by hand — a between-semesters operation, never mid-term.
 
 Multi-term work must be additive: new columns, not changed wire formats.
 

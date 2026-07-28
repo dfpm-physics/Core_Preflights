@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Generate site/app/js/db-schema.js — the table catalogue the System > Data browser renders from.
+"""Generate site/js/db-schema.js — the table catalogue the System > Data browser renders from.
 
 WHY THIS EXISTS AT ALL
   faculty/system.html is a generic table browser: it has no per-table code, so it has to be told
@@ -45,7 +45,7 @@ except ImportError:
 
 REPO = Path(__file__).resolve().parents[2]
 ENV_FILE = REPO / "supabase" / "admin" / ".env"
-OUT_FILE = REPO / "site" / "app" / "js" / "db-schema.js"
+OUT_FILE = REPO / "site" / "js" / "db-schema.js"
 SCHEMA = "app"
 
 # Columns a human reads a row by, best first. Used to label foreign keys as "phys-215" rather
@@ -326,7 +326,7 @@ export function referrers(name) {{
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Generate site/app/js/db-schema.js from schema `app`.")
+    ap = argparse.ArgumentParser(description="Generate site/js/db-schema.js from schema `app`.")
     ap.add_argument("--check", action="store_true",
                     help="exit 1 if the committed file differs from live (writes nothing)")
     ap.add_argument("--stdout", action="store_true", help="print the module, write nothing")

@@ -23,10 +23,10 @@
 
 import { check, eq, section, summary, installBrowser, makeClient } from './harness.mjs';
 
-installBrowser({ pathname: '/site/app/faculty/grade.html' });
+installBrowser({ pathname: '/site/faculty/grade.html' });
 globalThis.window.db = makeClient();
 
-const G = await import('../../site/app/js/faculty-grade.js');
+const G = await import('../../site/js/faculty-grade.js');
 
 /* ── Fixtures ─────────────────────────────────────────────────────────────────
  * A `choice` offering: one written activity, one interactive, both graded. Two questions on the

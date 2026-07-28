@@ -15,8 +15,9 @@ import { mountRunBanners } from './run-banner.js';
 import { mountFeedback } from './feedback.js';
 
 // All nav-rendering pages live one level deep (student/ , faculty/), so same-role links are
-// bare filenames. The nav no longer links out to the legacy site at all (see FACULTY_LINKS),
-// so legacyUrl() is not needed here; it remains in util.js for any page that still needs it.
+// bare filenames. The nav no longer links out to the legacy site at all (see FACULTY_LINKS).
+// The legacyUrl() helper it used to need was deleted with those pages at the 2026-07-28
+// promotion; nothing links to the legacy tree because the legacy tree is gone.
 // Students navigate by ASSIGNMENT, not by modality. Listing "Assignments" and "Interactions"
 // side by side showed a choice assignment twice — as two separate mandatory items — with nothing
 // saying they were alternatives (STUDENT-LESSON-VIEW.md §1). assignments.html still exists as

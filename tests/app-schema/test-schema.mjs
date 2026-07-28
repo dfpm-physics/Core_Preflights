@@ -1,4 +1,4 @@
-// test-schema.mjs — the pure domain rules in site/app/js/schema.js.
+// test-schema.mjs — the pure domain rules in site/js/schema.js.
 // No network, no login: these import the shipped module and exercise it directly.
 
 import { check, eq, section } from './harness.mjs';
@@ -8,7 +8,7 @@ import {
   canSwitchActivity, isActivityAvailable, pointsFromEffort, displayPoints,
   questionsOf, questionPoints, answeredCount, lessonNumber, chunked,
   taughtSectionIds, actionableSections,
-} from '../../site/app/js/schema.js';
+} from '../../site/js/schema.js';
 
 const NOW = new Date('2026-09-01T12:00:00Z');
 const EARLIER = '2026-08-01T05:59:00Z';

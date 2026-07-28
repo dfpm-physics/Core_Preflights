@@ -3,7 +3,7 @@
 // The goal is to test the SHIPPED files, so this shims only what a browser would provide
 // (window, location, localStorage) and never re-implements anything the tests are meant to
 // prove. In particular `window.db` is a real supabase-js client configured exactly the way
-// site/app/js/config.js configures it — and test-config.mjs separately proves that config.js
+// site/js/config.js configures it — and test-config.mjs separately proves that config.js
 // really does configure it that way, so this shim cannot silently drift from the site.
 
 import { createClient } from '@supabase/supabase-js';
@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-export const APP_JS = resolve(HERE, '../../site/app/js');
+export const APP_JS = resolve(HERE, '../../site/js');
 export const REPO = resolve(HERE, '../..');
 
 export const SUPABASE_URL = 'https://shzvpmlnqfmzfmuxkowi.supabase.co';
@@ -53,7 +53,7 @@ export function summary() {
  * their relative roots, so tests can exercise the nested-page case (student/…) that the real
  * pages use.
  */
-export function installBrowser({ pathname = '/site/app/student/dashboard.html' } = {}) {
+export function installBrowser({ pathname = '/site/student/dashboard.html' } = {}) {
   const store = new Map();
   const redirects = [];
 

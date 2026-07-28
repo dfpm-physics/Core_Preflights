@@ -13,7 +13,7 @@ Name it `<audience>-<topic>.md` (e.g. `instructor-extensions.md`). Plain CommonM
 with `marked` and sanitized with `DOMPurify` before it reaches the page, so raw HTML and scripts are
 stripped. Start at `##` — the page prints the manifest `title` as the `<h1>` above your content.
 
-Relative links resolve against the *page* (`site/app/student/help.html`), not this folder. Link to
+Relative links resolve against the *page* (`site/student/help.html`), not this folder. Link to
 another help topic with a query link — `[Grading](help.html?doc=grading)` — and to anything else
 with a full path from the site root or an absolute URL.
 
@@ -64,7 +64,7 @@ students are told to trust the screen and ask an instructor, because a path like
 `.ai/instructions/CORE.md` on a cadet's page reads as a malfunction rather than a caveat.
 
 **This is driven by a generated file and does not update itself.** A browser cannot run `git`, so
-`site/app/help/DOC-STATUS.json` carries the verdict, computed on someone's machine and committed:
+`site/help/DOC-STATUS.json` carries the verdict, computed on someone's machine and committed:
 
 ```
 python scripts/docs/check_doc_sources.py status --write
@@ -98,8 +98,8 @@ No build step (see `CORE.md` §2). From the repo root:
 python -m http.server 8000
 ```
 
-then open `http://localhost:8000/site/app/student/help.html` and
-`http://localhost:8000/site/app/faculty/help.html`.
+then open `http://localhost:8000/site/student/help.html` and
+`http://localhost:8000/site/faculty/help.html`.
 
 One deploy caveat worth knowing: the repo has no `.nojekyll`, so GitHub Pages runs these through
 Jekyll. Markdown files **without YAML front matter are copied verbatim** and served at their `.md`

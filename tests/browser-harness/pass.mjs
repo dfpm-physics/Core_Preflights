@@ -63,25 +63,25 @@ if (!CHROME) { console.error('No Chrome/Edge found. Pass --chrome <path>.'); pro
 const LESSON = arg('lesson');
 
 const FACULTY = [
-  ['dashboard',   '/site/app/faculty/dashboard.html', '.page-head h1'],
-  ...(LESSON ? [['rollup', `/site/app/faculty/report.html?i=${encodeURIComponent(LESSON)}`,
+  ['dashboard',   '/site/faculty/dashboard.html', '.page-head h1'],
+  ...(LESSON ? [['rollup', `/site/faculty/report.html?i=${encodeURIComponent(LESSON)}`,
                  '.lr-sec, .rm-shell, .page-head']] : []),
-  ...(LESSON ? [['rollup-kde', `/site/app/faculty/report.html?i=${encodeURIComponent(LESSON)}&kde=1`,
+  ...(LESSON ? [['rollup-kde', `/site/faculty/report.html?i=${encodeURIComponent(LESSON)}&kde=1`,
                  '.lr-sec, .rm-shell, .page-head']] : []),
-  ['grade',       '/site/app/faculty/grade.html',     '.page-head, .empty-state'],
-    ['lessons',     '/site/app/faculty/lessons.html',   '.page-head, .empty-state'],
-  ['admin',       '/site/app/faculty/admin.html',     '.page-head, .empty-state'],
-  ['extensions',  '/site/app/faculty/extensions.html', '.page-head, .empty-state'],
-  ['account',     '/site/app/faculty/account.html',   '.page-head h1'],
-  ['system',      '/site/app/faculty/system.html',    '.page-head, .empty-state'],
-  ['help',        '/site/app/faculty/help.html',      '.page-head, .help-shell, main'],
+  ['grade',       '/site/faculty/grade.html',     '.page-head, .empty-state'],
+    ['lessons',     '/site/faculty/lessons.html',   '.page-head, .empty-state'],
+  ['admin',       '/site/faculty/admin.html',     '.page-head, .empty-state'],
+  ['extensions',  '/site/faculty/extensions.html', '.page-head, .empty-state'],
+  ['account',     '/site/faculty/account.html',   '.page-head h1'],
+  ['system',      '/site/faculty/system.html',    '.page-head, .empty-state'],
+  ['help',        '/site/faculty/help.html',      '.page-head, .help-shell, main'],
 ];
 const STUDENT_PAGES = [
-  ['dashboard',   '/site/app/student/dashboard.html', '.page-head, .stat-tile, main'],
-  ['lessons',     '/site/app/student/lessons.html',   '.page-head, .empty-state, main'],
-  ['assignments', '/site/app/student/assignments.html', '.page-head, .empty-state, main'],
-  ['account',     '/site/app/student/account.html',   '.page-head h1'],
-  ['help',        '/site/app/student/help.html',      '.page-head, .help-shell, main'],
+  ['dashboard',   '/site/student/dashboard.html', '.page-head, .stat-tile, main'],
+  ['lessons',     '/site/student/lessons.html',   '.page-head, .empty-state, main'],
+  ['assignments', '/site/student/assignments.html', '.page-head, .empty-state, main'],
+  ['account',     '/site/student/account.html',   '.page-head h1'],
+  ['help',        '/site/student/help.html',      '.page-head, .help-shell, main'],
 ];
 const PAGES = STUDENT ? STUDENT_PAGES : FACULTY;
 
@@ -149,7 +149,7 @@ async function visit(label, path, selector) {
 console.log(`\nChrome: ${CHROME}`);
 console.log(`Theme:  ${THEME}\nOut:    ${OUT}\n`);
 
-await page.goto(`${BASE}/site/app/login.html`, { waitUntil: 'networkidle2' });
+await page.goto(`${BASE}/site/login.html`, { waitUntil: 'networkidle2' });
 // Set the theme the way the app does, before signing in, so every page paints in it from
 // first load rather than being corrected mid-walk.
 await page.evaluate(t => {

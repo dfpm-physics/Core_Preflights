@@ -11,10 +11,10 @@ import { check, eq, section, summary, installBrowser, makeClient } from './harne
 
 // feedback.js imports util.js only at module scope, but nav.js (which this mirrors) pulls the
 // supabase-touching chain; install the browser + a client so the import graph is happy under Node.
-installBrowser({ pathname: '/site/app/faculty/gradebook.html' });
+installBrowser({ pathname: '/site/faculty/gradebook.html' });
 globalThis.window.db = makeClient();
 
-const F = await import('../../site/app/js/feedback.js');
+const F = await import('../../site/js/feedback.js');
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 section('categories — the DB-valid set, and the two shown sentiments');
@@ -53,13 +53,13 @@ const ctx = {
 {
   const row = F.feedbackRow(ctx, {
     category: 'add', message: '  please add a dark-mode chart  ',
-    page: '/site/app/faculty/gradebook.html', pageTitle: 'Gradebook · PREP',
+    page: '/site/faculty/gradebook.html', pageTitle: 'Gradebook · PREP',
     userAgent: 'Mozilla/5.0 test',
   });
   eq('submitted_by is the auth uid — identity the DB will re-check', row.submitted_by, ctx.user.id);
   eq('the readable name is captured as a hint', row.submitter_name, 'Dr. Ada Byron');
   eq('role rides along', row.role, 'faculty');
-  eq('the page path is recorded', row.page, '/site/app/faculty/gradebook.html');
+  eq('the page path is recorded', row.page, '/site/faculty/gradebook.html');
   eq('the page title is recorded', row.page_title, 'Gradebook · PREP');
   eq('category passes through', row.category, 'add');
   eq('the message is trimmed', row.message, 'please add a dark-mode chart');

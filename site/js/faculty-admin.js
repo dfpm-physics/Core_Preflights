@@ -12,7 +12,7 @@
 //   instructors.is_director   ->  gone; is_global_admin is the only flag on the person
 //   scores                    ->  grades, reached through enrollments
 //
-// Plan: site/app/PLAN-2026-07-16-ADMIN.md §4.
+// Plan: docs/app/PLAN-2026-07-16-ADMIN.md §4.
 
 import { db } from './supabase.js';
 import { lastFirst } from './util.js';

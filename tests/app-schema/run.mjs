@@ -52,7 +52,7 @@ for (const s of OFFLINE) {
 }
 
 /* ── Suites that import app modules run in their own process, deliberately ───
- * site/app/js/supabase.js captures window.db once at import time. Running these in-process
+ * site/js/supabase.js captures window.db once at import time. Running these in-process
  * would leave every later suite bound to the unauthenticated client they used, so the
  * end-to-end tests would fail at bootstrap for a reason unrelated to the code under test.
  * Isolating them keeps the module registry clean.

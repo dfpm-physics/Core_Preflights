@@ -6,8 +6,8 @@
 // so every effort number silently described only the artifact takers.
 //
 // Two units under test, both pure:
-//   site/app/js/schema.js        writtenSignals / effortSignal — where each path's numbers live
-//   site/app/js/faculty-rollup.js summarizeReports — how the two are folded into one summary
+//   site/js/schema.js        writtenSignals / effortSignal — where each path's numbers live
+//   site/js/faculty-rollup.js summarizeReports — how the two are folded into one summary
 //
 // summarizeReports is pure, but faculty-rollup.js imports supabase.js at module load, which
 // requires window.db. Hence the shim below — and hence run.mjs spawning this suite in its own
@@ -18,7 +18,7 @@ import { check, eq, section, installBrowser, summary } from './harness.mjs';
 import {
   writtenSignals, writtenReport, effortSignal, FREE_RESPONSE_KEY, FREE_RESPONSE_LABEL, int05,
   minutes, median, pinnedQuestion, reflectionQuestionId,
-} from '../../site/app/js/schema.js';
+} from '../../site/js/schema.js';
 
 
 installBrowser();
@@ -47,7 +47,7 @@ globalThis.window.db = { from: () => chain() };
 
 const { summarizeReports, loadAnalysis: loadAnalysisRaw, canonMisconceptionId, taughtSectionIds,
         residualFlags } =
-  await import('../../site/app/js/faculty-rollup.js');
+  await import('../../site/js/faculty-rollup.js');
 
 // loadAnalysis returned a bare scope map until 2026-07-22, when it grew two offering-level
 // siblings (`aliases`, `glossary`) and started returning { scopes, aliases, glossary }. Every
@@ -795,7 +795,7 @@ eq('residuals do not leak into the recognized tallies',
 section('faculty-rollup.js — the query entry points resolve rather than throw');
 
 const { loadInteractionData, loadReport, buildLessonCorpus } =
-  await import('../../site/app/js/faculty-rollup.js');
+  await import('../../site/js/faculty-rollup.js');
 
 // Shaped like the real thing (auth.js): sectionsById is what offeringSections() reads.
 const ctxStub = {
@@ -822,7 +822,7 @@ await resolves('buildLessonCorpus(ctx, offeringId)',
 // rejection handler to the structured-data load, or a throw anywhere beneath it is indistinguishable
 // from a query that is still running.
 const reportSrc = readFileSync(
-  new URL('../../site/app/faculty/report.html', import.meta.url), 'utf8');
+  new URL('../../site/faculty/report.html', import.meta.url), 'utf8');
 check('report.html catches a loadInteractionData rejection',
       /loadInteractionData\(ctx,[\s\S]{0,600}?\.catch\(/.test(reportSrc));
 check('…and renders it as an error rather than leaving "Computing…" up',

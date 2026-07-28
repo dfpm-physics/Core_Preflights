@@ -8,7 +8,7 @@ transpiled. Nothing here is served, imported by the site, or required to deploy.
 folder and the site is unchanged.
 
 What Node buys us is the one thing a browser cannot give cheaply: running the **shipped
-modules themselves** — `site/app/js/schema.js`, `student-data.js`, `auth.js` — against the
+modules themselves** — `site/js/schema.js`, `student-data.js`, `auth.js` — against the
 live database, as a real signed-in user, and asserting on what comes back. The alternative
 was reimplementing the same logic in Python and testing the reimplementation, which proves
 nothing about what ships.
@@ -28,7 +28,7 @@ npm test
 | Layer | File | Proves |
 |---|---|---|
 | Pure logic | `test-schema.mjs` | Deadline precedence, status derivation, lock policy, effort→points — imported from the real `schema.js`, no network |
-| Config | `test-config.mjs` | `site/app/js/config.js` actually sets `db.schema = 'app'` |
+| Config | `test-config.mjs` | `site/js/config.js` actually sets `db.schema = 'app'` |
 | Query shape | `test-rest.mjs` | Every PostgREST projection the app ships is valid against the live schema |
 | End-to-end | `test-student.mjs` | The real `student-data.js` run as a signed-in student, through RLS |
 | Isolation | `test-isolation.mjs` | The student sees only their own work, and nothing from `public` |

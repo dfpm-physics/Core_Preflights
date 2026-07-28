@@ -29,7 +29,8 @@ import { hydrate as hydratePrefs, setPref, getPref, resetPrefs } from './prefs.j
 import { applyTheme, updateToggleButtons } from './theme.js';
 
 // App root relative to the current page: nested pages (student/ faculty/) are one
-// level deep. Works under /site/app/.
+// level deep. Depth-based, not path-based, so it survived the move from /site/app/
+// to /site/ unchanged and would survive another one.
 const APP_ROOT = /\/(student|faculty)\/[^/]*$/.test(location.pathname) ? '../' : '';
 
 // Persisted as "<courseCode>|<termCode>" rather than the offering uuid: the pair is stable

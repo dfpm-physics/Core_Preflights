@@ -8,12 +8,12 @@
   <!-- Director-only gate (internal design sandboxes). -->
   <script>document.documentElement.style.opacity='0'</script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../../site/app/js/config.js"></script>
+  <script src="../../site/js/config.js"></script>
   <script type="module" src="./guard.js"></script>
   <!-- Uses the LIVE design system and the LIVE nav module. Everything else is UNWIRED: synthetic
        identities, every control inert, no auth call of any kind. Mocks the proposed
-       site/app/account.html plus the three password flows. Spec: site/app/PLAN-2026-07-20-ACCOUNTS.md -->
-  <link rel="stylesheet" href="../../site/app/css/styles.css">
+       site/account.html plus the three password flows. Spec: docs/app/PLAN-2026-07-20-ACCOUNTS.md -->
+  <link rel="stylesheet" href="../../site/css/styles.css">
   <style>
     .sandbox-strip { max-width: 1180px; margin: 14px auto -2px; padding: 8px 20px; display: flex;
       align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.8em; color: var(--muted); }
@@ -89,7 +89,7 @@
   <div class="sandbox-strip">
     <span class="pill">Sandbox</span>
     <span>Account &amp; password flows · unwired mock ·
-      spec: <a href="../../site/app/PLAN-2026-07-20-ACCOUNTS.md">PLAN-2026-07-20-ACCOUNTS.md</a></span>
+      spec: <a href="../../docs/app/PLAN-2026-07-20-ACCOUNTS.md">PLAN-2026-07-20-ACCOUNTS.md</a></span>
   </div>
 
   <!-- Kept as the design record of the emailed-code flow, NOT as a picture of the system.
@@ -100,7 +100,7 @@
       no SMTP, and cadet addresses were fabricated, so that flow could never deliver. Recovery is now
       in person — an instructor resets a student to the default from the Roster page
       (<code>reset-student-password</code>), and the account is flagged for forced rotation. The
-      live account page is <code>site/app/js/account.js</code>.</span>
+      live account page is <code>site/js/account.js</code>.</span>
   </div>
 
   <main class="page" id="main"></main>
@@ -125,9 +125,9 @@
   </aside>
 
   <script type="module">
-    import { renderNav } from '../../site/app/js/nav.js';
-    import { setIconBase, esc } from '../../site/app/js/util.js';
-    setIconBase('../../site/app/media/icons/');
+    import { renderNav } from '../../site/js/nav.js';
+    import { setIconBase, esc } from '../../site/js/util.js';
+    setIconBase('../../site/media/icons/');
 
     /* ── The four synthetic identities ──────────────────────────────────────── */
     const WHO = {

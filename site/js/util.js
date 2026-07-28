@@ -8,7 +8,7 @@ export function esc(s) {
 }
 
 /* ── Icons ──────────────────────────────────────────────────────────────────
- * Icons live in site/app/media/icons as ic-<name>.png (256×256, downscaled by CSS to
+ * Icons live in site/media/icons as ic-<name>.png (256×256, downscaled by CSS to
  * 16–28px). Not every icon is necessarily present, so iconHTML degrades gracefully:
  *   missing ic-<name>.png  →  ic-dashboard.png (the universal default)
  *   if that's missing too  →  the emoji passed in
@@ -17,25 +17,20 @@ export function esc(s) {
 const DEFAULT_ICON = 'dashboard'; // ic-dashboard.png is the catch-all placeholder
 
 let ICON_BASE = (function detectBase() {
-  // Works at /site/app/ and after promotion to repo root. Nested pages (student/ faculty/)
-  // are one level deep and need to climb one directory to reach media/.
+  // Depth-based, not path-based: nested pages (student/ faculty/) are one level deep and
+  // climb one directory to reach media/. That is why it needed no edit when the tree moved
+  // from /site/app/ to /site/ at the 2026-07-28 promotion.
   return /\/(student|faculty)\/[^/]*$/.test(location.pathname) ? '../media/icons/' : 'media/icons/';
 })();
 
 export function setIconBase(base) { ICON_BASE = base; }
 
-/**
- * Build a link to a LEGACY page that lives at the SITE ROOT (admin.html,
- * interactions-admin.html). The relative depth differs between the two phases:
- *   • review:    .../site/app/faculty/x.html  →  ../../admin.html
- *   • promoted:  .../faculty/x.html      →  ../admin.html
- * Detecting the `/site/app/<role>/` segment lets the same markup work in BOTH phases with
- * no manual find/replace at go-live. (Relative only — safe under GitHub project pages.)
- */
-export function legacyUrl(file) {
-  const underApp = /\/app\/(student|faculty)\//.test(location.pathname);
-  return (underApp ? '../../' : '../') + file;
-}
+// legacyUrl() lived here until the 2026-07-28 promotion. It built a relative link to a
+// legacy page at the site root — admin.html, interactions-admin.html — and adjusted its
+// depth for whether the caller sat under /site/app/<role>/ or /site/<role>/. Those pages
+// were deleted by that promotion, so every link it could return is now a 404. It had zero
+// live callers throughout (LEGACY-AUDIT-2026-07-20.md §5, ROADMAP), so it is removed rather
+// than repointed: there is nothing left for it to point AT.
 
 /**
  * Returns an <img> string for ic-<name>.png. If that file 404s it falls back to

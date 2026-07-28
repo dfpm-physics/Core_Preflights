@@ -16,7 +16,7 @@ See [`../../CHANGELOG.md`](../../CHANGELOG.md).*
 >
 > **Audience.** This is the developer/agent-facing map — for someone *changing* the schema. The
 > director-facing account of the same model, for someone *using* PREP, is the tier-gated help pair
-> `site/app/help/director-course-structure.md` (the concepts) and `director-schema-reference.md` (the
+> `site/help/director-course-structure.md` (the concepts) and `director-schema-reference.md` (the
 > table-by-table reference with a diagram). Those deliberately omit the invariants, the frozen
 > surfaces, and the RLS reasoning that this doc and its companion decision records carry.
 

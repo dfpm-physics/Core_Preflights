@@ -340,7 +340,7 @@ def main():
 
     expect_ok(cur, "a well-formed feedback row inserts",
               """INSERT INTO feedback (submitted_by,page,category,message)
-                 VALUES (%s,'/site/app/faculty/gradebook.html','feature','Add a CSV export')""",
+                 VALUES (%s,'/site/faculty/gradebook.html','feature','Add a CSV export')""",
               (instructor,))
     expect_error(cur, "an unknown category is refused",
                  """INSERT INTO feedback (submitted_by,page,category,message)

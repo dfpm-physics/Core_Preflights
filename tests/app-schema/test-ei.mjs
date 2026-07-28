@@ -26,10 +26,10 @@
 
 import { check, eq, section, summary, installBrowser, makeClient } from './harness.mjs';
 
-installBrowser({ pathname: '/site/app/faculty/gradebook.html' });
+installBrowser({ pathname: '/site/faculty/gradebook.html' });
 globalThis.window.db = makeClient();
 
-const EI = await import('../../site/app/js/faculty-ei.js');
+const EI = await import('../../site/js/faculty-ei.js');
 
 /* ══ 1. localInputValue ═══════════════════════════════════════════════════════ */
 
@@ -293,7 +293,7 @@ eq('a row with an unreadable duration contributes zero minutes, not NaN',
  */
 section('faculty-ei.js — renderEiPanel');
 
-const { esc } = await import('../../site/app/js/util.js');
+const { esc } = await import('../../site/js/util.js');
 const fmtDate = (iso) => String(iso || '').slice(0, 10);
 const panelOpts = { esc, fmtDate, nameOf: (id) => ({ e1: 'Ada Byron', e2: 'Cadet Two' })[id] || '' };
 

@@ -26,7 +26,7 @@ Only a System Admin can create another System Admin.
 ## Adding an Instructor
 
 > **This section describes the admin panel that is live today (`site/admin.html`, schema `public`).**
-> The PREP v2 app (`site/app/faculty/admin.html` → **Staff**) replaced it, and two differences will
+> The PREP v2 app (`site/faculty/admin.html` → **Staff**) replaced it, and two differences will
 > bite whoever follows the steps below after the cutover:
 >
 > - **You no longer type a temporary password, and there is no field for one.** The account is
@@ -86,7 +86,7 @@ Any logged-in instructor can change their own password without contacting the co
 ## Adding Students (Roster Upload)
 
 > **This section describes the admin panel that is live today (`site/admin.html`, schema `public`),
-> and it is accurate for it.** The PREP v2 app (`site/app/`, schema `app`) replaced this whole
+> and it is accurate for it.** The PREP v2 app (`site/`, schema `app`) replaced this whole
 > procedure on 2026-07-21 and takes the **registrar's export** instead of a hand-made three-column
 > CSV — real email addresses, squadron, majors, and advisor, with a per-student review step for
 > returning cadets, and no password reset by email. None of that is live until the cutover

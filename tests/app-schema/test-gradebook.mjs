@@ -27,10 +27,10 @@
 
 import { check, eq, section, summary, installBrowser, makeClient } from './harness.mjs';
 
-installBrowser({ pathname: '/site/app/faculty/gradebook.html' });
+installBrowser({ pathname: '/site/faculty/gradebook.html' });
 globalThis.window.db = makeClient();
 
-const G = await import('../../site/app/js/faculty-gradebook.js');
+const G = await import('../../site/js/faculty-gradebook.js');
 
 /* ── Fixtures ─────────────────────────────────────────────────────────────────
  * Every date is fixed and `now` is injected everywhere, so this suite says the same thing in

@@ -46,7 +46,7 @@ in source_provenance.
 SUBMISSIONS ARE LEFT `draft` WITH NO chosen_activity_id — ON PURPOSE. The interactive
 activity is wired `grading_role='practice'` on this offering, and app.submissions_gradable
 refuses a chosen_activity_id that is not 'graded'. Leaving the submission uncommitted is
-exactly what site/app/js/student-data.js does for a practice activity, so these rows match
+exactly what site/js/student-data.js does for a practice activity, so these rows match
 what production would have written. /lesson-aggregate does not filter on status.
 
 NO `grades` ROWS ARE WRITTEN. The interactive activity is practice, and these students did

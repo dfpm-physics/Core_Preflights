@@ -14,7 +14,7 @@ Usage:
     python scripts/docs/check_doc_sources.py list       # print the whole index
     python scripts/docs/check_doc_sources.py check --json
     python scripts/docs/check_doc_sources.py status     # preview the help-centre banner data
-    python scripts/docs/check_doc_sources.py status --write   # write site/app/help/DOC-STATUS.json
+    python scripts/docs/check_doc_sources.py status --write   # write site/help/DOC-STATUS.json
 
 Exit codes:
     0  nothing stale
@@ -45,7 +45,7 @@ INDEX = REPO / "docs" / "DOC-SOURCES.json"
 
 # Published beside the help content so the help centre can fetch it with the same relative base
 # it already uses for MANIFEST.json. Generated — never hand-edit it.
-STATUS = REPO / "site" / "app" / "help" / "DOC-STATUS.json"
+STATUS = REPO / "site" / "help" / "DOC-STATUS.json"
 
 # The index and its notes contain em dashes; the default Windows console code page mangles
 # them. Force UTF-8 output, and never let an unencodable character crash a reporting tool.

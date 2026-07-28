@@ -155,7 +155,7 @@ def _connect():
     return conn
 
 
-# ── Coercion, mirroring site/app/js/faculty-interactions.js (contract §7) ─────────────────
+# ── Coercion, mirroring site/js/faculty-interactions.js (contract §7) ─────────────────
 # Structured content is LLM-produced and occasionally imperfect: keep only valid 0–5 ints;
 # everything else becomes None and drops out of means (null ≠ 0, contract §5.1).
 def _int05(v):
@@ -384,7 +384,7 @@ def summarize(rows, points_possible):
     # The written path's contribution: ONE synthetic objective. The free-response question
     # measures understanding on the same 0-5 scale, so it belongs in the same breakdown — but it
     # does NOT decompose, so it appears as a single item rather than being spread across the
-    # authored objectives. Matches FREE_RESPONSE_KEY in site/app/js/schema.js.
+    # authored objectives. Matches FREE_RESPONSE_KEY in site/js/schema.js.
     fr = [it["q3"] for it in items if it["q3"] is not None]
     if fr:
         objectives.append({"key": "__free_response__", "label": "Free response",
@@ -397,7 +397,7 @@ def summarize(rows, points_possible):
 
     # Misconceptions — counted by CANONICAL id, carrying description and a couple of examples.
     #
-    # MUST match canonMisconceptionId() in site/app/js/faculty-rollup.js. Both producers may coin
+    # MUST match canonMisconceptionId() in site/js/faculty-rollup.js. Both producers may coin
     # ids (contract §5.4) and both counting sites key on the string, so `scalar-sum`, `Scalar-Sum`
     # and `scalar sum` used to be three separate entries here and three separate bars in the
     # browser. If these two normalizers ever disagree, the prose cites a prevalence the panel

@@ -1,26 +1,31 @@
 # PREP v2 cutover — bootstrap, migrate, promote
 
-**Status:** **Phases 1–3 are DONE against the live database. Phase 4 has not run.**
-*(Corrected 2026-07-27 — this line read "not yet executed against the live database" until then,
-which stopped being true around 2026-07-21 and was the roadmap's P0.1 note that nobody had actioned.
-Anyone reading it since has been told the schema does not exist yet.)*
+**Status:** **ALL FOUR PHASES ARE DONE. The cutover ran on 2026-07-28.**
 
 | Phase | State |
 |---|---|
 | 1 — bootstrap schema and roles | **Done.** `app` exists; the three `prep_app_*` roles exist |
 | 2 — invariant + RLS suites | **Done.** Both green (22/22 and 35/35, 2026-07-22) |
 | 3 — migrate content and roster | **Done.** `app` holds the real Fall 2026 content and roster; the chain is applied through `015` |
-| 4 — promote the front end | **NOT RUN.** This is the live cutover, and the one-way step |
+| 4 — promote the front end | **Done 2026-07-28.** `site/app/` moved up to `site/`; the legacy pages are deleted |
 
-**What "done" does and does not mean.** `site/app/` is a complete portal already reading and writing
-`app` (`site/app/js/config.js` binds `db: { schema: 'app' }`). What has not happened is putting it
-on the URLs people visit. Until Phase 4 runs, students and instructors are still pointed at the
-legacy pages at `site/*.html`, which read `public`.
+**This document is now a record, not a plan.** It is kept because the reasoning is the only written
+account of why the frozen URLs survived the move, and because Phases 1–3 are the procedure anyone
+rebuilding the schema would follow. Do not run Phase 4 again — there is no `site/app/` to promote,
+and `scripts/promote_app.py` refuses on the missing tree.
 
-**Two things below are stale in a way worth knowing before you follow them:** the chain in step 2
-now runs past `003` to `015`, and step 11 ("seal the owner") has been done and undone several times
-since — `prep_app_owner` is unsealed whenever a migration is applied and must be re-sealed after.
-Roadmap **P0.2** is the standing item to seal it for good.
+**What the promotion did.** 109 files moved from `site/app/` to `site/`, file by file. Four legacy
+pages were deleted (`admin.html`, `interactions-admin.html`, `interactions.html`, `review.html`).
+The eight internal design notes at `site/app/*.md` went to `docs/app/` rather than into the
+published tree. The two frozen contract paths — `site/student/interaction-submit.html` and
+`site/faculty/lessons.html` — stopped being forwarding stubs and became the real pages **at
+byte-identical URLs**, verified by hash before and after.
+
+**Still stale below, and worth knowing before you follow Phases 1–3:** the chain in step 2 now runs
+past `003` to `015`, and step 11 ("seal the owner") has been done and undone several times since —
+`prep_app_owner` is unsealed whenever a migration is applied and must be re-sealed after. Roadmap
+**P0.2** is the standing item to seal it for good; it is **deliberately unsealed as of 2026-07-28**
+while the course director is still making schema tweaks.
 
 *Authored 2026-07-20 by Casey (via Claude). Operational companion to
 [`../decisions/PREP-V2-SCHEMA.md`](../decisions/PREP-V2-SCHEMA.md) (why a parallel schema),
@@ -117,13 +122,22 @@ each role connects and holds exactly the privileges it should, and no more.
 11. **Seal the owner** (bootstrap §7): `ALTER ROLE prep_app_owner NOLOGIN;` once the build is done, so
     it cannot connect until a human deliberately re-enables it for the next schema change.
 
-## Phase 4 — Promote the front end (the one-way step)
+## Phase 4 — Promote the front end (the one-way step) — **RAN 2026-07-28**
 
-Everything above is reversible by dropping schema `app`. This phase changes the live site.
+Everything above is reversible by dropping schema `app`. This phase changed the live site.
 
-12. ~~**Point the front end at `app`.**~~ **Done.** `site/app/js/config.js` binds the client to
-    `db: { schema: 'app' }`; every query from `site/app/` goes to the v2 model.
-13. **Promote the app tree** so the real pages land on the frozen contract paths
+12. ~~**Point the front end at `app`.**~~ **Done.** `site/js/config.js` binds the client to
+    `db: { schema: 'app' }`; every query from `site/` goes to the v2 model.
+13. ~~**Promote the app tree**~~ **Done 2026-07-28** — 109 files moved, 4 legacy pages deleted, both
+    frozen paths verified byte-identical to the pages that were at `site/app/`. Two bugs in
+    `promote_app.py` surfaced and were fixed during the run: it created each destination's parent
+    directory *before* `git rm`-ing the incumbent, and `git rm` of the last file in a directory
+    removes the directory — so the first overwrite (`site/css/styles.css`, the only file in
+    `site/css/`) aborted the run with ENOENT; and its "remove the empty shell" check only tested
+    `site/app/` itself, which is never empty while its subdirectories survive. The original
+    instruction follows, for the record.
+
+    **Promote the app tree** so the real pages land on the frozen contract paths
     `site/student/interaction-submit.html` and `site/faculty/lessons.html`, overwriting the
     forwarding stubs. **The public URLs must be identical before and after** — if the promotion
     cannot preserve them exactly, abort rather than change a contract URL.
@@ -137,11 +151,28 @@ Everything above is reversible by dropping schema `app`. This phase changes the 
     **does not commit or push**: pushing is the cutover, and that stays a human act (CORE.md §5).
 
     The blocker this step used to carry is cleared — the promotion deletes the legacy `admin.html`,
-    and its replacements (Staff and Export in `site/app/faculty/admin.html`) shipped 2026-07-20.
+    and its replacements (Staff and Export in `site/faculty/admin.html`) shipped 2026-07-20.
 
     `site/app/*.md` — the internal design notes — route to `docs/app/` rather than into the published
     tree, and `docs/DOC-SOURCES.json` references some of the moved files and must be updated in the
     **same commit**.
+
+    **What the script did not cover, and had to be fixed by hand in the same commit.** Worth reading
+    if you ever move this tree again: the script moves files, and nothing else knows they moved.
+    - `docs/DOC-SOURCES.json` — 31 source paths (the step above anticipated this one).
+    - `scripts/docs/check_doc_sources.py` — wrote its generated verdict to a hardcoded
+      `site/app/help/DOC-STATUS.json`.
+    - `scripts/app/gen_db_schema.py` — generated into a hardcoded `site/app/js/db-schema.js`, so the
+      db-schema test failed with "does not exist — run the generator".
+    - **Three** Node test harnesses, not one: `tests/app-schema/` (76 path references),
+      `tests/browser-harness/` (21), `tests/browser/` (38 — these are `<script src>` and `import`
+      paths in HTML sandboxes, so they break silently in a browser rather than loudly in a runner).
+    - `tests/app-schema/test-config.mjs` asserted the *legacy* config stayed on `public`. That
+      invariant is precisely what the promotion ends, so the test was rewritten to assert the new
+      one: exactly one config, on `app`, and no legacy page left alive.
+    - `site/js/util.js` — `legacyUrl()` was removed rather than repointed. It had zero live callers
+      throughout, and every link it could return became a 404 the moment the legacy pages were
+      deleted.
 14. **Push** — a push to `main` rebuilds GitHub Pages (~1–2 min) and is the live cutover.
 
 ---

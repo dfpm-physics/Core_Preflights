@@ -8,12 +8,12 @@
 <!-- Director-only gate (internal design sandboxes). -->
 <script>document.documentElement.style.opacity='0'</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../../site/app/js/config.js"></script>
+<script src="../../site/js/config.js"></script>
 <script type="module" src="./guard.js"></script>
 <!-- Uses the LIVE design system so this preview tracks the real app. No DB, no CDN, no JS modules:
      a hardcoded synthetic view-model is rendered with the same component classes the real
-     dashboard (site/app/student/dashboard.html) uses, plus the proposed "Review before class" panel. -->
-<link rel="stylesheet" href="../../site/app/css/styles.css">
+     dashboard (site/student/dashboard.html) uses, plus the proposed "Review before class" panel. -->
+<link rel="stylesheet" href="../../site/css/styles.css">
 <style>
   /* Sandbox-only chrome + the one NEW component this prototype introduces:
      the "Review before class" formative panel (objective strength meters). */
@@ -108,7 +108,7 @@
 <script>
 // ───────────────────────────────────────────────────────────────────────────
 // Synthetic view-model. Mirrors the shape produced by loadStudentDashboard()
-// in site/app/js/student-data.js, extended with the per-interaction report_data
+// in site/js/student-data.js, extended with the per-interaction report_data
 // fields (effort / objectives / recommended_review …) the live loader doesn't
 // surface yet. One realistic Physics 215 cadet, mid-semester.
 // ───────────────────────────────────────────────────────────────────────────
@@ -187,7 +187,7 @@ const effortToPoints = (e) => (e >= 3 ? 2 : e >= 1 ? 1 : 0);
 const effortLabel = (e) =>
   ['No engagement', 'Minimal effort', 'Partial effort', 'Solid effort', 'Strong effort', 'Full effort'][e] ?? '—';
 
-// ── render functions (mirror site/app/student/dashboard.html) ──
+// ── render functions (mirror site/student/dashboard.html) ──
 function statTiles(s) {
   const tile = (accent, e, num, label) => `
     <div class="stat-tile accent-${accent}">

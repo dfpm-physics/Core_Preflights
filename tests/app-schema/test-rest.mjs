@@ -11,7 +11,7 @@ import { check, section, anonClient } from './harness.mjs';
 import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT, ENROLLMENT_JOIN,
   STAFF_SELECT, ENROLLMENT_SELECT,
-} from '../../site/app/js/schema.js';
+} from '../../site/js/schema.js';
 
 section('PostgREST projections (shape only — RLS empties the rows)');
 

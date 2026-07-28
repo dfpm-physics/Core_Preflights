@@ -3,12 +3,12 @@
 // These are internal design/preview pages, so restrict them to course directors (or higher).
 // Static-site client-side gate: anonymous users are bounced to the app login; signed-in
 // non-directors get an access-denied message. Requires the Supabase client (window.db) from
-// ../../site/app/js/config.js, loaded as a classic script BEFORE this module.
+// ../../site/js/config.js, loaded as a classic script BEFORE this module.
 //
 // The page is hidden (opacity 0, set by an inline head script) until this resolves, so gated
 // content never flashes before the check completes.
 
-const APP = '../../site/app/';   // relative → resolves both locally and under /Core_Preflights/ on Pages
+const APP = '../../site/';   // relative → resolves both locally and under /Core_Preflights/ on Pages
 
 function reveal() { document.documentElement.style.opacity = ''; }
 function deny(msg) {

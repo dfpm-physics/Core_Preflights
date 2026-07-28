@@ -479,9 +479,9 @@ every live row, so the second day's submissions move it. That is the signal the 
 still owed, and it is the only automated one. Section scopes should be blank; a section that shows
 STALE right after its own run means its work changed while you were writing.
 
-> **The faculty rollup DOES display this (since 2026-07-21).** `site/app/faculty/report.html`
+> **The faculty rollup DOES display this (since 2026-07-21).** `site/faculty/report.html`
 > renders the readiness summary, the misconception-trend prose, and the per-section showcase
-> quotes; `loadAnalysis()` in `site/app/js/faculty-rollup.js` selects the scope. `status` remains
+> quotes; `loadAnalysis()` in `site/js/faculty-rollup.js` selects the scope. `status` remains
 > the fastest verification surface, but it is no longer the only one.
 >
 > **It was silently broken until then, and the failure mode is worth knowing.** `loadAnalysis()`

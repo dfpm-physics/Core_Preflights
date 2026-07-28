@@ -51,7 +51,7 @@ function ok(body: object) {
 /**
  * The default password, in one place: last name + `1234`, the surname cut at its first hyphen or
  * space. MUST derive the identical value to `defaultStaffPasswordFor()` in create-instructor and
- * `defaultStaffPassword()` in site/app/js/faculty-admin.js — this one has to reproduce what that
+ * `defaultStaffPassword()` in site/js/faculty-admin.js — this one has to reproduce what that
  * one created, and the browser copy is what the director is told to say out loud.
  */
 function defaultStaffPasswordFor(name: string): string {

@@ -1,4 +1,4 @@
-// test-imports.mjs — every import in site/app/ resolves to something that actually exists.
+// test-imports.mjs — every import in site/ resolves to something that actually exists.
 //
 // WHY THIS EARNS ITS PLACE
 //   The project has no build step by design (CORE.md §2), so nothing type-checks and nothing
@@ -19,10 +19,10 @@ import { check, section, REPO, installBrowser, makeClient } from './harness.mjs'
 // `window.db` to already exist (config.js, a classic script, sets it). Install both BEFORE
 // importing anything, or every module fails to load and the check reports noise instead of
 // the one thing it is for.
-installBrowser({ pathname: '/site/app/student/dashboard.html' });
+installBrowser({ pathname: '/site/student/dashboard.html' });
 globalThis.window.db = makeClient();
 
-const APP = resolve(REPO, 'site/app');
+const APP = resolve(REPO, 'site');
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -49,7 +49,7 @@ function moduleSources(file) {
 // `import { a, b as c } from './x.js'` and `import * as NS from './x.js'`
 const IMPORT_RE = /import\s+(?:([\w$]+)\s*,\s*)?(?:\{([^}]*)\}|\*\s*as\s+([\w$]+))\s+from\s+['"]([^'"]+)['"]/g;
 
-section('static import integrity across site/app/');
+section('static import integrity across site/');
 
 const files = walk(APP);
 const exportCache = new Map();
@@ -190,7 +190,7 @@ check(`no identifier is used without being imported`, missing.length === 0);
 process.exitCode = (problems.length === 0 && missing.length === 0) ? 0 : 1;
 
 // This suite runs in its OWN process (see run.mjs). It has to: verifying imports means
-// importing every module, and site/app/js/supabase.js binds `window.db` once at import time
+// importing every module, and site/js/supabase.js binds `window.db` once at import time
 // (`export const db = window.db`). Doing that with the unauthenticated client used here
 // would leave every later suite holding a signed-out client, and the end-to-end tests would
 // fail at bootstrap for a reason that has nothing to do with the code under test.

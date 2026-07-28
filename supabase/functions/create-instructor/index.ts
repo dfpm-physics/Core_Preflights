@@ -53,7 +53,7 @@ function ok(body: object) {
  * whitespace-separated token, and a compound one is cut at its first hyphen or space —
  * `Jane Smith-Jones` -> `smith1234`.
  *
- * THE ENFORCING COPY. `defaultStaffPassword()` in site/app/js/faculty-admin.js and
+ * THE ENFORCING COPY. `defaultStaffPassword()` in site/js/faculty-admin.js and
  * `defaultStaffPasswordFor()` in reset-staff-password must derive the identical value: the browser
  * one only tells the director what to say, and the reset one has to reproduce what was created
  * here. They may not drift. (Duplicated rather than shared because a Deno edge function and a
@@ -67,7 +67,7 @@ function defaultStaffPasswordFor(name: string): string {
   return stem ? `${stem}1234` : "";
 }
 
-/** Mirrors MIN_PASSWORD in site/app/js/account.js and set-own-password. */
+/** Mirrors MIN_PASSWORD in site/js/account.js and set-own-password. */
 const MIN_PASSWORD = 8;
 
 serve(async (req) => {
@@ -94,7 +94,7 @@ serve(async (req) => {
     // 'grader' was withdrawn on 2026-07-27: it meant "grades only, no authoring", and authoring
     // has always been gated on DIRECTOR, so it was privilege-identical to 'instructor'. The CHECK
     // constraint still admits it (DDL on `app` is sealed) and existing rows keep working — this
-    // only stops NEW ones being minted. See ROLE_LABEL in site/app/js/faculty-admin.js.
+    // only stops NEW ones being minted. See ROLE_LABEL in site/js/faculty-admin.js.
     if (role && !["system_admin", "director", "instructor"].includes(role)) {
       return ok({
         error: role === "grader"

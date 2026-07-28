@@ -22,7 +22,7 @@
 // last 6 digits of the cadet ID — from the roster page. The instructor never chooses or sees a
 // password, and the account is flagged so the cadet must pick their own on the next sign-in.
 //
-// Design record: site/app/PLAN-2026-07-20-ACCOUNTS.md (tiers C and D there describe the email
+// Design record: docs/app/PLAN-2026-07-20-ACCOUNTS.md (tiers C and D there describe the email
 // world this replaced; the "send reset email" tier no longer exists).
 
 import { db } from './supabase.js';

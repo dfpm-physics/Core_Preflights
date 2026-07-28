@@ -25,11 +25,11 @@
 
 import { check, eq, section, summary, installBrowser, makeClient } from './harness.mjs';
 
-installBrowser({ pathname: '/site/app/faculty/lessons.html' });
+installBrowser({ pathname: '/site/faculty/lessons.html' });
 globalThis.window.db = makeClient();
 
-const L = await import('../../site/app/js/faculty-lessons.js');
-const A = await import('../../site/app/js/faculty-admin.js');
+const L = await import('../../site/js/faculty-lessons.js');
+const A = await import('../../site/js/faculty-admin.js');
 
 /* Local wall clock of an ISO instant, in the zone this process is running in — which is the same
    zone the browser code converts through. Comparing wall clocks rather than strings is the whole

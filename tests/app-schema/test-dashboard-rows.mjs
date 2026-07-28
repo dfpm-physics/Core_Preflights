@@ -27,10 +27,10 @@
 
 import { check, eq, section, summary, installBrowser, makeClient } from './harness.mjs';
 
-installBrowser({ pathname: '/site/app/faculty/dashboard.html' });
+installBrowser({ pathname: '/site/faculty/dashboard.html' });
 globalThis.window.db = makeClient();
 
-const D = await import('../../site/app/js/faculty-data.js');
+const D = await import('../../site/js/faculty-data.js');
 
 /* ── Fixtures ──────────────────────────────────────────────────────────────── */
 

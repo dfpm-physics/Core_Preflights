@@ -2,11 +2,11 @@
 //
 // Nothing imports this module — which is why the app works, and also why the import checker
 // (tests/app-schema/test-imports.mjs) cannot catch what follows. Every query below targets
-// `public` tables and columns that this client can no longer reach: site/app/js/config.js
+// `public` tables and columns that this client can no longer reach: site/js/config.js
 // pins it to schema `app`, so importing this file yields 404s on `responses` and 400s on
 // `assignments.questions`, `assignments.analysis_report` and `students.section_id`.
 //
-// It is kept deliberately (see site/app/README.md): it is the ported query layer for the
+// It is kept deliberately (see docs/app/README.md): it is the ported query layer for the
 // by-question report, which is to be MERGED INTO THE LESSON ROLLUP rather than shipped as its
 // own page. Migrate it as part of that merge, not before — the replacement reads the
 // `analysis_reports` table (scope='assignment_offering'), which

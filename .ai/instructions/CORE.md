@@ -30,25 +30,29 @@ There is **one production Supabase database** (`shzvpmlnqfmzfmuxkowi`) and **one
 (GitHub Pages off `main`). Multiple agents write to both. Treat every mutation as visible to
 everyone else, immediately.
 
-**That database now holds two schemas. Know which one you are touching.**
+**That database holds two schemas, but only one of them is now reachable from the site.**
 
 | Schema | Status | Holds |
 |---|---|---|
-| `public` | **Live.** Serves the legacy pages at `site/*.html`, which are still the URLs students and instructors are pointed at. | The original model — `assignments` / `responses` / `scores`, `interactions`, `lessons` |
-| `app` | **Live, and read by every page under `site/app/`** — `site/app/js/config.js:25-26` binds that client to `db: { schema: 'app' }`. Not yet on the public URLs. | The PREP v2 redesign, holding the real Fall 2026 content and roster |
+| `app` | **Live, and the only schema any page reads.** `site/js/config.js` binds the one client to `db: { schema: 'app' }`, and every page under `site/` is served from the public URLs. | The PREP v2 model, holding the real Fall 2026 content and roster |
+| `public` | **Retained, unreferenced.** Nothing served from this repo queries it. Kept as the cutover rollback and as the historical record. | The original model — `assignments` / `responses` / `scores`, `interactions`, `lessons` |
 
-`app` is not dead code and `public` is not obsolete. **Both are live; the distinction is which URLs
-reach them.** `site/app/` is a complete, working portal already reading and writing `app` — what has
-not happened is the promotion that puts it on the paths people actually visit (roadmap P0.1). So a
-change to what a student sees *today, at the URL they were given* belongs in `public`; a change to
-the system everyone will be using after the cutover belongs in `site/app/`, and that is where new
-work goes. See [`docs/architecture/`](../../docs/architecture/) for the v2 model and why it is
-shaped that way.
+**The promotion ran on 2026-07-28** (Phase 4 of
+[`docs/operations/PREP-V2-CUTOVER.md`](../../docs/operations/PREP-V2-CUTOVER.md), roadmap P0.1).
+`site/app/` no longer exists: its 109 files moved up to `site/`, the four legacy pages
+(`admin.html`, `interactions.html`, `interactions-admin.html`, `review.html`) were deleted, and the
+two frozen contract paths stopped being forwarding stubs and became the real pages at the same URLs.
+So **all new work goes in `site/`** — there is no longer a legacy tree to avoid. See
+[`docs/architecture/`](../../docs/architecture/) for the v2 model and why it is shaped that way.
 
-*(This row read "built, tested, not yet wired to any page" until 2026-07-27. That was true when it
-was written and had been false for some time: it predates `site/app/` being pointed at `app`, and
-survived because nothing re-read it. It is the reason `PREP-V2-CUTOVER.md` also still said the
-procedure had never been run.)*
+**Do not read `public` from a page, and do not drop it either.** It is the rollback, and dropping it
+is a separate snapshot-gated destructive operation that has not been authorized
+([`docs/decisions/PREP-V2-SCHEMA.md`](../../docs/decisions/PREP-V2-SCHEMA.md) §8).
+
+*(Before 2026-07-28 this table described two live schemas behind two sets of URLs, which is what the
+whole `site/app/` staging arrangement existed to manage. That arrangement is over; if you find a doc
+that still describes a stub forwarding into `site/app/`, it is stale — the promotion is the thing
+that ended it.)*
 
 - **Nothing an agent "remembers" privately is shared.** Claude Code has a private per-project
   memory store outside the repo; Codex has its own session state. **Neither is visible to the
@@ -130,7 +134,7 @@ Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
   reports `node: not found` even though it is present. Check `C:\Program Files\nodejs\node.exe`
   directly before concluding it is absent, or restart the session.
 - **Verify UI changes in a browser:** `python -m http.server 8000` from the repo root, open
-  `http://localhost:8000/site/` and `http://localhost:8000/site/app/`. Do not add a build step.
+  `http://localhost:8000/site/`. Do not add a build step.
 - **Tooling is Python** using only the **standard library** (`urllib`, `json`, `zoneinfo`) against
   the Supabase REST API — see `scripts/`. Heavier DB work uses `psycopg2` in a gitignored `.venv/`
   (see `supabase/admin/`).
@@ -196,7 +200,7 @@ The canonical domain procedures are agent-neutral Markdown runbooks under `.ai/s
 | `lesson-aggregate` | **Per-cohort, and owns all of it.** Every AI panel for one lesson — readiness summary (including the common threads across the graded questions), the one-line recommendation, showcase quotes → `analysis_reports`. Modality-blind: folds the `schema: 1` assessment from *both* paths (the artifact's, on the submission; `preflight-analyze`'s, on the grade). Writes **three scope kinds** — section (recommendation + quotes), `instr:<uuid>` (the readiness summary, across every section that instructor teaches), and `__all__` (written only once every section has a scope). Run **after each day track's deadline** with `--day`. Renamed from `interaction-aggregate` 2026-07-21. *(`misconception_trends` was retired 2026-07-22 and listed here in error until 2026-07-27 — do not write it.)* |
 | `interaction-backfill` | Repair reports missing `report_data` by reconstructing schema-1 from `report_markdown`. Interactive path only — the written path's equivalent is a `preflight-analyze` re-run. |
 | `setup-preflight` | First-time machine setup — writes the config file above. |
-| `docs-author` | Decide whether a concept warrants documentation and which kind, then write it — in-app help docs (`site/app/help/`) or design docs (`docs/`). Read before adding any `.md` to either. |
+| `docs-author` | Decide whether a concept warrants documentation and which kind, then write it — in-app help docs (`site/help/`) or design docs (`docs/`). Read before adding any `.md` to either. |
 
 One-off/maintenance scripts live in `scripts/` (e.g. `scripts/fall2026/` Fall build+clean,
 `scripts/training/` disposable training data). All DB-mutating scripts **must be idempotent and
@@ -273,8 +277,9 @@ The full table catalog, JSONB shapes, roles, and edge functions are in
   caps effort at 2. Full transport spec (frozen v1): `docs/contracts/INTERACTION-DATA-CONTRACT.md`.
 - **The artifact↔site contract is frozen:** artifacts post by stable slug to
   `site/student/interaction-submit.html`, and AI-generated prefill links target
-  `site/faculty/lessons.html`. Both paths are stubs forwarding into `site/app/` today and become
-  the real pages at promotion, so **neither URL changes at go-live and neither may be moved**.
+  `site/faculty/lessons.html`. Both were forwarding stubs until the 2026-07-28 promotion replaced
+  them with the real pages **at the identical URLs**, which is what the stubs existed to guarantee.
+  Neither URL changed at go-live and **neither may be moved**.
   Any multi-term work must be additive (new columns) and must not change that wire format.
   Changing a contract URL means rebuilding every deployed artifact by hand — only ever done
   between semesters (last: 2026-07-16), never mid-term.

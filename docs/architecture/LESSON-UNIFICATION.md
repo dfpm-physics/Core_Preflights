@@ -447,8 +447,8 @@ or a small admin script using the scoped DB role.
   build/attach the preflight (questions; assignment authoring still lives on legacy `admin.html`
   today, so this either embeds or links it), set/attach the interaction (artifact URL — reuses the
   prefill-link flow), choose `completion_policy`, define `objectives`, and set due dates. Likely
-  extends `site/app/faculty/interactions.html` or a new `site/app/faculty/lessons.html`.
-- **Faculty — rollup** — `site/app/faculty/report.html` gains the merged by-objective view with the
+  extends `site/faculty/interactions.html` or a new `site/faculty/lessons.html`.
+- **Faculty — rollup** — `site/faculty/report.html` gains the merged by-objective view with the
   modality breakdown for choice lessons; by-question view for preflight-only.
 - **Student — lesson view** — a lesson-centric list/detail showing the required path or the choice,
   the lock state ("graded via interaction — preflight no longer counts"), and the single 2-point
@@ -482,7 +482,7 @@ Each phase is independently shippable and leaves the system working.
    row; add the question→objective and reading-reflection-role conventions; perform the due-date
    auto-promote of leftover drafts.
 4. **Faculty lesson creation tool** — author lessons, attach/build both components, set policy +
-   objectives + due dates. — **✅ built 2026-06-26** (`site/app/faculty/lessons.html` + `site/app/js/faculty-lessons.js`,
+   objectives + due dates. — **✅ built 2026-06-26** (`site/faculty/lessons.html` + `site/js/faculty-lessons.js`,
    director-gated **Lessons** nav entry). Originally new-content-only. **Updated 2026-07-15:** each
    component now has a `None · Use existing · Create new` source toggle, so a lesson can **reference an
    existing** assignment/interaction (see Phase 7) or be authored inline; a lesson may carry one or both

@@ -2,14 +2,14 @@
 name: docs-author
 description: >
   Decide whether a concept warrants written documentation, route it to the right artifact, and
-  write it. Two outputs: an in-app HELP DOC (`site/app/help/` + `MANIFEST.json`, tier-gated,
+  write it. Two outputs: an in-app HELP DOC (`site/help/` + `MANIFEST.json`, tier-gated,
   must stay current) and a DESIGN DOC (`docs/`, point-in-time record of a decision). Use when
   asked to "document this", "write a help page/topic", "add something to Help", "write it up",
   "write a design doc / spec / ADR", "explain this to students/instructors/directors", or
-  /docs-author — and BEFORE writing any new `.md` under `site/app/help/` or `docs/`. Also use
+  /docs-author — and BEFORE writing any new `.md` under `site/help/` or `docs/`. Also use
   to decide the prior question: does this need a doc at all, which kind, and for whom? The gate
   can and often should answer "neither — fix the UI, or just log it in CHANGELOG.md". NOT for
-  `site/app/DESIGN.md` (that is the design *system* — tokens and components, a different file
+  `docs/app/DESIGN.md` (that is the design *system* — tokens and components, a different file
   with its own rules), not for CORE.md/PROJECT.md (the operating contract), and not for
   CHANGELOG.md (which every shipped change updates regardless).
 ---
@@ -37,7 +37,7 @@ interesting the work was.
 
 | The reader's question | Artifact |
 |---|---|
-| "How do I do X in PREP?" · "Why did the system do this to my grade?" | **Help doc** — `site/app/help/` |
+| "How do I do X in PREP?" · "Why did the system do this to my grade?" | **Help doc** — `site/help/` |
 | "Why did we build it this way, and what did we reject?" | **Design doc** — `docs/decisions/` |
 | "What is the wire format, and what may never change?" | **Contract** — `docs/contracts/` |
 | "How do the pieces fit together?" | **Architecture** — `docs/architecture/` |
@@ -125,15 +125,15 @@ checkable rules; this section carries only what will break the page if you get i
 
 ### Mechanics that are not negotiable
 
-The authoring contract is [`site/app/help/README.md`](../../../site/app/help/README.md); the renderer is
-[`site/app/js/help.js`](../../../site/app/js/help.js).
+The authoring contract is [`site/help/README.md`](../../../site/help/README.md); the renderer is
+[`site/js/help.js`](../../../site/js/help.js).
 
 - **No YAML front matter.** The repo has no `.nojekyll`, so Jekyll converts any file with front
   matter to HTML and the Help page's fetch 404s. This is the single most common way to break a help doc.
 - **Start at `##`.** The manifest `title` renders as the `<h1>`.
 - **No raw HTML.** Content goes through `marked` → `DOMPurify`; tags are stripped.
 - **Link to other topics as `[Title](help.html?doc=<id>)`** — relative links resolve against
-  `site/app/{student,faculty}/`, not the help folder.
+  `site/{student,faculty}/`, not the help folder.
 - **File name:** `<audience>-<topic>.md`. **Manifest entry:** `id` (stable kebab-case — it is the
   deep link, changing it breaks saved URLs), `tier`, `title`, `summary`, `file`. Order within the
   manifest is display order inside the tier group.
@@ -182,7 +182,7 @@ as an orphan.
    ```
    python -m http.server 8000
    ```
-   Open `http://localhost:8000/site/app/student/help.html` and `.../faculty/help.html`. Confirm the
+   Open `http://localhost:8000/site/student/help.html` and `.../faculty/help.html`. Confirm the
    topic appears under the expected tier, opens, and renders — a doc that 404s locally will 404 live.
 2. **Validate the manifest parses** — a trailing comma silently breaks the entire Help page, not
    just the new topic.
@@ -202,7 +202,7 @@ as an orphan.
    python scripts/docs/check_doc_sources.py status --write
    ```
    The Help page shows a "may be out of date" banner on flagged topics, but a browser cannot run
-   `git` — so the verdict comes from `site/app/help/DOC-STATUS.json`, computed on your machine and
+   `git` — so the verdict comes from `site/help/DOC-STATUS.json`, computed on your machine and
    committed. **A stale snapshot is a silent all-clear, which is worse than no banner**: it tells
    readers a page was checked when it was not. It is generated from committed history only, so your
    working tree does not affect what readers see, and `check` prints a reminder when the published

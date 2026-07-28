@@ -14,12 +14,12 @@ below decides whether the written half exists too.
 **Base:**
 `https://dfpm-physics.github.io/Core_Preflights/site/faculty/lessons.html`
 
-> **Use this base and no other.** It survives the app promotion by construction: today
-> `site/faculty/lessons.html` is a stub forwarding into `site/app/faculty/lessons.html`, and at
-> promotion the app tree moves up so the real page lands on exactly this path. Links you generate
-> now keep working afterward with no edit.
+> **Use this base and no other.** It survived the app promotion by construction: until 2026-07-28
+> `site/faculty/lessons.html` was a stub forwarding into `site/app/faculty/lessons.html`, and the
+> promotion moved the app tree up so the real page landed on exactly this path. Links generated
+> before that date keep working with no edit, which was the point.
 >
-> Don't target `site/app/faculty/…` directly — that path disappears at promotion. The older
+> `site/app/faculty/…` no longer exists — it was never a valid target and is now a 404. The older
 > `site/interactions-admin.html` and `site/app/faculty/interactions.html` bases are **retired**
 > and are not part of this contract.
 

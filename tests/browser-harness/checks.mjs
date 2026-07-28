@@ -57,7 +57,7 @@ const browser = await puppeteer.launch({
 });
 const page = await browser.newPage();
 
-await page.goto(`${BASE}/site/app/login.html`, { waitUntil: 'networkidle2' });
+await page.goto(`${BASE}/site/login.html`, { waitUntil: 'networkidle2' });
 await page.type('#identifier', EMAIL);
 await page.type('#password', PASSWORD);
 await Promise.all([
@@ -77,7 +77,7 @@ console.log(`\nTier under test: ${TIER}\n`);
 
 /* ── Dashboard: P1.6 tasks panel, P1.7 switchers ──────────────────────────── */
 section('dashboard');
-await go('/site/app/faculty/dashboard.html');
+await go('/site/faculty/dashboard.html');
 
 const boxes = await count('.duo-box:not(.duo-skel)');
 const emptyState = await count('.duo-empty');
@@ -125,7 +125,7 @@ if (TIER === 'instructor') {
 /* ── Rollup: P0.10 KDE tuner gating, P1.5 chart style ─────────────────────── */
 if (LESSON) {
   section('rollup');
-  await go(`/site/app/faculty/report.html?i=${encodeURIComponent(LESSON)}`);
+  await go(`/site/faculty/report.html?i=${encodeURIComponent(LESSON)}`);
   check('the KDE tuner is ABSENT from a plain rollup', (await count('#kde-tuner')) === 0);
 
   const hist = await count('.obj-hist');
@@ -144,7 +144,7 @@ if (LESSON) {
   check('…and no name is present in the DOM while it is off',
         (await count('.sr-quote [data-name], .sr-quote .sr-name')) === 0);
 
-  await go(`/site/app/faculty/report.html?i=${encodeURIComponent(LESSON)}&kde=1`);
+  await go(`/site/faculty/report.html?i=${encodeURIComponent(LESSON)}&kde=1`);
   const tuner = await count('#kde-tuner');
   if (TIER === 'instructor') {
     check('?kde=1 does NOT give an instructor the tuner', tuner === 0);
@@ -156,7 +156,7 @@ if (LESSON) {
 /* ── Staff table: P0.11 ───────────────────────────────────────────────────── */
 if (TIER !== 'instructor') {
   section('course admin — staff table');
-  await go('/site/app/faculty/admin.html');
+  await go('/site/faculty/admin.html');
   const ownSelect = await count('.staff-tbl select[disabled]');
   const implicit = (await text('.staff-tbl')) || '';
   if (TIER === 'admin') {

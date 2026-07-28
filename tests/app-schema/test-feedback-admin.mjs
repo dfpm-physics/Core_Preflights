@@ -19,16 +19,16 @@
 
 import { check, eq, section, summary, installBrowser, makeClient } from './harness.mjs';
 
-installBrowser({ pathname: '/site/app/faculty/feedback.html' });
+installBrowser({ pathname: '/site/faculty/feedback.html' });
 globalThis.window.db = makeClient();
 
-const F = await import('../../site/app/js/faculty-feedback.js');
+const F = await import('../../site/js/faculty-feedback.js');
 
 const row = (o = {}) => ({
   id: o.id || Math.random().toString(36).slice(2),
   submitter_name: o.name || 'Dr. Ada Byron',
   role: o.role || 'faculty',
-  page: o.page || '/site/app/faculty/gradebook.html',
+  page: o.page || '/site/faculty/gradebook.html',
   page_title: o.page_title === undefined ? 'Gradebook · PREP' : o.page_title,
   category: o.category || 'other',
   message: o.message || 'a comment',
@@ -101,7 +101,7 @@ section('pageKey — a readable, stable row label');
 
 eq('the page title is preferred', F.pageKey(row({ page_title: 'Gradebook · PREP' })), 'Gradebook · PREP');
 eq('falls back to the file name when there is no title',
-   F.pageKey(row({ page_title: null, page: '/site/app/faculty/grade.html' })), 'grade.html');
+   F.pageKey(row({ page_title: null, page: '/site/faculty/grade.html' })), 'grade.html');
 eq('an unknown page is labelled, not blank',
    F.pageKey({ page: '', page_title: '' }), '(unknown)');
 eq('a null row does not throw', F.pageKey(null), '(unknown)');

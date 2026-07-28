@@ -8,6 +8,126 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-28 — Matthew Recker via Claude
+
+### PREP v2 cutover, Phase 4: `site/app/` promoted to `site/`
+
+**The redesign is now the site.** `site/app/` no longer exists — its 109 files moved up to `site/`,
+and the four legacy pages that read schema `public` were deleted. Every URL a student or instructor
+visits now serves the v2 portal against schema `app`. This is Phase 4 of
+`docs/operations/PREP-V2-CUTOVER.md` and roadmap **P0.1**, the last open item from the redesign.
+
+Run with `scripts/promote_app.py --commit` as a single designated operator, on a clean tree in sync
+with `origin/main` (CORE.md §0). **No database state was touched** — this is a file move plus the
+path fixes it forces. Schema `public` is untouched and remains the rollback; dropping it is a
+separate, unauthorized, snapshot-gated operation (PREP-V2-SCHEMA.md §8).
+
+**The frozen contract URLs came through byte-identical, which was the whole point.** Both
+`site/student/interaction-submit.html` and `site/faculty/lessons.html` were forwarding stubs; the
+promotion replaced each with the real page **at the same URL**. Verified by SHA-256 before and
+after: the file now at each path hashes identically to the page that was at `site/app/…`. Every
+deployed Claude artifact keeps posting to a URL that still works, with nothing rebuilt.
+
+**Deleted:** `site/admin.html`, `site/interactions-admin.html`, `site/interactions.html`,
+`site/review.html` (the last a credential-free grade viewer the legacy audit called "a re-enable
+away from a FERPA problem"). **Relocated out of the published tree:** the eight internal design
+notes at `site/app/*.md` → `docs/app/`, so a file named `LEGACY-AUDIT` no longer sits beside the
+student login page.
+
+### Two bugs in `promote_app.py`, both found by running it
+
+Fixed and committed separately (`8963547`) before the real run, because the script refuses to run on
+a dirty tree:
+
+- **ENOENT on the first overwrite.** The move loop created each destination's parent directory and
+  *then* `git rm`'d the incumbent. When the incumbent was the only tracked file in that directory,
+  `git rm` removed the directory too — undoing the mkdir — and `git mv` failed. `site/css/styles.css`
+  was exactly that case, so the run aborted on the first of its five overwrites with the file already
+  removed. The mkdir now happens after the `git rm`.
+- **The empty-shell cleanup never fired.** It tested `site/app/` itself for emptiness, which is never
+  true while its subdirectories survive (git tracks files, not directories). It now walks bottom-up,
+  and refuses to remove anything if a real file survived — which would mean the plan missed something.
+
+### What the runbook did not anticipate: everything outside `site/` that hardcodes a path into it
+
+This was the bulk of the work, and the general lesson is that **the script moves files and nothing
+else knows they moved**. All fixed in this commit:
+
+- `docs/DOC-SOURCES.json` — 31 source paths. The one *prose* mention of `site/app/`, inside a note
+  describing what that note used to say, was deliberately left alone.
+- `scripts/docs/check_doc_sources.py` — wrote its generated verdict to a hardcoded
+  `site/app/help/DOC-STATUS.json`.
+- `scripts/app/gen_db_schema.py` — generated into a hardcoded `site/app/js/db-schema.js`. Left
+  unfixed this would have read as live-schema drift: the test fails with "does not exist — run the
+  generator", which is not what a stale generated file usually means.
+- **Three** Node test harnesses, not the one the checklist names: `tests/app-schema/` (76 refs),
+  `tests/browser-harness/` (21), and `tests/browser/` (38). The last matters most — those are
+  `<script src>` and `import` paths inside HTML sandboxes, so they would have broken silently in a
+  browser rather than loudly in a runner.
+- `tests/app-schema/test-config.mjs` asserted that the *legacy* config stayed on `public`. That
+  invariant is precisely what this cutover ends, so the test now asserts the new one: exactly one
+  config, targeting `app`, with no legacy page and no second config left alive.
+
+### `legacyUrl()` removed rather than repointed
+
+`site/js/util.js` exported a helper that built relative links to `admin.html` /
+`interactions-admin.html`, adjusting depth for whether the caller sat under `/site/app/<role>/` or
+`/site/<role>/`. It had **zero live callers** throughout (legacy audit §5, roadmap P0.1), and every
+link it could return became a 404 the moment those pages were deleted. There is nothing left for it
+to point at, so it is gone rather than half-fixed.
+
+The two *runtime* path helpers needed no change at all, which is worth recording: `APP_ROOT` in
+`auth.js` and `ICON_BASE` in `util.js` both detect depth with `/(student|faculty)/…$` rather than
+matching a literal path, so they resolve identically before and after. That was designed in, and it
+held.
+
+### Verification
+
+- **`tests/app-schema`: 321 passed, 0 failed.** One suite, `test-isolation.mjs`, **did not run** —
+  see below.
+- **HTTP smoke test** against `python -m http.server`: every promoted page, stylesheet, module, help
+  manifest and icon returns 200; all four deleted legacy pages and `site/app/js/config.js` return
+  404. Every `href`/`src`/`import` on ten representative pages was followed — zero broken references.
+- **`check_doc_sources.py`** flagged 7 documents on the first pass. Every trigger was a source file
+  that had *moved* or had a comment edited, with no behavioural change, and no help doc cites a URL
+  that moved (the only `app/` string in help content is `supabase/migrations/app/*.sql`, a database
+  path). Their `reviewed` dates are bumped to 2026-07-28 on that basis. `PREP-V2-CUTOVER.md` was
+  substantially rewritten and re-dated as a real review.
+- **Committing the move flagged four more**, this time because `CORE.md` and `PROJECT.md` had
+  genuinely changed — and one of them was **wrong, not merely stale**:
+  `site/help/admin-system-operations.md` told admins the two frozen URLs "are currently stubs
+  forwarding into the app and become the real pages at promotion". That is a world-readable page
+  describing the system in the present tense, and the promotion had just falsified it. **Fixed**,
+  not bumped. The other three (`ai-and-your-work`, `director-ai-rules`, `director-course-structure`)
+  make no claim about tree layout or URLs and were correct as written.
+
+**Not verified, and unrelated to this change: `test-isolation.mjs` could not sign in as the test
+cadet** (`3009999999@usafa.edu`), failing with `Invalid login credentials`. That suite carries the
+RLS isolation checks — anon reads nothing, a student sees only their own rows. It **passed on the
+pre-promotion baseline run earlier the same day** and the credential broke between the two runs. It
+is not caused by the promotion: the harness hardcodes its own URL and publishable key
+(`harness.mjs:18-19`) and never loads any file this commit moved, and RLS is a property of the
+database, which this commit does not touch. The likely cause is that account's live password state
+(it was already flagged `must_change_password` at baseline, which is why `test-student.mjs`'s
+bootstrap check failed there). **Restoring that account's default is a live-auth mutation and was
+deliberately not done here** — it needs the coordination gate, and the database is currently
+unsealed for other work.
+
+### Docs
+
+`CORE.md` §0 rewritten: the two-live-schemas-behind-two-URL-sets model is gone, replaced by one
+reachable schema (`app`) and one retained-but-unreferenced rollback (`public`). `PROJECT.md`'s Key
+Files table rebuilt around the promoted paths (the old one listed four pages that no longer exist).
+`PREP-V2-CUTOVER.md` is now a record rather than a plan, and carries the list above so the next
+tree move starts from it. Roadmap **P0.1 closed**. The two frozen contracts were corrected by hand
+after a blanket path rewrite corrupted them into nonsense — one had come out reading "a stub
+forwarding into itself", the other "don't target" the very path that *is* the contract.
+
+**Not done, deliberately:** `prep_app_owner` is left **unsealed** at the course director's request,
+who is still making schema tweaks. Roadmap **P0.2** (seal it for good) stays open.
+
+---
+
 ## 2026-07-28 — Matthew Recker via Claude (feedback: mark an accepted item done, and get it off the list)
 
 **Migration `app/018_feedback_completed.sql` added; see "Applying it" below for its status.**

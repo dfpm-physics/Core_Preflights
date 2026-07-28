@@ -1,21 +1,285 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Opening your report… · PREP</title>
-<!-- Contract endpoint for artifact report submissions (docs/contracts/INTERACTION-DATA-CONTRACT.md).
-     Artifacts hardcode this URL, so the PATH is frozen even though this file is temporary.
-
-     During the app refactor the implementation lives at site/app/student/; this stub forwards
-     there, preserving the query and hash where the report payload rides. At promotion the app
-     tree moves up and app/student/interaction-submit.html lands on exactly this path, silently
-     replacing this stub — the forwarding disappears and the public URL never changes. Nothing
-     here needs editing at go-live; just don't move it. -->
-<script>location.replace('../app/student/interaction-submit.html' + location.search + location.hash);</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Submit report · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <!-- Stash the payload before ANY module can navigate. The report lives entirely in the URL
+       hash, and auth.js sends a signed-out student to login with pathname+search only — so
+       without this, a sign-in round trip silently discards a completed lesson. -->
+  <script>(function(){try{var h=location.hash.slice(1);if(h)sessionStorage.setItem('cp.pendingReport',h);}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <!-- Decompress the payload, render Markdown, sanitize before inserting to the DOM -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
 </head>
 <body>
-<p>Opening your report… If nothing happens,
-   <a href="../app/student/interaction-submit.html">continue here</a>.</p>
+  <header id="topnav"></header>
+  <main class="page" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Loading your report…</span></div>
+  </main>
+
+  <script type="module">
+    // Receiver for lesson-interaction reports. Transport spec: docs/contracts/INTERACTION-DATA-CONTRACT.md.
+    // The artifact has no concept of Submit — it just posts a report into the URL hash. Nothing
+    // reaches the database until the student clicks Submit below.
+    //
+    // THE URL AND THE #i= SLUG ARE FROZEN. Deployed artifacts point here by hard-coded path and
+    // send a lesson slug and nothing else. Under schema `app` that slug is activities.slug —
+    // globally unique for exactly this reason — and everything else (which assignment, which
+    // term, which offering, which enrollment) is resolved from it. The wire format is unchanged.
+    import { db } from '../js/supabase.js';
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { esc } from '../js/util.js';
+    import { resolveActivityBySlug, submitInteractionReport, loadAssignmentStatuses } from '../js/student-data.js';
+    import { questionsOf, answeredCount } from '../js/schema.js';
+
+    const PENDING_KEY = 'cp.pendingReport';
+
+    /* ── Payload ─────────────────────────────────────────────────────────────
+     * #t=interaction&i=<slug>&r=<lz markdown>&d=<lz json>
+     * The hash wins when present; sessionStorage is the fallback after a login round trip.
+     */
+    function unpack(packed) {
+      if (!packed) return null;
+      try { return LZString.decompressFromEncodedURIComponent(packed) || null; } catch (_) { return null; }
+    }
+
+    // Effort is the only grade-bearing field. Accept it only as an integer 0–5; anything else
+    // → null. NOTE: unlike the legacy receiver, nothing here writes a grade — a student cannot
+    // (grades_staff_write). Effort rides inside the stored schema:1 payload and is turned into
+    // a grade later by staff or the analysis workflow. It is shown below as an indication only.
+    function readEffort(d) {
+      const e = (d && typeof d === 'object') ? d.effort : null;
+      return (Number.isInteger(e) && e >= 0 && e <= 5) ? e : null;
+    }
+    function effortPoints(e, possible) {   // mirrors app.grades_points_from_effort()
+      if (e == null) return 0;
+      if (e >= 3) return possible;
+      if (e >= 1) return Math.round((possible / 2) * 100) / 100;
+      return 0;
+    }
+
+    function readPayload() {
+      let raw = location.hash.slice(1);
+      if (!raw) { try { raw = sessionStorage.getItem(PENDING_KEY) || ''; } catch (_) {} }
+      if (!raw) return null;
+
+      const p = new URLSearchParams(raw);
+      const markdown = unpack(p.get('r'));
+      let data = null;
+      // Optional structured data (#d=). Never block submission on a problem here: store what we
+      // can, fall back to a raw wrapper so nothing is lost, and continue (contract §7).
+      const decoded = unpack(p.get('d'));
+      if (decoded) {
+        try { data = JSON.parse(decoded); }
+        catch (_) { data = { _unparsed: decoded }; } // valid JSONB; preserves the payload
+      }
+      return {
+        type: (p.get('t') || 'interaction').toLowerCase(),
+        id: p.get('i'),
+        markdown,
+        data,
+        effort: readEffort(data),
+      };
+    }
+
+    /* ── Render helpers ──────────────────────────────────────────────────── */
+    const main = document.getElementById('main');
+
+    function notice(kind, title, body) {
+      main.innerHTML = `<div class="page-head"><h1>Submit report</h1></div>
+        <div class="alert alert-${kind}"><strong>${esc(title)}</strong>${body ? `<div style="margin-top:4px">${esc(body)}</div>` : ''}</div>`;
+    }
+    function emptyState(icon, title, body) {
+      main.innerHTML = `<div class="empty-state"><div class="es-ic">${icon}</div>
+        <h3>${esc(title)}</h3><p>${esc(body)}</p></div>`;
+    }
+
+    /* ── Init ────────────────────────────────────────────────────────────── */
+    const payload = readPayload();
+    const ctx = await bootstrap();
+    let resolved = { activity: null, offering: null };
+    let writtenAnswers = 0;   // saved work on the written path that would stop counting
+    if (ctx) init();
+
+    async function init() {
+      initTheme();
+      renderNav(ctx, { active: 'lessons' });
+
+      if (ctx.role !== 'student') {
+        notice('warn', 'Only students can submit reports.',
+          `You're signed in as ${ctx.instructorRow?.name || 'faculty'}. Interaction reports save against a student record, so there's nothing to submit from this account.`);
+        return;
+      }
+      if (!payload) {
+        emptyState('💡', 'Nothing to submit',
+          'Open an interactive lesson and finish it — it will send your report here automatically.');
+        return;
+      }
+      if (payload.type !== 'interaction') {
+        notice('warn', `This submission type (“${payload.type}”) isn’t supported yet.`,
+          'Your report was not saved. Let your instructor know which assignment produced this link.');
+        return;
+      }
+      if (!payload.markdown) {
+        notice('error', 'Could not read the report.',
+          'The link may have been truncated or copied incompletely. Re-open the interactive lesson and submit again from the finish screen.');
+        return;
+      }
+      await render();
+    }
+
+    async function render() {
+      // Resolve the slug to an activity and the offering scheduled for THIS student.
+      if (payload.id) {
+        resolved = await resolveActivityBySlug(ctx, payload.id);
+      }
+      const { activity, offering } = resolved;
+
+      // If the same assignment also has a written path and the student has saved answers on
+      // it, submitting here makes the interactive the graded one instead. Both sets of work
+      // are KEPT now — that is the point of submission_activities — but only one is graded,
+      // so the student still deserves the warning before, not after.
+      writtenAnswers = 0;
+      let offered = null;
+      let item = null;
+      if (offering) {
+        offered = offering.activities.find(a => a.id === activity.id) || null;
+        const items = await loadAssignmentStatuses(ctx);
+        item = items.find(i => i.offeringId === offering.offeringId) || null;
+        if (item?.written) {
+          const saved = item.submission?.activities?.[item.written.id]?.content || null;
+          writtenAnswers = answeredCount(saved, questionsOf(item.written));
+        }
+      }
+
+      // Two hard stops on submitting for a grade, both from the student's own resolved status
+      // (loadAssignmentStatuses honours the section deadline and any extension). An interactive
+      // grade is auto-final and has no instructor review to catch a late or duplicate submission,
+      // so these are enforced BEFORE submit, not after:
+      //   pastDue      — the deadline has passed; a report can't be handed in late for credit.
+      //   alreadyFinal — a finalized grade already exists; the first submitted report is the one
+      //                  that counts, so a later one can't overwrite it.
+      // (Practice is a separate, softer case handled below — it records but never grades.)
+      const pastDue      = !!item?.isPast;
+      const alreadyFinal = !!item?.grade?.is_finalized;
+
+      // Stored markdown is a user-controllable blob — sanitize at render time, never execute.
+      const preview = DOMPurify.sanitize(marked.parse(payload.markdown));
+      const canSubmit = !!(payload.id && activity && offering) && !pastDue && !alreadyFinal;
+
+      let banner = '';
+      if (!payload.id) {
+        banner = `<div class="alert alert-warn">This link is missing its assignment id, so the report can’t be
+          attached to an assignment. You can read it below, but it can’t be saved.</div>`;
+      } else if (!activity) {
+        banner = `<div class="alert alert-warn">This assignment isn’t set up yet — ask your instructor to add
+          interaction “${esc(payload.id)}” before you submit.</div>`;
+      } else if (!offering) {
+        banner = `<div class="alert alert-warn">This assignment exists, but it isn’t published for your class
+          this term, so there’s nowhere to record it. You can read your report below — check with your
+          instructor before re-running the interactive lesson.</div>`;
+      } else if (alreadyFinal) {
+        banner = `<div class="alert alert-warn">This assignment has already been <strong>graded</strong>, so a new
+          report can’t be submitted. You can still read it below. If you think this is wrong, ask your
+          instructor — they can reopen the assignment.</div>`;
+      } else if (pastDue) {
+        banner = `<div class="alert alert-warn">The <strong>deadline for this assignment has passed</strong>, so
+          this report can no longer be submitted for a grade. You can read it below, and you can still launch the
+          lesson any time to study. If you had an extension that should still be open, ask your instructor.</div>`;
+      } else if (offered?.gradingRole === 'practice') {
+        banner = `<div class="alert alert-info">This assignment is set up as <strong>practice</strong> this term,
+          so the written preflight is what carries your grade. Your report is still saved and your instructor
+          will see it — it just won’t replace your written work.</div>`;
+      } else if (writtenAnswers > 0) {
+        banner = `<div class="alert alert-warn">You have ${writtenAnswers} answer${writtenAnswers === 1 ? '' : 's'}
+          saved on the written version of this assignment. <strong>Submitting this report makes the interactive
+          lesson the one that counts</strong> — your written answers are kept, but they won’t be graded, and
+          you won’t be able to switch back without asking your instructor.</div>`;
+      }
+
+      const possible = offering?.pointsPossible ?? 2;
+      const effortTag = payload.effort !== null
+        ? `<span class="tag blue" title="Effort ${payload.effort} of 5">effort ${payload.effort}/5</span>`
+        : '';
+
+      main.innerHTML = `
+        <div class="page-head">
+          <h1>Submit report</h1>
+          <div class="sub">Review your report below, then submit it to your record.</div>
+        </div>
+        ${banner}
+        <div class="card">
+          <div class="row wrap" style="justify-content:space-between;align-items:flex-start;gap:16px">
+            <div class="grow" style="min-width:220px">
+              <div class="row wrap" style="gap:8px">
+                <div class="card-title">${esc(activity?.title || offering?.title || 'Interaction report')}</div>
+                ${effortTag}
+              </div>
+              ${payload.id ? `<div class="muted" style="font-size:0.88em;margin-top:6px">Assignment id: ${esc(payload.id)}</div>` : ''}
+            </div>
+            ${canSubmit ? `<div class="row" style="gap:10px;flex-shrink:0">
+              <button class="btn btn-primary" id="submit-btn">Submit this report</button>
+            </div>` : ''}
+          </div>
+          <div id="submit-status" class="muted" style="font-size:0.85em;margin-top:10px;display:none"></div>
+        </div>
+        <div class="card">
+          <div class="card-meta">Report preview</div>
+          <div class="md-render" id="report-preview">${preview}</div>
+        </div>`;
+
+      document.getElementById('submit-btn')?.addEventListener('click', () => submitReport(possible));
+    }
+
+    async function submitReport(possible) {
+      const btn = document.getElementById('submit-btn');
+      const status = document.getElementById('submit-status');
+
+      if (writtenAnswers > 0 &&
+          !confirm(`Submit the interactive report?\n\n` +
+                   `The ${writtenAnswers} answer${writtenAnswers === 1 ? '' : 's'} you saved on the written ` +
+                   `version will be kept, but this report becomes the one that's graded, and you can't ` +
+                   `switch back without asking your instructor.`)) return;
+
+      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
+
+      const { error, committed, role } = await submitInteractionReport(ctx, {
+        activity: resolved.activity,
+        offering: resolved.offering,
+        markdown: payload.markdown,
+        data: payload.data,
+      });
+
+      status.style.display = '';
+      if (error) {
+        btn.disabled = false; btn.textContent = 'Submit this report';
+        status.textContent = '⚠ Submission failed — ' + (error.message || 'please try again.');
+        status.style.color = 'var(--red)';
+        return;
+      }
+      // Saved — drop the stash so a later visit without a payload can't re-offer a stale report.
+      try { sessionStorage.removeItem(PENDING_KEY); } catch (_) {}
+      btn.textContent = '✓ Submitted';
+      // Effort is reported as an indication only: the grade is written by an instructor or the
+      // analysis workflow reading the stored payload, not by this page.
+      const pts = payload.effort !== null
+        ? ` Your instructor will see an effort rating of ${payload.effort}/5` +
+          (committed ? ` (about ${effortPoints(payload.effort, possible)} of ${possible} pts).` : '.')
+        : '';
+      status.textContent = (committed
+        ? 'Saved — this assignment is now the one that counts for your grade.'
+        : `Saved to your record${role === 'practice' ? ' as practice' : ''}.`) + pts +
+        ' Re-submitting will overwrite it.';
+      status.style.color = 'var(--green)';
+    }
+  </script>
 </body>
 </html>

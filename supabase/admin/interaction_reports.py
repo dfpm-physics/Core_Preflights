@@ -102,7 +102,7 @@ def points_from_effort(effort, points_possible):
     """Effort (0-5) -> points, scaled to the offering's value.
 
     MUST stay identical to app.grades_points_from_effort() (001_core_model.sql) and to
-    pointsFromEffort() in site/app/js/schema.js — three copies of the migration-013 curve that
+    pointsFromEffort() in site/js/schema.js — three copies of the migration-013 curve that
     must agree, because on an effort-mode offering the trigger overwrites whatever we send.
     """
     pp = Decimal(points_possible)

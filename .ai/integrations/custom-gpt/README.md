@@ -106,9 +106,9 @@ them. That external GPT configuration is not changed by this repository archive.
 
 The active `/app/` files were restored to their pre-experiment Git versions:
 
-- `site/app/faculty/lessons.html`
-- `site/app/js/faculty-lessons.js`
-- `site/app/login.html`
+- `site/faculty/lessons.html`
+- `site/js/faculty-lessons.js`
+- `site/login.html`
 
 This removes the URL-fragment package receiver, Markdown/file controls, destination
 picker, chat-input RPC calls, and draft privacy link. The older query-string

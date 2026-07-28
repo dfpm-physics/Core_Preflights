@@ -1,4 +1,4 @@
-// test-roster-import.mjs — the pure parsing and reconciliation rules in site/app/js/roster-import.js.
+// test-roster-import.mjs — the pure parsing and reconciliation rules in site/js/roster-import.js.
 // No network, no login: these import the shipped module and exercise it directly.
 //
 // The fixtures below are deliberately nasty, because the real registrar export is. Every case
@@ -10,7 +10,7 @@ import {
   studentIdProblem, rowMatchesCourse, parseRosterFile, reconcile, summarize,
   REQUIRED_FIELDS,
   sectionDefaultsFrom,
-} from '../../site/app/js/roster-import.js';
+} from '../../site/js/roster-import.js';
 
 
 /* ── Delimited parsing ─────────────────────────────────────────────────────── */

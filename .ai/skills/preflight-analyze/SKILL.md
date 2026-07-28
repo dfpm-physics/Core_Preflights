@@ -171,7 +171,7 @@ GET {SUPA_URL}/rest/v1/assignment_offerings?select=id,points_possible,grading_mo
 Headers: READ_HEADERS
 ```
 
-This is the same projection the site uses (`OFFERING_SELECT` in `site/app/js/schema.js`) — keep it
+This is the same projection the site uses (`OFFERING_SELECT` in `site/js/schema.js`) — keep it
 that way so the skill and the UI can never disagree about what an assignment is.
 
 From the embedded `offering_activities`, take the entry whose `activities.modality = 'written'`:
@@ -573,7 +573,7 @@ Headers: READ_HEADERS
 > `source:'instructor'` on every row it wrote, so a single click of *Save draft* relabelled every
 > AI suggestion in the section — the column could not distinguish a reviewed grade from an
 > untouched one, and this guard would have skipped the whole section. `gradeRows()` in
-> `site/app/js/faculty-grade.js` now marks a row `instructor` only when that student's card was
+> `site/js/faculty-grade.js` now marks a row `instructor` only when that student's card was
 > actually edited, and preserves the prior `source` otherwise. **This guard depends on that fix;
 > do not apply it to a deployment that predates it.**
 

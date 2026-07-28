@@ -27,7 +27,7 @@ After implementation, the authoring workflow is:
 2. The GPT calls the `createLessonPrefillLink` Action with the generated lesson metadata,
    interaction metadata, and Markdown.
 3. The Action validates and compresses the payload, then returns one clickable faculty link.
-4. Opening the link loads `site/app/faculty/lessons.html`, restores the payload across login if
+4. Opening the link loads `site/faculty/lessons.html`, restores the payload across login if
    necessary, and opens a review form. Nothing has been written yet.
 5. The default destination is **Create a new lesson**.
 6. The director may instead select **Assign to existing lesson…**, review the exact effect,
@@ -115,7 +115,7 @@ Successful response:
 ```json
 {
   "schema": 1,
-  "url": "https://dfpm-physics.github.io/Core_Preflights/site/app/faculty/lessons.html#lp=...",
+  "url": "https://dfpm-physics.github.io/Core_Preflights/site/faculty/lessons.html#lp=...",
   "raw_bytes": 18422,
   "packed_characters": 6910,
   "expires_at": null
@@ -280,7 +280,7 @@ using **lz-string 1.5.0**, matching the repository's existing interaction-report
 The version-2 authoring link is:
 
 ```text
-https://dfpm-physics.github.io/Core_Preflights/site/app/faculty/lessons.html#lp=<packed-payload>
+https://dfpm-physics.github.io/Core_Preflights/site/faculty/lessons.html#lp=<packed-payload>
 ```
 
 The full package lives in the URL fragment. It is not sent to GitHub Pages as part of the HTTP
@@ -299,7 +299,7 @@ Session record:
 ```json
 {
   "schema": 1,
-  "path": "/Core_Preflights/site/app/faculty/lessons.html",
+  "path": "/Core_Preflights/site/faculty/lessons.html",
   "packed": "...",
   "captured_at": 1783972800000
 }

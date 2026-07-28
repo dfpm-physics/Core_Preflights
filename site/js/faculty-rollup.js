@@ -62,7 +62,7 @@
 // content, which is the bug the old three-places-to-publish arrangement kept producing.
 //
 // ── API COMPATIBILITY ───────────────────────────────────────────────────────────────
-// site/app/faculty/report.html imports this module and calls loadManager, loadInteractionData,
+// site/faculty/report.html imports this module and calls loadManager, loadInteractionData,
 // loadAnalysis, summarizeReports, loadReport and buildLessonCorpus. Those names and their
 // argument shapes are preserved deliberately: the interaction key each takes is now an offering
 // uuid instead of a slug, but it stays an opaque string that this module mints and consumes, so

@@ -10,7 +10,7 @@ import { eq, section, installBrowser, summary } from './harness.mjs';
 // itself touches neither the DOM nor a database — the stub is only to get the import through.
 installBrowser();
 
-const { bannerFor } = await import('../../site/app/js/run-banner.js');
+const { bannerFor } = await import('../../site/js/run-banner.js');
 
 const hoursAgo = h => new Date(Date.now() - h * 36e5).toISOString();
 

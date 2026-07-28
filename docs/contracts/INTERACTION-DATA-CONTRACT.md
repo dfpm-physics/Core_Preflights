@@ -45,11 +45,12 @@ This URL is **part of the contract and does not change.** Artifacts hardcode it;
 source location and internals may evolve, but the public URL and payload format below are frozen.
 
 Note the path is `student` — **singular**. It matches the app tree exactly, and that is the whole
-point: during the refactor `site/student/interaction-submit.html` is a stub that forwards into
-`site/app/student/interaction-submit.html`, and at promotion the app tree moves up so the real
-page lands on exactly this path, overwriting the stub. **Nothing needs editing at go-live** —
-the URL is the same before and after. A one-character drift here (`students/`) would break the
-endpoint at precisely the moment it is supposed to keep working.
+point. Until 2026-07-28 `site/student/interaction-submit.html` was a stub forwarding into
+`site/app/student/interaction-submit.html`; the promotion moved the app tree up so the real page
+landed on exactly this path, overwriting the stub. **That happened, and nothing needed editing** —
+the URL is byte-identical before and after, which is what this paragraph was insurance for. A
+one-character drift here (`students/`) would have broken the endpoint at precisely the moment it
+was supposed to keep working.
 
 > **No legacy redirect.** The original endpoints — root `artifact-submit.html` and
 > `interaction-submit.html`, plus their `site/` counterparts — were **retired, not aliased**, in a

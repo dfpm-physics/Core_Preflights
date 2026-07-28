@@ -190,10 +190,21 @@ def main():
         sh("git", "rm", "-q", "-r", p)
         print(f"  deleted {p}")
 
-    # site/app/ should now be empty; remove the shell if git left it.
-    if APP.exists() and not any(APP.iterdir()):
-        APP.rmdir()
-        print("  removed empty site/app/")
+    # site/app/ holds no files now, but git does not track directories, so the whole subdirectory
+    # skeleton (css/ js/ faculty/ student/ help/ media/) is left behind on disk. Testing APP itself
+    # for emptiness never fires, because those children still exist. Walk bottom-up instead, and
+    # refuse if any actual FILE survived — that would mean the plan missed something.
+    if APP.exists():
+        stragglers = [p for p in APP.rglob("*") if p.is_file()]
+        if stragglers:
+            print(f"\n  WARNING: {len(stragglers)} file(s) left under site/app/ — not removing it:")
+            for p in stragglers:
+                print(f"    {p.relative_to(REPO).as_posix()}")
+        else:
+            for d in sorted((p for p in APP.rglob("*") if p.is_dir()), reverse=True):
+                d.rmdir()
+            APP.rmdir()
+            print("  removed empty site/app/ tree")
 
     print("\nMoved. NOT committed and NOT pushed — that is deliberate.\n")
     print("Before you commit, confirm by hand:")

@@ -18,11 +18,11 @@
 import { check, eq, section, summary, installBrowser, signInAsTestStudent, makeClient }
   from './harness.mjs';
 
-const { store } = installBrowser({ pathname: '/site/app/student/account.html' });
+const { store } = installBrowser({ pathname: '/site/student/account.html' });
 const { client, session } = await signInAsTestStudent();
 const USER_ID = session.user.id;
 
-const P = await import('../../site/app/js/prefs.js');
+const P = await import('../../site/js/prefs.js');
 
 /* ── 1. The synced set is a decision, not an accident ─────────────────────── */
 

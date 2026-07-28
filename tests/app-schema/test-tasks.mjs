@@ -18,16 +18,16 @@
 
 import { check, eq, section, summary, installBrowser, makeClient } from './harness.mjs';
 
-installBrowser({ pathname: '/site/app/faculty/dashboard.html' });
+installBrowser({ pathname: '/site/faculty/dashboard.html' });
 // faculty-tasks.js imports supabase.js, which throws at import time when window.db is absent.
 // An unauthenticated client is enough: nothing below reaches the network — the scope guards
 // return early and every other case is driven with stub sources.
 globalThis.window.db = makeClient();
 
-const T = await import('../../site/app/js/faculty-tasks.js');
+const T = await import('../../site/js/faculty-tasks.js');
 
 // The real esc, so the escaping check below is testing what ships rather than a stand-in.
-const { esc } = await import('../../site/app/js/util.js');
+const { esc } = await import('../../site/js/util.js');
 
 /* ── 1. Registry invariants ──────────────────────────────────────────────── */
 

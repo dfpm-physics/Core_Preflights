@@ -37,7 +37,7 @@ function ok(body: object) {
   });
 }
 
-// Mirrors MIN_PASSWORD in site/app/js/account.js. Duplicated rather than shared because a Deno
+// Mirrors MIN_PASSWORD in site/js/account.js. Duplicated rather than shared because a Deno
 // edge function and a browser module have no common import path — but the client check is for
 // feedback and THIS one is the enforcement, so they may not silently drift apart.
 const MIN_PASSWORD = 8;

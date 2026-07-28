@@ -27,21 +27,21 @@ import { check, eq, section, summary, installBrowser, makeClient } from './harne
 
 // faculty-student.js imports faculty-rollup.js -> supabase.js, which throws at import time when
 // window.db is absent. Same reason test-tasks.mjs does this; it makes no network call.
-installBrowser({ pathname: '/site/app/faculty/student.html' });
+installBrowser({ pathname: '/site/faculty/student.html' });
 globalThis.window.db = makeClient();
 
-const S = await import('../../site/app/js/faculty-student.js');
-const { CELL } = await import('../../site/app/js/faculty-gradebook.js');
+const S = await import('../../site/js/faculty-student.js');
+const { CELL } = await import('../../site/js/faculty-gradebook.js');
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 section('backTarget — an allowlist, not a same-origin check');
 
-eq('a plain gradebook referrer comes back', S.backTarget('https://x.test/site/app/faculty/gradebook.html'), 'gradebook.html');
+eq('a plain gradebook referrer comes back', S.backTarget('https://x.test/site/faculty/gradebook.html'), 'gradebook.html');
 // Course Admin's Students tab is the second real drill-down path, since 2026-07-23 — it replaced
 // the standalone roster page, which no longer exists.
-eq('course admin is allowed', S.backTarget('https://x.test/site/app/faculty/admin.html'), 'admin.html');
-eq('the deleted roster page is NOT allowed', S.backTarget('https://x.test/site/app/faculty/roster.html'), 'gradebook.html');
-eq('grade is allowed', S.backTarget('https://x.test/site/app/faculty/grade.html?i=abc'), 'grade.html');
+eq('course admin is allowed', S.backTarget('https://x.test/site/faculty/admin.html'), 'admin.html');
+eq('the deleted roster page is NOT allowed', S.backTarget('https://x.test/site/faculty/roster.html'), 'gradebook.html');
+eq('grade is allowed', S.backTarget('https://x.test/site/faculty/grade.html?i=abc'), 'grade.html');
 eq('no referrer at all falls back', S.backTarget(''), 'gradebook.html');
 eq('undefined referrer falls back', S.backTarget(undefined), 'gradebook.html');
 
@@ -55,8 +55,8 @@ eq('an off-site referrer that ENDS IN an allowed name is still refused by origin
 eq('a javascript: referrer cannot survive', S.backTarget('javascript:alert(1)'), 'gradebook.html');
 eq('a protocol-relative referrer cannot survive', S.backTarget('//evil.test/x.html'), 'gradebook.html');
 eq('an unlisted faculty page falls back rather than being trusted',
-   S.backTarget('https://x.test/site/app/faculty/system.html'), 'gradebook.html');
-eq('the login page is not a back target', S.backTarget('https://x.test/site/app/login.html'), 'gradebook.html');
+   S.backTarget('https://x.test/site/faculty/system.html'), 'gradebook.html');
+eq('the login page is not a back target', S.backTarget('https://x.test/site/login.html'), 'gradebook.html');
 check('the return value is always a bare relative filename, never a URL',
       !S.backTarget('https://evil.test/whatever').includes('//'),
       'a value containing // could navigate off-origin');

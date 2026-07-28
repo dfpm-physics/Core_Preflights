@@ -1,4 +1,4 @@
-// test-db-schema.mjs — prove site/app/js/db-schema.js still describes the real schema `app`.
+// test-db-schema.mjs — prove site/js/db-schema.js still describes the real schema `app`.
 //
 // db-schema.js is a GENERATED catalogue, and faculty/system.html renders directly from it: the
 // column list, the type of every form control, the foreign-key pickers and the delete cascade
@@ -18,7 +18,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { check, eq, section, REPO } from './harness.mjs';
-import { DB_SCHEMA, TABLE_NAMES, tableMeta, referrers } from '../../site/app/js/db-schema.js';
+import { DB_SCHEMA, TABLE_NAMES, tableMeta, referrers } from '../../site/js/db-schema.js';
 
 section('db-schema.js — generated catalogue');
 

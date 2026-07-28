@@ -9,7 +9,7 @@ retire icons — this table is the source of truth for what the UI expects.
   site-wide in the page footer, so keep new icons from the same author to keep it accurate.
 - **Format:** PNG, 256×256, transparent, square. CSS downscales to 16–28 px.
 - **Fallback chain:** a missing `ic-<name>.png` falls back to `ic-dashboard.png`, then to an
-  emoji — so the UI never breaks (see `site/app/js/util.js` → `iconHTML`).
+  emoji — so the UI never breaks (see `site/js/util.js` → `iconHTML`).
 - **How to reference one:** `iconHTML('<name>', '<emoji-fallback>', '<css-class>')` from
   `util.js`, or for CSS backgrounds use `url(../media/icons/ic-<name>.png)`.
 - **Status legend:** ✅ present · ⬜ needed (not yet added).

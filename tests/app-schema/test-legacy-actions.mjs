@@ -7,7 +7,7 @@
 
 import { check, eq, section, installBrowser } from './harness.mjs';
 
-installBrowser({ pathname: '/site/app/faculty/lessons.html' });
+installBrowser({ pathname: '/site/faculty/lessons.html' });
 
 // mountLegacyActions writes to document.body, so give it just enough DOM to append into.
 const made = [];
@@ -33,7 +33,7 @@ globalThis.document = {
   body: { appendChild: (n) => { made.push(n); return n; } },
 };
 
-const { mountLegacyActions } = await import('../../site/app/js/nav.js');
+const { mountLegacyActions } = await import('../../site/js/nav.js');
 
 const ITEMS = [{ href: 'interactions.html', label: 'Interaction reports', note: 'n', emoji: '💡' }];
 const reset = () => { made.length = 0; };

@@ -1,9 +1,9 @@
 // help.js — the Help centre. Renders an index of documentation topics the current user is
 // allowed to see, and reads any one of them.
 //
-// Content is NOT in this file and not in the database: it is Markdown under site/app/help/,
-// listed in site/app/help/MANIFEST.json. Adding a topic is a file plus a manifest entry — no
-// code change. See site/app/help/README.md for the authoring contract.
+// Content is NOT in this file and not in the database: it is Markdown under site/help/,
+// listed in site/help/MANIFEST.json. Adding a topic is a file plus a manifest entry — no
+// code change. See site/help/README.md for the authoring contract.
 //
 // mountHelp(ctx, root) is called by student/help.html and faculty/help.html, and again on a
 // course switch (a director in one course and an instructor in another sees a different set).

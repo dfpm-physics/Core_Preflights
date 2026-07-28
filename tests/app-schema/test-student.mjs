@@ -1,6 +1,6 @@
 // test-student.mjs — the real student path, end to end, as a signed-in cadet.
 //
-// This imports site/app/js/auth.js and student-data.js unmodified and runs them against the
+// This imports site/js/auth.js and student-data.js unmodified and runs them against the
 // live database through RLS. It is the only suite that proves the wiring actually works
 // rather than merely type-checking: bootstrap resolves a real enrollment, the assignment list
 // stitches four tables together, and the write path creates real rows.
@@ -12,14 +12,14 @@
 
 import { check, eq, section, signInAsTestStudent, installBrowser, TEST_STUDENT } from './harness.mjs';
 
-installBrowser({ pathname: '/site/app/student/dashboard.html' });
+installBrowser({ pathname: '/site/student/dashboard.html' });
 const { client } = await signInAsTestStudent();
 
-const { bootstrap } = await import('../../site/app/js/auth.js');
+const { bootstrap } = await import('../../site/js/auth.js');
 const {
   loadAssignmentStatuses, loadStudentDashboard, loadInteractionStatuses,
   ensureSubmission, saveWrittenAnswers, commitSubmission, chooseActivity,
-} = await import('../../site/app/js/student-data.js');
+} = await import('../../site/js/student-data.js');
 
 /* ── bootstrap ─────────────────────────────────────────────────────────────── */
 section('auth.bootstrap as a student');

@@ -258,7 +258,7 @@ export function buildPrefillLink(prefill: NormalizedPrefill): {
   const rawBytes = encoder.encode(normalizedJson).length;
   const packed = LZString.compressToEncodedURIComponent(normalizedJson);
   const configuredBase = Deno.env.get("FACULTY_LESSONS_URL")
-    || "https://dfpm-physics.github.io/Core_Preflights/site/app/faculty/lessons.html";
+    || "https://dfpm-physics.github.io/Core_Preflights/site/faculty/lessons.html";
 
   let base: URL;
   try {

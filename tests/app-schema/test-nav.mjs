@@ -9,7 +9,7 @@ import { readdirSync } from 'node:fs';
 import { check, eq, section, installBrowser } from './harness.mjs';
 
 installBrowser({});   // nav.js imports util.js, which reads `location` at module load
-const { courseOptionsHTML, FACULTY_LINKS } = await import('../../site/app/js/nav.js');
+const { courseOptionsHTML, FACULTY_LINKS } = await import('../../site/js/nav.js');
 
 const OFF_215 = { offeringId: 'o-215-f26', courseId: 'c-215', courseCode: 'phys-215',
                   courseTitle: 'Physics 215', termCode: 'fall-2026', termLabel: 'Fall 2026', role: 'director' };
@@ -47,7 +47,7 @@ check('…pointing at the page that carries all three tabs', linkFor('admin').hr
 
 // Every href must be a page that exists. This is the check that would have caught a nav entry
 // left pointing at a deleted file — the failure mode of every page merge.
-const PAGES = new Set(readdirSync(new URL('../../site/app/faculty/', import.meta.url)));
+const PAGES = new Set(readdirSync(new URL('../../site/faculty/', import.meta.url)));
 eq('every faculty nav link points at a page that exists',
    FACULTY_LINKS.filter(l => !l.external && !PAGES.has(l.href)).map(l => l.href), []);
 

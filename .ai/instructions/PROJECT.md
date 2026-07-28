@@ -24,7 +24,7 @@ lesson interactions at USAFA. Replaces GradeScope for two courses: Physics 110 a
   address is the **real address from the registrar export** (`app.students.email`); their first
   password is the last 6 digits of their cadet ID and they are forced to change it on first
   sign-in. **There is no password reset by email — PREP has no SMTP.** A locked-out cadet asks a
-  **course director**, who restores the default from `site/app/faculty/admin.html` → **Students**;
+  **course director**, who restores the default from `site/faculty/admin.html` → **Students**;
   nobody can view or choose a password, because `reset-student-password` derives it and rejects a
   request carrying one. *(Cadets provisioned before 2026-07-21 still sign in with the fabricated
   `cadetID@usafa.edu` address that predates the registrar import.)*
@@ -67,14 +67,21 @@ lesson interactions at USAFA. Replaces GradeScope for two courses: Physics 110 a
 
 | File | Purpose |
 |---|---|
-| `site/index.html` | Student-facing assignment submission and grade review |
-| `site/admin.html` | Instructor grading panel (Grade, Report, Assignments, Roster, Sections, Export tabs) |
-| `site/interactions-admin.html` | Director/admin: add/edit/publish lesson interactions, view per-student reports |
-| `site/interactions.html` | Student-facing list of published lesson interactions (Launch links) |
-| `site/app/student/interaction-submit.html` | Receives a Claude artifact's compressed report and saves it per student. Reached via the frozen contract URL `site/student/interaction-submit.html` (a stub the promotion overwrites) |
-| `site/app/faculty/lessons.html` | Director lesson authoring; accepts AI-generated prefill links via the frozen URL `site/faculty/lessons.html` (same stub pattern) |
-| `site/js/config.js` | Supabase URL + anon key (safe to commit) |
+*The 2026-07-28 promotion moved `site/app/` up to `site/` and deleted the legacy pages. Paths below
+are post-promotion; role pages sit one level deep under `student/` and `faculty/`.*
+
+| File | Purpose |
+|---|---|
+| `site/index.html` | Entry point — routes to login or the signed-in user's dashboard |
+| `site/student/dashboard.html` | Student home: what is due, what is done |
+| `site/faculty/grade.html` | Instructor grading panel |
+| `site/faculty/admin.html` | Course Admin — Students, Staff, Sections, Course, Export |
+| `site/faculty/report.html` | Lesson rollup: readiness summary, recommendation, showcase quotes |
+| `site/student/interaction-submit.html` | Receives a Claude artifact's compressed report and saves it per student. **Frozen contract URL** — was a forwarding stub until the promotion put the real page here, at the same URL |
+| `site/faculty/lessons.html` | Director lesson authoring; accepts AI-generated prefill links. **Frozen contract URL**, same history |
+| `site/js/config.js` | Supabase URL + publishable key (safe to commit); binds the one client to schema `app` |
 | `site/css/styles.css` | Shared styles |
+| `site/help/` | In-app help content (Markdown + `MANIFEST.json`) |
 | `supabase/seed_full.sql` | Test data for local development |
 | `CHANGELOG.md` | Running, attributed log of notable changes — update when shipping features or editing these docs |
 
@@ -95,7 +102,8 @@ lesson interactions at USAFA. Replaces GradeScope for two courses: Physics 110 a
 
 ## Roles
 
-Three tiers, enforced in `site/admin.html` via `isDirectorForCurrent()`:
+Three tiers. The legacy gate below lived in `site/admin.html`, deleted at the 2026-07-28 promotion;
+the live equivalent is `ctx.isDirectorForCurrent()` from `site/js/auth.js`, described after the table:
 
 | Role | Condition | Access |
 |---|---|---|
@@ -259,7 +267,9 @@ An AI skill will later summarize trends by section.
 1. A director adds a lesson in `site/faculty/lessons.html` — gives it a slug
    (`lesson-02-charge`), title, course, and `artifact_url`, then publishes it. (Claude can hand
    the director a prefilled one-click link — see `docs/contracts/INTERACTION-PREFILL-LINK.md`.)
-2. A student opens `site/interactions.html`, clicks **Launch**, and the artifact opens on claude.ai.
+2. A student opens `site/student/lessons.html`, clicks **Launch**, and the artifact opens on
+   claude.ai. *(This was `site/interactions.html` until the 2026-07-28 promotion deleted it —
+   students now navigate by assignment, not by modality.)*
 3. On finish, the artifact opens
    `site/student/interaction-submit.html#i=<slug>&r=<lz-string payload>` — data rides in the
    **URL hash** (GitHub Pages is static and can't accept a POST; the hash also keeps payloads
@@ -273,15 +283,15 @@ coordination point between the claude.ai artifact and this repo. The **full, fro
 for what the artifact sends (permanent endpoint URL, `#t=`/`#i=`/`#r=`/`#d=` hash payload, and
 the `schema: 1` structured-data spec — effort-graded, understanding diagnostic) is
 `docs/contracts/INTERACTION-DATA-CONTRACT.md`. The permanent public endpoint is
-`site/student/interaction-submit.html` — during the app refactor a stub that forwards into
-`site/app/student/`, and after promotion the real page at the same path, so the URL never
-changes. The pre-2026-07-16 endpoints (`artifact-submit.html` and `interaction-submit.html`, at
+`site/student/interaction-submit.html` — a stub forwarding into `site/app/student/` during the app
+refactor, and since the 2026-07-28 promotion the real page at that same path, so the URL never
+changed. The pre-2026-07-16 endpoints (`artifact-submit.html` and `interaction-submit.html`, at
 root and under `site/`) were **retired without a redirect** and now 404; source is kept in
 `_archive/artifact-receiver-v1/`. Effort (0–5) auto-derives a 0–2 `score` via DB trigger
 (migration `013`); a non-meaningful reading reflection caps effort at 2.
 
 **Prefill links:** a Claude artifact can hand the director a one-click link that opens
-`site/interactions-admin.html` with the New Interaction form already filled in
+`site/faculty/lessons.html` with the New Interaction form already filled in
 (`?new=1&id=&course=&title=&desc=&url=&pub=`); the director reviews and clicks Save. The
 link's `id` must equal the artifact's `#i=` slug. Full spec + builder: `docs/contracts/INTERACTION-PREFILL-LINK.md`.
 
