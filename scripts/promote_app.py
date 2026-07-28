@@ -173,12 +173,16 @@ def main():
 
     for src, dst, over in moves:
         dstp = REPO / dst
-        dstp.parent.mkdir(parents=True, exist_ok=True)
         # Remove the incumbent explicitly rather than letting `git mv -f` clobber it. Overwriting a
         # frozen contract path is correct here and must still be visible in the log.
         if dstp.exists():
             sh("git", "rm", "-q", "-f", dst)
             print(f"  replaced {dst}")
+        # mkdir AFTER the git rm, never before: `git rm` of the last tracked file in a directory
+        # deletes the directory too, so a mkdir beforehand is silently undone and the git mv then
+        # fails with ENOENT. That is exactly what site/css/styles.css did on 2026-07-28 — it was
+        # the sole file in site/css/, so removing the legacy stylesheet took site/css/ with it.
+        dstp.parent.mkdir(parents=True, exist_ok=True)
         sh("git", "mv", src, dst)
     print(f"  moved {len(moves)} file(s)")
 
