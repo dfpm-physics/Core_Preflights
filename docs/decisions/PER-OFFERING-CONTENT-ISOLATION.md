@@ -1,9 +1,10 @@
 # Per-offering content isolation — stop two terms sharing one lesson
 
-**Status:** accepted — the browser no longer shares content between offerings (§8 steps 1–6, shipped
-2026-07-28). **No DDL has been run and none is needed to ship this**; §6 is deferred, not resolved.
-The live sharing that already exists is repaired by §8 step 7, which is a separate, snapshot-gated
-operator run.
+**Status:** **done, 2026-07-28.** The browser no longer shares content between offerings (§8 steps
+1–6) and the 42 rows that were already shared have been separated (step 7, run against live — §13).
+`content_isolation_check.py` reports clean. **No DDL was run and none was needed**; §6 is deferred,
+not resolved, and is still wanted before Fall 2027. Step 8 — five rebuilt artifacts — is the
+director's and is outstanding.
 
 *Authored 2026-07-28 by Matthew Recker (via Claude), from a faculty-beta session against the live
 Fall 2026 offering. Companion to [`PREP-V2-SCHEMA.md`](PREP-V2-SCHEMA.md), whose cross-term reuse
@@ -109,8 +110,12 @@ These are hard and were each verified against the repo, not assumed:
   Deployed artifacts post `#i=<slug>` and send no other context.
 - **`assignments_slug_unique UNIQUE NULLS NOT DISTINCT (course_id, slug)`** — so phys-215 can hold
   only one `preflight-02`. This is what blocks a deep copy today.
-- **DDL on `app` is sealed.** `prep_app_owner` is `NOLOGIN`; a human must
-  `ALTER ROLE prep_app_owner LOGIN` as `postgres`, run it alone, and re-seal (CORE.md §0).
+- **DDL on `app` is sealed** — *as documented*. CORE.md §0 states `prep_app_owner` is `NOLOGIN` and
+  that a human must `ALTER ROLE prep_app_owner LOGIN` as `postgres`, run the change alone, and
+  re-seal. **Checked against the live database 2026-07-28: `pg_roles.rolcanlogin` is `true` for
+  `prep_app_owner`. The seal is currently OFF.** Nothing here relied on it either way — this work
+  ran as the DML tier and issued no DDL — but the discrepancy is recorded because the gate is
+  asserted as closed in the operating contract and is not.
 - **`writtenSlugFor(courseCode, assignmentSlug)`** returned `<course>-<slug>-written` —
   deterministic, so any copy collided on the global unique index. **Fixed 2026-07-28:** it is now
   `mintWrittenSlug()`, which appends 8 random hex ([`faculty-lessons.js`](../../site/js/faculty-lessons.js)).
@@ -118,10 +123,10 @@ These are hard and were each verified against the repo, not assumed:
   the slug permitted.
 - **~~The Fall 2026 offering's emptiness is unverified.~~ Verified 2026-07-28** — see §12. It holds
   **375 enrolled cadets across 17 sections, all published, and ZERO submissions or grades.** That
-  is what removes the delete-and-rebuild from the plan: content can be swapped underneath a live
-  schedule because there is no student work hanging off it. `assignment_offerings` deletes still
-  cascade to submissions, grades, `assignment_due_dates` and analysis reports — which is precisely
-  why the offering rows are now repointed rather than replaced.
+  is what makes the repair safe at all: content can be swapped underneath a live schedule because
+  there is no student work hanging off it. `assignment_offerings` deletes cascade to submissions,
+  grades and `assignment_due_dates`, so the run captures the due dates first and restores them —
+  and refuses outright if it finds any submission or grade (§13).
 
 ---
 
@@ -224,14 +229,17 @@ than the shortcut of retiring it.*
    blocker, to be bundled with `origin_assignment_id` in a single unseal.
 6. ~~**Verify the real offering is empty.**~~ **Done — §12.** 375 enrolments, 0 submissions,
    0 grades, 0 `content_snapshot`.
-7. **Repoint the real offering onto private content** (`scripts/fall2026/isolate_offering_content.py`,
-   dry-run by default). Rename the sandbox's 37 assignment slugs to `-training` so the real term
-   keeps clean ones; deep-copy 37 containers + 37 written activities; UPDATE the real offering's
-   37 `assignment_offerings.assignment_id` and swap its 37 `offering_activities` rows; detach the
-   5 shared interactive activities and flip `preflight-07`'s written activity to `graded`, since
-   the interaction was the only graded activity on that lesson. Verify with
-   `supabase/admin/content_isolation_check.py`.
+7. ~~**Give the real offering private content**~~ **Done — run against live 2026-07-28**, see §13.
+   `scripts/fall2026/isolate_offering_content.py --commit`.
+   *The offering rows are RECREATED, not repointed.* Both were on the table and they cost the same;
+   the director's call was that building fresh rows from a captured template is easier to reason
+   about than updating a foreign key in place, and with no student work to strand there is nothing
+   to choose between them on safety. What was **rejected** is deleting the `course_offerings` row
+   itself: that cascades 17 sections, 375 enrolments and **27 staff rows**, none of which the
+   content change requires, and the roster import rebuilds only the first two.
 8. **Re-add interactions** — each a rebuilt artifact with a fresh §3.2 slug. Director-driven.
+   Five lessons are waiting: `preflight-02`, `-03`, `-04`, `-05` (all were `practice`) and
+   `preflight-07` (was `graded`; its written activity now carries the credit).
 9. **Optional, independent:** address lessons by number in the skills; **demote `PREP Test Faculty`,
    which is a director on `phys-110 / fall-2026` — a REAL offering, not only the sandbox** (§12);
    retire the sandbox once faculty training is finished, which deletes the whole problem surface.
@@ -335,3 +343,41 @@ These numbers are what revised §8 and closed three of the four questions above.
   that shared credential stays scoped to the training offering; it does not. Since `activities_write`
   is scoped by COURSE, it can rewrite every phys-110 activity. §1.3 is therefore not only a sandbox
   problem, and fixing it is independent of everything else here.
+
+---
+
+## 13. The repair run — 2026-07-28
+
+`scripts/fall2026/isolate_offering_content.py --commit`, as the DML tier, in one transaction.
+Snapshot and lineage mapping in the gitignored `_snapshots/`:
+`isolate-content-snapshot-b9e6b3da.json`, `isolate-content-mapping-b9e6b3da.json`. The mapping is
+what stands in for `origin_assignment_id` until the DDL lands — old container id, new container id,
+old and new activity ids, and the slug each took.
+
+| | before | after |
+|---|---|---|
+| shared containers | 37 | **0** |
+| shared activities | 42 | **0** |
+| real offering: lessons / published | 37 / 37 | 37 / 37 |
+| real offering: sections / enrolments / staff rows | 17 / 375 / 27 | 17 / 375 / 27 |
+| real offering: per-section due dates | 34 | 34 |
+| sandbox: lessons / submissions / grades | 37 / 211 / 211 | 37 / 211 / 211 |
+
+**What changed, precisely.** The sandbox's 37 containers were renamed `preflight-NN` →
+`preflight-NN-training`, freeing the clean slugs; 37 new containers and 37 new written activities
+were created for the real term, each activity slug freshly minted; the real offering's 37
+`assignment_offerings` were rebuilt against the copies, carrying points, `due_at`, `due_by_day`,
+`content_snapshot`, publish state and position verbatim, with the 34 per-section due dates restored.
+
+**What the real term lost, and must get back (step 8):** its 5 interactive activities. Four were
+`practice` (`preflight-02/03/04/05`); `preflight-07`'s was `graded`, so that lesson's written
+activity was promoted to `graded` — a real change to how it scores, made deliberately rather than
+leaving a published lesson with nothing gradable on it. The artifacts themselves are untouched and
+still resolve for the sandbox; a real-term student launching one before it is rebuilt would submit
+into a slug their offering no longer schedules, which is why re-adding them is not optional.
+
+**Addressing the sandbox by slug changed.** `/preflight-analyze phys-215 preflight-02 M` now names
+the real term. The sandbox is `preflight-02-training`.
+
+**Verified after commit, independently of the script's own in-transaction checks:**
+`content_isolation_check.py` exits 0, and a read-only census confirms the table above.

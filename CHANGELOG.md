@@ -10,6 +10,45 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-07-28 — Matthew Recker via Claude
 
+### DATA: the live Fall 2026 offering was given its own content
+
+`scripts/fall2026/isolate_offering_content.py --commit`, as the DML tier, one transaction,
+snapshot + lineage mapping written to the gitignored `_snapshots/` first. This is the repair half of
+the entry below, which fixed the code. Full record: decision doc §13.
+
+**Before:** all 37 phys-215 containers and all 42 activities shared between the real Fall 2026
+offering and the training sandbox. **After:** zero shared, confirmed by
+`content_isolation_check.py` (exit 0) and by an independent read-only census.
+
+- The sandbox's containers are now `preflight-NN-training`, freeing the clean slugs for the real
+  term — so `/preflight-analyze phys-215 preflight-02 M` addresses **Fall 2026**, and the sandbox
+  needs `preflight-02-training`.
+- 37 new containers + 37 new written activities for the real term, each activity slug freshly
+  minted. Its 37 `assignment_offerings` were rebuilt against them carrying points, `due_at`,
+  `due_by_day`, publish state and position verbatim, with all 34 per-section due dates restored.
+- **Untouched:** 17 sections, 375 enrolments, 27 staff rows, and the entire sandbox — its 211
+  submissions, 211 grades and 78 student reports still hang off the activities they were made
+  against. Deleting and recreating the `course_offerings` row was considered and rejected: it
+  cascades all of the above to accomplish the same content change.
+
+**Outstanding, and the director's:** the real term lost its 5 interactive activities, because an
+artifact posts to one `#i=` slug and those slugs belong to the term already using them.
+`preflight-02/03/04/05` were `practice`; **`preflight-07`'s was `graded`, so its written questions
+were promoted to `graded`** — a deliberate change to how that lesson scores, rather than leaving a
+published lesson with nothing gradable on it. Each needs a rebuilt artifact with a fresh contract
+§3.2 slug.
+
+**Also found, unrelated and unfixed:** `pg_roles.rolcanlogin` is `true` for `prep_app_owner`.
+CORE.md §0 states that role was set `NOLOGIN` after build-out and that a schema change requires a
+human to unseal it. **The DDL seal is currently off.** Nothing in this work needed it — every write
+above was DML — but the contract asserts a gate that is not in force. Separately, `PREP Test Faculty`
+is a director on `phys-110 / fall-2026`, a real offering, which `split_training_offering.py`'s
+header says it is not.
+
+---
+
+## 2026-07-28 — Matthew Recker via Claude
+
 ### Two terms stop sharing one copy of a lesson
 
 The follow-through on the lesson that could not be re-pointed (entry below). That guard stopped the
