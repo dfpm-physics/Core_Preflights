@@ -8,6 +8,43 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-29 (later still) — Matthew Recker via Claude
+
+### The faculty dashboard calls a lesson a lesson
+
+The spotlight, the stat tiles, the section strips and the matrix now say **Lesson 02** and **L02**
+where they said *Assignment 02* and *A02*. Two reasons from the course director, and the first is
+the substantive one:
+
+- **The number IS a lesson number.** `short` comes from `lessonNumber()`, which reads it out of
+  `preflight-08` or `Lesson 08 Preflight`. Calling it an assignment number named it after the
+  container it happened to arrive in rather than after the thing it identifies.
+- **Nothing is lost by dropping the word,** because the eyebrow directly above already says
+  **PREFLIGHT** — and that is the word worth spending, since it says what the work *is*. The
+  "Past assignment" eyebrow and the two `earlier/current assignment` due-chip fallbacks were the
+  only states that did not say it, so they say it now too.
+
+**This reverses the reasoning in the entry below**, which kept the *Assignment NN* prefix on the
+grounds that the rest of the page used it. That argument was about consistency and it still holds —
+the answer just went the other way, so the identifier moved everywhere at once: spotlight title,
+stat tile label and sub, strip cell labels and tooltips, the strip and matrix eyebrows, the matrix
+column headers, and the `Effort·L02` / `Flags·L02` footer columns. Verified in a browser by reading
+every one of those back and then asserting that no `Assignment NN` or `ANN` survives anywhere in the
+rendered page — which is how the two footer columns were caught, since nothing else had pointed at
+them.
+
+`titleTopic()` still strips the title's own copy of the number: *"Lesson 02 — Lesson 02 Preflight —
+Electric Charge…"* would have been worse than what was there before this morning, not better.
+
+**A known limit, recorded rather than solved:** this page assumes every offering it renders is a
+preflight, and the eyebrow states that unconditionally. That is true of both courses today —
+neither schedules anything else — but if one ever does, the eyebrow starts lying before these labels
+do. The fix belongs where `MODEL.lessons` is built (filter to preflights, or derive the eyebrow from
+the assignment kind), not in the labels; noted in the module header so whoever adds a second
+assignment kind finds it.
+
+---
+
 ## 2026-07-29 (later) — Matthew Recker via Claude
 
 ### The deadline hour is course policy now, and Physics 215's is 1759

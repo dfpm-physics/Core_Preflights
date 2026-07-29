@@ -4,8 +4,9 @@ There is no **Grade** entry in the top navigation. Grading is work that arrives 
 you browse to, so the routes to it are the places that already know you have some:
 
 - the **Needs your attention** boxes on your dashboard, which appear only when there is something in
-  them. **There is one box per assignment** — *4 · Review · Preflight 3* — and selecting it opens
-  the Grade page on exactly that assignment, already loaded;
+  them. **There is one box per assignment**, showing the count, what it wants, and which lesson —
+  *17 · Review AI · Lesson 03 Preflight* — and selecting it opens the Grade page on exactly that
+  assignment, already loaded;
 - the **Grade page →** link beside those boxes, which is always there even when they are not;
 - **Grade** on any assignment card on the **Assignments** page, which opens that assignment already
   loaded. This is the route to use when you want a specific lesson rather than whatever is waiting —

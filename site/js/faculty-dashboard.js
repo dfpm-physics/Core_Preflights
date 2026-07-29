@@ -9,6 +9,29 @@
 //
 // Role is real (from ctx), not a preview toggle: instructors get their own sections scoped and
 // no matrix; directors/admins get the scope toggle (all ↔ mine) and the matrix.
+//
+// ── WHAT THIS PAGE CALLS THE THING IT IS SHOWING: "Lesson NN" / "LNN" ────────────────────────
+// It said "Assignment NN" / "ANN" until 2026-07-29, and the argument for that was consistency —
+// every label on the page agreed with every other. It still is; the answer just went the other
+// way, on two grounds the course director raised:
+//
+//   * The number IS a lesson number. `short` comes from lessonNumber(), which reads it out of
+//     `preflight-08` or `Lesson 08 Preflight`, so "Lesson 08" is what the identifier already
+//     means. Calling it an assignment number named it after the container it arrived in.
+//   * Nothing is lost by dropping "assignment", because the eyebrow above the title already says
+//     PREFLIGHT — and that is the word worth spending, since it says what the work IS.
+//
+// The forward-looking half, recorded because it is a real limit and not solved here: this page
+// assumes every offering it renders is a preflight. That holds today (both courses schedule
+// nothing else) and the eyebrow states it unconditionally. If a course ever schedules a different
+// kind of assignment, the eyebrow starts lying before these labels do — filtering the model to
+// preflights, or deriving the eyebrow from the assignment kind, is the fix, and it belongs
+// wherever MODEL.lessons is built rather than here.
+//
+// Consistency is the whole point, so the identifier moves everywhere at once: the spotlight title,
+// the stat tiles, the section strip cells and their tooltips, and the matrix column headers.
+// `titleTopic()` still strips the title's own copy of it — "Lesson 02 — Lesson 02 Preflight — …"
+// would be worse than what was there before, not better.
 
 import { loadFacultyDashboard } from './faculty-data.js';
 import { summarizeReports } from './faculty-rollup.js';
@@ -308,10 +331,10 @@ function statTiles(a, ctx) {
   const scopeLabel = (dir() && STATE.scope === 'all') ? 'all sections' : 'your sections';
   const L = ctx.lesson.short;
   const compLabel = ctx.status === 'today' ? 'Active preflight complete'
-    : ctx.status === 'past' ? `Assignment ${L} complete` : `Upcoming preflight (A${L})`;
-  const compSub = ctx.status === 'today' ? `Assignment ${L} · ${a.done}/${a.total} · before next class`
-    : ctx.status === 'past' ? `Assignment ${L} · ${a.done}/${a.total} · already covered`
-    : `Assignment ${L} · ${a.done}/${a.total} · not yet due · early submissions`;
+    : ctx.status === 'past' ? `Lesson ${L} complete` : `Upcoming preflight (L${L})`;
+  const compSub = ctx.status === 'today' ? `Lesson ${L} · ${a.done}/${a.total} · before next class`
+    : ctx.status === 'past' ? `Lesson ${L} · ${a.done}/${a.total} · already covered`
+    : `Lesson ${L} · ${a.done}/${a.total} · not yet due · early submissions`;
   return `<div class="stat-grid">
     ${tile('blue',  'completion', '📨', Math.round(a.pct * 100) + '%', compLabel, compSub)}
     ${tile('gold',  'bolt',       '⚡', f1(a.effort), 'Avg effort (graded)',
@@ -422,11 +445,11 @@ function spotlight(a, ctx) {
           + (a.flags ? `<div class="callout">🚩 <span><b>${a.flags}</b> student${a.flags === 1 ? '' : 's'} flagged for follow-up</span></div>` : '');
 
   const eyebrowTxt = st === 'today' ? 'Active preflight · due before next class'
-    : st === 'past' ? 'Past assignment · already covered in class' : 'Upcoming preflight · not yet due';
+    : st === 'past' ? 'Past preflight · already covered in class' : 'Upcoming preflight · not yet due';
   const metaTxt = st === 'today' ? 'What to know before you walk into class'
     : st === 'past' ? 'How this one landed' : 'Preview — students working ahead';
   const statusWord = st === 'today' ? 'Today' : st === 'past' ? 'Past' : 'Upcoming';
-  const dueTxt = L.due_date ? `due ${esc(fmtDate(L.due_date))}` : (st === 'past' ? 'earlier assignment' : st === 'upcoming' ? 'not yet due' : 'current assignment');
+  const dueTxt = L.due_date ? `due ${esc(fmtDate(L.due_date))}` : (st === 'past' ? 'earlier preflight' : st === 'upcoming' ? 'not yet due' : 'current preflight');
   const dueChip = st === 'today' ? `⏳ ${dueTxt}` : st === 'past' ? `✓ ${dueTxt}` : `🔭 ${dueTxt}`;
 
   const scopeCtl = dir() ? scopeControl() : '';
@@ -457,7 +480,7 @@ function spotlight(a, ctx) {
       <div class="card-head">
         <div>
           <span class="eyebrow">${eyebrowTxt}</span>
-          <div class="card-title">Assignment ${esc(L.short)} — ${esc(titleTopic(L.title, L.num ?? L.short))} <span class="status-tag ${st}">${statusWord}</span>${todayPill}</div>
+          <div class="card-title">Lesson ${esc(L.short)} — ${esc(titleTopic(L.title, L.num ?? L.short))} <span class="status-tag ${st}">${statusWord}</span>${todayPill}</div>
           <div class="card-meta">${metaTxt}</div>
         </div>
         <span class="grow"></span>
@@ -498,9 +521,9 @@ function yourSections() {
       const cc = cellFor(sec.id, L.id);
       const u = cc.und, col = sColor(u);
       const act = L.id === MODEL.activeId ? 'active-col' : '';
-      const title = `Assignment ${L.short} — understanding ${f1(u)}/5 · ${cc.done}/${cc.total} submitted`;
+      const title = `Lesson ${L.short} — understanding ${f1(u)}/5 · ${cc.done}/${cc.total} submitted`;
       return `<div class="us-cell ${act}" title="${esc(title)}">
-        <div class="cl">A${esc(L.short)}</div>
+        <div class="cl">L${esc(L.short)}</div>
         <div class="cv" style="color:${col}">${f1(u)}${u == null ? '' : '<span class="cv-unit">/5</span>'}</div></div>`;
     }).join('');
     return `<div class="sec-card mine">
@@ -514,7 +537,7 @@ function yourSections() {
         <div class="minstat"><div class="mv">${f1(c.und)}</div><div class="ml">understanding</div></div>
         <div class="minstat"><div class="mv ${c.flags ? 'flag' : ''}">${c.flags}</div><div class="ml">flagged</div></div>
       </div>
-      <div class="strip-eyebrow">Understanding by assignment</div>
+      <div class="strip-eyebrow">Understanding by lesson</div>
       <div class="us-strip">${strip}</div>
     </div>`;
   }).join('')}</div>`
@@ -534,7 +557,7 @@ function matrix() {
   const aIdx = activeIdx();
   const upTo = MODEL.lessons.slice(0, aIdx + 1);   // columns stop at the active lesson
   const colHdr = upTo.map(L => `<th class="lcol ${L.id === MODEL.activeId ? 'active-col' : ''}"
-    title="${esc(L.title)}">A${esc(L.short)}</th>`).join('');
+    title="${esc(L.title)}">L${esc(L.short)}</th>`).join('');
 
   const ordered = [...MODEL.sections].sort((a, b) => (b.isMine ? 1 : 0) - (a.isMine ? 1 : 0));
   const rows = ordered.map((s, i) => {
@@ -562,7 +585,7 @@ function matrix() {
     </tr>`;
   }).join('');
 
-  const unit = metric === 'completion' ? '% complete per assignment' : 'avg effort (0–5) per assignment';
+  const unit = metric === 'completion' ? '% complete per lesson' : 'avg effort (0–5) per lesson';
   const aShort = MODEL.lessons[aIdx]?.short || '';
   return `<details class="matrix">
     <summary>
@@ -575,7 +598,7 @@ function matrix() {
     </summary>
     <div class="card matrix-card">
       <div class="matrix-toolbar">
-        <span class="eyebrow" style="margin:0">Section × assignment · ${unit}</span>
+        <span class="eyebrow" style="margin:0">Section × lesson · ${unit}</span>
         <span class="grow"></span>
         <div class="legend"><span>low</span>
           <span class="ramp"><span style="background:${tint(0).bg}"></span><span style="background:${tint(.25).bg}"></span><span style="background:${tint(.5).bg}"></span><span style="background:${tint(.75).bg}"></span><span style="background:${tint(1).bg}"></span></span>
@@ -591,8 +614,8 @@ function matrix() {
             <th class="sticky-l" style="text-align:left">Section</th>
             <th>Students</th>
             ${colHdr}
-            <th title="Active assignment — average effort">Effort·A${esc(aShort)}</th>
-            <th title="Active assignment — students flagged">Flags·A${esc(aShort)}</th>
+            <th title="Active preflight — average effort">Effort·L${esc(aShort)}</th>
+            <th title="Active preflight — students flagged">Flags·L${esc(aShort)}</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
