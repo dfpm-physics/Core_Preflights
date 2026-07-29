@@ -623,15 +623,37 @@
      * was hardcoded to 2359 — fine as a default, wrong as the only option: a preflight due before
      * an 0750 class had no way to say so.
      *
-     * A SEPARATE TIME INPUT, NOT ONE `datetime-local`. The requirement is "default to 11:59 pm for
-     * the date selected", and datetime-local cannot express that — it hands back either an empty
-     * value or midnight, so the common case (pick a date, accept the default) would need the
-     * director to type 23:59 on every single row. Two boxes let the time carry its default while
-     * the date starts empty, which is the way round that matches how the form is actually filled in.
+     * A SEPARATE TIME INPUT, NOT ONE `datetime-local`. The requirement is "default to the course's
+     * deadline hour for the date selected", and datetime-local cannot express that — it hands back
+     * either an empty value or midnight, so the common case (pick a date, accept the default) would
+     * need the director to type the time on every single row. Two boxes let the time carry its
+     * default while the date starts empty, which is the way round that matches how the form is
+     * actually filled in.
+     *
+     * ── THE DEFAULT IS PER COURSE, BECAUSE THE POLICY IS ─────────────────────────────────────
+     * The deadline hour is a course director's decision, not a system constant. Physics 215's
+     * directors set 1759 on 2026-07-29 — before the duty day ends rather than late at night —
+     * and Physics 110, a different course with a different director, keeps 2359. Nothing asked
+     * for one answer across both, so this does not impose one.
+     *
+     * It is a hardcoded map rather than a setting because there is nowhere to put a setting: no
+     * table under `app` carries per-course configuration, and adding a column is DDL, which is
+     * sealed behind a human unsealing `prep_app_owner` (CORE.md §0). One line here is honest about
+     * that; a fake settings layer would not be. If a third course ever wants a third answer, add
+     * a line — and if this map reaches four or five entries, that is the signal it has earned a
+     * column and the unseal is worth asking for.
+     *
+     * This is a DEFAULT for a date whose time nobody has chosen, not a rewrite: an existing
+     * deadline is reloaded from `due_by_day` and keeps whatever it was saved with, and the box is
+     * right there to be changed before Save. It also covers the prefill-link path, where a bare
+     * `due_m=`/`due_t=` date arrives with no time — that contract still means "the course's
+     * deadline hour", which is exactly what it always meant.
      */
-    const DEFAULT_DUE_TIME = '23:59';
+    const DUE_TIME_BY_COURSE = { 'phys-215': '17:59' };
+    const FALLBACK_DUE_TIME = '23:59';
+    const defaultDueTime = () => DUE_TIME_BY_COURSE[ctx.currentCourseCode] || FALLBACK_DUE_TIME;
     const dueDatePart = (v) => String(v || '').slice(0, 10);
-    const dueTimePart = (v) => (String(v || '').length > 10 ? String(v).slice(11, 16) : DEFAULT_DUE_TIME);
+    const dueTimePart = (v) => (String(v || '').length > 10 ? String(v).slice(11, 16) : defaultDueTime());
 
     function renderDueDays() {
       const days = (vm.meetingDays && vm.meetingDays.length) ? vm.meetingDays : ['_all'];
@@ -659,12 +681,12 @@
      *
      * Clearing the DATE clears the day entirely — that is how a director removes a deadline, and
      * a time with no date is not a deadline. The reverse is not symmetric: a blank time falls back
-     * to 2359 rather than to midnight, so emptying that box cannot silently make everything due at
-     * the start of the day.
+     * to the course's deadline hour rather than to midnight, so emptying that box cannot silently
+     * make everything due at the start of the day.
      */
     function readDueDay(day) {
       const date = document.getElementById(`f-due-${day}`)?.value || '';
-      const time = document.getElementById(`f-duet-${day}`)?.value || DEFAULT_DUE_TIME;
+      const time = document.getElementById(`f-duet-${day}`)?.value || defaultDueTime();
       model.dueByDay[day] = date ? `${date}T${time}` : '';
     }
 

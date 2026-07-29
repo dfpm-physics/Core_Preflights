@@ -138,8 +138,25 @@ Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
 - **Tooling is Python** using only the **standard library** (`urllib`, `json`, `zoneinfo`) against
   the Supabase REST API — see `scripts/`. Heavier DB work uses `psycopg2` in a gitignored `.venv/`
   (see `supabase/admin/`).
-- **Timezone:** due dates are computed as 2359 **America/Denver** the night before a lesson and
-  stored as UTC (DST-aware). Reuse the `zoneinfo` helpers in `scripts/fall2026/build_fall_preflights.py`.
+- **Timezone:** due dates are computed the night before a lesson in **America/Denver** and stored
+  as UTC (DST-aware). Reuse the `zoneinfo` helpers in `scripts/fall2026/build_fall_preflights.py`.
+- **The deadline HOUR is course policy, not a system constant.** *(Changed 2026-07-29 — it was a
+  flat "2359" until then, and code and docs treated it as universal.)* **Physics 215 is 1759**, set
+  by its course directors; **Physics 110 is 2359**. Nothing asked for one answer across both, and
+  there is nowhere to store a per-course setting — no table under `app` carries course
+  configuration and DDL is sealed (§0) — so the policy is hardcoded in **three places that must
+  move together**:
+  - `DUE_TIME_BY_COURSE` in `site/faculty/lessons.html` — what a NEW assignment's time box
+    defaults to, and what a bare-date prefill link resolves to. An EXISTING deadline is reloaded
+    from `due_by_day` and keeps whatever it was saved with, so this default never rewrites.
+  - `DUE_TIME` in `scripts/fall2026/build_fall_preflights.py` (phys-215) and the `23, 59` in
+    `build_110_preflights.py` (phys-110) — what a term build writes.
+  - `scripts/fall2026/set_due_time.py` — the retimer for a course that has already been built. It
+    rewrites all three storage locations (`assignment_due_dates.due_at`,
+    `assignment_offerings.due_at`, `assignment_offerings.due_by_day`) and is idempotent.
+
+  If a third course ever wants a third answer, add a line. If that map reaches four or five, it has
+  earned a column and the unseal is worth asking for.
 - **Current Physics 215 preflight source DOCX:** `../Preflights/Physics215_Preflight_Questions_v12.docx`.
   v12 was generated from v11 after pulling live webpage/Supabase Q3 wording for lessons 3, 9,
   19, 24, 26, 28, and 30. Lessons 2 and 6 remain unchanged from v11 and matched the live Q3

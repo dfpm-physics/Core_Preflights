@@ -56,9 +56,17 @@ def _preflights_dir():
 DOCX_PATH = os.path.join(_preflights_dir(), "Physics215_Preflight_Questions_v12.docx")
 DENVER = ZoneInfo("America/Denver")
 
+# The deadline hour is COURSE POLICY, not a system constant, and this builder is Physics 215's.
+# Its directors set 1759 on 2026-07-29 — before the duty day ends rather than late at night. The
+# 2359 this used to carry survives in build_110_preflights.py, which is a different course with a
+# different director. Two matching decisions live elsewhere and must move together if this does:
+# `DUE_TIME_BY_COURSE` in site/faculty/lessons.html (what a NEW assignment defaults to) and
+# scripts/fall2026/set_due_time.py (what retimed the term that this built).
+DUE_TIME = (17, 59, 59)   # (hour, minute, second) America/Denver
+
 # ----------------------------------------------------------------------------
 # Syllabus schedule (p. 11). lesson_number -> (topic, M-day, T-day, is_lab).
-# Dates are 2026; the preflight is due the night before the lesson at 2359 Denver.
+# Dates are 2026; the preflight is due the night before the lesson at DUE_TIME Denver.
 # In-scope = these 37 (the 31 PF=Y regular lessons + the 6 labs). Lesson 1 and
 # GRs (12/23/35) are intentionally absent.
 SCHEDULE = {
@@ -113,9 +121,9 @@ LAB_Q2_TEXT = ("What did you find most confusing or most interesting about the l
 
 # ----------------------------------------------------------------------------
 def due_utc(date_str):
-    """'10 Aug' -> ISO UTC for 2359 the night BEFORE, in America/Denver."""
+    """'10 Aug' -> ISO UTC for DUE_TIME the night BEFORE, in America/Denver."""
     d = datetime.strptime(f"{date_str} {YEAR}", "%d %b %Y")
-    night_before = datetime(d.year, d.month, d.day, 23, 59, tzinfo=DENVER) - timedelta(days=1)
+    night_before = datetime(d.year, d.month, d.day, *DUE_TIME, tzinfo=DENVER) - timedelta(days=1)
     return night_before.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
 

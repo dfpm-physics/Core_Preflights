@@ -690,3 +690,37 @@ export function lessonNumber(slug, title) {
         || String(title || '').match(/(?:^|[^0-9])(\d{1,2})(?:[^0-9]|$)/);
   return m ? parseInt(m[1], 10) : null;
 }
+
+/**
+ * The part of an assignment title worth printing beside a label that ALREADY names the number.
+ *
+ * Both courses title their work `Lesson 02 Preflight — Electric Charge, Coulombic Force`, and the
+ * dashboard prefixes its own identifier, so the spotlight read "Assignment 02 — Lesson 02 Preflight
+ * — Electric Charge, Coulombic Force": the number twice, the word "preflight" twice, and a third
+ * time in the eyebrow above it. The topic — the only part that says what the lesson is about —
+ * came third and got the least room.
+ *
+ * The prefix is what goes, not the identifier: "Assignment 02" is what the rest of the page calls
+ * this thing (the section strip's `A02` cells, the due-out boxes, the rollup link), so dropping it
+ * here would make the spotlight the odd one out.
+ *
+ * DELIBERATELY CONSERVATIVE — it strips only when it is certain, because a title it mangles is a
+ * lesson nobody can identify. Three conditions, all required: the title opens with `Lesson <n>`,
+ * the clause ends in a dash separator, and `<n>` is THIS assignment's own number. A director who
+ * titles something "Lesson 12 review — see Lesson 02" keeps every word, and so does any title that
+ * does not open with a lesson reference at all.
+ *
+ * @param {string} title  the stored assignment title
+ * @param {number|string|null} num  the number already being displayed beside it
+ */
+export function titleTopic(title, num) {
+  const t = String(title || '').trim();
+  const n = parseInt(num, 10);
+  if (!t || !Number.isFinite(n)) return t;
+  // `[^—–-]*` covers the words between the number and the separator ("Preflight", "Lab", nothing)
+  // without letting the match run past the first dash — which is what keeps a topic like
+  // "1-D Motion" or "LAB 1: Projectile Motion" intact.
+  const m = t.match(/^Lesson\s*0*(\d{1,2})\b[^—–-]*[—–-]\s*(.+)$/i);
+  if (!m || parseInt(m[1], 10) !== n) return t;
+  return m[2].trim() || t;
+}

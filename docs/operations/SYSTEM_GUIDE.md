@@ -400,9 +400,17 @@ the **term label** is what the UI shows.
 **Step 2 — Update the due dates**
 
 Each scheduled assignment carries a per-meeting-day schedule in `assignment_offerings.due_by_day`
-(`{"M": …, "T": …}`) plus a fallback `due_at`. Edit them in **Lessons** — the editor shows one date
-box per meeting day the offering's sections actually use, so a course meeting W/F needs no code
-change. Saving rewrites the per-section rows for every current section.
+(`{"M": …, "T": …}`) plus a fallback `due_at`. Edit them in **Lessons** — the editor shows a date
+box and a time box per meeting day the offering's sections actually use, so a course meeting W/F
+needs no code change. Saving rewrites the per-section rows for every current section.
+
+The time box starts on **your course's deadline hour** — 1759 for Physics 215, 2359 for Physics 110
+— and an assignment that already has a deadline reloads whatever it was saved with, so the default
+only applies to a date nobody has timed yet. That hour is course policy set by the course director,
+hardcoded in three places that must move together; CORE.md §2 names them. To change it for a whole
+term that is already built, use `scripts/fall2026/set_due_time.py` rather than editing 37 lessons by
+hand — it rewrites all three storage locations, which is what stops the editor putting the old time
+back on the next save.
 
 **Step 3 — Upload the new roster**
 

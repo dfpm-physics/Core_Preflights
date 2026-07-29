@@ -161,7 +161,8 @@ work is in would only turn an on-time submission into a late one. If you need to
 back rather than correct an error, that is your director's call — they revoke it, which keeps it on
 the record with their reason attached.
 
-Otherwise each section's deadline is 2359 the night before that section meets, resolved in three
+Otherwise each section's deadline falls the night before that section meets, at the hour your
+course director has set — **1759 for Physics 215, 2359 for Physics 110** — and is resolved in three
 steps. The assignment carries a deadline **for each meeting day** — an M-day date and a T-day date
 — and a section takes the one matching the days it meets. A section may also be given its own
 explicit deadline on the assignment, which overrides the day's; that is the exception, for

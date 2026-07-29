@@ -31,13 +31,13 @@
         "site/reset.html",
         "supabase/functions/provision-students/index.ts"
       ],
-      "note": "Sign-in model and roster/auth rules from PROJECT.md; the 2359-night-before due date rule from CORE.md section 2; what the Lessons and Dashboard pages actually show from the student modules."
+      "note": "Sign-in model and roster/auth rules from PROJECT.md; the night-before due date rule from CORE.md section 2, whose HOUR is per-course policy (1759 phys-215, 2359 phys-110) — if a course changes it, this page is wrong; what the Lessons and Dashboard pages actually show from the student modules."
     },
     {
       "doc": "site/help/ai-and-your-work.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-07-28",
+      "reviewed": "2026-07-29",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -68,7 +68,7 @@
       "doc": "site/help/director-ai-rules.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-07-28",
+      "reviewed": "2026-07-29",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -83,7 +83,7 @@
       "doc": "site/help/admin-system-operations.md",
       "kind": "help",
       "tier": "admin",
-      "reviewed": "2026-07-28",
+      "reviewed": "2026-07-29",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -106,7 +106,7 @@
       "doc": "docs/operations/SYSTEM_GUIDE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-07-28",
+      "reviewed": "2026-07-29",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -121,7 +121,7 @@
       "doc": "docs/operations/PREP-V2-CUTOVER.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-07-28",
+      "reviewed": "2026-07-29",
       "sources": [
         "supabase/admin/app_schema_bootstrap.sql",
         "scripts/app_migration/migrate_public_to_app.py",
@@ -135,7 +135,7 @@
       "doc": ".ai/skills/docs-author/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-07-28",
+      "reviewed": "2026-07-29",
       "sources": [
         "site/help/README.md",
         "site/js/help.js",
@@ -148,7 +148,7 @@
       "doc": "site/help/director-course-structure.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-07-28",
+      "reviewed": "2026-07-29",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/003_term_calendar.sql",

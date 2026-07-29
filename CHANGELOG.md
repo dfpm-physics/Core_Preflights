@@ -8,6 +8,78 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-29 (later) — Matthew Recker via Claude
+
+### The deadline hour is course policy now, and Physics 215's is 1759
+
+Earlier today's entry flagged five Physics 215 assignments sitting at **17:59** instead of 2359 and
+left them alone. The course directors' answer inverts it: **1759 is the policy for Physics 215**, so
+the other 32 were the outliers. **Physics 110 keeps 2359** — a different course with a different
+director, and nobody asked for one answer across both.
+
+**So the flat constant had to become a per-course one.** It was hardcoded as 2359 in three places,
+and changing only the data would have been undone the first time anyone created an assignment:
+
+- `DUE_TIME_BY_COURSE` in `site/faculty/lessons.html` — what a NEW assignment's time box defaults
+  to, and what a bare-date prefill link resolves to. An **existing** deadline is reloaded from
+  `due_by_day` and keeps whatever it was saved with, so this default never rewrites anything; the
+  box is right there to change before Save. `endOfDay()` is untouched — the frozen prefill contract
+  (`due_m=`/`due_t=`) still means "the course's deadline hour", which is what it always meant.
+- `DUE_TIME` in `scripts/fall2026/build_fall_preflights.py` (phys-215 → 1759).
+  `build_110_preflights.py` is a different course and stays at 2359.
+- `scripts/fall2026/set_due_time.py` — new, for a term that is already built.
+
+It is a hardcoded map rather than a setting because there is nowhere to put a setting: no table
+under `app` carries per-course configuration, and adding a column is DDL, which is sealed. One line
+is honest about that where a fake settings layer would not be. CORE.md §2 now says so, and names all
+three places, because they must move together.
+
+**A deadline lives in three columns and all three had to move.**
+`assignment_due_dates.due_at` is what is enforced; `assignment_offerings.due_at` is the fallback for
+a section with no row; and `assignment_offerings.due_by_day` (jsonb) is what the lesson editor
+reloads into its date and time boxes — leave that one behind and the next director to open the
+lesson sees 23:59 and writes it straight back on save. The retimer keeps each deadline's **local
+date** and sets only its wall-clock time, doing the zone arithmetic in Postgres so DST is handled by
+one authority: this term spans the November change, and a fixed UTC offset would have moved every
+November and December deadline by an hour.
+
+**Run 2026-07-29 against live**, both phys-215 offerings: **672 per-section rows, 64 offering
+fallbacks, 71 `due_by_day` maps**. Read-back inside the transaction confirms 777 per-section rows
+and 74 fallbacks at 17:59:59 local with **0** jsonb entries off target; the script rolls back rather
+than commit if any survive. A second run reports zero changes. Verified afterwards in a real
+browser: an existing lesson reloads `17:59` into both time boxes and a new assignment defaults to
+`17:59`.
+
+**The training sandbox was retimed too**, deliberately. It is phys-215, and leaving it at 2359 would
+mean `port_sandbox_due_dates.py` dragging the real term back to 2359 on any future run. Its 211
+submissions are unaffected in substance — lateness is computed at render time (`schema.js`
+`lateness()`), not stored, and no grade column records it — but some training submissions will now
+render with a late badge that did not show before. The live term had **0 submissions and 0 grades**,
+so nothing there is re-decided.
+
+### The dashboard spotlight stops saying the lesson number twice
+
+The title read **"Assignment 02 — Lesson 02 Preflight — Electric Charge, Coulombic Force"**: the
+number twice, "preflight" twice, and a third time in the eyebrow above it — with the topic, the only
+part that says what the lesson is about, arriving third and getting the least room. Both courses
+title their work `Lesson NN Preflight — <topic>`, and the dashboard adds its own identifier on top.
+
+`titleTopic(title, num)` (new, in `schema.js` beside `lessonNumber`) strips the leading clause, so
+the card now reads **"Assignment 02 — Electric Charge, Coulombic Force"**. The prefix is what stays,
+not the title's copy of it: "Assignment 02" is what the rest of the page calls this thing — the
+section strip's `A02` cells, the due-out boxes, the rollup link — so dropping that instead would
+make the spotlight the odd one out.
+
+**It strips only when it is certain**, because a title it mangles is a lesson nobody can identify:
+the title must open with `Lesson <n>`, the clause must end in a dash, and `<n>` must be this
+assignment's own number. Checked against the real titles of both courses and the awkward cases —
+`Lesson 02 Preflight — 1-D Motion` and `Lesson 07 Preflight — LAB 1: Projectile Motion` keep their
+topics whole; `Lesson 12 review — see Lesson 02`, a title with no lesson prefix, an empty title and
+a null one are all returned untouched. The `A02` column tooltip still shows the full stored title,
+which is where it is genuinely useful.
+
+---
+
 ## 2026-07-29 — Matthew Recker via Claude
 
 ### Changing your password no longer locks you out of PREP

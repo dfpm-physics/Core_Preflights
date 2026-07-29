@@ -13,7 +13,7 @@
 import { loadFacultyDashboard } from './faculty-data.js';
 import { summarizeReports } from './faculty-rollup.js';
 import { loadTasks, renderTasks } from './faculty-tasks.js';
-import { actionableSections } from './schema.js';
+import { actionableSections, titleTopic } from './schema.js';
 import { loadEiForSections, summarizeEi, renderEiPanel } from './faculty-ei.js';
 import { esc, iconHTML, fmtDate } from './util.js';
 
@@ -457,7 +457,7 @@ function spotlight(a, ctx) {
       <div class="card-head">
         <div>
           <span class="eyebrow">${eyebrowTxt}</span>
-          <div class="card-title">Assignment ${esc(L.short)} — ${esc(L.title)} <span class="status-tag ${st}">${statusWord}</span>${todayPill}</div>
+          <div class="card-title">Assignment ${esc(L.short)} — ${esc(titleTopic(L.title, L.num ?? L.short))} <span class="status-tag ${st}">${statusWord}</span>${todayPill}</div>
           <div class="card-meta">${metaTxt}</div>
         </div>
         <span class="grow"></span>
