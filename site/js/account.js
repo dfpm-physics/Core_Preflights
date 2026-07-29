@@ -137,15 +137,40 @@ async function facultyIdentity(ctx) {
  * over. It skips that check for an account under forced rotation, where the user may genuinely
  * not know the password an instructor just set for them.
  *
+ * ── AND THEN IT SIGNS YOU BACK IN, WHICH IS NOT OPTIONAL ─────────────────────────────────────
+ * A password change through the admin API DESTROYS the session that made it — GoTrue drops the
+ * refresh token and the session row, so afterwards `refreshSession()` returns
+ * `refresh_token_not_found` and `/auth/v1/user` returns `session_not_found` (verified in a real
+ * browser against the live project, 2026-07-29). What it does NOT do is remove the access token
+ * this browser already holds: that JWT stays syntactically valid for the rest of its hour, so
+ * `getSession()` keeps handing back the user object minted at sign-in — including a
+ * `must_change_password: true` that is no longer true.
+ *
+ * That is exactly the trap this whole flow exists to avoid, and it was the shape of it: the user
+ * picked a new password, auth.js read the stale copy, and every page bounced them back here until
+ * the token aged out an hour later. The earlier `refreshSession()` could never have fixed it —
+ * there was no longer a refresh token to spend.
+ *
+ * So the only way back to a live session is a fresh sign-in with the password we just set. It is
+ * also what makes "you stay signed in here" on the card true rather than aspirational.
+ *
  * @param {string|null} currentPw  may be null when the user is under forced rotation
+ * @param {string} email           the auth address to re-establish the session with
+ * @returns {{error, wasForced, reauthed}} `reauthed:false` means the change LANDED but this
+ *          browser now holds nothing — the caller must send the user to the login page.
  */
-export async function changePassword(currentPw, newPw) {
+export async function changePassword(currentPw, newPw, email) {
   const { data, error } = await db.functions.invoke('set-own-password', {
     body: { current_password: currentPw ?? null, new_password: newPw },
   });
   if (error) return { error: { message: error.message } };
   if (data?.error) return { error: { message: data.error } };
-  return { error: null, wasForced: data?.was_forced === true };
+
+  const { error: reErr } = email
+    ? await db.auth.signInWithPassword({ email, password: newPw })
+    : { error: new Error('no address on this session') };
+
+  return { error: null, wasForced: data?.was_forced === true, reauthed: !reErr };
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -362,7 +387,7 @@ function wireAccount(ctx, root) {
     if (problem) { status.style.color = 'var(--red)'; status.textContent = problem; return; }
 
     btn.disabled = true; status.style.color = 'var(--muted)'; status.textContent = 'Updating…';
-    const { error, wasForced } = await changePassword(cur, next);
+    const { error, wasForced, reauthed } = await changePassword(cur, next, ctx.user?.email);
     btn.disabled = false;
     if (error) { status.style.color = 'var(--red)'; status.textContent = '⚠ ' + error.message; return; }
 
@@ -371,14 +396,22 @@ function wireAccount(ctx, root) {
     pwNew.value = $('pw-cf').value = '';
     bar.className = 'pwbar';
 
-    // The rotation flag is on the JWT, and bootstrap() re-reads it on every page load — so a
-    // user who was flagged is still flagged in this tab's session and would be bounced back
-    // here on the next click. Reload to pick up the cleared flag and let them through.
-    // Both role directories hold account.html beside dashboard.html, so one relative path
-    // serves either.
+    // The change landed but this browser could not get a session back on the new password — so
+    // it is holding a token that is already dead server-side. Say the change worked (it did) and
+    // send them to sign in, rather than leave them clicking around a page that will 403.
+    if (!reauthed) {
+      status.textContent = '✓ Password updated — sign in again to continue.';
+      setTimeout(() => location.replace('../login.html'), 1400);
+      return;
+    }
+
+    // changePassword() has re-signed us in, so this tab now holds a session minted AFTER the
+    // flag was cleared. Only now is it safe to navigate: bootstrap() reads the flag off the
+    // session on every page load, and until this point that copy still said "must change".
+    // Both role directories hold account.html beside dashboard.html, so one relative path serves
+    // either.
     if (wasForced) {
       status.textContent = '✓ Password updated — taking you to PREP…';
-      await db.auth.refreshSession();
       setTimeout(() => location.replace('dashboard.html'), 900);
     }
   });

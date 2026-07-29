@@ -430,20 +430,25 @@ function spotlight(a, ctx) {
   const dueChip = st === 'today' ? `⏳ ${dueTxt}` : st === 'past' ? `✓ ${dueTxt}` : `🔭 ${dueTxt}`;
 
   const scopeCtl = dir() ? scopeControl() : '';
-  /* ALWAYS RENDERED, DISABLED WHEN THERE IS NOWHERE TO GO (2026-07-27).
+  /* BACK-TO-TODAY RIDES ON THE STATUS TAG, AND ONLY WHEN THERE IS SOMEWHERE TO GO (2026-07-29).
    *
-   * It used to be conditional — present only off the current preflight — and it sits in a flex row
-   * immediately before "Open full rollup →", so arrowing to another assignment made that link jump
-   * sideways. A control that moves under the cursor is worse than a control that is greyed out,
-   * and the reader was aiming at the rollup link, not at this.
+   * Three revisions, and the middle one is the instructive failure. It began conditional, in the
+   * header's flex row immediately before "Open full rollup →" — so arrowing off the current
+   * preflight made that link jump sideways, and the reader was aiming at the rollup link, not at
+   * this. It was then made permanent-but-disabled to stop the jump (2026-07-27), which fixed the
+   * movement by paying for it in width: a greyed-out button nobody can press held a slot in the
+   * header on every single view, and at the common widths that is what pushed "Open full rollup →"
+   * onto a second line. Trading a rare reflow for a permanent one is the wrong trade.
    *
-   * Disabling rather than reserving a fixed-width slot is deliberate: the two nav arrows in this
-   * same header already do exactly that at the ends of the list, so this is the convention the
-   * component already has rather than a second one. It also needs no magic width that would go
-   * stale the moment the label changes. */
+   * So it moves out of the header row entirely and becomes a second pill beside the status tag,
+   * which is already the thing on this card that says WHERE YOU ARE — "Upcoming ↩ Today" reads as
+   * one statement, and the affordance sits next to the words that motivate it. Appearing and
+   * disappearing is now free: the pill is inline in the title, so nothing in the button row can
+   * move under a cursor, and the header keeps its full width for the controls that are always
+   * there. */
   const onToday = st === 'today';
-  const todayBtn = `<button class="btn btn-ghost btn-sm" data-today="1" ${onToday ? 'disabled' : ''}
-      title="${onToday ? 'You are on the current preflight' : 'Back to the current preflight'}">↩ Today</button>`;
+  const todayPill = onToday ? '' : `<button class="status-tag today-pill" data-today="1"
+      title="Back to the current preflight">↩ Today</button>`;
 
   return `<div class="spot-shell">
     <button class="spot-arrow left"  data-nav="prev" ${vIdx === 0 ? 'disabled' : ''} aria-label="Previous assignment"><span class="arrow-tab">◀</span></button>
@@ -452,7 +457,7 @@ function spotlight(a, ctx) {
       <div class="card-head">
         <div>
           <span class="eyebrow">${eyebrowTxt}</span>
-          <div class="card-title">Assignment ${esc(L.short)} — ${esc(L.title)} <span class="status-tag ${st}">${statusWord}</span></div>
+          <div class="card-title">Assignment ${esc(L.short)} — ${esc(L.title)} <span class="status-tag ${st}">${statusWord}</span>${todayPill}</div>
           <div class="card-meta">${metaTxt}</div>
         </div>
         <span class="grow"></span>
@@ -461,7 +466,6 @@ function spotlight(a, ctx) {
           <button data-nav="prev" ${vIdx === 0 ? 'disabled' : ''} aria-label="Previous assignment">◀</button>
           <button data-nav="next" ${vIdx === last ? 'disabled' : ''} aria-label="Next assignment">▶</button>
         </div>
-        ${todayBtn}
         <a class="btn btn-ghost btn-sm" href="report.html?i=${encodeURIComponent(L.id)}" title="Open the full assignment rollup">Open full rollup →</a>
       </div>
       <div class="spot">
@@ -622,11 +626,11 @@ function wire() {
     if (ni >= 0 && ni < MODEL.lessons.length) { STATE.viewLesson = MODEL.lessons[ni].id; rerender(); }
   });
 
-  // Guarded like the arrows above: the button is now always in the DOM and disabled on the
-  // current preflight, so the handler must not act on a click the browser would not deliver
-  // anyway — belt and braces, and it keeps the two nav controls reading the same way.
+  // Absent on the current preflight — there is nowhere for it to go, so it is not drawn at all
+  // (renderSpotlight). The null check is the whole guard; the disabled state it used to carry is
+  // gone with the header button it belonged to.
   const td = ROOT.querySelector('[data-today]');
-  if (td) td.onclick = () => { if (td.disabled) return; STATE.viewLesson = MODEL.activeId; rerender(); };
+  if (td) td.onclick = () => { STATE.viewLesson = MODEL.activeId; rerender(); };
 
   setupWings();
 }

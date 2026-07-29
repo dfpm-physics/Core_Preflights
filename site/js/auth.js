@@ -55,7 +55,7 @@ export async function bootstrap(opts = {}) {
     go(`${loginPath}?next=${encodeURIComponent(location.pathname + location.search)}`);
     return;
   }
-  const user = session.user;
+  let user = session.user;
 
   // ── Resolve role by membership ────────────────────────────────────────────
   // is_director is deliberately NOT selected: the column does not exist in `app`.
@@ -105,11 +105,36 @@ export async function bootstrap(opts = {}) {
   // (PLAN-2026-07-20-ACCOUNTS.md §3). It reads BOTH metadata bags: `app_metadata` is where it
   // lives now — service-role-only, so the user cannot clear it themselves — and `user_metadata`
   // is the pre-2026-07-21 location, honoured until every account flagged there has rotated.
-  // The account page is exempt, or the redirect would loop.
-  if ((user.app_metadata?.must_change_password || user.user_metadata?.must_change_password)
-      && !/\/account\.html$/.test(location.pathname)) {
-    go(`${APP_ROOT}${role === 'faculty' ? 'faculty' : 'student'}/account.html?rotate=1`);
-    return;
+  // The account page is exempt from the REDIRECT, or it would loop.
+  //
+  // ── THE COPY IN HAND IS NOT THE ANSWER, IT IS THE QUESTION ───────────────────────────────
+  // `session.user` is a snapshot minted when the session started and cached in localStorage. It
+  // can say "must change" about an account that changed its password minutes ago, because
+  // clearing the flag is a server-side write nothing pushes back down. Trusting it is what
+  // trapped people on this page for the rest of the token's hour (fixed 2026-07-29; the other
+  // half of the fix is the re-sign-in in account.js changePassword()).
+  //
+  // So a set flag triggers ONE server round trip to ask whether it is still set. Only flagged
+  // sessions pay for it, which is a handful of sign-ins per term. Three outcomes:
+  //   still set   → redirect, exactly as before
+  //   cleared     → carry on with the fresh copy, so the account page also stops showing the banner
+  //   error       → the session is dead server-side (a password change destroys it). Sign out and
+  //                 send them to the login page, which is the one place that can hand back a live
+  //                 one. Only reachable for an already-flagged session, so a transient network
+  //                 blip costs a sign-in, not a lost session.
+  if (user.app_metadata?.must_change_password || user.user_metadata?.must_change_password) {
+    const { data: fresh, error: freshErr } = await db.auth.getUser();
+    if (freshErr || !fresh?.user) {
+      await db.auth.signOut();
+      go(`${loginPath}?err=stale`);
+      return;
+    }
+    user = fresh.user;
+    if ((user.app_metadata?.must_change_password || user.user_metadata?.must_change_password)
+        && !/\/account\.html$/.test(location.pathname)) {
+      go(`${APP_ROOT}${role === 'faculty' ? 'faculty' : 'student'}/account.html?rotate=1`);
+      return;
+    }
   }
 
   const ctx = {

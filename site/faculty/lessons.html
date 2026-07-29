@@ -363,11 +363,24 @@
       // rather than a fixed M/T pair. One date for everyone collapses to a single entry.
       const dues = dueSummary(l);
       const nq = questionsOf(l.written).length;
-      // Preview sits OUTSIDE the director gate and first in the row. Reading what a lesson asks
-      // is not an edit, and an instructor has every reason to want it; before this the only way
-      // to see the questions was Edit → Preview → Cancel, which is a write-shaped path to a
-      // read-only answer and is director-only besides. Offered on every card, disabled with a
-      // reason when there is no written activity to show.
+      // ── THE ROW IS TWO GROUPS, SPLIT BY WHAT THEY DO TO THE ASSIGNMENT ──────────────────
+      // Left: Grade · Preview · Launch interaction — every one of them READS the assignment, and
+      // every instructor may use them. Right, after a spacer: Edit · Publish · Remove, which
+      // CHANGE it, gated on director. Before this the two kinds were one undifferentiated strip
+      // that simply got shorter for an instructor, so nothing on the card said which buttons were
+      // the dangerous ones; the split says it by position, for both roles, without a label.
+      //
+      // Grade leads because it is the errand that brings faculty here most often. It deep-links
+      // the grading panel to this exact assignment (`?a=`, read in grade.html's populate()) —
+      // the same link the dashboard's due-out boxes use — instead of leaving someone to re-find
+      // the lesson in a picker they just navigated away from.
+      const grade = `<a class="btn btn-ghost btn-sm" href="grade.html?a=${esc(encodeURIComponent(l.offeringId))}"
+            title="Open the grading panel on this assignment">Grade</a>`;
+      // Preview sits OUTSIDE the director gate too. Reading what a lesson asks is not an edit,
+      // and an instructor has every reason to want it; before this the only way to see the
+      // questions was Edit → Preview → Cancel, which is a write-shaped path to a read-only answer
+      // and is director-only besides. Offered on every card, disabled with a reason when there is
+      // no written activity to show.
       const preview = nq
         ? `<button class="btn btn-ghost btn-sm" data-prev="${esc(l.offeringId)}">Preview</button>`
         : `<button class="btn btn-ghost btn-sm" disabled title="This assignment has no free-response questions — the AI Interaction can't be previewed here.">Preview</button>`;
@@ -406,7 +419,7 @@
             </div>
           </div>
         </div>
-        <div class="row wrap" style="gap:8px;margin-top:14px">${preview}${launch}${manage}</div>
+        <div class="row wrap" style="gap:8px;margin-top:14px;align-items:center">${grade}${preview}${launch}<span class="grow"></span>${manage}</div>
       </div>`;
     }
 

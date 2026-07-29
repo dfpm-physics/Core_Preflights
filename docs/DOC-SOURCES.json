@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-07-28",
+  "updated": "2026-07-29",
   "_comment": [
     "Dependency index for documents that MUST STAY CURRENT. Each entry names the authoritative",
     "sources a document was derived from, and the date it was last checked against them.",
@@ -20,7 +20,7 @@
       "doc": "site/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-07-28",
+      "reviewed": "2026-07-29",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -51,7 +51,7 @@
       "doc": "site/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-07-28",
+      "reviewed": "2026-07-29",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -59,9 +59,10 @@
         "site/faculty/grade.html",
         "site/js/nav.js",
         "site/js/auth.js",
-        "site/js/faculty-tasks.js"
+        "site/js/faculty-tasks.js",
+        "site/faculty/lessons.html"
       ],
-      "note": "The 3-state toggle, question_scores shape, and the 'all my sections' scoping rule. If the Grade tab's behaviour changes, this doc is wrong before anything else is. nav.js is a source because the page has NO nav entry (P1.14, 2026-07-23) — the doc's 'getting to the Grade page' section is the only place that is written down, so a nav change silently invalidates it. grade.html is a source because the hand-grading queue is rendered there, not in the data module. faculty-tasks.js is a source since 2026-07-27: the due-out boxes are the documented route to this page, and they are now one box per assignment that deep-links into it, so a change to that registry invalidates the 'Getting to the Grade page' section."
+      "note": "The 3-state toggle, question_scores shape, and the 'all my sections' scoping rule. If the Grade tab's behaviour changes, this doc is wrong before anything else is. nav.js is a source because the page has NO nav entry (P1.14, 2026-07-23) — the doc's 'getting to the Grade page' section is the only place that is written down, so a nav change silently invalidates it. grade.html is a source because the hand-grading queue is rendered there, not in the data module. faculty-tasks.js is a source since 2026-07-27: the due-out boxes are the documented route to this page, and they are now one box per assignment that deep-links into it, so a change to that registry invalidates the 'Getting to the Grade page' section. lessons.html is a source since 2026-07-29: the Assignments page now carries a Grade button that deep-links here, so it is one of the enumerated routes and a change to it invalidates the list."
     },
     {
       "doc": "site/help/director-ai-rules.md",
@@ -163,7 +164,7 @@
       "doc": "site/help/director-schema-reference.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-07-28",
+      "reviewed": "2026-07-29",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/002_rls.sql",
@@ -191,7 +192,7 @@
       "doc": "site/help/instructor-accounts.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-07-28",
+      "reviewed": "2026-07-29",
       "sources": [
         ".ai/instructions/PROJECT.md",
         "site/js/roster-import.js",

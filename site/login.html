@@ -67,6 +67,12 @@
     if (params.get('err') === 'notreg') {
       showError('That account is not registered as a student or instructor. Contact your course director.');
     }
+    // auth.js sends `stale` when the browser was holding a session the server no longer has —
+    // which is what a password change leaves behind. Nothing is wrong with the account, so say
+    // that: the alternative is someone reading a bare "signed out" as a second failure.
+    if (params.get('err') === 'stale') {
+      showError('Your sign-in expired — this happens right after a password change. Sign in with your new password.');
+    }
 
     // Already signed in? Skip the form.
     (async () => {

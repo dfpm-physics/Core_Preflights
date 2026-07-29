@@ -8,6 +8,115 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-29 — Matthew Recker via Claude
+
+### Changing your password no longer locks you out of PREP
+
+**The bug:** a user under forced rotation picked a new password, PREP said "✓ Password updated", and
+then every page bounced them straight back to the account page. It stayed that way until the access
+token aged out an hour later — "relaunching the site" appeared to fix it because enough time had
+passed, not because reloading did anything.
+
+**Why.** Reproduced in a real browser against the live project with the test faculty account
+(reset itself to the derived default via `reset-staff-password`, signed back in on it, rotated), then
+narrowed with a second probe. `admin.updateUserById({ password })` **destroys the session that made
+the call**: afterwards `refreshSession()` returns `refresh_token_not_found` (400) and `/auth/v1/user`
+returns `session_not_found` (403). What it does *not* do is remove the access token the browser is
+already holding — that JWT stays syntactically valid for the rest of its hour, and PostgREST keeps
+honouring it, so the page renders normally while `getSession()` goes on serving the user object
+minted at sign-in, `must_change_password: true` and all. `account.js` was calling `refreshSession()`
+precisely to pick up the cleared flag; it could never have worked, because there was no longer a
+refresh token to spend, and its error was discarded.
+
+**The fix, in two halves:**
+
+- `changePassword()` now signs back in with the password it just set (`site/js/account.js`). That is
+  the only way to get a live session after an admin password write, and it is what makes the card's
+  "You stay signed in here" true rather than aspirational. If the re-sign-in fails, the page says the
+  change landed and sends the user to log in, instead of leaving them on a token that will 403.
+- `bootstrap()` no longer trusts the cached copy of the flag (`site/js/auth.js`). A *set* flag now
+  costs one `getUser()` round trip to ask the server whether it is still set — cleared means carry
+  on, an error means the session is dead and the user is signed out and sent to `login.html?err=stale`
+  (a new, explanatory message rather than a bare bounce). Only already-flagged sessions pay for the
+  round trip, which is a handful of sign-ins a term, and it self-heals anyone currently stuck.
+
+**Verified:** the reproduction script fails against the old code (trapped on `account.html?rotate=1`
+through a redirect, a hand navigation, and a fresh tab) and passes against the new one (`app_metadata`
+reads `false`, a new token is minted, the dashboard loads and stays loaded). Real Chrome, live
+Supabase.
+
+### "↩ Today" moves onto the status tag, and the rollup link stops wrapping
+
+**Open full rollup →** was being pushed onto a second line of the spotlight header. The always-
+rendered-but-disabled **↩ Today** button (2026-07-27) was part of it — that revision fixed a control
+that jumped sideways by making it hold header width permanently, which trades a rare reflow for a
+constant one — but removing it was not enough on its own.
+
+The real cause is how `.card-head` wraps: flex assigns items to lines by their *hypothetical* size, so
+the title block, whose natural width is the whole assignment title on one line, claimed the row and
+the link was the item pushed off. `.spot-shell .card-head > :first-child` now gets `flex: 1 1 260px;
+min-width: 0`, which makes the **title** the thing that reflows — it already wraps to two lines
+gracefully, and the controls do not.
+
+The way back to the current preflight is now a second pill beside the status tag —
+"UPCOMING ↩ TODAY" — drawn only when there is somewhere to go. It sits next to the words that
+motivate it, it cannot push anything in the button row around because it is inline in the title, and
+appearing/disappearing is free. Changed: `site/js/faculty-dashboard.js`, `site/css/styles.css`.
+
+### The Assignments page splits its action row by read vs. write
+
+Each assignment card's buttons are now two groups: **Grade · Preview · Launch interaction ↗** on the
+left, every one of which *reads* the assignment and is available to every instructor; then a spacer;
+then **Edit · Publish · Remove** on the right, which *change* it and stay director-only. Previously
+the two kinds were one undifferentiated strip that simply got shorter for an instructor, so nothing on
+the card said which buttons were the dangerous ones — the split says it by position, for both roles,
+without a label.
+
+**Grade** is new and leads, because it is the errand that brings faculty to this page most often. It
+deep-links the grading panel to that exact assignment (`grade.html?a=<assignment offering>`, the
+parameter `populate()` already reads and the same link the dashboard's due-out boxes use) instead of
+leaving someone to re-find the lesson in a picker. Changed: `site/faculty/lessons.html`.
+
+**Verified in a real browser** (headless Chrome, live data, signed in as faculty): the action row
+renders `Grade | Preview | Launch interaction ↗ | Edit | Unpublish | Remove` with the manage group
+right-aligned; the spotlight header keeps the rollup link on the title's line; the ↩ Today pill is
+absent on the current preflight, present elsewhere, and returns to it when clicked.
+
+### Physics 215 Fall 2026 got its per-section due dates back — 595 rows
+
+**Every T-day section in the live course was being held to the M-day deadline.** A deadline is per
+section (`app.assignment_due_dates`), because M-day and T-day sections answer the same preflight the
+night before their own class; `assignment_offerings.due_at` is only the fallback for a section with no
+row. The live offering was built by `split_training_offering.py` (2026-07-27) and rebuilt by
+`isolate_offering_content.py` (2026-07-28), and its per-section rows did not survive: they cascade off
+`assignment_offering_id`, and at the moment they would have been copied the offering's 17 sections
+were not yet there to copy them onto. Only `preflight-02` and `preflight-03` had been restored by
+hand. The other 35 fell back to a single date carrying the **M** value — so 9 sections and 185 cadets
+faced a deadline one to four days before their own lesson (`preflight-13`: M Sep 9, T Sep 13).
+
+`scripts/fall2026/port_sandbox_due_dates.py` restores them from the training sandbox, which never lost
+its rows. The two offerings share no sections (4 vs 17), so the port cannot go section-to-section: it
+collapses the sandbox's rows to one date **per meeting day** and applies the M date to every M section
+and the T date to every T section — the same rule `dueRowsFor()` in `site/js/faculty-lessons.js`
+applies when a director edits a lesson, so the result is what the UI would have written. It refuses if
+two sandbox sections meeting on the same day disagree, never invents a date for an uncovered day,
+never deletes, and does not touch `assignment_offerings.due_at` (live and sandbox already agree on it
+for all 37 — the fallback was never the wrong value, it was the wrong *granularity*).
+
+**Run 2026-07-29 against live** after `git fetch` (no divergence) and confirming no competing operator:
+595 rows written, 34 already correct, 0 mismatched on read-back inside the transaction. Independently
+re-verified afterwards from the read tier: 629 rows present (37 × 17), zero disagreements with the
+sandbox on any assignment or day, and a re-run reports "nothing to write". Preconditions checked, not
+assumed — the live offering held **0 submissions and 0 grades**, which is what makes moving a deadline
+safe; the script refuses without `--even-with-work` otherwise.
+
+**Flagged, not changed:** `preflight-02`, `-03`, `-04`, `-05` and `-07` are due at **17:59** local, not
+2359 — `23:59:59Z` stored where 2359 America/Denver was meant, six hours early. Those are the
+sandbox's own values, and copying them faithfully is what was asked for; moving a published deadline
+is the course director's call. The script reports every non-2359 deadline it copies.
+
+---
+
 ## 2026-07-28 — Matthew Recker via Claude
 
 ### Faculty can launch an assignment's AI Interaction from the Assignments page

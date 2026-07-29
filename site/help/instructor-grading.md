@@ -7,6 +7,9 @@ you browse to, so the routes to it are the places that already know you have som
   them. **There is one box per assignment** — *4 · Review · Preflight 3* — and selecting it opens
   the Grade page on exactly that assignment, already loaded;
 - the **Grade page →** link beside those boxes, which is always there even when they are not;
+- **Grade** on any assignment card on the **Assignments** page, which opens that assignment already
+  loaded. This is the route to use when you want a specific lesson rather than whatever is waiting —
+  the boxes above only show you assignments that currently need something;
 - a student's name in the **gradebook**.
 
 Past six assignments the boxes collapse back into one summary — *Review grades* — which opens the

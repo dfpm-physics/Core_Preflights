@@ -1582,6 +1582,15 @@ a.tbtn { text-decoration: none; display: inline-flex; align-items: center; }
 
 /* ── Active-lesson spotlight ───────────────────────────────── */
 .spot-shell { position: relative; }
+/* Keep "Open full rollup →" on the header's first line.
+   `.card-head` wraps, and flex assigns items to lines by their HYPOTHETICAL size — so the title
+   block, whose natural width is the whole assignment title on one line, claimed the row and the
+   link was the item pushed off. Removing the always-on "↩ Today" button bought back its width and
+   the link still wrapped, because the title was always the item setting the line. Giving the block
+   a modest basis and letting it grow makes the TITLE the thing that reflows, which is what should
+   give: it already wraps to two lines gracefully, and the controls do not. Narrow screens still
+   wrap the whole row, which is the right behaviour there. */
+.spot-shell .card-head > :first-child { flex: 1 1 260px; min-width: 0; }
 .spot { display: grid; gap: 26px;
   grid-template-columns: minmax(200px, 0.85fr) minmax(230px, 1.1fr) minmax(250px, 1.3fr); }
 .spot-col { min-width: 0; }
@@ -1622,6 +1631,18 @@ a.tbtn { text-decoration: none; display: inline-flex; align-items: center; }
 .status-tag.past { color: var(--muted); background: var(--surface-sunken); border: 1px solid var(--border); }
 .status-tag.upcoming { color: var(--gold); background: color-mix(in srgb, var(--gold) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent); }
+
+/* "↩ Today" — the way back, shown only when you are not there. A pill rather than a header button
+   because it belongs beside the tag that says where you are, and because a button in the header
+   row held width on every view just to be greyed out most of the time (see renderSpotlight). It is
+   a real <button>, so the family's font/line-height are reset rather than inherited from the UA. */
+.status-tag.today-pill { font: inherit; font-size: 0.6em; font-weight: 700; line-height: normal;
+  cursor: pointer; color: var(--blue-lt); background: color-mix(in srgb, var(--blue-lt) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue-lt) 35%, transparent); margin-left: 6px;
+  text-transform: uppercase; letter-spacing: 0.05em; transition: background 0.12s ease, border-color 0.12s ease; }
+.status-tag.today-pill:hover { background: color-mix(in srgb, var(--blue-lt) 20%, transparent);
+  border-color: color-mix(in srgb, var(--blue-lt) 60%, transparent); }
+.status-tag.today-pill:focus-visible { outline: 2px solid var(--blue-lt); outline-offset: 2px; }
 
 /* lesson nav — proximity wings (pointer) emerge into the page margin; inline stepper on touch */
 .spot-arrow { position: absolute; top: 0; bottom: 0; width: 44px; border: 0; background: transparent; padding: 0;
