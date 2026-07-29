@@ -8,6 +8,69 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-29 (fourth) — Matthew Recker via Claude
+
+### One grading box per assignment, and it says "Grade Assignment 03"
+
+**Two boxes were competing for one errand.** `to-grade` (📝) counted submissions past their own
+deadline and not finalized; `ai-unfinalized` (🤖) counted AI-suggested grades not finalized. The
+second is a **subset of the first** — `/preflight-analyze` runs *after* the deadline, so every
+student an AI suggestion sits on is already past due and already counted. In a live term the two
+boxes named the same lesson, linked to the same page, wanted the same action, and differed only in
+which subset each had counted.
+
+That is invisible today, which is why it lasted: the term has not started, nothing is past due, so
+only the 🤖 box ever appears. It would have shown up as a duplicate the first week of class.
+
+So `ai-unfinalized` is **removed**, and `to-grade` is the one box. What it was for is recorded where
+it was deleted rather than in a commit nobody will read: an AI suggestion is not a grade until a
+human says so, and that queue existed so suggestions could not sit unreviewed and invisible. They
+still cannot — `to-grade` counts them from the moment the deadline passes. **The one state no longer
+surfaced** is suggestions written *before* a deadline, from an early analyze run. That is deliberate:
+students can still revise until the deadline, so finalizing early is wrong and a box urging it was
+urging a mistake.
+
+**The label is now `17 · Grade Assignment 03`** — count, imperative, and which one.
+
+- **"Grade"**, not "Review AI", because the verb should survive the arrival of a second assignment
+  type. "Review AI" baked in the one grading path this queue happens to have today.
+- **"Assignment 03", not "Lesson 03"** — and yes, that is the opposite of the entry below, on
+  purpose. The spotlight says *Lesson* because it only ever shows preflights and its eyebrow says so
+  unconditionally. This queue carries whatever needs grading, and the day a course schedules homework
+  or a quiz it will carry that too; "Lesson" would quietly become a lie about what you are opening.
+  Course director's call, and the reasoning is in the code beside both.
+- The **number** still comes from `lessonNumber()`, the same helper the spotlight uses, so the two
+  agree about which thing they mean. A title it cannot read a number out of falls back to the title
+  rather than printing "Assignment null" — the box's whole job is to say *which*.
+- The full title survives as the **tooltip**, which is where it stopped being truncated.
+
+**Verified** by running the shipped `perLesson()` and `assignmentLabel()` against real rows — the
+sandbox has no past-due work, so the live dashboard cannot exercise this path today and saying "I
+checked it in the browser" would have been false. Per-lesson boxes, the over-six summary collapse
+(*Grade assignments*), and the edge cases: `homework-4` → Assignment 04 (the future case the change
+is for), an unnumbered title falls back to itself. The registry's own 22-character action rule still
+passes, and the suite is 351/351. In the browser the panel correctly shows **Nothing outstanding**
+with the Grade-page link intact — that link surviving the empty state is the thing a test guards,
+because the nav has no Grade entry.
+
+### The spotlight header was giving half its width to an empty spacer
+
+The title kept wrapping and dragging its status pills onto a second line. Measured rather than
+guessed: in a 1090px header the controls needed 333px, the title block got **488px**, and **228px
+sat empty beside it**. `.grow` is `flex: 1` and the title block is `flex: 1 1 260px`, so the two
+*split* the free space equally — the spacer grew just as eagerly as the title it was starving.
+
+Zeroing the spacer inside this header (`.spot-shell .card-head > .grow { flex: 0 0 0 }`) hands that
+228px back: the title block goes to **715px**, and since it still grows it pushes the controls right
+on its own, so the spacer had nothing left to do anyway. Scoped to this header rather than changed
+on `.grow`, which a dozen other layouts rely on.
+
+**Verified by walking all 37 lessons** at 1440px and again at 1280px and asserting that no header
+wraps — 0 at both. The longest title in the course, *Lesson 05 — Charged Particles in Uniform
+Electric Fields*, now sits on one line with both pills and every control.
+
+---
+
 ## 2026-07-29 (later still) — Matthew Recker via Claude
 
 ### The faculty dashboard calls a lesson a lesson

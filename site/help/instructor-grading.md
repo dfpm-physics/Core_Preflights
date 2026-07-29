@@ -4,20 +4,29 @@ There is no **Grade** entry in the top navigation. Grading is work that arrives 
 you browse to, so the routes to it are the places that already know you have some:
 
 - the **Needs your attention** boxes on your dashboard, which appear only when there is something in
-  them. **There is one box per assignment**, showing the count, what it wants, and which lesson —
-  *17 · Review AI · Lesson 03 Preflight* — and selecting it opens the Grade page on exactly that
-  assignment, already loaded;
+  them. **There is one box per assignment**, showing the count and which assignment —
+  *17 · Grade Assignment 03* — and selecting it opens the Grade page on exactly that assignment,
+  already loaded. Hovering names the assignment in full and says what the count is;
 - the **Grade page →** link beside those boxes, which is always there even when they are not;
 - **Grade** on any assignment card on the **Assignments** page, which opens that assignment already
   loaded. This is the route to use when you want a specific lesson rather than whatever is waiting —
   the boxes above only show you assignments that currently need something;
 - a student's name in the **gradebook**.
 
-Past six assignments the boxes collapse back into one summary — *Review grades* — which opens the
-Grade page with the assignment picker empty. Six named lessons is a worklist; sixteen is wallpaper.
+Past six assignments the boxes collapse back into one summary — *Grade assignments* — which opens
+the Grade page with the assignment picker empty. Six named assignments is a worklist; sixteen is
+wallpaper.
+
+**A box counts everything on that assignment still waiting on you** — work you have not graded and
+AI-suggested grades you have not finalized alike, since both are cleared the same way and in the
+same place. There is no separate "review the AI" box: a suggestion is not a grade until you say so,
+and it is counted here from the moment the deadline passes, which is the first moment finalizing it
+is the right thing to do. Before the deadline nothing appears, deliberately — students can still
+revise, so there is nothing to finalize yet.
 
 *(Before 2026-07-27 there was one box for all of it, and it landed on an empty picker: the count
-told you there was work and not where.)*
+told you there was work and not where. A second, AI-only box existed until 2026-07-29; it counted a
+subset of this one and sent you to the same page.)*
 
 ## Scope: what you can see
 

@@ -55,7 +55,7 @@
 // outcome than a dashboard that will not render.
 
 import { db } from './supabase.js';
-import { actionableSections } from './schema.js';
+import { actionableSections, lessonNumber } from './schema.js';
 import { pastDueUngraded } from './faculty-grade.js';
 
 /** A run still marked 'running' this long after it started did not finish (mirrors run-banner.js). */
@@ -70,9 +70,30 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const gradeLinkFor = (offeringId) => `grade.html?a=${encodeURIComponent(offeringId)}`;
 
 /**
+ * What a box calls the thing it wants graded: "Assignment 03".
+ *
+ * ── WHY "ASSIGNMENT" HERE WHEN THE REST OF THE DASHBOARD SAYS "LESSON" ───────────────────────
+ * Not an oversight, and not a leftover from the 2026-07-29 rename — the two are answering
+ * different questions. The spotlight above says "Lesson 03" because it only ever shows preflights,
+ * and its eyebrow says PREFLIGHT unconditionally. THIS queue has no such guarantee: it is
+ * whatever needs grading, and the day a course schedules homework or a quiz, this box will carry
+ * it. "Assignment" is the word that stays true through that; "Lesson" would quietly become a lie
+ * about what you are about to open. (Course director's call, 2026-07-29.)
+ *
+ * The NUMBER still comes from lessonNumber(), the same helper the spotlight uses, so the two agree
+ * about which thing they mean when they are talking about the same one. A title it cannot read a
+ * number out of falls back to the title itself rather than printing "Assignment null" — the box's
+ * entire job is to say WHICH, and a wrong number is worse than a long name.
+ */
+const assignmentLabel = (l) => {
+  const n = lessonNumber(l.slug, l.title);
+  return n == null ? l.title : `Assignment ${String(n).padStart(2, '0')}`;
+};
+
+/**
  * Per-lesson boxes, or one summary box when there are too many to read at a glance.
  *
- * @param {Array} lessons  [{ offeringId, title, count }] — already ordered most-urgent first
+ * @param {Array} lessons  [{ offeringId, slug, title, count }] — already ordered most-urgent first
  * @param {object} opts    { action, summaryAction, summaryText, textFor }
  */
 function perLesson(lessons, { action, summaryAction, summaryText, textFor }) {
@@ -91,7 +112,7 @@ function perLesson(lessons, { action, summaryAction, summaryText, textFor }) {
     // on the source id, and three boxes sharing one would be indistinguishable to both.
     idSuffix: l.offeringId,
     count: l.count,
-    action: `${action} · ${l.title}`,
+    action: `${action} ${assignmentLabel(l)}`,
     text: textFor(l),
     link: gradeLinkFor(l.offeringId),
   }));
@@ -132,11 +153,13 @@ export const SOURCES = [
       // order these should be worked, so it is also the order they are rendered in.
       const rows = (await pastDueUngraded(ctx, ctx.sectionIds)).filter(r => r.outstanding > 0);
       return perLesson(
-        rows.map(r => ({ offeringId: r.offeringId, title: r.title, count: r.outstanding })), {
-          action: 'Review',
+        rows.map(r => ({
+          offeringId: r.offeringId, slug: r.slug, title: r.title, count: r.outstanding,
+        })), {
+          action: 'Grade',
           textFor: (l) => `${plural(l.count, 'submission', 'submissions')} past due and not`
                         + ` finalized on ${l.title} — click to grade it`,
-          summaryAction: 'Review grades',
+          summaryAction: 'Grade assignments',
           summaryText: (total, n) =>
             `${plural(total, 'submission', 'submissions')} past due and not finalized`
             + ` · ${plural(n, 'assignment', 'assignments')}`,
@@ -144,58 +167,30 @@ export const SOURCES = [
     },
   },
 
-  {
-    id: 'ai-unfinalized',
-    severity: 'warn',
-    icon: '🤖',
-    director: false,
-    async load(ctx) {
-      // An AI suggestion is not a grade until a human says so — that is the whole posture of
-      // /preflight-analyze (is_finalized=false, always). This box is the queue that posture
-      // creates, and without it the suggestions sit unreviewed and invisible.
-      const { data: enroll } = await db.from('enrollments')
-        .select('id').in('section_id', ctx.sectionIds).eq('status', 'active');
-      const ids = (enroll || []).map(e => e.id);
-      if (!ids.length) return null;
-
-      // The offering is embedded so each box can NAME the lesson it counted and deep-link to it.
-      // Without the title the box would read "4 · Review AI grades" and send the reader to a
-      // picker to work out which four, which is what the beta objected to.
-      const { data, error } = await db.from('grades')
-        .select('id, assignment_offering_id,'
-              + 'assignment_offerings!inner(id, due_at, assignments!inner(title, slug))')
-        .in('enrollment_id', ids)
-        .eq('is_finalized', false)
-        .eq('source', 'ai_suggested');
-      if (error) throw error;
-      if (!(data || []).length) return null;
-
-      const byOffering = new Map();
-      (data || []).forEach(g => {
-        const o = g.assignment_offerings;
-        const cur = byOffering.get(g.assignment_offering_id) || {
-          offeringId: g.assignment_offering_id,
-          title: o?.assignments?.title || o?.assignments?.slug || 'this assignment',
-          dueAt: o?.due_at || null,
-          count: 0,
-        };
-        cur.count++;
-        byOffering.set(g.assignment_offering_id, cur);
-      });
-      const lessons = [...byOffering.values()]
-        .sort((a, b) => new Date(a.dueAt || 0) - new Date(b.dueAt || 0));
-
-      return perLesson(lessons, {
-        action: 'Review AI',
-        textFor: (l) => `${plural(l.count, 'AI-suggested grade', 'AI-suggested grades')} awaiting`
-                      + ` your review on ${l.title} — click to grade it`,
-        summaryAction: 'Review AI grades',
-        summaryText: (total, n) =>
-          `${plural(total, 'AI-suggested grade', 'AI-suggested grades')} awaiting your review`
-          + ` · ${plural(n, 'assignment', 'assignments')}`,
-      });
-    },
-  },
+  /* ── THE AI-REVIEW SOURCE WAS REMOVED HERE (2026-07-29) ────────────────────────────────────
+   * It was `ai-unfinalized`: 🤖, one box per lesson, counting `grades` rows with
+   * `is_finalized = false AND source = 'ai_suggested'`, labelled "Review AI · <title>".
+   *
+   * IT WAS A SUBSET OF THE BOX ABOVE, AND THAT IS WHY IT WENT. `to-grade` counts submissions
+   * past their own deadline that are not finalized — which already includes every student an AI
+   * suggestion is sitting on, because /preflight-analyze runs AFTER the deadline. So in a live
+   * term the two boxes named the same lesson, linked to the same page, asked for the same
+   * action, and differed only in which subset they had counted. Two boxes for one errand is the
+   * thing this panel exists to avoid.
+   *
+   * WHAT IT WAS FOR, SO NOBODY RE-ADDS IT BY ACCIDENT: an AI suggestion is not a grade until a
+   * human says so (`is_finalized=false`, always), and this was the queue that posture creates —
+   * without it, suggestions sit unreviewed and invisible. They are still visible; they are
+   * counted by `to-grade` from the moment the deadline passes, which is the moment finalizing
+   * them is the right thing to do.
+   *
+   * THE ONE STATE NO LONGER SURFACED, stated plainly: suggestions written BEFORE a deadline —
+   * an early /preflight-analyze run — raise no box until that deadline passes. That is on
+   * purpose. Students may still revise until the deadline, so finalizing early is wrong, and a
+   * box urging it would have been urging a mistake.
+   *
+   * Whether "AI suggested this" needs to be visible at all is a Grade-page question, and the
+   * Grade page already answers it per student. It is not a dashboard-queue question. */
 
   {
     id: 'to-aggregate',

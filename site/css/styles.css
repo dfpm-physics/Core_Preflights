@@ -1582,15 +1582,24 @@ a.tbtn { text-decoration: none; display: inline-flex; align-items: center; }
 
 /* ── Active-lesson spotlight ───────────────────────────────── */
 .spot-shell { position: relative; }
-/* Keep "Open full rollup →" on the header's first line.
+/* Keep "Open full rollup →" on the header's first line, and give the title the rest of it.
    `.card-head` wraps, and flex assigns items to lines by their HYPOTHETICAL size — so the title
    block, whose natural width is the whole assignment title on one line, claimed the row and the
    link was the item pushed off. Removing the always-on "↩ Today" button bought back its width and
    the link still wrapped, because the title was always the item setting the line. Giving the block
    a modest basis and letting it grow makes the TITLE the thing that reflows, which is what should
    give: it already wraps to two lines gracefully, and the controls do not. Narrow screens still
-   wrap the whole row, which is the right behaviour there. */
+   wrap the whole row, which is the right behaviour there.
+
+   The second half is the `.grow` spacer, and it was quietly costing half the header. `.grow` is
+   `flex: 1`, the title block is `flex: 1 1 260px`, so the two SPLIT the free space equally: in a
+   1090px header the controls took 333px, the title got 488px, and 228px sat empty beside it while
+   the title wrapped to two lines and dragged its status pills down with it. Zeroing the spacer
+   here hands that 228px back — the title still grows, so it pushes the controls right on its own
+   and the spacer has nothing left to do. Scoped to this header rather than changed on `.grow`,
+   which is a shared utility a dozen other layouts rely on. */
 .spot-shell .card-head > :first-child { flex: 1 1 260px; min-width: 0; }
+.spot-shell .card-head > .grow { flex: 0 0 0; }
 .spot { display: grid; gap: 26px;
   grid-template-columns: minmax(200px, 0.85fr) minmax(230px, 1.1fr) minmax(250px, 1.3fr); }
 .spot-col { min-width: 0; }
