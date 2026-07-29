@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Navbar / brand explorations · PREP</title>
+
+<!-- ============================================================================================
+     STANDALONE MOCKUP — nothing here is wired to anything.
+
+     No Supabase, no auth guard, no shared JS module, no import of site/css/styles.css. Every
+     token and rule below is a local copy, so editing this file cannot affect a live page and a
+     live page cannot change what you see here. The only things it borrows from site/ are two
+     read-only assets — the Oswald wordmark font and the atom icon PNG — because the whole point
+     is judging how the wordmark LOOKS.
+
+     Purpose: try several ways of answering "PREP, by itself, doesn't say what this is".
+     The bar is rendered as a SYSTEM ADMIN sees it (seven links) because that is the crowded
+     case — anything that fits here fits for an instructor.
+     ========================================================================================= -->
+
+<script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+
+<style>
+/* ── Wordmark face (read-only borrow from site/media) ─────────────────────────────────────── */
+@font-face { font-family:'Oswald'; font-style:normal; font-display:swap; font-weight:500;
+  src:url(../../site/media/fonts/oswald-500.woff2) format('woff2'); }
+@font-face { font-family:'Oswald'; font-style:normal; font-display:swap; font-weight:600;
+  src:url(../../site/media/fonts/oswald-600.woff2) format('woff2'); }
+
+/* ── Tokens — local copy of the live light/dark palette ───────────────────────────────────── */
+:root{
+  --font-display:'Oswald','Arial Narrow','Segoe UI',sans-serif;
+  --blue:#0969da; --blue-lt:#0969da; --gold:#9a6700; --green:#1a7f37;
+  --bg:#f6f8fa; --card:#ffffff; --border:#d0d7de;
+  --text:#1f2328; --text-soft:#424a53; --muted:#656d76;
+  --surface-sunken:#f6f8fa; --surface-hover:#eef1f4;
+  --nav-bg:rgba(255,255,255,0.72); --nav-border:rgba(27,31,36,0.10);
+  --nav-link:#57606a; --nav-hover-bg:rgba(27,31,36,0.05);
+  --nav-control-bg:rgba(27,31,36,0.04);
+  --alert-info-bg:#ddf4ff; --alert-info-fg:#0969da; --alert-info-bd:#54aeff;
+  --shadow-sm:0 1px 4px rgba(0,0,0,0.06); --shadow-md:0 4px 12px rgba(0,0,0,0.10);
+  --shadow-lg:0 12px 32px rgba(0,0,0,0.16);
+  --radius:10px; --radius-sm:6px;
+}
+[data-theme="dark"]{
+  --blue:#4493f8; --blue-lt:#4493f8; --gold:#d29922; --green:#3fb950;
+  --bg:#010409; --card:#0d1117; --border:#30363d;
+  --text:#e6edf3; --text-soft:#c9d1d9; --muted:#9198a1;
+  --surface-sunken:#010409; --surface-hover:#21262d;
+  --nav-bg:rgba(13,17,23,0.72); --nav-border:rgba(255,255,255,0.10);
+  --nav-link:#9198a1; --nav-hover-bg:rgba(255,255,255,0.07);
+  --nav-control-bg:rgba(255,255,255,0.06);
+  --alert-info-bg:#121d2f; --alert-info-fg:#4493f8; --alert-info-bd:#1f6feb;
+  --shadow-sm:0 1px 4px rgba(0,0,0,0.4); --shadow-md:0 4px 12px rgba(0,0,0,0.5);
+  --shadow-lg:0 12px 32px rgba(0,0,0,0.6);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{color-scheme:light dark;overflow-y:scroll}
+[data-theme="dark"] html,html[data-theme="dark"]{color-scheme:dark}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:var(--bg); color:var(--text); min-height:100vh;
+  display:flex; flex-direction:column;
+  padding-bottom:92px;                 /* clearance for the fixed control bar */
+}
+main{flex:1 0 auto}
+.ic{width:20px;height:20px;object-fit:contain;vertical-align:middle;flex:none}
+.icon-fallback{display:inline-flex;align-items:center;justify-content:center;line-height:1}
+
+/* ── Top navigation — local copy of the live rules ────────────────────────────────────────── */
+.topnav{
+  position:sticky; top:0; z-index:40; background:var(--nav-bg);
+  -webkit-backdrop-filter:saturate(180%) blur(14px); backdrop-filter:saturate(180%) blur(14px);
+  border-bottom:1px solid var(--nav-border);
+}
+.topnav-inner{
+  width:100%; display:grid; grid-template-columns:1fr auto 1fr; align-items:center;
+  gap:6px; height:64px; padding:0 24px;
+}
+/* A wide brand does not fit the live `1fr auto 1fr` grid: the centre track is pinned to the
+   viewport centre, so anything past the first 1fr overlaps the links instead of pushing them.
+   Measured on this page at 1440px, variants C/E/F/G/I all overrun it. The flexible layout below
+   is the fix any of them would need — the links stay centred in whatever space is left over.
+   Applied per-variant so variant A still shows the live behaviour exactly. */
+.topnav.wide-brand .topnav-inner{grid-template-columns:auto minmax(0,1fr) auto}
+.topnav.wide-brand .nav-links{justify-self:center}
+.nav-left{display:flex;align-items:center;gap:6px;justify-self:start;min-width:0}
+.nav-right{display:flex;align-items:center;gap:8px;justify-self:end}
+.brand{
+  display:flex; align-items:center; gap:11px;
+  font-family:var(--font-display); font-weight:600; font-size:1.24em; letter-spacing:.01em;
+  color:var(--text); text-decoration:none; white-space:nowrap; margin-right:4px;
+}
+.brand .brand-mark{display:grid;place-items:center;font-size:1.3em}
+.brand .brand-mark .ic{width:38px;height:38px}
+.brand-sub{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  font-size:.745em; font-weight:500; color:var(--muted); letter-spacing:0;
+  margin-left:5px; padding-left:11px; border-left:1px solid var(--nav-border); white-space:nowrap;
+}
+.course-menu{position:relative;display:inline-flex;align-items:center}
+.course-btn{
+  display:inline-flex; align-items:center; gap:5px;
+  background:none; border:none; border-left:1px solid var(--nav-border);
+  cursor:pointer; border-radius:0 8px 8px 0; padding:5px 9px 5px 11px; margin-left:5px;
+  transition:background .14s,color .14s;
+}
+.course-btn:hover,.course-btn[aria-expanded="true"]{background:var(--nav-hover-bg);color:var(--text)}
+.course-btn .cb-caret{font-size:.8em;opacity:.75}
+.course-pop{right:auto;left:0;min-width:232px}
+
+.nav-links{display:flex;align-items:center;gap:4px;justify-self:center}
+.nav-link{
+  display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:8px;
+  color:var(--nav-link); text-decoration:none; font-size:.875em; font-weight:500;
+  white-space:nowrap; transition:background .14s,color .14s;
+}
+.nav-link:hover{background:var(--nav-hover-bg);color:var(--text)}
+.nav-link.active{background:var(--nav-hover-bg);color:var(--text);font-weight:600}
+
+.theme-toggle{
+  display:inline-grid; place-items:center; width:40px; height:40px; border-radius:999px;
+  cursor:pointer; background:transparent; border:none; color:var(--text); font-size:1.1em;
+  transition:background .14s;
+}
+.theme-toggle:hover{background:var(--nav-hover-bg)}
+.user-menu{position:relative}
+.user-chip{
+  display:inline-flex; align-items:center; gap:8px; background:transparent; border:none;
+  color:var(--text); border-radius:999px; padding:4px 6px; cursor:pointer;
+  font-size:.86em; font-weight:600; transition:background .14s;
+}
+.user-chip:hover{background:var(--nav-hover-bg)}
+.user-chip .avatar{
+  width:30px;height:30px;border-radius:999px;display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--blue),var(--blue-lt));color:#fff;font-weight:800;font-size:.8em;
+}
+.user-chip .caret{font-size:.65em;color:var(--muted)}
+.menu-pop{
+  position:absolute; right:0; top:calc(100% + 10px); background:var(--card); color:var(--text);
+  border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow-lg);
+  min-width:210px; padding:6px; display:none; z-index:50;
+}
+.menu-pop.open{display:block}
+.menu-head{display:flex;align-items:center;gap:10px;padding:10px 12px 8px;border-bottom:1px solid var(--border);margin-bottom:4px}
+.menu-head .nm{font-weight:700;font-size:.9em}
+.menu-head .rl{font-size:.76em;color:var(--muted)}
+.menu-item{
+  display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border-radius:8px;
+  border:none;background:transparent;color:var(--text);font-size:.88em;cursor:pointer;
+  text-align:left;text-decoration:none;
+}
+.menu-item:hover{background:var(--surface-hover)}
+.menu-item.danger{color:#cf222e}
+[data-theme="dark"] .menu-item.danger{color:#f85149}
+.menu-sep{height:1px;background:var(--border);margin:4px 8px}
+.menu-label{padding:6px 12px 2px;font-size:.7em;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.menu-subhead{padding:6px 12px 2px;font-size:.72em;font-weight:600;color:var(--muted)}
+.course-opt{align-items:flex-start}
+.course-opt .co-check{flex:0 0 14px;font-size:.9em;line-height:1.35;color:var(--blue-lt);font-weight:700}
+.course-opt .co-body{display:flex;flex-direction:column;gap:1px;min-width:0}
+.course-opt .co-title{font-weight:600}
+.course-opt .co-sub{font-size:.78em;color:var(--muted)}
+.course-opt.active{background:var(--surface-sunken)}
+.course-opt.active .co-title{color:var(--blue-lt)}
+
+.nav-burger{
+  display:none; background:var(--nav-control-bg); border:1px solid var(--nav-border);
+  color:var(--text); width:38px; height:38px; border-radius:10px; font-size:1.15em; cursor:pointer;
+}
+
+/* ── Site footer (part of the DESIGN — two variants rewrite it) ───────────────────────────── */
+.site-footer{flex:0 0 auto;border-top:1px solid var(--border);margin-top:48px}
+.site-footer .footer-inner{
+  max-width:1180px;margin:0 auto;padding:18px 24px;display:flex;gap:6px 10px;flex-wrap:wrap;
+  align-items:center;font-size:.8em;color:var(--muted);
+}
+.site-footer .grow{flex:1}
+.site-footer a{color:var(--muted);text-decoration:underline;text-underline-offset:2px}
+.site-footer .fx{color:var(--text-soft)}
+
+/* ── Page furniture ───────────────────────────────────────────────────────────────────────── */
+.page-wide{width:100%;max-width:1180px;margin:0 auto;padding:28px 20px}
+.page-head{margin-bottom:22px}
+.page-head h1{font-family:var(--font-display);font-size:1.7em;font-weight:600}
+.page-head .sub{color:var(--muted);font-size:.92em;margin-top:4px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:24px;box-shadow:var(--shadow-sm);margin-bottom:20px}
+.card-title{font-size:1.05em;font-weight:700;margin-bottom:4px}
+.card-meta{font-size:.82em;color:var(--muted);margin-bottom:16px}
+.note{background:var(--alert-info-bg);border:1px solid var(--alert-info-bd);color:var(--alert-info-fg);
+  border-radius:var(--radius);padding:12px 16px;font-size:.86em;line-height:1.5;margin-bottom:20px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:22px}
+.tile{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
+.tile .k{font-size:.74em;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+.tile .v{font-family:var(--font-display);font-size:1.9em;font-weight:600;margin-top:4px}
+
+.lay{display:inline-block;font-size:.66em;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  border-radius:999px;padding:3px 9px;margin-left:10px;vertical-align:2px;border:1px solid}
+.lay.ok{background:rgba(26,127,55,.10);color:#1a7f37;border-color:rgba(26,127,55,.35)}
+[data-theme="dark"] .lay.ok{background:rgba(63,185,80,.14);color:#3fb950}
+.lay.grid{background:rgba(154,103,0,.10);color:var(--gold);border-color:rgba(154,103,0,.35)}
+.spec{display:grid;grid-template-columns:104px 1fr;gap:10px 16px;font-size:.9em;line-height:1.55}
+.spec dt{font-weight:700;color:var(--muted);font-size:.86em;text-transform:uppercase;letter-spacing:.04em;padding-top:2px}
+.spec dd{color:var(--text-soft)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;
+  background:var(--surface-hover);border-radius:5px;padding:1px 5px}
+
+/* ── "At a glance" gallery — every lockup on a bar-coloured strip ─────────────────────────── */
+.gal{display:flex;flex-direction:column;gap:10px}
+.gal-row{
+  display:grid;grid-template-columns:26px 1fr;gap:0 14px;align-items:center;
+  border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-sunken);
+  padding:0;cursor:pointer;overflow:hidden;text-align:left;font:inherit;color:inherit;
+  transition:border-color .12s,box-shadow .12s;
+}
+.gal-row:hover{border-color:var(--blue-lt);box-shadow:var(--shadow-sm)}
+.gal-row.on{border-color:var(--blue-lt);box-shadow:0 0 0 1px var(--blue-lt)}
+.gal-row .idx{
+  align-self:stretch;display:grid;place-items:center;background:var(--surface-hover);
+  font-size:.78em;font-weight:800;color:var(--muted);
+}
+.gal-row.on .idx{background:var(--blue-lt);color:#fff}
+.gal-body{display:flex;flex-direction:column;gap:0;min-width:0;padding:0}
+.gal-strip{
+  display:flex;align-items:center;min-height:60px;padding:0 14px;
+  background:var(--card);border-bottom:1px solid var(--border);
+}
+.gal-cap{padding:7px 14px;font-size:.78em;color:var(--muted)}
+.gal-cap b{color:var(--text)}
+
+/* ═══ VARIANT-SPECIFIC BRAND CSS ═══════════════════════════════════════════════════════════ *
+ * Everything below is what would be NEW in site/css/styles.css if a variant were adopted.    */
+
+/* stacked lockups (C, D) — wordmark over a second line */
+.brand.stack{align-items:center}
+.brand .bl{display:flex;flex-direction:column;justify-content:center;line-height:1.02}
+.brand .sub-line{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  font-size:.46em;font-weight:600;color:var(--muted);letter-spacing:.07em;
+  text-transform:uppercase;margin-top:3px;white-space:nowrap;
+}
+.brand .sub-line.plain{text-transform:none;letter-spacing:.01em;font-size:.5em;font-weight:500}
+
+/* "Portal" set lighter than the acronym (B, C) */
+.brand .lw{font-weight:500;opacity:.72;margin-left:.28em}
+
+/* inline expansion (E) — reads like the course label that follows it */
+.brand-expand{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  font-size:.6em;font-weight:500;color:var(--nav-link);letter-spacing:.01em;white-space:nowrap;
+  margin-left:11px;padding-left:12px;border-left:1px solid var(--nav-border);
+}
+
+/* full name with the acronym picked out (F) */
+.brand .acr-word{font-size:.82em;font-weight:500;letter-spacing:.015em}
+.brand .acr-word b{color:var(--blue-lt);font-weight:600}
+
+/* PREP as a filled badge + plain descriptor (G) */
+.brand .chip{
+  display:inline-grid;place-items:center;padding:3px 10px 4px;border-radius:7px;
+  background:var(--blue);color:#fff;font-size:.86em;font-weight:600;letter-spacing:.04em;
+}
+[data-theme="dark"] .brand .chip{background:var(--blue-lt);color:#0d1117}
+.brand .desc{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  font-size:.62em;font-weight:500;color:var(--nav-link);margin-left:9px;white-space:nowrap;
+}
+
+/* expansion revealed on hover / keyboard focus (H) */
+.brand .reveal{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  font-size:.6em;font-weight:500;color:var(--nav-link);white-space:nowrap;
+  max-width:0;opacity:0;overflow:hidden;
+  transition:max-width .32s ease,opacity .22s ease,margin .32s ease,padding .32s ease;
+  border-left:1px solid transparent;
+}
+.brand:hover .reveal,.brand:focus-visible .reveal{
+  max-width:360px;opacity:1;margin-left:11px;padding-left:12px;border-left-color:var(--nav-border);
+}
+
+/* full name only (I) */
+.brand .full-only{font-size:.8em;font-weight:500;letter-spacing:.015em}
+
+/* ── Narrow simulation (≈430px viewport) ─────────────────────────────────────────────────── */
+body.narrow .topnav-inner{max-width:430px;margin:0 auto;padding:0 12px;
+  border-left:1px dashed var(--border);border-right:1px dashed var(--border)}
+body.narrow .nav-links{display:none}
+body.narrow .nav-burger{display:grid;place-items:center}
+body.narrow .user-chip .nm,body.narrow .user-chip .caret{display:none}
+body.narrow .narrow-hide{display:none}
+body.narrow .brand{font-size:1.1em}
+body.narrow .stage-note{display:block}
+
+/* ── Fixed control bar (the mockup's own chrome, not part of the design) ──────────────────── */
+.ctrl{
+  position:fixed;left:0;right:0;bottom:0;z-index:80;
+  background:var(--card);border-top:1px solid var(--border);box-shadow:0 -6px 22px rgba(0,0,0,.10);
+}
+[data-theme="dark"] .ctrl{box-shadow:0 -6px 22px rgba(0,0,0,.55)}
+.ctrl-inner{
+  max-width:1400px;margin:0 auto;padding:10px 18px;
+  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;
+}
+.ctrl-lbl{font-size:.72em;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ctrl-btns{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.ctrl-right{display:flex;gap:6px;justify-content:flex-end}
+.vbtn{
+  font:inherit;font-size:.79em;font-weight:600;cursor:pointer;
+  background:var(--surface-hover);color:var(--text-soft);
+  border:1px solid var(--border);border-radius:999px;padding:6px 12px;white-space:nowrap;
+  transition:background .12s,color .12s,border-color .12s;
+}
+.vbtn:hover{border-color:var(--blue-lt);color:var(--text)}
+.vbtn.on{background:var(--blue);border-color:var(--blue);color:#fff}
+[data-theme="dark"] .vbtn.on{background:var(--blue-lt);border-color:var(--blue-lt);color:#0d1117}
+.vbtn .n{opacity:.65;margin-right:5px;font-weight:800}
+.vbtn.on .n{opacity:.8}
+.stage-note{display:none;font-size:.8em;color:var(--muted);margin:10px 0 0}
+
+@media (max-width:900px){
+  .ctrl-inner{grid-template-columns:1fr;gap:8px}
+  .ctrl-lbl,.ctrl-right{justify-self:center}
+  .spec{grid-template-columns:1fr;gap:2px 0}
+  .spec dt{margin-top:8px}
+}
+</style>
+</head>
+<body>
+
+<header id="topnav" class="topnav"></header>
+
+<main class="page-wide">
+  <div class="page-head">
+    <h1 id="v-title">Brand &amp; navbar explorations</h1>
+    <p class="sub">Nine ways to make the bar say what PREP is. Rendered as a <b>system admin</b> —
+      seven links, the widest case. Switch with the buttons at the bottom (or ← / →).</p>
+  </div>
+
+  <p class="note">Standalone mockup — no database, no auth, no shared stylesheet. Nothing on the
+    live site changes, and none of these are adopted. The atom mark, the Oswald wordmark font, the
+    course switcher and the seven links are copies of what ships today, so the comparison is fair.</p>
+
+  <p class="stage-note">Narrow simulation: the bar is clamped to ≈430&nbsp;px (dashed edges) and the
+    live phone rules are applied — links collapse into the burger and long brand text is dropped.</p>
+
+  <div class="card">
+    <div class="card-title"><span id="d-title">—</span><span class="lay" id="d-lay"></span></div>
+    <div class="card-meta" id="d-tag">—</div>
+    <dl class="spec">
+      <dt>Idea</dt><dd id="d-idea">—</dd>
+      <dt>Watch out</dt><dd id="d-watch">—</dd>
+      <dt>What changes</dt><dd id="d-changes">—</dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <div class="card-title">All nine at a glance</div>
+    <div class="card-meta">Each strip is the bar's left zone at full size, brand + course switcher.
+      Click one to load it above.</div>
+    <div class="gal" id="gallery"></div>
+  </div>
+
+  <!-- Filler so the sticky bar has something to sit over and be judged against. -->
+  <div class="tiles">
+    <div class="tile"><div class="k">Offerings</div><div class="v">4</div></div>
+    <div class="tile"><div class="k">Cadets</div><div class="v">612</div></div>
+    <div class="tile"><div class="k">Awaiting review</div><div class="v">37</div></div>
+    <div class="tile"><div class="k">Lessons closed</div><div class="v">12</div></div>
+  </div>
+</main>
+
+<footer id="site-footer" class="site-footer"></footer>
+
+<div class="ctrl">
+  <div class="ctrl-inner">
+    <span class="ctrl-lbl">Navbar mockup</span>
+    <div class="ctrl-btns" id="ctrl-btns"></div>
+    <div class="ctrl-right">
+      <button class="vbtn" id="btn-narrow" title="Simulate a ≈430px phone viewport">📱 Narrow</button>
+      <button class="vbtn" id="btn-theme" title="Light / dark">◐ Theme</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════════════════════════
+   Plain script, no modules, no fetch — the whole mockup is this file.
+   ══════════════════════════════════════════════════════════════════════════════════════════ */
+
+const FULL = 'Pre-lesson Readiness Engagement Platform';
+
+/* Atom mark, with the same emoji fallback the live iconHTML() uses. */
+const MARK = `<span class="brand-mark"><img class="ic" alt="" src="../../site/media/icons/ic-atom.png"
+  onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'icon-fallback ic',textContent:'⚛️'}))"></span>`;
+
+/* The course switcher exactly as it ships: the course name beside the wordmark, with a dropdown. */
+function courseHTML() {
+  return `
+    <span class="course-menu">
+      <button class="brand-sub course-btn" data-course-toggle aria-haspopup="true" aria-expanded="false" title="Switch course">
+        <span class="cb-name">Physics 215</span><span class="cb-caret" aria-hidden="true">&#9662;</span>
+      </button>
+      <div class="menu-pop course-pop" role="menu">
+        <div class="menu-label">Course view</div>
+        <div class="menu-scroll">
+          <div class="menu-subhead">Fall 2026</div>
+          <button class="menu-item course-opt active" role="menuitemradio" aria-checked="true">
+            <span class="co-check">&#10003;</span>
+            <span class="co-body"><span class="co-title">Physics 215</span><span class="co-sub">Admin</span></span>
+          </button>
+          <button class="menu-item course-opt" role="menuitemradio" aria-checked="false">
+            <span class="co-check"></span>
+            <span class="co-body"><span class="co-title">Physics 110</span><span class="co-sub">Admin</span></span>
+          </button>
+          <div class="menu-subhead">Spring 2026</div>
+          <button class="menu-item course-opt" role="menuitemradio" aria-checked="false">
+            <span class="co-check"></span>
+            <span class="co-body"><span class="co-title">Physics 215</span><span class="co-sub">Admin</span></span>
+          </button>
+        </div>
+      </div>
+    </span>`;
+}
+
+/* A system admin sees all seven. */
+const LINKS = [
+  ['Dashboard', true], ['Gradebook', false], ['Assignments', false],
+  ['Extensions', false], ['Admin', false], ['Feedback', false], ['System', false],
+].map(([l, on]) => `<a class="nav-link${on ? ' active' : ''}" href="#" onclick="return false">${l}</a>`).join('');
+
+const RIGHT = `
+  <button class="theme-toggle" id="nav-theme" title="Light / dark"><span id="nav-theme-ic">&#127769;</span></button>
+  <div class="user-menu">
+    <button class="user-chip" data-user-toggle>
+      <span class="avatar">MR</span><span class="nm">Matthew Recker</span><span class="caret">&#9662;</span>
+    </button>
+    <div class="menu-pop" data-user-pop>
+      <div class="menu-head">
+        <span>&#128100;</span>
+        <div><div class="nm">Matthew Recker</div><div class="rl">Global admin &middot; Physics 215</div></div>
+      </div>
+      <a class="menu-item" href="#" onclick="return false">&#128100; <span>Account</span></a>
+      <a class="menu-item" href="#" onclick="return false">&#10067; <span>Help</span></a>
+      <div class="menu-sep"></div>
+      <button class="menu-item danger">&#128682; <span>Sign out</span></button>
+    </div>
+  </div>`;
+
+const FOOTER_DEFAULT = `<span>PREP &middot; USAFA Physics</span>`;
+
+/* ── The nine variants ─────────────────────────────────────────────────────────────────────
+ * `brand` is the markup that would replace the <a class="brand"> block in site/js/nav.js.
+ * `footer` overrides the footer's left-hand string when a variant moves the expansion there.  */
+const VARIANTS = [
+  {
+    id:'current', btn:'Current', title:'A · Current — PREP alone', tag:'What ships today (baseline)',
+    brand:`<a class="brand" href="#" onclick="return false" title="PREP — ${FULL}">${MARK}<span>PREP</span></a>`,
+    idea:'The atom mark, the wordmark, then the course switcher. The expansion exists only in the anchor’s <code>title</code> tooltip, which nobody hovers.',
+    watch:'A first-time instructor has no way to learn what the four letters stand for without leaving the page. This is the complaint the other eight answer.',
+    changes:'Nothing. Here for comparison.',
+  },
+  {
+    id:'portal-footer', btn:'PREP Portal + footer', title:'B · PREP Portal, acronym spelled out in the footer',
+    tag:'One extra word up top, the definition at the bottom of every page',
+    brand:`<a class="brand" href="#" onclick="return false">${MARK}<span>PREP<span class="lw">Portal</span></span></a>`,
+    footer:`<span>PREP &mdash; <span class="fx">${FULL}</span> &middot; USAFA Physics</span>`,
+    idea:'The bar gains one word, set lighter than the acronym, so it reads as a place rather than a label. The acronym is spelled out once per page, in the footer, where there is room for all 34 characters.',
+    watch:'"Portal" says "this is a website", not what the website does — it fixes the tone, not the meaning. And the footer expansion is only seen by someone who scrolls to the bottom.',
+    changes:'The brand block in <code>site/js/nav.js</code>, plus the footer string in <code>renderFooter()</code>. No CSS beyond one class for the lighter word.',
+  },
+  {
+    id:'portal-stack', btn:'Portal, name below', title:'C · PREP Portal over the full name',
+    tag:'Two-line lockup inside the 64px bar', wide:true,
+    brand:`<a class="brand stack" href="#" onclick="return false">${MARK}<span class="bl">
+        <span>PREP<span class="lw">Portal</span></span>
+        <span class="sub-line narrow-hide">${FULL}</span></span></a>`,
+    idea:'Says the name and defines it in the same glance, with no second surface to visit. The expansion sits directly under the wordmark in small caps, the way a university seal carries its motto.',
+    watch:'34 characters at 64px bar height means ~9px type — legible, but it is the smallest text on the page, and it pushes the course switcher noticeably right. Must drop on a phone (toggle Narrow).',
+    changes:'The brand block, ~10 lines of CSS, <b>and the nav grid</b> — the left zone measures 398px here against the 383px the live <code>1fr auto 1fr</code> layout allows, so the links must be freed to sit centred in the leftover space. Bar height stays 64px, so nothing below the bar moves.',
+  },
+  {
+    id:'stack-desc', btn:'Descriptor below', title:'D · PREP over a plain-English descriptor',
+    tag:'Same two-line shape, but says what it is for instead of what it stands for',
+    brand:`<a class="brand stack" href="#" onclick="return false">${MARK}<span class="bl">
+        <span>PREP</span>
+        <span class="sub-line plain narrow-hide">Preflights &amp; lesson readiness</span></span></a>`,
+    idea:'Answers the actual question. "Pre-lesson Readiness Engagement Platform" tells you what the letters are; "Preflights & lesson readiness" tells you what the site does, in half the width.',
+    watch:'Drops the expansion entirely — if PREP has to be defined somewhere on screen, this is not where it happens (pair it with variant B’s footer). The wording is a placeholder; you pick the phrase.',
+    changes:'Same as C — brand block plus a little CSS. The second line is short enough to survive further down the responsive range.',
+  },
+  {
+    id:'inline-name', btn:'Name inline', title:'E · PREP · full name inline',
+    tag:'One line: wordmark, divider, expansion, divider, course', wide:true,
+    brand:`<a class="brand" href="#" onclick="return false">${MARK}<span>PREP</span>
+        <span class="brand-expand narrow-hide">${FULL}</span></a>`,
+    idea:'Keeps the bar single-line and treats the expansion exactly like the course label that follows it — same size, same muted colour, same divider rule. Visually the calmest way to carry the full name.',
+    watch:'Three segments before the course name, and the widest single-line option: 475px of left zone against the 383px the live grid allows. It has to hide well before phone width.',
+    changes:'Brand block, one CSS class, <b>and the nav grid</b> — with seven links this overruns the centre track by ~90px, so the links have to be freed to centre in the leftover space. Also worth a rule that drops the expansion under ~1100px.',
+  },
+  {
+    id:'acronym-in-name', btn:'Acronym in name', title:'F · Full name, acronym picked out',
+    tag:'The wordmark IS the name; the four initials carry the accent colour', wide:true,
+    brand:`<a class="brand" href="#" onclick="return false">${MARK}<span class="acr-word"><b>P</b>re-lesson <b>R</b>eadiness <b>E</b>ngagement <b>P</b>latform</span></a>`,
+    idea:'Nothing needs defining elsewhere — the acronym is discoverable inside the name itself. Someone who has only ever heard "PREP" finds it on their first look at the bar and never needs to again.',
+    watch:'The longest option, and the least logo-like: the bar loses the short recognisable mark that a product needs. Coloured initials can read as a rendering fault before they read as a device.',
+    changes:'Brand block, a colour rule, <b>and the nav grid</b> (441px of left zone against 383px allowed). The <code>title</code> tooltip becomes redundant and would go.',
+  },
+  {
+    id:'chip', btn:'Badge + descriptor', title:'G · PREP badge + descriptor',
+    tag:'Acronym as a filled mark, descriptor as ordinary nav text', wide:true,
+    brand:`<a class="brand" href="#" onclick="return false">${MARK}<span class="chip">PREP</span>
+        <span class="desc narrow-hide">Lesson readiness portal</span></a>`,
+    idea:'Separates the two jobs: the badge is the logo (short, coloured, memorable), the text beside it is the explanation and can be reworded any time without touching the brand.',
+    watch:'A filled badge next to the atom mark and the filled avatar puts three visual anchors on one bar — the accent colour stops meaning "active" if it is everywhere. Consider dropping the atom if the badge stays. Wording is a placeholder.',
+    changes:'Brand block plus ~12 lines of CSS, including a dark-mode inversion so the badge is not a glowing block on a near-black bar. Sits within ~10px of the centred links at 1440px, so it takes the flexible nav grid too.',
+  },
+  {
+    id:'hover', btn:'Name on hover', title:'H · PREP, name revealed on hover',
+    tag:'Identical to today at rest; expands on hover or keyboard focus',
+    brand:`<a class="brand" href="#" onclick="return false" tabindex="0">${MARK}<span>PREP</span>
+        <span class="reveal">${FULL}</span></a>`,
+    idea:'Costs the resting bar nothing — no width, no second line, no competition with the course switcher — and still puts the expansion one gesture away. Hover the wordmark to see it.',
+    watch:'Undiscoverable: the person who needs the expansion is exactly the person who will not think to hover for it, and on a touch screen there is no hover at all. Honestly this is a nicer <code>title</code> tooltip, not an answer to "PREP is not descriptive".',
+    changes:'Brand block plus a transition. Nothing moves at rest, so no responsive work is needed.',
+  },
+  {
+    id:'full-only', btn:'Full name only', title:'I · Full name only, acronym in the footer',
+    tag:'The opposite extreme — the bar never says PREP', wide:true,
+    brand:`<a class="brand" href="#" onclick="return false">${MARK}<span class="full-only">${FULL}</span></a>`,
+    footer:`<span><span class="fx">${FULL}</span> (PREP) &middot; USAFA Physics</span>`,
+    idea:'Tests whether the acronym needs to be on screen at all. The bar states the platform in full; "PREP" is introduced once, in the footer, for the people who use the short form in conversation.',
+    watch:'Gives up the short form that the docs, the skills and every hallway conversation already use — and it is the widest resting state of the nine. Included as the boundary case rather than a recommendation.',
+    changes:'Brand block, the footer string, <b>and the nav grid</b> (433px of left zone against 383px allowed). Would also want a pass over page titles, which say "PREP" today.',
+  },
+];
+
+/* ── Rendering ─────────────────────────────────────────────────────────────────────────── */
+const LS_KEY = 'prep.navmock.variant';
+let current = 0;
+
+function renderNav(v) {
+  const bar = document.getElementById('topnav');
+  bar.className = 'topnav' + (v.wide ? ' wide-brand' : '');
+  bar.innerHTML = `
+    <div class="topnav-inner">
+      <div class="nav-left">
+        ${v.brand}
+        ${courseHTML()}
+        <button class="nav-burger" aria-label="Menu">&#9776;</button>
+      </div>
+      <nav class="nav-links">${LINKS}</nav>
+      <div class="nav-right">${RIGHT}</div>
+    </div>`;
+  wireMenus(bar);
+  document.getElementById('nav-theme').addEventListener('click', toggleTheme);
+  syncThemeIcon();
+}
+
+function renderFooter(v) {
+  document.getElementById('site-footer').innerHTML = `
+    <div class="footer-inner">
+      ${v.footer || FOOTER_DEFAULT}
+      <span class="grow"></span>
+      <span>Icons by <a href="#" onclick="return false">Freepik</a> on <a href="#" onclick="return false">Flaticon</a></span>
+    </div>`;
+}
+
+function renderDetail(v) {
+  document.getElementById('v-title').textContent = v.title;
+  document.getElementById('d-title').textContent = v.title;
+  const lay = document.getElementById('d-lay');
+  lay.className = 'lay ' + (v.wide ? 'grid' : 'ok');
+  lay.textContent = v.wide ? 'Needs the nav grid changed' : 'Fits the live nav grid';
+  document.getElementById('d-tag').textContent = v.tag;
+  document.getElementById('d-idea').innerHTML = v.idea;
+  document.getElementById('d-watch').innerHTML = v.watch;
+  document.getElementById('d-changes').innerHTML = v.changes;
+}
+
+function renderGallery() {
+  const g = document.getElementById('gallery');
+  // A <div role="button">, NOT a <button>: the strips contain the real brand <a> and the real
+  // course <button>, and nesting those inside a <button> makes the parser close it early — which
+  // spills every caption into the row below it.
+  g.innerHTML = VARIANTS.map((v, i) => `
+    <div class="gal-row${i === current ? ' on' : ''}" data-i="${i}" role="button" tabindex="0"
+         aria-pressed="${i === current}">
+      <span class="idx">${'ABCDEFGHI'[i]}</span>
+      <span class="gal-body">
+        <span class="gal-strip">${v.brand}${courseHTML()}</span>
+        <span class="gal-cap"><b>${v.title.replace(/^[A-I] · /, '')}</b> — ${v.tag}${
+          v.wide ? ' <span class="lay grid">nav grid</span>' : ''}</span>
+      </span>
+    </div>`).join('');
+  g.querySelectorAll('.gal-row').forEach(r => {
+    const pick = () => select(Number(r.dataset.i));
+    r.addEventListener('click', pick);
+    r.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); }
+    });
+  });
+  // The gallery strips carry real course-switcher markup, so wire their dropdowns too.
+  g.querySelectorAll('.course-menu').forEach(m => wireMenus(m));
+}
+
+function renderButtons() {
+  const b = document.getElementById('ctrl-btns');
+  b.innerHTML = VARIANTS.map((v, i) => `
+    <button class="vbtn${i === current ? ' on' : ''}" data-i="${i}">
+      <span class="n">${'ABCDEFGHI'[i]}</span>${v.btn}
+    </button>`).join('');
+  b.querySelectorAll('.vbtn').forEach(x =>
+    x.addEventListener('click', () => select(Number(x.dataset.i))));
+}
+
+function select(i) {
+  current = ((i % VARIANTS.length) + VARIANTS.length) % VARIANTS.length;
+  const v = VARIANTS[current];
+  try { localStorage.setItem(LS_KEY, v.id); } catch (e) {}
+  renderNav(v); renderFooter(v); renderDetail(v); renderButtons(); renderGallery();
+}
+
+/* Dropdown wiring — scoped to a container so nav and gallery copies stay independent. */
+function wireMenus(root) {
+  root.querySelectorAll('[data-course-toggle]').forEach(btn => {
+    const pop = btn.parentElement.querySelector('.course-pop');
+    btn.addEventListener('click', e => {
+      e.stopPropagation(); e.preventDefault();
+      const open = !pop.classList.contains('open');
+      closeAll();
+      pop.classList.toggle('open', open);
+      btn.setAttribute('aria-expanded', String(open));
+    });
+  });
+  const chip = root.querySelector('[data-user-toggle]');
+  const upop = root.querySelector('[data-user-pop]');
+  chip?.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = !upop.classList.contains('open');
+    closeAll();
+    upop.classList.toggle('open', open);
+  });
+}
+function closeAll() {
+  document.querySelectorAll('.menu-pop.open').forEach(p => p.classList.remove('open'));
+  document.querySelectorAll('[data-course-toggle]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+}
+document.addEventListener('click', closeAll);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeAll();
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowRight') select(current + 1);
+  if (e.key === 'ArrowLeft')  select(current - 1);
+});
+
+/* Theme — shares the site's storage key so the mockup opens in whatever you were last using. */
+function toggleTheme() {
+  const root = document.documentElement;
+  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', next);
+  try { localStorage.setItem('cp.theme', next); } catch (e) {}
+  syncThemeIcon();
+}
+function syncThemeIcon() {
+  const ic = document.getElementById('nav-theme-ic');
+  if (ic) ic.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️' : '\u{1F319}';
+}
+document.getElementById('btn-theme').addEventListener('click', toggleTheme);
+document.getElementById('btn-narrow').addEventListener('click', e => {
+  const on = document.body.classList.toggle('narrow');
+  e.currentTarget.classList.toggle('on', on);
+});
+
+/* Boot */
+(function () {
+  let start = 0;
+  try {
+    const saved = localStorage.getItem(LS_KEY);
+    const i = VARIANTS.findIndex(v => v.id === saved);
+    if (i >= 0) start = i;
+  } catch (e) {}
+  select(start);
+})();
+</script>
+</body>
+</html>

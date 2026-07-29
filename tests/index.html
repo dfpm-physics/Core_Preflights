@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test &amp; mockup views · PREP</title>
+<!-- Default landing page for tests/. Intentionally UNGATED and self-contained: it links to
+     things, and every gated thing gates itself. Nothing here is part of the live site. -->
+<script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+<style>
+  :root{
+    --bg:#f6f8fa; --card:#fff; --border:#d0d7de; --text:#1f2328; --muted:#656d76;
+    --surface-hover:#eef1f4; --blue-lt:#0969da; --gold:#9a6700;
+    --shadow-sm:0 1px 4px rgba(0,0,0,.06); --shadow-md:0 6px 18px rgba(0,0,0,.10); --radius:12px;
+  }
+  [data-theme="dark"]{
+    --bg:#010409; --card:#0d1117; --border:#30363d; --text:#e6edf3; --muted:#9198a1;
+    --surface-hover:#21262d; --blue-lt:#4493f8; --gold:#d29922;
+    --shadow-sm:0 1px 4px rgba(0,0,0,.4); --shadow-md:0 6px 18px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    background:var(--bg);color:var(--text);line-height:1.5;padding:48px 24px}
+  .wrap{max-width:720px;margin:0 auto}
+  h1{font-size:1.6em;letter-spacing:-.02em;margin-bottom:4px}
+  .lede{color:var(--muted);font-size:.95em;margin-bottom:28px}
+  h2{font-size:.78em;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
+    margin:30px 0 12px}
+  .links{display:grid;gap:14px}
+  .linkcard{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;align-items:center;
+    text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--border);
+    border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:20px 22px;
+    transition:transform .12s, box-shadow .12s, border-color .12s}
+  .linkcard:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);border-color:var(--blue-lt)}
+  .linkcard .ic{grid-row:1/3;font-size:2em;width:54px;height:54px;border-radius:14px;
+    display:grid;place-items:center;background:var(--surface-hover)}
+  .linkcard .t{font-size:1.12em;font-weight:700}
+  .linkcard .d{color:var(--muted);font-size:.9em}
+  .tag{display:inline-block;font-size:.7em;font-weight:700;letter-spacing:.04em;
+    text-transform:uppercase;border-radius:999px;padding:2px 8px;margin-left:8px;vertical-align:2px}
+  .tag.open{background:rgba(26,127,55,.12);color:#1a7f37;border:1px solid rgba(26,127,55,.35)}
+  [data-theme="dark"] .tag.open{background:rgba(63,185,80,.14);color:#3fb950}
+  .tag.gated{background:rgba(154,103,0,.12);color:var(--gold);border:1px solid rgba(154,103,0,.35)}
+  .cli{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:18px 22px;font-size:.9em;color:var(--muted)}
+  .cli b{color:var(--text)}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;
+    background:var(--surface-hover);border-radius:5px;padding:1px 5px}
+  .tbtn{font:inherit;font-size:.82em;font-weight:600;cursor:pointer;background:var(--surface-hover);
+    color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 11px;margin-top:28px}
+  .tbtn:hover{border-color:var(--blue-lt)}
+  .foot{margin-top:16px;font-size:.82em;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>PREP — test &amp; mockup views</h1>
+  <p class="lede">Everything under <code>tests/</code>. Nothing here is served to students or
+    instructors, and none of it touches the live site. Serve the repo root with
+    <code>python -m http.server 8000</code> and open <code>/tests/</code>.</p>
+
+  <h2>Design mockups — synthetic data, no back end</h2>
+  <div class="links">
+    <a class="linkcard" href="browser/test-navbar.html">
+      <span class="ic">🧭</span>
+      <span class="t">Navbar &amp; brand explorations<span class="tag open">No sign-in</span></span>
+      <span class="d">Nine ways to make the top bar say what PREP <i>is</i> — "PREP Portal" with the
+        acronym spelled out, the name stacked underneath or set beside the wordmark, the acronym
+        picked out inside the full name, a badge, a hover reveal. Rendered as a system admin, with a
+        light/dark toggle and a phone-width simulation. Fully standalone.</span>
+    </a>
+    <a class="linkcard" href="browser/index.html">
+      <span class="ic">🎨</span>
+      <span class="t">Design sandboxes<span class="tag gated">Director sign-in</span></span>
+      <span class="d">The older preview pages — faculty dashboard, student dashboard, course/system
+        admin, account &amp; password flows, the lesson rollup, progress-bar styles. Gated by
+        <code>guard.js</code> against live Supabase auth, so these need a director account.</span>
+    </a>
+  </div>
+
+  <h2>Automated suites — command line, not browser pages</h2>
+  <div class="cli">
+    <p><b>app-schema/</b> — Node test suites for the shipped ES modules and the <code>app</code>
+      schema. Optional developer tooling; the site itself has no Node dependency.
+      Run with <code>node tests/app-schema/run.mjs</code>.</p>
+    <p style="margin-top:8px"><b>browser-harness/</b> — headless-browser harness for UI that
+      would otherwise go unverified. See its <code>README.md</code>.</p>
+  </div>
+
+  <button class="tbtn" id="theme">◐ Theme</button>
+  <p class="foot">Add a new mockup? Drop it in <code>tests/browser/</code> as
+    <code>test-&lt;name&gt;.html</code> and link it above.</p>
+</div>
+<script>
+  document.getElementById('theme').addEventListener('click', () => {
+    const root = document.documentElement;
+    const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('cp.theme', next); } catch (e) {}
+  });
+</script>
+</body>
+</html>
