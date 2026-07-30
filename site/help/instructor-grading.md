@@ -123,8 +123,10 @@ Some assignments let a student choose the interactive lesson instead of the writ
 left out, so the count you see and the roster still add up.
 
 Their grade comes from **effort**, scored 0–5 from the lesson report: 0 earns no points, 1–2 earns
-half, 3–5 earns full. A reading reflection that is not meaningful caps effort at 2 (so at most half
-credit), regardless of engagement elsewhere.
+**one point**, 3–5 earns **whatever the assignment is worth**. Full credit scales with the
+assignment; partial credit is the same single point on a 2-point preflight and on a 3-point one. A
+reading reflection that is not meaningful caps effort at 2 — so at that one point — regardless of
+engagement elsewhere.
 
 **Unlike the written path, this grade is automatic and final.** It is written the moment the student
 commits, from the report, and the student sees it immediately — there is no review step and nothing

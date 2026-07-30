@@ -29,11 +29,13 @@ WHERE THE DATA LIVES NOW (PREP v2 — schema `app`)
 
   THE ONE BEHAVIOURAL CHANGE — effort no longer implies points on its own. In `public` a DB
   trigger turned preflight_interaction_reports.effort into a 0-2 score unconditionally. In `app`
-  the equivalent trigger (grades_points_from_effort) fires ONLY when the offering is
-  grading_mode='effort', and every migrated Fall-2026 offering is grading_mode='points'. So this
-  script computes points_earned itself, from the same migration-013 curve scaled to the
-  offering's points_possible (3-5 -> full, 1-2 -> half, 0/None -> zero). On an effort-mode
-  offering the trigger recomputes the identical value, so writing it is safe either way.
+  the equivalent trigger (grades_points_from_effort) fires only on a grade row that CARRIES an
+  effort — migration 014 re-keyed it off the offering's grading_mode, which is 'points' on every
+  Fall-2026 offering. So this script computes points_earned itself, from the shared curve scaled
+  to the offering's points_possible: 3-5 -> the assignment, 1-2 -> one point, 0/None -> zero
+  (migration 019; it was half the assignment until 2026-07-30). Because the row we write does
+  carry an effort, the trigger recomputes the identical value on top of ours — which is the
+  point of keeping points_from_effort() below byte-for-byte equivalent to it.
 
 Safety:
   * Only `write` mutates. It sets submission_activities.content and upserts one app.grades row
@@ -99,11 +101,16 @@ def _connect():
 
 
 def points_from_effort(effort, points_possible):
-    """Effort (0-5) -> points, scaled to the offering's value.
+    """Effort (0-5) -> points: 3-5 the assignment, 1-2 one point, 0/None zero.
 
-    MUST stay identical to app.grades_points_from_effort() (001_core_model.sql) and to
-    pointsFromEffort() in site/js/schema.js — three copies of the migration-013 curve that
-    must agree, because on an effort-mode offering the trigger overwrites whatever we send.
+    MUST stay identical to app.grades_points_from_effort()
+    (019_effort_partial_credit_flat.sql) and to its display-side copies —
+    pointsFromEffort() in site/js/schema.js, pointsForEffort() in site/js/faculty-rollup.js,
+    _points_for_effort() in lesson_aggregate.py. The trigger overwrites whatever we send on a
+    row that carries an effort, so a divergence here is silently wrong rather than loudly.
+
+    Partial credit was `points_possible / 2` until 2026-07-30. Identical at 2 points, and a
+    half point at 3 — see the migration header.
     """
     pp = Decimal(points_possible)
     if effort is None:
@@ -111,7 +118,7 @@ def points_from_effort(effort, points_possible):
     if effort >= 3:
         return pp
     if effort >= 1:
-        return round(pp / 2, 2)
+        return min(Decimal("1"), pp)   # the trigger's LEAST: never pay full credit for partial
     return Decimal("0")
 
 

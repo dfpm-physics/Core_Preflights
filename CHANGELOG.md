@@ -8,6 +8,74 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-30 (fifth) — Matthew Recker via Claude
+
+### Partial credit on the effort curve is one point, not half the assignment
+
+Migration **`app/019_effort_partial_credit_flat.sql` APPLIED** to live `app` as `prep_app_owner`
+(already unsealed by the director from the 014 change; **it is still unsealed — re-seal with
+`ALTER ROLE prep_app_owner NOLOGIN;` as `postgres`**). No other DDL ran.
+
+The curve has said "half credit" since migration 013, when there was nothing to scale: every
+interaction was worth 2 points and half of 2 is 1. `app` made a lesson's value per-offering data
+and carried the rule forward as `points_possible / 2` — the same number at 2 points, and a
+different *kind* of number anywhere else. **Physics 310 is the first course worth anything else.**
+Its two lessons are 3 points, so a partially-engaged interactive taker scored **1.50** — a value no
+written taker on the same lesson can produce (0 + 1 + 2 give integer totals only), so a Choice
+assignment would have held two incompatible grids in one gradebook column.
+
+```
+effort 0     -> 0
+effort 1-2   -> LEAST(1, points_possible)      <- was round(points_possible / 2, 2)
+effort 3-5   -> points_possible
+```
+
+**Full credit scales with the assignment; partial credit is a flat acknowledgement that the student
+engaged.** The `LEAST` is not decoration: the Points box accepts any value (`min="0" step="0.1"`),
+and on a sub-1-point assignment a bare `1` would pay *full* credit for partial effort, or breach
+`grades_within_bounds` and reject the write outright. Verified live at 0.5 points — it clamps.
+
+**Nothing stored moved.** 213 grade rows exist; 78 carry an effort and every one is on a
+`points_possible = 2.00` offering, where old and new agree exactly. Captured before and after: rows
+disagreeing with the live trigger, **0 → 0**. The only offerings worth anything else are the two
+phys-310 lessons, and neither has a graded interactive activity yet. No backfill, nothing to
+reconcile.
+
+**Six copies of this curve must agree**, and all six moved in this commit — the trigger is
+authoritative (it overwrites `points_earned` on write) and the other five only render it, so a
+divergence shows a student one score while the gradebook stores another:
+`grades_points_from_effort()` · `pointsFromEffort()` (schema.js) · `pointsForEffort()`
+(faculty-rollup.js) · `points_from_effort()` (interaction_reports.py) · `_points_for_effort()`
+(lesson_aggregate.py). `grade_interactive.py` imports the fourth rather than adding a seventh.
+
+**Verified:** end-to-end against the live trigger inside a rolled-back transaction, driving every
+effort 0–5 at `points_possible` 3.00 / 2.00 / 1.00 / 0.50 and reading `points_earned` back —
+`grade_interactive_test.py` 55/55, `autograde_interactive_test.py` 13/13, `test-schema.mjs` 112/112,
+and the full `tests/app-schema` suite green. *(One pre-existing failure in
+`aggregate_summarize_test.py` — "a cross-TERM match may be a stale offering, and says so" —
+reproduces without these changes and is untouched.)*
+
+**Two tests were agreeing with both rules, therefore testing neither.**
+`autograde_interactive_test.py` asserted `points_earned == points_possible / 2` against a 2-point
+fixture, and would have stayed green through this change; it now asserts through the shared curve.
+`grade_interactive_test.py`'s only scaling check was "effort 2 on a 10-point assignment -> 5", the
+one case the new rule deliberately changes. Both suites now pin 3-point, 10-point, 1-point and
+half-point assignments explicitly.
+
+### Docs
+
+`CORE.md` §6 carried `0–5 → 0/1/2`, which was the *whole* rule only while every assignment was worth
+2. It now states the curve, names the six copies, and flags that
+`docs/contracts/INTERACTION-DATA-CONTRACT.md` §5.2 still describes the retired `public` 0–2 score —
+frozen record, not a live description. Same correction in `interaction-backfill/SKILL.md`,
+`PREP-V2-DATA-MODEL.md`, and superseding notes on the two ROADMAP tables that recorded the curve as
+built (both said "matches the policy exactly at `points_possible = 2`", which was the caveat coming
+due). Three help pages said "earns half": `director-ai-rules.md`, `director-schema-reference.md`,
+`instructor-grading.md`. Migration 019 registered in `DOC-SOURCES.json`; the ten documents it flags
+were re-read and their `reviewed` dates bumped.
+
+---
+
 ## 2026-07-30 (fourth) — Matthew Recker via Claude
 
 Two follow-ups from the director on the entry below, both of which say the same thing about it:

@@ -577,9 +577,10 @@ export { taughtSectionIds } from './schema.js';
 const num   = v => (typeof v === 'number' && isFinite(v)) ? v : null;
 const mean  = xs => { const a = xs.filter(n => n != null); return a.length ? a.reduce((s, n) => s + n, 0) / a.length : null; };
 
-/** effort -> points, mirroring app.grades_points_from_effort(): 3–5 full, 1–2 half, 0/null zero. */
+/** effort -> points, mirroring app.grades_points_from_effort() (migration 019):
+ *  3–5 the assignment, 1–2 one point (clamped to the assignment), 0/null zero. */
 const pointsForEffort = (e, possible) =>
-  e == null ? 0 : e >= 3 ? possible : e >= 1 ? Math.round((possible / 2) * 100) / 100 : 0;
+  e == null ? 0 : e >= 3 ? possible : e >= 1 ? Math.min(1, possible) : 0;
 
 /**
  * Numeric-only rollup over a set of interaction reports. Pure (no I/O).

@@ -268,19 +268,28 @@ check('no activity at all is not launchable (written-only lesson)',
       isArtifactLaunchable(null) === false);
 
 /* ── pointsFromEffort — MUST match app.grades_points_from_effort() ─────────── */
-section('pointsFromEffort (migration-013 curve)');
+section('pointsFromEffort (migration-019 curve)');
 
 eq('effort 5 => full', pointsFromEffort(5, 2), 2);
 eq('effort 4 => full', pointsFromEffort(4, 2), 2);
 eq('effort 3 => full', pointsFromEffort(3, 2), 2);
-eq('effort 2 => half', pointsFromEffort(2, 2), 1);
-eq('effort 1 => half', pointsFromEffort(1, 2), 1);
+eq('effort 2 => one point', pointsFromEffort(2, 2), 1);
+eq('effort 1 => one point', pointsFromEffort(1, 2), 1);
 eq('effort 0 => zero', pointsFromEffort(0, 2), 0);
 eq('effort null => zero', pointsFromEffort(null, 2), 0);
-// The curve scales, so a 10-point assignment works off the same 0–5 scale.
+
+// FULL credit scales with the assignment. PARTIAL credit deliberately does not — it is a flat
+// acknowledgement that the student engaged, not a fraction of the lesson. Until migration 019
+// partial was `possible / 2`, which is the same 1 at 2 points and a half point at 3.
+eq('scales to a 3-point offering (full)', pointsFromEffort(5, 3), 3);
+eq('3-point offering, partial is 1 not 1.5', pointsFromEffort(2, 3), 1);
 eq('scales to a 10-point offering (full)', pointsFromEffort(3, 10), 10);
-eq('scales to a 10-point offering (half)', pointsFromEffort(1, 10), 5);
-eq('half of an odd value rounds to 2dp like the trigger', pointsFromEffort(1, 5), 2.5);
+eq('10-point offering, partial is still 1', pointsFromEffort(1, 10), 1);
+// The clamp, mirroring the trigger's LEAST: partial can never exceed — or equal, above 1 —
+// what the assignment is worth. Without it, a 1-point lesson would pay full credit for
+// effort 1, and anything smaller would breach grades_within_bounds on write.
+eq('1-point offering, partial is capped at the assignment', pointsFromEffort(2, 1), 1);
+eq('half-point offering, partial is clamped', pointsFromEffort(1, 0.5), 0.5);
 
 eq('displayPoints uses points_earned when grading_mode=points',
    displayPoints({ points_earned: '1.50' }, { gradingMode: 'points' }), 1.5);

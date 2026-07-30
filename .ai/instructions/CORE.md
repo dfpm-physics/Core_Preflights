@@ -290,8 +290,17 @@ The full table catalog, JSONB shapes, roles, and edge functions are in
   what lets `/lesson-aggregate` summarize a cohort without caring how each student worked the
   lesson. Per-student extraction and cohort synthesis stay **separate skills on separate clocks** —
   grading runs early and often (often split M/T), aggregation runs once after the deadline.
-- **Interaction grade = effort** (0–5 → 0/1/2 via DB trigger); a non-meaningful reading reflection
-  caps effort at 2. Full transport spec (frozen v1): `docs/contracts/INTERACTION-DATA-CONTRACT.md`.
+- **Interaction grade = effort** — a DB trigger converts it: `0 → 0`, `1–2 → one point`,
+  `3–5 → the offering's points_possible`. **Full credit scales with the assignment; partial credit
+  does not.** A non-meaningful reading reflection caps effort at 2, i.e. at that one point.
+  *(Changed 2026-07-30, migration `app/019`. Partial was `points_possible / 2` from migration 013
+  onward, which is the same 1 at 2 points — the only value that existed — and 1.5 once Physics 310
+  shipped a 3-point assignment. Nothing stored moved; all 78 effort grades are on 2-point
+  offerings.)* The curve has **six copies that must agree** — the trigger plus five display-side
+  ones, listed in the migration header — because the trigger owns `points_earned` and the others
+  only render it, so a divergence shows a student one score while the gradebook holds another.
+  Full transport spec (frozen v1): `docs/contracts/INTERACTION-DATA-CONTRACT.md`, whose §5.2 still
+  states the retired `public` 0–2 curve; it is a frozen record, not a live description.
 - **The artifact↔site contract is frozen:** artifacts post by stable slug to
   `site/student/interaction-submit.html`, and AI-generated prefill links target
   `site/faculty/lessons.html`. Both were forwarding stubs until the 2026-07-28 promotion replaced

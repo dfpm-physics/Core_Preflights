@@ -533,14 +533,21 @@ export function canSwitchActivity(offering, submission, targetActivity) {
 
 /**
  * Effort (0–5) → points, scaled to the offering's value.
- * MUST match app.grades_points_from_effort() exactly (001_core_model.sql), which preserves
- * the migration-013 curve: 3–5 → full, 1–2 → half, 0/null → zero. This is display-only —
- * the trigger is authoritative and overwrites points_earned on write.
+ * MUST match app.grades_points_from_effort() exactly (019_effort_partial_credit_flat.sql):
+ * 3–5 → the assignment, 1–2 → one point, 0/null → zero. This is display-only — the trigger is
+ * authoritative and overwrites points_earned on write, so a divergence here shows a student one
+ * score while the gradebook stores another.
+ *
+ * Partial credit stopped being `possible / 2` on 2026-07-30. Half of 2 is 1, so the two rules
+ * were indistinguishable until Physics 310 became the first 3-point assignment and half credit
+ * started paying 1.5 — a value no written taker on the same lesson can reach. The Math.min is
+ * the clamp the trigger's LEAST does: on a sub-1-point assignment a flat 1 would be FULL credit
+ * for partial effort, and would breach grades_within_bounds on write.
  */
 export function pointsFromEffort(effort, pointsPossible) {
   if (effort == null) return 0;
   if (effort >= 3) return pointsPossible;
-  if (effort >= 1) return Math.round((pointsPossible / 2) * 100) / 100;
+  if (effort >= 1) return Math.min(1, pointsPossible);
   return 0;
 }
 

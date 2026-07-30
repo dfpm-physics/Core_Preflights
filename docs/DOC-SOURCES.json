@@ -83,7 +83,7 @@
       "doc": "site/help/admin-system-operations.md",
       "kind": "help",
       "tier": "admin",
-      "reviewed": "2026-07-29",
+      "reviewed": "2026-07-30",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -106,7 +106,7 @@
       "doc": "docs/operations/SYSTEM_GUIDE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-07-29",
+      "reviewed": "2026-07-30",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -121,7 +121,7 @@
       "doc": "docs/operations/PREP-V2-CUTOVER.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-07-29",
+      "reviewed": "2026-07-30",
       "sources": [
         "supabase/admin/app_schema_bootstrap.sql",
         "scripts/app_migration/migrate_public_to_app.py",
@@ -135,7 +135,7 @@
       "doc": ".ai/skills/docs-author/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-07-29",
+      "reviewed": "2026-07-30",
       "sources": [
         "site/help/README.md",
         "site/js/help.js",
@@ -184,7 +184,8 @@
         "supabase/migrations/app/015_interactive_autograde.sql",
         "supabase/migrations/app/016_comment_spelling.sql",
         "supabase/migrations/app/017_due_by_day.sql",
-        "supabase/migrations/app/018_feedback_completed.sql"
+        "supabase/migrations/app/018_feedback_completed.sql",
+        "supabase/migrations/app/019_effort_partial_credit_flat.sql"
       ],
       "note": "Every table and field transcribed from the app-schema migrations and verified against information_schema on the live database. Owns the enforced-rules list and the exact accepted values. Inline SVG depends on the .sf-* classes in styles.css. Omits RLS policy predicates - help docs are world-readable at every tier. SOURCES MUST LIST EVERY MIGRATION: the list stopped at 006 until 2026-07-22, so 007-009 landed without ever flagging this page and analysis_runs went undocumented for two days. Add the new file here whenever a migration is added. ei_sessions states its staff-only access rule in plain language and nothing more: that absence of a student policy is load-bearing (notes may hold a candid read of a cadet), so do not delete the sentence - and do not 'complete' it by pasting the policy SQL either."
     },

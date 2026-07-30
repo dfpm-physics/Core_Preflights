@@ -63,14 +63,35 @@ def check(label, got, want):
 # 1. Pure logic
 # ══════════════════════════════════════════════════════════════════════════════════════
 def test_curve():
-    """The course policy, stated by the director 2026-07-23: 0 -> 0, 1-2 -> 1, 3+ -> 2."""
+    """The course policy: 0 -> 0, 1-2 -> ONE POINT, 3+ -> the assignment.
+
+    Partial credit was `points_possible / 2` from migration 013 until 2026-07-30 (migration 019).
+    At 2 points the two rules are the same number, which is why the change was invisible until
+    Physics 310 shipped a 3-point assignment and partial credit started paying 1.5.
+    """
     print("\n=== the effort curve at points_possible = 2 ===")
     for effort, want in ((0, 0), (1, 1), (2, 1), (3, 2), (4, 2), (5, 2)):
         check(f"effort {effort} -> {want} pt(s)",
               points_from_effort(effort, Decimal("2")), Decimal(want))
-    # Scaling is the reason the curve is expressed against points_possible rather than hardcoded.
-    check("effort 2 on a 10-point assignment -> 5", points_from_effort(2, Decimal("10")),
-          Decimal("5"))
+
+    # Full credit still scales with the assignment; partial credit deliberately does not.
+    print("\n=== the curve at other assignment values ===")
+    check("effort 2 on a 3-point assignment -> 1 (not 1.5)",
+          points_from_effort(2, Decimal("3")), Decimal("1"))
+    check("effort 5 on a 3-point assignment -> 3",
+          points_from_effort(5, Decimal("3")), Decimal("3"))
+    check("effort 2 on a 10-point assignment -> 1",
+          points_from_effort(2, Decimal("10")), Decimal("1"))
+    check("effort 5 on a 10-point assignment -> 10",
+          points_from_effort(5, Decimal("10")), Decimal("10"))
+    # The clamp. Without it a flat 1 would pay FULL credit for partial effort on a 1-point
+    # assignment, and would breach grades_within_bounds (points_earned <= points_possible)
+    # on anything smaller — a rejected write, not a wrong number.
+    check("effort 2 on a 1-point assignment -> 1, not more",
+          points_from_effort(2, Decimal("1")), Decimal("1"))
+    check("effort 2 on a half-point assignment -> 0.5, clamped",
+          points_from_effort(2, Decimal("0.5")), Decimal("0.5"))
+    check("effort 0 is zero at every value", points_from_effort(0, Decimal("3")), Decimal("0"))
 
 
 def test_read_effort():

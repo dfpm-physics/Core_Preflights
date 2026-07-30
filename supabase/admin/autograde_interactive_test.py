@@ -18,6 +18,7 @@ from pathlib import Path
 ADMIN = Path(__file__).resolve().parent
 sys.path.insert(0, str(ADMIN))
 from app_tier_check import load, connect            # noqa: E402
+from interaction_reports import points_from_effort  # noqa: E402
 from psycopg2.extras import RealDictCursor          # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -140,14 +141,19 @@ def main():
               "practice" in str(e).lower())
     conn.rollback(); cur.execute("SET search_path TO app, public;")
 
-    print("\n3. §5.2 cap: a non-meaningful reflection caps effort at 2 (half credit)")
+    print("\n3. §5.2 cap: a non-meaningful reflection caps effort at 2 (partial credit)")
     fx = setup(cur)
     set_role(cur, fx, "graded"); reset_grade_and_content(cur, fx, 5, meaningful=False)
     commit(cur, fx)
     g = grade(cur, fx)
     check("effort clamped to 2", g and g["effort"] == 2, str(g and g["effort"]))
-    check("2 -> half points", g and float(g["points_earned"]) == float(fx["points_possible"]) / 2,
-          str(g and g["points_earned"]))
+    # Asserted through the shared curve, not a formula spelled out again here. The old literal
+    # (`points_possible / 2`) stayed GREEN through migration 019 because the fixture offering is
+    # worth 2 and half of 2 is also 1 — a test that agrees with both rules tests neither.
+    want = float(points_from_effort(2, fx["points_possible"]))
+    check(f"effort 2 -> {want} pt(s), per the shared curve",
+          g and float(g["points_earned"]) == want,
+          f"{g and g['points_earned']} vs {want}")
     conn.rollback(); cur.execute("SET search_path TO app, public;")
 
     print("\n4. guard: a finalized INSTRUCTOR grade is never clobbered")

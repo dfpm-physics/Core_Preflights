@@ -274,8 +274,13 @@ database no longer consults it. Each grade row is scored by whichever mechanism 
 — question scores for a written student, a 0–5 effort rating for an interactive one — and a
 constraint refuses a row that tries to carry both.
 
-Effort still converts the same way: 3 or above earns full marks, 1 or 2 earns half, 0 earns none.
-Correctness on the interactive path is still recorded, as a diagnostic that carries no credit.
+Effort converts one way for every assignment: 3 or above earns **what the assignment is worth**,
+1 or 2 earns **one point**, 0 earns none. Full credit scales with the lesson; partial credit is a
+flat point either way. Correctness on the interactive path is still recorded, as a diagnostic that
+carries no credit.
+
+*(Partial credit was half the assignment until 2026-07-30 — identical at 2 points, and 1.5 on the
+first 3-point assignment, which is a score no written student on the same lesson could receive.)*
 
 **Why not to set it to `effort`.** Every Fall 2026 offering is `points`, and switching one to
 `effort` was the obvious-looking way to make interactive lessons grade themselves before the

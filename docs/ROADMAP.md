@@ -926,6 +926,12 @@ implemented and correct on both halves:
 | Rule | Where it lives | State |
 |---|---|---|
 | effort → points, `≥3 → possible` · `≥1 → possible/2` · `else 0` | `grades_points_from_effort()`, `001_core_model.sql:568-586` | built, matches the policy exactly at `points_possible = 2` |
+
+> **Superseded 2026-07-30 (migration `app/019`).** "matches the policy exactly at
+> `points_possible = 2`" was the whole caveat, and it came due: Physics 310 is 3 points, where
+> `possible/2` pays **1.5**. The partial-credit branch is now `LEAST(1, possible)` — a flat point —
+> so the policy the director stated (`0 → 0` · `1–2 → 1` · `3+ → full`) now holds at every
+> assignment value rather than at one. Full credit still scales. No stored grade moved.
 | reflection cap, effort ≤ 2 when `reading_reflection.meaningful = false` | contract §5.2 — applied by the artifact, re-clamped server-side as a guard (`interaction_reports.py:223-231`) | built, and deliberately belt-and-braces |
 
 **So this item is not "decide a grading rule". It is "connect a rule that already exists to a column
@@ -1625,6 +1631,11 @@ two layers straight; conflating them is how this gets built wrong:
 | Modality | `grading_mode` | How points are set | Result |
 |---|---|---|---|
 | Interactive lesson | `effort` | DB trigger `001_core_model.sql:579-584`: `effort ≥3 → possible` · `≥1 → possible/2` · `else 0` | Full effort **2**; capped effort (clamped to 2) **1** |
+<!-- Amended twice since: migration 014 keys the trigger on the grade ROW rather than `grading_mode`,
+     and migration 019 (2026-07-30) makes the partial branch `LEAST(1, possible)` instead of
+     `possible/2`. Both leave this row's *numbers* correct, because the analysis assumed a 2-point
+     assignment and at 2 points every version of the curve agrees. -->
+
 | Written preflight | `points` | `question_scores` — Q1 `points: 0`, Q2 reflection `1`, Q3 free response `1` (`build_fall_preflights.py:216,235-236`; identical in `build_110_preflights.py:219,236-237`) | Reflection **1** + free response **1** = **2** |
 
 On the written path `effort` is **diagnostic only and must not be written to `grades.effort`** —

@@ -89,10 +89,15 @@ free-response measure for the question set.
 ## How effort becomes points
 
 Interactive lessons are graded on **effort** (0–5); a reading reflection that is not a genuine
-attempt caps effort at 2, so at most half credit however much work went in elsewhere.
+attempt caps effort at 2, so at most partial credit however much work went in elsewhere.
 
 **The database converts effort to points, and it does so on any grade that carries an effort
-score** — 0 earns nothing, 1–2 earns half, 3 or more earns full. It does *not* depend on how the
+score** — 0 earns nothing, 1–2 earns **one point**, 3 or more earns **whatever the assignment is
+worth**. Partial credit is a flat point, not a fraction of the lesson: a cadet who engaged a little
+earns the same single point on a 3-point lesson as on a 2-point one, while full credit scales with
+the assignment. (Partial credit was half the assignment until 30 July 2026. Half of 2 is 1, so
+nothing changed for a 2-point preflight — the rule was rewritten when the first 3-point assignment
+made "half" mean 1.5, a score no written student on the same lesson could be given.) It does *not* depend on how the
 assignment is configured for the semester. That matters because an assignment can offer both paths
 for credit at once, and one setting on the assignment could not describe two modalities: a written
 student is graded from their question scores and an interactive student from their effort, on the

@@ -100,9 +100,12 @@ may rely on them holding.
 - The chosen activity cannot silently change — the lock is driven by the offering's `switch_policy`
   as data, not compiled into a trigger body, so changing the rule is an `UPDATE`, not a migration.
 - An instructor unlock must name who performed it, so unlocks are always attributable.
-- Effort-graded offerings derive points from a 0–5 effort score by trigger, preserving the
-  migration-013 curve (3–5 → full, 1–2 → half, 0 or null → zero); the same curve scales to any
-  `points_possible`.
+- A grade row that carries a 0–5 effort score derives its points by trigger: 3–5 → the offering's
+  `points_possible`, 1–2 → one point, 0 or null → zero. **Full credit scales with the assignment;
+  partial credit is flat.** *(Two amendments to what this line said originally: migration 014 moved
+  the gate from the offering's `grading_mode` to the row, and migration 019 replaced the
+  migration-013 "half" with a flat point — the same value at 2 points, which is why the difference
+  went unnoticed until a 3-point assignment existed.)*
 - There is **no foreign key from `app` into `public`**, so the two schemas are independent.
 
 ## 5. Frozen surfaces inside the model

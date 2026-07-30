@@ -211,13 +211,14 @@ def _answer(written_content, qid):
 
 
 def _points_for_effort(e, pp):
-    """Mirrors app.grades_points_from_effort() / schema.js pointsFromEffort()."""
+    """Mirrors app.grades_points_from_effort() (migration 019) / schema.js pointsFromEffort():
+    3-5 the assignment, 1-2 one point clamped to the assignment, 0/None zero."""
     if e is None:
         return 0.0
     if e >= 3:
         return float(pp)
     if e >= 1:
-        return round(float(pp) / 2, 2)
+        return min(1.0, float(pp))
     return 0.0
 
 

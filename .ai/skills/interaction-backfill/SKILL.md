@@ -54,11 +54,13 @@ Everything per-student keys on **`enrollment_id`**, not `student_id`.
 
 > **The one behavioural change: effort no longer implies points by itself.** In `public` a trigger
 > turned `preflight_interaction_reports.effort` into a 0–2 score unconditionally. In `app` the
-> equivalent trigger fires **only** when the offering is `grading_mode = 'effort'`, and every
-> migrated Fall-2026 offering is `grading_mode = 'points'`. So the writer computes `points_earned`
-> itself, from the same migration-013 curve scaled to the offering's `points_possible`
-> (3–5 → full, 1–2 → half, 0/absent → zero). On an effort-mode offering the trigger recomputes the
-> identical value, so the result is the same either way — the rule did not change, only who applies it.
+> equivalent trigger fires only on a grade row that **carries** an effort — migration 014 re-keyed
+> it off the offering's `grading_mode`, which is `points` on every Fall-2026 offering. So the writer
+> computes `points_earned` itself, from the shared curve: **3–5 → the offering's `points_possible`,
+> 1–2 → one point, 0/absent → zero** (migration `app/019`, 2026-07-30; partial credit was half the
+> assignment before that — the same 1 at 2 points, and 1.5 at 3). The row the writer produces does
+> carry an effort, so the trigger recomputes the identical value on top of it, which is exactly why
+> `points_from_effort()` in `interaction_reports.py` must stay equivalent to the trigger.
 
 ---
 
