@@ -205,9 +205,11 @@ export function renderNav(ctx, opts = {}) {
   mount.innerHTML = `
     <div class="topnav-inner">
       <div class="nav-left">
-        <a class="brand" href="dashboard.html" title="PREP — Pre-lesson Readiness Engagement Platform">
+        <a class="brand" href="dashboard.html"
+           title="PREP — Pre-lesson Readiness Engagement Platform · iPREP — interactive PREP, the lesson interactions">
           <span class="brand-mark">${iconHTML('atom', '⚛️', 'ic')}</span>
-          <span>PREP</span>
+          <span>PREP<span class="brand-alt"><span class="brand-slash">/</span>iPREP</span><span
+            class="brand-lw">Portal</span></span>
         </a>
         ${brandCourseHTML(ctx, courseTitle)}
         <button class="nav-burger" aria-label="Menu" data-burger>${iconHTML('menu', '☰', 'ic')}</button>
@@ -316,7 +318,14 @@ export function mountLegacyActions(ctx, items = []) {
   });
 }
 
-/** Site footer with the required Flaticon attribution. Idempotent — safe to call again. */
+/**
+ * Site footer with the required Flaticon attribution. Idempotent — safe to call again.
+ *
+ * It also spells out both acronyms. The bar can only afford the marks themselves, so the footer
+ * is where "PREP" and "iPREP" are actually DEFINED — once per page, for the instructor who has
+ * never been told what the letters are. Keep the two expansions here if the wordmark changes
+ * again; a bar that names something it never defines is the problem this pair was chosen to fix.
+ */
 export function renderFooter() {
   if (document.getElementById('site-footer')) return;
   const f = document.createElement('footer');
@@ -324,7 +333,9 @@ export function renderFooter() {
   f.className = 'site-footer';
   f.innerHTML = `
     <div class="footer-inner">
-      <span>PREP · USAFA Physics</span>
+      <span>PREP — <span class="fx">Pre-lesson Readiness Engagement Platform</span>
+        · iPREP — <span class="fx">interactive PREP, the lesson interactions</span>
+        · USAFA Physics</span>
       <span class="grow"></span>
       <span>Icons by
         <a href="https://www.flaticon.com/authors/freepik" target="_blank" rel="noopener">Freepik</a>

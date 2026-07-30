@@ -8,6 +8,70 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-29 (fifth) — Matthew Recker via Claude
+
+### The navbar says what PREP is: the wordmark is now PREP/iPREP Portal
+
+**"PREP" alone told you the name and never what it was.** That was the complaint, and the bar had
+no answer to it — the expansion existed only in the anchor's `title` tooltip, which nobody hovers.
+
+Thirteen treatments were mocked up first in a standalone page,
+[`tests/browser/test-navbar.html`](tests/browser/test-navbar.html) (linked from the new
+`tests/index.html`), rendered as a system admin because seven links is the crowded case. The one
+chosen is **PREP/iPREP Portal**: both marks in one wordmark, `Portal` set lighter behind them, and
+the acronyms spelled out in the footer, which is now the one place either name is actually
+*defined* — `PREP — Pre-lesson Readiness Engagement Platform · iPREP — interactive PREP, the lesson
+interactions`.
+
+**PREP and iPREP are the same colour and weight, deliberately.** An earlier pass tinted the `i`
+with the accent colour; it read as two products sharing a bar, and it spent the accent — which
+everywhere else on that bar means *this nav item is active* — on the brand. The slash carries a
+hair of margin rather than a full space so the mark stays the single token it is spoken as. The
+`i` must never be italicised: at that size it loses its dot, which is all that keeps it from
+reading as a stray stroke.
+
+This does **not** rename the platform. CORE.md §1 and PROJECT.md still reserve *iPREP* for the
+interactive lesson-interaction component; the bar now names both, which is what they describe.
+A variant that renamed everything to iPREP was mocked up and rejected for exactly that reason.
+
+### The wordmark is 112px wider, and that turned into a responsive fix
+
+Adopting it cost more than the brand markup, and the extra was all layout. Measured on a real
+signed-in page at fifteen widths against both a 5-link instructor bar and a simulated 7-link system
+admin bar:
+
+- **`min-width: 0` removed from `.nav-left` — this was the real bug.** `1fr` is `minmax(auto, 1fr)`,
+  so the track grows to its content and pushes the centre track along; a zeroed minimum let that
+  nowrap item overflow its track instead and slide *underneath* the centred links. **This was
+  already broken before any of this work** — the shipped bar overlapped its own controls at 400px,
+  375px and 360px, and overlapped the links between 861px and 1000px. Removing one declaration
+  fixed all of it.
+- **The mark sheds in two stages** as the bar narrows, in order of how load-bearing each piece is:
+  `Portal` goes below 1180px, `/iPREP` below 1000px, leaving exactly the short mark that shipped
+  before today. The footer still defines both names at every width, which is what makes shedding
+  them safe.
+- **The nav links squeeze** in the same band, and **collapse into the burger at 920px** rather than
+  860px — measured, a system admin's seven links stop fitting at 892px even squeezed and even with
+  the short mark, so the old point left a ~30px band that overflowed.
+
+**Verified 375px → 1600px, light and dark, both link counts, no console or page errors.** Below
+375px the bar still overflows horizontally; the shipped bar overlapped its controls at those widths
+too, so this is not a regression, and 375px is the narrowest phone in use. **Known residual:** a
+course title much longer than "Physics 215" plus seven links can still overflow just above 920px —
+the course button does not truncate above 560px, which is pre-existing.
+
+*Not changed:* the sign-in and password-reset pages still show `PREP` as their hero with the
+expansion already spelled out beneath it, and page `<title>`s still read `… · PREP`. The short form
+is correct in both places and neither was part of the ask.
+
+*Doc-source check:* `instructor-grading.md` and `director-schema-reference.md` were flagged by
+`scripts/docs/check_doc_sources.py` because `nav.js` and `styles.css` are sources for them. Both
+re-read and still correct — the grading doc's claim that there is no **Grade** entry in the top
+navigation is untouched (`FACULTY_LINKS` did not change), and the schema reference depends on the
+`.sf-*` diagram classes, which did not change.
+
+---
+
 ## 2026-07-29 (fourth) — Matthew Recker via Claude
 
 ### One grading box per assignment, and it says "Grade Assignment 03"
