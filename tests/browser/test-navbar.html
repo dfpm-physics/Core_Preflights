@@ -81,7 +81,7 @@ main{flex:1 0 auto}
 }
 /* A wide brand does not fit the live `1fr auto 1fr` grid: the centre track is pinned to the
    viewport centre, so anything past the first 1fr overlaps the links instead of pushing them.
-   Measured on this page at 1440px, variants C/E/F/G/I all overrun it. The flexible layout below
+   Several of the wider variants overrun it at 1440px (each says so in its notes). The layout below
    is the fix any of them would need — the links stay centred in whatever space is left over.
    Applied per-variant so variant A still shows the live behaviour exactly. */
 .topnav.wide-brand .topnav-inner{grid-template-columns:auto minmax(0,1fr) auto}
@@ -244,8 +244,26 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;
 }
 .brand .sub-line.plain{text-transform:none;letter-spacing:.01em;font-size:.5em;font-weight:500}
 
-/* "Portal" set lighter than the acronym (B, C) */
+/* "Portal" set lighter than the acronym */
 .brand .lw{font-weight:500;opacity:.72;margin-left:.28em}
+
+/* ── PREP / iPREP — the i that stands for "interactive" ───────────────────────────────────
+ * Accent-coloured, never italic. An italic lowercase i at this size loses its dot against a
+ * translucent bar, and the dot is the only thing that distinguishes it from a stray stroke. */
+.brand .ip{color:var(--blue-lt);font-weight:600}
+.site-footer .ip{color:var(--blue-lt);font-weight:700}
+/* separator when both marks are shown at once */
+.brand .slash{color:var(--muted);font-weight:400;opacity:.6;margin:0 .3em}
+.brand .second{font-weight:500;opacity:.88}
+/* the contextual badge — a boxed i that appears only inside an interactive lesson, so it
+   reads as a STATE (something that switched on) rather than part of the wordmark */
+.brand .ibadge{
+  display:inline-grid;place-items:center;width:1.5em;height:1.5em;border-radius:6px;
+  background:var(--blue);color:#fff;font-size:.6em;font-weight:800;line-height:1;
+  margin-right:.42em;vertical-align:.14em;letter-spacing:0;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+}
+[data-theme="dark"] .brand .ibadge{background:var(--blue-lt);color:#0d1117}
 
 /* inline expansion (E) — reads like the course label that follows it */
 .brand-expand{
@@ -335,7 +353,8 @@ body.narrow .stage-note{display:block}
 <main class="page-wide">
   <div class="page-head">
     <h1 id="v-title">Brand &amp; navbar explorations</h1>
-    <p class="sub">Nine ways to make the bar say what PREP is. Rendered as a <b>system admin</b> —
+    <p class="sub">Thirteen ways to make the bar say what PREP is — including four (B–F) that also
+      carry <b>iPREP</b>, where the <i>i</i> is for interactive. Rendered as a <b>system admin</b> —
       seven links, the widest case. Switch with the buttons at the bottom (or ← / →).</p>
   </div>
 
@@ -357,7 +376,7 @@ body.narrow .stage-note{display:block}
   </div>
 
   <div class="card">
-    <div class="card-title">All nine at a glance</div>
+    <div class="card-title">All thirteen at a glance</div>
     <div class="card-meta">Each strip is the bar's left zone at full size, brand + course switcher.
       Click one to load it above.</div>
     <div class="gal" id="gallery"></div>
@@ -456,14 +475,14 @@ const FOOTER_DEFAULT = `<span>PREP &middot; USAFA Physics</span>`;
  * `footer` overrides the footer's left-hand string when a variant moves the expansion there.  */
 const VARIANTS = [
   {
-    id:'current', btn:'Current', title:'A · Current — PREP alone', tag:'What ships today (baseline)',
+    id:'current', btn:'Current', name:'Current — PREP alone', tag:'What ships today (baseline)',
     brand:`<a class="brand" href="#" onclick="return false" title="PREP — ${FULL}">${MARK}<span>PREP</span></a>`,
     idea:'The atom mark, the wordmark, then the course switcher. The expansion exists only in the anchor’s <code>title</code> tooltip, which nobody hovers.',
     watch:'A first-time instructor has no way to learn what the four letters stand for without leaving the page. This is the complaint the other eight answer.',
     changes:'Nothing. Here for comparison.',
   },
   {
-    id:'portal-footer', btn:'PREP Portal + footer', title:'B · PREP Portal, acronym spelled out in the footer',
+    id:'portal-footer', btn:'PREP Portal + footer', name:'PREP Portal, acronym spelled out in the footer',
     tag:'One extra word up top, the definition at the bottom of every page',
     brand:`<a class="brand" href="#" onclick="return false">${MARK}<span>PREP<span class="lw">Portal</span></span></a>`,
     footer:`<span>PREP &mdash; <span class="fx">${FULL}</span> &middot; USAFA Physics</span>`,
@@ -471,8 +490,53 @@ const VARIANTS = [
     watch:'"Portal" says "this is a website", not what the website does — it fixes the tone, not the meaning. And the footer expansion is only seen by someone who scrolls to the bottom.',
     changes:'The brand block in <code>site/js/nav.js</code>, plus the footer string in <code>renderFooter()</code>. No CSS beyond one class for the lighter word.',
   },
+  /* ── The B family: B again, but carrying iPREP as well ──────────────────────────────────
+   * CORE.md §1 and PROJECT.md both reserve iPREP for the interactive lesson-interaction
+   * component — "not the site as a whole". These four differ in how literally they say that. */
   {
-    id:'portal-stack', btn:'Portal, name below', title:'C · PREP Portal over the full name',
+    id:'iprep-footer', btn:'B + iPREP in footer', name:'PREP Portal, both names defined in the footer',
+    tag:'Variant B untouched; the footer teaches PREP and iPREP together',
+    brand:`<a class="brand" href="#" onclick="return false">${MARK}<span>PREP<span class="lw">Portal</span></span></a>`,
+    footer:`<span>PREP &mdash; <span class="fx">Pre-lesson Readiness Engagement Platform</span>
+      &middot; <span class="ip">i</span><span class="fx">PREP</span> &mdash; <span class="fx">its interactive lessons</span>
+      &middot; USAFA Physics</span>`,
+    idea:'The cheapest way to introduce the second name: the bar does not change at all, and the footer defines both at once — PREP is the platform, iPREP is the interactive half of it. Someone who meets "iPREP" on a lesson card has already been told what the i means.',
+    watch:'Two definitions on one 0.8em line is a lot of footer, still only read by someone who scrolls — and it introduces iPREP to every reader, including the majority whose lessons are written preflights and who will never open an interactive one.',
+    changes:'The footer string in <code>renderFooter()</code>, and nothing else. No brand block, no CSS, no nav grid, no responsive work — the lowest-risk option on this page.',
+  },
+  {
+    id:'iprep-lockup', btn:'PREP / iPREP', name:'PREP / iPREP lockup',
+    tag:'Both marks in the bar, the i in the accent colour',
+    brand:`<a class="brand" href="#" onclick="return false">${MARK}<span>PREP<span class="slash">/</span><span class="second"><span class="ip">i</span>PREP</span></span></a>`,
+    footer:`<span>PREP &mdash; <span class="fx">Pre-lesson Readiness Engagement Platform</span>
+      &middot; <span class="ip">i</span><span class="fx">PREP</span> &mdash; <span class="fx">interactive PREP</span>
+      &middot; USAFA Physics</span>`,
+    idea:'States the whole family up front and lets the colour carry the explanation: same four letters, one extra letter, one accent. Nobody has to be told that iPREP is a kind of PREP — the lockup shows it.',
+    watch:'Two names side by side read as two products, and the bar cannot say which one you are currently in, so it works as a glossary rather than as a location. It also spends the accent colour on the wordmark, where "accent" otherwise means "this nav item is active".',
+    changes:'Brand block, ~6 lines of CSS, and the footer string.',
+  },
+  {
+    id:'iprep-contextual', btn:'i lights up in a lesson', name:'The i as a contextual badge',
+    tag:'Reads PREP everywhere; the i appears only inside an interactive lesson',
+    brand:`<a class="brand" href="#" onclick="return false">${MARK}<span><span class="ibadge">i</span>PREP<span class="lw">Portal</span></span></a>`,
+    footer:`<span>PREP &mdash; <span class="fx">Pre-lesson Readiness Engagement Platform</span>
+      &middot; the <span class="ip">i</span> marks an <span class="fx">interactive lesson</span>
+      &middot; USAFA Physics</span>`,
+    idea:'The only option here where the mark <b>means something</b> rather than listing what exists: the bar is exactly variant B until the student opens an interactive lesson, and then the i switches on. It tells you where you are. Shown in the lit state — unlit, it is B pixel for pixel.',
+    watch:'The payoff needs both states, and a student on their first interactive lesson has only ever seen one. On the faculty side the bar would light up while authoring or grading an interaction, which may be more noise than signal.',
+    changes:'Brand block, ~8 lines of CSS, the footer string, <b>and a flag threaded from the page into <code>renderNav()</code></b> — the only variant on this page that needs application logic rather than markup and CSS.',
+  },
+  {
+    id:'iprep-only', btn:'iPREP as the name', name:'iPREP as the platform name',
+    tag:'The boundary case — everything branded interactive',
+    brand:`<a class="brand" href="#" onclick="return false">${MARK}<span><span class="ip">i</span>PREP</span></a>`,
+    footer:`<span><span class="ip">i</span>PREP &mdash; <span class="fx">interactive Pre-lesson Readiness Engagement Platform</span> &middot; USAFA Physics</span>`,
+    idea:'Drops the split and calls the whole thing iPREP, on the argument that one name is easier to teach than two and the i is the interesting part.',
+    watch:'This contradicts the brand as written down: CORE.md §1 and PROJECT.md both reserve iPREP for the interactive lesson-interaction component, <i>"not the site as a whole"</i>. Adopting it is a decision to change that, which should be made deliberately and not as a side effect of picking a navbar. It would also mislabel the written preflights, which are most of the work and are not interactive.',
+    changes:'Brand block, footer, page titles — <b>plus edits to CORE.md §1 and PROJECT.md</b>, because that is where the naming rule lives. Anything else leaves the docs contradicting the site.',
+  },
+  {
+    id:'portal-stack', btn:'Portal, name below', name:'PREP Portal over the full name',
     tag:'Two-line lockup inside the 64px bar', wide:true,
     brand:`<a class="brand stack" href="#" onclick="return false">${MARK}<span class="bl">
         <span>PREP<span class="lw">Portal</span></span>
@@ -482,7 +546,7 @@ const VARIANTS = [
     changes:'The brand block, ~10 lines of CSS, <b>and the nav grid</b> — the left zone measures 398px here against the 383px the live <code>1fr auto 1fr</code> layout allows, so the links must be freed to sit centred in the leftover space. Bar height stays 64px, so nothing below the bar moves.',
   },
   {
-    id:'stack-desc', btn:'Descriptor below', title:'D · PREP over a plain-English descriptor',
+    id:'stack-desc', btn:'Descriptor below', name:'PREP over a plain-English descriptor',
     tag:'Same two-line shape, but says what it is for instead of what it stands for',
     brand:`<a class="brand stack" href="#" onclick="return false">${MARK}<span class="bl">
         <span>PREP</span>
@@ -492,7 +556,7 @@ const VARIANTS = [
     changes:'Same as C — brand block plus a little CSS. The second line is short enough to survive further down the responsive range.',
   },
   {
-    id:'inline-name', btn:'Name inline', title:'E · PREP · full name inline',
+    id:'inline-name', btn:'Name inline', name:'PREP · full name inline',
     tag:'One line: wordmark, divider, expansion, divider, course', wide:true,
     brand:`<a class="brand" href="#" onclick="return false">${MARK}<span>PREP</span>
         <span class="brand-expand narrow-hide">${FULL}</span></a>`,
@@ -501,7 +565,7 @@ const VARIANTS = [
     changes:'Brand block, one CSS class, <b>and the nav grid</b> — with seven links this overruns the centre track by ~90px, so the links have to be freed to centre in the leftover space. Also worth a rule that drops the expansion under ~1100px.',
   },
   {
-    id:'acronym-in-name', btn:'Acronym in name', title:'F · Full name, acronym picked out',
+    id:'acronym-in-name', btn:'Acronym in name', name:'Full name, acronym picked out',
     tag:'The wordmark IS the name; the four initials carry the accent colour', wide:true,
     brand:`<a class="brand" href="#" onclick="return false">${MARK}<span class="acr-word"><b>P</b>re-lesson <b>R</b>eadiness <b>E</b>ngagement <b>P</b>latform</span></a>`,
     idea:'Nothing needs defining elsewhere — the acronym is discoverable inside the name itself. Someone who has only ever heard "PREP" finds it on their first look at the bar and never needs to again.',
@@ -509,7 +573,7 @@ const VARIANTS = [
     changes:'Brand block, a colour rule, <b>and the nav grid</b> (441px of left zone against 383px allowed). The <code>title</code> tooltip becomes redundant and would go.',
   },
   {
-    id:'chip', btn:'Badge + descriptor', title:'G · PREP badge + descriptor',
+    id:'chip', btn:'Badge + descriptor', name:'PREP badge + descriptor',
     tag:'Acronym as a filled mark, descriptor as ordinary nav text', wide:true,
     brand:`<a class="brand" href="#" onclick="return false">${MARK}<span class="chip">PREP</span>
         <span class="desc narrow-hide">Lesson readiness portal</span></a>`,
@@ -518,7 +582,7 @@ const VARIANTS = [
     changes:'Brand block plus ~12 lines of CSS, including a dark-mode inversion so the badge is not a glowing block on a near-black bar. Sits within ~10px of the centred links at 1440px, so it takes the flexible nav grid too.',
   },
   {
-    id:'hover', btn:'Name on hover', title:'H · PREP, name revealed on hover',
+    id:'hover', btn:'Name on hover', name:'PREP, name revealed on hover',
     tag:'Identical to today at rest; expands on hover or keyboard focus',
     brand:`<a class="brand" href="#" onclick="return false" tabindex="0">${MARK}<span>PREP</span>
         <span class="reveal">${FULL}</span></a>`,
@@ -527,7 +591,7 @@ const VARIANTS = [
     changes:'Brand block plus a transition. Nothing moves at rest, so no responsive work is needed.',
   },
   {
-    id:'full-only', btn:'Full name only', title:'I · Full name only, acronym in the footer',
+    id:'full-only', btn:'Full name only', name:'Full name only, acronym in the footer',
     tag:'The opposite extreme — the bar never says PREP', wide:true,
     brand:`<a class="brand" href="#" onclick="return false">${MARK}<span class="full-only">${FULL}</span></a>`,
     footer:`<span><span class="fx">${FULL}</span> (PREP) &middot; USAFA Physics</span>`,
@@ -539,6 +603,7 @@ const VARIANTS = [
 
 /* ── Rendering ─────────────────────────────────────────────────────────────────────────── */
 const LS_KEY = 'prep.navmock.variant';
+const L = i => String.fromCharCode(65 + i);   // positional letter, so inserting a variant renumbers cleanly
 let current = 0;
 
 function renderNav(v) {
@@ -569,8 +634,9 @@ function renderFooter(v) {
 }
 
 function renderDetail(v) {
-  document.getElementById('v-title').textContent = v.title;
-  document.getElementById('d-title').textContent = v.title;
+  const full = L(current) + ' · ' + v.name;
+  document.getElementById('v-title').textContent = full;
+  document.getElementById('d-title').textContent = full;
   const lay = document.getElementById('d-lay');
   lay.className = 'lay ' + (v.wide ? 'grid' : 'ok');
   lay.textContent = v.wide ? 'Needs the nav grid changed' : 'Fits the live nav grid';
@@ -588,10 +654,10 @@ function renderGallery() {
   g.innerHTML = VARIANTS.map((v, i) => `
     <div class="gal-row${i === current ? ' on' : ''}" data-i="${i}" role="button" tabindex="0"
          aria-pressed="${i === current}">
-      <span class="idx">${'ABCDEFGHI'[i]}</span>
+      <span class="idx">${L(i)}</span>
       <span class="gal-body">
         <span class="gal-strip">${v.brand}${courseHTML()}</span>
-        <span class="gal-cap"><b>${v.title.replace(/^[A-I] · /, '')}</b> — ${v.tag}${
+        <span class="gal-cap"><b>${v.name}</b> — ${v.tag}${
           v.wide ? ' <span class="lay grid">nav grid</span>' : ''}</span>
       </span>
     </div>`).join('');
@@ -610,7 +676,7 @@ function renderButtons() {
   const b = document.getElementById('ctrl-btns');
   b.innerHTML = VARIANTS.map((v, i) => `
     <button class="vbtn${i === current ? ' on' : ''}" data-i="${i}">
-      <span class="n">${'ABCDEFGHI'[i]}</span>${v.btn}
+      <span class="n">${L(i)}</span>${v.btn}
     </button>`).join('');
   b.querySelectorAll('.vbtn').forEach(x =>
     x.addEventListener('click', () => select(Number(x.dataset.i))));
