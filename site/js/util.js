@@ -109,6 +109,47 @@ export function runPage(ctx, init, mountId = 'main') {
     .catch(e => showFatal(e, mountId));
 }
 
+/* ── Modals ──────────────────────────────────────────────────────────────────
+ *
+ * WHY THIS IS NOT `if (e.target === backdrop) close()`
+ *   That was the pattern in all thirteen dialogs until 2026-07-30, and it loses work. Select text
+ *   inside a modal, drag past its edge, release — `mouseup` lands on the backdrop, and the browser
+ *   fires `click` on the nearest COMMON ANCESTOR of the two, which is the backdrop. The handler
+ *   cannot tell that from a real click on the backdrop, so the dialog closes and everything typed
+ *   into it is gone. Highlighting a sentence of feedback to replace it is the single most ordinary
+ *   thing to do in the grading modal, so this fired constantly and always at the worst moment.
+ *
+ * THE FIX is to require BOTH ends of the gesture to be on the backdrop. A dismissal is a click
+ * that starts and finishes on the overlay; anything that starts inside the dialog is part of
+ * working in it, however far the mouse travels afterwards.
+ *
+ * Escape closes too, and `[data-close]` (the × and any Cancel button) always closes regardless of
+ * where the drag began — those are unambiguous.
+ *
+ * @param {HTMLElement} backdrop the `.modal-backdrop` element
+ * @param {() => void} close what to run; callers that guard unsaved work pass their own confirm
+ * @param {{escape?: boolean}} [opts] `escape: false` for a dialog that must be answered
+ */
+export function wireModalDismiss(backdrop, close, opts = {}) {
+  if (!backdrop) return;
+  let startedOnBackdrop = false;
+  // `mousedown` on the backdrop itself is the only way a dismissing gesture can begin. Recorded on
+  // the backdrop rather than the document so a drag beginning outside the overlay entirely — which
+  // cannot happen while it is open, but could if a caller mounts one oddly — is not counted.
+  backdrop.addEventListener('mousedown', (e) => { startedOnBackdrop = e.target === backdrop; });
+  backdrop.addEventListener('click', (e) => {
+    const wasOnBackdrop = startedOnBackdrop;
+    startedOnBackdrop = false;                 // consume it — one gesture, one chance
+    if (e.target.closest && e.target.closest('[data-close]')) { close(); return; }
+    if (e.target === backdrop && wasOnBackdrop) close();
+  });
+  if (opts.escape !== false) {
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && backdrop.classList.contains('open')) close();
+    });
+  }
+}
+
 /* ── People / formatting ────────────────────────────────────────────────────── */
 export function initials(name) {
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean);

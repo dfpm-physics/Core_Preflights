@@ -199,7 +199,34 @@ const PINNED_TEXT_MATCH = {
 const PINNED_FALLBACK_ID = { reading_time: 'q1', reading_reflection: 'q2' };
 
 /**
+ * Does this question list declare its roles?
+ *
+ * ANY question carrying ANY role is enough, which is wider than "one of the pinned two" and has to
+ * be. A lesson with BOTH pinned questions switched off carries neither pinned role by definition —
+ * so a pinned-role-only test would read it as legacy content and start guessing, which is the very
+ * case the toggles exist to express. The lesson editor therefore stamps `role: 'free_response'` on
+ * ordinary questions as well (see faculty/lessons.html `stampRoles`), and that stamp is the signal
+ * this reads: the list has been authored by something that knows about roles, so silence is an
+ * answer rather than an absence of one.
+ */
+const declaresRoles = (questions) => questions.some(q => q && typeof q.role === 'string' && q.role);
+
+/**
  * The question id for a pinned role — by role, else by prompt text, else by position.
+ *
+ * ONCE A LESSON DECLARES ANY PINNED ROLE, ROLES ARE THE WHOLE ANSWER. The weak lookups below are
+ * a bridge for content authored before roles existed, and applying them to content that HAS roles
+ * is how an absent pinned question gets faked. Concretely (director, 2026-07-30): the lesson
+ * builder can now switch the reading-time question OFF, which leaves the reflection sitting at
+ * `q1` — and `PINNED_FALLBACK_ID.reading_time === 'q1'` would then return the REFLECTION as the
+ * reading-time question. The rollup would show a reading-time panel built from reflection prose,
+ * and `freeResponseQuestion()` would exclude the wrong question from the free-response panel.
+ * "If I toggle one or both off then I think our rollup will get confused because we did things by
+ * question number" — exactly right, and this is the line that stops it.
+ *
+ * The bridge still applies in full to a lesson that declares nothing, which on 2026-07-21 was
+ * 74 of 74 live written activities. Both engines must agree: the same rule is implemented in
+ * `_pinned_question_id` in supabase/admin/lesson_aggregate.py.
  *
  * @returns {{id: string|null, how: 'role'|'text'|'position'|null}} `how` names the signal that
  *   identified it, so a caller can tell a positional guess from a declared contract.
@@ -210,14 +237,28 @@ export function pinnedQuestion(activity, role) {
   const byRole = questions.find(q => q.role === role && q.id);
   if (byRole) return { id: byRole.id, how: 'role' };
 
+  // Declared, and this role is not among them → the question is deliberately absent. Guessing here
+  // would invent one out of whatever happens to sit in its old position.
+  if (declaresRoles(questions)) return { id: null, how: null };
+
   const needle = PINNED_TEXT_MATCH[role];
   if (needle) {
     const byText = questions.find(q => String(q.text || '').toLowerCase().includes(needle) && q.id);
     if (byText) return { id: byText.id, how: 'text' };
   }
 
+  // Position, last and weakest — and it must not claim a question whose own PROMPT says it is the
+  // other pinned role. A lesson holding only a reading reflection has it at `q1`, and `q1` is also
+  // reading_time's positional fallback, so an unguarded lookup answers "the reading-time question"
+  // with the reflection. That is the shape of the bug the editor hit on 2026-07-30; the editor's
+  // resolver avoids it by resolving both roles together (faculty-lessons.js
+  // `resolvePinnedQuestions`), which a one-role-per-call function cannot do — so it checks the
+  // other needle instead. Same answer, reached differently.
+  const otherNeedles = Object.entries(PINNED_TEXT_MATCH)
+    .filter(([r]) => r !== role).map(([, n]) => n);
   const want = PINNED_FALLBACK_ID[role];
-  const byPos = questions.find(q => q.id === want);
+  const byPos = questions.find(q => q.id === want
+    && !otherNeedles.some(n => String(q.text || '').toLowerCase().includes(n)));
   return byPos ? { id: byPos.id, how: 'position' } : { id: null, how: null };
 }
 

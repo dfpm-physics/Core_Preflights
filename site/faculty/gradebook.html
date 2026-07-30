@@ -43,7 +43,7 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { runPage, esc, lastFirst, fmtDate, pct } from '../js/util.js';
+    import { runPage, esc, lastFirst, fmtDate, pct, wireModalDismiss } from '../js/util.js';
     import { taughtSectionIds } from '../js/faculty-rollup.js';
     import { getPref, setPref } from '../js/prefs.js';
     import * as GB from '../js/faculty-gradebook.js';
@@ -283,12 +283,7 @@
     /* ── EI modal ──────────────────────────────────────────────────────── */
     function wireEiModal() {
       const m = document.getElementById('ei-modal');
-      m.addEventListener('click', e => {
-        if (e.target === m || e.target.dataset.close !== undefined) m.classList.remove('open');
-      });
-      document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && m.classList.contains('open')) m.classList.remove('open');
-      });
+      wireModalDismiss(m, () => m.classList.remove('open'));
       document.getElementById('ei-save').addEventListener('click', saveEi);
     }
 

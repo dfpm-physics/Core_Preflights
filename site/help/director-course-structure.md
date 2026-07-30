@@ -31,6 +31,33 @@ An assignment holds one or more activities. A preflight normally holds two:
 
 Both are optional. An assignment with one written activity is an ordinary written preflight.
 
+The interactive activity **only needs a URL when students can reach it** — that is, when the
+allowed mode is *Choice* or *AI Interaction*. Under *Free-Response* you can attach the interaction
+now and add its address later in the semester, once the lesson exists.
+
+## The two questions with special handling
+
+Most questions in a written activity are ordinary free responses. Two are not, and each can be
+switched on or off per assignment:
+
+| Question | What makes it special |
+|---|---|
+| **Reading time** | Worth 0 points. Answers are shown to instructors **without names**, so it reads as a class picture rather than as a record about a cadet. It is what the rollup's reading-time panel is built from. |
+| **Reading reflection** | The question the AI judges for *meaningfulness*, which is what caps effort when an attempt is not genuine. Its answers are the quotes the rollup offers you to read aloud. If the assignment also has an interactive lesson, this question must match the one the lesson asks — that is what makes the two paths comparable. |
+
+**Everything else is an ordinary question**, scored on its own points.
+
+Switching either off is a real choice, not a hidden one: without the reading-time question the
+rollup has no reading-time panel, and without the reflection nothing gates effort and there are no
+reflection quotes. The editor says so under the toggles.
+
+**These are identified by a flag on the question, not by being first and second.** That distinction
+matters for exactly one reason: it is what lets you drop one of them. When they were identified by
+position, removing the reading-time question left the reflection sitting in first place, and
+anything looking for "the reading-time question" would have found the reflection and reported its
+prose as a reading duration. An older assignment authored before the flags existed is recognised by
+its wording and flagged the first time you open it.
+
 ## Graded and practice activities
 
 Each semester you decide, per activity, whether it carries credit:

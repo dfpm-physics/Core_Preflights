@@ -100,7 +100,7 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, lastFirst, fmtDate, fmtDateTime, runPage } from '../js/util.js';
+    import { esc, lastFirst, fmtDate, fmtDateTime, runPage, wireModalDismiss } from '../js/util.js';
     // Questions now live in the written activity's content, not on the assignment row.
     import { questionsOf, submissionLateness, lateBy, actionableSections } from '../js/schema.js';
     // The 3-state control lives in its own module because student.html grades too now — see its
@@ -667,7 +667,7 @@
     // ── Extension modal ──
     function wireExtModal() {
       const m = document.getElementById('ext-modal');
-      m.addEventListener('click', (e) => { if (e.target.id === 'ext-modal' || e.target.dataset.close !== undefined) m.classList.remove('open'); });
+      wireModalDismiss(m, () => m.classList.remove('open'));
       document.getElementById('ext-save').addEventListener('click', saveExt);
     }
 

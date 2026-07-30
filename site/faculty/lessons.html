@@ -77,7 +77,17 @@
             <button type="button" class="btn btn-secondary btn-sm" data-qadd="free_response">+ Free response</button>
             <button type="button" class="btn btn-secondary btn-sm" data-qadd="numerical">+ Numerical</button>
             <button type="button" class="btn btn-secondary btn-sm" data-qadd="multiple_choice">+ Multiple choice</button></div>
-          <div class="field-hint" style="margin:-4px 0 10px">Q1 is a <strong>reading-time</strong> diagnostic (0 pts, names hidden from students) and Q2 is the standard <strong>reading reflection</strong> — both auto-filled, editable, and pinned first. Q2 must match the AI Interaction's reflection. Add any further questions below.</div>
+          <!-- The two questions with special handling, each optional (director, 2026-07-30). They
+               are identified by a ROLE stored on the question, not by their position, which is what
+               lets either be absent without the rollup mis-reading whatever sits at q1. -->
+          <div class="lb-pinned">
+            <label class="check-inline"><input type="checkbox" id="f-q-readtime"> <span>Reading-time question</span></label>
+            <label class="check-inline"><input type="checkbox" id="f-q-reflection"> <span>Reading reflection</span></label>
+            <span class="grow"></span>
+            <span class="muted" style="font-size:0.8em">Everything else is an ordinary question.</span>
+          </div>
+          <div class="field-hint" style="margin:-2px 0 10px" id="lb-pinned-hint"></div>
+          <div class="alert alert-info" id="lb-pinned-notice" style="display:none;margin-bottom:10px"></div>
           <div id="lb-q-list"></div>
         </div>
       </div>
@@ -102,8 +112,9 @@
             <div class="field grow" style="min-width:180px"><label for="f-i-title">Interaction title (optional)</label>
               <input id="f-i-title" type="text" data-i="title" placeholder="Defaults to the assignment title"></div>
           </div>
-          <div class="field"><label for="f-i-url">Interaction URL</label>
-            <input id="f-i-url" type="text" data-i="artifact_url" placeholder="https://chatgpt.com/g/…  or  https://claude.ai/public/artifacts/…"></div>
+          <div class="field"><label for="f-i-url" id="f-i-url-label">Interaction URL</label>
+            <input id="f-i-url" type="text" data-i="artifact_url" placeholder="https://chatgpt.com/g/…  or  https://claude.ai/public/artifacts/…">
+            <div class="field-hint" id="f-i-url-hint"></div></div>
           <div class="field"><label for="f-i-desc">Interaction description (optional)</label>
             <textarea id="f-i-desc" data-i="description" placeholder="Short description shown to students"></textarea></div>
           <div class="alert alert-info" style="margin-bottom:0">The interaction must ask the <strong>identical reading reflection (Q2)</strong> as the preflight, so the reflection is comparable across paths.</div>
@@ -245,7 +256,8 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, fmtDate, runPage } from '../js/util.js';
+    import { esc, fmtDate, runPage, wireModalDismiss } from '../js/util.js';
+    import { wireHoldButton } from '../js/hold-button.js';
     import { questionsOf, artifactUrlOf } from '../js/schema.js';
     import * as L from '../js/faculty-lessons.js';
 
@@ -291,6 +303,10 @@
       choice:      'Both count — each student picks one, and the commit rule below decides whether they may change it.',
     };
     const DAY_LABEL = { M: 'M-day', T: 'T-day', W: 'W-day', R: 'R-day', F: 'F-day', _all: 'Due date' };
+    /* The modes under which a student can actually OPEN the interaction, and therefore the modes
+     * that require its URL. Under `preflight` the interaction is attached as practice and nothing
+     * offers it, so it may legitimately sit URL-less until the director has built the artifact. */
+    const INTERACTION_REACHABLE = new Set(['interaction', 'choice']);
 
     function init() {
       initTheme();
@@ -301,6 +317,7 @@
       // deleted 2026-07-20, and the legacy Admin link was removed from the nav. Re-mount it here
       // with an items array the moment there is a retiring surface worth reaching.
       wireModal();
+      wirePinnedToggles();
       wireDelete();
       loadRagManifest();
       // Returned, not fired and forgotten: runPage()'s catch only covers what init() hands back,
@@ -463,6 +480,9 @@
       return {
         assignmentId: null,
         policy: 'choice', questions: [],
+        // Both on for a new lesson: that is every course so far, and the toggle exists so a
+        // course that does not want a reading question is not forced to carry one.
+        pinned: { reading_time: true, reading_reflection: true },
         written:     { include: true, reference_pdf: '', reference_pages: '', reading_link: '' },
         interactive: { include: true, slug: '', title: '', artifact_url: '', description: '' },
         existingInteractive: null,       // { id, slug } when the container already has one
@@ -484,10 +504,17 @@
       if (!Object.keys(dueByDay).length && l.dueAt) dueByDay._all = L.toEditorDue(l.dueAt);
 
       const w = l.written, i = l.interactive;
+      const qs = JSON.parse(JSON.stringify(questionsOf(w)));
+      // Derived from the CONTENT, not stored: the toggle is a statement about which questions
+      // exist, so reading it back off the questions is the only way it cannot disagree with them.
+      // `hasPinned` runs the same adoption the editor does, so a legacy lesson whose questions
+      // carry no `role` (every Fall 2026 one) still reads as having both.
+      const pinned = hasPinnedRoles(qs);
       return {
         assignmentId: l.assignmentId,
         policy: l.policy,
-        questions: JSON.parse(JSON.stringify(questionsOf(w))),
+        questions: qs,
+        pinned,
         written: {
           include: !!w,
           reference_pdf:   w?.content?.reference_pdf   || '',
@@ -512,38 +539,93 @@
     // Two questions are always pinned first when authoring written questions: Q1 is a reading-time
     // diagnostic (0 pts, names hidden) and Q2 is the shared reading reflection (the meaningful-gate,
     // identical to the interaction).
-    const roleRank = (q) => q.role === 'reading_time' ? 0 : q.role === 'reading_reflection' ? 1 : 2;
-    // Find an already-present pinned question the same way schema.js pinnedQuestion() does:
-    // by role, then by prompt text, then by position (q1/q2). The Fall builder created these two
-    // WITHOUT a `role`, so a role-only check does not see them and injects duplicates — that is the
-    // "5 questions on edit/preview" bug. Match here so an existing lesson keeps its 3 questions.
-    const PINNED_NEEDLE   = { reading_time: 'how much time did you spend reading',
-                              reading_reflection: 'confusing or most interesting' };
-    const PINNED_FALLBACK = { reading_time: 'q1', reading_reflection: 'q2' };
-    function findPinnedQuestion(role) {
-      const needle = PINNED_NEEDLE[role];
-      return model.questions.find(q => q.role === role)
-          || model.questions.find(q => (q.text || '').toLowerCase().includes(needle))
-          || model.questions.find(q => q.id === PINNED_FALLBACK[role]);
+    /* The role rules live in faculty-lessons.js so they can be tested — the bug the director hit
+     * ("the reading reflection is showing up in Q1") was in exactly this logic, inside this file,
+     * where nothing could reach it. The page keeps only the bits that touch `model`. */
+    const roleRank = L.roleRank;
+    const PINNED_ROLES = L.PINNED_ROLES;
+    const adoptPinnedRoles = () => L.adoptPinnedRoles(model.questions);
+    const hasPinnedRoles = (qs) => L.pinnedPresence(qs);
+
+    const pinnedQ = (role) => model.questions.find(q => q.role === role) || null;
+
+    /** The standard question for a pinned role — the wording every course has always used. */
+    function makePinnedQuestion(role) {
+      return role === 'reading_time'
+        ? { id: nextQid(), type: 'free_response', text: READING_TIME_TEXT, points: 0,
+            student_note: READING_TIME_NOTE, role: 'reading_time', figure_url: '' }
+        : { id: nextQid(), type: 'free_response', text: READING_REFLECTION_TEXT, points: 1,
+            expected_response: READING_REFLECTION_GUIDANCE, role: 'reading_reflection', figure_url: '' };
     }
+
+    /**
+     * Reconcile the question list with the two pinned toggles.
+     *
+     * The toggles are the director's (2026-07-30): "I think we need a way to flag a reading time
+     * question (which has special rules) and a reading reflection question and then everything
+     * else is treated as a free response. I would like the ability to toggle these two on or off."
+     * Both default ON, which is every existing lesson and every course so far — the toggle exists
+     * so a course that does not want a reading question is not forced to carry one.
+     *
+     * Creation happens AFTER adoption, always, so an existing question is claimed rather than
+     * duplicated. Removal is `unpinRole()`, from the toggle — never here, because a function that
+     * runs on every open must not delete anything.
+     */
     function ensureDefaultQuestions() {
       if (!model.written.include) return;
-      // Adopt the existing reflection (stamping its role so it renders pinned and is not duplicated),
-      // or create it when authoring a brand-new lesson.
-      const refl = findPinnedQuestion('reading_reflection');
-      if (refl) refl.role = 'reading_reflection';
-      else model.questions.push({
-        id: nextQid(), type: 'free_response', text: READING_REFLECTION_TEXT, points: 1,
-        expected_response: READING_REFLECTION_GUIDANCE, role: 'reading_reflection', figure_url: '',
-      });
-      // Same for the reading-time diagnostic.
-      const rt = findPinnedQuestion('reading_time');
-      if (rt) rt.role = 'reading_time';
-      else model.questions.unshift({
-        id: nextQid(), type: 'free_response', text: READING_TIME_TEXT, points: 0,
-        student_note: READING_TIME_NOTE, role: 'reading_time', figure_url: '',
-      });
+      adoptPinnedRoles();
+      for (const role of PINNED_ROLES) {
+        if (!model.pinned[role]) continue;
+        if (!pinnedQ(role)) model.questions.push(makePinnedQuestion(role));
+      }
+      stampRoles();
       model.questions.sort((a, b) => roleRank(a) - roleRank(b));   // stable: time, reflection, rest
+    }
+
+    /**
+     * Give every question an explicit role — ordinary ones become `free_response`.
+     *
+     * THIS IS WHAT MAKES "BOTH PINNED QUESTIONS OFF" EXPRESSIBLE, and it is not cosmetic. The
+     * resolvers (schema.js `pinnedQuestion`, lesson_aggregate.py `_pinned_question_id`) stop
+     * guessing by prompt text and position as soon as a question list declares ANY role — that
+     * guard is what stops the reflection at `q1` being read as the reading-time question. But a
+     * lesson with BOTH pinned questions switched off carries neither pinned role by definition, so
+     * with only the pinned two stamped it would look exactly like legacy content and the guessing
+     * would come back on the one lesson that had most clearly said no.
+     *
+     * Stamping ordinary questions closes that: "this list was authored by something that knows
+     * about roles" is then true of every list this editor saves, and silence means absence.
+     *
+     * Legacy Fall 2026 content is untouched until somebody opens it — at which point adoption has
+     * already run, so it is stamped correctly rather than being re-read positionally forever.
+     */
+    function stampRoles() { L.stampRoles(model.questions); }
+
+    /**
+     * Turn a pinned role off.
+     *
+     * NEVER DESTROYS AUTHORED TEXT. If the question is still the standard prompt (or empty) it is
+     * removed outright, which is what "I don't want this question" means. If the director has
+     * rewritten it, the flag comes off and it stays as an ordinary free-response question — losing
+     * a paragraph somebody wrote because they unticked a box is not a trade worth making, and the
+     * card's own Remove button is one click away if they did mean to delete it.
+     *
+     * @returns {'removed'|'kept'|'absent'} for the notice the caller shows.
+     */
+    function unpinRole(role) {
+      const q = pinnedQ(role);
+      if (!q) return 'absent';
+      const standard = role === 'reading_time' ? READING_TIME_TEXT : READING_REFLECTION_TEXT;
+      const text = (q.text || '').trim();
+      if (!text || text === standard.trim()) {
+        model.questions = model.questions.filter(x => x !== q);
+        return 'removed';
+      }
+      q.role = 'free_response';     // demoted, not un-roled — see stampRoles()
+      // A reading-time question is worth 0 by its special rules; as an ordinary question that
+      // would silently be an unscored free response, so give it the default every other one has.
+      if (role === 'reading_time' && !(Number(q.points) > 0)) q.points = 1;
+      return 'kept';
     }
 
     // id null → new; id set (an assignment-offering uuid) → edit. prefill overlays the base model
@@ -614,6 +696,8 @@
       updateSourceSegs();
       applyComponentVisibility();
       updatePolicyAvailability();     // also refreshes the policy segmented control + hint
+      pinnedNotice('');
+      renderPinnedToggles();
       renderQuestions();
       document.getElementById('lesson-modal').classList.add('open');
     }
@@ -716,6 +800,24 @@
       document.getElementById('f-policy-hint').textContent = POLICY_HINT[model.policy] || '';
       // switch_policy only means anything when there is a choice to lock.
       document.getElementById('f-switch-wrap').style.display = model.policy === 'choice' ? '' : 'none';
+      updateInteractionUrlHint();
+    }
+
+    /* The URL field says whether it is required, because that depends on the allowed mode above it
+     * and nothing else on the field itself would tell you. Under Free-Response it is a placeholder
+     * for an artifact that does not exist yet, which is a state a director building a course ahead
+     * of the term is legitimately in. */
+    function updateInteractionUrlHint() {
+      const required = INTERACTION_REACHABLE.has(model.policy);
+      const lbl = document.getElementById('f-i-url-label');
+      const hint = document.getElementById('f-i-url-hint');
+      if (lbl) lbl.innerHTML = required
+        ? 'Interaction URL <span class="req">required</span>'
+        : 'Interaction URL <span class="muted" style="font-weight:400">(optional for now)</span>';
+      if (hint) hint.textContent = required
+        ? 'Students open the interaction under this mode, so it needs somewhere to go.'
+        : 'The allowed mode is Free-Response, so nothing offers this interaction to students yet — '
+          + 'you can save it without a URL and add one later in the term.';
     }
     function updateSourceSegs() {
       const pfSrc = model.written.include ? 'new' : 'none';
@@ -771,7 +873,7 @@
     }
     function setWrittenIncluded(on) {
       model.written.include = on;
-      if (on) { ensureDefaultQuestions(); renderQuestions(); sectionCollapsed.written = false; }
+      if (on) { ensureDefaultQuestions(); renderPinnedToggles(); renderQuestions(); sectionCollapsed.written = false; }
       updateSourceSegs(); applyComponentVisibility(); updatePolicyAvailability();
     }
     function setInteractiveIncluded(on) {
@@ -824,12 +926,65 @@
     }
     function addQuestion(type) {
       model.questions.push({
-        id: nextQid(), type, text: '', points: 1,
+        // `role` from the start: an ordinary question is a declared free response, which is what
+        // tells the resolvers this lesson's roles are deliberate. See stampRoles().
+        id: nextQid(), type, role: 'free_response', text: '', points: 1,
         options: type === 'multiple_choice' ? ['A. ', 'B. ', 'C. ', 'D. '] : undefined,
         correct_answer: '', expected_response: '', figure_url: '',
         ...(type === 'numerical' ? { tolerance: 0.05 } : {}),
       });
       renderQuestions();
+    }
+
+    /* The two pinned toggles: their checked state, the hint under them, and the wiring.
+     *
+     * The hint is written from what is actually on, because the consequences differ. Without the
+     * reflection there is no meaningful-gate and no reflection quotes in the rollup; without the
+     * reading-time question there is no reading-time panel. Both are legitimate; neither should be
+     * a surprise discovered three weeks later on a rollup with a missing panel. */
+    function renderPinnedToggles() {
+      const rt = document.getElementById('f-q-readtime');
+      const rr = document.getElementById('f-q-reflection');
+      if (!rt || !rr) return;
+      rt.checked = !!model.pinned.reading_time;
+      rr.checked = !!model.pinned.reading_reflection;
+      const parts = [];
+      parts.push(model.pinned.reading_time
+        ? 'Reading time is a 0-point diagnostic — answers are shown to instructors without names.'
+        : 'No reading-time question, so the rollup shows no reading-time panel for this assignment.');
+      parts.push(model.pinned.reading_reflection
+        ? 'The reflection is the meaningful-gate the AI scores effort against, and must match the AI Interaction’s.'
+        : 'No reading reflection, so nothing gates effort and the rollup shows no reflection quotes.');
+      document.getElementById('lb-pinned-hint').textContent = parts.join(' ');
+    }
+
+    function pinnedNotice(msg) {
+      const el = document.getElementById('lb-pinned-notice');
+      if (!el) return;
+      el.style.display = msg ? '' : 'none';
+      el.textContent = msg || '';
+    }
+
+    function wirePinnedToggles() {
+      const apply = (role, on) => {
+        model.pinned[role] = on;
+        if (on) {
+          ensureDefaultQuestions();
+          pinnedNotice('');
+        } else {
+          const what = unpinRole(role);
+          pinnedNotice(what === 'kept'
+            ? 'You had rewritten that question, so it is kept as an ordinary question rather than '
+              + 'deleted. Remove it from its own card if you meant to drop it.'
+            : '');
+        }
+        renderPinnedToggles();
+        renderQuestions();
+      };
+      document.getElementById('f-q-readtime')
+        ?.addEventListener('change', (e) => apply('reading_time', e.target.checked));
+      document.getElementById('f-q-reflection')
+        ?.addEventListener('change', (e) => apply('reading_reflection', e.target.checked));
     }
 
     function renderQuestions() {
@@ -1088,7 +1243,18 @@
       if (model.interactive.include) {
         if (!L.isValidSlug(model.interactive.slug))
           return fail('Interaction id must be lowercase letters, numbers, and hyphens only.');
-        if (!(model.interactive.artifact_url || '').trim()) return fail('Enter the interaction URL.');
+        // The URL is required only when a STUDENT CAN REACH the interaction — i.e. when the
+        // allowed mode is Choice or AI Interaction. Under Free-Response the activity is attached
+        // as practice and nothing offers it, so demanding a URL forced the director to either
+        // invent one or set the interaction to "Not this term" — which is a different decision
+        // with a different meaning, and the wrong one for "I want to add it later in the term"
+        // (director, 2026-07-30). The Assignments card already renders a URL-less interaction as
+        // a disabled Launch with the reason, so the incomplete state is visible rather than silent.
+        if (INTERACTION_REACHABLE.has(model.policy)
+            && !(model.interactive.artifact_url || '').trim()) {
+          return fail('Enter the interaction URL — the allowed mode lets students open it. '
+                    + 'Set the mode to Free-Response if you mean to add the interaction later.');
+        }
       }
 
       const btn = document.getElementById('lm-save');
@@ -1189,7 +1355,7 @@
     }
 
     // ── Remove (from the term, or from the library too) ───────────────────
-    let delLesson = null, holdTimer = null;
+    let delLesson = null;
     function openDeleteModal(l) {
       if (!l) return;
       delLesson = l;
@@ -1218,18 +1384,13 @@
       });
     }
     function closeDelete() { cancelHold(); document.getElementById('del-modal').classList.remove('open'); }
-    function beginHold() {
-      const btn = document.getElementById('del-all');
-      btn.classList.add('holding');
-      document.getElementById('del-all-label').textContent = 'Keep holding…';
-      holdTimer = setTimeout(doDeleteAll, 5000);
-    }
-    function cancelHold() {
-      if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
-      document.getElementById('del-all')?.classList.remove('holding');
-      const lbl = document.getElementById('del-all-label');
-      if (lbl) lbl.textContent = 'Hold 5s · delete library copy too';
-    }
+
+    /* The hold-to-delete gesture lives in js/hold-button.js — it was broken for as long as it was
+     * inline here, and its header says why (short version: `mouseleave` cancelled the hold, so
+     * drifting a pixel off a 130px button during a five-second press silently reset it). It is a
+     * module so `tests/browser-harness/hold.mjs` can drive the real thing with a real mouse. */
+    let holdCtl = null;
+    function cancelHold() { holdCtl?.cancel(); }
     async function doDeleteAll() {
       const l = delLesson; closeDelete();
       const { error } = await L.deleteLessonAndContents(l);
@@ -1238,18 +1399,24 @@
     }
     function wireDelete() {
       const modal = document.getElementById('del-modal');
-      modal.addEventListener('click', (e) => { if (e.target === modal || e.target.closest('[data-delclose]')) closeDelete(); });
+      // `data-delclose` rather than the shared `data-close`, because this modal's × must not be
+      // confused with the lesson editor's — so the dismiss helper is given the backdrop half and
+      // the button keeps its own listener below.
+      wireModalDismiss(modal, closeDelete);
+      modal.querySelectorAll('[data-delclose]').forEach(b => b.addEventListener('click', closeDelete));
       document.getElementById('del-container').addEventListener('click', async () => {
         const l = delLesson; closeDelete();
         const { error } = await L.unscheduleLesson(l.offeringId);
         if (error) alert('Could not remove: ' + error.message);
         load();
       });
-      const holdBtn = document.getElementById('del-all');
-      const start = (e) => { e.preventDefault(); beginHold(); };
-      holdBtn.addEventListener('mousedown', start);
-      holdBtn.addEventListener('touchstart', start, { passive: false });
-      ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(ev => holdBtn.addEventListener(ev, cancelHold));
+      holdCtl = wireHoldButton({
+        button: document.getElementById('del-all'),
+        label: document.getElementById('del-all-label'),
+        ms: 5000,
+        idleText: 'Hold 5s · delete library copy too',
+        onComplete: doDeleteAll,
+      });
     }
 
     // ── Prefill from a query link (e.g. generated by an AI tool) ──
@@ -1479,17 +1646,28 @@
             + `Any student who had committed to it is released to choose again. `
             + `If the artifact was only rebuilt, cancel and keep the slug — changing just the URL preserves all of them.`
           : 'No student reports are attached to it yet, so nothing is lost.';
+        // Same both-ends-on-the-backdrop rule as every other dialog (util.js wireModalDismiss),
+        // open-coded because this one is a one-shot promise: both listeners are removed when it
+        // settles, where the shared helper wires permanent ones. A drag that starts inside and
+        // releases on the overlay must not answer a question about deleting student reports.
+        let downOnBackdrop = false;
+        const onDown = (e) => { downOnBackdrop = e.target === modal; };
+        const onClick = (e) => {
+          const started = downOnBackdrop; downOnBackdrop = false;
+          if (e.target === modal && started) done(false);
+        };
         const done = (val) => {
           modal.classList.remove('open');
           ok.onclick = null;
           modal.querySelectorAll('[data-swapclose]').forEach(b => (b.onclick = null));
+          modal.removeEventListener('mousedown', onDown);
+          modal.removeEventListener('click', onClick);
           resolve(val);
         };
         ok.onclick = () => done(true);
         modal.querySelectorAll('[data-swapclose]').forEach(b => (b.onclick = () => done(false)));
-        modal.addEventListener('click', function bg(e) {
-          if (e.target === modal) { modal.removeEventListener('click', bg); done(false); }
-        });
+        modal.addEventListener('mousedown', onDown);
+        modal.addEventListener('click', onClick);
         modal.classList.add('open');
       });
     }

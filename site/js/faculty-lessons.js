@@ -122,6 +122,101 @@ export const mintWrittenSlug = (courseCode, assignmentSlug) =>
 export const isValidSlug = (s) => /^[a-z0-9-]+$/.test(String(s || '').trim());
 
 /* ══════════════════════════════════════════════════════════════════════════════
+ * Question roles — which questions are the pinned two, and what "absent" means
+ *
+ * WHY THIS IS HERE AND NOT IN THE PAGE
+ *   It was in the page, and it shipped a bug the director hit within minutes of standing up a new
+ *   course: authoring a fresh lesson produced ONE question carrying the reflection's text and the
+ *   reading-time role, reported as "the reading reflection is showing up in Q1". Nothing could
+ *   have caught it — the logic lived inside a 1500-line HTML file where no test can import it.
+ *   The rule below now decides what the ROLLUP will later conclude about a lesson, which makes it
+ *   too load-bearing to leave unreachable. Same lesson as `hold-button.js`, same week.
+ *
+ * THE RULE, and it is deliberately the same one `pinnedQuestion()` in schema.js applies, because
+ * the editor must agree with what the aggregator will decide about the lesson it just saved:
+ *
+ *   The list DECLARES roles (any question carries one) → roles are the whole answer.
+ *   The list declares nothing (every Fall 2026 lesson) → bridge: prompt text, then position.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+export const PINNED_ROLES = ['reading_time', 'reading_reflection'];
+/** Ordinary questions carry this, so that a list with NEITHER pinned question still reads as
+ *  declared rather than as legacy content the resolvers should guess about. */
+export const FREE_RESPONSE_ROLE = 'free_response';
+
+const PINNED_NEEDLE = {
+  reading_time: 'how much time did you spend reading',
+  reading_reflection: 'confusing or most interesting',
+};
+const PINNED_FALLBACK_ID = { reading_time: 'q1', reading_reflection: 'q2' };
+
+/** Sort key: reading time first, reflection second, everything else after, stably. */
+export const roleRank = (q) =>
+  q?.role === 'reading_time' ? 0 : q?.role === 'reading_reflection' ? 1 : 2;
+
+export const declaresRoles = (questions) =>
+  (questions || []).some(q => q && typeof q.role === 'string' && q.role);
+
+/**
+ * Which question object IS each pinned role, for a given list.
+ *
+ * THE PASSES GO BY SIGNAL STRENGTH ACROSS BOTH ROLES, NOT ROLE BY ROLE, and that ordering is the
+ * whole fix. Resolving one role completely before starting the other lets a WEAK signal for the
+ * first role claim a question that a STRONG signal for the second role was going to match — which
+ * is exactly the reported bug. A lesson holding only a reading reflection has it at `q1`;
+ * `PINNED_FALLBACK_ID.reading_time` is also `q1`; so a role-at-a-time loop hands the reflection to
+ * reading_time on a positional guess, and the reflection's own prompt text — an exact match, the
+ * strongest signal available — never gets to speak. One question, reflection text, reading-time
+ * role: "the reading reflection is showing up in Q1".
+ *
+ * So: every explicit role first, then every prompt-text match, then positions for whatever is
+ * still unresolved. `claimed` enforces the other half — one question answers for one role.
+ *
+ * @returns {{reading_time?: object, reading_reflection?: object}}
+ */
+export function resolvePinnedQuestions(questions) {
+  const qs = (questions || []).filter(q => q && typeof q === 'object');
+  const claimed = new Set(), out = {};
+  const take = (role, q) => { if (q) { out[role] = q; claimed.add(q); } };
+  const free = (q) => !claimed.has(q);
+  const unresolved = () => PINNED_ROLES.filter(r => !out[r]);
+
+  // 1. Declared roles. Always, and on their own once anything declares one.
+  for (const role of PINNED_ROLES) take(role, qs.find(q => q.role === role && free(q)));
+  if (declaresRoles(qs)) return out;
+
+  // 2. The prompt text, for legacy content. Anchored to prompts a builder pins verbatim.
+  for (const role of unresolved()) {
+    const needle = PINNED_NEEDLE[role];
+    take(role, qs.find(q => free(q) && String(q.text || '').toLowerCase().includes(needle)));
+  }
+  // 3. Position, last and weakest — the first thing an edit changes.
+  for (const role of unresolved()) {
+    take(role, qs.find(q => free(q) && q.id === PINNED_FALLBACK_ID[role]));
+  }
+  return out;
+}
+
+/** Which pinned roles a list already has — the editor's two toggles, derived from content. */
+export function pinnedPresence(questions) {
+  const found = resolvePinnedQuestions(questions);
+  return { reading_time: !!found.reading_time, reading_reflection: !!found.reading_reflection };
+}
+
+/** Stamp the resolved pinned roles onto the questions themselves. Mutates, returns the list. */
+export function adoptPinnedRoles(questions) {
+  const found = resolvePinnedQuestions(questions);
+  for (const [role, q] of Object.entries(found)) q.role = role;
+  return questions;
+}
+
+/** Every un-roled question becomes an explicit free response. See FREE_RESPONSE_ROLE. */
+export function stampRoles(questions) {
+  (questions || []).forEach(q => { if (q && !q.role) q.role = FREE_RESPONSE_ROLE; });
+  return questions;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
  * Loading
  * ════════════════════════════════════════════════════════════════════════════ */
 

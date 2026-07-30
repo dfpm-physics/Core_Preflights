@@ -128,7 +128,7 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, lastFirst, fmtDate, fmtDateTime, runPage, showFatal } from '../js/util.js';
+    import { esc, lastFirst, fmtDate, fmtDateTime, runPage, showFatal, wireModalDismiss } from '../js/util.js';
     import { allSectionIds, courseExtensions, revokeExtension, reinstateExtension }
       from '../js/faculty-grade.js';
     import * as A from '../js/faculty-admin.js';
@@ -855,9 +855,7 @@
      */
     function wireAddStudentModal() {
       const m = document.getElementById('add-stu-modal');
-      m.addEventListener('click', (e) => {
-        if (e.target.id === 'add-stu-modal' || e.target.dataset.close !== undefined) m.classList.remove('open');
-      });
+      wireModalDismiss(m, () => m.classList.remove('open'));
       document.getElementById('as-save').addEventListener('click', doAddStudent);
       document.getElementById('as-search').addEventListener('input', (e) => {
         // Debounced: this is a query per keystroke otherwise, and the list it fills is small
@@ -1040,7 +1038,7 @@
     // section-move modal
     function wireSecModal() {
       const m = document.getElementById('sec-modal');
-      m.addEventListener('click', (e) => { if (e.target.id === 'sec-modal' || e.target.dataset.close !== undefined) m.classList.remove('open'); });
+      wireModalDismiss(m, () => m.classList.remove('open'));
       document.getElementById('sm-save').addEventListener('click', saveSection);
     }
     function openSecModal(enrollmentId, name, cur) {
@@ -1067,9 +1065,7 @@
      */
     function wirePwModal() {
       const m = document.getElementById('pw-modal');
-      m.addEventListener('click', (e) => {
-        if (e.target.id === 'pw-modal' || e.target.dataset.close !== undefined) m.classList.remove('open');
-      });
+      wireModalDismiss(m, () => m.classList.remove('open'));
       document.getElementById('pwm-confirm').addEventListener('click', doPwReset);
     }
     function openPwModal(studentId, name) {
@@ -1807,9 +1803,7 @@
 
     function wireRevokeModal() {
       const m = document.getElementById('revoke-modal');
-      m.addEventListener('click', (e) => {
-        if (e.target.id === 'revoke-modal' || e.target.dataset.close !== undefined) m.classList.remove('open');
-      });
+      wireModalDismiss(m, () => m.classList.remove('open'));
       document.getElementById('revoke-save').addEventListener('click', async () => {
         const reason = document.getElementById('revoke-reason').value.trim();
         const err = document.getElementById('revoke-error');
@@ -1916,9 +1910,7 @@
     }
     function wireModal() {
       const m = document.getElementById('mk-modal');
-      m.addEventListener('click', (e) => {
-        if (e.target === m || e.target.dataset.close !== undefined) m.classList.remove('open');
-      });
+      wireModalDismiss(m, () => m.classList.remove('open'));
       document.getElementById('mk-ok').addEventListener('click', async () => {
         const btn = document.getElementById('mk-ok');
         const err = document.getElementById('mk-error');

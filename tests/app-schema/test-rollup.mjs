@@ -460,6 +460,83 @@ eq('an interactive activity has no questions and resolves to null',
    reflectionQuestionId({ content: { artifact_url: 'https://claude.ai/x' } }), null);
 eq('a missing activity does not throw', reflectionQuestionId(null), null);
 
+/* ── A lesson that DECLARES roles gets no positional guessing ───────────────── */
+section('pinnedQuestion — a declared role list turns the text/position bridge OFF');
+
+// The lesson builder can switch either pinned question off (director, 2026-07-30). The whole point
+// of a role is that its ABSENCE then means something — and the fallbacks would fire on exactly the
+// lesson that has already answered the question, inventing one out of whatever sits in the old
+// position. Mirrored, case for case, in supabase/admin/aggregate_summarize_test.py: the aggregator
+// quotes the reflections this resolver renders, so the two must not disagree about which they are.
+
+const REFLECTION_ONLY = act([
+  { id: 'q1', type: 'free_response', points: 1, role: 'reading_reflection',
+    text: 'What did you find most confusing or most interesting about the reading?' },
+  { id: 'q2', type: 'free_response', points: 1, text: 'Why does the bulb dim?' },
+]);
+eq('the declared reflection is found wherever it sits',
+   pinnedQuestion(REFLECTION_ONLY, 'reading_reflection'), { id: 'q1', how: 'role' });
+// THE REGRESSION. q1 IS the reflection, and PINNED_FALLBACK_ID.reading_time is 'q1' — so without
+// the guard the rollup would draw a reading-time panel out of reflection prose.
+eq('reading time is ABSENT, not the q1 that happens to be the reflection',
+   pinnedQuestion(REFLECTION_ONLY, 'reading_time'), { id: null, how: null });
+// …and the ordinary question is then correctly the free response, rather than being excluded as a
+// reading-time question that does not exist.
+eq('…so the free-response panel gets the real question',
+   freeResponseQuestion(REFLECTION_ONLY)?.id, 'q2');
+
+const TIME_ONLY = act([
+  { id: 'q1', type: 'free_response', points: 0, role: 'reading_time',
+    text: 'How much time did you spend reading the book?' },
+  { id: 'q2', type: 'free_response', points: 1, text: 'Why does the bulb dim?' },
+]);
+eq('the declared reading-time question is found',
+   pinnedQuestion(TIME_ONLY, 'reading_time'), { id: 'q1', how: 'role' });
+eq('the reflection is ABSENT, not the q2 that happens to sit there',
+   pinnedQuestion(TIME_ONLY, 'reading_reflection'), { id: null, how: null });
+eq('…and q2 is the free response, not the reflection', freeResponseQuestion(TIME_ONLY)?.id, 'q2');
+
+// Neither pinned question at all — a course that wants only its physics question.
+const BARE = act([
+  { id: 'q1', type: 'free_response', points: 1, role: 'free_response', text: 'Why does the bulb dim?' },
+]);
+eq('a lesson with neither pinned question resolves both to absent',
+   [pinnedQuestion(BARE, 'reading_time').id, pinnedQuestion(BARE, 'reading_reflection').id],
+   [null, null]);
+eq('…and its one question is the free response', freeResponseQuestion(BARE)?.id, 'q1');
+
+// The bridge must still work in full for the 74 live Fall activities, which declare nothing.
+eq('a lesson declaring NO roles still uses the bridge',
+   pinnedQuestion(LIVE_SHAPE, 'reading_time'), { id: 'q1', how: 'text' });
+const NEITHER = act([
+  { id: 'q1', type: 'free_response', points: 1, text: 'Why does the bulb dim?' },
+  { id: 'q2', type: 'free_response', points: 1, text: 'What is the current?' },
+]);
+eq('…including the positional last resort',
+   pinnedQuestion(NEITHER, 'reading_time'), { id: 'q1', how: 'position' });
+
+// Legacy content that holds ONLY a reflection: it sits at q1, which is reading_time's positional
+// fallback. The position lookup must not answer "the reading-time question" with a question whose
+// own prompt says it is the reflection — the one-role-per-call shape of this resolver cannot see
+// the conflict the way the editor's does, so it checks the other needle instead.
+const LEGACY_REFLECTION_ONLY = act([
+  { id: 'q1', points: 1, text: 'What did you find most confusing or most interesting?' },
+  { id: 'q2', points: 1, text: 'Why does the bulb dim?' },
+]);
+eq('the reflection is found by its prompt',
+   pinnedQuestion(LEGACY_REFLECTION_ONLY, 'reading_reflection'), { id: 'q1', how: 'text' });
+eq('…and reading time does NOT take it by position',
+   pinnedQuestion(LEGACY_REFLECTION_ONLY, 'reading_time'), { id: null, how: null });
+
+// One declared role is enough to switch the whole list to role-only — that is what "declares its
+// roles" means, and a half-declared list is the state a director passes through mid-edit.
+const MIXED = act([
+  { id: 'q1', type: 'free_response', points: 1, text: 'Why does the bulb dim?' },
+  { id: 'q2', type: 'free_response', points: 1, role: 'reading_reflection', text: 'Reflect.' },
+]);
+eq('one declared role disables the bridge for the other',
+   pinnedQuestion(MIXED, 'reading_time'), { id: null, how: null });
+
 /* ── The third question: the one with no needle ────────────────────────────── */
 section('freeResponseQuestion — defined by elimination, not by text');
 

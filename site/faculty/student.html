@@ -83,7 +83,7 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { runPage, esc, lastFirst, fmtDate, fmtDateTime } from '../js/util.js';
+    import { runPage, esc, lastFirst, fmtDate, fmtDateTime, wireModalDismiss } from '../js/util.js';
     import * as S from '../js/faculty-student.js';
     import * as EI from '../js/faculty-ei.js';
     import * as G from '../js/faculty-grade.js';
@@ -341,12 +341,7 @@
     /* ── EI ────────────────────────────────────────────────────────────── */
     function wireEiModal() {
       const m = document.getElementById('ei-modal');
-      m.addEventListener('click', e => {
-        if (e.target === m || e.target.dataset.close !== undefined) m.classList.remove('open');
-      });
-      document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && m.classList.contains('open')) m.classList.remove('open');
-      });
+      wireModalDismiss(m, () => m.classList.remove('open'));
       document.getElementById('ei-save').addEventListener('click', saveEi);
     }
 
@@ -440,12 +435,8 @@
 
     function wireGradeModal() {
       const m = document.getElementById('sg-modal');
-      m.addEventListener('click', (e) => {
-        if (e.target === m || e.target.dataset.close !== undefined) attemptClose();
-      });
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && m.classList.contains('open')) attemptClose();
-      });
+      // attemptClose, not a bare close: this dialog holds unsaved grades and asks first.
+      wireModalDismiss(m, attemptClose);
       // Delegated on the modal body, which is replaced on every open and every re-render.
       document.getElementById('sg-body').addEventListener('click', onGradeClick);
       document.getElementById('sg-body').addEventListener('input', (e) => {
@@ -662,9 +653,7 @@
     /* ── Extensions, from inside the grading modal ─────────────────────────── */
     function wireExtModal() {
       const m = document.getElementById('sx-modal');
-      m.addEventListener('click', (e) => {
-        if (e.target === m || e.target.dataset.close !== undefined) m.classList.remove('open');
-      });
+      wireModalDismiss(m, () => m.classList.remove('open'));
       document.getElementById('sx-save').addEventListener('click', saveExt);
     }
 

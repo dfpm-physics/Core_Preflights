@@ -701,10 +701,36 @@ _ROLE_TEXT_MATCH = {
     "reading_reflection": "confusing or most interesting",
 }
 _ROLE_FALLBACK_ID = {"reading_time": "q1", "reading_reflection": "q2"}
+def _declares_roles(questions):
+    """Does this question list declare its roles?
+
+    ANY question carrying ANY role, which is wider than "one of the pinned two" and has to be. A
+    lesson with BOTH pinned questions switched off carries neither pinned role by definition, so a
+    pinned-only test would read it as legacy content and start guessing — the very case the
+    toggles exist to express. The lesson editor stamps `role: "free_response"` on ordinary
+    questions for exactly this reason, and that stamp is the signal read here.
+
+    Mirrors `declaresRoles` in site/js/schema.js.
+    """
+    return any(isinstance(q.get("role"), str) and q.get("role") for q in questions)
 
 
 def _pinned_question_id(written_content, role):
     """The question id for a pinned role — by role, else by prompt text, else by position.
+
+    ONCE A LESSON DECLARES ANY PINNED ROLE, ROLES ARE THE WHOLE ANSWER. The two fallbacks are a
+    bridge for content authored before roles existed; applying them to content that HAS roles is
+    how an absent pinned question gets invented. Concretely (director, 2026-07-30): the lesson
+    builder can now switch the reading-time question OFF, which leaves the reflection sitting at
+    `q1` — and `_ROLE_FALLBACK_ID["reading_time"] == "q1"` would then return the REFLECTION as the
+    reading-time question, so the aggregator would read reflection prose as a reading duration.
+
+    The bridge still applies in full to a lesson that declares nothing, which on 2026-07-21 was
+    74 of 74 live written activities.
+
+    This mirrors `pinnedQuestion()` in site/js/schema.js, rule for rule — the browser renders the
+    reflections this run quotes, and a disagreement puts different students in the prose than in
+    the panel.
 
     Returns (id, how) so callers can report WHICH signal identified it; a run that silently
     depends on a positional guess is one an operator should be told about.
@@ -717,16 +743,29 @@ def _pinned_question_id(written_content, role):
         if q.get("role") == role and q.get("id"):
             return q["id"], "role"
 
+    # Declared, and this role is not among them -> deliberately absent. Do not guess.
+    if _declares_roles(questions):
+        return None, None
+
     needle = _ROLE_TEXT_MATCH.get(role)
     if needle:
         for q in questions:
             if needle in str(q.get("text") or "").lower() and q.get("id"):
                 return q["id"], "text"
 
+    # Position, last and weakest -- and it must not claim a question whose own PROMPT says it is
+    # the other pinned role. A lesson holding only a reading reflection has it at `q1`, and `q1`
+    # is also reading_time's positional fallback, so an unguarded lookup answers "the reading-time
+    # question" with the reflection. Mirrors the same guard in schema.js pinnedQuestion().
+    other_needles = [n for r, n in _ROLE_TEXT_MATCH.items() if r != role]
     want = _ROLE_FALLBACK_ID.get(role)
     for q in questions:
-        if q.get("id") == want:
-            return q["id"], "position"
+        if q.get("id") != want:
+            continue
+        text = str(q.get("text") or "").lower()
+        if any(n in text for n in other_needles):
+            continue
+        return q["id"], "position"
     return None, None
 
 

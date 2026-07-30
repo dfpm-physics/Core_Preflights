@@ -98,7 +98,7 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, lastFirst } from '../js/util.js';
+    import { esc, lastFirst, wireModalDismiss } from '../js/util.js';
     import * as I from '../js/faculty-rollup.js';
     // Extensions are granted from the "Did not submit" list. Reusing the Grade tab's writer rather
     // than composing a second upsert here: one (enrollment, offering) UNIQUE key, one code path, so
@@ -153,7 +153,7 @@
     function wireModals() {
       ['flag-modal', 'student-modal', 'fullreport-modal', 'ext-modal'].forEach(id => {
         const m = document.getElementById(id);
-        m.addEventListener('click', (e) => { if (e.target.id === id || e.target.dataset.close !== undefined) m.classList.remove('open'); });
+        wireModalDismiss(m, () => m.classList.remove('open'));
       });
       document.getElementById('rm-export').addEventListener('click', exportCorpus);
       // Wired once here, not in wireNotSubmitted(): the panel re-renders on every scope change and

@@ -157,4 +157,96 @@ check('reset-staff-password refuses a supplied password rather than ignoring it'
 check('…and flags the account for a forced rotation',
       /must_change_password: true/.test(resetSrc));
 
+/* ── Question roles (2026-07-30) ─────────────────────────────────────────────
+ *
+ * WHY THIS IS THE SECOND-MOST IMPORTANT BLOCK IN THIS FILE
+ *   The director stood up Physics 310, authored a free-response assignment, and got ONE question
+ *   carrying the reading REFLECTION's text under the reading-TIME role — reported as "the reading
+ *   reflection is showing up in Q1". The cause is the third case below, and it was unreachable to
+ *   any test because the logic lived inside lessons.html. It is a module now so this can exist.
+ *
+ *   The roles are also what the ROLLUP reads. Getting them wrong is not a cosmetic editor problem:
+ *   the reading-time panel, the reflection quotes and the free-response panel are all resolved
+ *   from them, and a mislabelled question puts the wrong prose under the wrong heading with no
+ *   error anywhere.
+ */
+section('faculty-lessons.js — resolving the two pinned questions');
+
+const ids = (found) => Object.fromEntries(
+  Object.entries(found).map(([role, q]) => [role, q.id]));
+
+// Legacy Fall 2026 content: no roles anywhere, so the text bridge does the work. 0 of 74 live
+// written activities carried a role on 2026-07-21, so this path is not hypothetical.
+const LEGACY = [
+  { id: 'q1', points: 0, text: 'How much time did you spend reading the book for this lesson?' },
+  { id: 'q2', points: 1, text: 'What did you find most confusing or most interesting?' },
+  { id: 'q3', points: 1, text: 'Can an object have a velocity…' },
+];
+eq('legacy content resolves both by prompt text', ids(L.resolvePinnedQuestions(LEGACY)),
+   { reading_time: 'q1', reading_reflection: 'q2' });
+eq('…and reports both as present', L.pinnedPresence(LEGACY),
+   { reading_time: true, reading_reflection: true });
+
+// Lab preflights (CORE.md §2) reword Q1/Q2, so neither needle matches and position decides.
+const LAB = [
+  { id: 'q1', points: 0, text: 'How long did the lab instructions take you?' },
+  { id: 'q2', points: 1, text: 'What part of the procedure is unclear?' },
+  { id: 'q3', points: 1, text: 'Predict the meter reading.' },
+];
+eq('lab wording falls back to position', ids(L.resolvePinnedQuestions(LAB)),
+   { reading_time: 'q1', reading_reflection: 'q2' });
+
+/* THE REPORTED BUG. Authoring a NEW lesson pushed the reflection first, `nextQid()` gave it `q1`,
+ * and the reading-time lookup then matched it through the positional fallback (`q1`) and
+ * overwrote its role — one question, reflection text, reading-time role. `claimed` is what stops
+ * one question answering for both roles. */
+const REFLECTION_AT_Q1 = [
+  { id: 'q1', points: 1, text: 'What did you find most confusing or most interesting?' },
+];
+eq('a lone reflection sitting at q1 is NOT also the reading-time question',
+   ids(L.resolvePinnedQuestions(REFLECTION_AT_Q1)), { reading_reflection: 'q1' });
+const adopted = L.adoptPinnedRoles(structuredClone(REFLECTION_AT_Q1));
+eq('…so adoption stamps it once, correctly', adopted.map(q => q.role), ['reading_reflection']);
+
+// Once roles are declared, they are the whole answer — no needle, no position.
+const DECLARED_REFLECTION_ONLY = [
+  { id: 'q1', role: 'reading_reflection', points: 1, text: 'What did you find most confusing?' },
+  { id: 'q2', role: 'free_response', points: 1, text: 'Why does the bulb dim?' },
+];
+eq('a declared list resolves by role alone', ids(L.resolvePinnedQuestions(DECLARED_REFLECTION_ONLY)),
+   { reading_reflection: 'q1' });
+eq('…and reading time reads as ABSENT, not as the q1 that happens to sit there',
+   L.pinnedPresence(DECLARED_REFLECTION_ONLY), { reading_time: false, reading_reflection: true });
+
+// BOTH toggles off. This is the case `stampRoles` exists for: with only the pinned two stamped,
+// this list would carry no role at all, look exactly like legacy content, and get guessed at —
+// on the one lesson that has most clearly said no to both.
+const BOTH_OFF = [
+  { id: 'q1', role: 'free_response', points: 1, text: 'Why does the bulb dim?' },
+  { id: 'q2', role: 'free_response', points: 1, text: 'What is the current?' },
+];
+check('a list of ordinary questions still counts as declared', L.declaresRoles(BOTH_OFF));
+eq('…so neither pinned role is invented', L.pinnedPresence(BOTH_OFF),
+   { reading_time: false, reading_reflection: false });
+
+const unstamped = [{ id: 'q1', points: 1, text: 'Why does the bulb dim?' }];
+check('an unstamped list does NOT count as declared', !L.declaresRoles(unstamped));
+eq('stampRoles makes it declared', L.stampRoles(structuredClone(unstamped)).map(q => q.role),
+   ['free_response']);
+check('…and stamping never overwrites a pinned role',
+      L.stampRoles([{ id: 'q1', role: 'reading_time' }])[0].role === 'reading_time');
+
+section('faculty-lessons.js — role ordering');
+
+// The editor sorts by this, so a reflection authored before the reading-time question still
+// renders second. Ordinary questions keep their relative order (a stable sort on equal ranks).
+const mixed = [
+  { id: 'q9', role: 'free_response' }, { id: 'q2', role: 'reading_reflection' },
+  { id: 'q7', role: 'free_response' }, { id: 'q1', role: 'reading_time' },
+];
+eq('time, reflection, then the rest in the order they were in',
+   [...mixed].sort((a, b) => L.roleRank(a) - L.roleRank(b)).map(q => q.id),
+   ['q1', 'q2', 'q9', 'q7']);
+eq('an un-roled question sorts with the ordinary ones', L.roleRank({ id: 'x' }), 2);
+
 process.exit(summary() ? 0 : 1);

@@ -1923,6 +1923,15 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 .lb-obj-row .lb-lab { flex: 1; min-width: 140px; }
 
 /* one authored preflight question */
+/* The two optional pinned questions (reading time · reading reflection). A row of their own above
+   the question list, because they are a statement about the SHAPE of the preflight rather than
+   another question to author — and because either being off changes which panels the rollup can
+   draw, which the hint under them spells out. */
+.lb-pinned { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin: 2px 0 6px;
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface-sunken); }
+.lb-pinned .check-inline { font-size: 0.86em; font-weight: 600; margin: 0; }
+
 .lb-q { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px;
   margin-bottom: 10px; background: var(--card); }
 .lb-q-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }

@@ -131,6 +131,63 @@ want("no questions at all -> nothing, not a crash",
      _pinned_question_id({"questions": []}, "reading_time"), (None, None))
 want("no content at all -> nothing", _pinned_question_id(None, "reading_time"), (None, None))
 
+print("\n=== a lesson that DECLARES roles gets no positional guessing ===")
+# The lesson builder can switch either pinned question off (director, 2026-07-30), and the whole
+# point of a role is that its ABSENCE is then meaningful. Without the declared-roles guard the
+# fallbacks fire on exactly the lesson that has already answered the question, and the answer they
+# invent is whatever sits in the old position. These are the cases that go wrong first.
+#
+# Mirrored in tests/app-schema/test-rollup.mjs — the browser renders the reflections this run
+# quotes, so the two resolvers must agree case for case.
+REFLECTION_ONLY = {"questions": [
+    {"id": "q1", "type": "free_response", "points": 1, "role": "reading_reflection",
+     "text": "What did you find most confusing or most interesting about the reading?"},
+    {"id": "q2", "type": "free_response", "points": 1, "text": "Why does the bulb dim?"},
+]}
+want("the declared reflection is found wherever it sits",
+     _pinned_question_id(REFLECTION_ONLY, "reading_reflection"), ("q1", "role"))
+# The regression this guard exists for: q1 is the REFLECTION, and _ROLE_FALLBACK_ID says
+# reading_time is q1. Guessing here would read reflection prose as a reading duration.
+want("reading time is ABSENT, not the q1 that happens to be the reflection",
+     _pinned_question_id(REFLECTION_ONLY, "reading_time"), (None, None))
+
+TIME_ONLY = {"questions": [
+    {"id": "q1", "type": "free_response", "points": 0, "role": "reading_time",
+     "text": "How much time did you spend reading the book?"},
+    {"id": "q2", "type": "free_response", "points": 1, "text": "Why does the bulb dim?"},
+]}
+want("the declared reading-time question is found", _pinned_question_id(TIME_ONLY, "reading_time"),
+     ("q1", "role"))
+# Same in the other direction: q2 is an ordinary question and must not become the reflection.
+want("the reflection is ABSENT, not the q2 that happens to sit there",
+     _pinned_question_id(TIME_ONLY, "reading_reflection"), (None, None))
+
+LEGACY_REFLECTION_ONLY = {"questions": [
+    {"id": "q1", "points": 1, "text": "What did you find most confusing or most interesting?"},
+    {"id": "q2", "points": 1, "text": "Why does the bulb dim?"},
+]}
+want("legacy, reflection only: found by its prompt",
+     _pinned_question_id(LEGACY_REFLECTION_ONLY, "reading_reflection"), ("q1", "text"))
+want("...and reading time does NOT take it by position",
+     _pinned_question_id(LEGACY_REFLECTION_ONLY, "reading_time"), (None, None))
+
+NEITHER = {"questions": [
+    {"id": "q1", "type": "free_response", "points": 1, "text": "Why does the bulb dim?"},
+    {"id": "q2", "type": "free_response", "points": 1, "text": "What is the current?"},
+]}
+want("a lesson declaring NO roles still uses the bridge (q1 by position)",
+     _pinned_question_id(NEITHER, "reading_time"), ("q1", "position"))
+
+# A declared role elsewhere is enough to switch the whole list to role-only, even when the role
+# being asked about is not the one declared — that is what "declares its roles" means.
+MIXED = {"questions": [
+    {"id": "q1", "type": "free_response", "points": 1, "text": "Why does the bulb dim?"},
+    {"id": "q2", "type": "free_response", "points": 1, "role": "reading_reflection",
+     "text": "Reflect on the reading."},
+]}
+want("one declared role disables the bridge for the other",
+     _pinned_question_id(MIXED, "reading_time"), (None, None))
+
 print("\n=== identifying the GRADED concept question(s) by exclusion ===")
 # Q3 is found by excluding the two pinned questions, not by a role of its own. `points > 0` alone
 # would also match the reading reflection, which is free_response points:1 — so the exclusion is

@@ -8,6 +8,120 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-30 (third) — Matthew Recker via Claude
+
+Four defects found by the director while standing up **Physics 310** — the first course authored
+in this system from nothing, which is why they surfaced together. Frontend only; no DDL, no live
+data written.
+
+### Modals threw away work when a text selection ended outside them
+
+Select text in a modal, drag past its edge, release: `mouseup` lands on the backdrop, the browser
+fires `click` on the nearest common ancestor — the backdrop — and the dialog closed. Every one of
+the **thirteen** dialogs in PREP did this, and highlighting a sentence of feedback to replace it is
+the most ordinary thing to do in the grading modal, so it fired constantly and always mid-edit.
+
+`wireModalDismiss()` (util.js) now requires **both ends of the gesture** to be on the backdrop: a
+dismissal is a click that starts *and* finishes on the overlay, and anything that starts inside the
+dialog is part of working in it however far the mouse then travels. All thirteen call sites use it;
+`[data-close]` and Escape still close unconditionally, and the per-student grading modal routes it
+through its unsaved-changes confirm.
+
+### The interaction URL was required even when nothing could open the interaction
+
+*"It required me to enter an interactive url even if I chose free response only… I may want it
+later in the term."* Correct, and the workaround — setting the interaction to **Not this term** —
+is a different decision with a different meaning.
+
+The URL is now required only when the allowed mode is **Choice** or **AI Interaction**, i.e. when a
+student can actually reach it. Under **Free-Response** the interaction is attached as practice and
+nothing offers it, so it may sit URL-less until the artifact exists; the field says which case it
+is in, and the Assignments card already renders a URL-less interaction as a disabled Launch with
+the reason.
+
+### The reading reflection was being authored as the reading-time question
+
+*"The reading reflection does not appear to be showing up properly. It's showing up in Q1 even
+though Q1 is supposed to be a question about time spent reading."* Reproduced exactly, and the
+cause is one line of ordering.
+
+On a **new** lesson `ensureDefaultQuestions()` created the reflection first, `nextQid()` gave it
+`q1`, and the reading-time lookup then matched that same question through its positional fallback
+(`PINNED_FALLBACK.reading_time === 'q1'`) and **overwrote its role**. One question, reflection
+text, reading-time role. Existing lessons were unaffected — they already had three questions — so
+this only ever bit somebody authoring from scratch, which until Physics 310 nobody had done.
+
+**The repair is not the ordering, it is the resolution rule.** Both roles now resolve against the
+list *as it is*, by **signal strength across both roles rather than role by role**: every declared
+role first, then every prompt-text match, then positions for whatever is still unresolved, with one
+question able to answer for only one role. Resolving one role completely before starting the other
+is what let a *weak* signal for the first claim a question a *strong* signal for the second was
+about to match.
+
+### Flagging the two special questions, and toggling them off
+
+*"We need a way to flag a reading time question (which has special rules) and a reading reflection
+question and then everything else is treated as a free response. I would like the ability to toggle
+these two on or off… if I toggle one or both off then I think our rollup will get confused because
+we did things by question number."*
+
+Both toggles are in the editor above the question list, both default on. Turning one off **never
+destroys authored text**: the standard prompt is removed outright, a rewritten one keeps its words
+and becomes an ordinary question, and the notice says which happened.
+
+**The director's prediction about the rollup was right, and it needed three changes to stop it:**
+
+- **Once a question list declares any role, roles are the whole answer.** The prompt-text and
+  positional lookups are a bridge for content authored before roles existed (0 of 74 live written
+  activities carried one on 2026-07-21). Applied to content that *has* roles they invent the
+  question the director just removed — with reading-time off, the reflection sits at `q1` and `q1`
+  is reading-time's positional fallback, so the rollup would have drawn a reading-time panel out of
+  reflection prose. Implemented in **both** engines: `pinnedQuestion()` (schema.js) and
+  `_pinned_question_id()` (lesson_aggregate.py), which must agree or the aggregator's prose cites
+  students the browser's panel never shows.
+- **Ordinary questions are stamped `role: 'free_response'`.** Without this, a lesson with *both*
+  pinned questions off carries no role at all, reads as legacy content, and gets guessed at — on
+  the one lesson that has most clearly said no to both.
+- **The positional lookup refuses a question whose own prompt says it is the other role.** The
+  two resolvers answer one role per call and cannot see the conflict the editor's can, so they
+  check the other needle instead.
+
+The role rules moved out of `lessons.html` into `faculty-lessons.js` (`resolvePinnedQuestions`,
+`pinnedPresence`, `adoptPinnedRoles`, `stampRoles`, `roleRank`) — the bug lived in logic no test
+could import, and the extraction immediately paid: **the first run of the new tests failed**, on
+the legacy path, which the original fix had not covered.
+
+### Hold-to-delete never worked, and now has a browser test
+
+*"The hold down for 5 seconds to delete an assignment doesn't work."* Reproduced in Edge: holding
+perfectly still completes correctly, and moving the cursor **one pixel off the button** fires
+`mouseleave` and silently cancels. Over five seconds on a ~130px target, drifting off it is what a
+hand does — so the control was unusable in practice while being provably correct in principle.
+
+Rewritten on `setPointerCapture` in **`site/js/hold-button.js`**: once the gesture starts the
+button owns the pointer until release, so where the cursor wanders is not a decision the control
+has to make. Cancellation is now exactly release, OS pointer-cancel, and Escape. The label counts
+down, because a bar that fills is ambiguous when the hold can silently restart.
+
+**`tests/browser-harness/hold.mjs`** drives it with a real mouse — 7 checks, the load-bearing one
+being *hold while drifting well off the button and still complete*, which is the only one that was
+ever false. It inlines the real module rather than a copy, so it exercises the shipped code. This
+is the class of bug nothing else in the repo can see: it parsed, logged no error, rendered fine,
+and every unit suite stayed green.
+
+### Verification
+
+`tests/app-schema` all green (test-rollup **221**, test-lesson-due **48**, and the rest unchanged
+at 0 failed); `hold.mjs` 7/7 in Edge; `aggregate_summarize_test.py` green apart from **one
+pre-existing failure** (`a cross-TERM match may be a stale offering` — a message-wording assertion,
+verified identical without these changes). Every edited page's inline module passes `node --check`.
+
+**Not verified:** the lesson editor's new toggles have not been walked in a browser — the pure
+logic under them is covered by the 14 new checks in `test-lesson-due.mjs`, but the wiring, the
+notice and the URL hint have only been read.
+
+---
+
 ## 2026-07-30 (second) — Matthew Recker via Claude
 
 Eight director requests, worked as one batch. Frontend only except the last, which changes what
