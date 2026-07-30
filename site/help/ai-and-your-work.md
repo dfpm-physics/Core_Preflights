@@ -8,6 +8,12 @@ An AI assistant helps grade written preflights in this course. Here is exactly w
 It reads your free-response answers alongside the relevant textbook section and **suggests** a score
 and a short piece of feedback for each question.
 
+If you submitted nothing by your deadline, it also records a **zero** for that assignment rather
+than leaving it blank — with the note *No submission received.* That is a suggestion like any other
+here: your instructor sees it before you do, and it is not final until they publish it. **If you
+have an extension, you are not scored zero while it is running**; submit within it and your work is
+graded normally.
+
 ## What the AI does not do
 
 **It does not decide your grade on written work.** Every AI suggestion on your written answers

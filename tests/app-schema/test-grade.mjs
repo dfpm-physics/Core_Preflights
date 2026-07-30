@@ -106,6 +106,37 @@ const gdNoSub = G.buildGradeData(OFFERING, STUDENTS, RESPONSE_MAP, GRADE_MAP);
 check('without submissionMap, no student is excluded (old signature safe)',
       !!gdNoSub[1002]);
 
+/* ── `original` — the load-time baseline (2026-07-30) ────────────────────────
+ * Two things in grade.html read it and neither works off `status`: the status-lamp filter (so
+ * re-scoring an answer does not make the card vanish under the reader) and the before → after
+ * control (so an unsaved change is legible AS a change). Both are silent when it is wrong — the
+ * filter simply behaves the way it used to, which is the bug this replaced. */
+section('buildGradeData: `original` is the status as loaded, and is not the live one');
+
+eq('every question carries one', Object.values(gd[1001]).map(x => typeof x.original),
+   ['string', 'string']);
+eq('it starts equal to status — an untouched answer shows one chip, not a pair',
+   Object.values(gd[1001]).map(x => x.original === x.status), [true, true]);
+// The two shapes buildGradeData derives a status from, since `original` has to survive both.
+eq('an answered, ungraded question baselines at full', gd[1001].q3.original, 'full');
+eq('a blank, ungraded question baselines at zero', gd[1003].q3.original, 'zero');
+
+// A saved AI suggestion: q3 scored with feedback is `warn`, and that — not `full` — is what the
+// lamps must filter it under.
+const gdSaved = G.buildGradeData(OFFERING, STUDENTS, RESPONSE_MAP, {
+  1001: { gradeId: 'g-1001', finalized: false, source: 'ai_suggested',
+          qs: { q2: { score: 1, status: 'full', feedback: '' },
+                q3: { score: 1, status: 'warn', feedback: 'Close, but the direction is reversed.' } } },
+}, SUBMISSION_MAP);
+eq('a saved status is the baseline, not a recomputed one', gdSaved[1001].q3.original, 'warn');
+
+// The property the filter depends on: mutating `status` the way toggleCredit does must leave
+// `original` alone. If these ever move together the filter silently reverts to its old behaviour.
+gdSaved[1001].q3.status = 'zero';
+gdSaved[1001].q3.modified = true;
+eq('re-scoring moves status…', gdSaved[1001].q3.status, 'zero');
+eq('…and leaves original where it was', gdSaved[1001].q3.original, 'warn');
+
 /* ── writableCount — the zeroing this prevents ───────────────────────────────
  * writableCount() is the exported wrapper over the private gradeRows(); it returns exactly how
  * many rows a Save/Finalize would write, which is the number the confirm prompt shows. Asserting

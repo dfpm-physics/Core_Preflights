@@ -183,6 +183,22 @@ table for no gain, and quote selection reads the response directly.
 - `notable`: exemplary — the strongest understanding, or a genuine extension beyond what the
   question asked. Rare by construction; most cohorts have a handful.
 
+### `no_submission` — written-path only, and only when true
+
+`true` on a row written for a student who handed **nothing** in by their own deadline and held no
+active extension (SKILL.md § "Then: the students who submitted nothing get a zero"). **Omit it
+entirely otherwise** — an absent key means "they submitted", and `false` would be a third state
+nobody needs.
+
+It exists because an all-zero diagnostic is otherwise ambiguous. A student who submits a page of
+gibberish scores `effort 0`, `overall_understanding 0`, `q2_effort 0`, `q3_understanding 0` — byte
+for byte what a non-submitter's row carries — and the two call for opposite conversations. The
+distinction is recoverable from the absence of a `submissions` row, but only by someone who knows
+to go and look; on the row itself there was nothing to see.
+
+Nothing reads it today. It is provenance for a human opening the record, and for whatever asks
+"why is this zero" next term.
+
 ### `honor`
 
 **Omit it.** The artifact can observe disclosed assistance because it holds the conversation. A

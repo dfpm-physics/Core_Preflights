@@ -16,6 +16,19 @@ relevant textbook sections to ground itself, and writes back **one thing**: a **
 feedback per question**, always `is_finalized = false`, plus the hidden per-student assessment
 described below.
 
+**It also zeroes the students who submitted nothing** (added 2026-07-30). Anyone past their own
+deadline with no work in and **no active extension** gets a zero — no points, understanding 0,
+feedback *No submission received.* — written exactly like every other suggestion, unfinalized and
+AI-sourced. Before that they had no grade row at all, which was a weaker claim than the gradebook
+was already making: it counted a past-due non-submission as zero in the running total while showing
+a dash in the cell, so the percentage could not be reconciled against the row it came from.
+
+Two consequences worth knowing. **The extension case needs no special handling** — an unfinalized
+AI-sourced row is what a later run overwrites, so granting an extension and letting the cadet
+submit replaces the zero by itself; once you have *published* the column, reopen the grade first.
+And **it changes no class-level number**: aggregation reads students who have a submission, and a
+non-submitter has none, so the effort distribution and readiness prose are untouched.
+
 It produces no class-level output at all. It used to also write a per-instructor misconception
 report; that was retired in July 2026, because an instructor is not a unit of analysis — a single
 report pooled all of an instructor's sections, so it could never be shown for one section. Anything

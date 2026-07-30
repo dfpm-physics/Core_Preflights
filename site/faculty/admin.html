@@ -103,23 +103,52 @@
     </div>
   </div>
 
+  <!-- Revoke an extension. Its own modal rather than the generic one because a reason is
+       REQUIRED (migration 007) and the field has to be cleared and re-validated per open. -->
+  <div class="modal-backdrop" id="revoke-modal">
+    <div class="modal" style="max-width:460px">
+      <div class="modal-head"><h2>Revoke extension</h2><button class="modal-close" data-close>×</button></div>
+      <p class="muted" style="font-size:0.88em;margin-bottom:14px" id="revoke-who"></p>
+      <div class="field"><label for="revoke-reason">Reason <span class="req">required</span></label>
+        <input type="text" id="revoke-reason" maxlength="200"
+               placeholder="e.g. Discussed with the instructor; not a documented absence.">
+        <div class="field-hint">The extension stays on this report, marked revoked, with your name on it.</div>
+      </div>
+      <div class="error-msg" id="revoke-error" style="min-height:1em"></div>
+      <div class="row" style="gap:10px;margin-top:8px">
+        <button class="btn btn-primary" id="revoke-save">Revoke</button>
+        <button class="btn btn-secondary" data-close>Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <input type="file" id="csv-file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" style="display:none">
 
   <script type="module">
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, lastFirst, runPage, showFatal } from '../js/util.js';
-    import { allSectionIds } from '../js/faculty-grade.js';
+    import { esc, lastFirst, fmtDate, fmtDateTime, runPage, showFatal } from '../js/util.js';
+    import { allSectionIds, courseExtensions, revokeExtension, reinstateExtension }
+      from '../js/faculty-grade.js';
     import * as A from '../js/faculty-admin.js';
     import * as R from '../js/faculty-roster.js';
     import * as RI from '../js/roster-import.js';
 
-    /* ── One page, three tabs: Students · Staff · Export ─────────────────────────
+    /* ── One page, four tabs: Students · Staff · Extensions · Export ─────────────
      * The Students tab was two separate pages for a few hours on 2026-07-23 (`roster.html` and
      * `enrollment.html`, roadmap P1.9) before the director called it: they are one job, and
      * splitting them put two more entries in the nav bar to do it. Both pages are gone; everything
      * they held lives here, which is where a director looking at staffing and export already was.
+     *
+     * EXTENSIONS ARRIVED THE SAME WAY on 2026-07-30, off the nav bar and out of its own page.
+     * `extensions.html` is now a redirect into this tab, so it is still one URL a director can
+     * bookmark — what it stopped being is a fifth thing on a bar whose other entries are the
+     * places teaching happens. See `nav.js` FACULTY_LINKS.
+     *
+     * `?tab=` deep-links a tab, which is what makes that redirect possible and costs one line.
+     * It is read once, at load; switching tabs afterwards does not rewrite the URL, because a
+     * back button that walks a director through four panels is not what anyone wanted.
      *
      * The whole page stays director-gated, as it has been. Note that `reset-student-password`
      * itself admits ANY staff member of the offering — the help doc has said so since 2026-07-21 —
@@ -128,9 +157,15 @@
      * widened; exposing it means giving instructors a read-only view of this tab, which is a
      * deliberate decision and not one to make in passing.
      */
-    let tab = 'students';
+    const TABS = ['students', 'staff', 'extensions', 'export'];
+    const wantedTab = new URLSearchParams(location.search).get('tab');
+    let tab = TABS.includes(wantedTab) ? wantedTab : 'students';
     let cache = null;                       // last loadStaff() result, for the modals
     let onConfirm = null;                   // active modal's confirm handler
+
+    // Extensions tab state.
+    let extRows = [];             // every extension in the offering, revoked ones included
+    let revokeId = null;          // the row the revoke modal is about
 
     // Students tab state.
     let staged = null;            // the import, between preview and commit
@@ -161,6 +196,7 @@
       wireSecModal();
       wirePwModal();
       wireAddStudentModal();
+      wireRevokeModal();
       // Cross-tab links inside a panel ("…is the Students tab") switch rather than navigate.
       // Delegated on #main, wired ONCE here rather than inside render(): render() replaces the
       // panel beneath this element on every tab change but not the element itself, so re-attaching
@@ -198,6 +234,7 @@
         <div class="subtabs">
           <button class="subtab ${tab === 'students' ? 'active' : ''}" data-tab="students">Students</button>
           <button class="subtab ${tab === 'staff' ? 'active' : ''}" data-tab="staff">Staff</button>
+          <button class="subtab ${tab === 'extensions' ? 'active' : ''}" data-tab="extensions">Extensions</button>
           <button class="subtab ${tab === 'export' ? 'active' : ''}" data-tab="export">Export</button>
         </div>
         <div id="panel"><div class="center-load"><span class="spinner"></span><span>Loading…</span></div></div>`;
@@ -215,6 +252,7 @@
 
       if (tab === 'students') await renderStudents();
       else if (tab === 'staff') await renderStaff();
+      else if (tab === 'extensions') await renderExtensions();
       else await renderExport();
     }
 
@@ -1437,7 +1475,7 @@
        * people actually arrive with. A.setStaffSections() is kept for a caller that needs to
        * replace somebody's whole set at once. */
 
-      /* ── Add staff: an existing person, or a new account ─────────────────────
+      /* ── Add staff: existing people, or a new account ────────────────────────
        * The modal only ever created accounts, and that was the beta's complaint: the ordinary case
        * at the start of a term is a colleague who ALREADY has a PREP login from the other course,
        * and creating a second one for them is not a cosmetic duplicate. Grades, extensions and
@@ -1445,7 +1483,13 @@
        * no way to rejoin it.
        *
        * Existing people come first in the form for that reason — it is both the common case and
-       * the one with a consequence for getting it wrong. */
+       * the one with a consequence for getting it wrong.
+       *
+       * SEVERAL AT ONCE since 2026-07-30 (director's request). Staffing an offering is a batch job
+       * done once a term, and one-at-a-time meant re-choosing the role on every pass — which is
+       * how one of five colleagues quietly becomes a director. The list is shown OPEN rather than
+       * hidden behind a search, because a couple of dozen instructors is a list you read, not a
+       * name you recall; typing filters it. See A.addExistingStaffMany for why it is one write. */
       document.getElementById('add-btn').addEventListener('click', () => {
         // Everybody with a PREP login who is not already staffing THIS offering. `instructors` is
         // readable to any authenticated user (instructors_read), so this needs no extra query.
@@ -1465,13 +1509,14 @@
              ${isAdmin() ? '' : '<div class="field-hint">Only a system admin can grant the system-admin role.</div>'}</div>`;
 
         openModal('Add staff',
-          `<div class="field"><label for="ax-search">Somebody who already has a PREP login</label>
+          `<div class="field"><label for="ax-search">People who already have a PREP login</label>
              <input id="ax-search" type="search" autocomplete="off"
-                    placeholder="${free.length ? 'Search by name…' : 'Everybody with a login already staffs this offering'}"
+                    placeholder="${free.length ? 'Filter by name…' : 'Everybody with a login already staffs this offering'}"
                     ${free.length ? '' : 'disabled'}>
-             <div class="field-hint">Adds them to this offering. Never creates a second account —
-               their grades and history stay on the identity they already have.</div>
-             <div id="ax-results" class="pick-list" hidden></div></div>
+             <div class="field-hint">Tick as many as you like. This adds them to this offering and
+               never creates a second account — their grades and history stay on the identity they
+               already have.</div>
+             <div id="ax-results" class="pick-list pick-multi"></div></div>
            <div id="ax-picked" class="alert alert-info" style="display:none"></div>
            ${roleField}
            <details style="margin-top:14px" id="ax-new">
@@ -1492,17 +1537,22 @@
           'Add to offering',
           async () => {
             const role = document.getElementById('ax-role').value;
-            // The picked person wins: if somebody filled in both halves, the one they clicked is
+            // The picked people win: if somebody filled in both halves, the ones they ticked are
             // the more deliberate signal, and creating an account they did not ask for is the
             // outcome with a consequence.
-            if (staffPicked) {
+            if (staffPicked.length) {
               if (role === 'system_admin') {
                 return 'Granting system admin to an existing account is a System page action — '
                      + 'pick Instructor or Director here.';
               }
-              const { error } = await A.addExistingStaff(ctx, staffPicked.id, role);
+              const { error } = await A.addExistingStaffMany(ctx, staffPicked.map(p => p.id), role);
               if (error) return error.message;
-              status(`✓ ${staffPicked.name} added to this offering`, 'var(--green)');
+              // Name them. "3 added" leaves the operator to go and check WHICH three, and the
+              // whole point of a batch control is that they stop having to.
+              const names = staffPicked.map(p => lastFirst(p.name)).sort();
+              status(names.length === 1
+                ? `✓ ${staffPicked[0].name} added to this offering`
+                : `✓ ${names.length} added to this offering — ${names.join(', ')}`, 'var(--green)');
               await renderStaff();
               return null;
             }
@@ -1510,7 +1560,7 @@
             const email = document.getElementById('ax-email').value.trim();
             if (!name || !email) {
               return free.length
-                ? 'Pick somebody from the search above, or open “create a new account” and fill in a name and email.'
+                ? 'Tick somebody in the list above, or open “create a new account” and fill in a name and email.'
                 : 'Enter a name and email under “create a new account”.';
             }
             const { data, error } = await A.addStaff(ctx, { name, email, role });
@@ -1529,43 +1579,255 @@
      * Filtered in the browser, unlike the student one, because the two lists are different orders
      * of magnitude: every instructor in PREP is a couple of dozen people and is already loaded by
      * loadStaff(), where the cadet search is a few hundred rows behind RLS and has to be a query.
-     * Same control, same markup, different source — which is the honest reason they are not shared.
+     * Same markup, different source — which is the honest reason they are not shared.
+     *
+     * MULTI-SELECT since 2026-07-30, and that is what makes the two controls genuinely different
+     * rather than merely unshared. Two changes came with it:
+     *
+     *   The list is OPEN, not hidden until you type. The cadet picker must stay a search — a few
+     *   hundred names is not a list anybody reads — but two dozen colleagues is, and a director
+     *   staffing a new offering is choosing FROM a roster rather than recalling a name. Typing
+     *   still filters.
+     *
+     *   Picking no longer clears the box. Selecting one person used to close the results and empty
+     *   the query, which is right when the answer is one and actively hostile when it is five.
+     *   Ticked rows stay ticked through every filter change, because selection lives in
+     *   `staffPicked` and the DOM is redrawn from it.
      */
-    let staffPicked = null;
+    let staffPicked = [];
     function wireStaffPicker(pool) {
-      staffPicked = null;
+      staffPicked = [];
       const input = document.getElementById('ax-search');
       const box = document.getElementById('ax-results');
       if (!input) return;
 
+      const isPicked = id => staffPicked.some(p => p.id === id);
+
+      const paintChips = () => {
+        const note = document.getElementById('ax-picked');
+        if (!staffPicked.length) { note.style.display = 'none'; note.innerHTML = ''; return; }
+        note.style.display = '';
+        const n = staffPicked.length;
+        note.innerHTML = `<div style="margin-bottom:6px">Adding <strong>${n}</strong>
+            ${n === 1 ? 'person who already has a' : 'people who already have'} PREP login${n === 1 ? '' : 's'},
+            all as the role chosen below.</div>
+          <div class="row wrap" style="gap:6px">${staffPicked.map(p => `
+            <button type="button" class="chip-x" data-unpick="${esc(p.id)}"
+                    title="Remove ${esc(p.name)}">${esc(lastFirst(p.name))} <span aria-hidden="true">×</span></button>`).join('')}
+          </div>`;
+        note.querySelectorAll('[data-unpick]').forEach(b => b.addEventListener('click', () => {
+          staffPicked = staffPicked.filter(p => p.id !== b.dataset.unpick);
+          paintChips(); paint(input.value);
+        }));
+        // The "create a new account" half is unreachable for this save while anybody is ticked —
+        // close it rather than leave two live paths and a rule the operator has to know about.
+        document.getElementById('ax-new').open = false;
+      };
+
       const paint = (q) => {
         const t = String(q || '').trim().toLowerCase();
-        if (!t) { box.hidden = true; box.innerHTML = ''; return; }
-        const hits = pool.filter(p => p.name.toLowerCase().includes(t)).slice(0, 25);
-        box.hidden = false;
+        const hits = (t ? pool.filter(p => p.name.toLowerCase().includes(t)) : pool).slice(0, 50);
         box.innerHTML = hits.length
-          ? hits.map(p => `<button type="button" class="pick-item" data-pick="${esc(p.id)}"
-               data-name="${esc(p.name)}">${esc(lastFirst(p.name))}</button>`).join('')
-          : `<div class="pick-empty">Nobody with a login matches “${esc(q)}”. If they have never
-               used PREP, create the account below.</div>`;
+          ? hits.map(p => `<button type="button" class="pick-item${isPicked(p.id) ? ' picked' : ''}"
+               role="checkbox" aria-checked="${isPicked(p.id)}"
+               data-pick="${esc(p.id)}" data-name="${esc(p.name)}"
+               ><span class="pick-tick" aria-hidden="true">${isPicked(p.id) ? '✓' : ''}</span>${esc(lastFirst(p.name))}</button>`).join('')
+          : t
+            ? `<div class="pick-empty">Nobody with a login matches “${esc(q)}”. If they have never
+                 used PREP, create the account below.</div>`
+            : `<div class="pick-empty">Everybody with a PREP login already staffs this offering.</div>`;
         box.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
-          staffPicked = { id: b.dataset.pick, name: b.dataset.name };
-          box.hidden = true;
-          input.value = '';
-          const note = document.getElementById('ax-picked');
-          note.style.display = '';
-          note.innerHTML = `Adding <strong>${esc(staffPicked.name)}</strong>, who already has a
-            PREP login. <button class="btn btn-ghost btn-sm" id="ax-unpick" style="margin-left:6px">Choose someone else</button>`;
-          // The "create a new account" half is now unreachable for this save — close it rather
-          // than leave two live paths and a rule the operator has to know about.
-          document.getElementById('ax-new').open = false;
-          document.getElementById('ax-unpick').addEventListener('click', () => {
-            staffPicked = null;
-            note.style.display = 'none'; note.innerHTML = '';
-          });
+          const id = b.dataset.pick;
+          staffPicked = isPicked(id)
+            ? staffPicked.filter(p => p.id !== id)
+            : [...staffPicked, { id, name: b.dataset.name }];
+          paintChips();
+          // Repaint in place rather than re-running the filter from the input: the query has not
+          // changed, and re-reading it would be the same work with one more way to disagree.
+          paint(q);
         }));
       };
+
       input.addEventListener('input', (e) => paint(e.target.value));
+      paint('');       // open, showing everyone available
+    }
+
+    /* ═══════════════════════════ Extensions ═══════════════════════════
+     * Every deadline extension granted in this offering, and who granted it. Moved here verbatim
+     * from `faculty/extensions.html` on 2026-07-30 (director's request); that file is now a
+     * redirect into this tab. The data layer is untouched — `courseExtensions()` and the two
+     * governance verbs still live in faculty-grade.js beside the grant path.
+     *
+     * THE PAGE'S ORIGINAL PREMISE IS UNCHANGED and is why the banner stays: this exists so the
+     * NUMBER is visible, not so a grant can be undone. The per-instructor ranking is the headline
+     * because that is the conversation it is meant to start.
+     */
+    async function renderExtensions() {
+      const panel = document.getElementById('panel');
+      // Whole-offering scope, always. A director reading a per-instructor count off a subset of
+      // sections would be reading a comparison that is not one.
+      extRows = await courseExtensions(ctx, await allSectionIds(ctx));
+
+      panel.innerHTML = `
+        <div class="alert alert-info" style="margin-bottom:16px">
+          This tab exists so the number is visible, not so it can be undone. If an instructor is
+          granting more extensions than you would like, the fix is a conversation with them —
+          revoking one after the fact does not give a cadet their time back, and the database will
+          refuse it outright once the work is in.
+        </div>
+        <div class="toolbar">
+          <div class="field"><label for="ex-grp">Group by</label>
+            <select id="ex-grp">
+              <option value="instructor">Who granted it</option>
+              <option value="assignment">Assignment</option>
+              <option value="section">Section</option>
+            </select>
+          </div>
+          <div class="field"><label for="ex-show">Show</label>
+            <select id="ex-show">
+              <option value="active">Active only</option>
+              <option value="all">All, including revoked</option>
+              <option value="revoked">Revoked only</option>
+            </select>
+          </div>
+        </div>
+        <div id="ex-summary"></div>
+        <div id="ex-body"></div>`;
+
+      panel.querySelector('#ex-grp').addEventListener('change', drawExtensions);
+      panel.querySelector('#ex-show').addEventListener('change', drawExtensions);
+      // Delegated on the panel, which render() replaces wholesale on every tab change — so the
+      // listener goes with it rather than stacking.
+      panel.querySelector('#ex-body').addEventListener('click', onExtensionClick);
+      drawExtensions();
+    }
+
+    const extFiltered = () => {
+      const mode = document.getElementById('ex-show')?.value || 'active';
+      if (mode === 'active')  return extRows.filter(r => !r.isRevoked);
+      if (mode === 'revoked') return extRows.filter(r => r.isRevoked);
+      return extRows;
+    };
+
+    function drawExtensions() {
+      const summary = document.getElementById('ex-summary');
+      const body = document.getElementById('ex-body');
+      if (!summary || !body) return;
+
+      if (!extRows.length) {
+        summary.innerHTML = '';
+        body.innerHTML = `<div class="alert alert-ok">No extensions have been granted in this course.</div>`;
+        return;
+      }
+
+      // The headline is the per-instructor count — that is the number the conversation is
+      // about. Sorted descending so an outlier surfaces itself rather than having to be found.
+      const byInstructor = {};
+      for (const r of extRows) {
+        const k = r.grantedByName;
+        byInstructor[k] = byInstructor[k] || { total: 0, active: 0, revoked: 0 };
+        byInstructor[k].total++;
+        if (r.isRevoked) byInstructor[k].revoked++; else byInstructor[k].active++;
+      }
+      const ranked = Object.entries(byInstructor).sort((a, b) => b[1].total - a[1].total);
+
+      summary.innerHTML = `
+        <div class="card" style="padding:16px 18px;margin-bottom:16px">
+          <div class="card-title" style="margin-bottom:10px">Granted per instructor</div>
+          <div class="ext-rank">` + ranked.map(([name, c]) => `
+            <div class="ext-rank-row">
+              <span class="ext-rank-name">${esc(name)}</span>
+              <span class="ext-rank-bar"><span style="width:${(c.total / ranked[0][1].total * 100).toFixed(1)}%"></span></span>
+              <span class="ext-rank-n">${c.total}</span>
+              ${c.revoked ? `<span class="tag">${c.revoked} revoked</span>` : ''}
+            </div>`).join('') + `</div>
+        </div>`;
+
+      const list = extFiltered();
+      if (!list.length) { body.innerHTML = `<div class="muted">Nothing matches that filter.</div>`; return; }
+
+      const groupBy = document.getElementById('ex-grp').value;
+      const keyOf = r => groupBy === 'instructor' ? r.grantedByName
+                   : groupBy === 'assignment' ? r.assignmentTitle
+                   : ctx.sectionCodeOf(r.sectionId);
+
+      const groups = {};
+      for (const r of list) (groups[keyOf(r)] = groups[keyOf(r)] || []).push(r);
+
+      body.innerHTML = Object.entries(groups)
+        .sort((a, b) => b[1].length - a[1].length)
+        .map(([name, items]) => `
+          <section class="card" style="padding:16px 18px;margin-bottom:14px">
+            <div class="card-head" style="margin-bottom:10px">
+              <div class="card-title">${esc(name)}</div>
+              <div class="card-meta">${items.length} extension${items.length === 1 ? '' : 's'}</div>
+            </div>
+            <div class="ext-table">
+              <div class="ext-row ext-head">
+                <span>Cadet</span><span>Sec</span><span>Assignment</span>
+                <span>Original</span><span>Extended to</span><span>Reason</span><span></span>
+              </div>
+              ${items.map(r => `
+                <div class="ext-row${r.isRevoked ? ' revoked' : ''}">
+                  <span>${esc(lastFirst(r.studentName))}</span>
+                  <span>${esc(ctx.sectionCodeOf(r.sectionId))}</span>
+                  <span>${esc(r.assignmentTitle)}</span>
+                  <span class="muted">${r.originalDue ? esc(fmtDate(r.originalDue)) : '—'}</span>
+                  <span>${esc(fmtDateTime(r.due))}</span>
+                  <span class="ext-reason" title="${esc(r.reason)}">${esc(r.reason)}</span>
+                  <span class="ext-act">${r.isRevoked
+                    ? `<span class="tag danger">revoked</span>
+                       <button class="btn btn-ghost btn-sm" data-ext="reinstate" data-id="${esc(r.id)}">Reinstate</button>`
+                    : `<button class="btn btn-ghost btn-sm" data-ext="revoke" data-id="${esc(r.id)}"
+                         data-who="${esc(lastFirst(r.studentName))}" data-asgn="${esc(r.assignmentTitle)}">Revoke</button>`}
+                  </span>
+                  ${r.isRevoked ? `<span class="ext-revnote">Revoked by ${esc(r.revokedByName || '—')}
+                     ${esc(fmtDate(r.revokedAt))} — ${esc(r.revokedReason)}</span>` : ''}
+                </div>`).join('')}
+            </div>
+          </section>`).join('');
+    }
+
+    async function onExtensionClick(e) {
+      const el = e.target.closest('[data-ext]');
+      if (!el) return;
+      if (el.dataset.ext === 'revoke') {
+        revokeId = el.dataset.id;
+        document.getElementById('revoke-who').textContent = `${el.dataset.who} — ${el.dataset.asgn}`;
+        document.getElementById('revoke-reason').value = '';
+        document.getElementById('revoke-error').textContent = '';
+        document.getElementById('revoke-modal').classList.add('open');
+      } else if (el.dataset.ext === 'reinstate') {
+        if (!confirm('Reinstate this extension? The cadet gets the extended deadline back.')) return;
+        const { error } = await reinstateExtension(el.dataset.id);
+        if (error) { alert('Could not reinstate: ' + error.message); return; }
+        await renderExtensions();
+      }
+    }
+
+    function wireRevokeModal() {
+      const m = document.getElementById('revoke-modal');
+      m.addEventListener('click', (e) => {
+        if (e.target.id === 'revoke-modal' || e.target.dataset.close !== undefined) m.classList.remove('open');
+      });
+      document.getElementById('revoke-save').addEventListener('click', async () => {
+        const reason = document.getElementById('revoke-reason').value.trim();
+        const err = document.getElementById('revoke-error');
+        if (!reason) { err.textContent = 'A reason is required.'; return; }
+        const { error } = await revokeExtension(ctx, revokeId, reason);
+        if (error) {
+          // Both refusals come from the 007 trigger and both deserve a sentence, not a
+          // constraint name: one is a rule about the cadet, the other about the caller.
+          err.textContent = /already submitted under it/i.test(error.message)
+            ? 'That cadet has already submitted under this extension, so it cannot be revoked. Withdrawing it now would only make an on-time submission late.'
+            : /only a course director/i.test(error.message)
+              ? 'Only a course director may revoke an extension.'
+              : 'Could not revoke: ' + error.message;
+          return;
+        }
+        m.classList.remove('open');
+        await renderExtensions();
+      });
     }
 
     /* ───────────────────────────── Export ─────────────────────────────

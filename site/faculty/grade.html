@@ -53,6 +53,10 @@
       <div class="hq-cards" id="hq-cards"></div>
     </section>
 
+    <!-- Sticky, because the two buttons that write are at the BOTTOM of a page that runs to twenty
+         cards. It is the one thing on this screen that has to stay true wherever the reader is. -->
+    <div class="alert alert-warn dirty-banner" id="dirty-banner" role="status" hidden></div>
+
     <div id="grade-container">
       <div class="muted">Select an assignment to begin grading.</div>
     </div>
@@ -99,6 +103,12 @@
     import { esc, lastFirst, fmtDate, fmtDateTime, runPage } from '../js/util.js';
     // Questions now live in the written activity's content, not on the assignment row.
     import { questionsOf, submissionLateness, lateBy, actionableSections } from '../js/schema.js';
+    // The 3-state control lives in its own module because student.html grades too now — see its
+    // header on why one copy matters more than the eight lines it saves.
+    import {
+      CREDIT_LABEL as LABEL, applyCredit, creditControl, creditControlNode,
+      dirtyCount as countDirty, WARN_HINT,
+    } from '../js/grade-controls.js';
     import * as G from '../js/faculty-grade.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
@@ -128,8 +138,8 @@
       // Persistent delegated listeners (container survives re-renders)
       container().addEventListener('click', onClick);
       container().addEventListener('input', onInput);
-      asgnSel().addEventListener('change', loadView);
-      secSel().addEventListener('change', loadView);
+      asgnSel().addEventListener('change', pickerChanged);
+      secSel().addEventListener('change', pickerChanged);
       wireLamps();
       document.getElementById('save-btn').addEventListener('click', doSave);
       document.getElementById('finalize-btn').addEventListener('click', doFinalize);
@@ -185,14 +195,46 @@
       return v === '__all__' ? cachedAll : v ? [v] : cachedMy;
     }
 
+    /* Changing assignment or section reloads from the database, which discards anything unsaved.
+     * The banner says the work is unwritten; this is what stops a picker throwing it away without
+     * asking. Reverting the <select> on refusal is the part that matters — leaving it moved would
+     * put one assignment's name above another's cards.
+     *
+     * Deliberately NOT inside loadView(). doSave() calls loadView() the moment a save succeeds,
+     * and at that point the old model still carries its `modified` flags — a guard down there
+     * would interrogate the operator about changes they had just written. */
+    let lastPick = { asgn: '', sec: '' };
+
+    async function pickerChanged() {
+      const n = dirtyCount();
+      if (n && !confirm(`You have ${n} unsaved change${n === 1 ? '' : 's'} on screen.\n\n`
+                      + `Loading a different view discards them. Continue?`)) {
+        asgnSel().value = lastPick.asgn;
+        secSel().value = lastPick.sec;
+        return;
+      }
+      await loadView();
+    }
+
     async function loadView() {
       const asgnId = asgnSel().value;
       const actions = document.getElementById('grade-actions');
-      if (!asgnId) { container().innerHTML = `<div class="muted">Select an assignment to begin grading.</div>`; actions.style.display = 'none'; return; }
+      lastPick = { asgn: asgnId, sec: secSel().value };
+      if (!asgnId) {
+        container().innerHTML = `<div class="muted">Select an assignment to begin grading.</div>`;
+        actions.style.display = 'none';
+        gradeData = {}; updateDirtyBanner();
+        return;
+      }
       container().innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
 
       const data = await G.loadGradingData(ctx, asgnId, resolveSectionIds());
-      if (!data.offering) { container().innerHTML = `<div class="alert alert-error">Assignment not found.</div>`; actions.style.display = 'none'; return; }
+      if (!data.offering) {
+        container().innerHTML = `<div class="alert alert-error">Assignment not found.</div>`;
+        actions.style.display = 'none';
+        gradeData = {}; updateDirtyBanner();
+        return;
+      }
       current = data.offering; responseMap = data.responseMap; scoreMap = data.gradeMap; extensionMap = data.extensionMap;
       submissionMap = data.submissionMap;
 
@@ -228,6 +270,7 @@
                is graded automatically from the lesson report.</div>`
           : `<div class="alert alert-warn">No students found for the selected section(s).</div>`;
         actions.style.display = 'none';
+        gradeData = {}; updateDirtyBanner();
         renderQueue();
         return;
       }
@@ -236,13 +279,16 @@
       // defence for the same rule, and its header explains what a stray entry would cost.
       gradeData = G.buildGradeData(current, gradable, responseMap, scoreMap, submissionMap);
       render(gradable);
+      // A fresh model has nothing modified in it, so this clears the banner AND re-baselines every
+      // `original` — which is what collapses the before → after pairs back to single chips once a
+      // save has landed. Both loadView() call sites after a write depend on it.
+      updateDirtyBanner();
       actions.style.display = 'flex';
       // Deliberately not awaited: the queue is cross-assignment and reloads from scratch, and the
       // grading view the reader asked for must not wait on a panel above it.
       renderQueue();
     }
 
-    const LABEL = { full: '✓ Full credit', warn: '⚠ Full credit — review', zero: '✗ No credit' };
     const isZeroPointQuestion = q => Number(q?.points) === 0;
 
     function studentTotal(sid) {
@@ -312,12 +358,17 @@
             style="max-width:100%;max-height:240px;border-radius:6px;border:1px solid var(--border)"></div>` : '';
           const control = finalized
             ? `<span class="credit-toggle ${gd.status}" disabled>${LABEL[gd.status]}</span>`
-            : `<button class="credit-toggle ${gd.status}" id="tg-${sid}-${esc(q.id)}" data-act="toggle" data-sid="${sid}" data-qid="${esc(q.id)}" data-pts="${q.points}">${LABEL[gd.status]}</button>`;
+            : creditControl(sid, q, gd);
           const feedback = finalized
             ? (gd.feedback ? `<div class="feedback-block" style="margin-top:8px">${esc(gd.feedback)}</div>` : '')
             : `<textarea class="feedback-input" data-act="feedback" data-sid="${sid}" data-qid="${esc(q.id)}" placeholder="Feedback for student (optional)…">${esc(gd.feedback)}</textarea>`;
-          const hint = (gd.status === 'warn' && !finalized) ? `<div class="warn-hint" data-hint>Yellow = full credit flagged for review. Click for red (no credit), again for green (confirmed).</div>` : '';
-          return `<div class="grade-q" data-status="${gd.status}" id="row-${sid}-${esc(q.id)}">
+          const hint = (gd.status === 'warn' && !finalized) ? `<div class="warn-hint" data-hint>${WARN_HINT}</div>` : '';
+          // TWO status attributes, and they are different questions.
+          //   data-status — what the answer IS now, pending save. Drives nothing but the row tint.
+          //   data-filter — what it was on load. THIS is what the lamps filter on, so re-scoring
+          //     an answer never makes it vanish out from under the reader. See buildGradeData's
+          //     `original`.
+          return `<div class="grade-q" data-status="${gd.status}" data-filter="${gd.original}" id="row-${sid}-${esc(q.id)}">
             <div class="gq-head"><span class="gq-label">Q${idx + 1} · ${q.points} pts</span>${control}</div>
             <div class="gq-text">${esc(q.text)}</div>${fig}
             <div class="grade-answer ${hasAns ? '' : 'empty'}">${hasAns ? esc(String(ans)) : 'No answer submitted.'}</div>
@@ -353,31 +404,75 @@
       const t = e.target.closest('textarea[data-act="feedback"]');
       if (!t) return;
       const gd = gradeData[Number(t.dataset.sid)]?.[t.dataset.qid];
-      if (gd) { gd.feedback = t.value; gd.modified = true; }
+      if (gd) { gd.feedback = t.value; gd.modified = true; updateDirtyBanner(); }
     }
 
-    function toggleCredit(sid, qid, pts) {
-      const gd = gradeData[sid][qid];
-      gd.status = ({ full: 'warn', warn: 'zero', zero: 'full' })[gd.status] || 'full';
-      gd.score = gd.status === 'zero' ? 0 : pts;
-      gd.modified = true;
+    // The banner's two shortcuts. Delegated here rather than bound per render because the banner
+    // is rebuilt on every keystroke that changes the count.
+    document.getElementById('dirty-banner').addEventListener('click', (e) => {
+      const el = e.target.closest('[data-act]');
+      if (!el) return;
+      if (el.dataset.act === 'jump-save') doSave();
+      else if (el.dataset.act === 'jump-finalize') doFinalize();
+    });
 
-      const btn = document.getElementById(`tg-${sid}-${qid}`);
-      if (btn) { btn.className = `credit-toggle ${gd.status}`; btn.textContent = LABEL[gd.status]; }
+    function toggleCredit(sid, qid, pts) {
+      const gd = applyCredit(gradeData[sid][qid], pts);
+
       const row = document.getElementById(`row-${sid}-${qid}`);
       if (row) {
-        row.dataset.status = gd.status;
+        // The whole control is replaced rather than the chip relabelled: it may have just grown or
+        // lost the before → after pair, and that is a change of shape, not of text.
+        const head = row.querySelector('.gq-head');
+        const old = head?.querySelector('.credit-change, .credit-toggle');
+        if (old) old.replaceWith(creditControlNode(sid, { id: qid, points: pts }, gd));
+        row.dataset.status = gd.status;      // tint follows the pending value…
+        // …and data-filter deliberately does NOT change. See the render comment.
         let hint = row.querySelector('[data-hint]');
         if (gd.status === 'warn' && !hint) {
           hint = document.createElement('div'); hint.className = 'warn-hint'; hint.dataset.hint = '1';
-          hint.textContent = 'Yellow = full credit flagged for review. Click for red (no credit), again for green (confirmed).';
+          hint.textContent = WARN_HINT;
           row.appendChild(hint);
         } else if (gd.status !== 'warn' && hint) hint.remove();
       }
       const tot = document.getElementById(`tot-${sid}`);
       if (tot) tot.textContent = `${studentTotal(sid).toFixed(2)} / ${maxTotal.toFixed(2)} pts`;
       applyFilters();
+      updateDirtyBanner();
     }
+
+    /* ── "Nothing is saved yet" ──────────────────────────────────────────────────
+     * A banner pinned to the top of the page for as long as any edit is unwritten, because the
+     * two things that write are at the BOTTOM of a page that is often twenty cards long. An
+     * instructor who re-scored six answers and navigated away lost all six, and nothing on screen
+     * had ever said otherwise — the only feedback was a status line beside a button they had
+     * scrolled past.
+     *
+     * Counts questions, not students, because that is the unit being changed and the number the
+     * reader can check against what they remember doing. Feedback typing counts too: `modified` is
+     * set by the textarea handler as well, and losing a paragraph of written feedback is worse
+     * than losing a click.
+     */
+    const dirtyCount = () => countDirty(gradeData);
+
+    function updateDirtyBanner() {
+      const el = document.getElementById('dirty-banner');
+      const n = dirtyCount();
+      el.hidden = n === 0;
+      if (!n) return;
+      el.innerHTML = `<strong>${n} unsaved change${n === 1 ? '' : 's'}.</strong>
+        Nothing reaches the student — or the gradebook — until you
+        <button type="button" class="linkish" data-act="jump-save">Save draft</button> or
+        <button type="button" class="linkish" data-act="jump-finalize">Finalize &amp; publish</button>
+        at the bottom of the page.`;
+    }
+
+    // Warn on the way out. The banner is the visible reminder; this is the one that catches
+    // somebody who never scrolled far enough to see it. Browsers ignore custom text here and show
+    // their own wording, so there is none to write.
+    window.addEventListener('beforeunload', (e) => {
+      if (dirtyCount()) { e.preventDefault(); e.returnValue = ''; }
+    });
 
     // ── Status-lamp filter ──
     // The lamps are a traffic light: lit means "show answers with this status", dark means hide
@@ -425,7 +520,12 @@
         if (rows.length) anyRows = true;
         let shown = 0;
         rows.forEach(row => {
-          const s = row.dataset.status;
+          // FILTER on what the answer was when the page loaded (`data-filter`), COUNT the same —
+          // so the lamp numbers describe the set the lamps are actually selecting. Filtering on
+          // the live status made a re-scored answer vanish from under the reader; counting on it
+          // made the numbers drift away from the rows they claim to count. Both settle on the
+          // next load, which is when the reader's chosen set is genuinely stale.
+          const s = row.dataset.filter || row.dataset.status;
           if (counts[s] !== undefined) counts[s]++;
           const show = lampOn[s] !== false;
           row.style.display = show ? '' : 'none';
@@ -544,6 +644,12 @@
       // '' (all my sections) and '__all__' (whole course) both already contain them.
       const wrongSection = picked && picked !== '__all__' && picked !== sectionId;
       if (asgnSel().value !== offeringId || wrongSection) {
+        // Same discard as a picker change, so it asks the same question. The queue is one click
+        // and lands you on a different assignment entirely — the easiest way in the whole page to
+        // lose a screen of unsaved work by accident.
+        const n = dirtyCount();
+        if (n && !confirm(`You have ${n} unsaved change${n === 1 ? '' : 's'} on screen.\n\n`
+                        + `Opening this student discards them. Continue?`)) return;
         asgnSel().value = offeringId;
         if (wrongSection) secSel().value = '';
         await loadView();

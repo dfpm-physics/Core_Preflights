@@ -170,12 +170,43 @@ export function addStaff(ctx, { name, email, role }) {
  * sections they actually teach is the Section Coverage grid below the table.
  */
 export function addExistingStaff(ctx, instructorId, role) {
-  return db.from('staff_assignments').upsert({
-    instructor_id: instructorId,
-    course_offering_id: ctx.currentOffering,
-    section_id: null,
-    role: role || 'instructor',
-  }, { onConflict: 'instructor_id,course_offering_id,section_id' });
+  return addExistingStaffMany(ctx, [instructorId], role);
+}
+
+/**
+ * The same thing for SEVERAL people at once (director's request, 2026-07-30).
+ *
+ * Staffing is a start-of-term batch, not a trickle: a director stands up an offering and hands it
+ * to four or five colleagues in one sitting. The modal made that five passes through a search box,
+ * a role dropdown and a confirmation, and re-picking the role each time is exactly how one of the
+ * five ends up a director by accident.
+ *
+ * ONE UPSERT, NOT A LOOP, and the difference is what happens when it goes wrong. N round trips can
+ * half-succeed — "3 of 5 added", with no way to retry only the two — whereas a single statement
+ * either writes the batch or writes none of it, and the retry is pressing the button again. It is
+ * also one row per person against a UNIQUE key, so re-adding somebody already staffing the
+ * offering updates their row rather than erroring, which is what makes the retry safe.
+ *
+ * EVERYONE IN THE BATCH GETS THE SAME ROLE. A control per person would need its own confirmation
+ * step to be safe, and the Staff table already carries a per-person role dropdown for the rarer
+ * case: add the batch as instructors, then promote the one director.
+ *
+ * Deduplicated, because the picker allows the same person to be chosen twice and Postgres will
+ * reject a statement whose rows collide on the conflict target ("cannot affect row a second time")
+ * — a constraint name where the operator wanted a list of names.
+ *
+ * @param {string[]} instructorIds
+ */
+export function addExistingStaffMany(ctx, instructorIds, role) {
+  const ids = [...new Set((instructorIds || []).filter(Boolean))];
+  if (!ids.length) return Promise.resolve({ data: null, error: { message: 'Nobody was selected.' } });
+  return db.from('staff_assignments').upsert(
+    ids.map(id => ({
+      instructor_id: id,
+      course_offering_id: ctx.currentOffering,
+      section_id: null,
+      role: role || 'instructor',
+    })), { onConflict: 'instructor_id,course_offering_id,section_id' });
 }
 
 /**

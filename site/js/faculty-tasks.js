@@ -228,7 +228,12 @@ export const SOURCES = [
         count: missing.length,
         action: 'Run rollups',
         text: `${plural(missing.length, 'assignment', 'assignments')} past due with no readiness rollup yet`,
-        link: `report.html?i=${encodeURIComponent(missing[0].assignments?.slug || '')}`,
+        // The OFFERING id, not the assignment slug. report.html resolves `?i=` against
+        // loadManager()'s keys — which are offering ids — and silently `location.replace`s to the
+        // dashboard on a miss, so passing the slug here made "Run rollups" a button that bounced
+        // you back to the page you clicked it on. Fixed 2026-07-30 while giving lessons.html its
+        // own Rollup button, which is how the mismatch surfaced.
+        link: `report.html?i=${encodeURIComponent(missing[0].id)}`,
       };
     },
   },

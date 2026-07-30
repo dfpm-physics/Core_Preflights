@@ -318,7 +318,10 @@ export function commentCard({ student, enrollment, totals, rows, ei = [], classS
  * ------------------------------------------------------------------------- */
 
 const ALLOWED_BACK = new Set([
-  'gradebook.html', 'grade.html', 'dashboard.html', 'report.html', 'extensions.html',
+  'gradebook.html', 'grade.html', 'dashboard.html', 'report.html',
+  // `extensions.html` was on this list and came off on 2026-07-30. The report is Course Admin's
+  // Extensions tab now and that file is a redirect into it — so allowing it would send "Done"
+  // through a bounce to land on the page `admin.html` (below) already reaches directly.
   // admin.html replaced roster.html here on 2026-07-23: the roster moved into Course Admin's
   // Students tab, whose table links a cadet's name to this page. Without it, a director drilling
   // in from that list is bounced to the gradebook instead of back to what they were working

@@ -376,6 +376,25 @@
       // the lesson in a picker they just navigated away from.
       const grade = `<a class="btn btn-ghost btn-sm" href="grade.html?a=${esc(encodeURIComponent(l.offeringId))}"
             title="Open the grading panel on this assignment">Grade</a>`;
+      // Rollup, beside Grade, because they are the two halves of the same errand and the second
+      // half had no route from here at all: the lesson rollup was reachable ONLY from the
+      // dashboard's carousel, which shows one assignment at a time and orders them for you. An
+      // instructor wanting last week's readiness summary had to page a carousel backwards to find
+      // a lesson they were already looking at on this list.
+      //
+      // `?i=` is the assignment OFFERING id, not the slug — report.html looks the key up in
+      // loadManager()'s list and redirects to the dashboard when it misses, so a slug here would
+      // be a button that silently bounces. (That exact mistake is live in faculty-tasks.js and is
+      // fixed in the same change.)
+      //
+      // Disabled on a draft, with the reason. A rollup summarizes submitted work and nobody can
+      // submit to an unpublished assignment, so the page would render honestly — as an empty
+      // rollup — which reads as a broken report rather than as an assignment nobody has done yet.
+      const rollup = l.isPublished
+        ? `<a class="btn btn-ghost btn-sm" href="report.html?i=${esc(encodeURIComponent(l.offeringId))}"
+              title="Open the readiness rollup for this assignment">Rollup</a>`
+        : `<button class="btn btn-ghost btn-sm" disabled
+              title="This assignment is still a draft — no one can have submitted to it yet, so there is nothing to roll up.">Rollup</button>`;
       // Preview sits OUTSIDE the director gate too. Reading what a lesson asks is not an edit,
       // and an instructor has every reason to want it; before this the only way to see the
       // questions was Edit → Preview → Cancel, which is a write-shaped path to a read-only answer
@@ -419,7 +438,7 @@
             </div>
           </div>
         </div>
-        <div class="row wrap" style="gap:8px;margin-top:14px;align-items:center">${grade}${preview}${launch}<span class="grow"></span>${manage}</div>
+        <div class="row wrap" style="gap:8px;margin-top:14px;align-items:center">${grade}${rollup}${preview}${launch}<span class="grow"></span>${manage}</div>
       </div>`;
     }
 

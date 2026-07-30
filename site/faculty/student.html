@@ -37,6 +37,48 @@
     </div>
   </div>
 
+  <!-- Grade ONE submission, without leaving the cadet. See openGrade() for why this exists as
+       well as the Grade page rather than instead of it. -->
+  <div class="modal-backdrop" id="sg-modal">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <h2 id="sg-title">Grade</h2>
+        <button class="modal-close" data-close>×</button>
+      </div>
+      <div id="sg-body"><div class="center-load"><span class="spinner"></span><span>Loading…</span></div></div>
+      <div class="error-msg" id="sg-error" style="min-height:1em"></div>
+      <div class="row wrap" style="gap:10px;margin-top:8px;align-items:center" id="sg-actions" hidden>
+        <button class="btn btn-primary" id="sg-save">Save draft</button>
+        <button class="btn btn-secondary" id="sg-finalize">Finalize &amp; publish</button>
+        <span id="sg-status" class="muted" style="font-size:0.85em"></span>
+        <span class="grow"></span>
+        <button class="btn btn-ghost btn-sm" data-close>Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grant / edit an extension from inside the grading modal. Its own dialog, matching
+       grade.html's, because a reason is required (migration 007) and the field must be cleared
+       and re-validated per open. -->
+  <div class="modal-backdrop" id="sx-modal">
+    <div class="modal" style="max-width:460px">
+      <div class="modal-head"><h2 id="sx-heading">Grant extension</h2><button class="modal-close" data-close>×</button></div>
+      <p class="muted" style="font-size:0.88em;margin-bottom:14px" id="sx-name"></p>
+      <div class="field"><label for="sx-due">New due date &amp; time</label>
+        <input type="datetime-local" id="sx-due"></div>
+      <div class="field"><label for="sx-reason">Reason <span class="req">required</span></label>
+        <input type="text" id="sx-reason" maxlength="200"
+               placeholder="e.g. Cadet was on a scheduled team trip.">
+        <div class="field-hint">Your course director sees this alongside a count of the extensions you have granted.</div>
+      </div>
+      <div class="error-msg" id="sx-error" style="min-height:1em"></div>
+      <div class="row" style="gap:10px;margin-top:8px">
+        <button class="btn btn-primary" id="sx-save">Save extension</button>
+        <button class="btn btn-secondary" data-close>Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
@@ -44,6 +86,11 @@
     import { runPage, esc, lastFirst, fmtDate, fmtDateTime } from '../js/util.js';
     import * as S from '../js/faculty-student.js';
     import * as EI from '../js/faculty-ei.js';
+    import * as G from '../js/faculty-grade.js';
+    import { questionsOf, submissionLateness, lateBy } from '../js/schema.js';
+    import {
+      CREDIT_LABEL, applyCredit, creditControl, creditControlNode, dirtyCount, WARN_HINT,
+    } from '../js/grade-controls.js';
     import { CELL, zoneIndex } from '../js/faculty-gradebook.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
@@ -61,6 +108,7 @@
       initTheme();
       renderNav(ctx, { active: '' });
       wireEiModal();
+      wireGradeModal();
       await load();
     }
 
@@ -135,6 +183,8 @@
         ${commentCardHTML()}`;
 
       document.getElementById('ei-add').addEventListener('click', () => openEi(null));
+      document.querySelectorAll('[data-grade]').forEach(b =>
+        b.addEventListener('click', () => openGrade(b.dataset.grade)));
       document.querySelectorAll('[data-ei-edit]').forEach(b =>
         b.addEventListener('click', () => openEi(b.dataset.eiEdit)));
       document.querySelectorAll('[data-ei-del]').forEach(b =>
@@ -178,13 +228,16 @@
             : `${r.cell.points}<span class="muted">/${r.cell.possible}</span>`}</td>
         <td class="sd-num">${dial(r.effort, 'Engagement, 0–5. A measurement, not a grade.')}</td>
         <td class="sd-num">${dial(r.understanding, 'Demonstrated understanding, 0–5. A measurement, not a grade.')}</td>
+        <td class="sd-num"><button class="btn btn-ghost btn-sm" data-grade="${esc(r.offeringId)}"
+              title="Open this cadet's submission for grading">Grade</button></td>
       </tr>`).join('');
 
       return `<div class="card"><div class="card-title">Assignments</div>
         <div class="card-meta">Points are the grade. The two 0–5 columns are diagnostics — they are never added to the total.</div>
         <div class="table-wrap"><table class="sd-lessons">
           <thead><tr><th></th><th>Assignment</th><th>Due</th><th>Status</th><th>Points</th>
-            <th title="Engagement, 0–5">Effort</th><th title="Demonstrated understanding, 0–5">Underst.</th></tr></thead>
+            <th title="Engagement, 0–5">Effort</th><th title="Demonstrated understanding, 0–5">Underst.</th>
+            <th></th></tr></thead>
           <tbody>${body}</tbody></table></div></div>`;
     }
 
@@ -352,6 +405,315 @@
       const { error } = await EI.deleteEi(id);
       if (error) { alert('Could not delete: ' + error.message); return; }
       await load();
+    }
+
+    /* ═══════════════════ Grade one submission, in a modal ═══════════════════
+     * DIRECTOR'S REQUEST, 2026-07-30: "in the individual student view it should be possible to
+     * open a single student's submission for grading like in the grading page… re-open, change
+     * grades, enter comments, grant extensions."
+     *
+     * WHY THIS EXISTS AS WELL AS grade.html, NOT INSTEAD OF IT
+     *   The two answer different questions and both are real. The Grade page is a production line:
+     *   one assignment, a whole section, work through it. This page is the one screen that asks
+     *   "what is going on with THIS cadet" — and the thing you most often want to DO having found
+     *   an answer here is fix the grade you are looking at. Sending the reader to grade.html for
+     *   that meant re-picking the assignment, re-picking the section, and then finding the one
+     *   name among eighteen — landing them on the production line to make a single repair.
+     *
+     * WHAT IS SHARED, AND WHAT IS NOT
+     *   Every WRITE goes through faculty-grade.js — the same saveScores / finalizeScores /
+     *   reopenScore / setExtension the Grade page calls, with the same two rules in gradeRows()
+     *   that stop a save inventing a grade or relabelling AI work. The 3-state control is
+     *   grade-controls.js. What is local is the layout, because a modal about one submission is
+     *   not a page about a section.
+     *
+     * SCOPE. loadGradingData() is called with this cadet's section, then narrowed to them. It
+     *   fetches a section's worth of rows to grade one, which is a real cost and a deliberate one:
+     *   it is the function whose behaviour is already proven, and a second narrower loader would
+     *   be a second place for the effort-taker exclusion and the extension filter to be got wrong.
+     *   A section is ~20 students.
+     */
+    let sgOffering = null, sgStudent = null, sgGradeData = {}, sgGradeMap = {},
+        sgExtension = null, sgSubmission = null, sgResponses = {}, sgQuestions = [];
+
+    function sgClose() { document.getElementById('sg-modal').classList.remove('open'); }
+
+    function wireGradeModal() {
+      const m = document.getElementById('sg-modal');
+      m.addEventListener('click', (e) => {
+        if (e.target === m || e.target.dataset.close !== undefined) attemptClose();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && m.classList.contains('open')) attemptClose();
+      });
+      // Delegated on the modal body, which is replaced on every open and every re-render.
+      document.getElementById('sg-body').addEventListener('click', onGradeClick);
+      document.getElementById('sg-body').addEventListener('input', (e) => {
+        const t = e.target.closest('textarea[data-act="feedback"]');
+        if (!t) return;
+        const gd = sgGradeData[t.dataset.qid];
+        if (gd) { gd.feedback = t.value; gd.modified = true; sgSyncDirty(); }
+      });
+      document.getElementById('sg-save').addEventListener('click', () => sgWrite(false));
+      document.getElementById('sg-finalize').addEventListener('click', () => sgWrite(true));
+      wireExtModal();
+    }
+
+    /** Closing discards whatever has not been written, so it asks first. */
+    function attemptClose() {
+      const n = dirtyCount({ x: sgGradeData });
+      if (n && !confirm(`You have ${n} unsaved change${n === 1 ? '' : 's'}.\n\n`
+                      + `Closing discards them. Continue?`)) return;
+      sgClose();
+    }
+
+    async function openGrade(offeringId) {
+      const m = document.getElementById('sg-modal');
+      const row = rows.find(r => r.offeringId === offeringId);
+      document.getElementById('sg-title').textContent =
+        `${row?.title || 'Grade'} — ${vm.student.name || vm.enrollment.studentId}`;
+      document.getElementById('sg-body').innerHTML =
+        `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
+      document.getElementById('sg-error').textContent = '';
+      document.getElementById('sg-actions').hidden = true;
+      m.classList.add('open');
+
+      const data = await G.loadGradingData(ctx, offeringId, [vm.enrollment.sectionId]);
+      if (!data.offering) {
+        document.getElementById('sg-body').innerHTML =
+          `<div class="alert alert-error">That assignment could not be loaded.</div>`;
+        return;
+      }
+      const sid = vm.enrollment.studentId;
+      const student = data.students.find(s => s.student_id === sid);
+      if (!student) {
+        // RLS returned the offering but not this enrollment — the honest answer is that they are
+        // not gradeable by this caller, not an empty form.
+        document.getElementById('sg-body').innerHTML =
+          `<div class="alert alert-warn">This cadet is not in a section you can grade.</div>`;
+        return;
+      }
+
+      sgOffering = data.offering;
+      sgStudent = student;
+      sgGradeMap = data.gradeMap;
+      sgExtension = data.extensionMap[sid] || null;
+      sgSubmission = data.submissionMap[sid] || null;
+      sgResponses = data.responseMap[sid] || {};
+      sgQuestions = questionsOf(sgOffering.written);
+      // Same exclusion as the Grade page, for the same reason: an interactive taker is graded on
+      // effort by the migration-015 trigger, answered no written question, and a Save built from
+      // this model would write zeros over their effort grade.
+      sgGradeData = G.isEffortGraded(sgOffering, sgSubmission)
+        ? {}
+        : (G.buildGradeData(sgOffering, [student], sgResponses ? { [sid]: sgResponses } : {},
+                            sgGradeMap, { [sid]: sgSubmission })[sid] || {});
+      renderGradeModal();
+    }
+
+    function sgTotal() {
+      if (!Object.keys(sgGradeData).length) return Number(sgGradeMap[sgStudent.student_id]?.pointsEarned ?? 0);
+      return sgQuestions.reduce((s, q) => s + (Number(sgGradeData[q.id]?.score) || 0), 0);
+    }
+
+    function renderGradeModal() {
+      const sid = sgStudent.student_id;
+      const prior = sgGradeMap[sid];
+      const finalized = !!prior?.finalized;
+      const maxTotal = Number(sgOffering.pointsPossible ?? 0);
+      const effortGraded = G.isEffortGraded(sgOffering, sgSubmission);
+      const late = submissionLateness(sgOffering, sgStudent.section_id,
+                                      sgExtension?.due || null, sgSubmission?.committedAt);
+
+      const chips = `
+        ${finalized ? `<span class="tag" style="background:var(--alert-ok-bg);color:var(--alert-ok-fg)">✅ Finalized</span>
+          <button class="btn btn-ghost btn-sm" data-act="reopen">Reopen</button>` : ''}
+        ${!prior ? `<span class="tag tag-ungraded">Not yet graded</span>`
+          : prior.source === 'ai_suggested' ? `<span class="tag tag-ai">AI suggested</span>` : ''}
+        ${late.late ? `<span class="tag tag-late" title="Submitted ${esc(fmtDateTime(late.at))} · due ${esc(fmtDateTime(late.due))}">⏰ ${esc(lateBy(late.ms))}</span>` : ''}
+        ${sgExtension ? `<span class="ext-chip" title="${esc(sgExtension.reason)}">📅 ${esc(fmtDate(sgExtension.due))}</span>
+          <button class="btn btn-ghost btn-sm" data-act="ext">Edit</button>
+          <button class="btn btn-ghost btn-sm" data-act="ext-remove">Remove</button>`
+          : `<button class="btn btn-ghost btn-sm" data-act="ext">Grant extension</button>`}
+        <span class="grow"></span>
+        <span class="gc-total" id="sg-total">${sgTotal().toFixed(2)} / ${maxTotal.toFixed(2)} pts</span>`;
+
+      // The interactive path has nothing to grade by hand. Say why, rather than showing an empty
+      // question list that looks like a loading failure.
+      const body = effortGraded
+        ? `<div class="alert alert-info">This cadet took the interactive lesson, which is graded
+             automatically from the lesson report on submission (effort → points). There are no
+             written answers to score. Reopening the grade is still available above if you need to
+             adjust it.</div>`
+        : sgQuestions.filter(q => Number(q.points) !== 0).map(q => {
+            const idx = sgQuestions.indexOf(q);
+            const ans = sgResponses[q.id] ?? '';
+            const hasAns = String(ans).trim().length > 0;
+            const gd = sgGradeData[q.id];
+            if (!gd) return '';
+            const fig = q.figure_url ? `<div style="margin:6px 0 10px;text-align:center"><img src="${esc(q.figure_url)}" alt="Question figure"
+              style="max-width:100%;max-height:220px;border-radius:6px;border:1px solid var(--border)"></div>` : '';
+            const control = finalized
+              ? `<span class="credit-toggle ${gd.status}" disabled>${CREDIT_LABEL[gd.status]}</span>`
+              : creditControl(sid, q, gd, 'sgtg');
+            const feedback = finalized
+              ? (gd.feedback ? `<div class="feedback-block" style="margin-top:8px">${esc(gd.feedback)}</div>` : '')
+              : `<textarea class="feedback-input" data-act="feedback" data-qid="${esc(q.id)}"
+                    placeholder="Feedback for student (optional)…">${esc(gd.feedback)}</textarea>`;
+            const hint = (gd.status === 'warn' && !finalized)
+              ? `<div class="warn-hint" data-hint>${WARN_HINT}</div>` : '';
+            return `<div class="grade-q" data-status="${gd.status}" id="sgrow-${esc(q.id)}">
+              <div class="gq-head"><span class="gq-label">Q${idx + 1} · ${q.points} pts</span>${control}</div>
+              <div class="gq-text">${esc(q.text)}</div>${fig}
+              <div class="grade-answer ${hasAns ? '' : 'empty'}">${hasAns ? esc(String(ans)) : 'No answer submitted.'}</div>
+              ${feedback}${hint}
+            </div>`;
+          }).join('');
+
+      document.getElementById('sg-body').innerHTML = `
+        <div class="gc-head" style="margin-bottom:12px">
+          <span class="tag">Sec ${esc(ctx.sectionCodeOf(sgStudent.section_id))}</span>${chips}
+        </div>
+        <div class="sg-scroll">${body || '<div class="muted">This assignment has no gradable questions.</div>'}</div>
+        <div class="alert alert-warn" id="sg-dirty" hidden style="margin-top:12px"></div>`;
+
+      // Finalized work is read-only until it is reopened, so the write buttons would only ever
+      // produce a no-op or an argument with the DB. Reopen is on the header row above.
+      document.getElementById('sg-actions').hidden = false;
+      document.getElementById('sg-save').disabled = finalized || effortGraded;
+      document.getElementById('sg-finalize').disabled = finalized || effortGraded;
+      sgSyncDirty();
+    }
+
+    function sgSyncDirty() {
+      const el = document.getElementById('sg-dirty');
+      if (!el) return;
+      const n = dirtyCount({ x: sgGradeData });
+      el.hidden = n === 0;
+      if (n) el.innerHTML = `<strong>${n} unsaved change${n === 1 ? '' : 's'}.</strong>
+        Nothing reaches the cadet until you Save draft or Finalize &amp; publish.`;
+    }
+
+    function onGradeClick(e) {
+      const el = e.target.closest('[data-act]');
+      if (!el) return;
+      switch (el.dataset.act) {
+        case 'toggle':     sgToggle(el.dataset.qid, Number(el.dataset.pts)); break;
+        case 'reopen':     sgReopen(); break;
+        case 'ext':        openExt(); break;
+        case 'ext-remove': removeExt(); break;
+      }
+    }
+
+    function sgToggle(qid, pts) {
+      const gd = applyCredit(sgGradeData[qid], pts);
+      const row = document.getElementById(`sgrow-${qid}`);
+      if (row) {
+        const old = row.querySelector('.credit-change, .credit-toggle');
+        if (old) old.replaceWith(creditControlNode(sgStudent.student_id, { id: qid, points: pts }, gd, 'sgtg'));
+        row.dataset.status = gd.status;
+        let hint = row.querySelector('[data-hint]');
+        if (gd.status === 'warn' && !hint) {
+          hint = document.createElement('div'); hint.className = 'warn-hint'; hint.dataset.hint = '1';
+          hint.textContent = WARN_HINT;
+          row.appendChild(hint);
+        } else if (gd.status !== 'warn' && hint) hint.remove();
+      }
+      const tot = document.getElementById('sg-total');
+      if (tot) tot.textContent = `${sgTotal().toFixed(2)} / ${Number(sgOffering.pointsPossible ?? 0).toFixed(2)} pts`;
+      sgSyncDirty();
+    }
+
+    /**
+     * Save or publish. One student, one row — `writableCount` is not consulted because the answer
+     * is at most one and the operator is looking at the card it would write.
+     */
+    async function sgWrite(finalize) {
+      const st = document.getElementById('sg-status');
+      const sid = sgStudent.student_id;
+      const students = [sgStudent];
+      if (finalize && !confirm(
+        `Publish this grade to ${sgStudent.name}?\n\nThey will see their score and feedback immediately.`)) return;
+      st.textContent = finalize ? 'Publishing…' : 'Saving…';
+      const model = { [sid]: sgGradeData };
+      const res = finalize
+        ? await G.finalizeScores(ctx, sgOffering, students, model, sgGradeMap)
+        : await G.saveScores(ctx, sgOffering, students, model, sgGradeMap);
+      if (res.error) { st.textContent = ''; document.getElementById('sg-error').textContent = 'Failed: ' + res.error.message; return; }
+      if (res.skipped) { st.textContent = 'Nothing to save — no grade exists yet and nothing was edited.'; return; }
+      st.textContent = finalize ? '✅ Published' : '✓ Saved draft';
+      // Reload the page behind the modal, then re-open on the same assignment: the lesson table,
+      // the totals and the diagnostics all just changed, and leaving them stale would make the row
+      // behind the modal disagree with the modal on top of it.
+      await load();
+      await openGrade(sgOffering.offeringId);
+      document.getElementById('sg-status').textContent = finalize ? '✅ Published' : '✓ Saved draft';
+      setTimeout(() => { const s = document.getElementById('sg-status'); if (s) s.textContent = ''; }, 4000);
+    }
+
+    async function sgReopen() {
+      if (!confirm(`Reopen this grade for ${sgStudent.name}? Their score is hidden until you re-finalize.`)) return;
+      const { error } = await G.reopenScore(ctx, sgOffering.offeringId, sgStudent.enrollment_id);
+      if (error) { document.getElementById('sg-error').textContent = 'Could not reopen: ' + error.message; return; }
+      await load();
+      await openGrade(sgOffering.offeringId);
+    }
+
+    /* ── Extensions, from inside the grading modal ─────────────────────────── */
+    function wireExtModal() {
+      const m = document.getElementById('sx-modal');
+      m.addEventListener('click', (e) => {
+        if (e.target === m || e.target.dataset.close !== undefined) m.classList.remove('open');
+      });
+      document.getElementById('sx-save').addEventListener('click', saveExt);
+    }
+
+    function openExt() {
+      document.getElementById('sx-heading').textContent = sgExtension ? 'Edit extension' : 'Grant extension';
+      document.getElementById('sx-name').textContent =
+        `${sgStudent.name} — ${sgOffering.title || sgOffering.slug}`;
+      document.getElementById('sx-error').textContent = '';
+      document.getElementById('sx-reason').value = sgExtension?.reason || '';
+      const existing = sgExtension?.due || sgOffering?.dueAt;
+      const inp = document.getElementById('sx-due');
+      if (existing) {
+        const d = new Date(existing), pad = n => String(n).padStart(2, '0');
+        inp.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      } else inp.value = '';
+      document.getElementById('sx-modal').classList.add('open');
+    }
+
+    async function saveExt() {
+      const val = document.getElementById('sx-due').value;
+      const reason = document.getElementById('sx-reason').value.trim();
+      const err = document.getElementById('sx-error');
+      if (!val) { err.textContent = 'Please select a date and time.'; return; }
+      // Enforced by a NOT NULL + CHECK in migration 007 too; caught here so the operator gets a
+      // sentence instead of a Postgres constraint name.
+      if (!reason) { err.textContent = 'A reason is required — your director sees it on the extensions report.'; return; }
+      const { error } = await G.setExtension(
+        ctx, sgOffering.offeringId, sgStudent.enrollment_id, new Date(val).toISOString(), reason);
+      if (error) { err.textContent = 'Save failed: ' + error.message; return; }
+      document.getElementById('sx-modal').classList.remove('open');
+      await load();
+      await openGrade(sgOffering.offeringId);
+    }
+
+    async function removeExt() {
+      if (!confirm(`Remove the extension for ${sgStudent.name}?\n\nThey revert to the original due date. `
+                 + `This erases the record of it — if you are pulling one back rather than `
+                 + `correcting a mistake, your director should revoke it instead.`)) return;
+      const { error } = await G.removeExtension(sgOffering.offeringId, sgStudent.enrollment_id);
+      if (error) {
+        // The DB refuses this once the student has committed work under the extension.
+        alert(/already submitted under it/i.test(error.message)
+          ? `${sgStudent.name} has already submitted under this extension, so it cannot be removed.\n\n`
+            + `Withdrawing it now would only turn an on-time submission into a late one. Grade the work.`
+          : 'Failed to remove extension: ' + error.message);
+        return;
+      }
+      await load();
+      await openGrade(sgOffering.offeringId);
     }
   </script>
 </body>

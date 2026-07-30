@@ -582,6 +582,98 @@ are not lost: the Grade tab's "Extensions ready to grade" queue lists exactly th
 their own deadline passes, and they are graded by hand. Do not re-run the whole assignment to pick
 up a handful of late submissions — that is the scenario guard 2 exists for.
 
+### Then: the students who submitted nothing get a zero
+
+*Added 2026-07-30 at the course director's instruction: "blank at time of submission without an
+extension should result in a 0 for score and a 0 for understanding."*
+
+Until then this skill wrote a row only for students who submitted, and listed `missingEnrollments`
+in the run report. **A missing student therefore had no `grades` row at all**, which is a different
+claim from "scored zero" and the wrong one: their total was already built as though the zero
+existed (the gradebook counts a past-due non-submission as 0 out of full), but no number anywhere
+said so. The gradebook showed a dash, the student's own page showed nothing, and the two could not
+be reconciled against the percentage they added up to.
+
+**Write a zero grade for every enrollment that is ALL of:**
+
+1. in the filtered scope, `status = 'active'`;
+2. **past its own effective deadline** — extension → per-section `assignment_due_dates` →
+   offering `due_at`, in that precedence, exactly as `effectiveDue()` resolves it. Compute this per
+   student, not per assignment: an M-day and a T-day section do not come due together;
+3. holding **no active extension** (`revoked_at IS NULL` and `extended_due_at` still in the
+   future). This is the director's exception and the whole reason the rule is not simply "no
+   submission by now";
+4. with **no written content and no interactive commit** — not in `submittedEnrollments`, and not
+   on the interactive path (they are graded by the migration-015 trigger on commit; never write
+   over that);
+5. not skipped by the two guards above — a finalized grade or an instructor draft is still an
+   instructor's decision, and "they handed in nothing" is not new information that overrides it.
+
+**A draft with real content is NOT a zero.** Step 5 already says to grade a student whose written
+content is non-empty even when they never pressed Submit. That rule wins here: they wrote
+something, so they are graded on it, not zeroed.
+
+The payload is an ordinary grade row, so nothing downstream needs a special case:
+
+```json
+{
+  "enrollment_id": "{enrollment uuid}",
+  "assignment_offering_id": "{OFFERING_ID}",
+  "submission_id": null,
+  "points_earned": 0,
+  "points_possible": {POINTS_POSSIBLE},
+  "question_scores": {
+    "q1": { "score": 0, "max": 0, "feedback": "",                          "status": "zero" },
+    "q2": { "score": 0, "max": 1, "feedback": "No submission received.",   "status": "zero" },
+    "q3": { "score": 0, "max": 1, "feedback": "No submission received.",   "status": "zero" }
+  },
+  "diagnostic": {
+    "q2_effort": 0,
+    "q3_understanding": 0,
+    "schema": 1,
+    "source": "preflight-analyze",
+    "no_submission": true,
+    "effort": 0,
+    "overall_understanding": 0,
+    "objectives": [],
+    "misconceptions": [],
+    "reading_reflection": { "meaningful": false, "engagement": 0 },
+    "flags": { "needs_follow_up": true, "notable": false }
+  },
+  "source": "ai_suggested",
+  "is_finalized": false,
+  "graded_at": "{ISO timestamp}"
+}
+```
+
+Three details that are decisions rather than defaults:
+
+- **`is_finalized: false`, `source: "ai_suggested"` — the same as every other row this skill
+  writes, and that is what makes the extension case work.** The director's second sentence was
+  "granting an extension should allow this to be overwritten when resubmitted": an unfinalized
+  AI-sourced row is overwritten by the next run without any special handling, because guard 1 and
+  guard 2 both pass it through. If the instructor has since **finalized** the column, the zero is
+  published and a later submission needs the grade reopened first — one click, on the Grade page
+  or in the per-student grading modal on `faculty/student.html`.
+- **`no_submission: true` marks it.** An all-zero diagnostic is otherwise indistinguishable from a
+  submission of gibberish, which scores the same way and means something completely different.
+  Documented in [`references/WRITTEN-SCHEMA1.md`](references/WRITTEN-SCHEMA1.md).
+- **`feedback` on the zero-point Q1 stays empty.** Rule 3 ("never deduct without feedback") is
+  about a deduction, and a question worth 0 points deducts nothing; a sentence there would only be
+  a second copy of the same message on a card that does not render it (CORE.md §2, Q1 privacy).
+
+**This does not change any cohort number.** `/lesson-aggregate` and the rollup read
+`loadInteractionData()`, which includes a student only if they have a submission carrying work on
+a graded activity — a non-submitter has no submission row, so they are absent from the effort
+distribution, the understanding means and the readiness prose exactly as before. The zero moves
+the **gradebook cell, the student's own total, and the per-student page**, which is where it was
+always already being counted. Do not "fix" the aggregator to include these rows: a class average
+that folds in people who did nothing is a different statistic from the one the prose is written
+about.
+
+Report the count separately from the graded count — `"zeroed {Z} who submitted nothing by their
+deadline"` — because the two numbers answer different questions and summing them hides both.
+
 ### Then upsert
 
 ```

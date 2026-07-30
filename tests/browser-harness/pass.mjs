@@ -71,7 +71,12 @@ const FACULTY = [
   ['grade',       '/site/faculty/grade.html',     '.page-head, .empty-state'],
     ['lessons',     '/site/faculty/lessons.html',   '.page-head, .empty-state'],
   ['admin',       '/site/faculty/admin.html',     '.page-head, .empty-state'],
-  ['extensions',  '/site/faculty/extensions.html', '.page-head, .empty-state'],
+  // Extensions is a TAB of admin.html since 2026-07-30, reached by ?tab=. Walked as its own entry
+  // anyway: it is a distinct panel with its own load and its own render, and the thing this
+  // harness catches — a console error on a page that looks fine — is per panel, not per file.
+  // `faculty/extensions.html` itself is now a redirect here and is deliberately NOT walked; a
+  // page whose whole body is a <script> that leaves would only ever assert the destination twice.
+  ['extensions',  '/site/faculty/admin.html?tab=extensions', '.page-head, .empty-state'],
   ['account',     '/site/faculty/account.html',   '.page-head h1'],
   ['system',      '/site/faculty/system.html',    '.page-head, .empty-state'],
   ['help',        '/site/faculty/help.html',      '.page-head, .help-shell, main'],

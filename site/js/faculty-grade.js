@@ -229,6 +229,20 @@ export function buildGradeData(offering, students, responseMap, gradeMap, submis
         score: status === 'zero' ? 0 : Number(q.points) || 0,
         feedback: saved?.feedback ?? '',
         status,
+        // What this answer was when the page loaded, and it never changes for the life of the
+        // view. Two things read it, and neither works off `status`:
+        //
+        //   The STATUS-LAMP FILTER. Filtering on the live status meant re-scoring an answer made
+        //   it vanish under your cursor — turn a red into a green while "no credit" is the only
+        //   lit lamp and the card you were reading disappears, which reads as data loss. The
+        //   filter is a statement about the set you chose to review, and re-grading a member of
+        //   that set does not remove it from it. It re-settles on the next load, which is exactly
+        //   when the reader's chosen set is genuinely stale.
+        //
+        //   The PENDING-CHANGE CONTROL. `status !== original` is what makes grade.html draw the
+        //   before → after pair instead of one chip, so an unsaved change is legible as a change
+        //   rather than as the state having always been that.
+        original: status,
         modified: false,
       };
     });

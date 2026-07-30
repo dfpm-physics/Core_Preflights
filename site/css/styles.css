@@ -986,6 +986,16 @@ tr:last-child td { border-bottom: none; }
   background: var(--card); border: 1px solid var(--border); border-radius: 14px;
   box-shadow: var(--shadow-lg); width: 100%; max-width: 720px; padding: 24px;
 }
+/* The per-student grading modal (student.html). Wider than the 720px default because it holds a
+   question prompt, the cadet's full answer and a feedback box — the same content the Grade page
+   gives a full-width card to — and narrower reading measure there would make it the harder of the
+   two places to grade, which defeats the point of having it. */
+.modal-wide { max-width: 900px; }
+/* Cap the question list rather than the dialog, so the header chips (Reopen, extension, total) and
+   the write buttons stay put while the answers scroll under them. Those are what the reader came
+   for; making them scroll away is how you get a modal people close by mistake. */
+.sg-scroll { max-height: min(60vh, 620px); overflow-y: auto; padding-right: 4px; }
+
 .modal-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
 .modal-head h2 { font-size: 1.15em; font-weight: 700; flex: 1; }
 .modal-close { background: transparent; border: none; color: var(--muted); font-size: 1.4em; cursor: pointer; line-height: 1; }
@@ -1079,7 +1089,7 @@ tr:last-child td { border-bottom: none; }
 .req { font-size: 0.82em; font-weight: 700; color: var(--red); text-transform: uppercase; letter-spacing: 0.04em; }
 
 /* ============================================================= *
- *  Extensions report (faculty/extensions.html)                  *
+ *  Extensions report (faculty/admin.html — Extensions tab)      *
  * ============================================================= */
 .ext-rank { display: flex; flex-direction: column; gap: 7px; }
 .ext-rank-row { display: grid; grid-template-columns: minmax(120px, 200px) 1fr auto auto; align-items: center; gap: 10px; font-size: 0.88em; }
@@ -1215,6 +1225,25 @@ tr:last-child td { border-bottom: none; }
 .credit-toggle.warn { background: var(--alert-warn-bg);  color: var(--alert-warn-fg);  border-color: var(--alert-warn-bd); }
 .credit-toggle.zero { background: var(--alert-error-bg); color: var(--alert-error-fg); border-color: var(--alert-error-bd); }
 .credit-toggle[disabled] { cursor: default; opacity: 0.85; }
+
+/* Pending change: what it was → what it will be. The "was" chip keeps its colour but is faded and
+   inert, so the pair reads as a direction of travel rather than as two live controls; only the
+   right-hand one is a <button>. Collapses back to a single chip when the pending value cycles
+   round to the original — see grade.html creditControl(). */
+.credit-change { display: inline-flex; align-items: center; gap: 7px; }
+.credit-toggle.was { opacity: 0.45; cursor: default; filter: saturate(0.7); }
+.credit-arrow { font-size: 0.95em; font-weight: 800; color: var(--muted); line-height: 1; }
+
+/* The unsaved-changes banner. Sticky because the buttons that write are at the bottom of a very
+   long page, which is the whole reason it exists. */
+.dirty-banner { position: sticky; top: 8px; z-index: 5; margin-bottom: 14px;
+  box-shadow: var(--shadow-md); }
+.dirty-banner[hidden] { display: none; }
+
+/* A button that reads as a link — used inside prose, where a real button would break the line. */
+.linkish { font: inherit; font-weight: 700; color: inherit; background: none; border: 0; padding: 0;
+  cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.linkish:hover { text-decoration-thickness: 2px; }
 .warn-hint { font-size: 0.74em; color: var(--alert-warn-fg); margin-top: 6px; }
 .ext-chip { font-size: 0.72em; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--feedback-bg); color: var(--feedback-fg); }
 
@@ -1272,6 +1301,24 @@ tr:last-child td { border-bottom: none; }
 .pick-item:hover, .pick-item:focus-visible { background: var(--surface-sunken); }
 .pick-item .pi-sub { display: block; font-size: 0.82em; color: var(--muted); margin-top: 1px; }
 .pick-empty { padding: 8px 11px; font-size: 0.85em; color: var(--muted); }
+
+/* Multi-select variant — the Add staff picker, where the answer is usually several people
+   (admin.html wireStaffPicker). The single-select cadet picker keeps the plain styles above:
+   there, clicking IS the answer and a persistent tick would imply a second click was expected.
+   Taller, because this list is shown open rather than as search results. */
+.pick-multi { max-height: 260px; }
+.pick-multi .pick-item { display: flex; align-items: center; gap: 9px; }
+.pick-item.picked { background: var(--mc-sel-bg); font-weight: 600; }
+.pick-tick { flex: none; width: 16px; height: 16px; border: 1px solid var(--muted); border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.72em; font-weight: 800; line-height: 1; color: transparent; }
+.pick-item.picked .pick-tick { background: var(--blue-lt); border-color: var(--blue-lt); color: #fff; }
+
+/* A removable selection, shown above the list so the batch is legible without scrolling it. */
+.chip-x { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 0.8em;
+  font-weight: 600; cursor: pointer; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--blue-lt); background: var(--mc-sel-bg); color: var(--text); }
+.chip-x:hover { border-color: var(--red); color: var(--red); }
 
 .cov-wide { font-size: 0.86em; margin-bottom: 12px; }
 .cov-pool { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px;
@@ -1525,7 +1572,24 @@ a.tbtn { text-decoration: none; display: inline-flex; align-items: center; }
 .ai-prose > :first-child { margin-top: 0; }
 .ai-prose > :last-child { margin-bottom: 0; }
 
-/* student responses panel */
+/* student response panels — Reading Reflections and Free Responses share every class here */
+
+/* The question the answers below are answers TO, above the Free Responses panel only. Sunken and
+   quiet on purpose: it is a memory jog for an instructor reading answers days later, not part of
+   the analysis, and it must not compete with the cards under it.
+
+   The figure is CAPPED at 200px tall (director, 2026-07-30). Preflight figures are authored for a
+   student solving the problem and several are near-full-width diagrams; at their real size one of
+   them pushes every student response below the fold, which inverts what the panel is for. It
+   scales down and never up — a small figure stays small rather than being stretched into
+   blurriness. */
+.sr-prompt { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap;
+  background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 8px;
+  padding: 11px 13px; margin-bottom: 13px; }
+.sr-prompt-q { flex: 1 1 260px; min-width: 0; font-size: 0.86em; line-height: 1.5; color: var(--text-soft); }
+.sr-prompt-fig { flex: 0 1 auto; max-width: min(100%, 320px); max-height: 200px; width: auto; height: auto;
+  border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+
 .sr-controls { display: flex; align-items: center; gap: 10px; margin-bottom: 13px; flex-wrap: wrap; }
 .sr-controls .spacer { flex: 1 1 auto; }
 .switch { display: inline-flex; align-items: center; gap: 8px; font: inherit; font-size: 0.8em; font-weight: 600;

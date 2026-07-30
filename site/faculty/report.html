@@ -774,14 +774,34 @@
       }).join('');
     }
 
-    // ── Student responses panel (single-section scope only) ──
-    // Real reading-reflection quotes (contract §5.5), attributed via the roster (name + section).
-    // "AI pick" rows are the aggregator's per-section showcase quotes (interaction_analysis
-    // .selected_quotes, resolved to live text here); the rest is a random sample. Names hidden by
-    // default for showing in class. The whole-course ("All sections") view shows no quote panel.
-    let respState = null;   // { ai:[], pool:[], sample:[], randN, namesOn }
+    /* ── Student response panels (single-section scope only) ─────────────────────
+     * TWO panels since 2026-07-30 (director's request), built from one implementation:
+     *
+     *   Student Reading Reflections — what the cohort said about the reading (Q2). Carries the
+     *     aggregator's AI-picked showcase quotes, because reflections are what /lesson-aggregate
+     *     selects from (SKILL.md "selected_quotes").
+     *   Student Free Responses      — their answers to the lesson's own physics question (Q3).
+     *     NO AI PICKS, and that is a deliberate limit rather than an oversight: the lesson cycle
+     *     is untouched by this change, so nothing has ever argued for a free-response quote. Every
+     *     card here is a random sample, and the panel says so.
+     *
+     * It was ONE panel called "Student responses" until then, showing reflections only — which is
+     * the part that misled. The heading claimed everything a student wrote and delivered one
+     * question's worth, so an instructor looking for what the class said about the actual physics
+     * found a panel that appeared to be it and was not.
+     *
+     * Both are single-section tools (`singleScope`): AI picks are per-section and an instructor's
+     * union must never surface a cross-section quote. The rule is inherited unchanged by the
+     * second panel — not because IT has AI picks, but because a quote panel is for reading out in
+     * one classroom, and the free responses of a cohort you do not teach are not that.
+     */
+    let respStates = {};   // prefix -> { ai, pool, sample, randN, namesOn, showAll }
+
+    /** Roster lookup shared by both builders: student id -> { name, section }. */
+    const whoOf = roster => Object.fromEntries(roster.map(st => [String(st.student_id), st]));
+
     function buildResponses(rows, roster, analysis) {
-      const who = Object.fromEntries(roster.map(st => [String(st.student_id), st]));
+      const who = whoOf(roster);
       const byId = Object.fromEntries(rows.map(r => [String(r.student_id), r]));
       const reflOf = id => {
         const d = (byId[id]?.report_data && typeof byId[id].report_data === 'object') ? byId[id].report_data : null;
@@ -806,6 +826,29 @@
         pool.push({ id, text, name: w.name || '—', section: w.section || '' });
       });
       return { ai, pool };
+    }
+
+    /**
+     * The same shape for free responses, and `ai` is empty BY CONSTRUCTION rather than by
+     * happening to find none. `analysis.selected_quotes` resolves through the reflection text and
+     * always will until the aggregator learns to pick from a second field; pretending otherwise
+     * here would mean silently attributing "AI pick" to a card the AI never argued for.
+     *
+     * `row.free_response` is the verbatim answer, lifted onto the row by loadInteractionData().
+     * A pure interactive taker has null there, so they simply do not appear — which is also why
+     * an empty pool is the honest signal that this assignment has no free-response half.
+     */
+    function buildFreeResponses(rows, roster) {
+      const who = whoOf(roster);
+      const pool = [];
+      rows.forEach(r => {
+        const text = typeof r.free_response === 'string' ? r.free_response.trim() : '';
+        if (!text) return;
+        const id = String(r.student_id);
+        const w = who[id] || {};
+        pool.push({ id, text, name: w.name || '—', section: w.section || '' });
+      });
+      return { ai: [], pool };
     }
     function sampleN(arr, n) {
       const p = arr.slice(), out = [];
@@ -834,14 +877,41 @@
         </div>
       </div>`;
     }
-    // The student-responses / showcase panel is a per-section teaching tool: it renders only on a
-    // single-section scope (`singleScope`). The "All sections" view shows no quote panel — AI picks
-    // are per-section and an instructor's union must never surface a cross-section quote.
-    // ("My sections" counts as single-section when you teach exactly one — see singleSectionScope.)
-    function responsesSection(rows, roster, analysis, singleScope) {
-      if (!singleScope) { respState = null; return ''; }
-      const { ai, pool } = buildResponses(rows, roster, analysis);
-      if (!ai.length && !pool.length) { respState = null; return ''; }
+    /**
+     * The prompt the responses below are answers TO — rendered above the free-response panel only.
+     *
+     * WHY ONLY THERE. The reading reflection asks the identical fixed question every lesson of the
+     * term ("what did you find confusing or most interesting"), so printing it above its own panel
+     * would be forty repetitions of a sentence the reader has memorised. The free-response
+     * question is the lesson's actual physics and is different every time — an instructor reading
+     * eighteen answers three days later genuinely cannot recall which one they were to. It is
+     * there to jog a memory, not to be studied, which is why the figure is capped rather than
+     * shown at its authored size (director, 2026-07-30).
+     */
+    function promptBlock(q) {
+      if (!q || !String(q.text || '').trim()) return '';
+      const fig = q.figure_url
+        ? `<img class="sr-prompt-fig" src="${esc(q.figure_url)}" alt="Figure accompanying the free-response question" loading="lazy">`
+        : '';
+      return `<div class="sr-prompt">
+        <div class="sr-prompt-q">${esc(String(q.text).trim())}</div>${fig}
+      </div>`;
+    }
+
+    /**
+     * One quote panel. Per-section teaching tool: rendered only on a single-section scope
+     * (`singleScope`), because AI picks are per-section and an instructor's union must never
+     * surface a cross-section quote. ("My sections" counts as single-section when you teach
+     * exactly one — see singleSectionScope.)
+     *
+     * Parameterized by `p`, a two-letter DOM prefix, so the two panels are the same code rather
+     * than the same code twice. Every id below is `${p}-…`; the CSS classes are shared, and the
+     * click handlers scope themselves to `#${p}-list`.
+     */
+    function responsePanel(p, { title, ai, pool, note, prompt = '' }) {
+      // Absent, not empty. A panel with no cards says "we have nothing from this cohort", which on
+      // the free-response side is indistinguishable from "this assignment had no written half".
+      if (!ai.length && !pool.length) { delete respStates[p]; return ''; }
       // 3 AI picks + 5 ADDITIONAL random — the random count is fixed, not a remainder.
       //
       // This previously read `Math.max(0, 5 - ai.length)`, capping the panel at ~5 cards total, so
@@ -854,80 +924,112 @@
       const randN = Math.min(RANDOM_N, pool.length);
       // `showAll` switches the random sample for the ENTIRE pool, AI picks still pinned on top.
       // The sampled view is the teaching default (8 cards fit on a screen and in a class); reading
-      // every reflection is a different task — grading, or looking for someone specific — and used
+      // every response is a different task — grading, or looking for someone specific — and used
       // to require opening each student individually.
-      respState = { ai, pool, randN, sample: sampleN(pool, randN), namesOn: false, showAll: false };
+      respStates[p] = { ai, pool, randN, sample: sampleN(pool, randN), namesOn: false, showAll: false };
       const total = ai.length + pool.length;
-      const aiNote = ai.length ? `${ai.length} AI pick${ai.length === 1 ? '' : 's'}${randN ? ' + ' : ''}` : '';
-      const randNote = randN ? `${randN} random` : '';
-      return `<div class="lr-sec fw-panel" id="sr-sec">
-        <div class="lr-eyebrow">Student responses <span class="dim" id="sr-note">· ${aiNote}${randNote} · select to copy for slides</span></div>
+      return `<div class="lr-sec fw-panel" id="${p}-sec">
+        <div class="lr-eyebrow">${esc(title)} <span class="dim" id="${p}-note">· ${esc(note(respStates[p]))}</span></div>
+        ${prompt}
         <div class="sr-controls">
-          <button class="switch" id="sr-names" type="button" aria-pressed="false"><span class="track"><span class="knob"></span></span>Show names</button>
+          <button class="switch" id="${p}-names" type="button" aria-pressed="false"><span class="track"><span class="knob"></span></span>Show names</button>
           <span class="spacer"></span>
-          ${pool.length > randN ? `<button class="tbtn" id="sr-all" type="button" aria-pressed="false">Show all ${total}</button>` : ''}
-          ${randN > 0 && pool.length > randN ? `<button class="tbtn" id="sr-shuffle" type="button">↻ Shuffle random</button>` : ''}
-          <button class="tbtn" id="sr-copy" type="button">Copy selected</button>
+          ${pool.length > randN ? `<button class="tbtn" id="${p}-all" type="button" aria-pressed="false">Show all ${total}</button>` : ''}
+          ${randN > 0 && pool.length > randN ? `<button class="tbtn" id="${p}-shuffle" type="button">↻ Shuffle random</button>` : ''}
+          <button class="tbtn" id="${p}-copy" type="button">Copy selected</button>
         </div>
-        <div class="sr-quotes" id="sr-list"></div>
+        <div class="sr-quotes" id="${p}-list"></div>
       </div>`;
+    }
+
+    /** The sub-heading each panel carries. Different sentences, because they are different claims. */
+    const reflectionNote = (st) => st.showAll
+      ? `${st.ai.length} AI pick${st.ai.length === 1 ? '' : 's'} + all ${st.pool.length} reflections · select to copy for slides`
+      : `${st.ai.length ? `${st.ai.length} AI pick${st.ai.length === 1 ? '' : 's'}${st.randN ? ' + ' : ''}` : ''}${st.randN ? `${st.randN} random` : ''} · select to copy for slides`;
+    // No "AI pick" clause anywhere in this one — there are none, and saying "0 AI picks" would
+    // imply the aggregator looked and declined rather than that it was never asked.
+    const freeNote = (st) => st.showAll
+      ? `all ${st.pool.length} responses · select to copy for slides`
+      : `${st.randN} of ${st.pool.length}, at random · select to copy for slides`;
+
+    /**
+     * Both panels, in reading order: what they made of the reading, then what they made of the
+     * question. The free-response panel is absent — not empty — when nothing produced one, which
+     * is every interactive-only assignment.
+     */
+    function responsesSection(rows, roster, analysis, singleScope, lesson) {
+      if (!singleScope) { respStates = {}; return ''; }
+      respStates = {};
+      const refl = buildResponses(rows, roster, analysis);
+      const free = buildFreeResponses(rows, roster);
+      return responsePanel('sr', {
+             title: 'Student Reading Reflections', ...refl, note: reflectionNote })
+           + responsePanel('fr', {
+             title: 'Student Free Responses', ...free, note: freeNote,
+             prompt: promptBlock(lesson?.freeQuestion) });
     }
     // Selection is keyed on the quote TEXT, not on DOM identity, so it survives a re-render —
     // which the names toggle now performs (see srCard on why hiding is not enough).
-    function drawResponses(keepSelected) {
-      const list = document.getElementById('sr-list'); if (!list || !respState) return;
+    //
+    // The NOTE is recomputed from the panel's own `note()` rather than rebuilt inline. It used to
+    // be written here in a second copy of the sentence built in responsesSection(), which is
+    // exactly the drift a second panel would have made permanent: two panels × two copies is four
+    // places to keep one sentence right.
+    function drawResponses(p, keepSelected) {
+      const st = respStates[p];
+      const list = document.getElementById(`${p}-list`); if (!list || !st) return;
       const sel = keepSelected
         ? new Set([...list.querySelectorAll('.sr-quote.sel')].map(c => c.dataset.text))
         : null;
       // AI picks stay pinned on top in both modes — "show all" widens the sample, it does not
       // discard the argued-for showcase quotes or reorder them into the crowd.
-      const body = respState.showAll ? respState.pool : respState.sample;
-      list.innerHTML = respState.ai.map(q => srCard(q, true, respState.namesOn)).join('')
-        + body.map(q => srCard(q, false, respState.namesOn)).join('');
+      const body = st.showAll ? st.pool : st.sample;
+      list.innerHTML = st.ai.map(q => srCard(q, true, st.namesOn)).join('')
+        + body.map(q => srCard(q, false, st.namesOn)).join('');
       if (sel) list.querySelectorAll('.sr-quote').forEach(c => {
         if (sel.has(c.dataset.text)) c.classList.add('sel');
       });
-      const note = document.getElementById('sr-note');
-      if (note) {
-        const aiN = respState.ai.length;
-        note.textContent = respState.showAll
-          ? `· ${aiN} AI pick${aiN === 1 ? '' : 's'} + all ${respState.pool.length} responses · select to copy for slides`
-          : `· ${aiN ? `${aiN} AI pick${aiN === 1 ? '' : 's'}${respState.randN ? ' + ' : ''}` : ''}${respState.randN ? `${respState.randN} random` : ''} · select to copy for slides`;
-      }
-      const copyBtn = document.getElementById('sr-copy');
+      const note = document.getElementById(`${p}-note`);
+      if (note) note.textContent = '· ' + PANEL_NOTE[p](st);
+      const copyBtn = document.getElementById(`${p}-copy`);
       const updateCopy = () => { const n = list.querySelectorAll('.sr-quote.sel').length; copyBtn.textContent = n ? `Copy selected (${n})` : 'Copy selected'; };
       list.querySelectorAll('.sr-quote').forEach(c => c.addEventListener('click', () => { c.classList.toggle('sel'); updateCopy(); }));
       updateCopy();
     }
-    function wireResponses() {
-      if (!document.getElementById('sr-sec') || !respState) return;
-      drawResponses();
-      const namesBtn = document.getElementById('sr-names');
+    const PANEL_NOTE = { sr: reflectionNote, fr: freeNote };
+
+    /** Wire whichever panels rendered. Neither is guaranteed — see responsesSection. */
+    function wireResponses() { Object.keys(respStates).forEach(wireResponsePanel); }
+
+    function wireResponsePanel(p) {
+      const st = respStates[p];
+      if (!document.getElementById(`${p}-sec`) || !st) return;
+      drawResponses(p);
+      const namesBtn = document.getElementById(`${p}-names`);
       namesBtn?.addEventListener('click', () => {
-        respState.namesOn = !respState.namesOn;
-        namesBtn.setAttribute('aria-pressed', respState.namesOn); namesBtn.classList.toggle('on', respState.namesOn);
+        st.namesOn = !st.namesOn;
+        namesBtn.setAttribute('aria-pressed', st.namesOn); namesBtn.classList.toggle('on', st.namesOn);
         // Re-render rather than unhide (see srCard), preserving what the instructor had selected.
-        drawResponses(true);
+        drawResponses(p, true);
       });
-      const allBtn = document.getElementById('sr-all');
+      const allBtn = document.getElementById(`${p}-all`);
       allBtn?.addEventListener('click', () => {
-        respState.showAll = !respState.showAll;
-        allBtn.setAttribute('aria-pressed', String(respState.showAll));
-        allBtn.classList.toggle('on', respState.showAll);
-        allBtn.textContent = respState.showAll
-          ? `Show sample` : `Show all ${respState.ai.length + respState.pool.length}`;
+        st.showAll = !st.showAll;
+        allBtn.setAttribute('aria-pressed', String(st.showAll));
+        allBtn.classList.toggle('on', st.showAll);
+        allBtn.textContent = st.showAll ? `Show sample` : `Show all ${st.ai.length + st.pool.length}`;
         // Shuffling a full listing is meaningless — hide it rather than leave a dead control.
-        const sh = document.getElementById('sr-shuffle');
-        if (sh) sh.hidden = respState.showAll;
-        drawResponses();
+        const sh = document.getElementById(`${p}-shuffle`);
+        if (sh) sh.hidden = st.showAll;
+        drawResponses(p);
       });
-      document.getElementById('sr-shuffle')?.addEventListener('click', () => { respState.sample = sampleN(respState.pool, respState.randN); drawResponses(); });
-      document.getElementById('sr-copy')?.addEventListener('click', async () => {
-        const sel = [...document.querySelectorAll('#sr-list .sr-quote.sel')]; if (!sel.length) return;
-        const btn = document.getElementById('sr-copy');
-        const text = sel.map(c => respState.namesOn ? `"${c.dataset.text}"\n— ${c.dataset.name} (${c.dataset.sec})` : `"${c.dataset.text}"`).join('\n\n');
+      document.getElementById(`${p}-shuffle`)?.addEventListener('click', () => { st.sample = sampleN(st.pool, st.randN); drawResponses(p); });
+      document.getElementById(`${p}-copy`)?.addEventListener('click', async () => {
+        const sel = [...document.querySelectorAll(`#${p}-list .sr-quote.sel`)]; if (!sel.length) return;
+        const btn = document.getElementById(`${p}-copy`);
+        const text = sel.map(c => st.namesOn ? `"${c.dataset.text}"\n— ${c.dataset.name} (${c.dataset.sec})` : `"${c.dataset.text}"`).join('\n\n');
         try { await navigator.clipboard.writeText(text); const old = btn.textContent; btn.textContent = '✓ Copied'; setTimeout(() => { btn.textContent = old; }, 1200); }
-        catch (e) { btn.textContent = 'Copy blocked'; setTimeout(() => { const n = document.querySelectorAll('#sr-list .sr-quote.sel').length; btn.textContent = n ? `Copy selected (${n})` : 'Copy selected'; }, 1400); }
+        catch (e) { btn.textContent = 'Copy blocked'; setTimeout(() => { const n = document.querySelectorAll(`#${p}-list .sr-quote.sel`).length; btn.textContent = n ? `Copy selected (${n})` : 'Copy selected'; }, 1400); }
       });
     }
 
@@ -1191,7 +1293,11 @@
         <div class="lr-eyebrow">Understanding by objective <span class="dim">${objMix}</span></div>${objRows}</div>` : '';
 
       return row2 + rtSec + aiSec + mcSec + objSec
-           + responsesSection(rows, roster, analysis, singleSectionScope())
+           // The lesson itself, for the free-response panel's prompt. Resolved from vm rather than
+           // threaded through aggregateHTML's arguments, which are the SUMMARY of a scope — the
+           // question being asked is a property of the assignment and is the same in every scope.
+           + responsesSection(rows, roster, analysis, singleSectionScope(),
+                              vm.interactions.find(x => x.id === reportInteraction))
            + notSubmittedSection(roster);
     }
 

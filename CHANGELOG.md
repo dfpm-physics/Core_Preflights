@@ -8,6 +8,218 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-30 (second) — Matthew Recker via Claude
+
+Eight director requests, worked as one batch. Frontend only except the last, which changes what
+`/preflight-analyze` writes. **No DDL, no live data touched by this change** — the zero-grade
+backfill script is written and tested but has not been run.
+
+### The nav bar gives up two entries, and both land somewhere specific
+
+**System moved into the user dropdown**, beside Account and Help, still gated on
+`is_global_admin`. The bar states where the work of running a *course* happens; `system.html`
+administers the things courses are made **of** — offerings, terms, people, raw tables — and is the
+one destination the course picker beside it does not apply to. Feedback stays on the bar despite
+carrying the same gate, because it is the opposite kind of thing: a queue that accumulates work.
+The dropdown's contents are now `USER_MENU_LINKS` + `userMenuLinks(ctx)`, exported and pure for the
+same reason `FACULTY_LINKS` is — who sees which destination has been quietly wrong before.
+
+**Extensions became the third tab of Course Admin** — Students · Staff · Extensions · Export. It
+was its own page and its own nav entry from 2026-07-22, on the argument that a recurring review
+should not be buried in an administrative page. That argument was about being *found*, and a tab on
+the page a director already opens for staffing is found. The panel moved verbatim; the data layer
+(`courseExtensions`, `revokeExtension`, `reinstateExtension`) did not move at all and still lives
+beside the grant path in `faculty-grade.js`.
+
+`faculty/extensions.html` is now a **redirect** into `admin.html?tab=extensions`, not a deletion —
+it was a linked destination for eight days and is the kind of URL a director bookmarks. (The two
+roster pages of 2026-07-23 were deleted outright; those had been reachable for hours.) `?tab=` is
+read once at load and is what makes the redirect possible.
+
+`test-nav.mjs` asserts both moves, and pairs each "not on the bar" check with one that it still has
+a home — asserting only the absence would pass just as well if the destination had been dropped.
+
+### Assignments and the rollup
+
+**A Rollup button on every assignment card** (`lessons.html`), beside Grade. The lesson rollup was
+reachable only from the dashboard's carousel, which shows one assignment at a time — so getting to
+last week's readiness summary meant paging a carousel backwards to find a lesson you were already
+looking at on this list. Disabled with a reason on a draft: nobody can submit to an unpublished
+assignment, so the page would render honestly as an empty rollup, which reads as a broken report.
+
+**Fixed while building it:** `faculty-tasks.js`'s "Run rollups" box linked
+`report.html?i=<assignment slug>`. `?i=` is the assignment **offering id** — `report.html` resolves
+it against `loadManager()`'s keys and silently `location.replace`s to the dashboard on a miss — so
+that box was a button that bounced you back to the page you clicked it on.
+
+### The rollup's response panel became two
+
+**"Student responses" is now "Student Reading Reflections"**, and a second panel, **"Student Free
+Responses"**, sits beside it. The old heading claimed everything a student wrote and delivered one
+question's worth: it only ever showed Q2 reflections, so an instructor looking for what the class
+said about the actual physics found a panel that appeared to be it and was not.
+
+- The free-response panel carries **no AI picks**, by construction rather than by finding none.
+  `analysis.selected_quotes` resolves through the reflection text and will until the aggregator
+  learns to pick from a second field — **the lesson cycle is deliberately untouched by this
+  change**. Every card there is a random sample and the sub-heading says so.
+- It renders **only when the cohort produced free responses**, so an interactive-only assignment
+  gets no empty panel.
+- **The Q3 prompt and its figure are printed above it**, capped at 200px tall. The reflection panel
+  gets no prompt block: that question is the same fixed sentence all term, where the free-response
+  question is different every lesson and is genuinely unrecallable three days later. The figure is
+  capped because several preflight figures are near-full-width diagrams that would push every
+  student response below the fold.
+
+New in `schema.js`: **`freeResponseQuestion(activity)`**, which finds Q3 by *elimination* — the two
+pinned questions have fixed prompts to match on, this one is the lesson's own physics and has no
+needle. 12 checks in `test-rollup.mjs`, including the six lab preflights whose Q1/Q2 wording makes
+the pinned pair fall back to position.
+
+### Several instructors at once
+
+The Add staff modal took one existing person per pass, which meant re-choosing the role on every
+pass — and that is how one of five colleagues quietly becomes a director. The picker is now
+multi-select and shown **open** rather than hidden behind a search (two dozen colleagues is a list
+you read; typing filters it). `addExistingStaffMany()` writes the batch in **one upsert**, not a
+loop: N round trips can half-succeed, leaving "3 of 5 added" and no way to retry only the two.
+Deduplicated, because Postgres rejects an upsert whose rows collide on the conflict target.
+
+### Grading: a change you can see before you save it
+
+Three connected repairs to `grade.html`, all from the same beta complaint.
+
+**Re-scoring an answer no longer makes it vanish.** The status lamps filtered on the *live* status,
+so turning a red into a green while "no credit" was the only lit lamp removed the card you were
+reading — taking with it the evidence for a decision you had not yet saved. `buildGradeData()` now
+records **`original`**, the status at load, and the filter (and the lamp counts) run off that. It
+re-settles on the next load, which is when the reader's chosen set is genuinely stale.
+
+**The chip became a pair.** Once an edit moves it, the control renders `was → will be`: the
+original greyed and inert, an arrow, and the pending value, which stays clickable and keeps
+cycling. Cycling back to the original collapses it to one chip.
+
+**A sticky banner counts unsaved changes**, because the two buttons that write are at the bottom of
+a twenty-card page. It names the count, links to both actions, and is joined by a `beforeunload`
+guard and a confirm on any picker or queue click that would discard the work.
+
+The 3-state control moved into **`site/js/grade-controls.js`** — because student.html grades now
+too, and a course policy (full/warn/zero, yellow means full credit flagged) maintained in two
+copies becomes two policies by the end of term. Every **write** still goes through
+`faculty-grade.js`, so however many screens grow controls there is one place a grade is written
+from.
+
+### Grade one submission without leaving the cadet
+
+`faculty/student.html` grows a **Grade** button per assignment row, opening a modal with everything
+the Grade page has for one student: the 3-state toggles with the same pending-change pair, feedback
+boxes, Reopen, and grant/edit/remove extension. Same writes, same guards — including the
+interactive-taker exclusion, which on this page matters for the same reason it does on the other
+one (a save built from an empty model would write zeros over an effort grade).
+
+It exists *as well as* the Grade page, not instead of it. That page is a production line — one
+assignment, a whole section. This one is the only screen that asks "what is going on with THIS
+cadet", and the thing you most often want to do having found an answer here is fix the grade you
+are looking at.
+
+### Non-submitters get a real zero, not a blank
+
+**Director's rule:** "Blank at time of submission without an extension should result in a 0 for
+score and a 0 for understanding. Granting an extension should allow this to be overwritten when
+resubmitted."
+
+**The diagnosis is that the gradebook was right and the data was missing.** `/preflight-analyze`
+wrote a `grades` row only for students who submitted and merely *listed* the missing ones in its
+run report — so a non-submitter had **no grade row at all**, which is a different claim from
+"scored zero" and the wrong one. Their total was already being built as though the zero existed
+(`totalsFor` counts a past-due non-submission as 0 out of full), but no number anywhere said so.
+Compounding it, the gradebook only prints a hard `0` once at least one **finalized** grade exists
+in that section for that column (`gradedScopes`), and every row the AI writes is
+`is_finalized=false` — so the dashes survived grading and did not resolve until a human published.
+
+**The skill now writes the zero** (SKILL.md § "Then: the students who submitted nothing get a
+zero"): five conditions, all required — active enrollment, past its **own** effective deadline
+(extension → per-section → per-day → offering), **no active extension**, no written content and no
+interactive commit, and not already carrying a finalized or instructor-sourced grade. A draft with
+real content is *not* zeroed; that student is graded on what they wrote, which Step 5 already said.
+
+Written `is_finalized=false, source='ai_suggested'` — the same as every other row, and that is
+precisely what makes the extension case work with no special handling: a later run overwrites it.
+`diagnostic.no_submission: true` marks it, because an all-zero diagnostic is otherwise
+indistinguishable from a submission of gibberish, which scores identically and means the opposite.
+Documented in `WRITTEN-SCHEMA1.md`.
+
+**No cohort number changes.** `/lesson-aggregate` and the rollup read students who have a
+submission carrying work on a graded activity; a non-submitter has no submission row, so they stay
+absent from the effort distribution, the understanding means and the readiness prose. The zero
+moves the gradebook cell, the cadet's total and their per-student page — where it was already being
+counted. Do not "fix" the aggregator to include these rows.
+
+**`scripts/fall2026/zero_non_submitters.py`** backfills assignments graded before the rule, so the
+existing term does not need a full AI re-run to repair. Stdlib + REST, idempotent (a row it wrote
+is recognised as its own), dry-run by default. `zero_non_submitters_test.py` pins the deadline
+precedence and the payload at **40 offline checks** — no database, no credentials — because
+`effective_due()` is a re-implementation of `schema.js`'s and the two must agree, and dropping the
+migration-017 per-day fold would zero a whole day track early.
+
+### Verification, and what is NOT verified
+
+`tests/app-schema` is green — every suite 0 failed, the three touched here at **test-nav 42 checks,
+test-rollup 208, test-grade 46**. `zero_non_submitters_test.py` 40/40. Every edited page's inline
+module passes `node --check`.
+
+**Not verified:** none of this has been walked in a browser, and the zero-grade script has never
+run against the database — this machine has no `~/.claude/skills/preflight-analyze/config.json`, so
+even its dry run is unexercised. Its pure logic is what the 40 checks cover. Also note
+`tests/app-schema`'s two live suites (`test-student`, `test-isolation`) abort at the test cadet's
+sign-in with `Invalid login credentials`, before reaching any assertion; that is an environment
+issue predating this change, not a regression from it.
+
+---
+
+## 2026-07-30 — Matthew Recker via Claude
+
+### Physics 310 exists, offered Fall 2026, with Matthew Recker as its director
+
+**Live data change to schema `app`** — three rows, no DDL, written as `prep_app_dml`:
+
+| Table | Row | id |
+|---|---|---|
+| `courses` | `phys-310` · "Physics 310" · department NULL | `189b0483-5383-45ff-9aa7-04eb670ecdd1` |
+| `course_offerings` | phys-310 / `fall-2026` · `is_active=true` | `5d8d5b43-9b84-40ce-a288-71a4880518f1` |
+| `staff_assignments` | Matthew Recker · offering-wide (`section_id` NULL) · `director` | `5947d6ab-cf66-48f6-add4-d7a40c35736f` |
+
+`department` is left NULL to match `phys-110` and `phys-215`, which both carry NULL — a third
+course was not the moment to start populating a column the other two do not use.
+
+**The course has no sections, no roster, and no assignments yet**, which is the expected state: those
+are the roster-import and lesson-authoring workflows, and this change only gets phys-310 to where
+those tools can see it. Verified that they can — RLS `visible_offerings()` keys off
+`staff_assignments`, so the offering-wide row is what makes the offering visible, and it would work
+even if the director were not also a global admin. `director_courses()` grants authoring on the
+same basis.
+
+**Two frontend spots hardcode course codes; only one of them matters, and it is not urgent.**
+`COURSE_TITLE_FALLBACK` in [`site/js/util.js`](site/js/util.js#L176) is a *fallback* — the real
+title comes from `courses.title`, which is set, so phys-310 needs no entry. But
+`DUE_TIME_BY_COURSE` in [`site/faculty/lessons.html`](site/faculty/lessons.html#L671) names only
+phys-215 (`17:59`), so **phys-310 will default new deadlines to `FALLBACK_DUE_TIME` = `23:59`**.
+That is the phys-110 policy, inherited by accident rather than chosen. If Physics 310 wants a
+different hour it is one line there, per CORE.md §2 — and note that map is now two of the five
+entries that CORE.md says would earn a real column.
+
+### New: `scripts/app/create_course_offering.py`
+
+The three inserts above depend on each other in order, and the half-built states are bad ones — a
+catalogue row with no offering renders nowhere, and an offering with no director locks everyone out
+of its own admin page. So it is a script rather than three ad-hoc INSERTs against a database several
+agents share. Idempotent (matches on each natural key first; a re-run reports `[=]` and changes
+nothing) and dry-run by default per CORE.md §4. Pure DML, so it never needs `prep_app_owner`
+unsealed. It deliberately does **not** create sections, enrollments, or assignments — those already
+have tools, and a second path to them would drift.
+
+---
+
 ## 2026-07-29 (fifth) — Matthew Recker via Claude
 
 ### The navbar says what PREP is: the wordmark is now PREP/iPREP Portal

@@ -74,7 +74,7 @@ import {
   shapeOfferings, withResolvedDue, offeringSections,
   shapeOffering, shapeSubmission, artifactUrlOf, chunked,
   int05, writtenSignals, writtenReport, effortSignal, FREE_RESPONSE_KEY, FREE_RESPONSE_LABEL,
-  minutes, median, READING_BUCKETS, reflectionQuestionId,
+  minutes, median, READING_BUCKETS, reflectionQuestionId, freeResponseQuestion,
 } from './schema.js';
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -179,6 +179,12 @@ export async function loadManager(ctx) {
       writtenActivityId: o.written?.id || null,
       slug: o.interactive?.slug || null,       // the FROZEN artifact `#i=` slug, when there is one
       assignmentSlug: o.slug,
+      // The free-response question ITSELF — prompt text, points and `figure_url` — so the rollup
+      // can show an instructor what their students were answering. Resolved here rather than in
+      // the page because loadManager already holds the written activity's full content (it is in
+      // OFFERING_SELECT) and report.html holds only this shape. Null on an interactive-only
+      // assignment, which is what tells the page it has no free-response panel to draw.
+      freeQuestion: freeResponseQuestion(o.written),
       title: o.interactive?.title || o.title,
       description: o.interactive?.content?.description || o.description || null,
       artifact_url: artifactUrlOf(o.interactive),   // already null-safe on a written-only lesson
@@ -300,8 +306,10 @@ export async function loadInteractionData(ctx, offeringId, studentIds) {
   if (!studentIds?.length) return [];
   const found = await activitiesOf(ctx, offeringId);
   if (!found || (!found.interactiveId && !found.writtenId)) return [];
-  // Resolved once per lesson, not per student: which written question is the reading reflection.
+  // Resolved once per lesson, not per student: which written question is the reading reflection,
+  // and which is the free response.
   const reflectionQid = reflectionQuestionId(found.offering?.written);
+  const freeQ = freeResponseQuestion(found.offering?.written);
 
   const enrollments = [];
   for (const ids of chunked(studentIds)) {
@@ -398,6 +406,19 @@ export async function loadInteractionData(ctx, offeringId, studentIds) {
       // understanding per objective instead, and the two are not interchangeable.
       understanding: writtenWork ? understanding : null,
       score: grade?.points_earned == null ? null : Number(grade.points_earned),
+      // The student's verbatim answer to the free-response question, as a TOP-LEVEL row field
+      // rather than inside report_data. That distinction is deliberate: `report_data` is the
+      // frozen schema:1 shape (INTERACTION-DATA-CONTRACT), and the reflection graft above only
+      // gets to write into it because §5.5 already defines `reading_reflection.text` and the
+      // written producer merely declines to duplicate it. There is no schema:1 field for the free
+      // response, so inventing one would be adding to a frozen contract from the reading side.
+      //
+      // Null on a pure interactive row, because there is no written answer to have. That is what
+      // lets the rollup's Free Responses panel decide whether it has anything to show at all.
+      free_response: (writtenWork && freeQ?.id
+        && typeof writtenWork.content?.[freeQ.id] === 'string'
+        && writtenWork.content[freeQ.id].trim())
+        ? writtenWork.content[freeQ.id].trim() : null,
       report_data: reportData,
       report_markdown: interactiveWork?.reportMarkdown || null,
       updated_at: interactiveWork?.updatedAt || writtenWork?.updatedAt || null,

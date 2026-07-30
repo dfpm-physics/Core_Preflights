@@ -7,7 +7,8 @@
 // Help lives in the user dropdown rather than the main nav: it is a reference surface, not a
 // place work happens, and the nav bar is reserved for the latter. `help.html` is a bare filename
 // for the same reason the role links are — both student/ and faculty/ have one, and each shows
-// the topics that role may see (js/help.js).
+// the topics that role may see (js/help.js). System joined it there on 2026-07-30 — the dropdown's
+// contents are USER_MENU_LINKS, which says why.
 
 import { iconHTML, initials, esc } from './util.js';
 import { updateToggleButtons } from './theme.js';
@@ -75,17 +76,55 @@ export const FACULTY_LINKS = [
   // frozen contract URL (CORE.md §6) that AI-generated prefill links target — renaming it would
   // break every deployed artifact. Same for the student list.
   { key: 'lessons',      label: 'Assignments',  href: 'lessons.html',           icon: 'assignments',   emoji: '📚' },
-  // Extensions is its own destination rather than a panel inside Admin because it is a
-  // recurring review, not a one-off administrative action: the director reads it to see how
-  // many extensions each instructor is granting and then goes and talks to them. Burying a
-  // number someone is meant to check every few weeks inside an export page hides it.
-  { key: 'extensions',   label: 'Extensions',   href: 'extensions.html',        icon: 'assignments',   emoji: '📅', directorOnly: true },
+  // NO Extensions entry. It was its own destination from 2026-07-22 until 2026-07-30, on the
+  // argument that a recurring review should not be buried inside an administrative page. The
+  // director's call reverses that: it is the **Extensions tab of Course Admin** now, beside
+  // Students, Staff and Export. The argument was about being *found*, and a tab on the page a
+  // director already opens to look at staffing is found; a fifth entry on the bar is the cost
+  // P1.9 already established the bar cannot keep paying. `extensions.html` survives as a redirect
+  // into that tab so nobody's bookmark breaks.
   { key: 'admin',        label: 'Admin',        href: 'admin.html',             icon: 'settings',      emoji: '⚙️', directorOnly: true },
   // Site admins only, matching the RLS on app.feedback (is_admin()). The nav entry is convenience,
   // not the boundary — a director who types the URL gets an empty list from the database.
+  //
+  // Feedback stays on the bar and System does not, though both are adminOnly — see USER_MENU_LINKS
+  // for why they are opposite kinds of thing.
   { key: 'feedback',     label: 'Feedback',     href: 'feedback.html',          icon: 'info',          emoji: '💬', adminOnly: true },
-  { key: 'system',       label: 'System',       href: 'system.html',            icon: 'settings',      emoji: '🛠️', adminOnly: true },
 ];
+
+/* ── The user menu's own destinations ─────────────────────────────────────────
+ * Account and Help have always lived here. SYSTEM JOINED THEM 2026-07-30, off the bar.
+ *
+ * The bar states where the work of running a COURSE happens, and `system.html` is not that: it
+ * administers the things courses are made OF — offerings, terms, people, raw tables — and it is
+ * opened when something needs setting up or repairing, not while teaching. It is also the one
+ * destination the course picker beside it does not apply to, because it reaches across every
+ * course at once. Sitting on the bar it read as a peer of Gradebook and Assignments, which it is
+ * not, and it read that way permanently for the handful of people who hold the flag.
+ *
+ * FEEDBACK STAYS ON THE BAR, though it carries the same `adminOnly` gate. It is the opposite kind
+ * of thing: a queue that accumulates work and wants checking, which is what a bar entry is for.
+ * The gate is the same; what the two pages ARE is not.
+ *
+ * Exported and pure for the same reason FACULTY_LINKS is — who sees which destination has been
+ * quietly wrong before, and it is invisible from every other end of the app.
+ */
+export const USER_MENU_LINKS = [
+  { key: 'account', label: 'Account', href: 'account.html', icon: 'user', emoji: '👤' },
+  { key: 'help',    label: 'Help',    href: 'help.html',    icon: 'info', emoji: '❔' },
+  // Separated by a rule above it: it is a different tier from "your own account", and running the
+  // two together is how somebody lands on the raw table browser looking for their password.
+  { key: 'system',  label: 'System',  href: 'system.html',  icon: 'settings', emoji: '🛠️',
+    adminOnly: true, facultyOnly: true, groupBefore: true },
+];
+
+/** What this caller may see in the dropdown. Same gate vocabulary as FACULTY_LINKS. */
+export function userMenuLinks(ctx) {
+  return USER_MENU_LINKS
+    .filter(l => !l.facultyOnly || ctx?.role === 'faculty')
+    .filter(l => !l.adminOnly || ctx?.instructorRow?.is_global_admin)
+    .filter(l => !l.directorOnly || ctx?.isDirectorForCurrent?.());
+}
 
 /* ── Course-view picker ────────────────────────────────────────────────────────
  * Lives on the BRAND, as a dropdown hanging off the course name beside "PREP".
@@ -230,12 +269,10 @@ export function renderNav(ctx, opts = {}) {
                   spansTerms && ctx.currentTermLabel ? ' · ' + esc(ctx.currentTermLabel) : ''}</div></div>
             </div>
             <div class="menu-sep"></div>
-            <a class="menu-item" href="account.html">
-              ${iconHTML('user', '👤', 'ic')}<span>Account</span>
-            </a>
-            <a class="menu-item" href="help.html">
-              ${iconHTML('info', '❔', 'ic')}<span>Help</span>
-            </a>
+            ${userMenuLinks(ctx).map(l => `${l.groupBefore ? '<div class="menu-sep"></div>' : ''}
+            <a class="menu-item" href="${esc(l.href)}">
+              ${iconHTML(l.icon, l.emoji, 'ic')}<span>${esc(l.label)}</span>
+            </a>`).join('')}
             <div class="menu-sep"></div>
             <button class="menu-item danger" data-signout>
               ${iconHTML('signout', '🚪', 'ic')}<span>Sign out</span>

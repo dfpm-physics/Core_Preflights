@@ -64,6 +64,24 @@ You are created on that default and made to replace it the first time you sign i
 a system admin in the Supabase dashboard. That was true while the only derivable default was a
 cadet ID; staff now have one from their name, which is what made a delegated reset safe.)*
 
+## Adding colleagues to a course
+
+**Admin → Staff → + Add staff**, a course-director action. The list of everybody who already has a
+PREP login opens with it; **tick as many as you need** and they are all added in one go, in the
+role you choose below the list. Typing filters the list.
+
+**Prefer this to creating an account** whenever the person already has one — usually because they
+teach your other course. Grades, extensions and unlocks are attributed to the person, so a second
+login for the same colleague splits their history across two identities with no way to rejoin it.
+Somebody who has genuinely never used PREP is created under *Or create a new account*, on the
+derived default password above.
+
+Everyone added in one pass gets the **same role**. If one of them should be a director, add the
+group as instructors and change that one person's role in the Staff table afterwards — a role
+dropdown per row in a batch control is how somebody quietly becomes a director.
+
+Adding somebody grants them nothing in any other course or any other semester.
+
 ## Importing a roster
 
 **Admin → Students**, in the collapsed **Import the registrar's roster** panel below the student

@@ -4,230 +4,29 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Extensions · PREP</title>
-  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
-  <link rel="stylesheet" href="../css/styles.css">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/config.js"></script>
+  <!-- Moved 2026-07-30. The extensions report is the **Extensions tab of Course Admin** now
+       (director's request) — it left the nav bar along with its own page, because a tab on the
+       page a director already opens for staffing and export is found, and a fifth nav entry is
+       the cost P1.9 established the bar cannot keep paying. See nav.js FACULTY_LINKS.
+
+       THIS FILE STAYS AS A REDIRECT rather than being deleted. It was a linked destination for
+       eight days, it is the kind of URL a director bookmarks, and a 404 on a page that still
+       exists under a different name is the worst of the three outcomes. Compare the two roster
+       pages of 2026-07-23, which were deleted outright — those had been reachable for hours and
+       nobody could have bookmarked them.
+
+       Redirect in <head>, before anything else loads: no Supabase client, no auth bootstrap, no
+       nav. There is nothing on this page to authorize, so making it wait for a session would be
+       spending a round trip to show a spinner. `location.replace` rather than `href` so the Back
+       button returns to wherever the reader came from instead of bouncing them here again. -->
+  <script>location.replace('admin.html?tab=extensions' + location.hash);</script>
+  <link rel="canonical" href="admin.html?tab=extensions">
+  <meta http-equiv="refresh" content="0; url=admin.html?tab=extensions">
 </head>
 <body>
-  <header id="topnav"></header>
-  <main class="page-wide" id="main">
-    <div class="page-head">
-      <h1>Extensions</h1>
-      <div class="sub">Every deadline extension granted in this course, and who granted it.</div>
-    </div>
-
-    <div class="alert alert-info" style="margin-bottom:16px">
-      This page exists so the number is visible, not so it can be undone. If an instructor is
-      granting more extensions than you would like, the fix is a conversation with them — revoking
-      one after the fact does not give a cadet their time back, and the database will refuse it
-      outright once the work is in.
-    </div>
-
-    <div class="toolbar">
-      <div class="field"><label for="grp">Group by</label>
-        <select id="grp">
-          <option value="instructor">Who granted it</option>
-          <option value="assignment">Assignment</option>
-          <option value="section">Section</option>
-        </select>
-      </div>
-      <div class="field"><label for="show">Show</label>
-        <select id="show">
-          <option value="active">Active only</option>
-          <option value="all">All, including revoked</option>
-          <option value="revoked">Revoked only</option>
-        </select>
-      </div>
-    </div>
-
-    <div id="summary"></div>
-    <div id="body"><div class="center-load"><span class="spinner"></span><span>Loading…</span></div></div>
-  </main>
-
-  <div class="modal-backdrop" id="revoke-modal">
-    <div class="modal" style="max-width:460px">
-      <div class="modal-head"><h2>Revoke extension</h2><button class="modal-close" data-close>×</button></div>
-      <p class="muted" style="font-size:0.88em;margin-bottom:14px" id="revoke-who"></p>
-      <div class="field"><label for="revoke-reason">Reason <span class="req">required</span></label>
-        <input type="text" id="revoke-reason" maxlength="200"
-               placeholder="e.g. Discussed with the instructor; not a documented absence.">
-        <div class="field-hint">The extension stays on this report, marked revoked, with your name on it.</div>
-      </div>
-      <div class="error-msg" id="revoke-error" style="min-height:1em"></div>
-      <div class="row" style="gap:10px;margin-top:8px">
-        <button class="btn btn-primary" id="revoke-save">Revoke</button>
-        <button class="btn btn-secondary" data-close>Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <script type="module">
-    import { bootstrap } from '../js/auth.js';
-    import { renderNav } from '../js/nav.js';
-    import { initTheme } from '../js/theme.js';
-    import { esc, lastFirst, fmtDate, fmtDateTime, runPage } from '../js/util.js';
-    import * as G from '../js/faculty-grade.js';
-
-    const ctx = await bootstrap({ require: 'faculty' });
-    runPage(ctx, init);
-
-    let rows = [], revokeId = null;
-
-    async function init() {
-      initTheme();
-      renderNav(ctx, { active: 'extensions', onCourseChange: load });
-      // The nav hides this destination from a non-director, but a typed URL must not be a
-      // way in. RLS would return their own sections only, which is worse than a refusal:
-      // a partial report reads as a complete one.
-      if (!ctx.isDirectorForCurrent()) {
-        document.getElementById('main').innerHTML =
-          `<div class="alert alert-error">This page is for course directors.</div>`;
-        return;
-      }
-      document.getElementById('grp').addEventListener('change', render);
-      document.getElementById('show').addEventListener('change', render);
-      wireRevoke();
-      await load();
-    }
-
-    async function load() {
-      const all = await G.allSectionIds(ctx);
-      rows = await G.courseExtensions(ctx, all);
-      render();
-    }
-
-    const filtered = () => {
-      const mode = document.getElementById('show').value;
-      if (mode === 'active')  return rows.filter(r => !r.isRevoked);
-      if (mode === 'revoked') return rows.filter(r => r.isRevoked);
-      return rows;
-    };
-
-    function render() {
-      const list = filtered();
-      const summary = document.getElementById('summary');
-      const body = document.getElementById('body');
-
-      if (!rows.length) {
-        summary.innerHTML = '';
-        body.innerHTML = `<div class="alert alert-ok">No extensions have been granted in this course.</div>`;
-        return;
-      }
-
-      // The headline is the per-instructor count — that is the number the conversation is
-      // about. Sorted descending so an outlier surfaces itself rather than having to be found.
-      const byInstructor = {};
-      for (const r of rows) {
-        const k = r.grantedByName;
-        byInstructor[k] = byInstructor[k] || { total: 0, active: 0, revoked: 0 };
-        byInstructor[k].total++;
-        if (r.isRevoked) byInstructor[k].revoked++; else byInstructor[k].active++;
-      }
-      const ranked = Object.entries(byInstructor).sort((a, b) => b[1].total - a[1].total);
-
-      summary.innerHTML = `
-        <div class="card" style="padding:16px 18px;margin-bottom:16px">
-          <div class="card-title" style="margin-bottom:10px">Granted per instructor</div>
-          <div class="ext-rank">` + ranked.map(([name, c]) => `
-            <div class="ext-rank-row">
-              <span class="ext-rank-name">${esc(name)}</span>
-              <span class="ext-rank-bar"><span style="width:${(c.total / ranked[0][1].total * 100).toFixed(1)}%"></span></span>
-              <span class="ext-rank-n">${c.total}</span>
-              ${c.revoked ? `<span class="tag">${c.revoked} revoked</span>` : ''}
-            </div>`).join('') + `</div>
-        </div>`;
-
-      if (!list.length) {
-        body.innerHTML = `<div class="muted">Nothing matches that filter.</div>`;
-        return;
-      }
-
-      const groupBy = document.getElementById('grp').value;
-      const keyOf = r => groupBy === 'instructor' ? r.grantedByName
-                   : groupBy === 'assignment' ? r.assignmentTitle
-                   : ctx.sectionCodeOf(r.sectionId);
-
-      const groups = {};
-      for (const r of list) (groups[keyOf(r)] = groups[keyOf(r)] || []).push(r);
-
-      body.innerHTML = Object.entries(groups)
-        .sort((a, b) => b[1].length - a[1].length)
-        .map(([name, items]) => `
-          <section class="card" style="padding:16px 18px;margin-bottom:14px">
-            <div class="card-head" style="margin-bottom:10px">
-              <div class="card-title">${esc(name)}</div>
-              <div class="card-meta">${items.length} extension${items.length === 1 ? '' : 's'}</div>
-            </div>
-            <div class="ext-table">
-              <div class="ext-row ext-head">
-                <span>Cadet</span><span>Sec</span><span>Assignment</span>
-                <span>Original</span><span>Extended to</span><span>Reason</span><span></span>
-              </div>
-              ${items.map(r => `
-                <div class="ext-row${r.isRevoked ? ' revoked' : ''}">
-                  <span>${esc(lastFirst(r.studentName))}</span>
-                  <span>${esc(ctx.sectionCodeOf(r.sectionId))}</span>
-                  <span>${esc(r.assignmentTitle)}</span>
-                  <span class="muted">${r.originalDue ? esc(fmtDate(r.originalDue)) : '—'}</span>
-                  <span>${esc(fmtDateTime(r.due))}</span>
-                  <span class="ext-reason" title="${esc(r.reason)}">${esc(r.reason)}</span>
-                  <span class="ext-act">${r.isRevoked
-                    ? `<span class="tag danger">revoked</span>
-                       <button class="btn btn-ghost btn-sm" data-act="reinstate" data-id="${esc(r.id)}">Reinstate</button>`
-                    : `<button class="btn btn-ghost btn-sm" data-act="revoke" data-id="${esc(r.id)}"
-                         data-who="${esc(lastFirst(r.studentName))}" data-asgn="${esc(r.assignmentTitle)}">Revoke</button>`}
-                  </span>
-                  ${r.isRevoked ? `<span class="ext-revnote">Revoked by ${esc(r.revokedByName || '—')}
-                     ${esc(fmtDate(r.revokedAt))} — ${esc(r.revokedReason)}</span>` : ''}
-                </div>`).join('')}
-            </div>
-          </section>`).join('');
-    }
-
-    // ── Revoke / reinstate ──
-    document.getElementById('body').addEventListener('click', async (e) => {
-      const el = e.target.closest('[data-act]');
-      if (!el) return;
-      if (el.dataset.act === 'revoke') {
-        revokeId = el.dataset.id;
-        document.getElementById('revoke-who').textContent =
-          `${el.dataset.who} — ${el.dataset.asgn}`;
-        document.getElementById('revoke-reason').value = '';
-        document.getElementById('revoke-error').textContent = '';
-        document.getElementById('revoke-modal').classList.add('open');
-      } else if (el.dataset.act === 'reinstate') {
-        if (!confirm('Reinstate this extension? The cadet gets the extended deadline back.')) return;
-        const { error } = await G.reinstateExtension(el.dataset.id);
-        if (error) { alert('Could not reinstate: ' + error.message); return; }
-        await load();
-      }
-    });
-
-    function wireRevoke() {
-      const m = document.getElementById('revoke-modal');
-      m.addEventListener('click', (e) => {
-        if (e.target.id === 'revoke-modal' || e.target.dataset.close !== undefined) m.classList.remove('open');
-      });
-      document.getElementById('revoke-save').addEventListener('click', async () => {
-        const reason = document.getElementById('revoke-reason').value.trim();
-        const err = document.getElementById('revoke-error');
-        if (!reason) { err.textContent = 'A reason is required.'; return; }
-        const { error } = await G.revokeExtension(ctx, revokeId, reason);
-        if (error) {
-          // Both refusals come from the 007 trigger and both deserve a sentence, not a
-          // constraint name: one is a rule about the cadet, the other about the caller.
-          err.textContent = /already submitted under it/i.test(error.message)
-            ? 'That cadet has already submitted under this extension, so it cannot be revoked. Withdrawing it now would only make an on-time submission late.'
-            : /only a course director/i.test(error.message)
-              ? 'Only a course director may revoke an extension.'
-              : 'Could not revoke: ' + error.message;
-          return;
-        }
-        m.classList.remove('open');
-        await load();
-      });
-    }
-  </script>
+  <p style="font-family:system-ui,sans-serif;padding:2rem">
+    The extensions report has moved into
+    <a href="admin.html?tab=extensions">Course administration &rsaquo; Extensions</a>.
+  </p>
 </body>
 </html>

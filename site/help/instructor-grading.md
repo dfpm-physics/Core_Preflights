@@ -13,6 +13,12 @@ you browse to, so the routes to it are the places that already know you have som
   the boxes above only show you assignments that currently need something;
 - a student's name in the **gradebook**.
 
+**One student, one assignment: grade them from their own page instead.** Every assignment row on a
+cadet's page carries a **Grade** button, which opens that one submission in a dialog with
+everything this page has — the 3-state toggles, feedback, reopen, and extensions. Use it when you
+arrived at a cadet with a question about them; use the Grade page when you are working a section
+through an assignment. They write the same grades the same way.
+
 Past six assignments the boxes collapse back into one summary — *Grade assignments* — which opens
 the Grade page with the assignment picker empty. Six named assignments is a worklist; sixteen is
 wallpaper.
@@ -61,6 +67,13 @@ Each question carries one of three states. Select a question's state to cycle th
 
 Yellow awards full credit on purpose. Preflights grade pre-class engagement, not mastery.
 
+**Once you change one, the control shows both states**: what the answer was, an arrow, and what it
+will become. Only the right-hand one is selectable, and it keeps cycling. Cycling back to where you
+started collapses it to a single state again, because there is then no change to show.
+
+Nothing is written until you save. A banner stays at the top of the page counting the changes you
+have not saved yet, and leaving the page — or switching assignment or section — asks first.
+
 ## Filtering by color
 
 Three lamps above the list — green, yellow, red — control which answers you see. A lit lamp shows
@@ -70,8 +83,13 @@ are currently in its state.
 All three start lit. Dim green and yellow to work only the red answers, or dim green alone to review
 just what the AI flagged. A student drops off the list once every one of their answers is hidden.
 
-Changing a question's state re-files it under the lamps straight away, so an answer you resolve can
-disappear from the view you are working in — that is the filter keeping up, not a lost grade.
+**Re-scoring an answer does not remove it from the view.** The lamps filter on the state each
+answer was in *when the page loaded*, so working through the red answers and turning one green
+leaves it exactly where it was, now showing the change. The lamps re-settle on the next load —
+which is the point at which the set you chose to review is genuinely out of date.
+
+*(Until 2026-07-30 the filter tracked the live state, so resolving an answer made the card vanish
+under your cursor — along with the answer you had just read and not yet saved.)*
 
 ## AI-suggested scores
 
@@ -84,9 +102,19 @@ A card tagged **AI suggested** has not been edited by anyone. Editing any questi
 marks it as yours; cards you never touch keep the AI's authorship, which is what lets your director
 see how much of a section has actually been reviewed.
 
-A card tagged **Not yet graded** has no grade at all — the analysis run never scored that student.
-This is not the same as a zero, and saving will not create a grade for them. To grade them, set
-their questions yourself.
+A card tagged **Not yet graded** has no grade at all, and saving will not create one for them. To
+grade them, set their questions yourself.
+
+**A student who submitted nothing is scored zero, not left blank.** Since 2026-07-30 the analysis
+run writes a zero — no points, understanding 0, feedback *No submission received.* — for anyone
+past their own deadline who handed nothing in and holds no active extension. Like every other AI
+score it arrives unfinalized, so you can change it, and the student sees nothing until you publish.
+Before that change those students had no row at all, so the gradebook showed a dash while already
+counting them as a zero in the total — a number nobody could reconcile.
+
+**A student holding a live extension is never zeroed**, which is what makes the extension work: if
+they submit later, the next run replaces the zero with a real grade. If you have already published
+the column, reopen their grade first — from this page, or from the Grade button on their own page.
 
 ## Students who did the interactive lesson
 
@@ -104,7 +132,8 @@ for you to publish. That is deliberate: the effort rule above is arithmetic, not
 holding the result back would delay a grade nobody was going to change.
 
 They are likewise absent from your *Needs grading by hand* row. If you *do* need to change an effort
-score, open the student's page from the gradebook.
+score, open the student's page from the gradebook and use **Grade** on that assignment's row —
+which lets you reopen the automatic grade and adjust it.
 
 *(Until 2026-07-27 these students appeared here as a read-only card marked **Interactive**. It was
 accurate and it was in the way: a card you cannot mark, in the middle of a screen for marking, which
@@ -162,8 +191,9 @@ A per-student extension overrides the deadline for that student on that assignme
 precedence over everything else.
 
 Granting one **requires a reason**. Your course director sees every extension in the course on
-their own page, grouped by who granted it and with a count — the reason is what makes that count a
-conversation rather than a number.
+**Course administration → Extensions**, grouped by who granted it and with a count — the reason is
+what makes that count a conversation rather than a number. *(That report was its own page and its
+own navigation entry until 2026-07-30.)*
 
 **Remove** erases an extension, and is meant for a genuine mistake such as granting it to the wrong
 cadet. It stops working once the student has submitted under it: withdrawing a deadline after the
@@ -186,8 +216,12 @@ pattern work at all.
 ## The Report tab
 
 The report summarizes how an assignment went — how ready the class is, which misconceptions showed up,
-one recommended thing to cover, and a few reading-reflection quotes worth reading aloud. It is
+one recommended thing to cover, and a few student responses worth reading aloud. It is
 intended as a five-minute read before you teach the lesson.
+
+**Reach it with Rollup** on any assignment card on the Assignments page, or from your dashboard's
+carousel. The button is disabled on a draft assignment: nobody can have submitted to one, so there
+is nothing to summarize.
 
 **It opens on "My sections"** — your own sections combined. "Course rollup" covers the whole course
 and is still there if you want the wider picture; when you pick it, the charts show only the
@@ -205,9 +239,17 @@ differs named beneath it — so you can see whether something is your whole coho
 description of the misunderstanding and a couple of things students actually wrote, unattributed. A
 label and a percentage on their own rarely tell you what went wrong.
 
-**Show all** on the responses panel switches from the sample to every reflection in the section,
-with the AI's picks still at the top — useful when you are looking for a particular student rather
-than something to read aloud.
+**There are two response panels, and they answer different questions.** *Student Reading
+Reflections* is what the class made of the reading — this is the one the AI picks showcase quotes
+from, marked **AI pick** and pinned at the top. *Student Free Responses* is what they wrote for the
+lesson's own physics question, with **the question and any figure printed above it** so you can see
+what they were answering. That second panel has no AI picks — nothing has argued for one — so it is
+a straight random sample, and it is absent entirely on an assignment with no written half.
+
+**Show all** on either panel switches from the sample to every response in the section, with any AI
+picks still at the top — useful when you are looking for a particular student rather than something
+to read aloud. Both hide names by default and both let you select responses and copy them for
+slides.
 
 It appears once the assignment has been graded *and* aggregated, which happens after the deadline for
 that section — so a section whose deadline has not passed yet will still show placeholders.

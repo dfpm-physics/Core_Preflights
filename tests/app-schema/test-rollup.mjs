@@ -17,7 +17,7 @@ import { readFileSync } from 'node:fs';
 import { check, eq, section, installBrowser, summary } from './harness.mjs';
 import {
   writtenSignals, writtenReport, effortSignal, FREE_RESPONSE_KEY, FREE_RESPONSE_LABEL, int05,
-  minutes, median, pinnedQuestion, reflectionQuestionId,
+  minutes, median, pinnedQuestion, reflectionQuestionId, freeResponseQuestion,
 } from '../../site/js/schema.js';
 
 
@@ -459,6 +459,82 @@ eq('…and gives up rather than guessing when even position is absent',
 eq('an interactive activity has no questions and resolves to null',
    reflectionQuestionId({ content: { artifact_url: 'https://claude.ai/x' } }), null);
 eq('a missing activity does not throw', reflectionQuestionId(null), null);
+
+/* ── The third question: the one with no needle ────────────────────────────── */
+section('freeResponseQuestion — defined by elimination, not by text');
+
+// This is what the rollup's Free Responses panel prints as its prompt, and what
+// loadInteractionData reads each student's answer out of. Getting it wrong is quiet in both
+// places: the wrong prompt above the right answers, or an empty panel on a lesson that has one.
+const frq = (a) => freeResponseQuestion(a)?.id ?? null;
+
+eq('live Fall shape: q3, once both pinned questions are removed', frq(LIVE_SHAPE), 'q3');
+eq('…and it is the whole question, not an id — the panel needs the prompt',
+   freeResponseQuestion(LIVE_SHAPE).text, 'Can an object have a velocity…');
+
+// The six lab preflights (CORE.md §2) use lab-instruction wording for Q1/Q2, so neither needle
+// matches and the pinned pair resolves BY POSITION. Elimination has to survive that, because it
+// is the case where the pinned lookups are at their weakest.
+const LAB = act([
+  { id: 'q1', type: 'free_response', points: 0, text: 'How long did the lab instructions take you?' },
+  { id: 'q2', type: 'free_response', points: 1, text: 'What part of the procedure is unclear?' },
+  { id: 'q3', type: 'free_response', points: 1, text: 'Predict what the meter will read.' },
+]);
+eq('lab wording: pinned pair falls back to position, and q3 still resolves', frq(LAB), 'q3');
+
+const FIGURED = act([
+  { id: 'q1', type: 'free_response', points: 0, text: 'How much time did you spend reading?' },
+  { id: 'q2', type: 'free_response', points: 1, text: 'What did you find most confusing or most interesting?' },
+  { id: 'q3', type: 'free_response', points: 1, text: 'Which way does it move?',
+    figure_url: 'https://example.test/site/img/assignments/preflight-03-q3.png' },
+]);
+eq('the figure rides along — it is why the question object is returned',
+   freeResponseQuestion(FIGURED).figure_url,
+   'https://example.test/site/img/assignments/preflight-03-q3.png');
+
+// An auto-graded question has no prose to quote, so it is not the free response even though it
+// survives the pinned-pair elimination.
+eq('a multiple-choice third question is not it',
+   frq(act([
+     { id: 'q1', points: 0, text: 'How much time did you spend reading?' },
+     { id: 'q2', points: 1, text: 'What did you find most confusing or most interesting?' },
+     { id: 'q3', type: 'multiple_choice', points: 1, text: 'Pick one' },
+   ])), null);
+eq('…nor is a numerical one', frq(act([
+     { id: 'q1', points: 0, text: 'How much time did you spend reading?' },
+     { id: 'q2', points: 1, text: 'What did you find most confusing or most interesting?' },
+     { id: 'q3', type: 'numerical', points: 1, text: 'How many newtons?' },
+   ])), null);
+
+// Scored beats unscored, so a zero-point extra prompt cannot displace the real question…
+eq('a scored candidate wins over an unscored one, whatever the order', frq(act([
+     { id: 'q1', points: 0, text: 'How much time did you spend reading?' },
+     { id: 'q2', points: 1, text: 'What did you find most confusing or most interesting?' },
+     { id: 'q3', type: 'free_response', points: 0, text: 'Anything else?' },
+     { id: 'q4', type: 'free_response', points: 1, text: 'The actual physics question' },
+   ])), 'q4');
+// …but an unscored one is still shown when it is all there is, rather than rendering nothing.
+eq('an unscored candidate is used when no scored one exists', frq(act([
+     { id: 'q1', points: 0, text: 'How much time did you spend reading?' },
+     { id: 'q2', points: 1, text: 'What did you find most confusing or most interesting?' },
+     { id: 'q3', type: 'free_response', points: 0, text: 'Anything else?' },
+   ])), 'q3');
+
+eq('an explicit role wins outright', frq(act([
+     { id: 'q1', points: 0, text: 'How much time did you spend reading?' },
+     { id: 'q2', points: 1, text: 'What did you find most confusing or most interesting?' },
+     { id: 'q3', type: 'free_response', points: 1, text: 'decoy' },
+     { id: 'q9', type: 'free_response', points: 1, role: 'free_response', text: 'the real one' },
+   ])), 'q9');
+
+// The interactive-only case is the one the panel's visibility rule depends on: null here is what
+// makes the Free Responses panel absent rather than empty.
+eq('an interactive-only activity has none', frq({ content: { artifact_url: 'https://claude.ai/x' } }), null);
+eq('a missing activity does not throw', frq(null), null);
+eq('a reflection-only lesson has no free response beyond it', frq(act([
+     { id: 'q1', points: 0, text: 'How much time did you spend reading?' },
+     { id: 'q2', points: 1, text: 'What did you find most confusing or most interesting?' },
+   ])), null);
 
 /* ── The payload shape the writer ACTUALLY produces ────────────────────────── */
 section('loadAnalysis — payload.scopes, as lesson_aggregate.py writes it');

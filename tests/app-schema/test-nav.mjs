@@ -9,7 +9,8 @@ import { readdirSync } from 'node:fs';
 import { check, eq, section, installBrowser } from './harness.mjs';
 
 installBrowser({});   // nav.js imports util.js, which reads `location` at module load
-const { courseOptionsHTML, FACULTY_LINKS } = await import('../../site/js/nav.js');
+const { courseOptionsHTML, FACULTY_LINKS, USER_MENU_LINKS, userMenuLinks } =
+  await import('../../site/js/nav.js');
 
 const OFF_215 = { offeringId: 'o-215-f26', courseId: 'c-215', courseCode: 'phys-215',
                   courseTitle: 'Physics 215', termCode: 'fall-2026', termLabel: 'Fall 2026', role: 'director' };
@@ -42,8 +43,13 @@ const linkFor = (k) => FACULTY_LINKS.find(l => l.key === k);
 check('Grade is NOT a nav destination (P1.14)', !keys.includes('grade'));
 check('neither is Roster — it is Course Admin > Students now (P1.9)', !keys.includes('roster'));
 check('nor Enrollment — same tab, same reason', !keys.includes('enrollment'));
+// Both left the bar on 2026-07-30 and each landed somewhere specific. Asserting only "not on the
+// bar" would pass just as well if the destination had been dropped altogether, which is the
+// mistake worth catching — so each of these is paired with a check that it still has a home.
+check('nor Extensions — it is Course Admin > Extensions now', !keys.includes('extensions'));
+check('nor System — it is in the user dropdown now', !keys.includes('system'));
 check('Course Admin is, and is director-gated', linkFor('admin').directorOnly === true);
-check('…pointing at the page that carries all three tabs', linkFor('admin').href === 'admin.html');
+check('…pointing at the page that carries all four tabs', linkFor('admin').href === 'admin.html');
 
 // Every href must be a page that exists. This is the check that would have caught a nav entry
 // left pointing at a deleted file — the failure mode of every page merge.
@@ -53,13 +59,41 @@ eq('every faculty nav link points at a page that exists',
 
 // adminOnly is the GLOBAL flag, not "director of the current course". Conflating them would let a
 // director inherit the system tier by switching course, which is the whole reason for the split.
-eq('the system tier stays on is_global_admin, not on director',
-   FACULTY_LINKS.filter(l => l.adminOnly).map(l => l.key).sort(), ['feedback', 'system']);
+eq('Feedback is the only adminOnly entry left on the bar',
+   FACULTY_LINKS.filter(l => l.adminOnly).map(l => l.key).sort(), ['feedback']);
 check('no link is both directorOnly and adminOnly',
       !FACULTY_LINKS.some(l => l.directorOnly && l.adminOnly));
 eq('every link has a key, a label and an href',
    FACULTY_LINKS.filter(l => !l.key || !l.label || !l.href).map(l => l.key || '(none)'), []);
 eq('link keys are unique', keys.length, new Set(keys).size);
+
+/* ── The user dropdown (2026-07-30) ───────────────────────────────────────────
+ * System moved off the bar and into here. The gate had to come with it: the whole point of
+ * `adminOnly` is that it reads `is_global_admin` and NOT "director of the current course", and a
+ * move is exactly the moment a gate gets dropped on the floor — the entry keeps rendering, for
+ * everyone, and nothing else in the app notices. */
+
+section('user dropdown — who sees what in it');
+
+const menuKeys = (ctx) => userMenuLinks(ctx).map(l => l.key);
+const FACULTY = { role: 'faculty', instructorRow: { name: 'I' } };
+const ADMIN   = { role: 'faculty', instructorRow: { name: 'A', is_global_admin: true } };
+const STUDENT = { role: 'student', studentRow: { name: 'S' } };
+
+eq('the dropdown holds Account, Help and System', USER_MENU_LINKS.map(l => l.key),
+   ['account', 'help', 'system']);
+check('System carries the global-admin gate', USER_MENU_LINKS.find(l => l.key === 'system').adminOnly === true);
+eq('a global admin sees System', menuKeys(ADMIN), ['account', 'help', 'system']);
+eq('a plain instructor does NOT', menuKeys(FACULTY), ['account', 'help']);
+// A director is the case the split exists for: full authority over one course, none over the
+// system tier. Switching course must never be a way to acquire it.
+eq('nor does a DIRECTOR of the current course',
+   menuKeys({ ...FACULTY, isDirectorForCurrent: () => true }), ['account', 'help']);
+eq('a student sees neither System nor anything faculty-only', menuKeys(STUDENT), ['account', 'help']);
+eq('every dropdown href points at a page that exists',
+   USER_MENU_LINKS.filter(l => !PAGES.has(l.href)).map(l => l.href), []);
+check('no key collides with a bar entry',
+      !USER_MENU_LINKS.some(l => keys.includes(l.key)));
 
 section('course-view picker — when it appears');
 

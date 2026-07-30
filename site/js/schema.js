@@ -223,6 +223,45 @@ export function pinnedQuestion(activity, role) {
 
 /** Which written question IS the reading reflection. See pinnedQuestion. */
 export const reflectionQuestionId = activity => pinnedQuestion(activity, 'reading_reflection').id;
+
+/**
+ * The free-response question — the JiTT one, `q3` in every Fall 2026 preflight.
+ *
+ * DEFINED BY ELIMINATION, and that is not laziness. The two pinned questions above can be found
+ * by prompt text because their prompts are fixed strings a builder writes verbatim and a director
+ * does not hand-edit. This one is the lesson's actual physics question: it is different every
+ * lesson, by design, so there is no needle. What IS stable is its shape — a free-response
+ * question that is neither of the pinned two — and across the 74 Fall 2026 written activities
+ * that resolves to `q3` every time, including the six lab preflights whose Q1/Q2 use
+ * lab-instruction wording (CORE.md §2) and therefore reach the pinned pair by POSITION rather
+ * than by text.
+ *
+ * Returns the QUESTION OBJECT, not an id: every caller so far wants the prompt and the
+ * `figure_url` alongside the answer, and a second lookup to get from the id back to those is the
+ * kind of thing that drifts.
+ *
+ * Prefers a SCORED candidate, then falls back to any. A zero-point third question is not a shape
+ * anything writes today, but "no scored one exists, so show nothing" would be a silent empty
+ * panel, and a zero-point free response is still a free response.
+ *
+ * FIRST match when a lesson declares several. Fall 2026 has exactly one everywhere; a panel per
+ * question is a bigger design than the term needs and is worth revisiting when a second exists.
+ */
+export function freeResponseQuestion(activity) {
+  const questions = questionsOf(activity).filter(q => q && typeof q === 'object' && q.id);
+  const byRole = questions.find(q => q.role === 'free_response');
+  if (byRole) return byRole;
+
+  const pinned = new Set([
+    pinnedQuestion(activity, 'reading_reflection').id,
+    pinnedQuestion(activity, 'reading_time').id,
+  ].filter(Boolean));
+  // `type` defaults to free_response only when absent — a multiple_choice or numerical question
+  // is auto-graded and has no prose to show in a quote panel.
+  const candidates = questions.filter(q =>
+    !pinned.has(q.id) && (q.type || 'free_response') === 'free_response');
+  return candidates.find(q => (Number(q.points) || 0) > 0) || candidates[0] || null;
+}
 export function artifactUrlOf(activity) { return activity?.content?.artifact_url || null; }
 export function readingLinkOf(activity) { return activity?.content?.reading_link || null; }
 
