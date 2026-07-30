@@ -31,9 +31,19 @@ An assignment holds one or more activities. A preflight normally holds two:
 
 Both are optional. An assignment with one written activity is an ordinary written preflight.
 
+**A new assignment starts with the written questions only.** The AI Interaction is added
+deliberately — set it to *Include* in the editor and the section opens for you to fill in. It is
+not there by default because an interaction you never opened would otherwise be attached, and the
+Assignments page would then advertise one that does not exist.
+
 The interactive activity **only needs a URL when students can reach it** — that is, when the
 allowed mode is *Choice* or *AI Interaction*. Under *Free-Response* you can attach the interaction
 now and add its address later in the semester, once the lesson exists.
+
+While it has no address, the assignment card shows it in amber — *AI Interaction · no URL* — rather
+than as a working component, and **Launch interaction** stays disabled. Students see the same
+thing: the interactive box is greyed with *Available once your instructor adds the lesson link*.
+Nothing anywhere offers a button that goes nowhere.
 
 ## The two questions with special handling
 

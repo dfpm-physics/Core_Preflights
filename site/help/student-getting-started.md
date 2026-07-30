@@ -53,6 +53,10 @@ Sometimes the interactive lesson is offered only for **practice** — it does no
 it may be locked until you submit your written preflight or the deadline passes. When that is the
 case the assignment says so, and the practice card is greyed out until it opens.
 
+A greyed card that says *Available once your instructor adds the lesson link* means the lesson
+itself is not ready yet — the assignment expects one, and nobody has published it. Nothing is
+missing on your side, and the written preflight is unaffected.
+
 ## Seeing your grade
 
 For a **written preflight**, the grade appears once your instructor has reviewed it — a score you can

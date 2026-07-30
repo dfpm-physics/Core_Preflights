@@ -112,12 +112,13 @@ export function runPage(ctx, init, mountId = 'main') {
 /* ── Modals ──────────────────────────────────────────────────────────────────
  *
  * WHY THIS IS NOT `if (e.target === backdrop) close()`
- *   That was the pattern in all thirteen dialogs until 2026-07-30, and it loses work. Select text
- *   inside a modal, drag past its edge, release — `mouseup` lands on the backdrop, and the browser
- *   fires `click` on the nearest COMMON ANCESTOR of the two, which is the backdrop. The handler
- *   cannot tell that from a real click on the backdrop, so the dialog closes and everything typed
- *   into it is gone. Highlighting a sentence of feedback to replace it is the single most ordinary
- *   thing to do in the grading modal, so this fired constantly and always at the worst moment.
+ *   That was the pattern in every one of the site's twenty dialogs until 2026-07-30, and it loses
+ *   work. Select text inside a modal, drag past its edge, release — `mouseup` lands on the
+ *   backdrop, and the browser fires `click` on the nearest COMMON ANCESTOR of the two, which is
+ *   the backdrop. The handler cannot tell that from a real click on the backdrop, so the dialog
+ *   closes and everything typed into it is gone. Highlighting a sentence of feedback to replace it
+ *   is the single most ordinary thing to do in the grading modal, so this fired constantly and
+ *   always at the worst moment.
  *
  * THE FIX is to require BOTH ends of the gesture to be on the backdrop. A dismissal is a click
  * that starts and finishes on the overlay; anything that starts inside the dialog is part of
@@ -132,22 +133,43 @@ export function runPage(ctx, init, mountId = 'main') {
  */
 export function wireModalDismiss(backdrop, close, opts = {}) {
   if (!backdrop) return;
-  let startedOnBackdrop = false;
-  // `mousedown` on the backdrop itself is the only way a dismissing gesture can begin. Recorded on
-  // the backdrop rather than the document so a drag beginning outside the overlay entirely — which
-  // cannot happen while it is open, but could if a caller mounts one oddly — is not counted.
-  backdrop.addEventListener('mousedown', (e) => { startedOnBackdrop = e.target === backdrop; });
+  let downOnBackdrop = false, upOnBackdrop = false;
+  // Both ends, recorded literally. `click` alone cannot tell them apart: it fires on the nearest
+  // common ancestor, so a gesture with either end inside the dialog still arrives with the
+  // backdrop as its target. Recorded on the backdrop rather than the document so a drag beginning
+  // outside the overlay entirely is not counted.
+  backdrop.addEventListener('mousedown', (e) => { downOnBackdrop = e.target === backdrop; });
+  backdrop.addEventListener('mouseup',   (e) => { upOnBackdrop   = e.target === backdrop; });
   backdrop.addEventListener('click', (e) => {
-    const wasOnBackdrop = startedOnBackdrop;
-    startedOnBackdrop = false;                 // consume it — one gesture, one chance
+    const bothEnds = downOnBackdrop && upOnBackdrop;
+    downOnBackdrop = upOnBackdrop = false;     // consume it — one gesture, one chance
+    // `[data-close]` (the × and any Cancel) has no mousedown at all when it is reached by
+    // keyboard, so it is answered before the gesture test rather than through it.
     if (e.target.closest && e.target.closest('[data-close]')) { close(); return; }
-    if (e.target === backdrop && wasOnBackdrop) close();
+    if (e.target === backdrop && bothEnds) close();
   });
   if (opts.escape !== false) {
+    // Escape answers ONE dialog — the top one. Each wired backdrop listens on `document`, so with
+    // two open (a preview over the lesson editor, an extension over a grade) a single keypress
+    // reached both handlers and closed the stack, taking the dialog underneath that the user was
+    // still working in. A backdrop click cannot do this — the top overlay covers the one below —
+    // which is why only the key needs the guard.
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && backdrop.classList.contains('open')) close();
+      if (e.key === 'Escape' && backdrop.classList.contains('open') && topmostOpenModal() === backdrop) close();
     });
   }
+}
+
+/** The open dialog stacked highest: greatest z-index, later-in-document breaking a tie (which is
+ *  the common case — every `.modal-backdrop` shares one z-index unless a page overrides it). */
+export function topmostOpenModal() {
+  let best = null, bestZ = -Infinity;
+  document.querySelectorAll('.modal-backdrop.open').forEach(el => {
+    const z = parseInt(getComputedStyle(el).zIndex, 10);
+    const zz = Number.isFinite(z) ? z : 0;
+    if (zz >= bestZ) { bestZ = zz; best = el; }
+  });
+  return best;
 }
 
 /* ── People / formatting ────────────────────────────────────────────────────── */

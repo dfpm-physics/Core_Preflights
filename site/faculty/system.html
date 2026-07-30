@@ -57,7 +57,7 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, runPage, showFatal, fmtDateTime } from '../js/util.js';
+    import { esc, runPage, showFatal, fmtDateTime, wireModalDismiss } from '../js/util.js';
     import * as S from '../js/system-admin.js';
     import * as P from '../js/system-prefs.js';
 
@@ -554,16 +554,14 @@
     }
 
     /* ───────────────────────────── Modal plumbing ─────────────────────────────
-     * Copied rather than imported, matching admin.html:341-364 — there is no shared UI module
-     * and the lines are cheaper than the coupling. `sy-alt` is the one addition: the pickers need
-     * a "Reset to default" that is neither confirm nor cancel. */
+     * `sy-alt` is this dialog's one addition to the shared pattern: the pickers need a
+     * "Reset to default" that is neither confirm nor cancel. Dismissal itself is the shared
+     * util.js rule — × / Cancel / Escape, or a click that both starts AND ends on the backdrop.
+     * A naive `e.target === back` lived here until 2026-07-30, which meant selecting text in a
+     * confirmation and releasing outside it dismissed the dialog. */
     function wireModal() {
       const back = document.getElementById('sy-modal');
-      back.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeModal));
-      back.addEventListener('click', (e) => { if (e.target === back) closeModal(); });
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && back.classList.contains('open')) closeModal();
-      });
+      wireModalDismiss(back, closeModal);
       document.getElementById('sy-ok').addEventListener('click', () => runHandler(onConfirm));
     }
 

@@ -174,7 +174,15 @@
           `You can still launch it to study without submitting anything.`);
         if (!ok) return;
       }
-      window.open(l.interaction.artifact_url || '#', '_blank', 'noopener');
+      // Belt to interactiveAvailable's braces (student-lessons.js): every control that reaches
+      // here is gated on a usable URL, and the fallback used to be `'#'` — which opens a second
+      // copy of this page in a new tab and reads as the site malfunctioning.
+      const url = l.interaction?.artifact_url || '';
+      if (!/^https?:\/\//i.test(url)) {
+        alert('This interactive lesson has no link yet. Your instructor has to add it before it can open.');
+        return;
+      }
+      window.open(url, '_blank', 'noopener');
     }
 
     function gradeCard(l) {
@@ -295,10 +303,15 @@
         : `Answer the written preflight. The interactive lesson opens as practice once you’ve
            submitted — it doesn’t change your grade.`;
 
-      const interactiveAction = isChoice
-        ? `<button class="btn btn-secondary" id="choice-launch">Launch ↗</button>`
-        : `<button class="btn btn-secondary" disabled title="Available after you submit">Launch ↗</button>
-           <div class="study-note" style="margin-top:8px">Available after you submit your written responses.</div>`;
+      // Three states, not two: a graded choice whose interaction is not launchable yet (no link
+      // added, or a schedule gate) must say so rather than offer a button that goes nowhere.
+      const interactiveAction = !isChoice
+        ? `<button class="btn btn-secondary" disabled title="Available after you submit">Launch ↗</button>
+           <div class="study-note" style="margin-top:8px">Available after you submit your written responses.</div>`
+        : l.interactiveAvailable
+          ? `<button class="btn btn-secondary" id="choice-launch">Launch ↗</button>`
+          : `<button class="btn btn-secondary" disabled title="Not available yet">Launch ↗</button>
+             <div class="study-note" style="margin-top:8px">Available ${esc(l.interactiveGateReason || 'later')}.</div>`;
 
       const switchNote = isChoice
         ? `<div class="study-note">You can switch later — but once you submit an interactive report it

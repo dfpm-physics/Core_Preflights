@@ -21,7 +21,7 @@
 // sources, and there is now exactly one (app.grades, UNIQUE per enrollment per offering).
 
 import { loadAssignmentStatuses } from './student-data.js';
-import { questionsOf, answeredCount, displayPoints, isActivityAvailable } from './schema.js';
+import { questionsOf, answeredCount, displayPoints, isActivityAvailable, isArtifactLaunchable } from './schema.js';
 
 /**
  * Why the interactive path is not launchable yet, in words a student can act on.
@@ -31,6 +31,10 @@ import { questionsOf, answeredCount, displayPoints, isActivityAvailable } from '
 function interactiveGate(activity) {
   if (activity?.availableAfter === 'submit') return 'after you submit your written responses';
   if (activity?.availableAfter === 'due') return 'after the due date';
+  // Checked LAST, so a gate the director actually configured is reported while it applies. This
+  // one is not a schedule — it is an interaction attached without its address, which a
+  // Free-Response lesson may legitimately be for most of a term (schema.js isArtifactLaunchable).
+  if (!isArtifactLaunchable(activity)) return 'once your instructor adds the lesson link';
   return null;
 }
 
@@ -111,8 +115,12 @@ export async function loadLessonStatuses(ctx) {
     // (`submit` unlocks once written is committed; `due` unlocks after the deadline), and after
     // the deadline everything opens as study mode regardless — which is the "…or the assignment
     // has passed the due date" half of the rule. An invisible activity never opens.
+    // An interaction with no usable URL is never available, whatever the schedule says. Since
+    // 2026-07-30 the editor lets a Free-Response lesson attach its interaction and add the address
+    // later in the term, so this is an ordinary mid-term state rather than a broken row — and
+    // without this check the student got a live Launch button that opened nothing.
     const interactiveVisible = !!interactive && interactive.isVisible !== false;
-    const interactiveAvailable = interactiveVisible &&
+    const interactiveAvailable = interactiveVisible && isArtifactLaunchable(interactive) &&
       (isActivityAvailable(interactive, { submission: item.submission, isPast: item.isPast })
        || item.isPast);
     const interactiveGraded = interactive?.gradingRole === 'graded';

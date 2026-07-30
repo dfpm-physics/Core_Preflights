@@ -258,7 +258,7 @@
     import { initTheme } from '../js/theme.js';
     import { esc, fmtDate, runPage, wireModalDismiss } from '../js/util.js';
     import { wireHoldButton } from '../js/hold-button.js';
-    import { questionsOf, artifactUrlOf } from '../js/schema.js';
+    import { questionsOf, artifactUrlOf, isArtifactLaunchable } from '../js/schema.js';
     import * as L from '../js/faculty-lessons.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
@@ -372,6 +372,20 @@
       return `<span class="score-badge ${ok ? 'full' : 'pending'}" style="font-size:0.72em">${ok ? '✓' : '—'} ${esc(label)}</span>`;
     }
 
+    /* The interaction badge has THREE states where the written one has two, because it is the only
+     * component that can be attached and still be unusable: the URL is optional while the allowed
+     * mode is Free-Response, so the activity can exist with nowhere to send a student. A plain ✓
+     * claimed a working interaction for a row nobody can open (director, 2026-07-30) — read
+     * alongside the disabled "Launch interaction" button on the same card, it looked like the
+     * button was broken rather than the lesson unfinished. Amber says attached-but-not-ready, and
+     * matches the same colour's meaning in grading: real, and flagged. */
+    function interactionComp(l) {
+      if (!l.interactive) return comp(false, 'AI Interaction');
+      if (isArtifactLaunchable(l.interactive)) return comp(true, 'AI Interaction');
+      return `<span class="score-badge partial" style="font-size:0.72em"
+        title="This assignment has an AI Interaction attached, but no usable URL — students cannot open it. Add one with Edit, or set the interaction to “Not this term”.">⚠ AI Interaction · no URL</span>`;
+    }
+
     function card(l) {
       const status = l.isPublished
         ? `<span class="score-badge full">Published</span>`
@@ -425,11 +439,12 @@
       // and an instructor about to teach off a lesson has every reason to run it first. Absent
       // entirely when the assignment has no interactive activity — there is nothing to launch and a
       // permanently-disabled button on most cards is noise. Present-but-disabled only in the two
-      // states where an interaction exists and still can't be opened: no URL stored (possible only
-      // on rows predating the editor's URL check), or one that isn't http(s) — which is also what
+      // states where an interaction exists and still can't be opened: no URL stored (an ordinary
+      // state now that a Free-Response lesson may attach the interaction and add its address later
+      // in the term — the badge beside it says so), or one that isn't http(s) — which is also what
       // keeps a `javascript:` value out of an href.
       const iurl = artifactUrlOf(l.interactive);
-      const launchable = /^https?:\/\//i.test(iurl || '');
+      const launchable = isArtifactLaunchable(l.interactive);
       const launch = !l.interactive ? ''
         : launchable
           ? `<a class="btn btn-ghost btn-sm" href="${esc(iurl)}" target="_blank" rel="noopener"
@@ -451,7 +466,7 @@
             <div class="row wrap" style="gap:8px;margin-top:10px;align-items:center">
               <span class="score-badge" style="font-size:0.72em">${esc(POLICY_LABEL[l.policy] || l.policy)}</span>
               ${comp(!!l.written, nq ? `Free response · ${nq} q` : 'Free response')}
-              ${comp(!!l.interactive, 'AI Interaction')}
+              ${interactionComp(l)}
             </div>
           </div>
         </div>
@@ -484,7 +499,15 @@
         // course that does not want a reading question is not forced to carry one.
         pinned: { reading_time: true, reading_reflection: true },
         written:     { include: true, reference_pdf: '', reference_pages: '', reading_link: '' },
-        interactive: { include: true, slug: '', title: '', artifact_url: '', description: '' },
+        // OFF by default (director, 2026-07-30). It defaulted to on, which was harmless only while
+        // the URL was mandatory: the save refused until the director dealt with the interaction, so
+        // they could not create one by accident. Making the URL optional removed that stop, and
+        // because both sections open COLLAPSED and the interaction slug auto-mirrors the assignment
+        // id, authoring a written-only lesson silently attached an empty interactive activity the
+        // director never saw — which then showed on the card as an AI Interaction that did not
+        // exist. Opting in is one click on a control that is always visible, and it expands the
+        // section, so the fields are in front of whoever asked for them.
+        interactive: { include: false, slug: '', title: '', artifact_url: '', description: '' },
         existingInteractive: null,       // { id, slug } when the container already has one
         pointsPossible: 2, gradingMode: 'points', switchPolicy: 'lock_on_commit',
         dueByDay: {},
@@ -699,10 +722,30 @@
       pinnedNotice('');
       renderPinnedToggles();
       renderQuestions();
+      // Nothing typed yet, so a straight Cancel must not nag — unless a prefill link filled the
+      // form, which is unsaved content the director would have to go back and re-click to recover.
+      lmDirty = !!prefill;
       document.getElementById('lesson-modal').classList.add('open');
     }
 
-    function closeModal() { document.getElementById('lesson-modal').classList.remove('open'); }
+    /* Unsaved-work guard for the editor. Authoring a lesson is the longest piece of typing this
+     * site asks anyone to do — a whole question set, sometimes with uploaded figures — and until
+     * now any dismissal threw it away without a word. `lmDirty` is set by the delegated handlers
+     * in wireModal() on anything that touches the model; collapsing a section does not count. */
+    let lmDirty = false;
+
+    /** Dismissal path: × / Cancel / Escape / a click on the backdrop. Asks when there is
+     *  something to lose. `closeModal()` stays the unconditional close, because saveLesson()
+     *  calls it once the write has landed and a confirm there would be nonsense. */
+    function attemptCloseModal() {
+      if (lmDirty && !confirm('Discard your changes to this assignment?\n\nNothing has been saved yet.')) return;
+      closeModal();
+    }
+
+    function closeModal() {
+      lmDirty = false;
+      document.getElementById('lesson-modal').classList.remove('open');
+    }
 
     function renderInteractiveFields() {
       const idEl = document.getElementById('f-i-id');
@@ -915,6 +958,7 @@
         return;
       }
       model.questions[i].figure_url = url;
+      lmDirty = true;                 // a drag-dropped image fires no input/change event
       renderQuestions();
     }
 
@@ -1084,6 +1128,19 @@
     function wireModal() {
       const backdrop = document.getElementById('lesson-modal');
 
+      // Dismissal is the both-ends-on-the-backdrop rule every other dialog uses (util.js
+      // wireModalDismiss). This editor was one of four that still had the naive
+      // `e.target === backdrop` check on 2026-07-30, and it is the one where that costs most:
+      // highlighting a question you are rewriting, dragging past the edge of the dialog and
+      // releasing threw away every question in the form. attemptCloseModal(), not closeModal(),
+      // so a real dismissal of unsaved work asks first.
+      wireModalDismiss(backdrop, attemptCloseModal);
+
+      // Captured on the backdrop so it sees every edit before the delegated handlers below sort
+      // out which field it was — the flag only needs to know that something changed.
+      backdrop.addEventListener('input',  () => { lmDirty = true; }, true);
+      backdrop.addEventListener('change', () => { lmDirty = true; }, true);
+
       backdrop.addEventListener('input', (e) => {
         const t = e.target, ds = t.dataset;
         if (ds.q != null && ds.opt != null) { model.questions[+ds.q].options[+ds.opt] = t.value; return; }
@@ -1121,7 +1178,8 @@
       });
 
       backdrop.addEventListener('click', (e) => {
-        if (e.target === backdrop || e.target.closest('[data-close]')) { closeModal(); return; }
+        // Collapsing a section is the one click in here that changes no part of the model — it is
+        // view state, so it does not make the editor dirty.
         const collapseBtn = e.target.closest('[data-collapse]');
         if (collapseBtn) {
           const k = collapseBtn.dataset.collapse;
@@ -1133,17 +1191,18 @@
         if (policyBtn) {
           if (policyBtn.disabled) return;                     // mode not attached — ignore
           model.policy = policyBtn.dataset.policy;
-          updatePolicySeg();
+          lmDirty = true;
+          updatePolicySeg();            // which also refreshes the interaction-URL hint
           return;
         }
-        const pfSrcBtn = e.target.closest('[data-pfsrc]'); if (pfSrcBtn) { setWrittenIncluded(pfSrcBtn.dataset.pfsrc === 'new'); return; }
-        const iSrcBtn  = e.target.closest('[data-isrc]');  if (iSrcBtn)  { setInteractiveIncluded(iSrcBtn.dataset.isrc === 'new'); return; }
-        const qadd = e.target.closest('[data-qadd]'); if (qadd) { addQuestion(qadd.dataset.qadd); return; }
-        const qrm  = e.target.closest('[data-qrm]');  if (qrm)  { model.questions.splice(+qrm.dataset.qrm, 1); renderQuestions(); return; }
+        const pfSrcBtn = e.target.closest('[data-pfsrc]'); if (pfSrcBtn) { lmDirty = true; setWrittenIncluded(pfSrcBtn.dataset.pfsrc === 'new'); return; }
+        const iSrcBtn  = e.target.closest('[data-isrc]');  if (iSrcBtn)  { lmDirty = true; setInteractiveIncluded(iSrcBtn.dataset.isrc === 'new'); return; }
+        const qadd = e.target.closest('[data-qadd]'); if (qadd) { lmDirty = true; addQuestion(qadd.dataset.qadd); return; }
+        const qrm  = e.target.closest('[data-qrm]');  if (qrm)  { lmDirty = true; model.questions.splice(+qrm.dataset.qrm, 1); renderQuestions(); return; }
         const figpick = e.target.closest('[data-figpick]');
         if (figpick) { backdrop.querySelector(`[data-figfile="${figpick.dataset.figpick}"]`)?.click(); return; }
         const figrm = e.target.closest('[data-figremove]');
-        if (figrm) { model.questions[+figrm.dataset.figremove].figure_url = ''; renderQuestions(); return; }
+        if (figrm) { lmDirty = true; model.questions[+figrm.dataset.figremove].figure_url = ''; renderQuestions(); return; }
       });
 
       // Native drag-and-drop image upload onto a question's figure box → Supabase Storage.
@@ -1159,14 +1218,17 @@
 
       document.getElementById('lm-save').addEventListener('click', saveLesson);
       document.getElementById('lm-preview').addEventListener('click', openPreview);
+      // Preview opens OVER the editor, so its Escape has to answer only itself — that is what
+      // topmostOpenModal() inside wireModalDismiss is for. Without it one keypress dismissed the
+      // preview and then prompted to discard the lesson behind it.
       const pm = document.getElementById('preview-modal');
-      pm.addEventListener('click', (e) => { if (e.target === pm || e.target.closest('[data-prevclose]')) pm.classList.remove('open'); });
+      wireModalDismiss(pm, () => pm.classList.remove('open'));
+      pm.querySelectorAll('[data-prevclose]').forEach(b => b.addEventListener('click', () => pm.classList.remove('open')));
 
       // Destination chooser: dismissing it discards the prefill without writing anything.
       const dm = document.getElementById('dest-modal');
-      dm.addEventListener('click', (e) => {
-        if (e.target === dm || e.target.closest('[data-destclose]')) closeDest();
-      });
+      wireModalDismiss(dm, closeDest);
+      dm.querySelectorAll('[data-destclose]').forEach(b => b.addEventListener('click', closeDest));
     }
 
     // ── Student preview (free response only) ──────────────────────────────

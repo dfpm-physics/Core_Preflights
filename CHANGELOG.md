@@ -8,6 +8,95 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-07-30 (fourth) — Matthew Recker via Claude
+
+Two follow-ups from the director on the entry below, both of which say the same thing about it:
+**the fix was right and the sweep was incomplete.** Frontend only; no DDL, no live data written.
+
+### The modal fix reached sixteen of twenty dialogs, not "all thirteen"
+
+*"The modal disappears still. If I click and start to highlight and drag past the edge of the modal
+when I let go the modal goes away."*
+
+The entry below counted thirteen dialogs. There are **twenty**, and four still had the naive
+`e.target === backdrop` check — including **the lesson editor**, which is the dialog the director
+was in and the one where the loss is a whole authored question set. The other three were the
+Assignments preview, its destination chooser, and the System page's confirmation.
+
+All twenty now go through `wireModalDismiss()`, and three things changed in the helper itself:
+
+- **Both ends are recorded literally** (`mousedown` *and* `mouseup`), where before only the start
+  was. `click` fires on the common ancestor, so a gesture with *either* end inside the dialog
+  arrives with the backdrop as its target; tracking only the start left the mirror-image gesture —
+  press on the backdrop, release inside — reading as a dismissal.
+- **Escape answers one dialog, the top one.** Every wired backdrop listens on `document`, so with
+  two open a single keypress reached both handlers and closed the stack. `topmostOpenModal()` ranks
+  the open backdrops by z-index (document order breaking the tie) and only that one closes. This
+  became reachable *because* of this change: the preview opens over the editor.
+- **The lesson editor asks before discarding.** It now tracks whether anything in the form was
+  touched and confirms on any dismissal that would throw work away — the same guard the per-student
+  grading modal already had, on the dialog that holds the most work of anything on the site.
+
+**Two tests, because "I fixed it" was wrong once already.**
+`tests/browser-harness/modal.mjs` drives the real `wireModalDismiss` with a real mouse in Edge — 10
+checks, including the exact reported gesture (select text in a textarea, release far outside).
+Verified it *fails* under the old rule before keeping it: 4 of the 10 go red.
+`tests/app-schema/test-modals.mjs` enumerates every `.modal-backdrop` in `site/` and fails if one
+does not reach the shared helper — which is the check that would have caught this the first time,
+since a missed dialog is not a broken dialog and nothing else can see it.
+
+### An assignment with no AI Interaction advertised one
+
+*"Lesson 01 for 310 shows AI interaction green on assignment view, but there is no AI
+interaction."* Two causes, both introduced by making the URL optional in the entry below.
+
+**The editor was creating interactions nobody asked for.** A new lesson defaulted to
+`interactive.include = true`. That was harmless only while the URL was mandatory — the save
+*refused* until the director dealt with the interaction, so one could not be created by accident.
+Once the URL became optional that stop was gone, and because both activity sections open
+**collapsed** and the interaction slug auto-mirrors the assignment id, authoring a written-only
+lesson silently attached an empty interactive activity the director never saw. A new assignment now
+starts **written-only**; including the interaction is one click on an always-visible control, and it
+expands the section.
+
+**The card called an empty activity a working one.** The badge was `!!l.interactive` — the activity
+row exists — so it showed a green ✓ beside a disabled *Launch interaction* button, which reads as
+the button being broken rather than the lesson being unfinished. Three states now: absent, amber
+**AI Interaction · no URL**, green.
+
+**The student side had the same hole**, and worse: `window.open(artifact_url || '#')` opened a
+second copy of the page in a new tab. An interaction with no usable URL is now never *available* —
+the card greys with *Available once your instructor adds the lesson link* — and the launcher
+refuses outright as a backstop.
+
+One predicate decides all of it: `isArtifactLaunchable()` in schema.js, `http(s)` specifically, so
+it is also what keeps a `javascript:` URL out of an `href`. 9 checks in `test-schema.mjs`.
+
+**To clear the one already created:** open Lesson 01 in the editor, set **AI Interaction** to *Not
+this term*, and save. That detaches the empty activity and the badge goes with it.
+
+### The editor has now actually been opened
+
+Every defect in this entry and the one below was reported by the director, not caught here, and the
+common thread is that the logic was unit-tested and the **page had never been walked**.
+`tests/browser-harness/lesson-editor.mjs` signs in as the test faculty account and does it: 22
+checks over the real Assignments page and the real editor — that no card shows a green AI
+Interaction it cannot launch, that a new assignment opens written-only with both pinned questions
+distinct, that a drag-select ending on the backdrop keeps the form, that Escape on a dirty form
+asks first, and that the URL label flips between optional and required with the mode. **Read-only:
+it opens the editor and cancels; it never saves, publishes or deletes**, because the account is a
+live director on the live database.
+
+It found one thing on the first run — in itself, not in the site. An interaction-only lesson labels
+its *mode* "AI Interaction" too, so matching the badge by its words picked the mode badge, which
+carries no state class and passed every assertion vacuously. Matched on the ✓/—/⚠ prefix now, with
+a check that the count of badges equals the count of cards.
+
+Not covered by it: no assignment visible to the test account is in the amber state, so that badge
+is proven by `test-schema.mjs` and by reading, not by observation.
+
+---
+
 ## 2026-07-30 (third) — Matthew Recker via Claude
 
 Four defects found by the director while standing up **Physics 310** — the first course authored

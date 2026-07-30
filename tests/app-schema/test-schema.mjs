@@ -7,7 +7,7 @@ import {
   resolveDueBySection, withResolvedDue,
   canSwitchActivity, isActivityAvailable, pointsFromEffort, displayPoints,
   questionsOf, questionPoints, answeredCount, lessonNumber, chunked,
-  taughtSectionIds, actionableSections,
+  taughtSectionIds, actionableSections, isArtifactLaunchable,
 } from '../../site/js/schema.js';
 
 const NOW = new Date('2026-09-01T12:00:00Z');
@@ -237,6 +237,35 @@ check('due-gated opens after the deadline (study mode)',
       isActivityAvailable(afterDue, { submission: null, isPast: true }) === true);
 check('is_visible=false is never available',
       isActivityAvailable({ availableAfter: 'always', isVisible: false }, { submission: null, isPast: false }) === false);
+
+/* ── isArtifactLaunchable — attached is not the same as ready ──────────────────
+ * The Assignments card and the student's lesson page both decide whether to offer a Launch, and
+ * both must decide it the same way. Before this rule existed the card showed a green ✓ for an
+ * interaction with no URL while the button beside it was disabled, and the student page opened
+ * `'#'` — a second copy of the page — which reads as the site being broken. That state is now
+ * ORDINARY: a Free-Response lesson may attach its interaction in August and get the address in
+ * October (director, 2026-07-30). */
+section('isArtifactLaunchable');
+
+check('https URL is launchable',
+      isArtifactLaunchable({ content: { artifact_url: 'https://claude.ai/public/artifacts/abc' } }) === true);
+check('http URL is launchable',
+      isArtifactLaunchable({ content: { artifact_url: 'http://example.edu/lesson' } }) === true);
+check('attached with no URL at all is NOT launchable — the case the director hit',
+      isArtifactLaunchable({ content: {} }) === false);
+check('empty-string URL is not launchable',
+      isArtifactLaunchable({ content: { artifact_url: '' } }) === false);
+check('a bare slug someone typed into the URL box is not launchable',
+      isArtifactLaunchable({ content: { artifact_url: 'lesson-02-charge' } }) === false);
+// The value reaches an href and window.open, so the scheme check is a security boundary too.
+check('javascript: is refused',
+      isArtifactLaunchable({ content: { artifact_url: 'javascript:alert(1)' } }) === false);
+check('data: is refused',
+      isArtifactLaunchable({ content: { artifact_url: 'data:text/html,<script>' } }) === false);
+check('scheme match is case-insensitive',
+      isArtifactLaunchable({ content: { artifact_url: 'HTTPS://claude.ai/x' } }) === true);
+check('no activity at all is not launchable (written-only lesson)',
+      isArtifactLaunchable(null) === false);
 
 /* ── pointsFromEffort — MUST match app.grades_points_from_effort() ─────────── */
 section('pointsFromEffort (migration-013 curve)');

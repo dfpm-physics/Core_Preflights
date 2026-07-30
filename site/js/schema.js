@@ -304,6 +304,23 @@ export function freeResponseQuestion(activity) {
   return candidates.find(q => (Number(q.points) || 0) > 0) || candidates[0] || null;
 }
 export function artifactUrlOf(activity) { return activity?.content?.artifact_url || null; }
+
+/**
+ * Can this interactive activity actually be opened?
+ *
+ * ATTACHED IS NOT THE SAME AS READY. Since 2026-07-30 the lesson editor requires the artifact URL
+ * only when the allowed mode lets a student reach the interaction (Choice or AI Interaction), so a
+ * Free-Response lesson may carry its interaction for most of a term with no address on it. Every
+ * surface that offers to launch one — the Assignments card, the student's lesson page — has to ask
+ * this question, and they must all answer it the same way or the site tells two stories about the
+ * same lesson. It lives here for the same reason the pinned-question rules do.
+ *
+ * `http(s)` specifically, not merely non-empty: the value ends up in an `href` and in
+ * `window.open`, so this is also what keeps a `javascript:` URL out of both.
+ */
+export function isArtifactLaunchable(activity) {
+  return /^https?:\/\//i.test(artifactUrlOf(activity) || '');
+}
 export function readingLinkOf(activity) { return activity?.content?.reading_link || null; }
 
 /** Total points declared by a written activity's questions (0 when it declares none). */

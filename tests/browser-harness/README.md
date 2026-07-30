@@ -54,7 +54,22 @@ node tests/browser-harness/pass.mjs --student        # the test cadet instead of
 
 # the targeted P0.5 assertions, one run per tier (flip tiers with test_faculty_account.py)
 node tests/browser-harness/checks.mjs --tier director --lesson <uuid>
+
+# the Assignments page and its editor, signed in — read-only, never saves (see its header)
+node tests/browser-harness/lesson-editor.mjs
 ```
+
+Two scripts here need **no server and no account**, because they inline the module under test into
+a synthetic page. Run them from anywhere:
+
+```bash
+node tests/browser-harness/hold.mjs     # hold-to-confirm, driven by a real mouse
+node tests/browser-harness/modal.mjs    # dialog dismissal: a drag that starts inside never closes
+```
+
+Each exists because its bug was invisible to every offline suite and was reported by the director
+rather than caught here — the file headers say which bug, and which single assertion was ever
+false.
 
 ## Screenshots go to the scratchpad, never the repo
 
