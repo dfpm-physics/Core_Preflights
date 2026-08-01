@@ -7,8 +7,8 @@
 // Help lives in the user dropdown rather than the main nav: it is a reference surface, not a
 // place work happens, and the nav bar is reserved for the latter. `help.html` is a bare filename
 // for the same reason the role links are — both student/ and faculty/ have one, and each shows
-// the topics that role may see (js/help.js). System joined it there on 2026-07-30 — the dropdown's
-// contents are USER_MENU_LINKS, which says why.
+// the topics that role may see (js/help.js). System joined it there on 2026-07-30, and the test
+// views on 2026-08-01 — the dropdown's contents are USER_MENU_LINKS, which says why for each.
 
 import { iconHTML, initials, esc } from './util.js';
 import { updateToggleButtons } from './theme.js';
@@ -116,6 +116,22 @@ export const USER_MENU_LINKS = [
   // two together is how somebody lands on the raw table browser looking for their password.
   { key: 'system',  label: 'System',  href: 'system.html',  icon: 'settings', emoji: '🛠️',
     adminOnly: true, facultyOnly: true, groupBefore: true },
+  /* Test & mockup views — `tests/index.html`, the landing page for everything under `tests/`.
+   *
+   * IT IS NOT PART OF THE APP, which is the whole reason it is here rather than on the bar and why
+   * it opens in a NEW TAB. The bar states where the work of running a course happens; these are
+   * design sandboxes and mockups that touch no live data, and following one should not cost an
+   * admin the page they were on.
+   *
+   * The href is the only one in either list that is not a bare filename. Every other destination
+   * is a sibling under student/ or faculty/; this one climbs to the repo root, which resolves the
+   * same locally (`python -m http.server` from the root) and on Pages, where the site is served
+   * from `/Core_Preflights/site/` and so the tests tree is `/Core_Preflights/tests/`.
+   *
+   * Gated on the GLOBAL flag, like System — the sandboxes carry their own director gate
+   * (tests/browser/guard.js), so this is discoverability, not the boundary. */
+  { key: 'tests',   label: 'Test views', href: '../../tests/index.html', icon: 'beaker', emoji: '🧪',
+    adminOnly: true, facultyOnly: true, external: true },
 ];
 
 /** What this caller may see in the dropdown. Same gate vocabulary as FACULTY_LINKS. */
@@ -270,8 +286,8 @@ export function renderNav(ctx, opts = {}) {
             </div>
             <div class="menu-sep"></div>
             ${userMenuLinks(ctx).map(l => `${l.groupBefore ? '<div class="menu-sep"></div>' : ''}
-            <a class="menu-item" href="${esc(l.href)}">
-              ${iconHTML(l.icon, l.emoji, 'ic')}<span>${esc(l.label)}</span>
+            <a class="menu-item" href="${esc(l.href)}"${l.external ? ' target="_blank" rel="noopener"' : ''}>
+              ${iconHTML(l.icon, l.emoji, 'ic')}<span>${esc(l.label)}${l.external ? ' ↗' : ''}</span>
             </a>`).join('')}
             <div class="menu-sep"></div>
             <button class="menu-item danger" data-signout>

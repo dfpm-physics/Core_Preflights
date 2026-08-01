@@ -51,6 +51,7 @@ retire icons — this table is the source of truth for what the UI expects.
 | `ic-rocket.png` | "Preflight" theme — rocket/paper plane | rocket, launch, paper plane, takeoff | ✅ | Student "all caught up" empty state |
 | `ic-wave.png` | Physics — waveform | wave, waveform, oscillation, sine | ✅ | Login physics motif |
 | `ic-magnet.png` | E&M — magnet | magnet, magnetism, horseshoe, field | ✅ | Login physics motif |
+| `ic-beaker.png` | Test & mockup views — beaker/flask | beaker, flask, test, laboratory | ⬜ | User-menu dropdown, "Test views" (global admins) |
 
 ## Adding a new icon
 

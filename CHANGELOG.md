@@ -8,6 +8,68 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-01 — Matthew Recker via Claude
+
+### A course calendar, as a mockup — and the test views reachable from the app
+
+Two things, both about seeing. Nothing shipped to students, no schema change, no data touched.
+
+**`tests/browser/test-calendar.html` — the term as a calendar rather than an ordered list.**
+`faculty/lessons.html` lists a term's offerings in order, which says what comes next but cannot say
+*when*. The specific thing it cannot show is the one this exists for: **a lesson has two deadlines,
+not one.** M-day and T-day sections meet on different dates and each track's preflight is due the
+evening before *its own* class, so on a list those two dates are a detail inside a row and on a
+calendar they are two marks days apart. Every deadline here is drawn per track, and the day track
+is the only thing colour is spent on — modality (`✎` written · `⚛` interactive · `⇄` choice) is a
+glyph, so the two never compete.
+
+Month view and a whole-term view, a rail that opens the selected day, and the cases that are easy
+to forget existed: **per-section overrides drawn on their own dates** (an `assignment_due_dates`
+row is the cancelled-class case, and those cadets really do have a different date), the unpublished
+tail **dashed** because a director authoring a term should see its shape, holidays that shift the
+whole M/T pattern after them, term milestones, and completion on what is already past. Switching
+course in the sandbox strip moves the deadline hour — **215 is 1759, 110 is 2359** (CORE.md §2),
+which is the sort of policy that is invisible on a list and obvious on a calendar.
+
+The header comment maps every mark to the field that would feed it, so this is reviewable as a
+design proposal rather than a picture. Two deliberate omissions are recorded there: `app.extensions`
+is per *student*, so a course calendar drawing them would show one cadet's date to a section; and
+the M/T day sequence is **derived from the deadlines**, not from a new academic-day table —
+`due_by_day` × `sections.meeting_days` already implies it, and inventing a table is not a mockup's
+call. Synthetic and clock-independent (a pinned "today" of 2026-10-06, so the page opens mid-term
+with real past and future rather than whatever the machine's date makes of it).
+
+**"Test views" in the user dropdown, for global admins.** `tests/index.html` had no route from the
+app — you had to know the URL. It sits beside **System** under the same `is_global_admin` gate, and
+it is the **first entry in either nav list whose href leaves the app** (`../../tests/index.html`,
+which resolves identically locally and on Pages), so it opens in a new tab and is labelled `↗`.
+It is not on the bar for the same reason System is not: the bar states where the work of running a
+course happens, and these are sandboxes touching no live data. The sandboxes keep their own director
+gate (`tests/browser/guard.js`) — the dropdown entry is discoverability, not the boundary.
+
+`ic-beaker.png` is registered in `ICONS.md` as **⬜ needed**; until the art lands the entry shows the
+standard fallback, which is the documented way round.
+
+**Verified in real Chrome** (puppeteer, `tests/browser-harness` deps), since a calendar that parses
+is not a calendar that is right: 33 assertions on the sandbox — every visible deadline lands the
+evening before its own lesson's class (the one exception being an override, which is what an
+override *is*), all four term milestones present and highlighted while holidays stay quiet, class
+days with no lesson still badged, both views, both themes, both courses, the track and unpublished
+filters, no console/page errors of the page's own, and no horizontal overflow at 430px. Nine more
+render the **live** `nav.js` with a stubbed ctx: an admin gets the entry with `target=_blank` and
+`rel=noopener`, a director and a student do not, and the href is resolved from `site/faculty/` and
+then actually fetched (200, the tests landing page). `tests/app-schema` is **380 passed, 0 failed** —
+`test-nav.mjs` gained the dropdown's new shape plus a check that an out-of-app href resolves to a
+real file, which the existing "points at a page that exists" check could not do. *(The two suites
+that need the live test-student account still throw on invalid credentials, unchanged and unrelated.)*
+`check_doc_sources.py` flagged `instructor-grading.md` because `nav.js` is one of its sources; no
+route to the Grade page moved, so its `reviewed` date is bumped, not its text.
+
+**Node-only verification** for the browser half, per CORE.md §2 — the sandbox has not been opened by
+a signed-in human, and the dropdown entry has not been clicked on the live site.
+
+---
+
 ## 2026-07-30 (fifth) — Matthew Recker via Claude
 
 ### Partial credit on the effort curve is one point, not half the assignment

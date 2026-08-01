@@ -5,7 +5,7 @@
 // sees a picker at all, how terms are grouped, which row is marked current — is exactly the
 // part worth testing, and it is all string in / string out.
 
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { check, eq, section, installBrowser } from './harness.mjs';
 
 installBrowser({});   // nav.js imports util.js, which reads `location` at module load
@@ -67,11 +67,17 @@ eq('every link has a key, a label and an href',
    FACULTY_LINKS.filter(l => !l.key || !l.label || !l.href).map(l => l.key || '(none)'), []);
 eq('link keys are unique', keys.length, new Set(keys).size);
 
-/* ── The user dropdown (2026-07-30) ───────────────────────────────────────────
+/* ── The user dropdown (2026-07-30 · 2026-08-01) ──────────────────────────────
  * System moved off the bar and into here. The gate had to come with it: the whole point of
  * `adminOnly` is that it reads `is_global_admin` and NOT "director of the current course", and a
  * move is exactly the moment a gate gets dropped on the floor — the entry keeps rendering, for
- * everyone, and nothing else in the app notices. */
+ * everyone, and nothing else in the app notices.
+ *
+ * "Test views" joined it on 2026-08-01 under the same gate, and is the one entry in EITHER list
+ * whose href leaves the app. That makes it the one entry the "points at a page that exists" check
+ * cannot resolve against site/faculty/ — so it is resolved against the repo instead, below,
+ * rather than being waved through. A dropdown entry pointing at a path that is not there is
+ * exactly the failure this section exists to catch. */
 
 section('user dropdown — who sees what in it');
 
@@ -80,18 +86,29 @@ const FACULTY = { role: 'faculty', instructorRow: { name: 'I' } };
 const ADMIN   = { role: 'faculty', instructorRow: { name: 'A', is_global_admin: true } };
 const STUDENT = { role: 'student', studentRow: { name: 'S' } };
 
-eq('the dropdown holds Account, Help and System', USER_MENU_LINKS.map(l => l.key),
-   ['account', 'help', 'system']);
+eq('the dropdown holds Account, Help, System and Test views', USER_MENU_LINKS.map(l => l.key),
+   ['account', 'help', 'system', 'tests']);
 check('System carries the global-admin gate', USER_MENU_LINKS.find(l => l.key === 'system').adminOnly === true);
-eq('a global admin sees System', menuKeys(ADMIN), ['account', 'help', 'system']);
+check('so does Test views', USER_MENU_LINKS.find(l => l.key === 'tests').adminOnly === true);
+eq('a global admin sees both', menuKeys(ADMIN), ['account', 'help', 'system', 'tests']);
 eq('a plain instructor does NOT', menuKeys(FACULTY), ['account', 'help']);
 // A director is the case the split exists for: full authority over one course, none over the
 // system tier. Switching course must never be a way to acquire it.
 eq('nor does a DIRECTOR of the current course',
    menuKeys({ ...FACULTY, isDirectorForCurrent: () => true }), ['account', 'help']);
-eq('a student sees neither System nor anything faculty-only', menuKeys(STUDENT), ['account', 'help']);
-eq('every dropdown href points at a page that exists',
-   USER_MENU_LINKS.filter(l => !PAGES.has(l.href)).map(l => l.href), []);
+eq('a student sees nothing faculty-only', menuKeys(STUDENT), ['account', 'help']);
+
+// Same href check as the bar's, split by where the target lives. Both halves matter: a bare
+// filename must exist beside the pages that render the nav, and the one relative path must
+// resolve from those pages to something real in the repo.
+eq('every in-app dropdown href points at a page that exists',
+   USER_MENU_LINKS.filter(l => !l.external && !PAGES.has(l.href)).map(l => l.href), []);
+eq('…and the external one resolves from site/faculty/ to a real file',
+   USER_MENU_LINKS.filter(l => l.external)
+     .filter(l => !existsSync(new URL(`../../site/faculty/${l.href}`, import.meta.url)))
+     .map(l => l.href), []);
+check('an external dropdown entry is marked as such so it opens in a new tab',
+      USER_MENU_LINKS.filter(l => l.href.includes('/')).every(l => l.external === true));
 check('no key collides with a bar entry',
       !USER_MENU_LINKS.some(l => keys.includes(l.key)));
 
