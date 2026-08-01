@@ -8,6 +8,64 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-01 (third) — Matthew Recker via Claude
+
+### Six calendar formats, not two, and a switcher between them
+
+The director asked to see the calendar in genuinely different shapes rather than restyled ones.
+The sandbox now offers **six formats over one set of data**, and the point of the switcher is that
+the choice is a judgment nobody can make from a description — each format makes one question cheap
+and the others expensive:
+
+| | answers | costs |
+|---|---|---|
+| **Month** | what does this week look like | truncates titles to ~11 characters |
+| **Term** | what is the shape of the whole term | denser, still truncating |
+| **Timeline** | how far apart are a lesson's two deadlines | needs horizontal room |
+| **Agenda** | what is coming, in full | one date at a time, no shape |
+| **Pulse** | how is the term going | no text at all |
+| **Ledger** | which weeks will pull the two tracks apart | no sense of calendar time |
+
+**Timeline** is the one the data argued for. Two lanes on a single real-time axis, with each
+lesson's M mark joined to its T mark by an SVG **diagonal whose slope is the gap** — near-vertical
+for a one-day turnaround, a long lean for four days, and the nine wider-than-a-day pairs drawn
+heavier. A flat rule between the lanes said only "these are related", which the lanes already said.
+
+**Agenda** exists because every grid here truncates; it is the format that never does, and the
+suite asserts that (`scrollWidth <= clientWidth` on every title). **Pulse** is the
+contribution-graph shape — 147 squares, weekday down and week across, hue for track and fill for
+submission. Its ramp is stretched over **50–100%**, not 0–100%, because submission on a graded
+preflight never lands in the bottom half and a raw scale rendered every square identical; the
+tooltip always reports the true figure. **Ledger** puts both dates on one row with the **spread**
+as a sortable column, which is the fastest way to find the weeks where a director has to think
+about the two halves of the cohort separately.
+
+**A real bug, found by adding formats.** Lesson 1's M-day preflight is due the evening **before**
+the first class — 5 Aug, a date outside the term by the academy's own dates — and three of the six
+formats silently dropped it: the agenda began its walk at the term start, the pulse treated the day
+as out of range, and the timeline gave it a negative offset and pushed it off the left edge. The
+month and term grids happened to include it because their week padding reached back that far, which
+is why nothing had caught it. All six now start from `FIRST_DRAWN`. The rail also stopped labelling
+that date "Outside the term" over the top of a live deadline.
+
+Two smaller fixes: re-centring now fires only on a **format change**, not on every render — clicking
+a timeline mark was dragging the view out from under the click that caused it; and `aria-selected`
+has exactly one writer (`render()`), so the tabs cannot disagree with the viewport.
+
+**Verified:** a second browser suite, **62 assertions**, covering every format — each renders,
+names itself, offers selectable dates, shows the month pager only where paging means anything, and
+drives the one shared rail; plus format-specific substance: the timeline's 41 connectors reproduce
+the real `{1:32, 2:1, 3:6, 4:2}` gap spread in their horizontal runs and are diagonals rather than
+rules; the agenda truncates nothing and lists all 82 deadlines; the pulse partitions exactly the
+evenings the agenda lists (a cross-format consistency check — a square is a *day*, not a deadline);
+the ledger's spread column reports the real gaps and sorts widest-first. No format overflows at
+430px. The original 46-assertion suite and `tests/app-schema` (**380 passed, 0 failed**) are
+unchanged and green.
+
+**Still Node-only verification** (CORE.md §2) — nobody has opened these signed in.
+
+---
+
 ## 2026-08-01 (second) — Matthew Recker via Claude
 
 ### The academy calendar is ground truth, and it is now in the repo
