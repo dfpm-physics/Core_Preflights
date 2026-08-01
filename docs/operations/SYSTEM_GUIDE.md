@@ -404,6 +404,18 @@ Each scheduled assignment carries a per-meeting-day schedule in `assignment_offe
 box and a time box per meeting day the offering's sections actually use, so a course meeting W/F
 needs no code change. Saving rewrites the per-section rows for every current section.
 
+**Which date goes on which lesson comes from the academy calendar, not from counting.** A preflight
+is due the evening before its class, and which calendar days are M-days and which are T-days is a
+property of the USAFA Academic Calendar — it is not in the database and it is not a pattern you can
+work out. The published calendar is mirrored into the repo at `site/data/academic-calendar.json`
+(regenerate with `python scripts/calendar/build_academic_calendar.py --commit`), and it names every
+teaching day `M<n>` / `T<n>` — the track **and** the lesson number, so lesson 14's two dates are the
+days it lists as `M14` and `T14`. Do not assume the two alternate: in Fall 2026 a lesson's M-day and
+T-day are one day apart 32 times, three days apart six times, and **four days apart twice**. The
+file also marks the **modified-SOC** days, on which afternoon sections start an hour early — that
+changes when class meets and never moves a deadline, but it is worth knowing when you look at a week
+that seems oddly shaped. CORE.md §2 carries the full note.
+
 The time box starts on **your course's deadline hour** — 1759 for Physics 215, 2359 for Physics 110
 — and an assignment that already has a deadline reloads whatever it was saved with, so the default
 only applies to a date nobody has timed yet. That hour is course policy set by the course director,

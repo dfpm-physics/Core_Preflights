@@ -8,6 +8,78 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-01 (second) — Matthew Recker via Claude
+
+### The academy calendar is ground truth, and it is now in the repo
+
+The course-calendar mockup shipped this morning generated its own M/T day sequence — weekdays
+alternating, minus a hand-typed holiday list. The director supplied the real thing: the published
+**USAFA Academic Calendar** feed. Every part of the guess turns out to be wrong, and the errors are
+not cosmetic.
+
+**`scripts/calendar/build_academic_calendar.py` → `site/data/academic-calendar.json`.** Stdlib
+Python, dry-run by default, `--commit` to write, idempotent (re-running against the live feed
+reports "already current"). It parses the .ics — RFC 5545 line unfolding and all — and emits four
+terms: fall-2025, spring-2026, fall-2026, spring-2027.
+
+**The calendar names each teaching day `M<n>` / `T<n>` — the track AND the lesson number.** So
+`preflight-14` maps to the day the academy calls `M14`, and nothing has to count. That single fact
+is why this is a lookup rather than a derivation.
+
+**Why it cannot be derived, in the numbers.** Real Fall 2026 runs **6 Aug – 10 Dec** with **41**
+lesson slots — the mockup had guessed 12 Aug – 11 Dec and 40. The gap between a lesson's M-day and
+its T-day is 1 day 32 times, 2 days once, **3 days six times and 4 days twice**. The weekday spread
+is uneven (18 Tuesdays, 15 Fridays). And Fall 2025 has **no M7 at all**, because that day was
+cancelled — the feed says so in as many words ("M7 Canceled - USAFA Down Day"), and the extractor
+records it rather than silently renumbering. Any rule reproducing that is a rule somebody has to
+maintain against a calendar published elsewhere.
+
+That variable gap is also the calendar view's whole argument. A lesson's two deadlines being
+*sometimes adjacent and sometimes most of a week apart* is precisely what an ordered list cannot
+say — and the synthetic version, having a fixed rhythm, was quietly making the argument look
+smaller than it is.
+
+**SOC days are flagged**, as the director asked. "SSoC" in local speech appears in the feed as
+`Modified SOC - …`, usually "Afternoon Sections Start 1 Hour Early"; Fall 2026 has seven, including
+a one-off for a change of command. The variants are kept verbatim rather than normalised, because
+they differ in *how* modified (one Spring day moves only P5 and P6, by 90 minutes). **It changes
+when class MEETS and never moves a preflight deadline**, which is set the evening before — so it is
+a flag on the day and never a mark on a deadline. The file also carries days off, breaks, finals,
+study day and grades-due, classified coarsely; training series (BCT, Silver Training Weekend, the
+summer periods) are kept but marked `other`, because what is worth drawing is the view's decision,
+not the extractor's.
+
+**The mockup now reads the file** instead of inventing anything, which also means it exercises the
+wiring a real page would use: a static JSON under `site/`, fetched with no build step. It is under
+`site/` for a concrete reason — the source is an Outlook publish URL on another origin, so a browser
+fetching it directly is refused by CORS, and there is no server to proxy through.
+
+**Recorded in `CORE.md` §2**, because this is exactly the class of fact that must not live only in
+an agent's memory: where the ground truth is, how to regenerate it, and the numbers above as the
+reason not to reconstruct it. `SYSTEM_GUIDE.md`'s "Step 2 — Update the due dates" gained the same
+pointer, where it was a real gap: that step tells a director to put a date on every lesson and never
+said where the dates come from.
+
+**One bug found and fixed by the new data.** A single-day milestone falling inside a multi-day break
+was suppressed entirely — Final Grades Due (21 Dec) sits inside Winter Break (17 Dec – 3 Jan), and
+since a spanning note only writes its label on its first day, the 21st rendered blank. A note that
+*starts* on a date now outranks one merely passing through. The synthetic holiday list had no
+overlapping events, so nothing could have surfaced this before.
+
+**Verified:** the browser suite grew to **46 assertions**, the load-bearing one being that all **82**
+Fall 2026 teaching days match `academic-calendar.json` date for date on both track and SOC flag,
+with nothing badged as a teaching day the file does not list. Plus: all 7 SOC days flagged and no
+others; term bounds, finals and grades-due highlighted while days off stay quiet; a date carrying
+two notes shows the specific one (11 Sep is both "Commandant's Training Day" and "No Classes"); a
+teaching day with no preflight still badged (215 declares 40 lessons against 41 slots, so slot 41 is
+that case); no console or page errors; no horizontal overflow at 430px. `tests/app-schema` **380
+passed, 0 failed**. Nine derived documents were re-read against the CORE.md change and review-bumped;
+`SYSTEM_GUIDE.md` was edited rather than bumped.
+
+**Still Node-only verification** (CORE.md §2) — the sandbox has not been opened by a signed-in human.
+
+---
+
 ## 2026-08-01 — Matthew Recker via Claude
 
 ### A course calendar, as a mockup — and the test views reachable from the app
