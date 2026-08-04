@@ -252,7 +252,8 @@ and costs the student nothing — so the legitimate case wins.
 | `grading_mode` | Vestigial since 2026-07-23 — see below. Always `points`; the assignment editor stopped offering a choice on 2026-07-27 |
 | `switch_policy` | Whether a student may change activity after committing |
 | `due_at` | Default deadline, overridden per section |
-| `is_published` | Whether students can see it |
+| `opens_at` | When students may see it. **Empty is the normal case** and does not mean "always" — it selects the standard rolling window, 7 days before each student's own deadline. A value overrides that with one fixed instant for every section, earlier or later, and does not follow a due date changed afterwards |
+| `is_published` | Whether the assignment is **ready**. Not the same as whether students can see it — see `opens_at` above; both must be satisfied |
 | `content_snapshot` | What this class was given, captured at term close |
 | `content_snapshot_frozen_at` | When it was sealed. Once set, the snapshot cannot be edited |
 

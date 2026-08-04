@@ -36,7 +36,7 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc } from '../js/util.js';
+    import { esc, fmtDate } from '../js/util.js';
     import { resolveActivityBySlug, submitInteractionReport, loadAssignmentStatuses } from '../js/student-data.js';
     import { questionsOf, answeredCount } from '../js/schema.js';
 
@@ -152,7 +152,11 @@
       let item = null;
       if (offering) {
         offered = offering.activities.find(a => a.id === activity.id) || null;
-        const items = await loadAssignmentStatuses(ctx);
+        // `includeLocked` — this page must be able to REASON about an assignment the release
+        // window is still hiding, not just fail to find it. Without it an unreleased lesson
+        // resolves to `item = null`, which reads here as "no deadline, no grade, nothing saved"
+        // and would wave an early submission straight through. See the notReleased stop below.
+        const items = await loadAssignmentStatuses(ctx, { includeLocked: true });
         item = items.find(i => i.offeringId === offering.offeringId) || null;
         if (item?.written) {
           const saved = item.submission?.activities?.[item.written.id]?.content || null;
@@ -160,20 +164,27 @@
         }
       }
 
-      // Two hard stops on submitting for a grade, both from the student's own resolved status
+      // Three hard stops on submitting for a grade, all from the student's own resolved status
       // (loadAssignmentStatuses honours the section deadline and any extension). An interactive
-      // grade is auto-final and has no instructor review to catch a late or duplicate submission,
-      // so these are enforced BEFORE submit, not after:
+      // grade is auto-final and has no instructor review to catch a late, early or duplicate
+      // submission, so these are enforced BEFORE submit, not after:
       //   pastDue      — the deadline has passed; a report can't be handed in late for credit.
       //   alreadyFinal — a finalized grade already exists; the first submitted report is the one
       //                  that counts, so a later one can't overwrite it.
+      //   notReleased  — the assignment hasn't opened yet. This is the one stop that cannot be
+      //                  reached from inside the site, and is exactly why it is needed: the
+      //                  artifact lives on claude.ai and its URL is shareable, so a cadet handed
+      //                  next month's link by a classmate arrives here having never seen the
+      //                  lesson listed. Letting that through would auto-grade a lesson the
+      //                  release window is explicitly holding back.
       // (Practice is a separate, softer case handled below — it records but never grades.)
       const pastDue      = !!item?.isPast;
       const alreadyFinal = !!item?.grade?.is_finalized;
+      const notReleased  = !!item && item.released === false;
 
       // Stored markdown is a user-controllable blob — sanitize at render time, never execute.
       const preview = DOMPurify.sanitize(marked.parse(payload.markdown));
-      const canSubmit = !!(payload.id && activity && offering) && !pastDue && !alreadyFinal;
+      const canSubmit = !!(payload.id && activity && offering) && !pastDue && !alreadyFinal && !notReleased;
 
       let banner = '';
       if (!payload.id) {
@@ -190,6 +201,12 @@
         banner = `<div class="alert alert-warn">This assignment has already been <strong>graded</strong>, so a new
           report can’t be submitted. You can still read it below. If you think this is wrong, ask your
           instructor — they can reopen the assignment.</div>`;
+      } else if (notReleased) {
+        banner = `<div class="alert alert-warn">This lesson <strong>hasn’t opened yet</strong>${
+          item.releasesAt ? ` — it becomes available on ${esc(fmtDate(item.releasesAt))}` : ''}, so this report
+          can’t be submitted for a grade. Preflights are meant to be done in the days before the lesson that
+          covers them, which is why they appear when they do. You can read your report below, and run the
+          lesson again once it opens.</div>`;
       } else if (pastDue) {
         banner = `<div class="alert alert-warn">The <strong>deadline for this assignment has passed</strong>, so
           this report can no longer be submitted for a grade. You can read it below, and you can still launch the

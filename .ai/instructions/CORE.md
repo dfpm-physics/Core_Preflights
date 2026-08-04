@@ -157,6 +157,33 @@ Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
 
   If a third course ever wants a third answer, add a line. If that map reaches four or five, it has
   earned a column and the unseal is worth asking for.
+- **Publishing an assignment is not releasing it.** *(Added 2026-08-04.)* A published offering
+  appears to a student only in the **7 days before that student's own deadline**
+  (`LOOKAHEAD_DAYS` in `site/js/schema.js`, with `releaseAt`/`isReleased`), so a cadet cannot work
+  fifteen preflights in an afternoon and reach each of those lessons having forgotten the reading.
+  The filter is applied once, in `loadAssignmentStatuses` (`site/js/student-data.js`) — the one
+  loader every student surface projects over — and **never** in a renderer.
+  - The window is measured from the **scheduled** deadline, deliberately not the extended one:
+    measuring from an extension would let granting a cadet more time remove the assignment from
+    their list. Work with a submission or a grade is never withdrawn, whatever the dates say.
+  - `assignment_offerings.opens_at` **overrides it per lesson**, in both directions, and the
+    "Students can see it" control in `site/faculty/lessons.html` writes it. **NULL is the default
+    answer, not a missing one** — it selects the rolling window. Relative presets there resolve to
+    a fixed instant at save time because a `timestamptz` cannot hold "N days before" and DDL is
+    sealed (§0); a fixed date therefore does **not** follow a due date edited afterwards.
+  - Release instants are **floored to the start of their day**. Deadlines are 2359, so plain
+    subtraction opens a lesson at 2359 — invisible all through the day it should appear, which
+    delivers six days against a rule that promises seven. Both `releaseAt` and the editor's
+    `daysBeforeDue` floor; they must stay in step.
+  - **It is a UI rule, not a security boundary.** `ao_read_student` still returns every published
+    offering, so the REST API will hand a determined cadet a future preflight. Closing that means
+    adding the predicate to the RLS policy — DDL on `app`, which needs the §0 unseal. The rule
+    targets pacing of ordinary use, which is the actual problem.
+  - The number **7 has copies that must agree**: `LOOKAHEAD_DAYS`, the editor's standard-option
+    label and its `daysBeforeDue(base, 7)` calls, and three help docs
+    (`student-getting-started.md`, `director-course-structure.md`,
+    `director-schema-reference.md`) — all registered in `docs/DOC-SOURCES.json`, so changing the
+    constant re-flags them.
 - **Which dates are M-days and which are T-days is NOT in the database and is NOT derivable.**
   *(Recorded 2026-08-01.)* `due_by_day` says "the M deadline is this timestamp" and
   `sections.meeting_days` says "this section meets on M"; neither says which calendar day is an

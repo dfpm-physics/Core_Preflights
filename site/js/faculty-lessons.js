@@ -323,6 +323,23 @@ const endOfDay = (d) => {
 };
 
 /**
+ * An editor OPEN value -> the UTC ISO timestamp `assignment_offerings.opens_at` stores.
+ *
+ * The same local-time conversion endOfDay() does, and deliberately NOT the same rounding. A
+ * deadline is inclusive of its minute, so it pins to :59; a release date is the instant access
+ * BEGINS, so it pins to :00 — and a bare date means the start of that day rather than the end
+ * of it. Sharing one helper would have made "opens 5 Aug" mean 2359 on the 5th, which is a day
+ * of access quietly lost.
+ */
+export function openAtFrom(v) {
+  if (!v) return null;
+  const s = String(v);
+  const local = s.length <= 10 ? `${s}T00:00:00` : `${s.slice(0, 16)}:00`;
+  const at = new Date(local);
+  return isNaN(at) ? null : at.toISOString();
+}
+
+/**
  * The inverse, for loading a stored deadline back into the editor: UTC ISO -> local
  * 'YYYY-MM-DDTHH:MM'. Built from the local getters rather than from the string, because the
  * string is UTC and slicing it would put a Denver evening deadline on the following day —
@@ -546,6 +563,8 @@ async function activitiesOf(assignmentId) {
  *   policy: 'preflight'|'interaction'|'choice',
  *   pointsPossible, gradingMode, switchPolicy, isPublished,
  *   dueByDay: { M:'YYYY-MM-DD', … }, sections: [{id, meeting_days}],
+ *   opensAt: 'YYYY-MM-DDTHH:MM' | null,   // null = the rolling default window
+
  *   written:     { include, questions[], reference_pdf, reference_pages, reading_link },
  *   interactive: { include, slug, title, artifact_url, description },
  * }
@@ -704,6 +723,12 @@ export async function saveLesson(ctx, model, editingOfferingId) {
     // derive its deadline from and silently took due_at — the M-day date. Persisting it here is
     // what lets a section added after scheduling be correct with no lesson re-save.
     due_by_day: dueByDayRow(model.dueByDay),
+    // NULL is not "no answer" here, it is the DEFAULT ANSWER: it selects the rolling window in
+    // schema.js (LOOKAHEAD_DAYS before each student's own deadline), which is what the editor's
+    // standard option means and what nearly every lesson should carry. A value is the explicit
+    // per-lesson override — one fixed instant for every section, which does not follow a due
+    // date edited afterwards.
+    opens_at: openAtFrom(model.opensAt),
     is_published: !!model.isPublished,
     position: model.lessonNumber == null ? null : model.lessonNumber,
   };

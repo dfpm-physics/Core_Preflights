@@ -4,6 +4,7 @@
 import { check, eq, section } from './harness.mjs';
 import {
   shapeOffering, shapeSubmission, effectiveDue, isOpen, deriveStatus,
+  releaseAt, isReleased, releaseNote, LOOKAHEAD_DAYS,
   resolveDueBySection, withResolvedDue,
   canSwitchActivity, isActivityAvailable, pointsFromEffort, displayPoints,
   questionsOf, questionPoints, answeredCount, lessonNumber, chunked,
@@ -168,6 +169,79 @@ section('isOpen');
 check('no opens_at means always open', isOpen({ opensAt: null }, NOW) === true);
 check('opens_at in the past means open', isOpen({ opensAt: EARLIER }, NOW) === true);
 check('opens_at in the future means not open yet', isOpen({ opensAt: LATER }, NOW) === false);
+
+/* ── the release window ────────────────────────────────────────────────────── */
+section('releaseAt / isReleased');
+
+const DAY = 86400000;
+const dueIn = (days) => new Date(NOW.getTime() + days * DAY);
+const noOpen = { opensAt: null };
+
+check('LOOKAHEAD_DAYS is the documented 7', LOOKAHEAD_DAYS === 7);
+
+// The default window, measured back from the student's own deadline.
+check('due inside the window is released',
+  isReleased(noOpen, dueIn(LOOKAHEAD_DAYS - 1), NOW) === true);
+check('due beyond the window is not released yet',
+  isReleased(noOpen, dueIn(LOOKAHEAD_DAYS + 1), NOW) === false);
+check('due exactly LOOKAHEAD_DAYS out is released — the boundary is inclusive',
+  isReleased(noOpen, dueIn(LOOKAHEAD_DAYS), NOW) === true);
+check('a past deadline stays released — the window never withdraws finished work',
+  isReleased(noOpen, dueIn(-30), NOW) === true);
+/* The default release instant is floored to the START of the day LOOKAHEAD_DAYS before the
+ * deadline, and that is not cosmetic. Deadlines are 2359, so plain subtraction would open the
+ * assignment at 2359 — absent for the whole of the day it is supposed to appear, delivering six
+ * days against a note that promises seven. */
+const flooredExpectation = (() => {
+  const d = new Date(dueIn(10).getTime() - LOOKAHEAD_DAYS * DAY);
+  d.setHours(0, 0, 0, 0);
+  return d;
+})();
+eq('the default release instant is floored to the start of its day',
+  releaseAt(noOpen, dueIn(10)).toISOString(), flooredExpectation.toISOString());
+check('the default release instant is local midnight, not the deadline hour',
+  releaseAt(noOpen, dueIn(10)).getHours() === 0 &&
+  releaseAt(noOpen, dueIn(10)).getMinutes() === 0);
+
+// A 2359 deadline must open at the start of its release day, not one minute before midnight.
+const lateDeadline = new Date('2026-08-20T23:59:00');
+const lateRelease = releaseAt(noOpen, lateDeadline);
+eq('a 2359 deadline releases at the start of the day 7 days earlier',
+  `${lateRelease.getFullYear()}-${String(lateRelease.getMonth() + 1).padStart(2, '0')}`
+  + `-${String(lateRelease.getDate()).padStart(2, '0')}T`
+  + `${String(lateRelease.getHours()).padStart(2, '0')}:${String(lateRelease.getMinutes()).padStart(2, '0')}`,
+  '2026-08-13T00:00');
+
+// An explicit date is an instant the director chose — it is NOT floored.
+eq('an explicit opens_at keeps its exact time', releaseAt({ opensAt: '2026-08-13T08:30:00Z' }, dueIn(10)).toISOString(),
+  new Date('2026-08-13T08:30:00Z').toISOString());
+
+// An undated assignment has no window to be outside of — hiding it would hide it all term.
+check('no deadline and no opens_at is always released', isReleased(noOpen, null, NOW) === true);
+check('no deadline and no opens_at has no release instant', releaseAt(noOpen, null) === null);
+
+// An explicit opens_at overrides the default IN BOTH DIRECTIONS.
+check('opens_at can release earlier than the default window would',
+  isReleased({ opensAt: EARLIER }, dueIn(90), NOW) === true);
+check('opens_at can hold back something the default window would have released',
+  isReleased({ opensAt: LATER }, dueIn(1), NOW) === false);
+check('opens_at gates an undated assignment too',
+  isReleased({ opensAt: LATER }, null, NOW) === false);
+eq('opens_at is used verbatim, not offset', releaseAt({ opensAt: EARLIER }, dueIn(10)).toISOString(),
+  new Date(EARLIER).toISOString());
+
+// A garbage opens_at must not swallow the default — it falls through to the window.
+check('an unparseable opens_at falls back to the default window',
+  isReleased({ opensAt: 'not-a-date' }, dueIn(30), NOW) === false);
+
+/* ── releaseNote ───────────────────────────────────────────────────────────── */
+section('releaseNote');
+eq('nothing withheld produces no note', releaseNote(0), '');
+eq('undefined produces no note', releaseNote(undefined), '');
+check('one withheld reads as singular', releaseNote(1).includes('1 more assignment is'));
+check('several read as plural', releaseNote(4).includes('4 more assignments are'));
+check('the note states the same number of days the rule uses',
+  releaseNote(3).includes(`opens ${LOOKAHEAD_DAYS} days before`));
 
 /* ── deriveStatus ──────────────────────────────────────────────────────────── */
 section('deriveStatus');

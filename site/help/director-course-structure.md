@@ -156,6 +156,32 @@ A student's deadline comes from the first of these that exists:
 That is how M-day and T-day sections get different due dates, and how one student can be given more
 time without moving anyone else's deadline.
 
+## Publishing and releasing are two different things
+
+Publishing an assignment means it is **ready**. It does not mean students can see it yet.
+
+A published assignment appears to a student **7 days before their own deadline** and stays visible
+from then on. The two work together: publish the whole semester whenever it suits you, and cadets
+still meet each preflight in the week before the lesson it belongs to, which is the point of asking
+for one. Without this, a cadet can work through fifteen preflights in an afternoon and arrive at
+each of those lessons having forgotten the reading.
+
+Because it counts back from *each student's* deadline, one setting covers M-day and T-day sections
+correctly, and moving a due date moves the release with it.
+
+One assignment can override the window. The standard setting is the rolling 7 days; the
+alternatives resolve to a **fixed date**, shown to you as you choose it. A fixed date applies to
+every section at the same instant and — unlike the standard setting — does **not** follow the due
+date if you change it afterwards, so if you move a deadline, check the release date too. The field
+itself is `opens_at`; see the schema reference.
+
+Work a student has already started is never withdrawn. If you push a deadline back or set a release
+date after the fact, anything already submitted or graded stays on their page.
+
+One limit worth knowing: this governs what the **site shows**. It is not a security boundary, and
+it does not encrypt anything — a determined cadet querying the database directly could still read a
+future assignment. It is there to pace ordinary use, which is the actual problem.
+
 ## When a student changes section
 
 Moving a student adds a second enrollment rather than editing the first. Their earlier work stays

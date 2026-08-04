@@ -20,6 +20,7 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { loadStudentLessonDashboard, STATE } from '../js/student-lessons.js';
+    import { releaseNote } from '../js/schema.js';
     import { esc, iconHTML, relativeDue, deadlineClass, fmtDateTime, runPage } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
@@ -45,7 +46,7 @@
           <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))} · Section ${esc(ctx.sectionCodeOf(ctx.sectionIds[0]) || '—')}</div>
         </div>
         ${statTiles(vm.stats)}
-        ${upNextSection(vm.upNext)}
+        ${upNextSection(vm.upNext, vm.lockedCount)}
         ${vm.missed.length ? missedSection(vm.missed) : ''}
         ${gradedSection(vm.graded)}`;
     }
@@ -98,9 +99,17 @@
       </a>`;
     }
 
-    function upNextSection(items) {
+    /* `locked` — assignments the release window is holding back (schema.js releaseNote).
+     * It matters most in the empty state: "All caught up. Nice work." is the wrong thing to tell
+     * a cadet whose next four preflights simply have not opened yet, because it invites them to
+     * stop checking. With work still to come the heading says so instead. */
+    function upNextSection(items, lockedCount) {
+      const locked = releaseNote(lockedCount);
       const body = items.length
         ? `<div class="list">${items.map(lessonItem).join('')}</div>`
+        : locked
+        ? `<div class="empty-state"><div class="es-ic">${iconHTML('due-soon', '⏳', 'ic')}</div><h3>Nothing open right now</h3>
+             <p>${esc(locked)}</p></div>`
         : `<div class="empty-state"><div class="es-ic">${iconHTML('rocket', '🚀', 'ic')}</div><h3>All caught up</h3>
              <p>You have no open assignments right now. Nice work.</p></div>`;
       return `<section class="dash-section">
@@ -108,7 +117,8 @@
           ${items.length ? `<span class="count-pill">${items.length}</span>` : ''}
           <span class="grow"></span>
           <a class="btn btn-ghost btn-sm" href="lessons.html">View all</a>
-        </div>${body}</section>`;
+        </div>${body}
+        ${items.length && locked ? `<div class="field-hint" style="margin-top:10px">${esc(locked)}</div>` : ''}</section>`;
     }
 
     function missedSection(items) {

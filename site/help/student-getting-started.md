@@ -30,6 +30,25 @@ interactive lesson, and some offer a choice between the two — the card tells y
 
 **Dashboard** is the short version of the same thing: what is due next, and what you have missed.
 
+## Why you cannot see the whole semester at once
+
+Assignments appear **7 days before they are due**, not all at the start of term. If your list stops
+part way through the numbers, nothing is broken and you have not missed anything — the rest are
+scheduled and will show up as their deadlines approach. The bottom of the list says how many are
+still to come.
+
+This is deliberate. A preflight is meant to be done in the days before the lesson that covers it,
+so that the reading is fresh when you walk into class. Working ten of them in one sitting in week
+two defeats the point of doing them at all.
+
+Your own deadline is what the countdown uses, so M-day and T-day sections unlock on different days
+for the same lesson. Anything you have already submitted or been graded on stays visible for the
+rest of the semester, and so does anything you missed — nothing you have worked on ever disappears
+from the list.
+
+An instructor can open an individual assignment earlier than this when there is a reason to, so you
+may occasionally see something further out.
+
 ## Submitting a preflight
 
 Answer every question and select **Submit**. You can reopen and change your answers until the

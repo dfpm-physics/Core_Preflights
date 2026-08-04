@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-07-29",
+  "updated": "2026-08-04",
   "_comment": [
     "Dependency index for documents that MUST STAY CURRENT. Each entry names the authoritative",
     "sources a document was derived from, and the date it was last checked against them.",
@@ -20,7 +20,7 @@
       "doc": "site/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-08-01",
+      "reviewed": "2026-08-04",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -29,9 +29,11 @@
         "site/js/account.js",
         "site/login.html",
         "site/reset.html",
-        "supabase/functions/provision-students/index.ts"
+        "supabase/functions/provision-students/index.ts",
+        "site/js/schema.js",
+        "site/js/student-data.js"
       ],
-      "note": "Sign-in model and roster/auth rules from PROJECT.md; the night-before due date rule from CORE.md section 2, whose HOUR is per-course policy (1759 phys-215, 2359 phys-110) — if a course changes it, this page is wrong; what the Lessons and Dashboard pages actually show from the student modules."
+      "note": "Sign-in model and roster/auth rules from PROJECT.md; the night-before due date rule from CORE.md section 2, whose HOUR is per-course policy (1759 phys-215, 2359 phys-110) — if a course changes it, this page is wrong; what the Lessons and Dashboard pages actually show from the student modules. The release window became a source on 2026-08-04: schema.js LOOKAHEAD_DAYS is the number this page quotes to students, so changing it makes the page wrong the same day."
     },
     {
       "doc": "site/help/ai-and-your-work.md",
@@ -51,7 +53,7 @@
       "doc": "site/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-08-01",
+      "reviewed": "2026-08-04",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -148,7 +150,7 @@
       "doc": "site/help/director-course-structure.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-01",
+      "reviewed": "2026-08-04",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/003_term_calendar.sql",
@@ -156,15 +158,16 @@
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
         "site/js/faculty-lessons.js",
-        "docs/decisions/PER-OFFERING-CONTENT-ISOLATION.md"
+        "docs/decisions/PER-OFFERING-CONTENT-ISOLATION.md",
+        "site/js/schema.js"
       ],
-      "note": "Conceptual companion to director-schema-reference.md, which owns the field-level detail and the enforced-rules list; this page links out rather than restating them, after a restated unlock rule drifted and contradicted the reference. Deliberately contains no UI procedures - it explains the model, not the screens, so a page rename cannot invalidate it. (This note used to justify that by saying site/app/ does not read the app schema yet; it has read it since 2026-07-21 - the reason stands, the justification did not.) faculty-lessons.js became a source on 2026-07-28: whether reusing an assignment SHARES it or COPIES it is the content model, not a screen, and it is decided in saveLesson() rather than in any migration - this page said 'schedule the same library entry again instead of copying it', which was true until that day and is now the opposite of what happens. The decision doc is listed beside it because it is where the reasoning lives."
+      "note": "Conceptual companion to director-schema-reference.md, which owns the field-level detail and the enforced-rules list; this page links out rather than restating them, after a restated unlock rule drifted and contradicted the reference. Deliberately contains no UI procedures - it explains the model, not the screens, so a page rename cannot invalidate it. (This note used to justify that by saying site/app/ does not read the app schema yet; it has read it since 2026-07-21 - the reason stands, the justification did not.) faculty-lessons.js became a source on 2026-07-28: whether reusing an assignment SHARES it or COPIES it is the content model, not a screen, and it is decided in saveLesson() rather than in any migration - this page said 'schedule the same library entry again instead of copying it', which was true until that day and is now the opposite of what happens. The decision doc is listed beside it because it is where the reasoning lives. schema.js and faculty-lessons.js became sources on 2026-08-04, when publishing stopped meaning 'students can see it': the release window (LOOKAHEAD_DAYS) and the opens_at override are content-model facts, and this page now explains the difference."
     },
     {
       "doc": "site/help/director-schema-reference.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-07-30",
+      "reviewed": "2026-08-04",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/002_rls.sql",
@@ -185,9 +188,10 @@
         "supabase/migrations/app/016_comment_spelling.sql",
         "supabase/migrations/app/017_due_by_day.sql",
         "supabase/migrations/app/018_feedback_completed.sql",
-        "supabase/migrations/app/019_effort_partial_credit_flat.sql"
+        "supabase/migrations/app/019_effort_partial_credit_flat.sql",
+        "site/js/schema.js"
       ],
-      "note": "Every table and field transcribed from the app-schema migrations and verified against information_schema on the live database. Owns the enforced-rules list and the exact accepted values. Inline SVG depends on the .sf-* classes in styles.css. Omits RLS policy predicates - help docs are world-readable at every tier. SOURCES MUST LIST EVERY MIGRATION: the list stopped at 006 until 2026-07-22, so 007-009 landed without ever flagging this page and analysis_runs went undocumented for two days. Add the new file here whenever a migration is added. ei_sessions states its staff-only access rule in plain language and nothing more: that absence of a student policy is load-bearing (notes may hold a candid read of a cadet), so do not delete the sentence - and do not 'complete' it by pasting the policy SQL either."
+      "note": "Every table and field transcribed from the app-schema migrations and verified against information_schema on the live database. Owns the enforced-rules list and the exact accepted values. Inline SVG depends on the .sf-* classes in styles.css. Omits RLS policy predicates - help docs are world-readable at every tier. SOURCES MUST LIST EVERY MIGRATION: the list stopped at 006 until 2026-07-22, so 007-009 landed without ever flagging this page and analysis_runs went undocumented for two days. Add the new file here whenever a migration is added. ei_sessions states its staff-only access rule in plain language and nothing more: that absence of a student policy is load-bearing (notes may hold a candid read of a cadet), so do not delete the sentence - and do not 'complete' it by pasting the policy SQL either. schema.js became a source on 2026-08-04 — it owns the release window that opens_at overrides, and the is_published row is only correct while that rule is described beside it."
     },
     {
       "doc": "site/help/instructor-accounts.md",

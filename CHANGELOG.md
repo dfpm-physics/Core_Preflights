@@ -8,6 +8,105 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-04 — Matthew Recker via Claude
+
+### Preflights unlock 7 days before they are due, because working ahead defeats the instrument
+
+The director's problem: a cadet could work fifteen preflights in an afternoon and then arrive at
+each of those lessons having forgotten the topic. A preflight is only worth asking for if it is
+done in the run-up to the lesson that discusses it, so publishing the whole term at once quietly
+broke the thing the assignment exists to do.
+
+**Publishing an assignment no longer means students can see it.** A published offering now appears
+**7 days before that student's own deadline** and stays visible from then on.
+
+The rule collapses to one predicate — *hide anything whose deadline is more than 7 days away* —
+which is why the director's original phrasing ("due within 7 days plus completed") did not need a
+second clause: overdue, submitted and graded work is not in the future, so it stays visible for
+free. That includes the case the phrasing did not cover — a missed assignment nobody submitted,
+which the cadet still needs in order to find their zero and their feedback.
+
+**One filter, at the one choke point.** `loadAssignmentStatuses` (`site/js/student-data.js`) is the
+single loader the dashboard, the lesson list, the written-preflight list and the artifact receiver
+all project over. Filtering there rather than in four renderers is not tidiness: a renderer that
+was forgotten is how a cadet ends up with a working deep link to a lesson three weeks out.
+
+Details that are load-bearing rather than incidental:
+
+- **Measured from the scheduled deadline, never an extended one.** `effectiveDue` is called a
+  second time with the extension deliberately omitted. Measuring from the extension would mean
+  that granting a cadet more time pushes the assignment out of the window and takes it off their
+  page — the exact opposite of what an extension is for.
+- **Work already started is never withdrawn.** A row with a submission or a grade is exempt.
+  Otherwise a director pushing a deadline back a fortnight would retract a submitted assignment
+  and its released grade with no explanation.
+- **Release instants are floored to the start of their day**, and the browser harness is what
+  caught this. Deadlines are 2359, so plain subtraction opened a lesson at 2359 seven days
+  earlier — absent for the whole of the day it was supposed to appear, delivering six days against
+  a note promising seven. `releaseAt` and the editor's `daysBeforeDue` both floor.
+- **An undated assignment is always visible.** It has no window to be outside of, and hiding it
+  would hide it for the whole term.
+
+**The dormant `opens_at` column is now load-bearing.** It has existed since `001_core_model.sql`,
+`shapeOffering` has always read it, and `isOpen()` was computed on every student item and read by
+**nothing**. It is now the per-lesson override, in both directions — release a review packet three
+weeks early, or hold one back longer than the default. NULL is the *default answer*, not a missing
+one: it selects the rolling window, which is what lets M-day and T-day sections unlock on different
+days from a single setting and lets a moved deadline move the release with it.
+
+**A "Students can see it" control** in the assignment editor writes it: the standard rolling
+option, presets for 3 and 14 days and "as soon as it's published", and a specific date. The presets
+are shortcuts that *resolve into the date box* rather than stored modes, because a `timestamptz`
+cannot hold "N days before" and there is nowhere to put a relative offset (DDL on `app` is sealed —
+CORE.md §0). Showing the instant each preset resolved to is the honest version of that, and it is
+what makes the real difference legible: the standard option follows a deadline edited later, a
+fixed date does not. Relative presets count back from the **earliest** per-day deadline, matching
+`defaultDueFrom()` — counting from the latest would give M-day sections less run-up than the
+control promises them. A preset chosen before any due date is set refuses and says why, rather than
+inventing a date off today's clock.
+
+**Students are told, not left to guess.** Lessons are numbered, so a list that stops at 11 with no
+explanation reads as an outage and produces an instructor email. Every student surface now carries
+the count and the rule, and the start-of-term case — nothing scheduled versus nothing *open* yet —
+says which one it is instead of "No assignments yet". The dashboard no longer says "All caught up.
+Nice work." to a cadet whose next four preflights simply have not opened.
+
+**The artifact receiver gets a third hard stop.** `interaction-submit.html` loads with
+`includeLocked` and refuses an unreleased submission. This is the one stop unreachable from inside
+the site, which is exactly why it is needed: the artifact lives on claude.ai and its URL is
+shareable, so a cadet handed next month's link by a classmate arrives having never seen the lesson
+listed — and an interactive grade is auto-final, with no instructor review to catch it. Without
+`includeLocked` the item resolved to `null`, which reads as "no deadline, no grade" and waved the
+submission through.
+
+**What this is not.** It is a UI rule, not a security boundary — the same standing as
+`isActivityAvailable`. `ao_read_student` still returns every published offering, so the REST API
+will hand a determined cadet a future preflight. Closing that means adding the predicate to the RLS
+policy, which is DDL on `app` and needs the §0 unseal; it is written up as the follow-up rather
+than done quietly. The rule targets pacing of ordinary use, which is the actual problem.
+
+One side effect worth naming: the dashboard's points denominator is now "out of what has been
+released to you" rather than "out of the whole term". 4/6 in week two says something a cadet can
+act on; 4/82 does not.
+
+**Verification.** 401 checks pass in `tests/app-schema` (up from 380 — 21 new, covering the
+window, the boundary, the flooring, the override in both directions, and an unparseable `opens_at`
+falling back rather than swallowing the default). A new `tests/browser-harness/release-window.mjs`
+drives real Chrome: every edited page parses and loads clean, and the editor's release control is
+exercised against its own lifted markup — 24 checks, and it is what found the 2359 defect. **Not
+verified signed-in**: `supabase/admin/.env` on this machine carries no `PREP_TEST_FACULTY_*`, so
+the director walkthrough of the new control and a cadet's view of a partly-released term have not
+been looked at by a human (CORE.md §2 — a Node-only check is never the sole verification).
+
+Files: `site/js/schema.js` (the rule, `LOOKAHEAD_DAYS`, `releaseAt`/`isReleased`/`releaseNote`),
+`site/js/student-data.js`, `site/js/student-lessons.js`, `site/js/faculty-lessons.js`
+(`openAtFrom`, the `opens_at` write), `site/faculty/lessons.html`, `site/student/lessons.html`,
+`site/student/dashboard.html`, `site/student/assignments.html`,
+`site/student/interaction-submit.html`, `.ai/instructions/CORE.md` §2, three help docs +
+`docs/DOC-SOURCES.json`. No migration: the column already existed. No DDL, no build step.
+
+---
+
 ## 2026-08-01 (third) — Matthew Recker via Claude
 
 ### Six calendar formats, not two, and a switcher between them

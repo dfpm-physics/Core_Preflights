@@ -153,6 +153,38 @@
              pattern is a column on the section now, so the fields are generated from data. -->
         <div class="row wrap" style="gap:14px" id="f-due-days"></div>
         <div class="field-hint" id="f-due-hint" style="margin-top:-4px"></div>
+
+        <!-- WHEN STUDENTS CAN SEE IT — the release window (schema.js LOOKAHEAD_DAYS).
+             Publishing and releasing are two different acts and this is the second one. A
+             published assignment is ready; it still appears to a cadet only in the run-up to its
+             deadline, so nobody can work fifteen preflights in an afternoon and arrive at each
+             lesson having forgotten the reading.
+
+             The presets are SHORTCUTS THAT FILL THE DATE BOX, not stored modes — the only two
+             states are "standard" (opens_at NULL, rolling, per-section) and a concrete date.
+             That is deliberate: `opens_at` is a timestamptz and there is nowhere to store "N days
+             before", so a relative preset has to resolve to an instant at save time. Showing the
+             instant it resolved to is the honest version of that, and it is what makes the
+             difference between the two states legible — the standard option follows a due date
+             you change later, a fixed date does not. -->
+        <div class="row wrap" style="gap:14px;margin-top:12px">
+          <div class="field grow" style="min-width:240px"><label for="f-release">Students can see it</label>
+            <select id="f-release">
+              <option value="standard">7 days before it's due — standard</option>
+              <option value="d3">3 days before it's due</option>
+              <option value="d14">14 days before it's due</option>
+              <option value="now">As soon as it's published</option>
+              <option value="custom">On a specific date…</option>
+            </select></div>
+          <div class="field" style="min-width:230px;flex:0 0 auto" id="f-release-when">
+            <label for="f-opens">Opens on</label>
+            <div class="row" style="gap:8px">
+              <input id="f-opens" type="date" style="flex:1 1 140px">
+              <input id="f-openst" type="time" style="flex:0 0 116px" value="00:00" aria-label="Open time">
+            </div></div>
+        </div>
+        <div class="field-hint" id="f-release-hint" style="margin-top:-4px"></div>
+
         <label class="check-inline" style="margin-top:10px"><input type="checkbox" id="f-pub"> Published (visible to students)</label>
       </div>
 
@@ -511,6 +543,9 @@
         existingInteractive: null,       // { id, slug } when the container already has one
         pointsPossible: 2, gradingMode: 'points', switchPolicy: 'lock_on_commit',
         dueByDay: {},
+        // '' = the standard rolling window (opens_at NULL). A new lesson gets the default, which
+        // is the answer for nearly all of them; an override is opted into per lesson.
+        opensAt: '',
       };
     }
 
@@ -556,6 +591,9 @@
         gradingMode: l.gradingMode || 'points',
         switchPolicy: l.switchPolicy || 'lock_on_commit',
         dueByDay,
+        // Which PRESET produced a stored date is not recoverable, and does not need to be — the
+        // date itself is the setting. Reloading shows the instant that is actually in force.
+        opensAt: l.opensAt ? L.toEditorDue(l.opensAt) : '',
       };
     }
 
@@ -711,6 +749,7 @@
       document.getElementById('f-pf-readlink').value = model.written.reading_link;
       renderInteractiveFields();
       renderDueDays();
+      renderRelease();          // after renderDueDays: its hint counts back from the deadlines
 
       // Fresh open → both sections collapsed; the director expands what they need.
       sectionCollapsed.written = true;
@@ -834,6 +873,125 @@
       const date = document.getElementById(`f-due-${day}`)?.value || '';
       const time = document.getElementById(`f-duet-${day}`)?.value || defaultDueTime();
       model.dueByDay[day] = date ? `${date}T${time}` : '';
+      // A relative preset was resolved against the deadline that just changed, so the resolved
+      // date is now stale. Re-resolving silently would fight a director who typed a date by
+      // hand, so this only refreshes the hint — which is where the staleness is visible.
+      renderRelease();
+    }
+
+    /* ── When students can see it: the release window ─────────────────────────────────────────
+     * Two states, not five. `model.opensAt` is either '' — the standard rolling window, stored as
+     * opens_at NULL and computed per student against their OWN deadline — or a concrete local
+     * 'YYYY-MM-DDTHH:MM' that overrides it for every section at once.
+     *
+     * The select's middle options are shortcuts that RESOLVE INTO the date box, because a
+     * timestamptz cannot hold "three days before" and there is no column to put a relative offset
+     * in (DDL on `app` is sealed — CORE.md §0). Rather than pretend otherwise, picking one shows
+     * the exact instant it worked out to, which is also the only honest way to show the real
+     * difference between the two states: the standard window follows a deadline edited later, a
+     * resolved date does not.
+     *
+     * Relative presets resolve against the EARLIEST per-day deadline, matching defaultDueFrom()'s
+     * reasoning — measuring from the latest would give the M-day sections less run-up than the
+     * number on the control promises them.
+     */
+    const releaseMode = () => (model.opensAt ? 'custom' : 'standard');
+    const DAY_MS = 86400000;
+    const nowEditorValue = () => L.toEditorDue(new Date().toISOString());
+
+    /**
+     * N days before a deadline, as an editor value — floored to the START of that day.
+     *
+     * The flooring is the whole correctness of the preset. Deadlines are 2359, so plain
+     * subtraction resolves "14 days before" to 2359 fourteen days earlier: the lesson stays
+     * invisible for the whole of the day it was supposed to open and appears a minute before
+     * midnight, delivering thirteen days against a control that promises fourteen. Matches
+     * schema.js releaseAt(), which floors the rolling default for the same reason.
+     */
+    function daysBeforeDue(base, days) {
+      const at = new Date(base.getTime() - days * DAY_MS);
+      at.setHours(0, 0, 0, 0);
+      return L.toEditorDue(at.toISOString());
+    }
+
+    /** The earliest deadline currently in the form, as a Date — what a preset counts back from. */
+    function releaseBaseDue() {
+      const iso = L.defaultDueFrom(model.dueByDay);
+      const d = iso ? new Date(iso) : null;
+      return d && !isNaN(d) ? d : null;
+    }
+
+    /**
+     * @param {boolean} [keepPresetLabel] true only when called straight from applyReleaseChoice —
+     *   i.e. the director just picked a preset and the label should confirm what they clicked,
+     *   with the resolved date shown underneath it.
+     *
+     * Any other call re-derives the label from the model, which is what a preset label must not
+     * survive: the editor is reused across lessons, so a "3 days before it's due" left over from
+     * the last lesson would otherwise sit above the NEXT lesson's date and describe it wrongly.
+     * Only two states are stored, so outside that one moment the label can only honestly read
+     * "standard" or "a specific date".
+     */
+    function renderRelease(keepPresetLabel = false) {
+      const sel  = document.getElementById('f-release');
+      const when = document.getElementById('f-release-when');
+      const hint = document.getElementById('f-release-hint');
+      if (!sel || !when || !hint) return;
+      const custom = releaseMode() === 'custom';
+
+      const justPicked = keepPresetLabel && custom && ['d3', 'd14', 'now'].includes(sel.value);
+      if (!justPicked) sel.value = custom ? 'custom' : 'standard';
+      when.style.display = custom ? '' : 'none';
+      document.getElementById('f-opens').value  = custom ? model.opensAt.slice(0, 10) : '';
+      document.getElementById('f-openst').value = custom ? model.opensAt.slice(11, 16) : '00:00';
+
+      if (!custom) {
+        const base = releaseBaseDue();
+        const example = base
+          ? ` For the deadline above that is ${esc(fmtDate(new Date(daysBeforeDue(base, 7))))}.`
+          : '';
+        hint.textContent = 'Each section unlocks 7 days before its own deadline, so M-day and T-day '
+          + 'cadets get the same run-up, and changing a due date moves this with it.' + example;
+      } else {
+        hint.textContent = 'Opens for every section at this exact time. A fixed date does not follow '
+          + 'the due date — change the deadline later and you must change this too.';
+      }
+    }
+
+    /**
+     * Apply a choice from the select. The relative options compute a date and then behave exactly
+     * as if it had been typed; 'standard' clears back to the rolling window.
+     */
+    function applyReleaseChoice(choice) {
+      if (choice === 'standard') { model.opensAt = ''; renderRelease(true); return; }
+      if (choice === 'now')      { model.opensAt = nowEditorValue(); renderRelease(true); return; }
+      if (choice === 'custom') {
+        // Seed with the standard date so the picker opens somewhere sensible rather than blank.
+        const base = releaseBaseDue();
+        model.opensAt = model.opensAt || (base ? daysBeforeDue(base, 7) : nowEditorValue());
+        renderRelease(true);
+        return;
+      }
+      const days = choice === 'd3' ? 3 : 14;
+      const base = releaseBaseDue();
+      if (!base) {
+        // Nothing to count back from. Say so instead of inventing a date off today's clock, which
+        // would look like a considered answer and be meaningless.
+        document.getElementById('f-release').value = 'standard';
+        document.getElementById('f-release-hint').textContent =
+          `Set a due date above first — "${days} days before it's due" needs a deadline to count back from.`;
+        return;
+      }
+      model.opensAt = daysBeforeDue(base, days);
+      renderRelease(true);
+    }
+
+    /** Fold the two boxes back into the model. Clearing the DATE returns to the standard window. */
+    function readRelease() {
+      const date = document.getElementById('f-opens')?.value || '';
+      const time = document.getElementById('f-openst')?.value || '00:00';
+      model.opensAt = date ? `${date}T${time}` : '';
+      renderRelease();
     }
 
     // ── Components & policy ───────────────────────────────────────────────
@@ -1153,6 +1311,7 @@
         }
         if (ds.due)     { readDueDay(ds.due); return; }
         if (ds.duetime) { readDueDay(ds.duetime); return; }
+        if (t.id === 'f-opens' || t.id === 'f-openst') { readRelease(); return; }
         if (ds.pf)  { model.written[ds.pf] = t.value; return; }
         if (ds.i)   { if (ds.i === 'slug') interactionSlugTouched = true; model.interactive[ds.i] = t.value; return; }
       });
@@ -1170,10 +1329,12 @@
         if (t.id === 'f-pf-refpdf-sel') { handleRefSelect(t.value); return; }
         if (t.id === 'f-pts')    { model.pointsPossible = parseFloat(t.value) || 0; return; }
         if (t.id === 'f-switch') { model.switchPolicy = t.value; return; }
+        if (t.id === 'f-release') { applyReleaseChoice(t.value); return; }
         // `change` (not `input`) is what a date/time picker fires when it is driven by its own
         // calendar UI rather than typed into, so both events have to reach readDueDay().
         if (t.dataset.due)     { readDueDay(t.dataset.due); return; }
         if (t.dataset.duetime) { readDueDay(t.dataset.duetime); return; }
+        if (t.id === 'f-opens' || t.id === 'f-openst') { readRelease(); return; }
         if (t.dataset.figfile != null)  { const f = t.files?.[0]; if (f) handleFigureFile(+t.dataset.figfile, f); return; }
       });
 
@@ -1363,6 +1524,8 @@
         switchPolicy: document.getElementById('f-switch').value,
         isPublished: document.getElementById('f-pub').checked,
         dueByDay: model.dueByDay,
+        // '' → opens_at NULL → the standard rolling window. See the control in "This term".
+        opensAt: model.opensAt || null,
         sections: vm.sections,
         written: model.written.include ? {
           include: true,

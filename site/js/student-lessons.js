@@ -184,13 +184,18 @@ export async function loadLessonStatuses(ctx) {
   });
 
   // Position is optional; fall back to the deadline so ordering is always stable.
-  return rows.sort((a, b) => {
+  rows.sort((a, b) => {
     const an = a.lesson_number, bn = b.lesson_number;
     if (an != null && bn != null && an !== bn) return an - bn;
     if (an != null && bn == null) return -1;
     if (an == null && bn != null) return 1;
     return (a.due?.getTime() ?? Infinity) - (b.due?.getTime() ?? Infinity);
   });
+  // Carried through the projection: .map() built a new array, so the count of lessons the
+  // release window withheld would be lost here otherwise, and the list could not say that
+  // later ones exist. See loadAssignmentStatuses().
+  rows.lockedCount = items.lockedCount || 0;
+  return rows;
 }
 
 /** One view-model for the student dashboard (STUDENT-LESSON-VIEW §8). */
@@ -216,5 +221,10 @@ export async function loadStudentLessonDashboard(ctx) {
     stats: { toDo: toDo.length, missed: missed.length, graded: graded.length, earned, available },
     lessons, toDo, missed, graded,
     upNext: toDo.slice(0, 6),
+    // How many lessons the release window is holding back. Note what this does to `available`
+    // above: the points denominator is now "out of what has been released to you so far"
+    // rather than "out of the whole term", which is the more useful of the two readings —
+    // 4/6 in week two says something a cadet can act on, 4/82 does not.
+    lockedCount: lessons.lockedCount || 0,
   };
 }

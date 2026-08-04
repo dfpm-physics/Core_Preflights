@@ -489,6 +489,103 @@ export function isOpen(offering, now = new Date()) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
+ * The release window — how far ahead of a deadline a student may see an assignment
+ * ══════════════════════════════════════════════════════════════════════════════
+ * A preflight is meant to be done in the days before the lesson that discusses it. Publishing
+ * a whole term at once let a cadet burn through fifteen of them in an afternoon and arrive at
+ * each lesson having forgotten the reading — which defeats the point of the instrument, not
+ * just the schedule. So a published assignment is not automatically a VISIBLE one: it appears
+ * a bounded time before it is due, and stays visible from then on.
+ *
+ * TWO LAYERS, and which one applies is the director's call per lesson:
+ *
+ *   1. The default, when `opens_at` is NULL — a rolling LOOKAHEAD_DAYS before the deadline.
+ *      Rolling is the important word. It is computed per student against THEIR OWN resolved
+ *      deadline, so an M-day and a T-day section unlock on different days without anybody
+ *      entering two dates, and moving a due date moves the unlock with it automatically.
+ *
+ *   2. An explicit `opens_at` — a fixed instant that wins in BOTH directions: it can release
+ *      a review packet three weeks early, or hold one back longer than the default. Being an
+ *      absolute timestamp it is the same instant for every section, and it does NOT follow a
+ *      deadline that is edited afterwards. The editor says so where it is set.
+ *
+ * MEASURED FROM THE SCHEDULED DEADLINE, NEVER AN EXTENDED ONE. An extension pushes a
+ * student's effective due date later; if the window were measured from that, granting a
+ * cadet more time could push the assignment back out of their list and take it away. Callers
+ * pass the section deadline with the extension deliberately left out — see student-data.js.
+ *
+ * THIS IS A UI RULE, NOT A SECURITY BOUNDARY — the same standing as isActivityAvailable()
+ * below. RLS (`ao_read_student`) still returns every published offering to the browser, so
+ * the questions of a locked assignment are readable by anyone who opens devtools and calls
+ * the REST API directly. Closing that means adding the predicate to the policy, which is DDL
+ * on `app` and sealed behind a human unsealing `prep_app_owner` (CORE.md §0). The rule here
+ * is aimed at pacing ordinary use, which is what the problem actually is.
+ *
+ * One constant, not a per-course map, for the same reason DUE_TIME_BY_COURSE is a map and not
+ * a setting: nothing under `app` stores course configuration. If a second course ever wants a
+ * different window, this becomes a map keyed on course code and the per-lesson override above
+ * covers everything finer than that.
+ */
+
+/** Days before its deadline that an assignment appears, absent an explicit `opens_at`. */
+export const LOOKAHEAD_DAYS = 7;
+
+const DAY_MS = 86400000;
+
+/**
+ * When this offering becomes visible to a student, or null if it always has been.
+ *
+ * @param {object} offering  a shapeOffering() result
+ * @param {Date|null} scheduledDue  the student's own deadline, IGNORING any extension
+ * @returns {Date|null} null = nothing gates it (no explicit open date and no deadline)
+ */
+export function releaseAt(offering, scheduledDue) {
+  if (offering?.opensAt) {
+    const o = new Date(offering.opensAt);
+    if (!isNaN(o)) return o;             // explicit wins, earlier or later, at the exact instant
+  }
+  if (!scheduledDue || isNaN(scheduledDue)) return null;
+  /* FLOORED TO THE START OF ITS DAY, which is not a rounding detail — it is the difference
+   * between the rule and what the rule says. A deadline is 2359, so plain subtraction lands the
+   * release at 2359 seven days earlier: the assignment is absent all through the day it is
+   * supposed to appear and shows up one minute before midnight. Cadets would experience "opens 7
+   * days before" as six, and the day they lose is the one the note on their list promised them.
+   * Flooring makes it appear at the start of the day that is LOOKAHEAD_DAYS before the deadline,
+   * which is how everybody reads the sentence.
+   *
+   * Local midnight, not UTC: the same trade toEditorDue() and the extension modal already make,
+   * and right for the case that matters — a cadet in Colorado on a Colorado clock. */
+  const at = new Date(scheduledDue.getTime() - LOOKAHEAD_DAYS * DAY_MS);
+  at.setHours(0, 0, 0, 0);
+  return at;
+}
+
+/**
+ * May the student see this offering yet? An undated assignment with no explicit open date has
+ * no window to be outside of, so it is visible — hiding it would hide it for the whole term.
+ */
+export function isReleased(offering, scheduledDue, now = new Date()) {
+  const at = releaseAt(offering, scheduledDue);
+  return at == null || at <= now;
+}
+
+/**
+ * The sentence a student list shows in place of what the window is holding back. Empty when
+ * nothing is held back, so a caller can drop it in unconditionally.
+ *
+ * Lives beside LOOKAHEAD_DAYS rather than in the pages so the number and the sentence that
+ * explains the number cannot disagree — a note promising seven days over a fourteen-day window
+ * is worse than no note, because a cadet will plan around it.
+ */
+export function releaseNote(lockedCount) {
+  if (!lockedCount) return '';
+  const n = Number(lockedCount);
+  return `${n} more ${n === 1 ? 'assignment is' : 'assignments are'} scheduled this term. `
+    + `Each one opens ${LOOKAHEAD_DAYS} days before it is due — preflights are meant to be done `
+    + `just before the lesson that covers them.`;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
  * Availability + locking — the rules the DB also enforces, mirrored for the UI
  * ════════════════════════════════════════════════════════════════════════════ */
 

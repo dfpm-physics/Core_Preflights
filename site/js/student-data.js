@@ -22,6 +22,7 @@ import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT,
   shapeOffering, shapeOfferings, withResolvedDue, offeringSections,
   shapeSubmission, effectiveDue, deriveStatus, isOpen,
+  releaseAt, isReleased, LOOKAHEAD_DAYS,
   questionsOf, questionPoints, displayPoints, isActivityAvailable, answeredCount,
 } from './schema.js';
 
@@ -39,12 +40,32 @@ function mySectionId(ctx) {
  * Everything scheduled for this student in the current offering, stitched with their own
  * work and grades.
  *
+ * ── WHAT THIS DELIBERATELY DOES NOT RETURN ───────────────────────────────────────────────
+ * An assignment that has not reached its release date yet (schema.js `isReleased`) is dropped
+ * here rather than in the pages, because this is the ONE loader every student surface runs
+ * through — the dashboard, the lesson list, the written-preflight list and the artifact
+ * receiver are all projections over it. A filter in each renderer would be four chances to
+ * forget one, and forgetting one is how a cadet gets a working deep link to a lesson that is
+ * supposed to be three weeks away.
+ *
+ * `lockedCount` rides back on the returned array so a list can SAY that later work exists
+ * without being handed it. Silence would read as a broken page: lessons are numbered, so a
+ * cadet who sees 1–11 and then nothing has no way to tell a release window from an outage,
+ * and the instructor gets the email.
+ *
+ * @param {object} ctx
+ * @param {object} [opts]
+ * @param {boolean} [opts.includeLocked=false] return unreleased assignments too, each carrying
+ *   `released:false` and `releasesAt`. For surfaces that must reason about an assignment the
+ *   student cannot yet see — the artifact receiver, which has to refuse an early submission
+ *   rather than silently accept one against a lesson that is not open.
  * @returns {Promise<Array>} sorted by effective due date (undated last), each:
  *   { offeringId, slug, title, description, pointsPossible, activities, written, interactive,
- *     isChoice, due, isPast, dueSource, submission, grade, status, chosenActivity,
- *     answered, qCount, earned }
+ *     isChoice, due, isPast, dueSource, released, releasesAt, submission, grade, status,
+ *     chosenActivity, answered, qCount, earned }
+ *   plus `lockedCount` on the array itself — how many were withheld.
  */
-export async function loadAssignmentStatuses(ctx) {
+export async function loadAssignmentStatuses(ctx, { includeLocked = false } = {}) {
   if (!ctx.currentOffering) return [];
   const enrollmentIds = myEnrollmentIds(ctx);
   const sectionId = mySectionId(ctx);
@@ -77,11 +98,19 @@ export async function loadAssignmentStatuses(ctx) {
   const gradeByOffering = Object.fromEntries(grades.map(g => [g.assignment_offering_id, g]));
   const extByOffering   = Object.fromEntries(extensions.map(e => [e.assignment_offering_id, e.extended_due_at]));
 
+  const now = new Date();
+
   const items = offerings.map(o => {
     const submission = subByOffering[o.offeringId] || null;
     const grade = gradeByOffering[o.offeringId] || null;
     const { due, isPast, source } = effectiveDue(o, sectionId, extByOffering[o.offeringId]);
     const status = deriveStatus({ submission, grade, isPast });
+
+    // The release window is measured from the SCHEDULED deadline — the same call with the
+    // extension left out. Passing the extended date would mean that granting a student more
+    // time could push the assignment past the window and remove it from their list, which is
+    // the exact opposite of what an extension is for.
+    const { due: scheduledDue } = effectiveDue(o, sectionId, null, now);
 
     const chosenActivity = submission?.chosenActivityId
       ? o.activities.find(a => a.id === submission.chosenActivityId) || null
@@ -96,6 +125,8 @@ export async function loadAssignmentStatuses(ctx) {
       ...o,
       due, isPast, dueSource: source,
       isOpen: isOpen(o),
+      released: isReleased(o, scheduledDue, now),
+      releasesAt: releaseAt(o, scheduledDue),
       submission, grade, status, chosenActivity,
       qCount: questions.length,
       totalPts: o.pointsPossible || questionPoints(written),
@@ -109,12 +140,24 @@ export async function loadAssignmentStatuses(ctx) {
 
   // Undated assignments sort last rather than first — an assignment with no deadline is not
   // the most urgent thing on the list.
-  return items.sort((a, b) => {
+  items.sort((a, b) => {
     if (a.due && b.due) return a.due - b.due;
     if (a.due) return -1;
     if (b.due) return 1;
     return (a.position ?? 0) - (b.position ?? 0);
   });
+
+  if (includeLocked) { items.lockedCount = 0; return items; }
+
+  /* WORK THE STUDENT HAS ALREADY DONE IS NEVER WITHDRAWN.
+   * The window is a pacing rule about starting something early, not a claim on anything
+   * already started, and the two come apart in ordinary use: a director who pushes a deadline
+   * back a fortnight, or sets an explicit open date after the fact, would otherwise take a
+   * submitted assignment and its released grade off the student's page with no explanation.
+   * A row that has a submission or a grade has by definition already been seen. */
+  const visible = items.filter(a => a.released || a.submission || a.grade);
+  visible.lockedCount = items.length - visible.length;
+  return visible;
 }
 
 /**

@@ -45,6 +45,7 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { loadLessonStatuses, STATE } from '../js/student-lessons.js';
+    import { releaseNote } from '../js/schema.js';
     import { esc, deadlineClass, relativeDue, fmtDateTime, iconHTML, runPage } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
@@ -117,11 +118,23 @@
       history.replaceState(null, '', location.pathname);
       const root = document.getElementById('main');
 
+      // What the release window is holding back, said out loud. Lessons are NUMBERED, so a list
+      // that stops at 11 with no explanation reads as a broken page rather than as a schedule —
+      // and the cadet's next move is to email an instructor. See schema.js releaseNote().
+      const locked = releaseNote(list.lockedCount);
+      const lockedHTML = locked
+        ? `<div class="field-hint" style="margin-top:14px">${esc(locked)}</div>` : '';
+
       if (!list.length) {
+        // Distinguish "nothing scheduled" from "nothing OPEN yet" — at the start of term, before
+        // the first deadline is inside the window, the second is what is actually true and
+        // "no assignments yet" would be a small lie.
         root.innerHTML = `
           <div class="page-head"><h1>Assignments</h1></div>
           <div class="empty-state"><div class="es-ic">${iconHTML('rocket', '🚀', 'ic')}</div>
-            <h3>No assignments yet</h3><p>Assignments appear here once your instructor publishes them.</p></div>`;
+            <h3>${list.lockedCount ? 'Nothing open right now' : 'No assignments yet'}</h3>
+            <p>${list.lockedCount ? esc(locked)
+                                  : 'Assignments appear here once your instructor publishes them.'}</p></div>`;
         return;
       }
 
@@ -137,7 +150,8 @@
           <div class="list">${open.map(lessonItem).join('')}</div></section>` : ''}
         ${rest.length ? `<section class="dash-section">
           <div class="section-head"><h2>Past assignments</h2></div>
-          <div class="list">${rest.map(lessonItem).join('')}</div></section>` : ''}`;
+          <div class="list">${rest.map(lessonItem).join('')}</div></section>` : ''}
+        ${lockedHTML}`;
 
       root.querySelectorAll('.list-item').forEach(el =>
         el.addEventListener('click', e => {

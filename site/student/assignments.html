@@ -39,7 +39,7 @@
     import {
       loadAssignmentStatuses, saveWrittenAnswers, commitSubmission,
     } from '../js/student-data.js';
-    import { questionsOf, readingLinkOf, displayPoints } from '../js/schema.js';
+    import { questionsOf, readingLinkOf, displayPoints, releaseNote } from '../js/schema.js';
     import { esc, deadlineClass, fmtDateTime, runPage } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
@@ -63,7 +63,11 @@
         return;
       }
       root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
-      list = (await loadAssignmentStatuses(ctx)).filter(a => a.written);
+      // `.filter()` returns a fresh array, which would drop the release-window count the loader
+      // attached — carry it across so the list below can say what is still to come.
+      const all = await loadAssignmentStatuses(ctx);
+      list = all.filter(a => a.written);
+      list.lockedCount = all.lockedCount || 0;
 
       const params = new URLSearchParams(location.search);
       const openId = params.get('a');
@@ -85,10 +89,15 @@
 
     function renderList() {
       const root = document.getElementById('main');
+      // Preflights the release window is still holding back, said out loud rather than left as a
+      // gap in a numbered list. See schema.js releaseNote().
+      const locked = releaseNote(list.lockedCount);
       if (!list.length) {
         root.innerHTML = `<div class="page-head"><h1>Written preflights</h1></div>
-          <div class="empty-state"><div class="es-ic">📋</div><h3>No written preflights yet</h3>
-          <p>Published preflights for ${esc(ctx.courseTitleOf(ctx.currentOffering))} will appear here.</p></div>`;
+          <div class="empty-state"><div class="es-ic">📋</div>
+          <h3>${list.lockedCount ? 'Nothing open right now' : 'No written preflights yet'}</h3>
+          <p>${list.lockedCount ? esc(locked)
+                                : `Published preflights for ${esc(ctx.courseTitleOf(ctx.currentOffering))} will appear here.`}</p></div>`;
         return;
       }
       const items = list.map(a => {
@@ -112,7 +121,8 @@
       }).join('');
       root.innerHTML = `<div class="page-head"><h1>My written preflights</h1>
         <div class="sub">Open preflights can be edited until you submit. Click one to work on it or view your grade.</div></div>
-        <div class="list">${items}</div>`;
+        <div class="list">${items}</div>
+        ${locked ? `<div class="field-hint" style="margin-top:14px">${esc(locked)}</div>` : ''}`;
 
       root.querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', (e) => {
         e.preventDefault();
