@@ -50,20 +50,17 @@
 
 import { db } from './supabase.js';
 import {
-  OFFERING_SELECT, shapeOffering, questionsOf, lessonNumber, chunked,
+  OFFERING_SELECT, shapeOffering, questionsOf, lessonNumber, chunked, policyOf,
 } from './schema.js';
 
 /* ══════════════════════════════════════════════════════════════════════════════
  * Derived policy  <->  offering_activities.grading_role
  * ════════════════════════════════════════════════════════════════════════════ */
 
-/** The familiar three-way label for an offering, read back out of the graded roles. */
-export function policyOf(offering) {
-  const graded = offering?.gradedActivities || [];
-  if (graded.length > 1) return 'choice';
-  if (graded.length === 1) return graded[0].modality === 'interactive' ? 'interaction' : 'preflight';
-  return 'choice';   // nothing graded yet — the editor's neutral default
-}
+// policyOf() moved to schema.js so the STUDENT surfaces read the label back the same way this
+// editor writes it. Re-exported here because this module is where the pairing with roleFor()
+// belongs, and callers (and site/faculty/lessons.html) already name this file for both.
+export { policyOf };
 
 /** grading_role for one modality under a chosen policy. */
 export function roleFor(policy, modality) {

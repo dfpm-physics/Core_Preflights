@@ -89,6 +89,13 @@ lesson. Keeping the questions present as practice means that if the lesson has a
 mid-semester, you switch the two settings and the whole class moves to the questions. Students who
 already earned a grade keep it.
 
+**The two practice arrangements do not look the same to a student, deliberately.** A practice
+*interactive* lesson is shown alongside the graded questions — it is somewhere to go after
+submitting, and running it costs nothing. Practice *questions* are hidden entirely while the
+interactive lesson is the graded path: a question set that is visible but cannot score reads as
+work, and a student who answered it would be turned away at the point of submitting. They reappear
+the moment you flip the two settings, which is what makes the switch above safe to make mid-term.
+
 Changing these settings affects one semester. So does editing the questions themselves — each
 semester holds its own copy, so other semesters are unaffected either way.
 

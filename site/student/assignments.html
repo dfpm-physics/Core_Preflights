@@ -39,7 +39,7 @@
     import {
       loadAssignmentStatuses, saveWrittenAnswers, commitSubmission,
     } from '../js/student-data.js';
-    import { questionsOf, readingLinkOf, displayPoints, releaseNote } from '../js/schema.js';
+    import { questionsOf, readingLinkOf, displayPoints, releaseNote, isGradedPath } from '../js/schema.js';
     import { esc, deadlineClass, fmtDateTime, runPage } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
@@ -66,7 +66,11 @@
       // `.filter()` returns a fresh array, which would drop the release-window count the loader
       // attached — carry it across so the list below can say what is still to come.
       const all = await loadAssignmentStatuses(ctx);
-      list = all.filter(a => a.written);
+      // A written activity that is only PRESENT is not a written preflight — an interaction-only
+      // lesson attaches one as `practice`, and listing it here put a full question set with a live
+      // Submit button in front of a cadet whose commit the DB was always going to refuse. This
+      // page is "work I can earn points for by writing", so the graded role is the test.
+      list = all.filter(a => isGradedPath(a.written));
       list.lockedCount = all.lockedCount || 0;
 
       const params = new URLSearchParams(location.search);
@@ -169,6 +173,23 @@
           <div class="card-meta">${a.due ? 'Due ' + fmtDateTime(a.due) : 'No due date'} · ${a.pointsPossible} pts</div>
           <div style="font-size:0.9em;color:var(--muted)">${descHTML}</div>
         </div>`;
+
+      // A CHOICE lesson stays on this list after the student commits to the interactive — the
+      // written path really is graded here, they just did not take it. Their answers remain theirs
+      // to read, but nothing about this page may still look submittable: switch_policy has locked
+      // the choice, so a Submit click could only ever return a raw trigger exception.
+      const chosenElsewhere = !!written && !!a.chosenActivity && a.chosenActivity.id !== written.id;
+      if (chosenElsewhere) {
+        root.innerHTML = header + `
+          <div class="alert alert-info">You completed this assignment with the interactive lesson,
+            so that report is the version being graded. The answers below are the draft you saved —
+            you can still read them, but they no longer count toward this assignment.</div>
+          <div id="questions"></div>`;
+        renderQuestions(questions, true);
+        document.getElementById('back-btn').addEventListener('click', backToList);
+        window.scrollTo(0, 0);
+        return;
+      }
 
       if (isGraded) {
         const earned = displayPoints(grade, a) ?? 0;

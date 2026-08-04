@@ -134,6 +134,59 @@ export function shapeOffering(row) {
   };
 }
 
+/**
+ * The three-way policy an offering expresses, read back out of which activities carry credit.
+ *
+ * Lives here rather than beside the editor that writes it because BOTH sides must agree: the
+ * director picks a label, `roleFor()` turns it into grading_role, and every student surface has
+ * to read the same answer back out. It used to live only in faculty-lessons.js, and the student
+ * lesson page re-derived its own version from `interactiveGraded` alone — which cannot tell
+ * "both graded" from "only the interactive is graded", so an interaction-only lesson rendered as
+ * a free choice and offered the written path it had just taken away.
+ *
+ *   preflight   written graded,     interactive practice (if attached)
+ *   interaction interactive graded, written practice     (if attached)
+ *   choice      both graded
+ *
+ * Nothing graded returns 'choice' — the editor's neutral default for a lesson still being built.
+ * That is a sensible default for an AUTHORING form and a bad one for a student page, so student
+ * surfaces branch on the two booleans below instead of on this label alone.
+ */
+export function policyOf(offering) {
+  const graded = offering?.gradedActivities || [];
+  if (graded.length > 1) return 'choice';
+  if (graded.length === 1) return graded[0].modality === 'interactive' ? 'interaction' : 'preflight';
+  return 'choice';   // nothing graded yet — the editor's neutral default
+}
+
+/** Does this modality carry credit on this offering? Explicit, so "absent" never reads as "graded". */
+export const isGradedPath = (activity) => activity?.gradingRole === 'graded';
+
+/**
+ * May a student surface still offer the WRITTEN path as a way to complete this assignment?
+ *
+ * Lives here, not in a renderer, for the reason the rest of this module exists: the lesson page
+ * used to answer it inline from `interactiveGraded` alone and got it wrong in both directions —
+ * showing the questions on an interaction-only lesson, and showing them again after an
+ * interactive report had already become the grade. Two independent derivations of one rule is
+ * how those disagreed; this is the one derivation.
+ *
+ * @param {object} a
+ * @param {boolean} a.hasWritten          a written activity is attached at all
+ * @param {boolean} a.writtenGraded       …and it carries credit this term
+ * @param {boolean} a.interactiveGraded   the interactive path carries credit this term
+ * @param {string|null} a.committedModality  what the student committed to, or null while open
+ */
+export function writtenPathCounts({ hasWritten, writtenGraded, interactiveGraded, committedModality }) {
+  if (!hasWritten) return false;
+  // Their report IS the grade now; the answers stop counting and must stop looking submittable.
+  if (committedModality === 'interactive') return false;
+  // Graded → obviously. Not graded, but nothing else is either → a misconfigured lesson, where
+  // rendering the written card beats rendering an empty page. Hidden only when the interactive
+  // is demonstrably the path carrying the points.
+  return writtenGraded || !interactiveGraded;
+}
+
 /** Normalize a submission row (with its submission_activities) for rendering. */
 export function shapeSubmission(row) {
   if (!row) return null;

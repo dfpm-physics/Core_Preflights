@@ -9,6 +9,7 @@ import {
   canSwitchActivity, isActivityAvailable, pointsFromEffort, displayPoints,
   questionsOf, questionPoints, answeredCount, lessonNumber, chunked,
   taughtSectionIds, actionableSections, isArtifactLaunchable,
+  policyOf, isGradedPath, writtenPathCounts,
 } from '../../site/js/schema.js';
 
 const NOW = new Date('2026-09-01T12:00:00Z');
@@ -67,6 +68,58 @@ const choiceRaw = structuredClone(rawOffering);
 choiceRaw.offering_activities[0].grading_role = 'graded';
 eq('two graded activities => choice', shapeOffering(choiceRaw).isChoice, true);
 eq('gradedActivities lists both', shapeOffering(choiceRaw).gradedActivities.length, 2);
+
+// The fourth combination — interactive graded, written attached as practice. The director's
+// "Interaction only". It is the one the student pages had no branch for.
+const interactionOnlyRaw = structuredClone(rawOffering);
+interactionOnlyRaw.offering_activities[0].grading_role = 'graded';    // interactive
+interactionOnlyRaw.offering_activities[1].grading_role = 'practice';  // written
+const interactionOnly = shapeOffering(interactionOnlyRaw);
+
+/* ── policyOf: all four role combinations ──────────────────────────────────── */
+// Regression cover for the bug where the lesson page derived "is this a choice?" from
+// `interactiveGraded` alone. That predicate cannot separate the two rows marked (!) below, so an
+// interaction-only lesson rendered as a free choice and offered the written path it had removed.
+section('policyOf');
+
+eq('written graded + interactive practice => preflight', policyOf(off), 'preflight');
+eq('both graded => choice', policyOf(shapeOffering(choiceRaw)), 'choice');
+eq('interactive graded + written practice => interaction (!)', policyOf(interactionOnly), 'interaction');
+eq('nothing graded => choice, the editor neutral default', policyOf({ gradedActivities: [] }), 'choice');
+eq('a missing offering does not throw', policyOf(null), 'choice');
+
+// The old predicate, shown failing to distinguish them — this is what the page used to use.
+eq('interactiveGraded is true for BOTH choice and interaction-only, which is why it was wrong',
+   [isGradedPath(shapeOffering(choiceRaw).interactive), isGradedPath(interactionOnly.interactive)],
+   [true, true]);
+eq('isGradedPath is false for a practice activity', isGradedPath(interactionOnly.written), false);
+eq('isGradedPath of a missing activity is false, not undefined', isGradedPath(null), false);
+
+/* ── writtenPathCounts: may the questions be offered at all? ───────────────── */
+section('writtenPathCounts');
+
+const wpc = (o) => ({
+  hasWritten: !!o.written,
+  writtenGraded: isGradedPath(o.written),
+  interactiveGraded: isGradedPath(o.interactive),
+});
+
+eq('written-required lesson shows the questions',
+   writtenPathCounts({ ...wpc(off), committedModality: null }), true);
+eq('choice lesson shows the questions while still open',
+   writtenPathCounts({ ...wpc(shapeOffering(choiceRaw)), committedModality: null }), true);
+eq('INTERACTION-ONLY never shows the questions',
+   writtenPathCounts({ ...wpc(interactionOnly), committedModality: null }), false);
+eq('a choice lesson stops showing them once the interactive report is the grade',
+   writtenPathCounts({ ...wpc(shapeOffering(choiceRaw)), committedModality: 'interactive' }), false);
+eq('committing to the WRITTEN path keeps them visible (still editable until the deadline)',
+   writtenPathCounts({ ...wpc(shapeOffering(choiceRaw)), committedModality: 'written' }), true);
+eq('no written activity at all => nothing to show',
+   writtenPathCounts({ hasWritten: false, writtenGraded: false, interactiveGraded: true,
+                       committedModality: null }), false);
+eq('a misconfigured lesson with NOTHING graded still renders the questions, not a blank page',
+   writtenPathCounts({ hasWritten: true, writtenGraded: false, interactiveGraded: false,
+                       committedModality: null }), true);
 
 /* ── content accessors ─────────────────────────────────────────────────────── */
 section('content accessors');

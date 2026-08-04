@@ -226,8 +226,11 @@
 
       if (!l.interactiveAvailable) {
         const when = l.interactiveGateReason || 'later';
+        // The tag has to follow the role, not be assumed: a GRADED interactive that simply has no
+        // link yet was being labelled "practice" here, telling the student the one required path
+        // did not count.
         return `<div class="card" aria-disabled="true" style="opacity:0.55">
-          <div class="card-title">Interactive lesson <span class="tag">practice</span></div>
+          <div class="card-title">Interactive lesson${graded ? '' : ' <span class="tag">practice</span>'}</div>
           <div class="lesson-actions" style="margin-top:10px">
             <button class="btn btn-secondary" disabled title="Not available yet">Launch ↗</button>
           </div>
@@ -235,11 +238,16 @@
         </div>`;
       }
 
-      const note = graded
-        ? `Launch this any time — to work through it, or to review later. You can run it as many
-           times as you like; only your first submitted report counts toward your grade.`
-        : `Practice — launch it any time to work through the material or review. It does not affect
-           your grade for this assignment.`;
+      // On an interaction-only lesson this card is the whole assignment, not a companion to a
+      // written one, so it has to say so — there is no other card left to imply it.
+      const note = !graded
+        ? `Practice — launch it any time to work through the material or review. It does not affect
+           your grade for this assignment.`
+        : l.policy === 'interaction'
+          ? `This assignment is completed through the interactive lesson. Launch it whenever you
+             like; only your first submitted report counts toward your grade.`
+          : `Launch this any time — to work through it, or to review later. You can run it as many
+             times as you like; only your first submitted report counts toward your grade.`;
       return `<div class="card">
         <div class="card-title">Interactive lesson${graded ? '' : ' <span class="tag">practice</span>'}</div>
         <div class="lesson-actions" style="margin-top:10px">
@@ -251,6 +259,15 @@
 
     function bannerFor(l) {
       switch (l.state) {
+        case STATE.GRADED:
+          // The COMPLETE arm below carries this sentence, but a graded interactive never reaches
+          // it (migration 015 finalizes on commit → STATE.GRADED), so the student who most needs
+          // it — the one whose written card has just disappeared — was the one not being told.
+          // gradeCard() already gives the score and the path; this only explains the absence.
+          return l.committedModality === 'interactive' && l.writtenAnswerCount > 0
+            ? `<div class="alert alert-info">Your interactive report is the graded version of this
+                 assignment, so the written answers you saved are no longer counted.</div>`
+            : '';
         case STATE.COMPLETE:
           return `<div class="alert alert-ok">Complete — graded from your interactive report.${
             l.writtenAnswerCount > 0
@@ -281,11 +298,19 @@
           ${l.description ? `<div style="font-size:0.9em;color:var(--muted);margin-top:6px">${esc(l.description)}</div>` : ''}
         </div>`;
 
+      // MAY THE WRITTEN PATH BE SHOWN AT ALL? Derived in student-lessons.js via
+      // schema.writtenPathCounts(), not here — it is false for an interaction-only lesson (the
+      // director removed that route deliberately; offering it back invites a cadet to write three
+      // answers that can never score) and false once an interactive report has become the grade.
+      const showWritten = l.showWrittenPath;
+
       // Both paths loaded and still open (nothing submitted) → show them side by side. When the
       // interactive is a graded choice, both are live and the student picks. When the written is
       // required (interactive is practice), the same two-box layout renders with the interactive
       // GREYED until they submit — the view the director asked for (STUDENT-LESSON-VIEW §5).
-      const bothOpen = l.preflight && l.interaction
+      // An interaction-only lesson never reaches here: showWritten is false, so it falls through
+      // to studyBlock() below and renders the interactive card alone.
+      const bothOpen = showWritten && l.interaction
         && (l.state === STATE.NOT_STARTED || l.state === STATE.DRAFT);
       if (bothOpen) {
         root.innerHTML = header + choiceBlock(l);
@@ -295,7 +320,11 @@
       }
 
       const graded = l.state === STATE.GRADED ? gradeCard(l) : '';
-      const written = l.preflight && l.state !== STATE.COMPLETE ? writtenBlock(l) : '';
+      // Was `l.state !== STATE.COMPLETE`, which is not the fact this needs: an interactive commit
+      // that GRADES lands in STATE.GRADED (migration 015 finalizes it), so COMPLETE is reached
+      // only when the interaction did not grade — the test fired in exactly the wrong half of the
+      // cases and handed a graded student an "Edit your answers" button.
+      const written = showWritten ? writtenBlock(l) : '';
 
       root.innerHTML = header + bannerFor(l) + graded + written + studyBlock(l);
       wire(l);
@@ -304,9 +333,11 @@
 
     function choiceBlock(l) {
       const qn = l.preflight?.questions?.length ?? 0;
-      // A real choice only when the interactive is itself a graded path. Otherwise the written is
-      // required and the interactive is practice, locked until they submit.
-      const isChoice = l.interactiveGraded;
+      // A real choice only when BOTH paths carry credit. This was `l.interactiveGraded`, which is
+      // equally true of an interaction-only lesson — so that lesson rendered here as a free
+      // choice, complete with a live "Start writing" button for a path worth nothing. openLesson
+      // now keeps that case out of this function entirely; the derived policy is the test.
+      const isChoice = l.policy === 'choice';
       const writtenLabel = l.state === STATE.DRAFT ? 'Resume writing' : 'Start writing';
 
       const heading = isChoice ? 'Choose how to complete this assignment'

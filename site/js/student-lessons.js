@@ -21,7 +21,8 @@
 // sources, and there is now exactly one (app.grades, UNIQUE per enrollment per offering).
 
 import { loadAssignmentStatuses } from './student-data.js';
-import { questionsOf, answeredCount, displayPoints, isActivityAvailable, isArtifactLaunchable } from './schema.js';
+import { questionsOf, answeredCount, displayPoints, isActivityAvailable, isArtifactLaunchable,
+         policyOf, writtenPathCounts } from './schema.js';
 
 /**
  * Why the interactive path is not launchable yet, in words a student can act on.
@@ -125,9 +126,22 @@ export async function loadLessonStatuses(ctx) {
        || item.isPast);
     const interactiveGraded = interactive?.gradingRole === 'graded';
 
+    // WHICH PATHS CARRY CREDIT — the question every renderer below actually needs, and the one
+    // `interactiveGraded` alone cannot answer. "The interactive is graded" is true both when the
+    // student may choose and when the interactive is the ONLY way to earn the points; reading it
+    // as "choice" offered an interaction-only lesson the written path it had just taken away.
+    const writtenGraded = written?.gradingRole === 'graded';
+    const policy = policyOf(item);   // 'choice' | 'interaction' | 'preflight'
+
     // `completion` keeps its old shape so the page's renderers are untouched, but it is now
     // derived from the single grades row rather than a separate lesson_completions table.
     const committed = item.submission?.status === 'committed';
+    // WHICH path the student actually committed to, or null while still open. The renderers used
+    // STATE.COMPLETE as a stand-in for "committed to the interactive", which is not the same fact:
+    // migration 015 finalizes an interactive grade the moment it commits, so resolveState()
+    // returns GRADED and COMPLETE is reached only when the interactive submission did NOT grade
+    // (no `#d=` payload). That made the stand-in fire in exactly the wrong half of the cases.
+    const committedModality = committed ? (item.chosenActivity?.modality || null) : null;
     const completion = committed ? {
       path: item.chosenActivity?.modality === 'interactive' ? 'interaction' : 'preflight',
       points: displayPoints(item.grade, item) ?? 0,
@@ -165,6 +179,14 @@ export async function loadLessonStatuses(ctx) {
       // never re-derives the availability rule (STUDENT-LESSON-VIEW §4).
       interactiveAvailable,
       interactiveGraded,
+      writtenGraded,
+      policy,
+      // Whether the page may offer the written path at all — derived here, never in a renderer
+      // (STUDENT-LESSON-VIEW §4, the same reason interactiveAvailable is computed here).
+      showWrittenPath: writtenPathCounts({
+        hasWritten: !!written, writtenGraded, interactiveGraded, committedModality,
+      }),
+      committedModality,
       interactiveGateReason: interactiveAvailable ? null : interactiveGate(interactive),
 
       due: item.due, isPast: item.isPast, isExtended: item.dueSource === 'extension',
@@ -178,8 +200,9 @@ export async function loadLessonStatuses(ctx) {
       // there is no completion_policy column to drift out of step with reality.
       canChoose: item.isChoice && !!written && !!interactive && !item.isPast && !committed,
       hasInteraction: !!interactive,
-      // Kept for renderers that showed the policy; derived, not stored.
-      completion_policy: item.isChoice ? 'choice' : 'preflight',
+      // Kept for renderers that showed the policy; derived, not stored. Was
+      // `isChoice ? 'choice' : 'preflight'`, which called an interaction-only lesson a preflight.
+      completion_policy: policy,
     };
   });
 

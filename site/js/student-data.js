@@ -300,26 +300,57 @@ export async function saveWrittenAnswers(ctx, offeringId, activityId, answers) {
 /**
  * Commit: mark the work final and record which activity carries credit.
  *
- * Two writes on purpose. The DB trigger submissions_check_gradable() rejects a
- * chosen_activity_id that is not `graded` in this offering, and submissions_lock_activity()
- * governs changing one already committed — so this deliberately does NOT try to force a
- * choice through. If the trigger refuses, the error surfaces to the student rather than
- * being papered over.
+ * The DB is still the authority — submissions_check_gradable() rejects a chosen_activity_id that
+ * is not `graded` in this offering, and submissions_lock_activity() governs changing one already
+ * committed. This does NOT try to force a choice through either of them.
+ *
+ * What it does now do is check the same two conditions FIRST, for one reason: a PostgreSQL
+ * `RAISE EXCEPTION` is not a sentence you can show a student. The refusals read
+ * "submission 7f3a… is locked to interactive by switch_policy=lock_on_commit" and went straight
+ * into the page's error banner verbatim. The triggers remain the guarantee; these are the words.
+ * submitInteractionReport() has always checked its own preconditions this way.
+ *
+ * The two writes are also ordered the other way round than they were. `is_final` used to be set
+ * before the commit, so a refused commit still left the activity flagged final — a write that
+ * outlived the operation it belonged to. The commit is what the triggers police, so it goes first
+ * and nothing is marked final until it lands.
  */
 export async function commitSubmission(ctx, offeringId, activityId) {
   const { data: submission, error } = await ensureSubmission(ctx, offeringId);
   if (error || !submission) return { error: error || new Error('Could not open a submission.') };
+
+  // Can this activity carry credit at all? (mirrors submissions_check_gradable)
+  const { data: oa } = await db.from('offering_activities')
+    .select('grading_role')
+    .eq('assignment_offering_id', offeringId)
+    .eq('activity_id', activityId)
+    .maybeSingle();
+  if (oa?.grading_role !== 'graded') {
+    return { error: new Error('This isn’t the graded part of the assignment, so it can’t be '
+                            + 'submitted for credit. Check the lesson page for how to complete it.') };
+  }
+
+  // Is the choice already spent elsewhere? (mirrors submissions_lock_activity)
+  if (submission.status === 'committed' && submission.chosenActivityId
+      && submission.chosenActivityId !== activityId) {
+    return { error: new Error('You’ve already completed this assignment another way, and that '
+                            + 'version is the one being graded. Ask your instructor if you need '
+                            + 'it reopened.') };
+  }
+
+  const { error: cErr } = await db.from('submissions').update({
+    chosen_activity_id: activityId,
+    status: 'committed',
+    committed_at: new Date().toISOString(),
+  }).eq('id', submission.id);
+  if (cErr) return { error: cErr };
 
   const { error: aErr } = await db.from('submission_activities')
     .update({ is_final: true })
     .eq('submission_id', submission.id).eq('activity_id', activityId);
   if (aErr) return { error: aErr };
 
-  return db.from('submissions').update({
-    chosen_activity_id: activityId,
-    status: 'committed',
-    committed_at: new Date().toISOString(),
-  }).eq('id', submission.id);
+  return { error: null };
 }
 
 /**

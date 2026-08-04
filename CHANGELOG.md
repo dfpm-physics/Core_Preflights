@@ -10,6 +10,73 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-04 — Matthew Recker via Claude
 
+### An interaction-only lesson offered the free response it had just taken away
+
+Reported from the sandbox: the test student could see the written preflight as an option on a lesson
+the director had set to **Interaction only**. Three of the four role combinations rendered correctly;
+this one had no branch anywhere on the student side.
+
+**The offering was never wrong.** `roleFor()` writes interaction-only as *interactive graded,
+written practice*, and `shapeOffering()` derives `isChoice` correctly from it (one graded activity →
+not a choice). The student lesson page simply asked a different question
+(`site/student/lessons.html`):
+
+```js
+const isChoice = l.interactiveGraded;   // true for a CHOICE and for INTERACTION-ONLY alike
+```
+
+That predicate cannot separate "both paths count" from "only the interactive counts", so the lesson
+rendered as a free choice: heading *"Choose how to complete this assignment"*, the claim that
+*"Both are worth the same 2 points"*, and a live **Start writing** button for a path worth nothing.
+
+**Four surfaces, one root cause.** Fixing the derivation fixed all of them:
+
+- **The lesson page** offered the written path on an interaction-only lesson.
+- **My written preflights** (`site/student/assignments.html`) filtered on `a.written` — the
+  *presence* of a written activity, not whether it can score — so the same lesson appeared as an
+  ordinary item with a full question set and a live Submit button.
+- **The lesson list and the dashboard** labelled it *"3 questions"*. Both `modeLabel()` functions
+  were written against a three-way `completion_policy`, but the loader only ever supplied
+  `'choice'` or `'preflight'`, so the `'interaction'` arm had always been dead code.
+- **A committed choice came unstuck.** The written card was hidden on `STATE.COMPLETE`, which an
+  interactive commit does not reach: migration 015 finalizes the grade on commit, so `resolveState`
+  returns `GRADED` first. The guard therefore fired only when the interaction *failed* to grade
+  (no `#d=` payload) and not when it succeeded — a student who had submitted their report was shown
+  their written answers again under an **Edit your answers** button.
+
+**Nothing was ever miscredited.** `submissions_check_gradable` and `submissions_lock_activity` held
+the line in every case. That was the other half of the problem: the refusals reached the student as
+raw PostgreSQL, e.g. *"submission 7f3a… is locked to interactive by switch_policy=lock_on_commit"*,
+after they had written and submitted three answers.
+
+**What changed.** `policyOf()` moved from `faculty-lessons.js` to `schema.js` (re-exported, so the
+editor is untouched) because the label the director writes and the label the student pages read back
+must be one function. Two new derivations live beside it: `isGradedPath()` and
+`writtenPathCounts()`, which owns the whole "may the questions be offered at all" rule — the pages
+now read a field instead of re-deriving it, the same reason `interactiveAvailable` is computed in
+the loader. `commitSubmission()` gained the preconditions `submitInteractionReport()` always had, so
+a refusal is a sentence rather than a trigger exception; it also writes `is_final` *after* the
+commit lands instead of before, which previously left the flag set on a commit that was rejected.
+
+**The two practice arrangements are deliberately asymmetric**, now stated in
+`director-course-structure.md`: a practice *interactive* stays visible beside the graded questions
+(somewhere to go after submitting, costing nothing), while practice *questions* are hidden while the
+interactive is the graded path. A visible question set that cannot score reads as work, and anyone
+who did it would be turned away at the point of submitting. They reappear the moment a director
+flips the two settings, which is what keeps the documented mid-term fallback safe.
+
+**Verification — read this before trusting it.** Node-only, and *not* a substitute for looking
+(CORE.md §2). 148 assertions in `tests/app-schema/test-schema.mjs` pass, 15 of them new and aimed at
+this bug (all four role combinations through `policyOf`, and every state of `writtenPathCounts`
+including the two that regressed). `test-imports.mjs` resolves all 375 named imports across `site/`,
+and both edited inline module scripts pass `node --check`.
+
+**Not verified: the rendering itself, in a browser, signed in.** The live suites cannot run — the
+test cadet `3009999999` in `tests/app-schema/harness.mjs` now fails sign-in with *Invalid login
+credentials*, which is the failure mode that file's own README warns about after a password reset.
+Until that account is restored, `test-student.mjs`, `test-rest.mjs`, `test-isolation.mjs` and the
+`browser-harness` walkthrough are all unrunnable by anyone. Worth fixing on its own account.
+
 ### Preflights unlock 7 days before they are due, because working ahead defeats the instrument
 
 The director's problem: a cadet could work fifteen preflights in an afternoon and then arrive at
