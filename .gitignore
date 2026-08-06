@@ -4,6 +4,7 @@ site/js/config.local.js
 .env*
 config.json
 INBOX/
+_inbox/
 
 # Skill / tooling config — each operator copies config.json.template locally (service keys, DB creds)
 .ai/skills/preflight-analyze/config.json
