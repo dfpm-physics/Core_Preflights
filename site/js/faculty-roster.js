@@ -472,6 +472,10 @@ export async function commitRoster(ctx, fresh, conflicts, plan = {}, meta = {}) 
    * column that already exists carries the same audit fact today, and the columns can follow the
    * next time the schema is opened for another reason. */
   const notes = [
+    // What the operator overrode, verbatim from the preview. See admin.html's overrideNote():
+    // the file is not kept, so this sentence is the only surviving evidence that these rows
+    // named another course or term and a human said take them anyway.
+    meta.overrides || null,
     invisible ? `${invisible} cadet(s) already existed outside this director's visibility and `
               + `were enrolled without changing their record.` : null,
     dropped ? `${dropped} enrollment(s) dropped — on the roster but not in this file. Their `

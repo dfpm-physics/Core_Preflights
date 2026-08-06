@@ -104,8 +104,7 @@ cell dropped that cadet's name, address and section from the import entirely.)*
 
 Three things the upload does that are worth knowing:
 
-- **Rows for other courses are filtered out** by subject and course number, and it shows you which
-  ones and why rather than dropping them silently.
+- **Rows for another course or term are held back — and you can take them anyway.** See below.
 - **Cadets you already have are flagged for review.** For each, you choose whether to keep the
   record you have or take the file's version, field by field. The default is to keep what you
   have — a stale export should not quietly overwrite a correction somebody made by hand.
@@ -113,6 +112,35 @@ Three things the upload does that are worth knowing:
   so anyone enrolled here but absent from the file has left. They are listed by name, ticked, and
   you un-tick anyone who should stay; you then confirm the removals a second time before anything
   is written. See below for what removal means.
+
+### When the file says another course or term
+
+The export is the result of a registrar query, so it often covers more than the course you are
+importing. Each row's **Subject**, **Course Number** and **Term** are compared with this course's
+own, and a row that disagrees is held back rather than imported quietly.
+
+**A disagreement is a question, not a verdict.** The preview lists what it found — *Course Number
+"215S" — 57 rows* — with a tick box beside each. Tick the ones that belong here anyway and press
+**Re-check with the ticked rows included**; those rows are then read exactly like every other row.
+This is the case where the registrar numbers part of your own course differently, which happens.
+
+Three things to know about ticking one:
+
+- **It approves that one claim, not the row.** A row that also names a different term stays out
+  until you tick that too — so you can take the 215S block without also taking next semester's.
+- **It does not skip any other check.** An included row still needs a valid cadet ID, an email
+  address and a section this course has; if it fails one, it moves down to the list of rows that
+  were not imported, now showing what is actually wrong with it.
+- **It is recorded.** The import log keeps a sentence naming what you approved and how many cadets
+  came in that way — the file itself is not kept, so this is the only later evidence.
+
+Nothing in those three columns is stored against a cadet. They decide which rows to take; the
+record itself is built from name, email, squadron, sex, majors and advisor.
+
+**One caution.** A cadet who appears in the file *only* on a row you did not include is, as far as
+this course is concerned, not in the file at all — so if they are currently enrolled, they will be
+proposed for removal below. That is usually right (they really are in the other course), but if you
+meant to include their rows, tick the claim first and the proposal disappears.
 
 ### Who can be removed, and what removal does
 

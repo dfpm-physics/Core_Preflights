@@ -8,6 +8,58 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-06 (second) — Casey via Claude
+
+### A roster import's course/term mismatch is now a decision, not a verdict
+
+The Fall 2026 Physics 215 registrar export arrived as two blocks: 311 rows numbered `215`, then a
+trailing 57 numbered **`215S`**. `rowMatchesCourse()` compared catalog numbers for exact equality,
+so all 57 cadets were reported "215S — not this course" and dropped, with no way to take them short
+of editing the export by hand. **The filter was right to notice and wrong to decide.**
+
+**What replaced it.** Subject, Course Number and Term are now compared **independently**, and each
+disagreement becomes a **flag on the offending VALUE** (`course_number=215s`) rather than a verdict
+on the row. The preview lists the distinct claims with row counts and a tick box each; ticking one
+and pressing **Re-check with the ticked rows included** re-parses the same file with that approval.
+
+- **An approval is per claim, spent per row.** Approving `215S` admits every row whose *only*
+  disagreement is that. A row that also names `Spring 2027` stays out and says so — which is the
+  property that makes a blanket "import anyway" button unnecessary, and unsafe to add.
+- **An override lets a row be considered, not admitted.** It is re-parsed, not patched, so an
+  included row faces the identical cadet-ID, email, section and duplicate checks. The 215S row with
+  no email address moves from "not this course" to "missing email", which is the useful answer.
+- **Silence is not disagreement, in either direction.** A blank cell, a missing column, an offering
+  with no term, or a term string that cannot be parsed (`1271`) produces **no flag** rather than a
+  false one. Every file that imported cleanly before still does. A term gate that cried wolf on
+  correct files would train the operator to tick without reading, defeating the mechanism.
+- **Departures stay honest.** An excluded row still does not shield its cadet from the removal
+  proposal — a cadet in the export only under another course is not in this one. Approving the
+  claim is what changes that, and it changes it the honest way: the row is staged, so it protects
+  like any other.
+- **Overrides are recorded.** `roster_imports.notes` gains a sentence naming what was approved and
+  how many cadets came in that way. The export is not kept, so it is the only later evidence.
+- **Two dead ends closed:** a file where *every* row is flagged used to parse to zero rows and hit
+  an error box whose only button was Close — precisely the file the control exists for; and a
+  re-parse now carries the operator's conflict resolutions and un-ticked departures forward instead
+  of discarding decisions already made further down the page.
+
+`class_nbr` and `course_title` are deliberately not gated: a class number differs per section by
+design, and a course title restates subject + number under a second name. Nothing in the gated
+columns is stored about a cadet — `commitRoster()` writes name, email, squadron, sex, majors and
+advisor — which is what makes overriding them safe at all.
+
+**Touched:** `site/js/roster-import.js` (`IDENTITY_FIELDS`, `identityFlags()`, `termKey()`,
+`parseRosterFile({termCode, approved})` → `identityGroups`/`overridden`; `rowMatchesCourse()` kept
+as the yes/no over the flags), `site/faculty/admin.html` (the override card, carry-forward,
+audit note), `site/js/faculty-roster.js` (`meta.overrides` → notes),
+`tests/app-schema/test-roster-import.mjs` (+31 assertions), `site/help/instructor-accounts.md`
+(new "When the file says another course or term"), `SYSTEM_GUIDE.md`, `DOC-SOURCES.json`.
+
+**Verification note (CORE.md §2):** proven by the Node suite — `node test-roster-import.mjs`, 156
+assertions, 0 failures — plus `node --check` on both modules and on admin.html's extracted module
+script. **The new preview card itself was not exercised in a browser this session**; the parse layer
+under it is covered, the rendering and the two re-parse buttons are not.
+
 ## 2026-08-06 — Casey via Claude
 
 ### Both courses now use a 2359 preflight deadline (215 moved back from 1759)

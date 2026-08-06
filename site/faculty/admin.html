@@ -292,7 +292,9 @@
             <code>Cadet Name</code>, <code>Email</code>, and <code>Section</code>;
             <code>Cadet Squadron</code>, Term, Subject, Course Number, <code>Major 1</code>,
             <code>Major 2</code>, <code>Major 3</code>, Sex, and Advisor Name are picked up when
-            present and skipped when they are not. Rows for other courses are filtered out, and you
+            present and skipped when they are not. Rows naming another course or term are held
+            back and listed by what they say — <strong>tick one to include it</strong> if it
+            belongs here anyway (a second course number for the same course, say) — and you
             review anything that would change an existing record before it is written.
             <strong>A section the file names that this course does not have yet is offered for
             creation in the preview</strong> — a first import into an empty course is expected.</div>
@@ -464,7 +466,19 @@
       const f = document.getElementById('csv-file'); if (f) f.value = '';
     }
 
-    async function previewImport(text, filename) {
+    /**
+     * Parse, reconcile and stage a file for review.
+     *
+     * `carry` is what survives a RE-PARSE, and it exists because two controls in the preview
+     * re-run this on the same file: "create these sections" and "include these rows". Re-parsing
+     * rather than patching staged rows is deliberate (one code path, one set of checks), but it
+     * would otherwise throw away every decision the operator had already made further down the
+     * page — the conflict resolutions and the departures they had un-ticked. Losing thirty
+     * decisions to a tick at the top is the kind of thing nobody reports and everybody works
+     * around, so the decisions are carried across by student id and enrollment id.
+     */
+    async function previewImport(text, filename, carry = {}) {
+      const approved = carry.approved instanceof Set ? carry.approved : new Set();
       /* ALWAYS pass the section map, even when it is EMPTY (director, 2026-07-28).
        *
        * This used to send `null` when the offering had no sections, which turns the parser's
@@ -480,13 +494,20 @@
        * and the preview's "Create these sections and re-check" button appears on the FIRST
        * import — which is the moment it was always meant for. */
       const known = Object.fromEntries(offeringSections.map(x => [x.code.toUpperCase(), x]));
+      const here = ctx.courses?.find(c => c.offeringId === ctx.currentOffering) || null;
       const parsed = RI.parseRosterFile(text, {
         knownSections: known,
         courseCode: ctx.currentCourseCode,
+        termCode: here?.termCode || null,
+        approved,
       });
 
       if (parsed.errors.length) { showImportError(parsed.errors); return; }
-      if (!parsed.rows.length && !parsed.unknownSections.length) {
+      /* The dead end this avoids: a file whose EVERY row names another course number parses to
+       * zero rows, and the error box has one button on it — Close. That is precisely the file the
+       * override control exists for, so a course/term disagreement is never allowed to reach here.
+       * Render the preview instead; the commit button disables itself when nothing is staged. */
+      if (!parsed.rows.length && !parsed.unknownSections.length && !parsed.identityGroups.length) {
         showImportError(['No rows in that file matched this course.',
           ...parsed.skipped.slice(0, 4).map(s => `Line ${s.line} (${s.label}): ${s.reason}`)]);
         return;
@@ -503,6 +524,12 @@
       const enrolledIds = new Set(enrollmentState.filter(e => e.status === 'active')
                                                  .map(e => e.student_id));
       const { fresh, conflicts } = RI.reconcile(parsed.rows, existing, enrolledIds);
+      // Decisions the operator already made, re-applied to the freshly parsed rows. Keyed by cadet
+      // id rather than by position: a re-parse that admits 57 more rows renumbers everything.
+      if (carry.resolutions) conflicts.forEach(c => {
+        const prior = carry.resolutions.get(c.row.student_id);
+        if (prior) c.resolution = prior;
+      });
       // Who is on the roster but not in this file (scoped to the sections the file covers — see
       // departures()), and who is in the file but was dropped by a previous import. Both are
       // computed here rather than at commit so the operator decides in front of the names.
@@ -513,10 +540,20 @@
       // says, and so re-rendering the preview does not quietly re-arm somebody they just spared.
       // rawText is kept so "create these sections" can re-run this exact parse against the
       // new sections without asking the operator to pick the file again.
-      staged = { parsed, fresh, conflicts, departing, returning, keep: new Set(),
-                 filename, rawText: text,
+      staged = { parsed, fresh, conflicts, departing, returning,
+                 keep: carry.keep instanceof Set ? carry.keep : new Set(),
+                 approved, filename, rawText: text,
                  summary: RI.summarize(parsed, { fresh, conflicts }, departing) };
       renderPreview();
+    }
+
+    /** Everything a re-parse of the same file must not lose. See previewImport(). */
+    function carryOver() {
+      return {
+        approved: staged.approved,
+        keep: staged.keep,
+        resolutions: new Map(staged.conflicts.map(c => [c.row.student_id, c.resolution])),
+      };
     }
 
     /** The departures still armed for removal — everything the operator has not rescued. */
@@ -538,6 +575,45 @@
       box.style.display = '';
 
       const decidable = conflicts.filter(c => !c.trivial);
+
+      /* ── Course identity: what the file claims, and what this offering is ─────────────────────
+       * The only control in the preview that WIDENS an import rather than narrowing it, so it is
+       * a list of specific claims with counts and deliberately not an "import everything anyway"
+       * switch. Each tick admits the rows whose ONLY disagreement is that one; a row that also
+       * names a different term stays out and stays visible in the skip list below.
+       *
+       * Ticking does not re-render — the same reason the departure checkboxes do not. The list of
+       * conflicts under this card can be a hundred rows deep, and a re-render mid-decision throws
+       * the operator back to the top of the page. The button applies them.
+       */
+      const idGroups = parsed.identityGroups || [];
+      const idBlocked = parsed.skipped.filter(k => k.code === 'other-course').length;
+      const here = ctx.courses?.find(c => c.offeringId === ctx.currentOffering) || null;
+      const expectedOf = (g) => (g.field === 'term' ? (here?.termLabel || g.expected) : g.expected);
+      const identityOffer = idGroups.length ? `
+        <div class="alert alert-warn">
+          <strong>${idBlocked
+            ? `${idBlocked} row(s) name a different course or term`
+            : 'Some rows name a different course or term'}</strong> — this one is
+          <strong>${esc(here?.courseTitle || ctx.currentCourseCode)}</strong>${
+            here?.termLabel ? ` · ${esc(here.termLabel)}` : ''}.
+          <div style="margin-top:6px">Tick anything that belongs here anyway, then re-check. A tick
+            admits only the rows whose <em>only</em> disagreement it is — a row that also disagrees
+            somewhere unticked stays out, and says so below. Nothing in these columns is stored:
+            they decide which rows to take, not what is recorded about a cadet.</div>
+          <div class="table-wrap" style="margin-top:8px"><table>
+            <thead><tr><th style="width:1%">Include</th><th>What the file says</th>
+              <th style="width:1%">Rows</th></tr></thead>
+            <tbody>${idGroups.map(g => `<tr>
+              <td style="text-align:center"><input type="checkbox" data-idflag="${esc(g.key)}"
+                    ${staged.approved.has(g.key) ? 'checked' : ''}></td>
+              <td><strong>${esc(g.label)}</strong> "${esc(g.value)}"
+                  <span class="muted">— this course is ${esc(expectedOf(g)) || '—'}</span></td>
+              <td>${g.rows}</td></tr>`).join('')}</tbody></table></div>
+          <div style="margin-top:8px">
+            <button class="btn btn-secondary btn-sm" id="id-recheck">Re-check with the ticked rows included</button>
+          </div>
+        </div>` : '';
 
       // Unknown sections block the rows that reference them, so offer the fix inline rather
       // than sending the operator somewhere else and back. A course with NO sections at all is
@@ -674,11 +750,14 @@
         </div>` : '';
 
       box.innerHTML = `
+        ${identityOffer}
         ${sectionOffer}
         <div class="alert alert-info">
           <strong>${s.matched}</strong> of ${s.inFile} row(s) match this course —
           <strong>${fresh.length}</strong> new, <strong>${conflicts.length}</strong> already on file${trivialCount ? ` (${trivialCount} unchanged)` : ''}.
           Sections: ${esc(s.sections.join(', ') || '—')}.
+          ${s.overridden ? `<div class="muted" style="margin-top:4px">${s.overridden} of them are
+             here only because you approved a course or term mismatch above.</div>` : ''}
           ${parsed.noSquadron ? `<div class="muted" style="margin-top:4px">${parsed.noSquadron} of
              them have no squadron. They are imported anyway — squadron is advisory and nothing
              depends on it.</div>` : ''}
@@ -741,6 +820,17 @@
         box.querySelectorAll('[data-dep]').forEach(cb => { cb.checked = true; });
         syncCommitLabel();
       });
+      // A tick records the approval; the button spends it. Splitting the two is what lets a
+      // director tick three flags and pay for one re-parse, and what lets "create these sections"
+      // pick up approvals that have not been applied yet — both re-parses read the same set.
+      box.querySelectorAll('[data-idflag]').forEach(cb => cb.addEventListener('change', () => {
+        if (cb.checked) staged.approved.add(cb.dataset.idflag);
+        else staged.approved.delete(cb.dataset.idflag);
+      }));
+      document.getElementById('id-recheck')?.addEventListener('click', () => {
+        const carry = carryOver();
+        previewImport(staged.rawText, staged.filename, carry);
+      });
       document.getElementById('mk-sections')?.addEventListener('click', doCreateSections);
       document.getElementById('csv-commit').onclick = doCommit;
       document.getElementById('csv-cancel').onclick = clearImport;
@@ -777,8 +867,24 @@
       await refreshCtxSections();
       staged.sectionsCreated = (staged.sectionsCreated || 0) + codes.length;
       const created = staged.sectionsCreated, name = staged.filename, text = staged.rawText;
-      await previewImport(text, name);
+      const carry = carryOver();
+      await previewImport(text, name, carry);
       if (staged) staged.sectionsCreated = created;
+    }
+
+    /**
+     * One sentence for the audit row naming what the operator waved through, or null.
+     *
+     * An override is a judgment about a file that nobody else can see afterwards — the export is
+     * on somebody's laptop and the rows it produced look exactly like every other row. The
+     * `roster_imports` row is the only durable record that 57 cadets came in under a course number
+     * this offering does not use, and the next person to wonder why has nowhere else to look.
+     */
+    function overrideNote() {
+      const used = (staged.parsed.identityGroups || []).filter(g => staged.approved.has(g.key));
+      if (!used.length || !staged.summary.overridden) return null;
+      return `${staged.summary.overridden} cadet(s) imported over a course/term mismatch approved `
+           + `by the operator: ${used.map(g => `${g.label} "${g.value}"`).join(', ')}.`;
     }
 
     async function doCommit() {
@@ -812,7 +918,7 @@
         ctx, staged.fresh, staged.conflicts,
         { departing: removing, returning: staged.returning },
         { filename: staged.filename, rowsInFile: staged.summary.inFile,
-          sectionsCreated: staged.sectionsCreated || 0 });
+          sectionsCreated: staged.sectionsCreated || 0, overrides: overrideNote() });
 
       if (error) {
         btn.disabled = false;

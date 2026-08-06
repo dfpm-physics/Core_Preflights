@@ -200,26 +200,108 @@ export function studentIdProblem(raw) {
   return { value: n };
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════════════
+ * Course identity — the disagreements an operator may override
+ * ════════════════════════════════════════════════════════════════════════════════════ */
+
 /**
- * Does this row belong to the course being imported?
+ * The row fields that claim WHICH course and term a row is for.
  *
- * The export is the result of a registrar query that may span courses, so this is a real
- * filter and not a formality. It compares the row's Subject + Course Number against the
- * offering's course code (`phys-215` -> subject `phys`, number `215`).
+ * ── WHY THESE ARE OVERRIDABLE, AND WHY THE FLAG IS PER VALUE ─────────────────────────────────
+ * A mismatch here used to be fatal to the row. The registrar exported Fall 2026 Physics 215 as
+ * two blocks, the second one numbered `215S`, and 57 cadets were dropped with no way to say "yes,
+ * those are mine" short of editing the export by hand (director, 2026-08-06). That is the wrong
+ * shape for the fact being reported: NONE of these fields is stored by an import — commitRoster()
+ * writes name, email, squadron, sex, majors and advisor, and nothing else — so they are evidence
+ * about the FILE, not data about a cadet. Evidence deserves a question; only the answer should be
+ * a decision.
  *
- * Returns true when the file carries no course columns at all — a hand-made section list has
- * no Subject column and is, by construction, already about one course. Being permissive here
- * is safe because the SECTION filter still applies and is the tighter of the two.
+ * So each field is compared independently and reports its own flag, keyed by the offending VALUE,
+ * and the operator approves flags rather than rows. Approving `Course Number "215S"` admits every
+ * row whose only disagreement is that one, and leaves a row that additionally names another term
+ * excluded and visible. That property is the whole point, and it is why there is no blanket
+ * "import anyway" switch: the safe answer to one wrong column is never "ignore every column".
+ *
+ * `class_nbr` and `course_title` are deliberately absent. A class number differs per section by
+ * design, so gating on it would flag most of a correct file; a course title restates subject +
+ * number, so it would report a single disagreement twice under a second name.
+ */
+export const IDENTITY_FIELDS = [
+  { field: 'subject',       label: 'Subject' },
+  { field: 'course_number', label: 'Course Number' },
+  { field: 'term',          label: 'Term' },
+];
+
+/**
+ * A term reduced to something comparable — `fall-2026` — or '' when it cannot be read.
+ *
+ * `terms.code` is `fall-2026` and the registrar's Term column is `Fall 2026`, so one normaliser
+ * serves both sides of the comparison. Returning '' for anything else is the load-bearing part:
+ * a term string this cannot parse (a PeopleSoft numeric code, an empty cell) produces NO flag
+ * rather than a false one. An import that cried wolf about the term on every correct file would
+ * train the operator to tick the box without reading it, which is the failure this mechanism
+ * exists to prevent.
+ */
+export function termKey(raw) {
+  const s = clean(raw).toLowerCase();
+  const year = (s.match(/\b(20\d{2})\b/) || [])[1];
+  const season = /fall|autumn/.test(s) ? 'fall'
+               : /spring/.test(s) ? 'spring'
+               : /summer/.test(s) ? 'summer' : '';
+  return year && season ? `${season}-${year}` : '';
+}
+
+const IDENTITY_NORM = {
+  subject:       (v) => clean(v).toLowerCase().replace(/[^a-z]/g, ''),
+  course_number: (v) => clean(v).toLowerCase().replace(/[^a-z0-9]/g, ''),
+  term:          termKey,
+};
+
+/**
+ * How one row's course identity disagrees with the offering's: one entry per field, [] when it
+ * agrees or cannot be compared.
+ *
+ * SILENCE IS NOT DISAGREEMENT, in either direction. A row whose Subject cell is empty — or a file
+ * with no Subject column at all — is not claiming to be another subject: a hand-made section list
+ * has no course columns and is by construction already about one course. Equally, an offering
+ * whose term we do not know cannot catch a wrong one. Both cases produce no flag, which is what
+ * keeps every file that used to import cleanly importing cleanly.
+ *
+ * `key` is built from the NORMALISED value, so `215S` and `215s` are one flag and one tick.
+ *
+ * @param {object} row   raw cell values for one line
+ * @param {object} opts  { courseCode: 'phys-215', termCode: 'fall-2026' }
+ * @returns {Array} [{ field, label, key, value, expected }]
+ */
+export function identityFlags(row, opts = {}) {
+  const { courseCode = null, termCode = null } = opts;
+  const [subj, num] = String(courseCode || '').toLowerCase().split('-');
+  const expected = { subject: subj || '', course_number: num || '', term: termCode || '' };
+  const flags = [];
+
+  for (const { field, label } of IDENTITY_FIELDS) {
+    const norm = IDENTITY_NORM[field];
+    const want = norm(expected[field]);
+    const got = norm(row[field]);
+    if (!want || !got || want === got) continue;
+    flags.push({
+      field, label,
+      key: `${field}=${got}`,
+      value: clean(row[field]),
+      expected: clean(expected[field]),
+    });
+  }
+  return flags;
+}
+
+/**
+ * Does this row belong to the course being imported, with nothing overridden?
+ *
+ * Kept as the plain yes/no over identityFlags() for callers that only want the question and not
+ * the decision. The parse itself uses the flags.
  */
 export function rowMatchesCourse(row, courseCode) {
-  if (!courseCode) return true;
-  const [subj, num] = String(courseCode).toLowerCase().split('-');
-  const rowSubj = clean(row.subject).toLowerCase().replace(/[^a-z]/g, '');
-  const rowNum = clean(row.course_number).toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (!rowSubj && !rowNum) return true;
-  if (rowSubj && subj && rowSubj !== subj) return false;
-  if (rowNum && num && rowNum !== num) return false;
-  return true;
+  return identityFlags(row, { courseCode }).length === 0;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════════════
@@ -233,15 +315,25 @@ export function rowMatchesCourse(row, courseCode) {
  * @param {object} opts
  * @param {object} opts.knownSections  upper-cased code -> section row, from the offering
  * @param {string} opts.courseCode     e.g. 'phys-215', for the course filter
- * @returns {{rows, skipped, errors, warnings, headers, unmatchedHeaders, delimiter}}
+ * @param {string} opts.termCode       e.g. 'fall-2026', for the term filter
+ * @param {Set|Array} opts.approved    identity flag keys the operator has approved
+ * @returns {{rows, skipped, errors, warnings, headers, unmatchedHeaders, identityGroups,
+ *            overridden, delimiter}}
  *
  * `errors` are problems with the FILE (wrong shape, missing required columns) — they stop the
  * import. `skipped` are rows deliberately excluded, each with a reason, and are shown to the
  * operator rather than dropped quietly. A row with a bad value goes into `skipped` too, not
  * into `errors`: one cadet with a malformed ID must not block the other 200.
+ *
+ * `identityGroups` is the distinct course/term disagreements the file contains, each with the
+ * number of rows carrying it and whether it is currently approved — the material for the
+ * override control. Re-parsing the same text with more keys in `approved` is the ONLY way to
+ * admit a flagged row: nothing patches a staged row afterwards, so an overridden cadet has been
+ * through the identical cadet-ID, email, section and duplicate checks as everybody else.
  */
 export function parseRosterFile(text, opts = {}) {
-  const { knownSections = null, courseCode = null } = opts;
+  const { knownSections = null, courseCode = null, termCode = null, approved = null } = opts;
+  const approvedSet = approved instanceof Set ? approved : new Set(approved || []);
   const delimiter = sniffDelimiter(text);
   const grid = parseDelimited(text, delimiter);
 
@@ -266,6 +358,7 @@ export function parseRosterFile(text, opts = {}) {
   const rows = [], skipped = [], warnings = [];
   const seenIds = new Map();      // student_id  -> first line it appeared on
   const seenEmails = new Map();   // lower(email) -> first line it appeared on
+  const identity = new Map();     // flag key    -> { …flag, rows, approved }
 
   grid.slice(1).forEach((cells, i) => {
     const line = i + 2;           // 1-based, and the header is line 1
@@ -286,15 +379,31 @@ export function parseRosterFile(text, opts = {}) {
       advisor_name: at(cells, 'advisor_name'),
     };
     const label = raw.name || raw.student_id || `line ${line}`;
-    // `code` classifies the skip for the caller; `reason` is the sentence shown to a human.
-    // The two are separate so the page can group by cause without parsing prose.
-    const skip = (reason, code = 'invalid') => skipped.push({ line, label, reason, code, raw });
+    // `code` classifies the skip for the caller, `reason` is the sentence shown to a human, and
+    // `extra` carries structured detail for a caller that wants to offer a decision rather than
+    // print a sentence. Three, so the page can group by cause, by value, or by neither, without
+    // ever parsing prose.
+    const skip = (reason, code = 'invalid', extra = null) =>
+      skipped.push({ line, label, reason, code, raw, ...(extra || {}) });
 
-    // Course filter first: a row for another course should be reported as "not this course",
-    // not as "bad cadet ID". Ordering the checks this way keeps the reasons honest.
-    if (!rowMatchesCourse(raw, courseCode)) {
-      const what = [raw.subject, raw.course_number].filter(Boolean).join(' ') || 'another course';
-      return skip(`${what} — not this course`, 'other-course');
+    /* Course identity first: a row for another course should be reported as "not this course",
+     * not as "bad cadet ID". Ordering the checks this way keeps the reasons honest.
+     *
+     * Every flag is COUNTED whether or not it is approved. The page needs "57 rows say 215S" to
+     * put a number on the control it is offering, and that number must not collapse to zero the
+     * moment the box is ticked and those rows stop being skipped — a control that erases its own
+     * justification when used cannot be un-used with any confidence. */
+    const flags = identityFlags(raw, { courseCode, termCode });
+    for (const f of flags) {
+      const g = identity.get(f.key) || { ...f, rows: 0, approved: approvedSet.has(f.key) };
+      g.rows++;
+      identity.set(f.key, g);
+    }
+    const blocking = flags.filter(f => !approvedSet.has(f.key));
+    if (blocking.length) {
+      const what = blocking.map(f => `${f.label} "${f.value}"`).join(' · ');
+      const tail = blocking.every(f => f.field === 'term') ? 'not this term' : 'not this course';
+      return skip(`${what} — ${tail}`, 'other-course', { flags: blocking });
     }
 
     const id = studentIdProblem(raw.student_id);
@@ -346,6 +455,9 @@ export function parseRosterFile(text, opts = {}) {
       section_code: code,
       term: raw.term || null,
       course_title: raw.course_title || null,
+      // Which approvals this row needed. Empty for the ordinary row, and the reason the preview
+      // and the audit note can say how many cadets came in on an override rather than on merit.
+      overrides: flags.map(f => f.key),
     });
   });
 
@@ -363,11 +475,21 @@ export function parseRosterFile(text, opts = {}) {
   if (noSquadron) warnings.push(`${noSquadron} row(s) have no squadron — imported without one.`);
   if (!rows.length && !skipped.length) warnings.push('The file has headers but no data rows.');
 
+  // Ordered the way the operator will read them: by field, then by weight. A disagreement 57 rows
+  // deep is the one to decide first, and a single stray row must not sit above it.
+  const order = IDENTITY_FIELDS.map(f => f.field);
+  const identityGroups = [...identity.values()].sort((a, b) =>
+    order.indexOf(a.field) - order.indexOf(b.field)
+    || b.rows - a.rows
+    || String(a.value).localeCompare(String(b.value)));
+
   return {
     rows, skipped, warnings, errors: [],
     headers: headerCells,
     unmatchedHeaders: headerCells.filter((h, i) => h && !Object.values(map).includes(i)),
     unknownSections,
+    identityGroups,
+    overridden: rows.filter(r => r.overrides.length).length,
     noSquadron,
     delimiter,
   };
@@ -376,7 +498,8 @@ export function parseRosterFile(text, opts = {}) {
 function blank(delimiter, errors) {
   return {
     rows: [], skipped: [], warnings: [], errors,
-    headers: [], unmatchedHeaders: [], unknownSections: [], noSquadron: 0, delimiter,
+    headers: [], unmatchedHeaders: [], unknownSections: [], identityGroups: [], overridden: 0,
+    noSquadron: 0, delimiter,
   };
 }
 
@@ -484,7 +607,9 @@ export function reconcile(rows, existing, enrolledIds = new Set()) {
  *      SKIPPED for a data problem (a malformed email, a bad cadet ID). Those rows are reported
  *      separately for the operator to fix; a typo in one cell must not read as "this person left".
  *      Rows skipped as `other-course` do NOT protect anyone — a cadet appearing in the export only
- *      under a different course genuinely is not in this one.
+ *      under a different course genuinely is not in this one. Approving that course's flag is
+ *      what changes the answer, and it changes it the honest way: the row is no longer skipped,
+ *      so it is in `rows` and protects its cadet like any other.
  *
  * Past those, the confirmation step is the control: the list is shown by name, individually
  * un-tickable, and confirmed a second time before anything is written. And nothing here deletes —
@@ -545,6 +670,7 @@ export function summarize(parsed, reconciled, departing = []) {
   return {
     inFile: parsed.rows.length + parsed.skipped.length,
     matched: parsed.rows.length,
+    overridden: parsed.overridden || 0,
     skipped: parsed.skipped.length,
     fresh: reconciled.fresh.length,
     conflicts: reconciled.conflicts.length,

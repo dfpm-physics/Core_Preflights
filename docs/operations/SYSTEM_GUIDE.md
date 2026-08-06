@@ -97,7 +97,8 @@ Any logged-in instructor can change their own password without contacting the co
 > paragraph, what changed: the import takes the **registrar's export as-is** (not a hand-made
 > three-column CSV), requires **Cadet EMPLID / Cadet Name / Email / Section** (Cadet Squadron and
 > the three Major columns are optional — a cadet with no squadron imports normally),
-> filters out rows for other courses, reviews each returning cadet field by field, offers to create
+> holds back rows naming another course or term **and offers each disagreement for approval one
+> value at a time** (the registrar's `215S` block, say), reviews each returning cadet field by field, offers to create
 > sections the file names, provisions logins automatically, and — since 2026-07-28 — proposes
 > **removing cadets who are on the roster but not in the file**, listed by name for confirmation.
 > That check covers the whole offering, so **export the whole course**, not one section.

@@ -7,7 +7,8 @@
 import { check, eq, section } from './harness.mjs';
 import {
   parseDelimited, sniffDelimiter, mapHeaders, normalizeName, emailProblem,
-  studentIdProblem, rowMatchesCourse, parseRosterFile, reconcile, summarize,
+  studentIdProblem, rowMatchesCourse, identityFlags, termKey,
+  parseRosterFile, reconcile, summarize,
   departures, returning,
   REQUIRED_FIELDS,
   sectionDefaultsFrom,
@@ -108,6 +109,48 @@ check('rejects another number',
       !rowMatchesCourse({ subject: 'Phys', course_number: '110' }, 'phys-215'));
 check('a file with no course columns is treated as already scoped',
       rowMatchesCourse({ subject: '', course_number: '' }, 'phys-215'));
+
+/* ── Course identity, field by field ─────────────────────────────────────────
+ * A mismatch is a flag on a VALUE, not a verdict on a row, so that the operator can approve
+ * "Course Number 215S" without also approving "Term Spring 2027" for a row that says both. */
+section('identityFlags');
+
+const keys = (row, opts) => identityFlags(row, opts).map(f => f.key).join(',');
+const PHYS = { courseCode: 'phys-215', termCode: 'fall-2026' };
+
+eq('a row that agrees raises nothing',
+   keys({ subject: 'Phys', course_number: '215', term: 'Fall 2026' }, PHYS), '');
+// The Fall 2026 case this was built for: the registrar exported 215 and 215S in one file.
+eq('a suffixed catalog number is one flag, on its own value',
+   keys({ subject: 'Phys', course_number: '215S' }, PHYS), 'course_number=215s');
+eq('a wrong subject and a wrong number are two independent flags',
+   keys({ subject: 'Chem', course_number: '100' }, PHYS), 'subject=chem,course_number=100');
+eq('a wrong term is its own flag', keys({ course_number: '215', term: 'Spring 2027' }, PHYS),
+   'term=spring-2027');
+
+// Silence is not disagreement, in either direction — this is what keeps every file that used to
+// import cleanly importing cleanly.
+eq('a blank cell says nothing about the course', keys({ subject: '', course_number: '215' }, PHYS), '');
+eq('a file with no course columns at all says nothing either', keys({}, PHYS), '');
+eq('a term string this cannot read is not a wrong term', keys({ term: '1271' }, PHYS), '');
+eq('an offering with no term of its own cannot catch one',
+   keys({ term: 'Spring 2027' }, { courseCode: 'phys-215' }), '');
+
+const flag = identityFlags({ subject: 'Phys', course_number: '215S' }, PHYS)[0];
+eq('the flag quotes the file verbatim', flag.value, '215S');
+eq('…beside what this course actually is', flag.expected, '215');
+eq('…under the registrar column name', flag.label, 'Course Number');
+eq('case and punctuation collapse, so one tick covers both spellings',
+   identityFlags({ course_number: '215-s' }, PHYS)[0].key, flag.key);
+
+section('termKey');
+eq('the registrar spelling', termKey('Fall 2026'), 'fall-2026');
+eq('the terms.code spelling normalises to the same thing', termKey('fall-2026'), 'fall-2026');
+eq('spring', termKey('Spring 2027'), 'spring-2027');
+// Refusing to guess is the point: a false term flag on every correct file teaches the operator
+// to tick without reading, which defeats the whole mechanism.
+eq('a numeric term code yields nothing rather than a guess', termKey('1271'), '');
+eq('a season with no year is not a term', termKey('Fall'), '');
 
 /* ── Whole-file parse ──────────────────────────────────────────────────────── */
 section('parseRosterFile');
@@ -210,6 +253,65 @@ const tabbed = parseRosterFile(FILE.split('\n').map(l =>
 eq('a tab-separated export yields the same rows', tabbed.rows.length, 2);
 eq('and the same names', tabbed.rows[0].name, 'Jane M. Doe');
 
+/* ── Overriding a course/term mismatch ───────────────────────────────────────
+ * Fall 2026: the registrar's Physics 215 export carried a second block numbered 215S, and 57
+ * cadets were dropped with no way to say "those are mine" short of editing the file by hand.
+ * The rule these assertions pin down is that an approval is granted to a CLAIM and spent per ROW:
+ * approving 215S takes the rows whose only disagreement is 215S, and nothing else. */
+section('parseRosterFile — overrides');
+
+const MIXED = [
+  'Term,Subject,Course Number,Section,Cadet EMPLID,Cadet Name,Email',
+  'Fall 2026,Phys,215,M1A,3001234567,"Doe, Jane",jane.doe@afacademy.af.edu',
+  'Fall 2026,Phys,215S,T3A,3005555555,"Ess, Sam",s.ess@afacademy.af.edu',
+  'Fall 2026,Phys,215S,T3A,3006666666,"Ess, Pat",p.ess@afacademy.af.edu',
+  // Two claims at once — the row that proves an approval is not a skeleton key.
+  'Spring 2027,Phys,215S,T3A,3007777777,"Next, Term",n.term@afacademy.af.edu',
+  // Flagged AND broken. Approving the flag must not import a row with no email.
+  'Fall 2026,Phys,215S,T3A,3008888888,"Bad, Email",',
+].join('\n');
+const MOPTS = { knownSections: KNOWN, courseCode: 'phys-215', termCode: 'fall-2026' };
+
+const strict = parseRosterFile(MIXED, MOPTS);
+eq('with nothing approved, only the exact match is staged', strict.rows.length, 1);
+eq('…and the other four are held as other-course',
+   strict.skipped.filter(s => s.code === 'other-course').length, 4);
+
+// What the page renders the control from: distinct claims with counts, not a list of rows.
+eq('the file is reduced to its distinct claims, each with a row count',
+   strict.identityGroups.map(g => `${g.key}:${g.rows}`).join(' '),
+   'course_number=215s:4 term=spring-2027:1');
+check('and none of them is approved yet', strict.identityGroups.every(g => !g.approved));
+
+const ok = parseRosterFile(MIXED, { ...MOPTS, approved: ['course_number=215s'] });
+eq('approving one claim admits the rows whose only disagreement it is', ok.rows.length, 3);
+eq('…and says how many came in that way', ok.overridden, 2);
+eq('…while an ordinary row is not marked as overridden', ok.rows[0].overrides.length, 0);
+
+const spring = ok.skipped.find(s => s.raw.student_id === '3007777777');
+eq('a row with a second, unapproved claim stays out', spring?.code, 'other-course');
+check('…and its reason names only what is still unapproved',
+      /Term "Spring 2027"/.test(spring?.reason) && !/215S/.test(spring?.reason), spring?.reason);
+check('…and reads as a term problem rather than a course one',
+      /not this term$/.test(spring?.reason), spring?.reason);
+
+// An override lets a row be CONSIDERED. It does not let it in.
+const bad = ok.skipped.find(s => s.raw.student_id === '3008888888');
+eq('an overridden row still faces every other check', bad?.code, 'invalid');
+check('…and now reports what is actually wrong with it', /email/i.test(bad?.reason), bad?.reason);
+
+const all = parseRosterFile(MIXED, { ...MOPTS,
+  approved: ['course_number=215s', 'term=spring-2027'] });
+eq('approving both claims admits the two-claim row as well', all.rows.length, 4);
+eq('…leaving only the genuinely broken row behind', all.skipped.length, 1);
+check('…and the groups report themselves as approved for the checkboxes',
+      all.identityGroups.every(g => g.approved));
+
+// The count on the control must not collapse when the control is used — an operator who ticks a
+// box has to be able to see what it did and untick it.
+eq('an approved claim still reports how many rows it covers',
+   all.identityGroups.find(g => g.key === 'course_number=215s').rows, 4);
+
 /* ── Reconciliation ────────────────────────────────────────────────────────── */
 section('reconcile');
 
@@ -304,6 +406,11 @@ eq('an other-course skip does not protect anybody',
    departures(file([row(3001111111, 'M1A')],
                    [{ code: 'other-course', raw: { student_id: '3002222222' } }]), ENROLLED)
      .map(d => d.enrollment_id).sort().join(','), 'en-2,en-3');
+// …and the other half of that rule. Approving the claim is what changes the answer, and it changes
+// it honestly: the row stops being skipped, so it protects its cadet like any other staged row.
+eq('an overridden cadet IS named in the file, so they are not a departure',
+   departures(all, [{ enrollment_id: 'en-x', status: 'active', student_id: 3007777777,
+                      name: 'Term Next', section_id: 's-t3a', section_code: 'T3A' }]).length, 0);
 
 // The file's ids arrive as numbers from studentIdProblem(); enrollment rows come back from
 // PostgREST where a bigint can be a string. A === between the two silently removes everybody.
@@ -335,6 +442,8 @@ eq('counts the matched rows', sum.matched, 2);
 eq('counts the skipped rows', sum.skipped, 5);
 eq('counts the ones needing a human decision', sum.needsDecision, 1);
 eq('lists the sections touched', sum.sections.join(','), 'M1A,T3A');
+eq('counts nothing as overridden when nothing was', sum.overridden, 0);
+eq('…and counts them when there were', summarize(all, reconcile(all.rows, [])).overridden, 3);
 eq('reports no departures when it is not given any', sum.departing, 0);
 eq('…and counts them when it is', summarize(parsed, rec, [{ enrollment_id: 'x' }]).departing, 1);
 
