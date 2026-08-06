@@ -817,15 +817,16 @@
      *
      * ── THE DEFAULT IS PER COURSE, BECAUSE THE POLICY IS ─────────────────────────────────────
      * The deadline hour is a course director's decision, not a system constant. Physics 215's
-     * directors set 1759 on 2026-07-29 — before the duty day ends rather than late at night —
-     * and Physics 110, a different course with a different director, keeps 2359. Nothing asked
-     * for one answer across both, so this does not impose one.
+     * directors set 1759 on 2026-07-29, then moved back to 2359 on 2026-08-06; Physics 110 has
+     * always used 2359. Both courses now want the same "right before midnight" deadline, so the
+     * per-course map is empty and everything takes the 2359 fallback — but the mechanism stays,
+     * because the hour remains a per-course decision that could diverge again.
      *
      * It is a hardcoded map rather than a setting because there is nowhere to put a setting: no
      * table under `app` carries per-course configuration, and adding a column is DDL, which is
      * sealed behind a human unsealing `prep_app_owner` (CORE.md §0). One line here is honest about
-     * that; a fake settings layer would not be. If a third course ever wants a third answer, add
-     * a line — and if this map reaches four or five entries, that is the signal it has earned a
+     * that; a fake settings layer would not be. If a course ever wants a different answer, add a
+     * line — and if this map reaches four or five entries, that is the signal it has earned a
      * column and the unseal is worth asking for.
      *
      * This is a DEFAULT for a date whose time nobody has chosen, not a rewrite: an existing
@@ -834,7 +835,7 @@
      * `due_m=`/`due_t=` date arrives with no time — that contract still means "the course's
      * deadline hour", which is exactly what it always meant.
      */
-    const DUE_TIME_BY_COURSE = { 'phys-215': '17:59' };
+    const DUE_TIME_BY_COURSE = {};
     const FALLBACK_DUE_TIME = '23:59';
     const defaultDueTime = () => DUE_TIME_BY_COURSE[ctx.currentCourseCode] || FALLBACK_DUE_TIME;
     const dueDatePart = (v) => String(v || '').slice(0, 10);

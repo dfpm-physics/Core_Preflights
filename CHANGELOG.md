@@ -8,6 +8,39 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-06 — Casey via Claude
+
+### Both courses now use a 2359 preflight deadline (215 moved back from 1759)
+
+Physics 215's directors had set the preflight deadline to **1759** on 2026-07-29; it is now **2359**
+(`23:59:59` America/Denver), matching Physics 110. Both courses wanted the same "right before
+midnight" deadline, so the two have converged and the per-course override is gone. This reverses the
+2026-07-29 decision by design, at the course director's request.
+
+**Live DB retimed** — the fall-2026 Physics 215 offering moved 1759 → 2359 across all three storage
+locations (629 `assignment_due_dates` section rows, 37 `assignment_offerings.due_at`, 74
+`due_by_day` jsonb entries). The Physics 215 **training** offering was deliberately left at 1759.
+While in there, Physics 110 was normalized to a single instant: 36 `assignment_offerings.due_at`
+rows sat at `23:59:00` (from the builder's `23, 59`) against `23:59:59` everywhere else, so a section
+falling back to the offering deadline got `:00`; all now `23:59:59`. Read-back verified: 110 and 215
+fall-2026 uniformly `23:59:59`, training untouched.
+
+- **Retime tooling:** the change was run through a stdlib-REST equivalent of
+  `scripts/fall2026/set_due_time.py` (same three-location, DST-aware, keep-local-date logic),
+  because the `prep_app_*` DB credentials the canonical psycopg2 script needs were not on the
+  operating machine. Dry-run-first, idempotent, read-back-verified. **Not committed** — the canonical
+  script remains the tool of record; this was a stopgap for a credential-less machine.
+- **Code kept in step so the DB change does not revert** (the deadline hour is hardcoded in the three
+  places CORE.md §2 enumerates): `DUE_TIME_BY_COURSE` in `site/faculty/lessons.html` is now `{}` (both
+  courses take the `23:59` fallback); `DUE_TIME` in `build_fall_preflights.py` is `(23, 59, 59)`; the
+  110 builder's `due_utc` writes `23, 59, 59` (not `23, 59`) so a rebuild keeps the normalized instant.
+- **Docs updated:** CORE.md §2 (the policy narrative), `SYSTEM_GUIDE.md`, and the student and
+  instructor help pages that quoted "1759 for Physics 215"; `DOC-SOURCES.json` note + reviewed dates.
+
+**Verification note:** the DB retime is verified by REST read-back. The `lessons.html` default is a
+JS constant change not exercised in a browser this session; it only affects the time box for a *new*
+assignment, since an existing deadline reloads its saved value.
+
 ## 2026-08-04 — Matthew Recker via Claude
 
 ### An interaction-only lesson offered the free response it had just taken away

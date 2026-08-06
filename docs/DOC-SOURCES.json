@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-08-04",
+  "updated": "2026-08-06",
   "_comment": [
     "Dependency index for documents that MUST STAY CURRENT. Each entry names the authoritative",
     "sources a document was derived from, and the date it was last checked against them.",
@@ -20,7 +20,7 @@
       "doc": "site/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-08-04",
+      "reviewed": "2026-08-06",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -33,13 +33,13 @@
         "site/js/schema.js",
         "site/js/student-data.js"
       ],
-      "note": "Sign-in model and roster/auth rules from PROJECT.md; the night-before due date rule from CORE.md section 2, whose HOUR is per-course policy (1759 phys-215, 2359 phys-110) — if a course changes it, this page is wrong; what the Lessons and Dashboard pages actually show from the student modules. The release window became a source on 2026-08-04: schema.js LOOKAHEAD_DAYS is the number this page quotes to students, so changing it makes the page wrong the same day."
+      "note": "Sign-in model and roster/auth rules from PROJECT.md; the night-before due date rule from CORE.md section 2, whose HOUR is per-course policy (2359 for both phys-215 and phys-110 as of 2026-08-06) — if a course changes it, this page is wrong; what the Lessons and Dashboard pages actually show from the student modules. The release window became a source on 2026-08-04: schema.js LOOKAHEAD_DAYS is the number this page quotes to students, so changing it makes the page wrong the same day."
     },
     {
       "doc": "site/help/ai-and-your-work.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-08-01",
+      "reviewed": "2026-08-06",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -53,7 +53,7 @@
       "doc": "site/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-08-04",
+      "reviewed": "2026-08-06",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -70,7 +70,7 @@
       "doc": "site/help/director-ai-rules.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-01",
+      "reviewed": "2026-08-06",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -85,7 +85,7 @@
       "doc": "site/help/admin-system-operations.md",
       "kind": "help",
       "tier": "admin",
-      "reviewed": "2026-08-01",
+      "reviewed": "2026-08-06",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -108,7 +108,7 @@
       "doc": "docs/operations/SYSTEM_GUIDE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-01",
+      "reviewed": "2026-08-06",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -123,7 +123,7 @@
       "doc": "docs/operations/PREP-V2-CUTOVER.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-01",
+      "reviewed": "2026-08-06",
       "sources": [
         "supabase/admin/app_schema_bootstrap.sql",
         "scripts/app_migration/migrate_public_to_app.py",
@@ -137,7 +137,7 @@
       "doc": ".ai/skills/docs-author/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-08-01",
+      "reviewed": "2026-08-06",
       "sources": [
         "site/help/README.md",
         "site/js/help.js",
@@ -150,7 +150,7 @@
       "doc": "site/help/director-course-structure.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-04",
+      "reviewed": "2026-08-06",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/003_term_calendar.sql",

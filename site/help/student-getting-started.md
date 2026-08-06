@@ -54,8 +54,8 @@ may occasionally see something further out.
 Answer every question and select **Submit**. You can reopen and change your answers until the
 deadline; after the deadline the form locks.
 
-Preflights are due **the night before the lesson**, at the time your course sets — **1759 for
-Physics 215**, **2359 for Physics 110**. The date and time on the assignment itself are the ones
+Preflights are due **the night before the lesson**, at **2359** (11:59 PM) — just before midnight,
+for both Physics 215 and Physics 110. The date and time on the assignment itself are the ones
 that count: they are your own section's deadline, and M-day and T-day sections do not share one.
 
 ## Assignments that offer a choice

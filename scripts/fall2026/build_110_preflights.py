@@ -106,9 +106,13 @@ LESSON11_PAGES = "276-283"
 
 # ----------------------------------------------------------------------------
 def due_utc(date_str):
-    """'Aug 9' -> ISO UTC for 2359 America/Denver on that date (the PF is already due then)."""
+    """'Aug 9' -> ISO UTC for 2359 America/Denver on that date (the PF is already due then).
+
+    23:59:59, not 23:59:00 — the whole term (both courses) was normalized to :59 on 2026-08-06 so
+    every deadline is one instant right before midnight; a rebuild must not reintroduce the :00 split.
+    """
     d = datetime.strptime(f"{date_str} {YEAR}", "%b %d %Y")
-    local = datetime(d.year, d.month, d.day, 23, 59, tzinfo=DENVER)
+    local = datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=DENVER)
     return local.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
 

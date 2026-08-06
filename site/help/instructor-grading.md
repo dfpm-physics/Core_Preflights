@@ -204,7 +204,7 @@ back rather than correct an error, that is your director's call — they revoke 
 the record with their reason attached.
 
 Otherwise each section's deadline falls the night before that section meets, at the hour your
-course director has set — **1759 for Physics 215, 2359 for Physics 110** — and is resolved in three
+course director has set — **2359 for both Physics 215 and Physics 110** — and is resolved in three
 steps. The assignment carries a deadline **for each meeting day** — an M-day date and a T-day date
 — and a section takes the one matching the days it meets. A section may also be given its own
 explicit deadline on the assignment, which overrides the day's; that is the exception, for

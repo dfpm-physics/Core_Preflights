@@ -57,12 +57,12 @@ DOCX_PATH = os.path.join(_preflights_dir(), "Physics215_Preflight_Questions_v12.
 DENVER = ZoneInfo("America/Denver")
 
 # The deadline hour is COURSE POLICY, not a system constant, and this builder is Physics 215's.
-# Its directors set 1759 on 2026-07-29 — before the duty day ends rather than late at night. The
-# 2359 this used to carry survives in build_110_preflights.py, which is a different course with a
-# different director. Two matching decisions live elsewhere and must move together if this does:
-# `DUE_TIME_BY_COURSE` in site/faculty/lessons.html (what a NEW assignment defaults to) and
-# scripts/fall2026/set_due_time.py (what retimed the term that this built).
-DUE_TIME = (17, 59, 59)   # (hour, minute, second) America/Denver
+# Its directors set 1759 on 2026-07-29, then moved it back to 2359 on 2026-08-06 — both courses now
+# want the same "right before midnight" deadline, so 215 and 110 have converged. Two matching
+# decisions live elsewhere and must move together if this does: `DUE_TIME_BY_COURSE` in
+# site/faculty/lessons.html (what a NEW assignment defaults to) and scripts/fall2026/set_due_time.py
+# (the retimer that moved the already-built term).
+DUE_TIME = (23, 59, 59)   # (hour, minute, second) America/Denver
 
 # ----------------------------------------------------------------------------
 # Syllabus schedule (p. 11). lesson_number -> (topic, M-day, T-day, is_lab).

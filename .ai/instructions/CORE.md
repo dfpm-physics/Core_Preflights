@@ -140,22 +140,26 @@ Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
   (see `supabase/admin/`).
 - **Timezone:** due dates are computed the night before a lesson in **America/Denver** and stored
   as UTC (DST-aware). Reuse the `zoneinfo` helpers in `scripts/fall2026/build_fall_preflights.py`.
-- **The deadline HOUR is course policy, not a system constant.** *(Changed 2026-07-29 — it was a
-  flat "2359" until then, and code and docs treated it as universal.)* **Physics 215 is 1759**, set
-  by its course directors; **Physics 110 is 2359**. Nothing asked for one answer across both, and
-  there is nowhere to store a per-course setting — no table under `app` carries course
-  configuration and DDL is sealed (§0) — so the policy is hardcoded in **three places that must
-  move together**:
+- **The deadline HOUR is course policy, not a system constant.** *(History: a flat "2359" until
+  2026-07-29, when Physics 215's directors set it to 1759; moved back to 2359 on 2026-08-06 — both
+  courses now want the same "right before midnight" deadline.)* **Both Physics 215 and Physics 110
+  are 2359** (`23:59:59` America/Denver — the whole seconds field is `:59`, not `:00`, so every
+  deadline is one instant). The hour is still a per-course decision and could diverge again; there
+  is nowhere to store a per-course setting — no table under `app` carries course configuration and
+  DDL is sealed (§0) — so the policy is hardcoded in **three places that must move together**:
   - `DUE_TIME_BY_COURSE` in `site/faculty/lessons.html` — what a NEW assignment's time box
-    defaults to, and what a bare-date prefill link resolves to. An EXISTING deadline is reloaded
-    from `due_by_day` and keeps whatever it was saved with, so this default never rewrites.
-  - `DUE_TIME` in `scripts/fall2026/build_fall_preflights.py` (phys-215) and the `23, 59` in
-    `build_110_preflights.py` (phys-110) — what a term build writes.
+    defaults to, and what a bare-date prefill link resolves to. It is now **empty** (both courses
+    take the `23:59` fallback); a course wanting a different hour adds a line. An EXISTING deadline
+    is reloaded from `due_by_day` and keeps whatever it was saved with, so this default never rewrites.
+  - `DUE_TIME = (23, 59, 59)` in `scripts/fall2026/build_fall_preflights.py` (phys-215) and the
+    `23, 59, 59` in `build_110_preflights.py` (phys-110) — what a term build writes.
   - `scripts/fall2026/set_due_time.py` — the retimer for a course that has already been built. It
     rewrites all three storage locations (`assignment_due_dates.due_at`,
-    `assignment_offerings.due_at`, `assignment_offerings.due_by_day`) and is idempotent.
+    `assignment_offerings.due_at`, `assignment_offerings.due_by_day`) and is idempotent. *(The
+    2026-08-06 move was run through a REST equivalent of this script because the `prep_app_*` DB
+    creds were not on the operating machine; same three-location, DST-aware, keep-local-date logic.)*
 
-  If a third course ever wants a third answer, add a line. If that map reaches four or five, it has
+  If a course ever wants a different answer, add a line. If that map reaches four or five, it has
   earned a column and the unseal is worth asking for.
 - **Publishing an assignment is not releasing it.** *(Added 2026-08-04.)* A published offering
   appears to a student only in the **7 days before that student's own deadline**

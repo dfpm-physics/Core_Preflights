@@ -416,9 +416,9 @@ file also marks the **modified-SOC** days, on which afternoon sections start an 
 changes when class meets and never moves a deadline, but it is worth knowing when you look at a week
 that seems oddly shaped. CORE.md §2 carries the full note.
 
-The time box starts on **your course's deadline hour** — 1759 for Physics 215, 2359 for Physics 110
-— and an assignment that already has a deadline reloads whatever it was saved with, so the default
-only applies to a date nobody has timed yet. That hour is course policy set by the course director,
+The time box starts on **your course's deadline hour** — 2359 for both Physics 215 and Physics 110
+(converged 2026-08-06; 215 was briefly 1759) — and an assignment that already has a deadline reloads
+whatever it was saved with, so the default only applies to a date nobody has timed yet. That hour is course policy set by the course director,
 hardcoded in three places that must move together; CORE.md §2 names them. To change it for a whole
 term that is already built, use `scripts/fall2026/set_due_time.py` rather than editing 37 lessons by
 hand — it rewrites all three storage locations, which is what stops the editor putting the old time
