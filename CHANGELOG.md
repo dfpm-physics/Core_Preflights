@@ -69,12 +69,65 @@ page that looks like it is loading, and one line in a console nobody has open.
   nothing, while the list cannot appear unless the module parsed, the session carried, and the
   bucket policy admitted the account.
 
+### The detail header was using `.lesson-head` without the container it is built for
+
+Reported after the fix above, from a screenshot: the topics badge sat under the title at the left
+instead of beside it at the right, and the tinted panel overhung the page on both sides. Two causes,
+and the previous entry's `.den` fix had addressed neither — it made the badge render correctly as a
+badge, in the wrong place.
+
+- **`.lesson-head` is a block, not a flex row.** The flex row is `.lh-top`, and this page was not
+  using it, so no amount of styling could put the badge beside the title — it stacked underneath.
+  The header now uses the same `.lh-top` / `.lh-sub` structure report.html uses, with `.grow` on
+  the title and flag bar.
+- **Its `margin: -24px -24px 24px` is an edge-bleed measured against a 24px-padded container.**
+  report.html — the only other user — wraps it in `.report-rollup`, which is exactly that. Here it
+  sat straight in `.page-wide`, whose padding is 20px, so the tint overhung the page by 4px on each
+  side and pulled its top edge up over the back button. A new `.al-headcard` makes it a standalone
+  card instead: no bleed, closed radius, a full border where `.lesson-head` has only
+  `border-bottom`.
+
+Verified with twelve geometry assertions in real Chrome against the live stylesheet: the card is
+inside the page box on both edges, below the back button, left-aligned with the columns under it;
+the badge is on the title's line, to its right, pushed to the header edge. None of this is visible
+to a syntax check or a unit test — the page renders either way, only the boxes are wrong.
+
+### Download the .jsx from the Artifacts page
+
+Asked for directly: *"I can fetch the jsx but I need to be able to download it so I can send it to
+claude.ai to generate the public artifact."* That is step 2 of
+[`PUBLISH-ARTIFACT.md`](docs/operations/PUBLISH-ARTIFACT.md), and the `.jsx` is gitignored, so a
+director whose machine never ran `sync_artifacts.py pull` had no copy to attach and no way to get
+one from the site.
+
+The Source card now offers **Download .jsx** beside **Read it here** (renamed from "Load the JSX",
+which described the mechanism rather than what it gets you). It fetches once and both buttons share
+the bytes. The filename comes from the build record and is never re-derived — the slug inside the
+file is the artifact's identity (contract §3.2), and this page exists partly to stop that being
+retyped. Served as `text/plain`, not `text/jsx`: no browser knows the latter, and an unknown type is
+what makes Chrome ask "keep or discard?" on an ordinary download. `PUBLISH-ARTIFACT.md` §1 now
+points at it for the no-local-copy case.
+
+`triggerDownload` moved from `faculty-admin.js` to `util.js` to make that possible. Nothing about
+Blob-to-download is about course administration, and importing the admin data layer from the
+Artifacts page would have coupled two unrelated pages. Its two existing callers are both in
+`admin.html` (gradebook CSV, JSON backup) and now import it from `util.js` directly.
+
 **Verification.** The page loads in real Chrome against a real session: 29 rows, no console errors,
-no spinner. Full faculty walk 9/9 clean including the new entry. `run.mjs` 449 passed / 4 failed —
-the same four pre-existing `test-nav.mjs` "Test views" failures, unrelated, plus `test-isolation`
-still throwing at the test cadet's sign-in (both confirmed pre-existing earlier today). The six
-layout geometry assertions from the previous entry still pass. Line endings checked against an
-untouched sibling — both LF, no rewrite.
+no spinner. The detail view passes all twelve header-and-download assertions, including a real
+download landing on disk — `phys310_preflight_binding_energy_and_stability.jsx`, 122,847 bytes, the
+whole artifact rather than an error page. Full faculty walk 9/9 clean including the new entry.
+`run.mjs` 449 passed / 4 failed — the same four pre-existing `test-nav.mjs` "Test views" failures,
+unrelated, plus `test-isolation` still throwing at the test cadet's sign-in (both confirmed
+pre-existing earlier today). The six list-view layout assertions from the previous entry still pass.
+Line endings checked against an untouched sibling — both LF, no rewrite.
+
+**Not fixed, and visible in the same screenshot:** the "Built from" panel renders its values as
+literal Markdown — `Murray corpus **§2.7** Binding Energy` with the asterisks showing, and backticks
+around `STATUS: PENDING`. The text comes verbatim from `BUILD-LOG.md`, which is Markdown, and the
+page escapes it as plain text. There is no inline-Markdown helper anywhere in `site/js/`, so this
+wants a small shared one rather than a fourth private regex; left for a decision rather than
+invented here.
 
 ---
 

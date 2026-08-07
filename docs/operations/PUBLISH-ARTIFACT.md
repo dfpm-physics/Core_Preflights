@@ -18,6 +18,12 @@ nothing.
 
 ## 1. Verify the file before you hand it over
 
+**No local copy?** The `.jsx` is gitignored, so a fresh clone has none. Either run
+`python scripts/artifacts/sync_artifacts.py pull`, or open the faculty **Artifacts** page, pick the
+lesson, and use **Download .jsx** on the Source card — same bytes, straight from the
+`artifact-sources` bucket, named the way the build record names it. The page is the better route
+when you only want one file and are about to attach it to a session anyway.
+
 From the repository root, with the artifact path in `A`:
 
 ```bash
