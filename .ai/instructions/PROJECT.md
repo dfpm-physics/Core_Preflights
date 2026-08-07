@@ -412,6 +412,64 @@ Use these when writing tailored yellow (`warn`) feedback. Each pattern includes 
 | `ambiguous-direction` | Mentions two forces but doesn't say which direction each acts | Force from left charge points right (+x), force from right charge points left (−x); net = algebraic sum |
 | *(upgrade to green)* | Explicitly says "as vectors" or "vector sum" AND gives direction reasoning | Promote to `full` credit with empty feedback |
 
+## The artifact builder (`_builder/`)
+
+*Merged in 2026-08-07 from `ranador/Socratic-Artifact-Builder`, now archived. Decision record:
+[`docs/decisions/BUILDER-MERGE.md`](../../docs/decisions/BUILDER-MERGE.md).*
+
+PREP consumes Claude artifacts; `_builder/` is where they are made. It is a **build-input store,
+not a runtime** — nothing in it serves traffic. It holds the material a Claude session reads in
+order to emit a React artifact, plus one script that specializes that material per course.
+
+| Component | Owns |
+|---|---|
+| `_builder/preflight-kit/` | the shared build system — the `preflight-factory-v2` skill, the frozen contract snapshots, the verbatim sources, `THEME_REFERENCE.md`. **Hash-locked** by `MANIFEST.sha256`, seven files, checked by `tools/verify.py` (22 checks) |
+| `_builder/courses/<id>/COURSE_PROFILE.md` | one course's identity, vocabulary, endpoints, session shape, slug namespace. **The only file edited per course** |
+| `_builder/preflight-kit/tools/localize.py` | bakes a profile into `courses/<id>/build/` (gitignored, wiped each run) |
+| a Claude Project, per course | builds artifacts; holds the localized kit in project knowledge. **Uploaded by hand and unversioned** — nothing checks that project knowledge matches this repo |
+| a published artifact | one lesson's ~10-minute cadet conversation; emits `r` and `d` to `site/student/interaction-submit.html` |
+
+**A lesson flows:** attach the lesson PDF in the course's Claude Project → the skill reads the
+schedule for that lesson's topic → emits a preview for approval → emits a `.jsx` → a human
+publishes it from a Claude session → a director registers it via the prefill link → cadets take
+the session → the artifact submits `r` and `d` as a URL hash.
+
+**Current holdings: 46 artifacts, 30 published, 0 registered.** phys-215 has 29 (all published);
+phys-310 has 17 (one published). *Published is not registered, and the gap is silent* — until a
+lesson row exists with the matching slug, the artifact is a live URL no cadet can reach through
+the course site.
+
+**Where things are:**
+- `.jsx` source → the private `artifact-sources` Storage bucket (CORE.md §3). Not in git.
+- `BUILD-LOG.md`, `REVIEW-NOTES.json`, profiles, schedules, `MURRAY-GROUNDING.md` → in git, under
+  `_builder/`, which Pages does not serve.
+- `_builder/CHANGELOG.md` → the builder's own history, 2026-07-30 to 2026-08-06.
+
+**Three rules that govern writes here:**
+- **The kit is never edited per course.** A per-course edit forks it for every course at once.
+  All variation goes in a profile. The one exception already taken: `tools/` is authored rather
+  than hash-locked, so a genuine bug fix there is legitimate and gets a CHANGELOG entry.
+- **Publishing is the irreversible step.** Slug, objective keys, submit URL and model candidates
+  are baked in at publish time. A rebuild mints a **new 8-hex slug** (contract §3.2) and therefore
+  registers as a **new lesson row** — applying a review note to a published artifact is a
+  republish and a re-registration, never an in-place edit.
+- **Effort is the grade, not correctness.** A cadet who works through the whole conversation and
+  understands nothing earns full marks. Everything diagnostic stays diagnostic.
+
+### Sharp edges the builder already paid for
+
+| The trap | What happens | How to avoid it |
+|---|---|---|
+| **`node --check` silently passes JSX** | It reports **exit 0** on an invalid `.jsx` — Node auto-detects any file containing `import`/`export` as ESM and does not reject JSX on that path. A two-line JSX file with no `import` correctly fails; add one `import` and the same JSX passes | Do not use it. **Publishing is the only JSX parser this project has.** `check_artifact.py` is explicitly *not* a syntax check, however green — it checks NUL bytes, delimiter balance, contract strings and per-course constants |
+| **A Python text-mode read silently converts CRLF to LF**, so a three-line edit lands as a whole-file rewrite | `open(p, encoding="utf-8").read()` applies universal newlines. A 12-string substitution across three artifacts produced **6,327 insertions and 6,327 deletions** — every line of every file, with the three real changes invisible inside it. Nothing errors | **Read and write bytes** for any file you did not create. Then **read `git diff --stat` before staging**: an edit whose diff is the size of the file is a line-ending rewrite until proven otherwise |
+| **OpenStax lesson-PDF equations are vector paths, and every text extractor drops them silently** | `pdftotext -layout` and `pypdf` both return complete-*looking* prose with every equation simply absent — "We can rewrite this as", blank, "5.3". No error, no placeholder. Confirmed: the page carries **1,083 Bézier operators** and no math font | **Rasterize and read the pages.** `pymupdf`: `pg.get_pixmap(dpi=150).save(...)`, then read the PNGs. An agent that trusts the text layer writes a confident, equation-free grounding for a lesson that is *about* an equation |
+| **A hand transcription between a source and a load-bearing string corrupted a published artifact's identity** | phys-310's schedule was hand-transcribed and dropped one word from lesson 2's topic. The published slug is `phys310-atoms-and-nuclei-83022f32`, minted from a word that was never in the source. `check_artifact.py` validates a slug's *shape*, never its *derivation* | Register every transcription against its source in `docs/DOC-SOURCES.json`. **Never type a slug** — read it out of the artifact |
+| **Twelve published artifacts disagree with their own pacing constant** | Each artifact states its per-topic budget in **six** places that must agree; in twelve of them one disagrees. The runtime effect is small; **the build risk is not** — a new artifact rebased off one of the twelve inherits the wrong string with nothing detecting it | **Rebase off lessons 21+ or 2/3, never off 4–20.** Do not fix the twelve without asking: all are published, so twelve fixes are twelve new lesson rows |
+| **`git add -A` commits the human's edits under the agent's message** | A deletion made in the IDE while an agent was mid-task got staged and committed under a message asserting the file was still present | **Read `git status` before staging and account for every line.** Stage explicit paths |
+| **A confidence flag on the phys-310 corpus can mean five different things** | Across sixteen builds: invisible, a flag on the *subject*, packaging only, a genuine content caveat, and one that *raises* confidence | **Read the Flags block, never the confidence word.** A zero cross-check is not the same as unsupported — check for internal corroboration first |
+
+---
+
 ## Operating rules & safety → CORE.md
 
 The non-negotiable rules that used to be restated here live once in [`CORE.md`](CORE.md), not in this

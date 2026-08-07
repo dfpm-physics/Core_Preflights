@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-08-06",
+  "updated": "2026-08-07",
   "_comment": [
     "Dependency index for documents that MUST STAY CURRENT. Each entry names the authoritative",
     "sources a document was derived from, and the date it was last checked against them.",
@@ -210,7 +210,115 @@
         "supabase/functions/create-instructor/index.ts",
         "site/js/faculty-admin.js"
       ],
-      "why": "The only documentation of the in-person password-reset workflow, which replaced email recovery on 2026-07-21, and of the registrar roster-export format. If reset-student-password's authorization or the importer's required columns change, this page misdirects an instructor standing in front of a locked-out cadet. Both pages are sources since 2026-07-23 (P1.9): reset lives on Roster and is an instructor action, import and provisioning live on Enrollment and are a director's — the doc sends the reader to one or the other by name, so a move between them makes it wrong. The three staff-password sources were added 2026-07-27, when a derivable default (last name + 1234) made a delegated staff reset possible: this page is now the only place the rule is written down for a human, and the derivation itself has three code copies that must agree."
+      "note": "The only documentation of the in-person password-reset workflow, which replaced email recovery on 2026-07-21, and of the registrar roster-export format. If reset-student-password's authorization or the importer's required columns change, this page misdirects an instructor standing in front of a locked-out cadet. Both pages are sources since 2026-07-23 (P1.9): reset lives on Roster and is an instructor action, import and provisioning live on Enrollment and are a director's — the doc sends the reader to one or the other by name, so a move between them makes it wrong. The three staff-password sources were added 2026-07-27, when a derivable default (last name + 1234) made a delegated staff reset possible: this page is now the only place the rule is written down for a human, and the derivation itself has three code copies that must agree."
+    },
+    {
+      "doc": ".ai/patterns/README.md",
+      "kind": "reference",
+      "tier": null,
+      "reviewed": "2026-08-07",
+      "sources": [
+        ".ai/instructions/CORE.md",
+        ".ai/README.md"
+      ],
+      "note": "Defines what a per-language pattern file holds and why these are references rather than skills. CORE.md section 2 is where the read-before-you-code rule lives, and `.ai/README.md` carries the workspace map this directory was added to -- if either moves, this page describes a layout that no longer exists."
+    },
+    {
+      "doc": ".ai/patterns/python.md",
+      "kind": "reference",
+      "tier": null,
+      "reviewed": "2026-08-07",
+      "sources": [
+        ".ai/instructions/CORE.md",
+        ".ai/instructions/PROJECT.md",
+        ".ai/patterns/README.md"
+      ],
+      "note": "Encodes the project's Python version, dependency policy, and the fact that no formatter, linter, type checker, or test framework is installed. The dependency policy is the load-bearing one: CORE.md section 2 decides whether the project is standard-library-only, and an agent reading a stale answer adds an import that breaks a script for the next operator. The `cpp.md` entry was removed at bootstrap along with the file -- this project does not write C++."
+    },
+    {
+      "doc": ".ai/skills/integration-package/SKILL.md",
+      "kind": "skill",
+      "tier": null,
+      "reviewed": "2026-08-07",
+      "sources": [
+        ".ai/instructions/CORE.md"
+      ],
+      "note": "Packages work for handoff under the operating contract. CORE section 5 governs git, publish and CHANGELOG, which is the whole surface this skill automates."
+    },
+    {
+      "doc": ".ai/skills/safe-change/SKILL.md",
+      "kind": "skill",
+      "tier": null,
+      "reviewed": "2026-08-07",
+      "sources": [
+        ".ai/instructions/CORE.md"
+      ],
+      "note": "The procedure for editing the instruction contracts themselves. CORE.md is both its authority and its most common subject, so a change to CORE's rules changes what a safe change is."
+    },
+    {
+      "doc": ".ai/skills/skill-author/SKILL.md",
+      "kind": "skill",
+      "tier": null,
+      "reviewed": "2026-08-07",
+      "sources": [
+        ".ai/instructions/CORE.md",
+        ".ai/README.md"
+      ],
+      "note": "Defines how skills are written and where they live. CORE.md sets the operating rules every skill must respect and `.ai/README.md` defines the directory layout it writes into."
+    },
+    {
+      "doc": "_builder/courses/phys-310/phys310_fall2026_schedule.md",
+      "kind": "reference",
+      "tier": null,
+      "reviewed": "2026-08-07",
+      "sources": [
+        "_builder/courses/phys-310/2.  PHYS 310 Schedule - Fall 2026 (28 July 2026).xlsx"
+      ],
+      "note": "A hand transcription of the workbook's Schedule sheet, and the file the build skill actually reads for a lesson's topic and reading. Added 2026-08-05 after the transcription went stale in silence: recker updated the workbook, five lessons were renumbered and lesson 2's topic changed from 'Atoms and Nuclei' to 'Energy, Atoms, and Nuclei', and the checker reported every indexed document current because this one was not indexed. The topic string is what this course mints its slug, filename, and component name from, so a stale transcription here does not produce a cosmetic error -- it produces an artifact whose identity disagrees with the schedule, discoverable only by reading both. The workbook is binary, so the checker can only compare mtimes; that is enough, because any workbook edit at all warrants re-reading the sheet."
+    },
+    {
+      "doc": "docs/operations/PREFILL-LINK.md",
+      "kind": "operations",
+      "tier": null,
+      "reviewed": "2026-08-07",
+      "sources": [
+        "_builder/preflight-kit/contracts/INTERACTION-PREFILL-LINK.md",
+        "_builder/courses/phys-310/COURSE_PROFILE.md",
+        "_builder/courses/phys-215/COURSE_PROFILE.md"
+      ],
+      "note": "Restates the prefill-link procedure as a runbook: the base URL, the parameter values, and the slug-match guard. The contract is frozen and authoritative -- if it moves, this page is wrong. BOTH profiles are sources because the two courses deliberately differ on the slug shape (phys-310 carries no lesson number, phys-215 requires one) and on course_id, and this page tells the operator to verify a slug against exactly that convention -- so a slug-rule change in EITHER profile makes this page actively harmful, not merely stale. Added phys-215 on 2026-08-04 when the second course landed."
+    },
+    {
+      "doc": "docs/operations/PUBLISH-ARTIFACT.md",
+      "kind": "operations",
+      "tier": null,
+      "reviewed": "2026-08-07",
+      "sources": [
+        "_builder/preflight-kit/contracts/INTERACTION-DATA-CONTRACT.md",
+        "_builder/preflight-kit/skill/preflight-factory-v2/SKILL.md",
+        "scripts/artifacts/check_artifact.py"
+      ],
+      "note": "The publish runbook and the verbatim-reproduction prompt it hands to the publishing session. The prompt enumerates what must not be edited, so it goes wrong the moment the contract's slug rule (section 3.2), endpoint, or codec changes, or the skill's artifact structure does. It also tells the operator to run check_artifact.py and compare a line count -- if that script's invocation or output changes, step 1 and step 3 stop matching what the operator sees."
+    },
+    {
+      "doc": "_builder/preflight-kit/contracts/INTERACTION-DATA-CONTRACT.md",
+      "kind": "reference",
+      "tier": null,
+      "reviewed": "2026-08-07",
+      "sources": [
+        "docs/contracts/INTERACTION-DATA-CONTRACT.md"
+      ],
+      "note": "A FROZEN SNAPSHOT of PREP's own contract, taken 2026-07-30 when preflight-kit was extracted from this project, and hash-locked by _builder/preflight-kit/MANIFEST.sha256. It is deliberately a second copy: the kit is portable and self-contained, and tools/localize.py and tools/verify.py both operate on these files. Registering it here is the mechanism that stops the duplication being silent — a flag means PREP's authoritative copy moved, and the decision is whether that is a schema:2 event under _builder/preflight-kit/PROVENANCE.md. As of the import the two ALREADY differ (data contract by 1 line, prefill link by 35); PREP's is newer, and re-syncing the kit is deliberately not part of the import. Do not 'fix' by editing the kit copy alone — that breaks MANIFEST.sha256."
+    },
+    {
+      "doc": "_builder/preflight-kit/contracts/INTERACTION-PREFILL-LINK.md",
+      "kind": "reference",
+      "tier": null,
+      "reviewed": "2026-08-07",
+      "sources": [
+        "docs/contracts/INTERACTION-PREFILL-LINK.md"
+      ],
+      "note": "A FROZEN SNAPSHOT of PREP's own contract, taken 2026-07-30 when preflight-kit was extracted from this project, and hash-locked by _builder/preflight-kit/MANIFEST.sha256. It is deliberately a second copy: the kit is portable and self-contained, and tools/localize.py and tools/verify.py both operate on these files. Registering it here is the mechanism that stops the duplication being silent — a flag means PREP's authoritative copy moved, and the decision is whether that is a schema:2 event under _builder/preflight-kit/PROVENANCE.md. As of the import the two ALREADY differ (data contract by 1 line, prefill link by 35); PREP's is newer, and re-syncing the kit is deliberately not part of the import. Do not 'fix' by editing the kit copy alone — that breaks MANIFEST.sha256."
     }
   ]
 }

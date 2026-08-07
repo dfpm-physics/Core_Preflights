@@ -77,6 +77,15 @@ that ended it.)*
   change requires a human to run `ALTER ROLE prep_app_owner LOGIN;` as `postgres`, and to re-seal
   afterwards. Treat an unseal as a coordination event under the gate below.
 
+**The builder came home on 2026-08-07, and it did NOT bring its contract with it.** `_builder/`
+was a separate repository (`ranador/Socratic-Artifact-Builder`) whose own CORE.md opened *"This
+project has no shared state — no production database, no live site,"* and granted a standing
+authorization to commit and push freely once three checks passed. **Neither survives the merge.**
+Every rule in this file now governs builder work too: the coordination gate below, the CHANGELOG
+requirement, and push-only-when-asked. An artifact build touches no database, but it lands in a
+repository where `main` is live, so the difference that mattered has gone.
+Reasoning: [`docs/decisions/BUILDER-MERGE.md`](../../docs/decisions/BUILDER-MERGE.md).
+
 **Coordination gate — the CHANGELOG is an audit trail, not a lock.** Before any live DB mutation or
 push to `main`:
 
@@ -135,6 +144,29 @@ Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
   directly before concluding it is absent, or restart the session.
 - **Verify UI changes in a browser:** `python -m http.server 8000` from the repo root, open
   `http://localhost:8000/site/`. Do not add a build step.
+- **GitHub Pages serves this repository with default Jekyll, which excludes `_`-prefixed paths.
+  That exclusion is the access control on `_archive/` and `_builder/`, and it is one empty file
+  away from being switched off.** Verified 2026-08-07:
+  `…/docs/contracts/INTERACTION-PREFILL-LINK.md` serves the real document;
+  `…/_archive/artifact-receiver-v1/` returns 404. So `docs/`, `scripts/`, `supabase/` and
+  `tests/` are **already publicly readable** — that is the existing state, and nothing secret may
+  go in them. **Never add a `.nojekyll` file (or a `_config.yml` that re-includes underscore
+  paths) without moving `_archive/` and `_builder/` first.** Doing so would publish every
+  `BUILD-LOG.md`, the 132 KB tutor system prompt, the misconception taxonomies and the worked
+  extension problems, instantly and with nothing reporting it.
+- **Artifact `.jsx` source does not live in the repo.** The 46 built artifacts (~8 MB) live in the
+  private Supabase Storage bucket `artifact-sources`; `_builder/courses/*/artifacts/*.jsx` is a
+  **gitignored local cache** populated by `python scripts/artifacts/sync_artifacts.py pull`. The
+  source is not secret — claude.ai shows an artifact's formatted code behind a Code button — so
+  the reason is history size, not confidentiality. The **build records** are a different matter and
+  are why the bucket is private.
+- **`.gitattributes` marks `_builder/preflight-kit/**` and `_builder/courses/**` as `-text`, and
+  removing either line breaks things invisibly.** `core.autocrlf` is on for this machine; it has
+  already twice corrupted this payload in the source repository — a fresh clone failed 6 of 7
+  `MANIFEST.sha256` hashes, and separately `localize.py`'s ` ```profile ` fence regex stopped
+  matching because CRLF put `\r` before the `\n`. **The working tree looked correct through both.**
+  After any change to how these are stored, clone to a temp directory and run
+  `python _builder/preflight-kit/tools/verify.py` **there**.
 - **Tooling is Python** using only the **standard library** (`urllib`, `json`, `zoneinfo`) against
   the Supabase REST API — see `scripts/`. Heavier DB work uses `psycopg2` in a gitignored `.venv/`
   (see `supabase/admin/`).
@@ -251,6 +283,19 @@ Notes:
   in a URL/query string, or in the CHANGELOG. The anon key in `site/js/config.js` is intentionally public
   (protected by RLS).
 
+**Two Storage buckets, and they are gated differently on purpose:**
+
+| Bucket | Public? | Holds | Read | Write |
+|---|---|---|---|---|
+| `lesson-figures` | **yes** | question/lesson images, referenced by `questions[].figure_url` | anyone | any authenticated instructor |
+| `artifact-sources` | **no** | every built artifact's `.jsx`, its parsed build record, the per-course index, and the review sidecar the Artifacts page writes | `app.is_staff()` | a director of any offering, or a global admin |
+
+Migration `023_artifact_sources_storage.sql`, applied 2026-08-07, with a `_ROLLBACK.sql` beside it.
+**A private bucket needs a policy on `storage.buckets` as well as on `storage.objects`** — that
+table has RLS on with no policies, so the bucket row is otherwise invisible and reads fail as
+`NoSuchBucket`. Note that error is ambiguous: **a wrong request path produces it too**, and the
+correct object route is `/storage/v1/object/<bucket>/<path>`, bucket segment included.
+
 ---
 
 ## 4. Operating procedures (runbooks)
@@ -268,6 +313,9 @@ The canonical domain procedures are agent-neutral Markdown runbooks under `.ai/s
 | `interaction-backfill` | Repair reports missing `report_data` by reconstructing schema-1 from `report_markdown`. Interactive path only — the written path's equivalent is a `preflight-analyze` re-run. |
 | `setup-preflight` | First-time machine setup — writes the config file above. |
 | `docs-author` | Decide whether a concept warrants documentation and which kind, then write it — in-app help docs (`site/help/`) or design docs (`docs/`). Read before adding any `.md` to either. |
+| `safe-change` | **The gated procedure for any change that is hard to undo** — deletes, bulk updates, migrations, publishes, credential rotation, history rewrites. Arrived with the builder 2026-08-07; PREP's equivalent was prose in §0 with no runbook behind it. Read it before the operation, not after. |
+| `skill-author` | Decide whether a procedure warrants a skill, then write or revise it. Read before adding any `SKILL.md`. |
+| `integration-package` | Build, verify, archive or resume a package for an external AI surface that calls into this system — i.e. `.ai/integrations/custom-gpt/`. |
 
 One-off/maintenance scripts live in `scripts/` (e.g. `scripts/fall2026/` Fall build+clean,
 `scripts/training/` disposable training data). All DB-mutating scripts **must be idempotent and

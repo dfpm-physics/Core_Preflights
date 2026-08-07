@@ -26,7 +26,30 @@ pushing obvious instructions taught users to dismiss help entirely), and a doc t
 worse than one that never existed (Write the Docs: *"Consider incorrect documentation to be worse
 than missing documentation"*). Write only what earns its maintenance cost.
 
-**Work in this order. Do not skip Step 1.**
+**Work in this order. Do not skip Step 0 or Step 1.**
+
+---
+
+## Step 0 — Name the reader and the question they arrived with
+
+Before writing anything, answer two questions in one sentence each:
+
+1. **Who is the reader?** Not "instructors" or "students" — a specific person in a specific
+   situation. "A director standing in front of a cadet who cannot sign in." "An instructor
+   opening the Grade tab at 2200 the night before class."
+2. **What question did they arrive with?** In their words, not yours. Nobody arrives asking
+   "how does the offering/activity split work"; they arrive asking "why can't my cadet see
+   this preflight".
+
+**If you cannot name both, stop — you are not ready to route.** Routing is entirely a function
+of those two facts, and a document written without them becomes a description of the
+implementation, which is the failure mode that produces docs nobody reads. Ask the human.
+
+Then confirm the repo can receive a document: `docs/architecture/`, `docs/contracts/`,
+`docs/decisions/` and `docs/operations/` exist, `docs/DOC-SOURCES.json` parses
+(`python scripts/docs/check_doc_sources.py validate`), and `CHANGELOG.md` exists. A document
+dropped into a tree with no taxonomy lands wherever the author guessed, and guessed locations
+are how `docs/` becomes a folder of unsorted files nobody greps.
 
 ---
 
@@ -53,9 +76,15 @@ Two of these overlap and need a hard line:
   operational procedure that references credentials, hostnames, or internal paths *cannot* be a
   help doc at any tier.
 - **Design doc vs. help doc.** A design doc is a **point-in-time record** — it captures reasoning,
-  is archived after the work lands, and is superseded rather than rewritten. A help doc **must be
-  current**; staleness is a bug. If you are tempted to write one document that does both, you have
-  two documents.
+  is archived after the work lands, and is superseded rather than rewritten. This is why ADRs are
+  immutable by convention and carry a status
+  ([Nygard, *Documenting Architecture Decisions*](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)),
+  and it is why `docs/decisions/` and `docs/contracts/` are deliberately absent from
+  `docs/DOC-SOURCES.json` — a staleness flag on a historical record is permanent noise, and a
+  checker that always complains is a checker everybody learns to ignore. A help doc has the
+  opposite contract: it must be current, and staleness is a bug. **If you are tempted to write one
+  document that does both, you have two documents** — the moment the design changes, one half must
+  be rewritten and the other half must not, and no single file can obey both rules.
 
 ### The design-doc gate
 
