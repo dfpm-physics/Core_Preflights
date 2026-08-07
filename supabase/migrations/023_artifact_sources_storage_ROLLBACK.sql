@@ -35,7 +35,12 @@ SELECT count(*) AS objects_remaining
  WHERE bucket_id = 'artifact-sources';
 
 
--- 2) The four policies. Safe to run whether or not they exist.
+-- 2) The five policies. Safe to run whether or not they exist.
+--    Four on storage.objects, and one on storage.buckets — that last one exists because a
+--    PRIVATE bucket's row is otherwise invisible to `authenticated` and every download fails as
+--    "Bucket not found". Dropping it returns storage.buckets to having no policies at all,
+--    which is the state this project was in before migration 023.
+DROP POLICY IF EXISTS "artifact-sources bucket visible to staff" ON storage.buckets;
 DROP POLICY IF EXISTS "artifact-sources staff read"      ON storage.objects;
 DROP POLICY IF EXISTS "artifact-sources director insert"  ON storage.objects;
 DROP POLICY IF EXISTS "artifact-sources director update"  ON storage.objects;

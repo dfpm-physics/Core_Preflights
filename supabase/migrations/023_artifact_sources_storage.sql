@@ -38,6 +38,40 @@ ON CONFLICT (id) DO UPDATE
       allowed_mime_types = EXCLUDED.allowed_mime_types;
 
 
+-- ── Make the bucket ROW visible to staff ────────────────────────────────────
+-- Added 2026-08-07, after the first application of this file.
+--
+-- WHAT WAS OBSERVED: before this policy existed, `GET /storage/v1/bucket/artifact-sources`
+-- answered `{"statusCode":"404","error":"Bucket not found","code":"NoSuchBucket"}` for an
+-- authenticated director, for a bucket that demonstrably existed. That endpoint reads
+-- `storage.buckets` as the caller, and on this project that table has RLS ENABLED with ZERO
+-- policies — so the row is invisible to every non-superuser role. `lesson-figures` never
+-- exposed this because it is PUBLIC and its objects are served without the caller ever
+-- resolving the bucket row.
+--
+-- WHAT IS NOT CLAIMED: whether object DOWNLOAD also required this. The failing download that
+-- prompted the investigation turned out to be a malformed probe — the request path omitted the
+-- bucket segment, so storage-api read the first path component as the bucket name and answered
+-- "Bucket not found", which was literally correct. Once the path was corrected, reads, writes
+-- and deletes all succeeded. This policy was in place by then and was not re-tested without it,
+-- so it may be belt-and-braces for the download route. It is kept because `getBucket` and
+-- `listBuckets` are real capabilities a staff page may want, and because the failure mode it
+-- removes is one that names the wrong object.
+--
+-- THE LESSON WORTH KEEPING: `NoSuchBucket` from storage-api means "the bucket you named is not
+-- reachable", and BOTH a wrong path and an RLS denial produce it. Check the path spelling before
+-- concluding it is a policy problem — the correct object route is
+-- `/storage/v1/object/<bucket>/<path>`, bucket segment included.
+--
+-- This policy is strictly ADDITIVE. `storage.buckets` denied everything by having no policy at
+-- all; PostgreSQL policies are permissive and OR together, so one scoped to a single `id` grants
+-- visibility of exactly that row and leaves every other bucket precisely as invisible as before.
+DROP POLICY IF EXISTS "artifact-sources bucket visible to staff" ON storage.buckets;
+CREATE POLICY "artifact-sources bucket visible to staff"
+  ON storage.buckets FOR SELECT TO authenticated
+  USING (id = 'artifact-sources' AND app.is_staff());
+
+
 -- ── Read: any staff member ──────────────────────────────────────────────────
 -- app.is_staff() is SECURITY DEFINER and owned by prep_app_owner, so it reads app.instructors
 -- without the caller holding rights on that table. `authenticated` already has USAGE on schema
@@ -108,9 +142,10 @@ CREATE POLICY "artifact-sources director delete"
 --   FROM storage.buckets WHERE id = 'artifact-sources';
 --     -> one row, public = false, 2097152, {text/plain,application/json}
 --
--- SELECT polname FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
---  WHERE c.relname = 'objects' AND polname LIKE 'artifact-sources%' ORDER BY 1;
---     -> exactly 4 rows: staff read, director insert, director update, director delete
+-- SELECT c.relname, p.polname FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
+--  WHERE p.polname LIKE 'artifact-sources%' ORDER BY 1, 2;
+--     -> 5 rows: 1 on buckets (bucket visible to staff), 4 on objects (staff read,
+--        director insert, director update, director delete)
 --
 -- The live probes that matter are NOT SQL, because a service-role session bypasses RLS and
 -- would pass whatever you wrote. Run them from a browser, per the plan's Step 1 after-test:
