@@ -8,6 +8,88 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-07 — Matthew Recker via Claude
+
+### The artifact builder comes into PREP; artifact sources go to Supabase Storage
+
+PREP consumes Claude artifacts and a separate private repository —
+`ranador/Socratic-Artifact-Builder` — produced them. That split was costing real things. The
+`preflight-kit` was **extracted from this project** on 2026-07-30, so two of its seven hash-locked
+files are copies of PREP's own `docs/contracts/`, and they had already drifted. **46 published
+artifacts** had their slugs and live URLs recorded only in two `BUILD-LOG.md` files this repo could
+not read. Reviewing an objective needed a clone and a terminal, and registering one meant
+transcribing a slug between two repositories — a failure that has already corrupted one published
+artifact's identity.
+
+**The `.jsx` does not enter git.** 46 artifacts come to ~8 MB; committing them would put that in
+every clone's history permanently. They live in a new **private** Storage bucket,
+`artifact-sources`, added by migration `023` (applied 2026-08-07, with a `_ROLLBACK.sql` in the same
+commit). `_builder/courses/*/artifacts/*.jsx` is gitignored and is a local cache that
+`scripts/artifacts/sync_artifacts.py pull` populates. The source is not secret — claude.ai shows an
+artifact's code behind a Code button — so the reason is history size. **The build records are a
+different matter**, and are why the bucket is private: they carry grounding page numbers (CORE.md §6
+— never surfaced to a cadet), the tutor system prompt, misconception taxonomies and worked extension
+problems.
+
+**The tree is `_builder/`, and the underscore is access control rather than style.** GitHub Pages
+serves this repo with default Jekyll, which excludes `_`-prefixed paths. Verified live:
+`…/docs/contracts/INTERACTION-PREFILL-LINK.md` serves the real document, `…/_archive/…` returns 404.
+So `docs/`, `scripts/`, `supabase/` and `tests/` are **already public** — and a top-level `builder/`
+would have published every build log and the 132 KB tutor prompt to the open web. CORE.md §2 now
+records that adding a `.nojekyll` would switch that off for `_archive/` too.
+
+**New: `site/faculty/artifacts.html`** — browse every built artifact and what went into it, review
+its objectives with accept/reject and notes, and register it by pasting the published URL. Linked
+from the **user menu**, not the nav bar: nav.js already argues that the bar cannot keep paying for
+another entry, and this is a reference surface rather than a place teaching happens. Read is gated
+on `app.is_staff()`, writing a review on being a director — both by storage policy, not by the UI.
+
+**The instruction layers were merged rather than chosen between.** `check_doc_sources.py` now runs
+the builder's engine with PREP's `status --write` ported onto it; the merged index went 12 → 22
+entries, two of which register the kit's frozen contract copies against `docs/contracts/` so their
+drift becomes an alarm instead of a silence. `safe-change`, `skill-author` and `integration-package`
+joined the skill tree; `project-bootstrap` and `check_slots.py` deliberately did not, because they
+install the scaffold into a *new* project.
+
+**Five defects were found by verification, not by review:**
+
+- **`storage.buckets` has RLS on with zero policies**, so a PRIVATE bucket's row is invisible and
+  every download fails as `NoSuchBucket`. Making a bucket private is not a one-line change from the
+  migration-019 pattern. Note the error is ambiguous — **a wrong request path produces it too**, and
+  chasing the wrong one cost a round trip here.
+- **Listing a non-existent bucket returns `200 []`, not a 404**, so "list it and see" reports a
+  missing bucket as an empty one. `sync_artifacts.py` now probes `GET /bucket/<id>` explicitly.
+- **`loadReviews` caught every error and returned the empty shape**, so a failed read became
+  `revision: 0`, the save's confirmation compared against that, and a write that had *landed* was
+  reported to the reviewer as lost.
+- **Storage stamps uploads with `max-age=3600`**, so the two objects this page writes could be
+  served an hour stale. They are fetched through a signed URL with `cache: no-store`.
+- **`docs/DOC-SOURCES.json` had an entry using `why` where the schema says `note`** — its rationale
+  had been silently ignored by the old, lenient checker.
+
+**Corrected a stale record inherited from the builder:** its docs said no artifact was registered.
+In fact **phys-215 is 29/29 registered and phys-310 is 1/17**. The library page surfaced that on
+first load.
+
+**Reversal.** Four independent levers, all drilled dry-run before anything was deleted:
+`sync_artifacts.py purge` (deletes only the 97 paths in its own upload manifest, never a prefix
+sweep), `023_..._ROLLBACK.sql`, `git revert`, and the physical copies in
+`_snapshots/builder-import-2026-08-07/`. `scripts/artifacts/restore_point.py verify` compares live
+git, Storage and file hashes against the state recorded before any of this ran.
+
+**`_inbox/` is deleted.** Every file in it was verified present in at least two other places first.
+The Socratic-Artifact-Builder working tree is **untouched** and should be archived, not deleted.
+
+**Verification actually run:** the kit's 22 checks from a fresh clone (the only thing that catches
+line-ending corruption); `check_artifact.py` 46/46; a byte-identical Storage round trip against the
+snapshot; anon refused on both object routes while a director reads, writes and deletes;
+`DOC-STATUS.json` regenerating with only its date/commit stamp changed; and a signed-in browser pass
+over dashboard, assignments, gradebook and artifacts with no page errors and no sideways overflow at
+1440 or 420. **Not verified:** the read-only path for a non-director staff account, because no such
+test account exists — the storage policy is written and was not exercised from a browser.
+
+---
+
 ## 2026-08-06 (second) — Casey via Claude
 
 ### A roster import's course/term mismatch is now a decision, not a verdict

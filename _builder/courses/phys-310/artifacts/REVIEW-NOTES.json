@@ -1,77 +1,78 @@
 {
-  "schema": 1,
-  "course": "phys-310",
-  "updated": "2026-08-06",
-  "note": "Review decisions from scripts/review/serve_artifact_review.py. NOTHING HERE HAS BEEN APPLIED — these are instructions for a later edit, and the .jsx artifacts are untouched. Each objective carries the `sha` of the probe-topic prose it was judged against; if the artifact is rebuilt the sha stops matching and the note is stale (run the server with --stale to list those). Rejecting anything in a PUBLISHED artifact costs a republish and a new 8-hex slug per contract 3.2, which registers as a NEW lesson row.",
-  "artifacts": {
-    "phys310-atoms-and-nuclei-83022f32": {
-      "objectives": {
-        "nuclide-numbers-density": {
-          "decision": "accepted",
-          "comment": "",
-          "sha": "8c1e477ae102c3e6",
-          "label": "Distinguishes A, Z, M and number density N",
-          "by": "published 2026-07-31"
-        },
-        "isotopes-notation": {
-          "decision": "accepted",
-          "comment": "",
-          "sha": "7c9ea6ff32632018",
-          "label": "Reads isotope notation; chemical vs. nuclear identity",
-          "by": "published 2026-07-31"
-        },
-        "nuclear-size-mass-amu": {
-          "decision": "accepted",
-          "comment": "",
-          "sha": "39fc305030b2965f",
-          "label": "Relates nuclear size and mass to the carbon-12 amu",
-          "by": "published 2026-07-31"
-        }
-      },
-      "file": "phys310_preflight_atoms_and_nuclei.jsx",
-      "reviewed": "2026-08-06"
+ "schema": 1,
+ "course": "phys-310",
+ "updated": "2026-08-07",
+ "note": "Review decisions from scripts/review/serve_artifact_review.py. NOTHING HERE HAS BEEN APPLIED — these are instructions for a later edit, and the .jsx artifacts are untouched. Each objective carries the `sha` of the probe-topic prose it was judged against; if the artifact is rebuilt the sha stops matching and the note is stale (run the server with --stale to list those). Rejecting anything in a PUBLISHED artifact costs a republish and a new 8-hex slug per contract 3.2, which registers as a NEW lesson row.",
+ "artifacts": {
+  "phys310-atoms-and-nuclei-83022f32": {
+   "objectives": {
+    "nuclide-numbers-density": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "8c1e477ae102c3e6",
+     "label": "Distinguishes A, Z, M and number density N",
+     "by": "published 2026-07-31"
     },
-    "phys310-binding-energy-and-stability-e0ceabee": {
-      "objectives": {
-        "mass-defect-binding-energy": {
-          "decision": "accepted",
-          "comment": "",
-          "sha": "98e98099f2b0b89f",
-          "label": "Relates the mass defect to binding energy"
-        },
-        "binding-per-nucleon-curve": {
-          "decision": "accepted",
-          "comment": "",
-          "sha": "aed1e1599df6d7e1",
-          "label": "Reads the B/A curve and its energy consequences"
-        },
-        "line-of-stability": {
-          "decision": "accepted",
-          "comment": "",
-          "sha": "4ff8d8d7d63861b2",
-          "label": "Explains what makes a nuclide stable or unstable"
-        }
-      },
-      "file": "phys310_preflight_binding_energy_and_stability.jsx",
-      "reviewed": "2026-08-06"
+    "isotopes-notation": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "7c9ea6ff32632018",
+     "label": "Reads isotope notation; chemical vs. nuclear identity",
+     "by": "published 2026-07-31"
     },
-    "phys310-cross-sections-9308e38c": {
-      "objectives": {
-        "sigma-area-not-size": {
-          "decision": "accepted",
-          "comment": "",
-          "sha": "eca297edc782994f",
-          "label": "Reads a cross section as a probability, not a nuclear size"
-        },
-        "macroscopic-sigma-per-path": {
-          "decision": "accepted",
-          "comment": "",
-          "sha": "19706b136094f18a",
-          "label": "Builds Sigma = N sigma and reads it per unit path length"
-        }
-      },
-      "file": "phys310_preflight_cross_sections.jsx",
-      "reviewed": "2026-08-06"
+    "nuclear-size-mass-amu": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "39fc305030b2965f",
+     "label": "Relates nuclear size and mass to the carbon-12 amu",
+     "by": "published 2026-07-31"
     }
+   },
+   "file": "phys310_preflight_atoms_and_nuclei.jsx",
+   "reviewed": "2026-08-06"
+  },
+  "phys310-binding-energy-and-stability-e0ceabee": {
+   "objectives": {
+    "mass-defect-binding-energy": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "98e98099f2b0b89f",
+     "label": "Relates the mass defect to binding energy"
+    },
+    "binding-per-nucleon-curve": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "aed1e1599df6d7e1",
+     "label": "Reads the B/A curve and its energy consequences"
+    },
+    "line-of-stability": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "4ff8d8d7d63861b2",
+     "label": "Explains what makes a nuclide stable or unstable"
+    }
+   },
+   "file": "phys310_preflight_binding_energy_and_stability.jsx",
+   "reviewed": "2026-08-06"
+  },
+  "phys310-cross-sections-9308e38c": {
+   "objectives": {
+    "sigma-area-not-size": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "eca297edc782994f",
+     "label": "Reads a cross section as a probability, not a nuclear size"
+    },
+    "macroscopic-sigma-per-path": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "19706b136094f18a",
+     "label": "Builds Sigma = N sigma and reads it per unit path length"
+    }
+   },
+   "file": "phys310_preflight_cross_sections.jsx",
+   "reviewed": "2026-08-06"
   }
+ },
+ "revision": 6
 }
