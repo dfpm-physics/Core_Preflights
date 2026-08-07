@@ -20,7 +20,7 @@
       "doc": "site/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-08-06",
+      "reviewed": "2026-08-07",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -39,7 +39,7 @@
       "doc": "site/help/ai-and-your-work.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-08-06",
+      "reviewed": "2026-08-07",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -53,7 +53,7 @@
       "doc": "site/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-08-06",
+      "reviewed": "2026-08-07",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -70,7 +70,7 @@
       "doc": "site/help/director-ai-rules.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-06",
+      "reviewed": "2026-08-07",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -85,7 +85,7 @@
       "doc": "site/help/admin-system-operations.md",
       "kind": "help",
       "tier": "admin",
-      "reviewed": "2026-08-06",
+      "reviewed": "2026-08-07",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -108,7 +108,7 @@
       "doc": "docs/operations/SYSTEM_GUIDE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-06",
+      "reviewed": "2026-08-07",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -123,7 +123,7 @@
       "doc": "docs/operations/PREP-V2-CUTOVER.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-06",
+      "reviewed": "2026-08-07",
       "sources": [
         "supabase/admin/app_schema_bootstrap.sql",
         "scripts/app_migration/migrate_public_to_app.py",
@@ -137,7 +137,7 @@
       "doc": ".ai/skills/docs-author/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-08-06",
+      "reviewed": "2026-08-07",
       "sources": [
         "site/help/README.md",
         "site/js/help.js",
@@ -150,7 +150,7 @@
       "doc": "site/help/director-course-structure.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-06",
+      "reviewed": "2026-08-07",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/003_term_calendar.sql",
@@ -197,7 +197,7 @@
       "doc": "site/help/instructor-accounts.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-08-06",
+      "reviewed": "2026-08-07",
       "sources": [
         ".ai/instructions/PROJECT.md",
         "site/js/roster-import.js",
