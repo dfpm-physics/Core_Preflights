@@ -91,11 +91,13 @@ def _cfg():
     return c["supabase_url"].rstrip("/"), c["supabase_service_key"]
 
 
-def _req(method, path, key, data=None, ctype=None, timeout=90):
+def _req(method, path, key, data=None, ctype=None, timeout=90, extra=None):
     url, _ = _cfg()
     headers = {"apikey": key, "Authorization": f"Bearer {key}"}
     if ctype:
         headers["Content-Type"] = ctype
+    if extra:
+        headers.update(extra)
     req = urllib.request.Request(f"{url}{path}", data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -173,11 +175,23 @@ def storage_list(key, prefix=""):
 
 
 def storage_put(key, path, blob, ctype):
+    """Create or replace one object.
+
+    `x-upsert` IS THE WHOLE FIX, and the bug it replaces is worth stating because the code
+    looked correct. This used to POST and then retry as PUT `if code == 409` — but Storage
+    does not answer a duplicate with HTTP 409. It answers **HTTP 400** carrying
+    `{"statusCode":"409","error":"Duplicate","code":"KeyAlreadyExists"}` in the BODY. So the
+    retry never fired, and every object that already existed failed permanently.
+
+    The effect was that `push` could only ever CREATE. Updating an artifact was impossible —
+    the first push of a slug succeeded and every later one reported "48 upload(s) FAILED",
+    which read as a permissions problem and is not one. Observed 2026-08-07 while settling
+    the build records; nothing had been uploaded, so no partial state resulted.
+
+    Upserting in one request also removes the two-call race the retry had.
+    """
     code, body = _req("POST", f"/storage/v1/object/{BUCKET}/{urllib.parse.quote(path)}",
-                      key, blob, ctype)
-    if code == 409:  # already there — upsert
-        code, body = _req("PUT", f"/storage/v1/object/{BUCKET}/{urllib.parse.quote(path)}",
-                          key, blob, ctype)
+                      key, blob, ctype, extra={"x-upsert": "true"})
     if code >= 400:
         raise Unusable(f"upload {path} failed ({code}): {body[:300].decode('utf-8','replace')}")
 
@@ -242,6 +256,14 @@ def build_payload(source_root):
 
             # The whole build record for one artifact: what the parser understood, plus the
             # raw markdown so nothing is lost to a parser that did not understand it.
+            # NO `generated_at` HERE, deliberately. It used to carry
+            # datetime.now(), which put a fresh value in the body on every run — so the
+            # sha256 could never match and all 46 build records reported as `changed`
+            # forever, on a tool whose whole contract is "idempotent, skipped when it
+            # already matches". A push that always rewrites everything hides the one
+            # thing the comparison exists to show: which artifact actually moved.
+            # Nothing read the field. When the push happened is recorded once, in the
+            # manifest's `written_at`, which is where a push time belongs.
             build = {
                 "schema": 1,
                 "slug": slug,
@@ -250,7 +272,6 @@ def build_payload(source_root):
                 "artifact": art,
                 "build_log": sec,
                 "review": rev,
-                "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             }
             objects.append({
                 "path": f"{course}/{slug}/build.json",
@@ -301,7 +322,7 @@ def build_payload(source_root):
             "submit_endpoint": prof.get("submit_endpoint", ""),
             "build_log_title": log.get("title", ""),
             "build_log_preamble": log.get("preamble", ""),
-            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            # No `generated_at` — same reason as the build record above.
             "artifacts": index,
         }
         objects.append({
@@ -362,6 +383,30 @@ def resolve_source(args):
     return root
 
 
+def classify(objects, remote):
+    """Split a payload into (new, changed, unchanged) against what Storage already holds.
+
+    An object is unchanged when its md5 etag matches. Storage's etag is md5 for a single-part
+    upload, which every object here is.
+
+    Shared by `push` and `status` on purpose: `status` used to print `len(objects)` under the
+    words "would be pushed", i.e. the whole payload, whether or not any of it differed. It
+    therefore reported "95 object(s) would be pushed" against a bucket that was already
+    identical, while `push` in the same breath said `changed 0`. Two commands whose entire job
+    is to answer the same question must not answer it differently.
+    """
+    new, changed, same = [], [], []
+    for o in objects:
+        r = remote.get(o["path"])
+        if r is None:
+            new.append(o)
+        elif r["etag"] == hashlib.md5(o["blob"]).hexdigest():
+            same.append(o)
+        else:
+            changed.append(o)
+    return new, changed, same
+
+
 def cmd_push(args):
     _, key = _cfg()
     require_bucket(key)
@@ -373,17 +418,7 @@ def cmd_push(args):
     skipped_seed = [s["path"] for s in seed_reviews(root, objects) if s["path"] in remote]
     objects += seeds
 
-    # An object is unchanged when its size matches and its md5 etag matches. Storage's etag is
-    # md5 for a single-part upload, which every object here is.
-    new, changed, same = [], [], []
-    for o in objects:
-        r = remote.get(o["path"])
-        if r is None:
-            new.append(o)
-        elif r["etag"] == hashlib.md5(o["blob"]).hexdigest():
-            same.append(o)
-        else:
-            changed.append(o)
+    new, changed, same = classify(objects, remote)
 
     print(f"Source: {root}")
     for course, note, _ in report:
@@ -555,7 +590,19 @@ def cmd_status(args):
         objects, report = build_payload(root)
         for course, note, _ in report:
             print(f"  {course:<10} {note}")
-        print(f"  {len(objects)} object(s) would be pushed")
+        if remote is None:
+            print(f"  {len(objects)} object(s) in the local payload "
+                  "(cannot compare — Storage unreachable)")
+        else:
+            new, changed, same = classify(objects, remote)
+            pending = len(new) + len(changed)
+            print(f"  {len(objects)} object(s) in the local payload — "
+                  f"{pending} would be pushed ({len(new)} new, {len(changed)} changed, "
+                  f"{len(same)} already identical)")
+            for o in (new + changed)[:6]:
+                print(f"    + {o['path']}")
+            if pending > 6:
+                print(f"    … {pending - 6} more")
     if remote is not None:
         kinds = {}
         for p in remote:

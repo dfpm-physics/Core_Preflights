@@ -8,6 +8,72 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-07 (third) — Matthew Recker via Claude
+
+### `sync_artifacts.py push` could only ever create, never update
+
+Reported by the course director as "all jsx files show as not loaded", with two layout oddities on
+the Artifacts page. The reported symptom was the one thing that turned out to be fine: **all 46
+sources were already in Storage and download correctly** — verified by signing in as the test
+faculty account and pulling one (HTTP 200, 115 KB). "not loaded" was the Source card's initial
+label sitting beside its own *Load the JSX* button, i.e. an idle state phrased as a fault. It now
+reads "fetched on demand", which is what it means and why: a `.jsx` runs 100–250 KB, so the card
+fetches on click rather than on page load.
+
+Underneath it, though, `push` was broken in two ways that between them made every run report
+`48 upload(s) FAILED` and look like a permissions problem:
+
+- **`storage_put` could not replace an object.** It POSTed and retried as PUT `if code == 409` —
+  but Storage does not answer a duplicate with HTTP 409. It answers **HTTP 400** carrying
+  `{"statusCode":"409","error":"Duplicate","code":"KeyAlreadyExists"}` in the *body*, so the retry
+  never fired. Every object that already existed failed permanently, which means **updating a
+  published artifact's source has never worked** since the import landed. Now a single POST with
+  `x-upsert: true`, which also removes the two-call race the retry had.
+- **Every `build.json` and `index.json` carried a fresh `generated_at`**, so its sha256 could never
+  match and all 48 records reported as `changed` on every run — on a tool whose stated contract is
+  "idempotent, skipped when it already matches". Nothing read the field; the manifest's
+  `written_at` already records when a push happened. Removed.
+
+`status` disagreed with `push` for a third reason: it printed `len(objects)` under the words "would
+be pushed", i.e. the entire payload whether or not any of it differed — "95 object(s) would be
+pushed" against a bucket that was byte-identical. Both commands now share one `classify()`, and a
+clean tree reports `0 would be pushed (0 new, 0 changed, 95 already identical)`.
+
+**Settled against live Storage:** 48 objects uploaded (the build records, once, to drop the
+timestamp), then re-verified — `push` and `status` now both report zero pending. The 46 sources were
+never touched, and review sidecars are still never overwritten by a push.
+
+### Two Artifacts-page layout bugs, both box-model
+
+- **The slug was welded to the title** in the lesson list —
+  "Energy, Atoms, and Nuclei<code>phys310-atoms-and-nuclei-83022f32</code>" on one line. `.al-ttl`
+  and `.al-slug` were inline spans, so the `margin-top` and the ellipsis rules on the slug did
+  nothing. Both are block boxes now, in a `.al-cell` with `min-width: 0` so the ellipsis can
+  actually engage inside a `minmax(0, 1fr)` grid column.
+- **The topic count was orphaned onto its own line** above its own words. `.den` was a *sibling* of
+  `.num` on a `flex-direction: column` block; the shared style expects it **nested inside** `.num`
+  with `emph` on the block (`.comp-block.emph .num .den`, and report.html's completion badge).
+  `tests/browser/test-artifacts.html` — the design fixture — already had it right, so the shipped
+  page had drifted from its own reference.
+
+Verified in real Chrome against the shipped stylesheet: six geometry assertions (slug below the
+title and left-aligned with it; count and words sharing a line, den to the right and smaller).
+Neither bug is visible to a syntax check or to any unit suite — the markup parses and the page
+renders; only the boxes are wrong — which is why the check had to be geometric.
+
+### Publishing now says to push
+
+`docs/operations/PUBLISH-ARTIFACT.md` gained a step 5: run `sync_artifacts.py push --commit` before
+closing a publish session. The `.jsx` is gitignored, so an artifact that only exists in one working
+copy has a Source card that can never open on any other machine. Both bugs above are recorded there
+too, so their symptoms read as a regression rather than as normal.
+
+Files: `scripts/artifacts/sync_artifacts.py`, `site/faculty/artifacts.html`,
+`docs/operations/PUBLISH-ARTIFACT.md`. The four pre-existing `test-nav.mjs` failures are unchanged
+and unrelated.
+
+---
+
 ## 2026-08-07 (second) — Matthew Recker via Claude
 
 ### Publishing full credit clears a reading-reflection cap it had already overruled

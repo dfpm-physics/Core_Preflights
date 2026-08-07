@@ -126,7 +126,37 @@ field, `Start Preflight →`, the Study Mode button, the boxed Honor Code, and t
 
 ---
 
-## 5. Next
+## 5. Push the source to Storage
+
+**Do this every time you publish, before you close the session.** The `.jsx` is gitignored — it is a
+local cache, so a build that only ever exists in your working copy is a build nobody else can read.
+The faculty **Artifacts** page loads each source from the `artifact-sources` bucket on demand; an
+artifact you skipped is one whose Source card can never open, on every machine but yours.
+
+```
+python scripts/artifacts/sync_artifacts.py status          # what differs, changes nothing
+python scripts/artifacts/sync_artifacts.py push            # dry run — read the list
+python scripts/artifacts/sync_artifacts.py push --commit
+```
+
+It is idempotent and compares by hash, so re-running it costs nothing and a clean tree reports
+`0 would be pushed`. Push the whole tree rather than hunting for the one file you changed — that is
+what makes "did I remember?" a question you never have to answer.
+
+What it uploads per artifact: `source.jsx`, and a `build.json` assembled from `BUILD-LOG.md` +
+`REVIEW-NOTES.json`. Review decisions made **on the site** flow the other way — `pull-reviews`
+brings those back into the repo, and `push` deliberately never overwrites a review sidecar that
+Storage already holds.
+
+> Two bugs made this step look optional until 2026-08-07, and both are fixed: `push` could only
+> ever *create* (Storage answers a duplicate with HTTP 400 carrying `statusCode: 409`, so the
+> upsert retry never fired and every update failed), and each `build.json` carried a fresh
+> `generated_at`, so all 48 records reported as changed on every run whether or not anything had.
+> If you see either symptom again, it is a regression, not the normal state.
+
+---
+
+## 6. Next
 
 Go to [`PREFILL-LINK.md`](PREFILL-LINK.md) with the public URL. Nothing is graded until the lesson
 row exists and the `id` on it equals this artifact's `INTERACTION_ID`.

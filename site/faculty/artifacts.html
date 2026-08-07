@@ -29,8 +29,14 @@
     .al-no { font-family: var(--font-display); font-weight: 600; font-size: 1.24em;
       font-variant-numeric: tabular-nums; color: var(--muted); }
     .al-row:hover .al-no { color: var(--blue-lt); }
-    .al-ttl { font-weight: 600; line-height: 1.3; }
-    .al-slug { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    /* The title/slug cell stacks. Both children were inline spans, so `margin-top` and the
+       ellipsis below did nothing and the slug ran straight on from the title with no gap —
+       "Energy, Atoms, and Nucleiphys310-atoms-and-nuclei-83022f32". They need block boxes;
+       `min-width: 0` is what lets the ellipsis engage inside a `minmax(0, 1fr)` grid column. */
+    .al-cell { display: block; min-width: 0; }
+    .al-ttl { display: block; font-weight: 600; line-height: 1.3;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .al-slug { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 0.7em; color: var(--muted); margin-top: 2px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .al-keys { display: flex; gap: 3px; align-items: center; flex-wrap: wrap; }
@@ -317,7 +323,7 @@
       return `
         <button class="al-row" data-slug="${esc(a.slug)}" data-n="${a.lesson_no ?? ''}">
           <span class="al-no">${a.lesson_no ?? '–'}</span>
-          <span><span class="al-ttl">${esc(a.title)}</span><span class="al-slug">${esc(a.slug)}</span></span>
+          <span class="al-cell"><span class="al-ttl">${esc(a.title)}</span><span class="al-slug">${esc(a.slug)}</span></span>
           <span class="al-keys">${(a.objectives || []).slice(0, 4).map((o) =>
             `<span class="al-key" title="${esc(o.label)}">${esc(o.key)}</span>`).join('')}
             ${(a.dropped || []).map((o) => `<span class="al-key drop" title="dropped on review">${esc(o.key)}</span>`).join('')}</span>
@@ -363,8 +369,13 @@
               <span>·</span><span>${art.lines || '?'} lines</span>
               <span>·</span><span>${art.component || ''}</span></div>
           </div>
-          <div class="comp-block"><span class="num">${a.topic_count}</span>
-            <span class="den">topics · ~${esc(a.budget)} min each</span></div>
+          <!-- `.den` nests INSIDE `.num`, and the block needs `emph` — that is the shape the
+               shared style expects (see report.html's completion badge and the
+               `.comp-block.emph .num .den` rule). As siblings on a `flex-direction: column`
+               block the count was orphaned onto its own line above the words, which is what
+               made a plain "3 topics" render as a floating hero number. -->
+          <div class="comp-block emph"><span class="num">${a.topic_count}<span class="den">
+            topics · ~${esc(a.budget)} min each</span></span></div>
         </div>
 
         <div class="al-cols">
@@ -444,7 +455,10 @@
       return `
         <div class="card al-card-flush" style="margin-top:18px" id="srccard">
           <div class="al-cardhead"><span class="card-title">Source</span>
-            <span class="sub" id="srcsub">not loaded</span>
+            <!-- Was "not loaded", which reads as "this file is missing" next to a button
+                 offering to load it — the source is in Storage and downloads fine; it is
+                 simply fetched on demand because a .jsx runs 100–250 KB. Say that instead. -->
+            <span class="sub" id="srcsub">fetched on demand</span>
             <button class="btn btn-sm" id="loadsrc">Load the JSX</button></div>
           <div id="srcbody"></div>
         </div>`;
