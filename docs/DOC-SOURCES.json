@@ -8,9 +8,9 @@
     "Checked by scripts/docs/check_doc_sources.py — when a source changes after a document's",
     "'reviewed' date, that document is flagged as possibly stale. See CORE.md section 5.",
     "",
-    "DELIBERATELY NOT INDEXED: docs/decisions/ and docs/contracts/. Those are point-in-time",
-    "records and frozen interfaces — they are superseded, never refreshed, so a staleness flag",
-    "on them would be noise. See .ai/skills/docs-author/references/DESIGN-DOC.md.",
+    "DELIBERATELY NOT INDEXED: docs/decisions/, docs/contracts/ and docs/audits/. Those are",
+    "point-in-time records and frozen interfaces — they are superseded, never refreshed, so a",
+    "staleness flag on them would be noise. See .ai/skills/docs-author/references/DESIGN-DOC.md.",
     "",
     "'reviewed' is an attestation ('someone read this against its sources on this date'), not an",
     "edit date. Fixing a typo does not advance it; re-checking the content against the sources does."

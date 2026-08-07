@@ -8,6 +8,71 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-07 (fifth) — Matthew Recker via Claude
+
+### A full system audit, recorded under `docs/audits/`
+
+The course director asked for a holistic review of the whole platform — inconsistencies,
+inefficiencies, bad programming, bad security — plus a plan to address them without breaking a system
+that is live with students. Six read-only specialist reviews ran in parallel (security, database,
+frontend, onboarding/operations, Python tooling, docs/tests), each with the in-flight artifact library
+carved out of scope, then were cross-refereed into one plan.
+
+**Nothing was changed by the audit.** No repository file was modified, no database connection was
+made, and no script was executed — several of them contact live Supabase at import time, so they were
+read rather than run. This entry records the knowledge; the fixes are not yet made.
+
+**94 findings** — 9 Critical/Blocker, 24 High, 32 Medium, 30 Low. The three that need attention
+regardless of everything else:
+
+- **Any instructor can make themselves system admin with one API call.** `instructors_update_own`
+  restricts *which row* may be updated, never *which columns*, and there are no column-level grants
+  anywhere in `app`. `is_global_admin` sits on that row. The fix is one
+  `REVOKE UPDATE (is_global_admin)` — a grant change, not schema DDL.
+- **A student can write their own grade on any interactive assignment.** Not through the artifact —
+  through direct PostgREST calls with their own session, which `sa_student_write` (`FOR ALL`, no
+  status/deadline predicate) permits. Migration 015's trigger then derives a *finalized* grade from
+  the value they wrote. Found independently by the security and database reviews.
+- **A seventh copy of the effort→points curve, in `site/student/interaction-submit.html`, still uses
+  the rule migration 019 retired** — and prints its result to the student. Invisible at 2 points where
+  both formulas give 1; wrong on the 3-point Physics 310 offerings.
+
+That last one is why the audit was run as six perspectives rather than one. The database review
+verified all **six registered** copies of the curve agree and recorded it as a positive finding. The
+frontend review found the seventh. Both were right. It had survived migration 019's careful inventory
+because it was inline in an HTML file, so it did not look like code — which is also the argument for
+the largest structural finding: **42% of hand-written JavaScript (9,293 of 22,238 lines) lives inside
+HTML files**, unreachable by the 28-file test suite.
+
+**On the director's actual question — training a new machine or user:** today they cannot get from a
+fresh clone to a verified lesson-cycle run using the repository alone. `docs/operations/MACHINE-SETUP.md`
+is the one accurate runbook and is referenced by nothing; `supabase/admin/.env` has no template so it
+cannot be constructed at all; `/setup-preflight` covers one credential of three; and `supabase/SETUP.md`
+— the only file literally named SETUP — ends with `TRUNCATE students CASCADE` against production. The
+proposed target state is one document, one skill, and one new stdlib-only `scripts/doctor.py` that
+turns "did my setup work?" into an exit code and works with no credentials present.
+
+The plan is phased so nothing student-facing moves without a reason: twelve no-DDL swaps first, then
+the onboarding work (documentation plus the doctor, no live risk), then correctness hardening in a
+quiet window, then **one** coordinated DDL batch rather than six windows, then the structural work
+between terms.
+
+**§10 of the master report records the director's clarifications from the review session** — including
+that `prep_app_owner` is deliberately unsealed (so `CORE.md` §0 is wrong and load-bearing, and the DDL
+batch needs coordination rather than a ceremony), that the aggregation *merge* works and only the
+`worklist --latest` *selection* is broken, and the decision to remove `service_role` from the grading
+path in favour of the `prep_app_dml` tier that `lesson_aggregate.py` already uses.
+
+Also in this commit: `docs/README.md` gained the three subdirectories it had been omitting
+(`audits/`, `app/`, `ROADMAP.md`) — finding DOC-03, fixed in passing because it is the index a reader
+would use to find the audit.
+
+Audits are point-in-time records. Like `docs/decisions/` and `docs/contracts/` they are superseded by
+the next one, never refreshed in place, and are deliberately **not** registered in
+`docs/DOC-SOURCES.json`.
+
+---
+
 ## 2026-08-07 (fourth) — Matthew Recker via Claude
 
 ### The Artifacts page never loaded: a backtick in a comment, inside a template literal

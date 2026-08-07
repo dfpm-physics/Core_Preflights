@@ -65,6 +65,7 @@ interesting the work was.
 | "What is the wire format, and what may never change?" | **Contract** — `docs/contracts/` |
 | "How do the pieces fit together?" | **Architecture** — `docs/architecture/` |
 | "How do I operate the system from outside the app?" (SQL, migrations, scripts, deploys) | **Runbook** — `docs/operations/` |
+| "What state was the system in on date X, and what was wrong with it?" | **Audit** — `docs/audits/` |
 | "What changed, when, and who did it?" | **`CHANGELOG.md` only** — always, for every shipped change |
 | "How must an AI agent behave here?" | **`CORE.md`** — the operating contract, not a doc |
 
@@ -79,7 +80,7 @@ Two of these overlap and need a hard line:
   is archived after the work lands, and is superseded rather than rewritten. This is why ADRs are
   immutable by convention and carry a status
   ([Nygard, *Documenting Architecture Decisions*](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)),
-  and it is why `docs/decisions/` and `docs/contracts/` are deliberately absent from
+  and it is why `docs/decisions/`, `docs/contracts/` and `docs/audits/` are deliberately absent from
   `docs/DOC-SOURCES.json` — a staleness flag on a historical record is permanent noise, and a
   checker that always complains is a checker everybody learns to ignore. A help doc has the
   opposite contract: it must be current, and staleness is a bug. **If you are tempted to write one
