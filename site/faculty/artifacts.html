@@ -357,6 +357,18 @@
       const reg = state.registered.get(state.slug);
       const dropped = new Map((log.objectives || []).filter((o) => o.dropped).map((o) => [o.key, o]));
 
+      // The topics badge: `.den` nests INSIDE `.num`, and the block needs `emph` — that is the
+      // shape the shared style expects (see report.html's completion badge and the
+      // `.comp-block.emph .num .den` rule). As siblings on a `flex-direction: column` block the
+      // count was orphaned onto its own line above the words, which made a plain "3 topics"
+      // render as a floating hero number.
+      //
+      // This note lives out here, in a JS comment, and not in an HTML comment inside the
+      // template below. Backticks are how this repository writes about code, and a backtick
+      // inside a template literal ENDS it: the first draft of this note closed the string at
+      // `emph`, the module failed to parse, and the page sat on its loading spinner forever with
+      // one SyntaxError in the console. A comment in the markup also ships to the DOM on every
+      // render, which is a second reason not to put one there.
       main.innerHTML = `
         <button class="al-back" id="back">← All artifacts</button>
         <div class="lesson-head">
@@ -369,11 +381,6 @@
               <span>·</span><span>${art.lines || '?'} lines</span>
               <span>·</span><span>${art.component || ''}</span></div>
           </div>
-          <!-- `.den` nests INSIDE `.num`, and the block needs `emph` — that is the shape the
-               shared style expects (see report.html's completion badge and the
-               `.comp-block.emph .num .den` rule). As siblings on a `flex-direction: column`
-               block the count was orphaned onto its own line above the words, which is what
-               made a plain "3 topics" render as a floating hero number. -->
           <div class="comp-block emph"><span class="num">${a.topic_count}<span class="den">
             topics · ~${esc(a.budget)} min each</span></span></div>
         </div>
@@ -451,13 +458,13 @@
         </div>`;
     }
 
+    // The sub-label was "not loaded", which reads as "this file is missing" standing next to a
+    // button offering to load it — the source is in Storage and downloads fine; it is simply
+    // fetched on demand because a .jsx runs 100–250 KB. Say that instead.
     function sourceCard() {
       return `
         <div class="card al-card-flush" style="margin-top:18px" id="srccard">
           <div class="al-cardhead"><span class="card-title">Source</span>
-            <!-- Was "not loaded", which reads as "this file is missing" next to a button
-                 offering to load it — the source is in Storage and downloads fine; it is
-                 simply fetched on demand because a .jsx runs 100–250 KB. Say that instead. -->
             <span class="sub" id="srcsub">fetched on demand</span>
             <button class="btn btn-sm" id="loadsrc">Load the JSX</button></div>
           <div id="srcbody"></div>

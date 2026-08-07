@@ -70,6 +70,13 @@ const FACULTY = [
                  '.lr-sec, .rm-shell, .page-head']] : []),
   ['grade',       '/site/faculty/grade.html',     '.page-head, .empty-state'],
     ['lessons',     '/site/faculty/lessons.html',   '.page-head, .empty-state'],
+  // `.al-list` and not `.page-head`: the whole page is one inline module reading a private
+  // Storage bucket, so "it painted a heading" proves almost nothing. The list is the first
+  // thing that cannot appear unless the module parsed, the session carried, and the bucket
+  // policy admitted this account. It was omitted when the page shipped, and a syntax error in
+  // that module went out to the live site the same day — the page served 200 and sat on its
+  // spinner, which is precisely the failure this walk exists to catch.
+  ['artifacts',   '/site/faculty/artifacts.html', '.al-list'],
   ['admin',       '/site/faculty/admin.html',     '.page-head, .empty-state'],
   // Extensions is a TAB of admin.html since 2026-07-30, reached by ?tab=. Walked as its own entry
   // anyway: it is a distinct panel with its own load and its own render, and the thing this

@@ -8,6 +8,76 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-07 (fourth) — Matthew Recker via Claude
+
+### The Artifacts page never loaded: a backtick in a comment, inside a template literal
+
+Reported by the course director as "artifact site is just looping the busy circle and not loading".
+It was live — `01650c2` was already on `origin/main`, so the page had been broken on GitHub Pages
+for as long as it had existed there. Reproduced in a real browser with a real session, where the
+console held exactly one line:
+
+```
+UNCAUGHT: SyntaxError: Unexpected identifier 'emph'
+```
+
+The cause was an explanatory comment added in the previous entry, written the way this repository
+writes about code — with backticks around the identifiers — and placed in an HTML comment *inside a
+template literal*:
+
+```js
+main.innerHTML = `
+  <!-- ... and the block needs `emph` — that is the shape the shared style expects ... -->
+```
+
+**A backtick inside a template literal ends it.** Everything after it parsed as expression garbage,
+the module failed to parse, and a module that fails to parse never executes a single statement — so
+`main` was never touched and the page kept the loading spinner that ships in its static HTML.
+Nothing timed out and nothing reported anything, because no code ran to do either.
+
+Both comments in that page moved out of the markup and into `//` comments beside the function.
+That is the correct home regardless: prose about code and code that builds markup do not share a
+quoting scheme, and a comment inside a template literal ships to the DOM on every render.
+
+### Why nothing caught it, and what now does
+
+**This is the second time.** The 2026-07-25 entry records the identical defect — "a backtick inside
+a template literal in `admin.html`" — caught then by a hand-run `node --check` on the extracted
+module. That habit shows up in fourteen entries of this file. It is a habit, not a gate, and this
+time it was skipped, so the page went to production.
+
+The gap is specific and was total: a `.js` module gets parsed for free the moment
+`test-imports.mjs` imports it, but an **inline `<script type="module">` was parsed by nothing** —
+not that suite, not `node --check` (which refuses a `.html` file outright), not any unit test. On
+most faculty pages that block *is* the page. Its failure mode is the worst available: HTTP 200, a
+page that looks like it is loading, and one line in a console nobody has open.
+
+- **`tests/app-schema/test-imports.mjs` gained a parse gate**, running before the two checks that
+  were already there — deliberately first, because both are regex over text and a file that does
+  not parse still matches regexes perfectly well. (Confirmed: with the defect reintroduced, both
+  still reported `[pass]`.) It extracts every `.js` and every inline module in `site/` — 55 sources
+  — pads each with the newlines its extract dropped so the reported line number is the line number
+  in the real file, and runs `node --check` on it as `.mjs` in a subprocess. The extension forces
+  the module parse goal; the subprocess means nothing executes, which matters because several of
+  these files touch `document` at import time and others install browser globals the rest of the
+  suite depends on. Verified both ways: with the defect back it reports
+  `site/faculty/artifacts.html:384 (inline module #1) — SyntaxError: Unexpected identifier 'emph'`,
+  and exits non-zero.
+- **`tests/browser-harness/pass.mjs` now walks `artifacts.html`**, which it had never been added to
+  when the page shipped. Its selector is `.al-list`, not `.page-head` — the whole page is one
+  inline module reading a private Storage bucket, so "it painted a heading" would prove almost
+  nothing, while the list cannot appear unless the module parsed, the session carried, and the
+  bucket policy admitted the account.
+
+**Verification.** The page loads in real Chrome against a real session: 29 rows, no console errors,
+no spinner. Full faculty walk 9/9 clean including the new entry. `run.mjs` 449 passed / 4 failed —
+the same four pre-existing `test-nav.mjs` "Test views" failures, unrelated, plus `test-isolation`
+still throwing at the test cadet's sign-in (both confirmed pre-existing earlier today). The six
+layout geometry assertions from the previous entry still pass. Line endings checked against an
+untouched sibling — both LF, no rewrite.
+
+---
+
 ## 2026-08-07 (third) — Matthew Recker via Claude
 
 ### `sync_artifacts.py push` could only ever create, never update
