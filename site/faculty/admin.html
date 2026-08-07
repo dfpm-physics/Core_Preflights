@@ -128,7 +128,7 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, lastFirst, fmtDate, fmtDateTime, runPage, showFatal, wireModalDismiss } from '../js/util.js';
+    import { esc, lastFirst, fmtDate, fmtDateTime, runPage, showFatal, triggerDownload, wireModalDismiss } from '../js/util.js';
     import { allSectionIds, courseExtensions, revokeExtension, reinstateExtension }
       from '../js/faculty-grade.js';
     import * as A from '../js/faculty-admin.js';
@@ -1987,7 +1987,7 @@
         st.style.color = 'var(--muted)'; st.textContent = 'Building…';
         const matrix = await A.gradeMatrix(ctx, ids);
         if (!matrix.students.length) { st.style.color = 'var(--red)'; st.textContent = 'No students in scope.'; return; }
-        A.triggerDownload(A.buildGradesCsv(matrix, (id) => codeOf[id]),
+        triggerDownload(A.buildGradesCsv(matrix, (id) => codeOf[id]),
           A.exportFilename('Grades', 'csv'), 'text/csv');
         st.style.color = 'var(--green)';
         st.textContent = `✓ ${matrix.students.length} students, ${matrix.columns.length} assignments`;
@@ -1998,7 +1998,7 @@
         st.style.color = 'var(--muted)'; st.textContent = 'Building…';
         const ids = await allSectionIds(ctx);
         const backup = await A.buildBackup(ctx, ids);
-        A.triggerDownload(JSON.stringify(backup, null, 2),
+        triggerDownload(JSON.stringify(backup, null, 2),
           A.exportFilename('Backup', 'json'), 'application/json');
         st.style.color = 'var(--green)';
         st.textContent = `✓ ${backup.enrollments.length} enrollments, ${backup.grades.length} grades`;

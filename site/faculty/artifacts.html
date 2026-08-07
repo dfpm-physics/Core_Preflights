@@ -65,6 +65,22 @@
       .al-head .c-flag, .al-row .c-flag { display: none; }
     }
 
+    /* `.lesson-head` is designed to BLEED to the edge of a 24px-padded container — report.html,
+       its only other user, wraps it in `.report-rollup` and that is what its `margin: -24px -24px`
+       is measured against. Here it sits straight in `.page-wide`, whose padding is 20px, so the
+       tint overhung the page by 4px on each side and pulled its top edge up over the back button.
+       This class makes it a standalone card instead: no bleed, closed radius, a full border where
+       it otherwise has only `border-bottom`.
+
+       It is also a BLOCK, not a flex row — the flex row is `.lh-top`, which this page was not
+       using. Without it the topics badge could not sit beside the title however it was styled;
+       it stacked underneath and left-aligned, which is what made the header read as broken even
+       after the `.den` nesting was corrected. */
+    .al-headcard { margin: 0 0 20px; padding: 20px 22px 17px;
+      border: 1px solid var(--border); border-radius: 14px; }
+    .al-headcard .lh-title { font-size: 1.85em; }
+    .al-headcard .al-slugline { margin-top: 9px; }
+
     .al-back { font: inherit; font-size: 0.85em; color: var(--muted); background: none;
       border: 0; padding: 0; cursor: pointer; margin-bottom: 14px; }
     .al-back:hover { color: var(--blue-lt); }
@@ -371,18 +387,21 @@
       // render, which is a second reason not to put one there.
       main.innerHTML = `
         <button class="al-back" id="back">← All artifacts</button>
-        <div class="lesson-head">
-          <div><span class="lh-title">${esc(a.title)}</span>
-            <span class="hflags">
+        <div class="lesson-head al-headcard">
+          <div class="lh-top">
+            <h2 class="lh-title grow">${esc(a.title)}</h2>
+            <div class="comp-block emph"><span class="num">${a.topic_count}<span class="den">
+              topics · ~${esc(a.budget)} min each</span></span></div>
+          </div>
+          <div class="lh-sub">
+            <div class="hflags grow">
               ${a.published_url ? '<span class="tag green">Published</span>' : '<span class="tag">Draft</span>'}
               ${reg ? '<span class="tag blue">Registered</span>' : '<span class="tag gold">Not registered</span>'}
-            </span>
-            <div class="al-slugline"><span>slug</span><code>${esc(state.slug)}</code>
-              <span>·</span><span>${art.lines || '?'} lines</span>
-              <span>·</span><span>${art.component || ''}</span></div>
+            </div>
           </div>
-          <div class="comp-block emph"><span class="num">${a.topic_count}<span class="den">
-            topics · ~${esc(a.budget)} min each</span></span></div>
+          <div class="al-slugline"><span>slug</span><code>${esc(state.slug)}</code>
+            <span>·</span><span>${art.lines || '?'} lines</span>
+            <span>·</span><span>${art.component || ''}</span></div>
         </div>
 
         <div class="al-cols">
@@ -400,7 +419,7 @@
       document.getElementById('back').onclick = () => { state.slug = null; render(); };
       wireReview(art, dropped);
       wireRegister(a, art);
-      wireSource();
+      wireSource(art);
     }
 
     function objectivesCard(art, rev, dropped) {
@@ -466,7 +485,8 @@
         <div class="card al-card-flush" style="margin-top:18px" id="srccard">
           <div class="al-cardhead"><span class="card-title">Source</span>
             <span class="sub" id="srcsub">fetched on demand</span>
-            <button class="btn btn-sm" id="loadsrc">Load the JSX</button></div>
+            <button class="btn btn-sm" id="dlsrc">Download .jsx</button>
+            <button class="btn btn-sm" id="loadsrc">Read it here</button></div>
           <div id="srcbody"></div>
         </div>`;
     }
@@ -601,18 +621,50 @@
 
     // ── source browser ───────────────────────────────────────────────────────
 
-    function wireSource() {
+    /** Fetch the .jsx once and keep it — both buttons want the same bytes. */
+    async function source() {
+      if (state.source == null) state.source = await AL.loadSource(state.course, state.slug);
+      return state.source;
+    }
+
+    const srcFail = (err) => {
+      document.getElementById('srcbody').innerHTML =
+        `<div class="al-cardbody"><span class="muted">${esc(err.message)}</span></div>`;
+    };
+
+    function wireSource(art) {
+      // Download is the step that connects this page to PUBLISH-ARTIFACT.md: publishing means
+      // attaching this exact .jsx to a claude.ai session, and the file is gitignored, so a
+      // director whose machine never ran `sync_artifacts.py pull` has no other copy of it.
+      // The name comes from the build record and is never re-derived — the slug inside the file
+      // is the artifact's identity (contract §3.2) and this page exists partly to stop that
+      // being retyped.
+      const dl = document.getElementById('dlsrc');
+      if (dl) dl.onclick = async () => {
+        const name = art?.file || `${state.slug}.jsx`;
+        dl.disabled = true; dl.textContent = 'Fetching…';
+        try {
+          // text/plain, not text/jsx: no browser knows the latter, and an unknown type is what
+          // makes Chrome ask "keep or discard?" on an otherwise ordinary download.
+          triggerDownload(await source(), name, 'text/plain;charset=utf-8');
+          dl.textContent = `Saved ${name}`;
+        } catch (err) {
+          dl.textContent = 'Download .jsx';
+          srcFail(err);
+        }
+        dl.disabled = false;
+      };
+
       const btn = document.getElementById('loadsrc');
       if (!btn) return;
       btn.onclick = async () => {
         btn.disabled = true; btn.textContent = 'Loading…';
         try {
-          state.source = await AL.loadSource(state.course, state.slug);
-          state.outline = AL.sourceOutline(state.source);
+          state.outline = AL.sourceOutline(await source());
           drawSource();
         } catch (err) {
-          document.getElementById('srcbody').innerHTML =
-            `<div class="al-cardbody"><span class="muted">${esc(err.message)}</span></div>`;
+          btn.disabled = false; btn.textContent = 'Read it here';
+          srcFail(err);
         }
       };
     }

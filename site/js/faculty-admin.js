@@ -454,14 +454,8 @@ export async function buildBackup(ctx, sectionIds) {
   };
 }
 
-/** Blob → synthetic <a download> → click → revoke. Shared by both exports. */
-export function triggerDownload(text, filename, mime) {
-  const url = URL.createObjectURL(new Blob([text], { type: mime }));
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
-}
+/* `triggerDownload` moved to util.js on 2026-08-07 — the Artifacts page needed it too, and
+   nothing about Blob-to-download is about course administration. Import it from there. */
 
 /** `Core_Preflights_Grades_2026-07-20.csv` — the repo name is load-bearing for Blackboard imports. */
 export function exportFilename(kind, ext) {

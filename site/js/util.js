@@ -235,6 +235,24 @@ export function deadlineClass(due, isPast) {
   return (due - new Date()) < 48 * 3600000 ? 'soon' : '';
 }
 
+/**
+ * Blob → synthetic `<a download>` → click → revoke. The site is static with no server, so this
+ * is the only way it hands a file to the user.
+ *
+ * Lived in `faculty-admin.js` until 2026-08-07, where the gradebook CSV and the JSON backup were
+ * its only callers. It moved here when the Artifacts page needed to hand a director an artifact's
+ * `.jsx` to attach to a claude.ai session: nothing about turning text into a download is about
+ * course administration, and importing the admin data layer to reach it would have coupled two
+ * unrelated pages.
+ */
+export function triggerDownload(text, filename, mime) {
+  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
 /* ── Course titles (fallback only; real titles come from the courses table) ── */
 export const COURSE_TITLE_FALLBACK = {
   'phys-110': 'Physics 110',
