@@ -60,9 +60,17 @@ the chain for the PREP v2 schema. A `014` in one has nothing to do with a `014` 
 **Adding a migration file is not applying it.** Applying one is coordinated in advance — never two
 at once, and never while another operator is mid-run — and recorded in `CHANGELOG.md`.
 
-Applying anything in the v2 chain needs one extra step: the role that owns that schema is
-deliberately left unable to log in, so a schema change there starts with a person re-enabling it and
-ends with them sealing it again. That is intentional friction, not an obstacle to route around.
+Applying anything in the v2 chain is *designed* to need one extra step: the role that owns that
+schema is meant to sit unable to log in, so a schema change starts with a person re-enabling it and
+ends with them sealing it again — intentional friction, not an obstacle to route around.
+
+**That seal is currently open** and has been since 2026-07-23, because the v2 model has been under
+continuous revision and re-sealing between every change was not practical (confirmed against the
+database on 2026-08-07). So the friction is not there right now. **The coordination rule is
+unchanged and does not depend on it:** a schema change is still agreed in advance, applied by one
+person, never run by two operators at once, and recorded in `CHANGELOG.md`. An open seal is not
+permission — it just means nothing will stop you, which is the reason to be more careful rather
+than less.
 
 ## Frozen contracts
 

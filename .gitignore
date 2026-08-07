@@ -6,6 +6,13 @@ config.json
 INBOX/
 _inbox/
 
+# ...but DO commit the templates. `.env*` above swallows `.env.template`, which is why
+# supabase/admin/.env had no committable template for so long — the file could not be
+# constructed from the repo at all, so machine setup depended on someone remembering the
+# key list. These negations are narrow on purpose: only `*.template`, never a real value.
+!*.env.template
+!.env.template
+
 # Skill / tooling config — each operator copies config.json.template locally (service keys, DB creds)
 .ai/skills/preflight-analyze/config.json
 supabase/admin/config.json

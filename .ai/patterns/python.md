@@ -20,8 +20,8 @@ A style guide that does not know which interpreter it is targeting gives advice 
 | setting | this project's answer |
 |---|---|
 | interpreter version | **Python 3.14.0** — what is installed on the owner's machine, and the only interpreter this project has been run against. Nothing is pinned by a manifest, because there is no manifest. |
-| the dependency manifest | **`requirements.txt` at the repo root, for the ADMIN tier only.** It exists for `supabase/admin/`, which needs `psycopg2` from a project-local `.venv/`. Everything under `scripts/` is standard library and must stay that way — adding a dependency there is a decision recorded in `docs/decisions/`, not a side effect of needing an import. |
-| the dependency policy | **two tiers.** `scripts/` is **standard library only** and must run on any machine with Python 3 and no install step — that is what lets a teammate clone and immediately grade, build or sync. `supabase/admin/` may use `psycopg2` from a gitignored `.venv/`. Never blur them: a stdlib script that grows an import stops working on the machine that needed it most. |
+| the dependency manifest | **`requirements.txt` at the repo root.** Written for `supabase/admin/`, which needs `psycopg2` from a project-local `.venv/`; it now also carries the two `scripts/` carve-outs below. Adding a dependency under `scripts/` is a decision recorded in `docs/decisions/`, not a side effect of needing an import. |
+| the dependency policy | **two tiers, with three named exceptions.** `scripts/` is **standard library by default** and must run on any machine with Python 3 and no install step — that is what lets a teammate clone and immediately grade, build or sync. `supabase/admin/` may use `psycopg2` from a gitignored `.venv/`. Never blur them: a stdlib script that grows an import stops working on the machine that needed it most. **The exceptions are the three `scripts/fall2026/` term builders**, which need `python-docx` and `tzdata` ([`docs/decisions/SCRIPTS-DOCX-DEPENDENCY.md`](../../docs/decisions/SCRIPTS-DOCX-DEPENDENCY.md)). They are term-build tooling run twice a year by a course director; **nothing the lesson cycle runs is in that set.** |
 | the formatter | **none installed.** Match the layout of the surrounding code by hand. |
 | the linter | **none installed.** |
 | the type checker | **none installed.** |
@@ -50,6 +50,18 @@ The hard rule, stated once so the rest of the file can assume it:
 > exactly the "fine on your machine, dies on first run" shape this section is about.
 > **The test is not "does it import?" but "is it in the standard library?"** If a `scripts/` file ever
 > genuinely needs one, that is a `docs/decisions/` entry and a manifest, not an import line.
+
+> **And there is one case where "is it in the standard library?" is not sufficient either.**
+> `zoneinfo` is stdlib since 3.9 and passes every test above — but it **ships no data**. It reads the
+> operating system's IANA tz database, and Windows does not have one. `ZoneInfo("America/Denver")`
+> therefore works on macOS and Linux and raises `ZoneInfoNotFoundError` on a stock Windows machine,
+> which is this project's primary platform. The documented fallback is the `tzdata` package, now
+> pinned in `requirements.txt` for the two term builders that need it.
+> This one dies **loudly**, on the first line of the first run, which is the merciful version — a
+> tz-naive fallback would have written silently wrong deadlines. But the lesson generalises:
+> **a stdlib module can still carry a platform dependency, and only running it on the target
+> platform will tell you.** Confirmed 2026-08-07, when fixing an unrelated hardcoded path made the
+> Physics 110 term builder runnable on Windows for the first time and it failed here instead.
 
 ---
 

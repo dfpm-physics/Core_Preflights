@@ -305,13 +305,20 @@
     // The committed manifest of approved RAG reference files (textbook-pdfs/rag-manifest.txt).
     // The PDFs are gitignored; this list is committed so the reference names match across repos and
     // the grader (/preflight-analyze) can resolve each under textbook_base_path.
+    // The path is TWO levels up, not three. This page lived at site/app/faculty/lessons.html until
+    // the 2026-07-28 promotion moved it to site/faculty/; the '../../../' it was written with came
+    // along and has pointed above the repo root ever since — so the fetch 404'd and the dropdown
+    // silently showed only "none" and "Add new…". Nothing reported it, because both exits below are
+    // quiet. Found 2026-08-07. Keep this relative to THIS file's directory if the page ever moves.
     async function loadRagManifest() {
       try {
-        const res = await fetch('../../../textbook-pdfs/rag-manifest.txt', { cache: 'no-cache' });
-        if (!res.ok) return;
+        const res = await fetch('../../textbook-pdfs/rag-manifest.txt', { cache: 'no-cache' });
+        if (!res.ok) { console.warn(`RAG manifest not loaded (HTTP ${res.status}) — Reference PDF list will be empty.`); return; }
         const text = await res.text();
         ragManifest = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
-      } catch { /* dropdown falls back to “none” + “add new” */ }
+      } catch (e) {
+        console.warn('RAG manifest not loaded — Reference PDF list will be empty.', e);
+      }
     }
 
     // The reading reflection (Q2) is identical across every lesson and both paths, so it's

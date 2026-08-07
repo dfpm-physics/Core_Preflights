@@ -9,7 +9,53 @@
 # One reference per line. Blank lines and #-comments are ignored. Keep it sorted.
 # To add a new approved reference: add the exact path here and commit — do NOT rely on
 # a browser one-off, which only stores the string on a single assignment.
+#
+# HOW THE PATHS RESOLVE. Each line is relative to `textbook_base_path` and begins
+# `Text_Book_PDFs/<NNN> Sections/`, because that is the string stored in the live
+# `activities.content.reference_pdf`. The PDFs live in this repo at
+# `textbook-pdfs/phys-110/` and `textbook-pdfs/phys-215/`, which do NOT match that
+# prefix — so a machine bridges the two, either by holding the PDFs in a real
+# `Text_Book_PDFs/{110,215} Sections/` tree or by linking to the repo folders.
+# See textbook-pdfs/README.md, and verify with:
+#     python scripts/grounding/check_grounding.py
+#
+# REGENERATED 2026-08-07 from the live database. It had drifted badly:
+#   * it listed 29 entries, all Physics 215, while the live DB used 57 — every one of
+#     the 28 Physics 110 references was absent, so the dropdown offered a phys-110
+#     author nothing at all;
+#   * one entry was two filenames joined by " + " and matched no file on disk, so
+#     preflight-41 has been grading without grounding. Both real files are listed
+#     below now. The concatenated string is STILL STORED on `preflight-41` and
+#     `preflight-41-training` in the live DB and needs a separate data fix.
 # ------------------------------------------------------------------------------
+Text_Book_PDFs/110 Sections/1-D Motion, Position, Velocity, Acceleration.pdf
+Text_Book_PDFs/110 Sections/2-D Collisions.pdf
+Text_Book_PDFs/110 Sections/2-D Motion, Projectile Motion.pdf
+Text_Book_PDFs/110 Sections/Angular Momentum.pdf
+Text_Book_PDFs/110 Sections/Angular Position, Velocity, Acceleration.pdf
+Text_Book_PDFs/110 Sections/Application of Newton's Laws, Friction.pdf
+Text_Book_PDFs/110 Sections/Application of Newton's Laws.pdf
+Text_Book_PDFs/110 Sections/Center of Mass, Systems of Particles.pdf
+Text_Book_PDFs/110 Sections/Changes in Mechanical Energy, Power.pdf
+Text_Book_PDFs/110 Sections/Conservation of Angular Momentum.pdf
+Text_Book_PDFs/110 Sections/Conservation of Energy.pdf
+Text_Book_PDFs/110 Sections/Constant Acceleration and Freefall.pdf
+Text_Book_PDFs/110 Sections/Energy of a System, Work.pdf
+Text_Book_PDFs/110 Sections/Gravitational Potential Energy, Kepler's Laws.pdf
+Text_Book_PDFs/110 Sections/Intro to Newton's Laws.pdf
+Text_Book_PDFs/110 Sections/Linear Momentum and 1-D Collisions.pdf
+Text_Book_PDFs/110 Sections/Moment of Inertia Applications.pdf
+Text_Book_PDFs/110 Sections/Newton's Laws with Circular Motion.pdf
+Text_Book_PDFs/110 Sections/Planetary and Satellite Motion.pdf
+Text_Book_PDFs/110 Sections/Potential Energy, Nonconservative Forces.pdf
+Text_Book_PDFs/110 Sections/Rotational Kinetic Energy, Rolling Motion.pdf
+Text_Book_PDFs/110 Sections/Rotational Motion Applications.pdf
+Text_Book_PDFs/110 Sections/Simple Harmonic Oscillation.pdf
+Text_Book_PDFs/110 Sections/Universal Gravitation.pdf
+Text_Book_PDFs/110 Sections/Varying Forces, Kinetic Energy.pdf
+Text_Book_PDFs/110 Sections/Vector Product, Torque, Moment of Inertia.pdf
+Text_Book_PDFs/110 Sections/Vectors and Coordinate Systems.pdf
+Text_Book_PDFs/110 Sections/Wave Motion.pdf
 Text_Book_PDFs/215 Sections/Ampere's Law, Gauss's Law in Magnetism.pdf
 Text_Book_PDFs/215 Sections/Capacitance, Energy, and Dielectrics.pdf
 Text_Book_PDFs/215 Sections/Charge Distributions, Electric Flux.pdf
@@ -35,7 +81,8 @@ Text_Book_PDFs/215 Sections/Light, Reflection, Refraction.pdf
 Text_Book_PDFs/215 Sections/Magnetic Force on Current-carrying Wires.pdf
 Text_Book_PDFs/215 Sections/Maxwell's Equations.pdf
 Text_Book_PDFs/215 Sections/Moving Charged Particle in a Magnetic Field.pdf
-Text_Book_PDFs/215 Sections/Photoelectric Effect.pdf + Wave-Particle, Uncertainty.pdf
+Text_Book_PDFs/215 Sections/Photoelectric Effect.pdf
 Text_Book_PDFs/215 Sections/Sources of Magnetic Fields.pdf
 Text_Book_PDFs/215 Sections/Torque on a Current Loop.pdf
 Text_Book_PDFs/215 Sections/Vector Form of Coulomb's Law.pdf
+Text_Book_PDFs/215 Sections/Wave-Particle, Uncertainty.pdf

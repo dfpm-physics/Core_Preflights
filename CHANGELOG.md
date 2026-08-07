@@ -8,6 +8,97 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-07 (sixth) — Matthew Recker via Claude
+
+### Audit Phase 0 verified against the live database, then Waves 0–1 of the remediation
+
+The director asked for the audit's verification queries to be run and the Critical findings planned.
+All nine ran read-only as `prep_app_read` inside a `READ ONLY` transaction, plus an unauthenticated
+REST probe, a filesystem check, and the GitHub API. **Nothing was written to the database.** Then
+Waves 0 and 1 of the resulting plan — everything that needs no DDL and no downtime.
+
+**What verification changed.** Three findings shrank, three grew, and one appeared that six static
+audits could not see:
+
+- **`prep_app_owner` is NOT sealed** (`rolcanlogin = true`, all four roles, since 2026-07-23).
+  CORE.md §0 asserted the opposite; `PREP-V2-CUTOVER.md` had it right all along. Corrected in §0,
+  in `MACHINE-SETUP.md`, and in the director-facing help topic — all three now say the seal is open
+  and that **the coordination rule does not depend on it**. A rule everyone can see is false stops
+  being read as a rule, including the parts that still hold.
+- **The legacy `public` schema is exposed to PostgREST with `USING (true)` policies.** With only the
+  publishable key from `site/js/config.js` — in a repo confirmed **public** — and no login at all:
+  73 rows of `public.students` (cadet ID, name, section) and 64 of `public.responses`. Verified by
+  row count only; no data was fetched. `app` is correctly gated: 0 rows for anon on every table.
+  **This is a dashboard toggle for the director** (Settings → API → Exposed schemas), verified safe:
+  no shipped JS, no edge function, and no script reads `public` over REST.
+- **Answer keys are readable by enrolled students.** `expected_response` on q3 is the model physics
+  answer, present on 80 assignments, and `activities_student_read` returns the whole `content` JSONB
+  over REST. The UI never renders it; PostgREST does. Needs DDL — deferred to Wave 2 with a design
+  note, because RLS cannot filter columns and the key is inside a JSONB column.
+- **Not exploited, and latent where it looked worse:** zero `submission_activities` mutated after a
+  grade finalized (SEC-02 unused), zero `grading_mode='effort'` offerings, zero rows in the DB-01
+  broken state, zero `grader` rows, and all 78 effort grades agree with migration 019's curve.
+
+**Wave 0.** Deleted `supabase/SETUP.md`, a pre-v1 guide whose "Semester Reset Checklist" said
+`TRUNCATE students CASCADE;` and which is the only file in the repo named `SETUP`.
+*`site/js/faculty-report.js` was also deleted and then restored* — its own header and four documents
+say it is deliberately dormant pending the rollup merge, one of them in the words "Don't delete it as
+dead code." The audit's "dead module" reading was mechanically true and wrong about intent.
+
+**Wave 1.**
+
+- **A seventh copy of the effort→points curve, and the diverged one, is gone.**
+  `site/student/interaction-submit.html` still paid the `possible / 2` partial credit that migration
+  019 retired on 2026-07-30. It now imports `pointsFromEffort` from `schema.js`. Verified: effort 2
+  on a 3-point offering now prints **1**, matching the trigger, where it printed 1.5. phys-310 has
+  three published 3-point offerings, two with zero submissions — the next interactive submitter
+  would have been shown a score the gradebook does not hold.
+- **The Reference PDF dropdown has been broken on the live site since the 2026-07-28 promotion.**
+  `lessons.html` fetched the manifest with one `../` too many, left from when the page lived at
+  `site/app/faculty/`. On Pages that resolves above the site root and 404s; **locally the extra `../`
+  clamps at the server root and works**, which is why no local check ever caught it. Both exits were
+  silent, so the dropdown just looked empty. Fixed, both exits now warn, and confirmed in real Chrome
+  loading 58 entries.
+- **`rag-manifest.txt` regenerated from the live database** — it listed 29 entries, all Physics 215,
+  while the live DB used 57, so **every one of the 28 Physics 110 references was missing** and a
+  phys-110 author was offered nothing. One entry was two filenames joined by `" + "` and matched no
+  file, which is why `preflight-41` grades ungrounded. Now 58 entries, all 58 resolving. *The
+  concatenated string is still stored on `preflight-41` and `preflight-41-training` and needs a
+  separate dry-run-gated data fix — not done here.*
+- **`textbook_base_path` was documented wrongly in the place most people read.** `PROJECT.md` said
+  `{repo_root}/textbook-pdfs/{course_id}/`, which resolves **0 of 58** manifest entries;
+  `setup-preflight` and `SYSTEM_GUIDE.md` were always correct. New `scripts/grounding/check_grounding.py`
+  (stdlib, read-only, exits non-zero) makes it checkable instead of assumed, and is now referenced
+  from CORE.md §7, `PROJECT.md`, `SYSTEM_GUIDE.md`, `MACHINE-SETUP.md`, the grading skill, and
+  `textbook-pdfs/README.md` with both supported layouts. Reference machine: **58 of 58**.
+- **Two undeclared dependencies, one of which no static audit could have found.** The three Fall
+  term builders import `python-docx`, which is not stdlib. Fixing the hardcoded
+  `/Users/caseypellizzari/…` path in `build_110_preflights.py` made it runnable on Windows for the
+  first time — and it failed on `zoneinfo` instead: **stdlib, but it ships no data**, reads the OS tz
+  database, and Windows has none. Both now pinned in `requirements.txt`, with the reasoning and the
+  generalisable lesson in `docs/decisions/SCRIPTS-DOCX-DEPENDENCY.md`; the two policy statements that
+  claimed `scripts/` is uniformly stdlib now name the carve-outs. Both builders also gained a clear
+  "source DOCX not found" message in place of a raw traceback.
+- **`supabase/admin/.env` finally has a template.** It never had one because `.gitignore`'s `.env*`
+  swallowed it, so the file could not be constructed from the repo at all — narrow negations
+  (`!*.env.template`) fix that, verified not to un-ignore any real `.env`.
+- **`MACHINE-SETUP.md` is reachable.** It is the one accurate machine-setup runbook and a repo-wide
+  grep outside the CHANGELOG returned zero references to it. CORE.md §7 now opens by pointing at it.
+
+**Verification.** Read-only DB queries (nothing written); both edited pages extracted and
+`node --check`ed, then booted in real Chrome with zero non-auth console errors; `pointsFromEffort`
+imported and its outputs compared against the installed trigger definition; the manifest path proved
+against the live Pages URL (old → 404, new → 200); both term builders run to their new guard;
+`check_grounding.py` run against both the correct and the previously-documented base path;
+`check_doc_sources.py` green. No database mutation, no DDL, no schema change.
+
+**Still open from §3 of the audit** — all Wave 2, all needing DDL: privilege escalation via
+`instructors.is_global_admin` (C1), students writing their own grade (C2), the answer-key exposure
+above, and the day-scoped aggregation worklist (C4). Plus one dashboard toggle only the director can
+make, and the `preflight-41` reference string.
+
+---
+
 ## 2026-08-07 (fifth) — Matthew Recker via Claude
 
 ### A full system audit, recorded under `docs/audits/`

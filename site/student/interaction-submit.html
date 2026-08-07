@@ -38,7 +38,7 @@
     import { initTheme } from '../js/theme.js';
     import { esc, fmtDate } from '../js/util.js';
     import { resolveActivityBySlug, submitInteractionReport, loadAssignmentStatuses } from '../js/student-data.js';
-    import { questionsOf, answeredCount } from '../js/schema.js';
+    import { questionsOf, answeredCount, pointsFromEffort } from '../js/schema.js';
 
     const PENDING_KEY = 'cp.pendingReport';
 
@@ -59,12 +59,12 @@
       const e = (d && typeof d === 'object') ? d.effort : null;
       return (Number.isInteger(e) && e >= 0 && e <= 5) ? e : null;
     }
-    function effortPoints(e, possible) {   // mirrors app.grades_points_from_effort()
-      if (e == null) return 0;
-      if (e >= 3) return possible;
-      if (e >= 1) return Math.round((possible / 2) * 100) / 100;
-      return 0;
-    }
+    // The effort→points curve is NOT restated here. It lives once in schema.js (pointsFromEffort),
+    // which mirrors app.grades_points_from_effort(). This page held a seventh copy until 2026-08-07
+    // and it was the diverged one — still paying the `possible / 2` partial credit that migration
+    // 019 retired on 2026-07-30. Invisible at 2 points, where both rules give 1; on Physics 310's
+    // 3-point lessons it would have told a student 1.5 while the trigger wrote 1, and no instructor
+    // would ever see the number the student was shown. Import the curve; never re-derive it.
 
     function readPayload() {
       let raw = location.hash.slice(1);
@@ -292,7 +292,7 @@
       // analysis workflow reading the stored payload, not by this page.
       const pts = payload.effort !== null
         ? ` Your instructor will see an effort rating of ${payload.effort}/5` +
-          (committed ? ` (about ${effortPoints(payload.effort, possible)} of ${possible} pts).` : '.')
+          (committed ? ` (about ${pointsFromEffort(payload.effort, possible)} of ${possible} pts).` : '.')
         : '';
       // WHAT HAPPENS IF THEY RUN THE LESSON AGAIN — and it is NOT "it overwrites", which is what
       // this said until 2026-07-28. A graded interactive submission auto-finalizes its grade the

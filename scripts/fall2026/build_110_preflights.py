@@ -37,11 +37,33 @@ from docx import Document
 
 # ----------------------------------------------------------------------------
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-DOCX_PATH = ("/Users/caseypellizzari/Library/CloudStorage/OneDrive-afacademy.af.edu/"
-             "USAFA Classes/PREP/Preflights/Physics110_Preflight_Questions_v2.docx")
+COURSE_ROOT = os.path.abspath(os.path.join(REPO_ROOT, ".."))  # the PREP course root
 RAG_DIR_REL = "Text_Book_PDFs/110 Sections"  # relative to textbook_base_path (the PREP root)
 
 CONFIG_PATH = os.path.expanduser("~/.claude/skills/preflight-analyze/config.json")
+
+DOCX_NAME = "Physics110_Preflight_Questions_v2.docx"
+
+
+def _preflights_dir():
+    """The PREP `Preflights/` folder. Prefer the config's textbook_base_path (points at the
+    PREP course root on any machine); fall back to the repo-relative layout (repo inside PREP).
+
+    Until 2026-08-07 this file hardcoded an absolute macOS path into one operator's OneDrive,
+    so the script could not run on any other machine — including the course director's. Its
+    Physics 215 sibling already resolved the folder this way; the two now match.
+    """
+    try:
+        with open(CONFIG_PATH) as f:
+            base = json.load(f).get("textbook_base_path")
+        if base and os.path.isdir(os.path.join(base, "Preflights")):
+            return os.path.join(base, "Preflights")
+    except Exception:
+        pass
+    return os.path.join(COURSE_ROOT, "Preflights")
+
+
+DOCX_PATH = os.path.join(_preflights_dir(), DOCX_NAME)
 DENVER = ZoneInfo("America/Denver")
 UTC = ZoneInfo("UTC")
 YEAR = 2026
@@ -158,6 +180,14 @@ def parse_rag(rag_line, lesson_num):
 
 def parse_docx():
     """Return {lesson_num: {jitt_question, expected_response, ref_pdf, ref_pages}}."""
+    if not os.path.isfile(DOCX_PATH):
+        sys.exit(
+            f"Source DOCX not found:\n  {DOCX_PATH}\n\n"
+            f"The folder is resolved from `textbook_base_path` in {CONFIG_PATH},\n"
+            f"falling back to {COURSE_ROOT}. Set that key to your PREP course root\n"
+            f"(the folder containing `Preflights/` and `Text_Book_PDFs/`), or place\n"
+            f"{DOCX_NAME} in the Preflights folder."
+        )
     doc = Document(DOCX_PATH)
     lessons, cur = {}, None
     for p in doc.paragraphs:

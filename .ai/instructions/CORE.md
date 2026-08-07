@@ -71,11 +71,31 @@ that ended it.)*
 - **No concurrent DDL.** Schema changes (new tables/columns/policies) are coordinated in advance,
   never run by two agents at once. The service key is DML-only by convention; the `claude_code_recker`
   DB role is explicitly `BYPASSRLS` **but has no DDL**.
-- **DDL on `app` is sealed shut.** Three scoped roles cover that schema — `prep_app_owner` (owns it,
-  full DDL), `prep_app_dml` (data only), `prep_app_read` (SELECT only). None holds any privilege on
-  `public`. After build-out the owner was set `NOLOGIN`, so it **cannot connect at all**; a schema
-  change requires a human to run `ALTER ROLE prep_app_owner LOGIN;` as `postgres`, and to re-seal
-  afterwards. Treat an unseal as a coordination event under the gate below.
+- **DDL on `app` is coordinated, and the seal that used to enforce it is currently OPEN.** Three
+  scoped roles cover that schema — `prep_app_owner` (owns it, full DDL), `prep_app_dml` (data only),
+  `prep_app_read` (SELECT only). None holds any privilege on `public`.
+
+  The design is that `prep_app_owner` sits `NOLOGIN` between changes, so it cannot connect at all
+  and a schema change requires a human to run `ALTER ROLE prep_app_owner LOGIN;` as `postgres` and
+  re-seal afterwards.
+
+  > **It has not been sealed since 2026-07-23.** Verified against `pg_roles` on 2026-08-07:
+  > `rolcanlogin = true` on all four roles. The `app` model has been under continuous revision and
+  > re-sealing between every change was not practical, so the unseal became the steady state.
+  > Roadmap **P0.2** is the standing item to close it;
+  > [`docs/operations/PREP-V2-CUTOVER.md`](../../docs/operations/PREP-V2-CUTOVER.md) has said so
+  > since the cutover, and this bullet claimed the opposite until 2026-08-07.
+  >
+  > **This paragraph now describes what is true, not what is intended, and the difference matters
+  > more than the seal did.** A rule that everyone can see is false stops being read as a rule —
+  > including the parts of it that still hold. What still holds, entirely: **no agent runs DDL on
+  > its own.** Schema changes go to the course director as migration SQL and are applied as a
+  > coordination event under the gate below. The seal was one mechanism enforcing that; the
+  > obligation outlived the mechanism, and an open seal is not permission.
+  >
+  > It also means DDL-bearing fixes are **cheaper than they look** — no unseal ceremony stands
+  > between a reviewed migration and applying it. That is an argument for batching them, not for
+  > running them ad hoc.
 
 **The builder came home on 2026-08-07, and it did NOT bring its contract with it.** `_builder/`
 was a separate repository (`ranador/Socratic-Artifact-Builder`) whose own CORE.md opened *"This
@@ -167,9 +187,18 @@ Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
   matching because CRLF put `\r` before the `\n`. **The working tree looked correct through both.**
   After any change to how these are stored, clone to a temp directory and run
   `python _builder/preflight-kit/tools/verify.py` **there**.
-- **Tooling is Python** using only the **standard library** (`urllib`, `json`, `zoneinfo`) against
-  the Supabase REST API — see `scripts/`. Heavier DB work uses `psycopg2` in a gitignored `.venv/`
-  (see `supabase/admin/`).
+- **Tooling is Python**, **standard library by default** (`urllib`, `json`, `zoneinfo`) against the
+  Supabase REST API — see `scripts/`. Heavier DB work uses `psycopg2` in a gitignored `.venv/` (see
+  `supabase/admin/`). **Three named exceptions exist, all in the two Fall term builders**
+  (`scripts/fall2026/build_fall_preflights.py`, `build_110_preflights.py`, and
+  `extract_preflight_figures.py`): they need `python-docx` to read the source preflight DOCX, and
+  **`tzdata` to make `zoneinfo` work at all on Windows** — `zoneinfo` is stdlib but ships no data,
+  reads the OS tz database, and Windows has none, so `ZoneInfo("America/Denver")` raises on a stock
+  Windows machine. Both are pinned in `requirements.txt`; reasoning in
+  [`docs/decisions/SCRIPTS-DOCX-DEPENDENCY.md`](../../docs/decisions/SCRIPTS-DOCX-DEPENDENCY.md).
+  **Everything else under `scripts/` — including everything the lesson cycle runs — is still
+  stdlib-only and must stay that way.** A fourth exception needs its own decision record, not an
+  import line.
 - **Timezone:** due dates are computed the night before a lesson in **America/Denver** and stored
   as UTC (DST-aware). Reuse the `zoneinfo` helpers in `scripts/fall2026/build_fall_preflights.py`.
 - **The deadline HOUR is course policy, not a system constant.** *(History: a flat "2359" until
@@ -412,13 +441,27 @@ The full table catalog, JSONB shapes, roles, and edge functions are in
 
 ## 7. New-agent quickstart
 
+> **Setting up a NEW MACHINE? Follow
+> [`docs/operations/MACHINE-SETUP.md`](../../docs/operations/MACHINE-SETUP.md) instead of this
+> list.** It is the step-by-step runbook — venv, all three credential files, the PDF corpus, the
+> optional Node harnesses, the accounts a human must grant you, and a verification block that
+> proves each one. This section is the orientation summary; that file is the procedure.
+> *(It was reachable from nothing at all until 2026-08-07 — no link from here, from `AGENTS.md`,
+> from `CLAUDE.md`, or from `docs/README.md` — which is why setup kept getting re-derived.)*
+
 1. Clone the repo; confirm you're on `main`. Read this file (`.ai/instructions/CORE.md`),
    `.ai/instructions/PROJECT.md`, and `docs/operations/SYSTEM_GUIDE.md`.
-2. Create the two config files from their `.template`s (§3). Get the service key / DB creds from the
+2. Create the config files from their `.template`s (§3) — `supabase/admin/.env.template`,
+   `supabase/admin/config.json.template`, and
+   `.ai/skills/preflight-analyze/config.json.template`. Get the service key / DB creds from the
    course director out-of-band — never from the repo.
 3. Confirm the environment: Python available; the shipped site needs no Node and no build step, and
-   Node itself may or may not be installed on your machine (§2); textbook PDFs present at
-   `textbook_base_path` if you'll grade.
+   Node itself may or may not be installed on your machine (§2). If you will grade, verify the
+   textbook corpus actually resolves — `python scripts/grounding/check_grounding.py`, which is
+   read-only and exits non-zero on a miss. **Do not just check that PDFs exist.**
+   `textbook_base_path` must point at a directory *containing* `Text_Book_PDFs/`, not at the
+   clone's `textbook-pdfs/`, and a wrong value grades the whole cohort without grounding while
+   warning only once.
 4. Before any DB mutation, re-read §0. For destructive ops, snapshot first.
 5. Do the work using the runbooks in §4 and the scripts in `scripts/`. Keep scripts idempotent +
    dry-run-by-default.

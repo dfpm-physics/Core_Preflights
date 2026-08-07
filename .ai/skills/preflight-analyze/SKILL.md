@@ -228,6 +228,17 @@ If either field is null, skip this step (proceed without RAG context).
 > proceed without RAG (Error Handling), and flag that the reference should be added to the manifest
 > and committed so it is shared.
 
+> **Before the FIRST run on a machine, confirm `PDF_BASE` actually resolves:**
+> ```
+> python scripts/grounding/check_grounding.py
+> ```
+> Read-only, instant, exits non-zero on any miss. **Do this once per machine rather than
+> discovering it per lesson.** The failure mode this skill is built around — warn and grade without
+> RAG — is correct for one missing PDF and badly wrong when the base path is misconfigured, because
+> then *every* lesson misses and the whole term grades ungrounded while each individual run looks
+> like a normal warning. `PDF_BASE` must point at a directory *containing* `Text_Book_PDFs/`, not at
+> the repo's `textbook-pdfs/` folder; see `textbook-pdfs/README.md`.
+
 ---
 
 ## Step 4 — Fetch the Roster (sections → staff → enrollments)

@@ -9,3 +9,20 @@
 # psycopg2-binary: direct PostgreSQL access for the interaction-backfill DB tooling
 # (connects to Supabase as the scoped `claude_code_recker` role — see supabase/admin/claude_code_role.sql).
 psycopg2-binary==2.9.12
+
+# python-docx: the ONE declared exception to the "scripts/ is standard library only" rule.
+# Needed by the three Fall 2026 term builders to parse the source preflight DOCX:
+#   scripts/fall2026/build_fall_preflights.py, build_110_preflights.py, extract_preflight_figures.py
+# A .docx is a ZIP of related XML parts — a real format, not a convenience wrapper — which is the
+# case the dependency policy carves out. Reasoning: docs/decisions/SCRIPTS-DOCX-DEPENDENCY.md.
+# Nothing on the deploy path uses it; the lesson cycle never touches these files.
+python-docx==1.1.2
+
+# tzdata: the IANA time zone database, needed by the SAME two term builders on Windows.
+# `zoneinfo` is standard library, but it carries no data — it reads the system tz database, which
+# Windows does not have, and falls back to this package. So ZoneInfo("America/Denver") works on
+# macOS/Linux and raises ZoneInfoNotFoundError on a stock Windows machine. That is why the term
+# builders had only ever been run on macOS. Both write DST-aware UTC deadlines, so a missing tz
+# database is not a degraded result, it is a hard stop. Verified 2026-08-07: with this installed,
+# 2026-08-06 2359 Denver resolves to UTC-6 and 2026-12-06 2359 to UTC-7.
+tzdata==2026.3

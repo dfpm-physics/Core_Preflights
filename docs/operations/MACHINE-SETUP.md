@@ -63,11 +63,20 @@ PREP_APP_READ_ROLE  / _PASSWORD      <- analysis tier
 PREP_TEST_FACULTY_EMAIL / _PASSWORD / _UID
 ```
 
-**About the owner pair.** `prep_app_owner` is the only role with DDL on schema `app`, and it is
-sealed `NOLOGIN` on purpose (CORE.md §0). Having the credential here does **not** give you DDL —
-a schema change requires me to run `ALTER ROLE prep_app_owner LOGIN;` as `postgres` and re-seal
-afterwards, and that is a coordination event. Never attempt it on your own. `app_tier_check.py`
-failing to connect as owner is the gate working, not a fault.
+**About the owner pair.** `prep_app_owner` is the only role with DDL on schema `app`. The design
+is that it sits sealed `NOLOGIN` between schema changes (CORE.md §0), so holding the credential
+does not confer DDL.
+
+> **It is NOT sealed right now, and has not been since 2026-07-23.** Verified against `pg_roles`
+> on 2026-08-07: `rolcanlogin = true`. The `app` model has been under continuous revision and
+> re-sealing between every change was not practical. So `app_tier_check.py` **connects** as owner
+> and reports DDL succeeding — on a sealed database that same result would be a serious finding,
+> and here it is just the current state. Do not "fix" it, and do not read the seal language in
+> CORE.md §0 as a description of today.
+>
+> What has *not* changed: **you still do not run DDL on your own.** Schema changes go to the
+> course director as migration SQL and are applied as a coordinated event (CORE.md §0). The seal
+> was one mechanism enforcing that rule; the rule outlived the mechanism.
 
 ### 2b. `supabase/admin/config.json`
 
@@ -88,7 +97,7 @@ here.** Template: `.ai/skills/preflight-analyze/config.json.template`.
 |---|---|
 | `supabase_url` | `https://shzvpmlnqfmzfmuxkowi.supabase.co` |
 | `supabase_service_key` | ask me — Supabase dashboard → Project Settings → API → reveal `service_role` |
-| `textbook_base_path` | **absolute path on THIS machine** to `textbook-pdfs/` in this clone |
+| `textbook_base_path` | **absolute path on THIS machine to a folder CONTAINING `Text_Book_PDFs/`** — see §3, and note this is *not* the clone's `textbook-pdfs/` |
 | `default_course_id` | `phys-215` |
 
 Ask me for the service key when you get here. `/setup-preflight` walks this interactively if you
@@ -110,9 +119,25 @@ Filenames must match `textbook-pdfs/rag-manifest.txt` exactly — that committed
 contract that keeps names identical across clones, and the faculty lesson editor populates its
 "Reference PDF" dropdown from it.
 
-Reference machine currently holds **31 files under phys-215 and 0 under phys-110**, so phys-110
-grading there already runs without RAG. Report the counts you end up with. Missing PDFs are not a
-blocker — `/preflight-analyze` warns and proceeds without grounding.
+**Then set `textbook_base_path` to something else, and verify it.** The manifest entries — and
+the `reference_pdf` strings on 111 live activities — all begin `Text_Book_PDFs/<NNN> Sections/`,
+which is *not* the folder layout above. The grader resolves `textbook_base_path` + manifest
+entry, so the base must be a directory containing a `Text_Book_PDFs/` tree with `110 Sections`
+and `215 Sections` inside it. `textbook-pdfs/README.md` gives the two supported ways to satisfy
+that (put the PDFs in that shape, or link to the repo folders) with copy-paste commands.
+
+```
+python scripts/grounding/check_grounding.py
+```
+
+Read-only, exits non-zero on any miss, prints `k of N` per course. **Run it and report the
+numbers** — this is the one setup step whose failure is completely invisible afterwards, because
+`/preflight-analyze` warns once and then grades the entire cohort without textbook context.
+Reference machine as of 2026-08-07: **58 of 58**, 30 under 215 and 28 under 110.
+
+*Before 2026-08-07 this section said the reference machine held "31 files under phys-215 and 0
+under phys-110, so phys-110 grading there already runs without RAG." The files were present; the
+manifest simply did not list any of them, so nothing could reference them.*
 
 ---
 
@@ -157,13 +182,17 @@ of a change. If it is all you ran, say so explicitly in the CHANGELOG entry.
 .venv\Scripts\python supabase\admin\db_check.py
 .venv\Scripts\python supabase\admin\lesson_aggregate.py worklist --course phys-215
 python scripts\docs\check_doc_sources.py
+python scripts\grounding\check_grounding.py
 ```
 
 Expected:
 
 - **`app_tier_check.py`** — `prep_app_dml` connects, reads and writes in `app`, **DDL denied**;
-  `prep_app_read` reads but cannot write; `prep_app_owner` **fails at connect (correct — sealed)**;
-  and **no tier can touch `public`**.
+  `prep_app_read` reads but cannot write; and **no tier can touch `public`**. `prep_app_owner`
+  **currently connects and can do DDL** — see §2a. The design is that it fails at connect; that
+  is not today's state and a successful owner probe is not a fault to report.
+- **`check_grounding.py`** — `58 of 58`. Anything less means grading will silently run without
+  textbook context; fix it before your first run rather than after.
 - **`db_check.py`** — connects as `claude_code_recker`, reads real rows, `ALTER`/`DROP` come back
   **DENIED**.
 - **`worklist`** — returns the course's past-due day tracks.

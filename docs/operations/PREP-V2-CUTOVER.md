@@ -25,7 +25,9 @@ byte-identical URLs**, verified by hash before and after.
 past `003` to `015`, and step 11 ("seal the owner") has been done and undone several times since —
 `prep_app_owner` is unsealed whenever a migration is applied and must be re-sealed after. Roadmap
 **P0.2** is the standing item to seal it for good; it is **deliberately unsealed as of 2026-07-28**
-while the course director is still making schema tweaks.
+while the course director is still making schema tweaks. **Confirmed against `pg_roles` on
+2026-08-07: `prep_app_owner` has `rolcanlogin = true`.** This paragraph is the accurate one; CORE.md
+§0 still describes the sealed design as though it were the current state.
 
 *Authored 2026-07-20 by Casey (via Claude). Operational companion to
 [`../decisions/PREP-V2-SCHEMA.md`](../decisions/PREP-V2-SCHEMA.md) (why a parallel schema),

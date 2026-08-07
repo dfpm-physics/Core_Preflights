@@ -164,6 +164,14 @@ def figure_url_for(lesson_num, figure_index=1):
 
 def parse_docx():
     """Return {lesson_num: {jitt_question, expected_response, ref_pdf, ref_pages}}."""
+    if not os.path.isfile(DOCX_PATH):
+        sys.exit(
+            f"Source DOCX not found:\n  {DOCX_PATH}\n\n"
+            f"The folder is resolved from `textbook_base_path` in {CONFIG_PATH},\n"
+            f"falling back to {COURSE_ROOT}. Set that key to your PREP course root\n"
+            f"(the folder containing `Preflights/` and `Text_Book_PDFs/`), or place\n"
+            f"Physics215_Preflight_Questions_v12.docx in the Preflights folder."
+        )
     doc = Document(DOCX_PATH)
     lessons, cur = {}, None
     for p in doc.paragraphs:

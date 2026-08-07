@@ -259,6 +259,18 @@ Open `~/.claude/skills/preflight-analyze/config.json` and fill in the values:
 
 The config path is Claude-branded for historical reasons, but Codex uses the same local file. **Never create or commit a real `config.json` inside the repo.**
 
+**Check that last value rather than trusting it** — it is the one setting whose failure is invisible:
+
+```bash
+python scripts/grounding/check_grounding.py
+```
+
+Read-only, one second, prints `k of N` per course and exits non-zero on any miss. Point
+`textbook_base_path` at the repo's own `textbook-pdfs/` folder — an easy and reasonable-looking
+mistake — and **nothing resolves**, but `/preflight-analyze` warns once and grades the entire
+cohort without textbook grounding anyway. Nothing in the output afterwards looks different.
+Layouts and fixes: [`textbook-pdfs/README.md`](../../textbook-pdfs/README.md).
+
 ### Running the skill (Course Director / System Admin only)
 
 Before each live run:

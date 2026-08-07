@@ -360,7 +360,8 @@ and verifies the connection. Takes about 2 minutes.
 **Manual setup** (if you prefer):
 1. `cp .ai/skills/preflight-analyze/config.json.template ~/.claude/skills/preflight-analyze/config.json`
 2. Fill in `supabase_url`, `supabase_service_key` (service_role key from Supabase dashboard → Project Settings → API), `textbook_base_path`, `default_course_id`
-3. Set `textbook_base_path` to `{repo_root}/textbook-pdfs/{course_id}/` (see below)
+3. Set `textbook_base_path` to a directory **containing a `Text_Book_PDFs/` tree** — NOT to
+   `textbook-pdfs/` itself (see below)
 4. The `config.json` is gitignored — never commit it
 
 **Textbook PDFs** (`textbook-pdfs/` — gitignored, ~968 MB):
@@ -370,7 +371,24 @@ textbook-pdfs/
   phys-215/    ← Physics 215 lesson PDFs
   phys-110/    ← Physics 110 lesson PDFs
 ```
-See `textbook-pdfs/README.md` for full instructions.
+
+**`textbook_base_path` does NOT point here, and that trips up every new machine.**
+`textbook-pdfs/phys-215/` is where the *files* live; it is not what the *manifest* says. Every
+entry in `textbook-pdfs/rag-manifest.txt` — and every `reference_pdf` string in the live
+database, 111 of them — begins `Text_Book_PDFs/<NNN> Sections/`. The grader resolves
+`textbook_base_path` + that entry, so the base must be a directory containing a
+`Text_Book_PDFs/` tree with `110 Sections` and `215 Sections` inside it. Point it at
+`textbook-pdfs/` and **0 of 58 entries resolve** — and `/preflight-analyze` warns once and grades
+without grounding anyway, so nothing stops.
+
+*This paragraph said `{repo_root}/textbook-pdfs/{course_id}/` until 2026-08-07, which is the
+value that resolves nothing. `.ai/skills/setup-preflight/SKILL.md` has always been correct.*
+
+Verify before grading — the check is read-only and takes a second:
+```
+python scripts/grounding/check_grounding.py
+```
+See `textbook-pdfs/README.md` for the two supported layouts and how to bridge them.
 
 **Usage**: `/preflight-analyze [course_id] [assignment_id] [M|T]`
 
