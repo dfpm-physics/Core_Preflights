@@ -819,10 +819,18 @@ export function summarizeReports(rows, possible = 2, opts = {}) {
   const reflEng = [];
   const sentiment = { positive: 0, neutral: 0, negative: 0, mixed: 0 };
   const topicMap = {};
-  list.forEach(({ d }) => {
+  // `capped` counts the students the GATE IS STILL BITING, which is not the same as the students
+  // the AI judged non-meaningful. Finalizing full credit raises a capped effort to 3
+  // (confirmEffortRows in faculty-grade.js) without touching `meaningful` — the AI's reading is
+  // preserved on purpose. Counting `assessed - meaningful` therefore kept reporting a cap that a
+  // human had already lifted. Read the resolved effort, exactly as the effort histogram does.
+  let reflCapped = 0;
+  list.forEach(({ d, effort }) => {
     const r = d.reading_reflection;
     if (!r || typeof r !== 'object') return;
     if (typeof r.meaningful === 'boolean') { reflAssessed++; if (r.meaningful) reflMeaningful++; }
+    const eff = effort != null ? effort : int05(d.effort);
+    if (r.meaningful === false && !(eff > 2)) reflCapped++;
     const e = int05(r.engagement); if (e != null) reflEng.push(e);
     if (r.sentiment in sentiment) sentiment[r.sentiment]++;
     (Array.isArray(r.topics) ? r.topics : []).forEach(t => {
@@ -893,7 +901,7 @@ export function summarizeReports(rows, possible = 2, opts = {}) {
       from: understandingFrom },
     objectives, radar, misconceptions,
     reflection: { meaningful: reflMeaningful, assessed: reflAssessed,
-      capped: reflAssessed - reflMeaningful, engagement: mean(reflEng), sentiment, topics },
+      capped: reflCapped, engagement: mean(reflEng), sentiment, topics },
     honor, flags,
   };
 }

@@ -334,4 +334,75 @@ eq('a staff row in a different offering is ignored',
      { course_offering_id: 'off-2', section_id: 'sec-z', role: 'director' },
    ])), ['sec-a']);
 
+/* ── confirmEffortRows — publishing full credit confirms a capped effort ──────
+ * The reading-reflection gate is a CEILING (effort = min(effort, 2)), and on the written path it
+ * costs nothing: points come from question_scores, where yellow is full credit. So a student could
+ * sit under a "Reflection capped" pill while holding every point the assignment was worth.
+ * Finalizing full credit is the instructor asserting the work was worth full marks, which raises
+ * the effort to 3. These pin the boundaries, because every one of them is a plausible "simplify
+ * this to `effort = 3`" away from being wrong. */
+section('confirmEffortRows: finalizing full credit raises a capped effort');
+
+const CTX = { user: { id: 'instr-1' } };
+const capped = (effort, extra = {}) => ({
+  1001: { gradeId: 'g-1001', qs: {}, finalized: false, source: 'ai_suggested',
+          diagnostic: { schema: 1, effort, reading_reflection: { meaningful: false, engagement: effort },
+                        q2_effort: effort, ...extra } },
+});
+// Full credit on both graded questions — the yellow case, which IS full credit.
+const fullCredit = {
+  1001: { q2: { score: 1, status: 'warn', modified: false },
+          q3: { score: 1, status: 'warn', modified: false } },
+};
+const oneZero = {
+  1001: { q2: { score: 0, status: 'zero', modified: false },
+          q3: { score: 1, status: 'full', modified: false } },
+};
+
+const bumped = G.confirmEffortRows(CTX, OFFERING, STUDENTS, fullCredit, capped(2));
+eq('a capped 2 is raised to 3', bumped.map(r => r.diagnostic.effort), [3]);
+eq('…on the right enrollment', bumped.map(r => r.enrollment_id), ['enr-1001']);
+eq('…recording what it was and who confirmed it',
+   [bumped[0].diagnostic.effort_override.from, bumped[0].diagnostic.effort_override.by], [2, 'instr-1']);
+
+// The gate is a ceiling, not a fixed value: thin answers everywhere AND a failed reflection lands
+// on 1, and the same act of publishing full credit confirms both.
+eq('a capped 1 is also raised to 3',
+   G.confirmEffortRows(CTX, OFFERING, STUDENTS, fullCredit, capped(1)).map(r => r.diagnostic.effort), [3]);
+
+// 0 is not a cap — it is "no substantive participation anywhere", which full credit cannot assert.
+eq('0 is left alone', G.confirmEffortRows(CTX, OFFERING, STUDENTS, fullCredit, capped(0)), []);
+
+// Never lowers, never exceeds 3.
+eq('an effort already above the cap is untouched',
+   G.confirmEffortRows(CTX, OFFERING, STUDENTS, fullCredit, capped(5)), []);
+eq('an effort already at 3 is untouched',
+   G.confirmEffortRows(CTX, OFFERING, STUDENTS, fullCredit, capped(3)), []);
+
+// Any zero on a graded question means it was not full credit.
+eq('a zero on one question blocks the bump',
+   G.confirmEffortRows(CTX, OFFERING, STUDENTS, oneZero, capped(2)), []);
+
+// The AI's own reading is preserved — this records an override, it does not rewrite the judgement.
+check('the AI meaningful judgement survives untouched',
+      bumped[0].diagnostic.reading_reflection.meaningful === false);
+check('q2_effort survives untouched', bumped[0].diagnostic.q2_effort === 2);
+
+// A student with no diagnostic at all has nothing to confirm.
+eq('no diagnostic -> nothing to do',
+   G.confirmEffortRows(CTX, OFFERING, STUDENTS, fullCredit,
+     { 1001: { gradeId: 'g-1001', qs: {}, source: 'ai_suggested', diagnostic: null } }), []);
+// …and so does a student with no prior grade row: there is no capped effort to raise.
+eq('no prior grade row -> nothing to do',
+   G.confirmEffortRows(CTX, OFFERING, STUDENTS, fullCredit, {}), []);
+
+// Q1 is worth 0 points and is filtered out of the grading UI, so it must not gate the bump.
+const withQ1 = { ...OFFERING, written: { id: WRITTEN_ID, content: { questions: [
+  { id: 'q1', text: 'Reading time', points: 0 },
+  { id: 'q2', text: 'Reading reflection', points: 1 },
+  { id: 'q3', text: 'Free response', points: 1 },
+] } } };
+eq('a zero-point Q1 does not block the bump',
+   G.confirmEffortRows(CTX, withQ1, STUDENTS, fullCredit, capped(2)).map(r => r.diagnostic.effort), [3]);
+
 process.exit(summary() ? 0 : 1);

@@ -137,6 +137,9 @@ export async function loadGradingData(ctx, offeringId, sectionIds) {
       qs: g.question_scores || {},
       finalized: g.is_finalized,
       effort: g.effort,
+      // Carried for confirmEffortRows(): finalizing full credit raises a capped
+      // diagnostic effort, and that needs the payload it is amending.
+      diagnostic: g.diagnostic || null,
       pointsEarned: g.points_earned == null ? null : Number(g.points_earned),
       // Carried so a save can PRESERVE them for a student nobody edited. Writing the
       // current user over every row was what erased the ai_suggested/instructor
@@ -318,6 +321,71 @@ function gradeRows(ctx, offering, students, gradeData, isFinalized, gradeMap = {
   }).filter(r => r && r.enrollment_id);
 }
 
+/**
+ * Finalizing full credit CONFIRMS the effort the AI only suspected.
+ *
+ * `/preflight-analyze` applies the reading-reflection gate last, as a ceiling:
+ * `effort = min(effort, 2)` whenever the reflection is not a genuine attempt. That is a
+ * judgement about substance, and on the written path it costs the student nothing — points
+ * come from `question_scores`, where yellow earns full credit. So a student could sit under a
+ * "Reflection capped" pill on the rollup while holding every point the assignment was worth,
+ * which is the contradiction this closes.
+ *
+ * When an instructor FINALIZES — the deliberate, published act, not a draft save — and has
+ * awarded full credit on every question that carries points, they have asserted the work was
+ * worth full marks. Raise a capped effort to 3, the bottom of the "earns what the assignment
+ * is worth" band, so the charts and the pill agree with the grade that was actually published.
+ *
+ * Deliberately narrow:
+ *  - **Only 1 and 2 move, and only ever up to 3.** The gate is a ceiling, not a fixed value, so
+ *    a student can land on 1 by engaging thinly everywhere *and* failing the reflection. Both
+ *    are confirmed by the same act. 0 is left alone: no substantive participation anywhere is
+ *    not something full credit can retroactively assert.
+ *  - **It never lowers an effort** and never exceeds 3 — an instructor confirming full credit
+ *    says "at least enough", not "exemplary".
+ *  - **The AI's own reading survives** in `reading_reflection.meaningful` and in
+ *    `effort_override.from`. Nothing here rewrites the judgement; it records that a human
+ *    overrode its consequence, and who.
+ *
+ * Applied as targeted updates AFTER the upsert rather than as a `diagnostic` key on every row:
+ * a PostgREST bulk upsert requires identical keys across the array, so folding it into
+ * gradeRows() would mean writing `diagnostic` for every student in scope — re-sending a
+ * payload this page never edits, and racing any concurrent `/preflight-analyze` write.
+ */
+export function confirmEffortRows(ctx, offering, students, gradeData, gradeMap = {}) {
+  const graded = questionsOf(offering.written).filter(q => (Number(q.points) || 0) > 0);
+  if (!graded.length) return [];
+  const enrollmentOf = Object.fromEntries(students.map(s => [s.student_id, s.enrollment_id]));
+  const now = new Date().toISOString();
+
+  return Object.entries(gradeData).map(([sid, qMap]) => {
+    const prior = gradeMap[sid];
+    if (!prior || !enrollmentOf[sid]) return null;
+
+    // Full credit on every question that carries points. Yellow qualifies: it IS full credit,
+    // and an instructor who published it reviewed the flag and let it stand.
+    const fullCredit = graded.every(q => {
+      const gd = qMap?.[q.id];
+      return gd && gd.status !== 'zero' && Number(gd.score) === (Number(q.points) || 0);
+    });
+    if (!fullCredit) return null;
+
+    const d = prior.diagnostic;
+    if (!d || typeof d !== 'object') return null;
+    const from = d.effort;
+    if (!(from === 1 || from === 2)) return null;      // 0, >=3, null and non-integers stand
+
+    return {
+      enrollment_id: enrollmentOf[sid],
+      diagnostic: {
+        ...d,
+        effort: 3,
+        effort_override: { from, to: 3, by: ctx.user.id, at: now, rule: 'finalized-full-credit' },
+      },
+    };
+  }).filter(Boolean);
+}
+
 /** How many rows a save/finalize would actually write — for an honest confirm prompt. */
 export function writableCount(ctx, offering, students, gradeData, gradeMap = {}) {
   return gradeRows(ctx, offering, students, gradeData, false, gradeMap).length;
@@ -340,6 +408,16 @@ export async function finalizeScores(ctx, offering, students, gradeData, gradeMa
   const res = await db.from('grades').upsert(rows, { onConflict: 'enrollment_id,assignment_offering_id' })
     .select('id');
   if (res.error) return res;
+
+  // Publishing full credit confirms a capped effort. Best-effort and deliberately after the
+  // upsert: this amends a diagnostic, and failing to raise it must never cost the grades that
+  // were just published. See confirmEffortRows().
+  for (const u of confirmEffortRows(ctx, offering, students, gradeData, gradeMap)) {
+    const { error } = await db.from('grades').update({ diagnostic: u.diagnostic })
+      .eq('enrollment_id', u.enrollment_id)
+      .eq('assignment_offering_id', offering.offeringId);
+    if (error) console.warn('[grade] published, but confirming effort failed:', error.message);
+  }
 
   // Append-only audit. Best-effort: a failed log entry must not lose the grades that were
   // just published, so the error is reported but not thrown.

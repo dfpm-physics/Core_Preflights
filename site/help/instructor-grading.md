@@ -156,6 +156,16 @@ if you have the section filter set wide, because "All sections" means the whole 
 **You publish your own sections.** You do not need a director to release grades; Finalize & publish
 writes exactly the students currently loaded, which is the sections you staff.
 
+**Publishing full credit also settles the effort question.** The AI caps a student's effort rating
+at 2 when it judges their reading reflection wasn't a real attempt — but on a written preflight
+that cap costs nothing, because points come from the questions and yellow is still full credit. So
+a student could sit under a **Reflection capped** flag on the Report tab while holding every point
+the assignment was worth. When you finalize with full credit on every question that carries points,
+that contradiction is resolved in the student's favour: an effort of 1 or 2 is raised to 3, and the
+flag clears. It never lowers an effort, never goes above 3, and never touches a student who lost
+points somewhere. The AI's original reading is kept on the record — this notes that you overrode
+its consequence, not that it never happened.
+
 > A third button, **Mark section reviewed**, sat here until 2026-07-27. It recorded that you had
 > been through the AI's proposals, for a director who was going to publish afterwards. There is no
 > second person in that sequence — you publish — so it was a note to yourself sitting one click from

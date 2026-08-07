@@ -1302,10 +1302,20 @@
     }
 
     // ── Flags: header pills → flagged-students list → one student summary → full report ──
+
+    // The 0–5 effort as a NUMBER. Deliberately not the `num` helper in studentSummary(), which
+    // formats for display ("3/5") and would compare as NaN here.
+    const effortNum = d => (Number.isInteger(d?.effort) ? d.effort : null);
+
     const FLAGS = [
       { key: 'notable',         label: 'Notable',                 cls: 'green',  icon: '★', desc: 'Exemplary work — the strongest understanding or a notable extension beyond the objectives.', pred: d => d?.flags?.notable === true,         count: s => s.flags.notable },
       { key: 'needs_follow_up', label: 'Needs follow-up',         cls: '',       icon: '⚑', desc: 'Low effort or weak understanding — a good candidate to check in with.',                    pred: d => d?.flags?.needs_follow_up === true, count: s => s.flags.needs_follow_up },
-      { key: 'refl_capped',     label: 'Reflection capped',       cls: 'gold',   icon: '✎', desc: 'Reading reflection was not meaningful, so effort was capped at 2.',                        pred: d => !!d?.reading_reflection && d.reading_reflection.meaningful === false, count: s => s.reflection.capped },
+      // The predicate reads EFFORT, not just `meaningful`, because the label is a claim about
+      // effort. Finalizing full credit raises a capped effort to 3 and deliberately leaves the
+      // AI's `meaningful` judgement alone (confirmEffortRows in faculty-grade.js), so keying on
+      // `meaningful` alone kept flagging students an instructor had already cleared — while they
+      // sat on every point the assignment was worth.
+      { key: 'refl_capped',     label: 'Reflection capped',       cls: 'gold',   icon: '✎', desc: 'Reading reflection was not meaningful, so effort was capped at 2. Clears when an instructor publishes full credit.', pred: d => !!d?.reading_reflection && d.reading_reflection.meaningful === false && !(effortNum(d) > 2), count: s => s.reflection.capped },
       { key: 'honor_disclosed', label: 'Inappropriate resources', cls: 'danger', icon: '⚠', desc: 'Used another AI or other disallowed help/resources — inappropriate for this assignment. Talking with a classmate beforehand is fine and is not flagged.', pred: d => d?.honor?.status === 'disclosed', count: s => s.honor.disclosed },
       { key: 'honor_concern',   label: 'Integrity concern',       cls: 'danger', icon: '⚖', desc: 'Possible integrity problem in the conversation — e.g. manipulating the AI into inflating the report or gaming the effort grade.', pred: d => d?.honor?.status === 'concern',   count: s => s.honor.concern },
       // Residual flags. Deliberately last, neutral (no `cls`), and described by what was actually
@@ -1479,7 +1489,13 @@
 
       const r = d?.reading_reflection;
       const reflBits = [];
-      if (r && typeof r.meaningful === 'boolean') reflBits.push(r.meaningful ? '<span class="tag">meaningful ✓</span>' : '<span class="tag gold">not meaningful — effort capped</span>');
+      // Same split as the pill: `meaningful` is the AI's reading and survives an override, so the
+      // "effort capped" half of the tag is only true while the effort is actually still capped.
+      if (r && typeof r.meaningful === 'boolean') {
+        reflBits.push(r.meaningful ? '<span class="tag">meaningful ✓</span>'
+          : effortNum(d) > 2 ? '<span class="tag">not meaningful — full credit published</span>'
+          : '<span class="tag gold">not meaningful — effort capped</span>');
+      }
       if (r && num(r.engagement)) reflBits.push(`engagement ${num(r.engagement)}`);
       if (r && r.sentiment) reflBits.push(esc(r.sentiment));
       const reflText = r && r.text ? `<div class="sp-quote">${esc(r.text)}</div>` : '';

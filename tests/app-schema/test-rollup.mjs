@@ -307,6 +307,28 @@ eq('misconceptions are now COUNTED for a written cohort',
 eq('…with severity carried through', writtenStructured.misconceptions[0].major, 2);
 eq('flags tally for a written cohort', writtenStructured.flags.needs_follow_up, 1);
 eq('the reflection gate is assessed', writtenStructured.reflection.assessed, 2);
+
+/* ── `capped` counts the gate STILL BITING, not the AI's judgement ────────────
+ * Finalizing full credit raises a capped effort to 3 and deliberately leaves `meaningful` alone
+ * (confirmEffortRows in faculty-grade.js), so `assessed - meaningful` kept reporting a cap a human
+ * had already lifted — while the student held every point the assignment was worth. */
+const refl = (id, effort, meaningful) => ({
+  student_id: id, path: 'written', effort, understanding: null,
+  report_data: { ...s1, effort, reading_reflection: { meaningful, engagement: 2 } },
+});
+
+eq('a non-meaningful reflection still under the cap counts',
+   summarizeReports([refl(1, 2, false)], 2).reflection.capped, 1);
+eq('…and at 1 as well, since the gate is a ceiling not a fixed value',
+   summarizeReports([refl(1, 1, false)], 2).reflection.capped, 1);
+eq('an override to 3 clears the count',
+   summarizeReports([refl(1, 3, false)], 2).reflection.capped, 0);
+eq('…while the AI judgement it preserved is still reported',
+   summarizeReports([refl(1, 3, false)], 2).reflection.meaningful, 0);
+eq('a meaningful reflection never counts, whatever the effort',
+   summarizeReports([refl(1, 1, true)], 2).reflection.capped, 0);
+eq('a mixed cohort counts only the ones still capped',
+   summarizeReports([refl(1, 2, false), refl(2, 3, false), refl(3, 4, true)], 2).reflection.capped, 1);
 eq('understanding comes from the holistic read, not the free-response question',
    writtenStructured.understanding.overall, 2);
 eq('…and is attributed to the written path, not inflated as interactive coverage',

@@ -8,6 +8,70 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-07 (second) — Matthew Recker via Claude
+
+### Publishing full credit clears a reading-reflection cap it had already overruled
+
+Found by the course director while reading the Physics 310 Lesson 01 rollup: a cadet was flagged
+**Reflection capped** and simultaneously held **3 of 3 points**. Both were correct, which is the
+problem.
+
+The reading-reflection gate is a **ceiling** — `/preflight-analyze` applies `effort = min(effort, 2)`
+when the reflection is not a genuine attempt. On the **interactive** path that costs real points: the
+trigger chain turns effort into points, so 2 pays one point instead of the assignment's full value.
+On the **written** path it costs nothing at all, because points come from `question_scores`, where a
+`warn` is full credit by deliberate design (`preflight-analyze` SKILL.md rule 5). Same student
+behaviour, same shared question, two different grades depending only on which path they picked — and
+a rollup pill asserting a penalty the gradebook never applied.
+
+**Finalize & publish now settles it.** When an instructor publishes full credit on every question
+carrying points, `diagnostic.effort` of **1 or 2 is raised to 3**. Deliberately narrow:
+
+- **1 as well as 2**, because the gate is a ceiling and not a fixed value — thin answers everywhere
+  *plus* a failed reflection lands on 1, and one act of publishing confirms both. **0 is left
+  alone**: no substantive participation anywhere is not something full credit can retroactively
+  assert.
+- **Never lowers, never exceeds 3** — an instructor confirming full credit says "at least enough",
+  not "exemplary".
+- **On finalize, not on a draft save.** Publishing is the deliberate, student-visible act; a draft
+  save is not a decision.
+- **The AI's reading survives.** `reading_reflection.meaningful` is untouched and
+  `effort_override {from, to, by, at, rule}` records who overrode its consequence. Nothing rewrites
+  the judgement, so "how often do faculty and the AI disagree on this gate" stays answerable.
+
+**The pill had to move too, and this is the part that was actually broken.** All three render sites
+keyed on `reading_reflection.meaningful`, never on effort — so raising the effort alone would have
+changed nothing on screen while silently moving the cohort effort mean. The predicate now reads the
+resolved effort, which is what its own label ("effort was capped at 2") always claimed:
+`report.html`'s flag pill and per-student tag, and `faculty-rollup.js`'s `reflection.capped` count,
+which was `assessed - meaningful` and therefore kept reporting a cap a human had lifted.
+
+Applied as targeted updates **after** the upsert rather than as a `diagnostic` key on every row: a
+PostgREST bulk upsert requires identical keys across the array, so folding it into `gradeRows()`
+would have meant rewriting `diagnostic` for every student in scope and racing any concurrent
+`/preflight-analyze` write. Best-effort — failing to raise an effort must never cost the grades that
+were just published.
+
+Files: `site/js/faculty-grade.js` (`confirmEffortRows`, exported for test; `diagnostic` carried on
+`gradeMap`), `site/js/faculty-rollup.js`, `site/faculty/report.html`,
+`site/help/instructor-grading.md`. **19 new tests** — 13 in `tests/app-schema/test-grade.mjs`
+pinning each boundary, 6 in `test-rollup.mjs` pinning the count. Verified additionally by replaying
+the real live row that prompted this.
+
+**Verification is Node-only (CORE.md §2).** The full offline suite passes and the logic was replayed
+against the live diagnostic, but the actual click-path — Finalize & publish writing the amended
+`diagnostic`, and the pill clearing on the rollup — has **not** been exercised in a browser. Four
+pre-existing `test-nav.mjs` failures ("Test views" dropdown) are unrelated and present on a clean
+tree.
+
+*Not fixed here, and it is the larger question:* the meaningful-gate still only bites on the
+interactive path. Two students writing the same throwaway reflection are graded two points apart on
+a 3-point lesson purely by modality. Closing that means either giving the written path a real gate —
+which breaks "yellow always earns full credit" — or accepting it is interactive-only and saying so.
+That is course policy, and it is the director's call.
+
+---
+
 ## 2026-08-07 — Matthew Recker via Claude
 
 ### The artifact builder comes into PREP; artifact sources go to Supabase Storage
