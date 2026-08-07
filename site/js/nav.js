@@ -112,6 +112,21 @@ export const FACULTY_LINKS = [
 export const USER_MENU_LINKS = [
   { key: 'account', label: 'Account', href: 'account.html', icon: 'user', emoji: '👤' },
   { key: 'help',    label: 'Help',    href: 'help.html',    icon: 'info', emoji: '❔' },
+  /* Artifacts — the library of built interactive lessons and what went into each.
+   *
+   * IN THE MENU, NOT ON THE BAR, and that is this file's own argument rather than a new one: the
+   * bar states where the work of running a COURSE happens, and P1.9 already established that it
+   * cannot keep paying for a further entry — Roster, Enrollment and Extensions each came off it.
+   * This is a reference surface opened when building or registering a lesson, not while teaching,
+   * which is the same shape as System.
+   *
+   * `facultyOnly` but NOT `adminOnly`: Storage read is gated on app.is_staff(), because an
+   * instructor teaching a section has a legitimate reason to see what their cadets are about to
+   * work through. WRITING a review is director-only and enforced by the bucket policy, not here —
+   * the page renders the decisions read-only for everybody else. The gate below is
+   * discoverability; RLS is the boundary. */
+  { key: 'artifacts', label: 'Artifacts', href: 'artifacts.html', icon: 'interactions', emoji: '🧪',
+    facultyOnly: true },
   // Separated by a rule above it: it is a different tier from "your own account", and running the
   // two together is how somebody lands on the raw table browser looking for their password.
   { key: 'system',  label: 'System',  href: 'system.html',  icon: 'settings', emoji: '🛠️',
