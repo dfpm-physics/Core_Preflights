@@ -1,0 +1,851 @@
+{
+  "schema": 1,
+  "course": "phys-215",
+  "updated": "2026-08-05",
+  "note": "Review decisions from scripts/review/serve_artifact_review.py. NOTHING HERE HAS BEEN APPLIED — these are instructions for a later edit, and the .jsx artifacts are untouched. Each objective carries the `sha` of the probe-topic prose it was judged against; if the artifact is rebuilt the sha stops matching and the note is stale (run the server with --stale to list those). Rejecting anything in a PUBLISHED artifact costs a republish and a new 8-hex slug per contract 3.2, which registers as a NEW lesson row.",
+  "artifacts": {
+    "lesson-02-electric-charge-coulombic-force-3a8e4e18": {
+      "objectives": {
+        "charge-quantization-conservation": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "14ee247427b27aef",
+          "label": "Charge is quantized and conserved; charging moves electrons"
+        },
+        "coulomb-inverse-square": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "13b787c9798cc2cc",
+          "label": "Coulomb's law for two charges: inverse square and sign rule"
+        },
+        "conductor-insulator-mobility": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "a12d744341ab27fa",
+          "label": "Conductor vs. insulator is electron mobility"
+        },
+        "polarization-and-induction": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "0d4791e25065fdfe",
+          "label": "Polarization attracts neutrals; induction needs no contact"
+        }
+      },
+      "file": "lesson_02_preflight_electric_charge_coulombic_force.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-03-coulombs-law-and-superposition-485f9923": {
+      "objectives": {
+        "force-superposition-vector-sum": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "63631b5f7c113a0c",
+          "label": "Net force is the vector sum of independent pairwise forces"
+        },
+        "unit-vector-sign-bookkeeping": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "b3a5ee979e08a365",
+          "label": "Each term's direction from its own pair of signs, not one rule"
+        },
+        "coulomb-component-resultant": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "fb0656adc4ebf8e5",
+          "label": "Resolve, add componentwise, recombine, fix the quadrant"
+        },
+        "third-law-fixed-sources": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "e90255252638c068",
+          "label": "Third-law pairs force the fixed-source electrostatics idealization"
+        }
+      },
+      "file": "lesson_03_preflight_coulombs_law_and_superposition.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-04-electric-fields-and-superposition-479afcad": {
+      "objectives": {
+        "field-definition": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "e3c0b906c6429c39",
+          "label": "Electric field as force per unit test charge",
+          "by": "published 2026-08-04"
+        },
+        "field-superposition": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "a99b8c9c60cfb1f6",
+          "label": "Vector superposition of fields from several charges",
+          "by": "published 2026-08-04"
+        },
+        "field-direction-sign": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "dceefdb91f371b6e",
+          "label": "Source sign sets field direction; test sign sets force",
+          "by": "published 2026-08-04"
+        },
+        "field-lines": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "c7b983892e8c3e73",
+          "label": "Reads field-line diagrams: density, tangent, line count",
+          "by": "published 2026-08-04"
+        }
+      },
+      "file": "lesson_04_preflight_electric_fields_and_superposition.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-05-charged-particles-in-uniform-elec-fields-1c5bc31d": {
+      "objectives": {
+        "uniform-field-source": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "4483712a2b581ad8",
+          "label": "How charged planes superpose into a uniform field",
+          "by": "published 2026-08-04"
+        },
+        "force-on-charge-uniform": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "3f1bdb1078ce0517",
+          "label": "Constant force qE gives constant acceleration",
+          "by": "published 2026-08-04"
+        },
+        "trajectory-component-separation": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "b89cdf28314c3f70",
+          "label": "Parabola: components separate and share one clock",
+          "by": "published 2026-08-04"
+        },
+        "charge-to-mass-and-time-in-field": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "299eb7c47e79cf37",
+          "label": "q/m sets a; more time in the field means more deflection",
+          "by": "published 2026-08-04"
+        }
+      },
+      "file": "lesson_05_preflight_charged_particles_in_uniform_elec_fields.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-07-charge-distributions-electric-flux-32174e58": {
+      "objectives": {
+        "charge-density-integral": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "cc56204b0ab92980",
+          "label": "Picks lambda/sigma/rho; turns the sum into an integral",
+          "by": "published 2026-08-04"
+        },
+        "symmetry-integration": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "599f34a02085059b",
+          "label": "Uses symmetry to cancel components before integrating",
+          "by": "published 2026-08-04"
+        },
+        "limiting-cases": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "4e91ef7d66a7276e",
+          "label": "Checks results by limits; falloff weakens with source size",
+          "by": "published 2026-08-04"
+        },
+        "flux-dot-product": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "65eb0c0603b9265e",
+          "label": "Flux as E dot A; orientation and the outward normal",
+          "by": "published 2026-08-04"
+        }
+      },
+      "file": "lesson_07_preflight_charge_distributions_electric_flux.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-08-gausss-law-and-its-applications-5f57cc30": {
+      "objectives": {
+        "enclosed-charge-flux": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "78e82e1defba24ad",
+          "label": "Flux set by enclosed charge; size and shape drop out",
+          "by": "published 2026-08-04"
+        },
+        "total-field-vs-qenc": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "00947176385eb027",
+          "label": "E in the integral is total; q_enc is inside only",
+          "by": "published 2026-08-04"
+        },
+        "symmetry-picks-surface": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "d1b53257403b0cc3",
+          "label": "Matches the Gaussian surface to the distribution",
+          "by": "published 2026-08-04"
+        },
+        "inside-outside-qenc": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "27378dd073ff8451",
+          "label": "Builds q_enc(r); field inside versus outside",
+          "by": "published 2026-08-04"
+        }
+      },
+      "file": "lesson_08_preflight_gausss_law_and_its_applications.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-09-electric-potential-difference-b3ba716f": {
+      "objectives": {
+        "potential-vs-energy": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "6d120182f0956e95",
+          "label": "V = U/q: potential versus potential energy",
+          "by": "published 2026-08-04"
+        },
+        "field-from-voltage": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "0a09dbf51e969f44",
+          "label": "E from Delta V over d, and which way V drops",
+          "by": "published 2026-08-04"
+        },
+        "charge-energy-conservation": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "419f8b75d123d465",
+          "label": "K + U with charge; the electron-volt",
+          "by": "published 2026-08-04"
+        },
+        "potential-field-integral": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "f5d124b30bd2f21e",
+          "label": "V from the integral of E; path and reference",
+          "by": "published 2026-08-04"
+        }
+      },
+      "file": "lesson_09_preflight_electric_potential_difference.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-10-electric-potential-potential-energy-c627bfa9": {
+      "objectives": {
+        "point-charge-potential": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "f2f220a05ceeae37",
+          "label": "V = kq/r, and adding potentials as numbers",
+          "by": "published 2026-08-04"
+        },
+        "field-from-potential": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "32230ecf6daa0de3",
+          "label": "E = -dV/ds: the field is the slope of V",
+          "by": "published 2026-08-04"
+        },
+        "equipotential-surfaces": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "5a2ddb44a400a54a",
+          "label": "Equipotentials: perpendicular to E, no work along",
+          "by": "published 2026-08-04"
+        },
+        "conductor-equipotential": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "ffa58895ed5d7427",
+          "label": "Conductors: one potential, E = 0 inside",
+          "by": "published 2026-08-04"
+        }
+      },
+      "file": "lesson_10_preflight_electric_potential_potential_energy.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-13-capacitance-energy-and-dielectrics-7444aa79": {
+      "objectives": {
+        "capacitance-definition": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "a6d5ea35148d40a3",
+          "label": "C = Q/V, but fixed by geometry alone",
+          "by": "published 2026-08-04"
+        },
+        "stored-energy": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "8e032f6fc5fe8dab",
+          "label": "U = QV/2 = CV^2/2 = Q^2/2C; energy in the field",
+          "by": "published 2026-08-04"
+        },
+        "dielectric-battery-state": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "8e0ffed80aecf900",
+          "label": "Dielectric: C = kappa*C0; the battery decides the rest",
+          "by": "published 2026-08-04"
+        }
+      },
+      "file": "lesson_13_preflight_capacitance_energy_and_dielectrics.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-14-current-resistance-and-electrical-power-06497f19": {
+      "objectives": {
+        "current-as-charge-rate": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "c49562e8987dcb6d",
+          "label": "I = dQ/dt; the ampere as one coulomb per second",
+          "by": "published 2026-08-04"
+        },
+        "resistance-vs-resistivity": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "e9ad2cec34f223f1",
+          "label": "R = rho*L/A; object property vs material property",
+          "by": "published 2026-08-04"
+        },
+        "ohms-law-empirical": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "bb16413c1321fbab",
+          "label": "V = IR is empirical, not a law of nature",
+          "by": "published 2026-08-04"
+        },
+        "power-three-forms": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "7d94815e9421ca6c",
+          "label": "P = IV = I^2*R = V^2/R; pick by what is held fixed",
+          "by": "published 2026-08-04"
+        }
+      },
+      "file": "lesson_14_preflight_current_resistance_and_electrical_power.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-15-dc-circuit-analysis-kirchhoffs-rules-d9d8a7a3": {
+      "objectives": {
+        "loop-rule-signs": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "21fb0854c0bafb64",
+          "label": "sum Delta_V = 0; signs come from direction of travel",
+          "by": "published 2026-08-04"
+        },
+        "junction-rule-conservation": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "8dff91bf8a774575",
+          "label": "sum I_in = sum I_out; charge conservation at a node",
+          "by": "published 2026-08-04"
+        },
+        "assumed-direction-negative": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "41e6b926374ff25a",
+          "label": "a negative current is a direction, not an error",
+          "by": "published 2026-08-04"
+        }
+      },
+      "file": "lesson_15_preflight_dc_circuit_analysis_kirchhoffs_rules.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-18-moving-charged-particle-in-a-magnetic-field-cd95f8b3": {
+      "objectives": {
+        "magnetic-force-cross-product": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "9c7dffbf2c0dbb05",
+          "label": "F = q*v x B; magnitude, direction, and both zeros",
+          "by": "published 2026-08-04"
+        },
+        "no-work-constant-speed": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "e760ff27eb5923c1",
+          "label": "force perpendicular to v; speed and KE never change",
+          "by": "published 2026-08-04"
+        },
+        "radius-from-newtons-law": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "4ba6a39819114709",
+          "label": "q*v*B = m*v^2/r gives r = m*v/(q*B)",
+          "by": "published 2026-08-04"
+        },
+        "period-independent-of-speed": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "2c065078c326ea9c",
+          "label": "T = 2*pi*m/(q*B); no v and no r in it",
+          "by": "published 2026-08-04"
+        }
+      },
+      "file": "lesson_18_preflight_moving_charged_particle_in_a_magnetic_field.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-19-magnetic-force-on-current-carrying-wires-4a147cca": {
+      "objectives": {
+        "wire-force-from-moving-charges": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "e9da9f251aa6e916",
+          "label": "F = I*L x B; the wire force is q*v x B summed up",
+          "by": "published 2026-08-04"
+        },
+        "angle-between-current-and-field": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "286858bc21f97c34",
+          "label": "F = I*L*B*sin(theta); theta is between I and B",
+          "by": "published 2026-08-04"
+        },
+        "rhr1-force-direction-on-wire": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "ded30795909bfade",
+          "label": "RHR-1 gives the force direction on a wire",
+          "by": "published 2026-08-04"
+        },
+        "closed-loop-net-force-zero": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "34ded0d20cfed981",
+          "label": "net force on any closed loop in a uniform B is zero",
+          "by": "published 2026-08-04"
+        }
+      },
+      "file": "lesson_19_preflight_magnetic_force_on_current_carrying_wires.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-20-magnetic-dipoles-and-torque-3190fefe": {
+      "objectives": {
+        "zero-net-force-nonzero-torque": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "425b35bbdcfe6f86",
+          "label": "net force on a loop is zero; net torque is not",
+          "by": "published 2026-08-04"
+        },
+        "dipole-moment-definition": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "7b4262865b9c8c4c",
+          "label": "mu = N*I*A*n-hat; magnitude and RHR-2 direction",
+          "by": "published 2026-08-04"
+        },
+        "torque-angle-from-normal": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "c7206101a3190a63",
+          "label": "theta is normal-to-B; max torque when plane holds B",
+          "by": "published 2026-08-04"
+        }
+      },
+      "file": "lesson_20_preflight_magnetic_dipoles_and_torque.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-21-sources-of-magnetic-fields-85e63bf8": {
+      "objectives": {
+        "biot-savart-structure": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "f52b5013147b3ee3",
+          "label": "dB from I dl x r-hat, 1/r^2, then integrate"
+        },
+        "straight-wire-field": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "8563a4b11de70855",
+          "label": "B = mu0*I/(2*pi*R): 1/R, circling the wire"
+        },
+        "parallel-currents-force": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "4b6f40871ab4bc21",
+          "label": "Wire 1 makes B; that B pushes wire 2"
+        },
+        "current-loop-field": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "5c1a47dd93d33e76",
+          "label": "Loop: mu0*I/(2R) at the centre, dipole far off"
+        }
+      },
+      "file": "lesson_21_preflight_sources_of_magnetic_fields.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-22-amperes-law-gausss-law-in-magnetism-bd81d7d5": {
+      "objectives": {
+        "enclosed-current-only": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "40e575398ca645dd",
+          "label": "Only current through the loop counts; shape drops out"
+        },
+        "symmetry-makes-it-solvable": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "29c34fc10598350e",
+          "label": "Always true, only usable when symmetry pulls B out"
+        },
+        "thick-wire-inside-outside": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "ade39dc2a43284dd",
+          "label": "I_enc goes as r^2/a^2: B rises, then falls as 1/r"
+        },
+        "solenoid-uniform-field": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "110b5f17947faca4",
+          "label": "B = mu0*n*I inside, zero outside; n is per length"
+        }
+      },
+      "file": "lesson_22_preflight_amperes_law_gausss_law_in_magnetism.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-24-faradays-law-of-induction-motional-emf-8cbe647d": {
+      "objectives": {
+        "magnetic-flux-orientation": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "71599e9f507e0d2f",
+          "label": "Flux is B dot A: size, tilt, and the chosen normal"
+        },
+        "emf-from-rate-of-change": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "d5e74663515f25ff",
+          "label": "Emf comes from dPhi/dt, never from B itself"
+        },
+        "motional-emf-blv": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "fc6e35e9075b7793",
+          "label": "Moving rod: the area changes, so emf = B*l*v"
+        },
+        "motional-emf-energy": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "cbce0120e40e99c8",
+          "label": "You must push; your work becomes I^2*R"
+        }
+      },
+      "file": "lesson_24_preflight_faradays_law_of_induction_motional_emf.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-25-lenzs-law-induced-electric-field-1a98a6d0": {
+      "objectives": {
+        "lenz-opposes-change": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "53f2f7264bccc0e0",
+          "label": "The induced effect opposes the change, not the field"
+        },
+        "lenz-direction-procedure": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "78c105daa4d6bca6",
+          "label": "Applied field, rising or falling, induced field, current"
+        },
+        "induced-e-nonconservative": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "255987d576029d63",
+          "label": "A changing flux makes an E field with no wire and no voltage"
+        },
+        "induced-e-from-symmetry": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "002aa0a5b563d735",
+          "label": "Symmetry turns the loop integral into E times 2 pi r"
+        }
+      },
+      "file": "lesson_25_preflight_lenzs_law_induced_electric_field.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-26-generators-and-motors-ac-transformers-1bbf05b9": {
+      "objectives": {
+        "generator-emf-nbaw": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "e37331a59ecacf30",
+          "label": "Spinning coil: peak emf is N B A omega"
+        },
+        "motor-back-emf": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "dabd589ef6402924",
+          "label": "A turning motor makes back emf; it limits the current"
+        },
+        "ac-peak-vs-rms": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "79d0862627977d69",
+          "label": "Peak, rms and frequency: 170 V peak is the 120 V outlet"
+        },
+        "transformer-turns-and-power": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "d3783eb88453f7d7",
+          "label": "Turns set voltage, current inverts, power is conserved"
+        }
+      },
+      "file": "lesson_26_preflight_generators_and_motors_ac_transformers.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-28-displacement-current-dc9f8b07": {
+      "objectives": {
+        "ampere-surface-ambiguity": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "084e7d7eed92c98d",
+          "label": "One loop, two surfaces, two different answers"
+        },
+        "displacement-current-term": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "e77a3018289ce613",
+          "label": "Changing electric flux, not moving charge"
+        },
+        "ampere-maxwell-consistency": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "9ff5f8fff4606e25",
+          "label": "The repaired law agrees on every surface"
+        }
+      },
+      "file": "lesson_28_preflight_displacement_current.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-29-maxwells-equations-7a27dd4c": {
+      "objectives": {
+        "four-laws-as-a-set": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "08147059c618506c",
+          "label": "What each of the four equations asserts"
+        },
+        "symmetry-and-its-limit": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "e6cadc50bb96bd90",
+          "label": "Where the two induction laws mirror, and where they do not"
+        },
+        "wave-bootstrap": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "65b313c473ad1d5d",
+          "label": "Each changing field creating the other, outward"
+        }
+      },
+      "file": "lesson_29_preflight_maxwells_equations.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-30-electromagnetic-waves-em-spectrum-40677a45": {
+      "objectives": {
+        "transverse-e-b-in-phase": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "7f956fcae2b78b1f",
+          "label": "E and B: perpendicular, in phase, ratio c"
+        },
+        "speed-from-two-constants": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "b6f4dea7db274ebd",
+          "label": "c falls out of eps0 and mu0 alone"
+        },
+        "spectrum-is-one-wave": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "64fc58904ddbe88a",
+          "label": "One wave, many bands; the edges are conventions"
+        }
+      },
+      "file": "lesson_30_preflight_electromagnetic_waves_em_spectrum.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-31-light-reflection-refraction-ec714375": {
+      "objectives": {
+        "index-and-light-speed": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "283aa09d1253ed37",
+          "label": "n = c/v: the index sets the speed in matter"
+        },
+        "reflection-from-the-normal": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "9437274d0d973081",
+          "label": "Reflection: equal angles, measured from the normal"
+        },
+        "snell-bending-sense": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "55e7750ddf87613c",
+          "label": "Snell's law, and which way the ray bends"
+        },
+        "critical-angle-tir": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "10c6b7bb8f7733e5",
+          "label": "Total internal reflection needs n1 greater than n2"
+        }
+      },
+      "file": "lesson_31_preflight_light_reflection_refraction.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-32-image-formation-from-mirrors-fbd3ac8d": {
+      "objectives": {
+        "plane-mirror-virtual-image": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "ee0664df62360543",
+          "label": "Plane mirror: a virtual image, equally far behind"
+        },
+        "focal-point-and-paraxial": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "5b8695815241e08f",
+          "label": "Focal point, f = R/2, and the small-angle limit"
+        }
+      },
+      "file": "lesson_32_preflight_image_formation_from_mirrors.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-33-image-formation-from-lenses-d3ec7a43": {
+      "objectives": {
+        "thin-lens-ray-tracing": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "6d9a91a11e03f285",
+          "label": "Three principal rays locate the image"
+        }
+      },
+      "file": "lesson_33_preflight_image_formation_from_lenses.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-36-double-slit-interference-8b6dbbb7": {
+      "objectives": {
+        "interference-wave-evidence": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "269ae2d27ae65d0e",
+          "label": "Fringes are superposition: light behaves as a wave"
+        },
+        "coherence-requirement": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "7aeb2bd12e102dcf",
+          "label": "Why one source and one wavelength: coherence"
+        },
+        "path-difference-order": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "87aca49ccc501727",
+          "label": "d sin theta = m lambda, and m is the order"
+        },
+        "fringe-position-scaling": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "2fc276bf708fe7e4",
+          "label": "Positions go as lambda D over d; small d spreads them"
+        }
+      },
+      "file": "lesson_36_preflight_double_slit_interference.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-37-diffraction-resolution-89cef48b": {
+      "objectives": {
+        "single-slit-minima": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "3d6ac0cabc1588f7",
+          "label": "a sin theta = m lambda locates the DARK fringes"
+        },
+        "slit-width-and-spread": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "8683db0f8d47a2c7",
+          "label": "Narrower slit spreads the pattern wider"
+        },
+        "single-slit-intensity": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "ddeb287851cc4775",
+          "label": "Side maxima are weak; intensity goes as sinc squared"
+        },
+        "rayleigh-resolution": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "76b5aaa2149befec",
+          "label": "Rayleigh limit 1.22 lambda over D; bigger aperture resolves more"
+        }
+      },
+      "file": "lesson_37_preflight_diffraction_resolution.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-39-intro-to-nuclear-4084143d": {
+      "objectives": {
+        "nuclide-notation": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "e6842ca9cce3f734",
+          "label": "Z, N and A: what the nuclear symbol counts"
+        },
+        "binding-energy-release": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "20a5b50b6e6716a9",
+          "label": "Fission and fusion both move toward iron"
+        },
+        "activity-and-units": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "6a8570a5bb65cb44",
+          "label": "Activity is lambda N, not the number of nuclei"
+        }
+      },
+      "file": "lesson_39_preflight_intro_to_nuclear.jsx",
+      "reviewed": "2026-08-05"
+    },
+    "lesson-41-photoelectric-effect-wave-particle-518e76f6": {
+      "objectives": {
+        "classical-wave-failure": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "914d5481c433446e",
+          "label": "Three facts the wave picture cannot produce"
+        },
+        "photon-energy-balance": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "b639fb716d30324b",
+          "label": "K_max = hf - phi, and where the cut-off comes from"
+        },
+        "matter-wave-lambda": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "345ad41ffd14d672",
+          "label": "lambda = h/p, and why only small things diffract"
+        },
+        "wave-particle-duality": {
+          "decision": "accepted",
+          "comment": "",
+          "sha": "7b67db07e7683569",
+          "label": "What duality claims, and what it does not"
+        }
+      },
+      "file": "lesson_41_preflight_photoelectric_effect_wave_particle.jsx",
+      "reviewed": "2026-08-05"
+    }
+  }
+}

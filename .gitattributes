@@ -1,0 +1,24 @@
+# Byte-exact storage for the artifact builder tree.
+#
+# `_builder/preflight-kit/` is a HASH-LOCKED payload. `MANIFEST.sha256` hashes exact bytes, and
+# one of the contracts intentionally ships with CRLF while the rest use LF.
+#
+# Git's core.autocrlf=true (the Windows default, and set on this machine) rewrites line endings
+# on checkout. That silently corrupts the payload, and it has bitten twice:
+#
+#   1. A fresh clone failed 6 of 7 MANIFEST.sha256 hashes in tools/verify.py.
+#   2. localize.py finds a course profile with the regex ```profile\n — and a CRLF checkout
+#      puts \r before the \n, so parse_profile exited with "no fenced block found".
+#
+# THE LOCAL WORKING TREE LOOKED CORRECT THROUGH BOTH. This class of bug is invisible until
+# somebody clones. After any change to how these are stored, clone to a temp directory and run
+# `python tools/verify.py` there — not here.
+#
+# Do not remove either line.
+_builder/preflight-kit/** -text
+
+# Course profiles are parsed by localize.py with the same ```profile\n regex; schedules are
+# parsed by the build skill; and the .jsx artifacts are hashed against Supabase Storage by
+# scripts/artifacts/sync_artifacts.py, where a rewritten line ending is a different file.
+# Keep the whole tree byte-stable for one reason rather than several rules that drift apart.
+_builder/courses/** -text

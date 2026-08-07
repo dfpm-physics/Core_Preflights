@@ -47,3 +47,16 @@ node_modules/
 # Pre-change JSON snapshots taken by scripts/ before a live mutation. Local safety artifacts:
 # they carry live offering/staff structure and are regenerated on demand, never reviewed in a diff.
 _snapshots/
+
+# Artifact SOURCE lives in Supabase Storage, not in git — 46 published artifacts come to ~8 MB
+# of .jsx, and committing them would put that in every clone's history permanently. This
+# directory is a LOCAL CACHE: populate it with
+#     python scripts/artifacts/sync_artifacts.py pull --into _builder/courses --commit
+# Only the .jsx is ignored. BUILD-LOG.md and REVIEW-NOTES.json sit beside them and ARE tracked —
+# they are the human record of what was built and what was approved, and they diff well.
+_builder/courses/*/artifacts/*.jsx
+
+# preflight-kit localizer output — regenerate with `python tools/localize.py`. Never committed;
+# localize.py wipes and rewrites it on every run.
+_builder/courses/*/build/
+_builder/preflight-kit/build/
