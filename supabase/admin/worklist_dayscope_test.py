@@ -101,6 +101,14 @@ def test_wired():
           "array_agg(distinct sd.section_id::text)" in src)
     check("tied deadlines get a deterministic order before --latest sees them",
           "order by d.due_at desc, a.slug, d.track" in src)
+    # sec_due claims to mirror schema.js effectiveDue(), which has had FOUR tiers since migration
+    # 017. It carried three until 2026-08-07, silently dropping the per-day schedule — so a
+    # section created after its lesson was saved resolved to the offering default (the M date) and
+    # read a day early. That is the exact bug 017 exists to fix, reproduced inside the tool that
+    # reports on it. Today every section has an explicit row so nothing differs; this guards the
+    # next late-created section rather than anything currently visible.
+    check("sec_due folds in the per-day schedule (effectiveDue tier 3)",
+          "due_by_day ->> md.day" in src and "with ordinality" in src)
 
 
 def test_pick_latest():

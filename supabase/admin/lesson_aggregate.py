@@ -1304,7 +1304,22 @@ def cmd_worklist(args, conn):
         sec_due as (
           select ao.id as offering_id, s.id as section_id, s.code as section_code,
                  s.meeting_days,
-                 coalesce(add.due_at, ao.due_at) as due_at
+                 coalesce(
+                   add.due_at,
+                   -- Tier 3: the per-day schedule. This was MISSING until 2026-08-07 while the
+                   -- comment above claimed to mirror effectiveDue(), which has had four tiers
+                   -- since migration 017. It matters only for a section created AFTER the lesson
+                   -- was saved — the editor writes an assignment_due_dates row for every section
+                   -- it can see, so tier 2 normally answers — and that is precisely the case 017
+                   -- was added to fix on the site. A T-day section added late therefore resolved
+                   -- to the offering default here (the M date) and read one day early, which is
+                   -- the original bug reproduced inside the tool that reports on it.
+                   -- First meeting day carrying a date wins, matching resolveDueBySection().
+                   (select (ao.due_by_day ->> md.day)::timestamptz
+                      from unnest(s.meeting_days) with ordinality as md(day, ord)
+                     where jsonb_exists(ao.due_by_day, md.day)
+                     order by md.ord limit 1),
+                   ao.due_at) as due_at
             from assignment_offerings ao
             join offering o on o.id = ao.course_offering_id
             join sections s on s.course_offering_id = ao.course_offering_id
