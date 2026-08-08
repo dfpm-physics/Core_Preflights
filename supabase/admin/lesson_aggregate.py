@@ -1203,6 +1203,50 @@ def cmd_pull(args, conn):
 
 
 # ── worklist ───────────────────────────────────────────────────────────────────────────
+def track_covered_sql(payload_expr, ids_expr):
+    """SQL for: every section of one day track already has a scope in this stored payload.
+
+    THE single definition. cmd_worklist splices it into its query at the /*TRACK_COVERED*/ marker;
+    worklist_dayscope_test.py imports it and evaluates it over synthetic payloads. One copy is
+    what makes that test a regression test instead of a restatement of itself — a future edit that
+    reverts the day-scoping has to come through here, and the test fails.
+
+    Both arguments are SQL expressions written by this module, never user input.
+
+    Why "every section" rather than "any": `pull --day` writes a track's sections in one pass, so
+    a partial payload means a run died midway. Treating that as done strands the missing sections
+    where only a human reading the rollup would ever notice.
+    """
+    return (f"not exists (select 1 from unnest({ids_expr}) sid "
+            f"where not jsonb_exists(coalesce({payload_expr} -> 'scopes', '{{}}'::jsonb), sid))")
+
+
+def _pick_latest(rows):
+    """Which single track --latest reports, given the worklist ordered newest-deadline-first.
+
+    Split out of cmd_worklist so it can be tested without a database — the states that matter
+    here only arise after a deadline, and waiting for one is not a test strategy.
+
+    `rows[0]` is not enough. Two tracks of one lesson can share a deadline (a course that sets no
+    per-day dates has both its M and T sections fall back to the offering default), and then the
+    top row is decided by tie-break alone. Whichever track loses is never reported again: the run
+    picks the same winner every time, finds it already analyzed, and skips. The T sections of
+    every such lesson would go un-aggregated for the whole term with the command cheerfully
+    reporting success.
+
+    So: among the tracks tied at the newest deadline, prefer one that still needs a run, and
+    prefer a runnable one over an empty one. Falling back to `tied[0]` keeps the "nothing to do"
+    answer intact — the caller still gets a row to report a skip against.
+
+    Looking only inside the tied group is not the backwards-walk the docstring above forbids.
+    Every row in it carries the deadline that just passed; that is the window this path is for.
+    """
+    newest = rows[0]["due_at"]
+    tied = [r for r in rows if r["due_at"] == newest]
+    return next((r for r in tied if r["needs_run"] and r["submissions"]),
+                next((r for r in tied if r["needs_run"]), tied[0]))
+
+
 def cmd_worklist(args, conn):
     """What is past due in a course, and has it been analyzed yet.
 
@@ -1222,8 +1266,30 @@ def cmd_worklist(args, conn):
 
     Day tracks are separate work. A lesson's M sections and T sections close on different days,
     so "most recently due" is answered per day track, not per lesson.
+
+    Except when they do not. Per-day deadlines are a per-course habit, not a rule the schema
+    enforces: as of 2026-08-07 phys-215 sets `assignment_due_dates` on all 74 offerings and its M
+    and T tracks close a day apart, while phys-110 sets them on one offering out of 37 — so every
+    other phys-110 lesson has both tracks resolving to the same offering default, closing at the
+    same instant. Both shapes are legitimate and both must work here. Two consequences, each
+    handled below rather than assumed away:
+
+      * "has this been analyzed" must be asked PER TRACK, because one stored row serves both.
+      * "the most recently due track" can name two rows, so --latest must break the tie on
+        something better than plan order.
     """
     day = (getattr(args, "day", None) or "").strip().upper() or None
+
+    # --as-of is a REHEARSAL, and it is read-only in the strongest sense: worklist writes nothing
+    # at all, so the worst it can do is print a list. It exists because the interesting states of
+    # this command only occur after a deadline, which makes them untestable and unrehearsable
+    # until the moment they matter. It moves the clock ONLY for "which tracks are past due" —
+    # every other figure is live. Say so loudly, because a list of past-due lessons that is not
+    # actually past due is exactly the sort of output someone screenshots and acts on later.
+    as_of = getattr(args, "as_of", None) or None
+    if as_of:
+        print(f"⚠ REHEARSAL — pretending the clock reads {as_of}. Nothing here is a live "
+              f"instruction to run.\n")
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
         with offering as (
@@ -1264,9 +1330,19 @@ def cmd_worklist(args, conn):
                  where r2.assignment_offering_id = ao.id
                    and coalesce(r2.day_track, '') = coalesce(d.track, '')
                  order by r2.started_at desc limit 1)                         as last_status,
+               -- Day-scoped ON PURPOSE, and it is the whole reason this subquery is not a
+               -- plain row count. There is ONE analysis_reports row per offering, holding every
+               -- track's scopes side by side, so its mere existence says only "somebody has
+               -- aggregated something here" — never which track. Counting the row made every
+               -- other track of the same lesson look finished the moment the first one ran, so
+               -- the second track reported `skip` forever and its sections never got a scope.
+               -- Ask the narrower question the caller actually means: is THIS track represented?
+               -- Scopes are keyed by section id, so the track is covered only when every one of
+               -- its sections has a key — which also catches a half-written run.
                (select count(*) from analysis_reports ar
                  where ar.scope = 'assignment_offering' and ar.scope_id = ao.id
-                   and ar.kind = %(kind)s)                                    as has_analysis
+                   and ar.kind = %(kind)s
+                   and /*TRACK_COVERED*/)                                     as has_analysis
           from assignment_offerings ao
           join assignments a on a.id = ao.assignment_id
           join offering o    on o.id = ao.course_offering_id
@@ -1275,15 +1351,20 @@ def cmd_worklist(args, conn):
                  -- track's work closed: the LAST of its sections' deadlines.
                  select unnest(sd.meeting_days) as track,
                         max(sd.due_at)          as due_at,
-                        array_agg(distinct sd.section_code order by sd.section_code) as section_codes
+                        array_agg(distinct sd.section_code order by sd.section_code) as section_codes,
+                        array_agg(distinct sd.section_id::text)                      as section_ids
                    from sec_due sd
                   where sd.offering_id = ao.id and sd.due_at is not null
                   group by unnest(sd.meeting_days)
                ) d on true
-         where d.due_at <= now()
+         where d.due_at <= coalesce(%(as_of)s::timestamptz, now())
            and (%(day)s is null or d.track = %(day)s)
-         order by d.due_at desc, a.slug
-    """, {"course": args.course, "day": day, "kind": KIND})
+         -- d.track breaks the tie between tracks sharing one deadline. Without it the order of
+         -- two otherwise-identical rows is whatever the plan happens to emit, and --latest picks
+         -- from the top.
+         order by d.due_at desc, a.slug, d.track
+    """.replace("/*TRACK_COVERED*/", track_covered_sql("ar.payload", "d.section_ids")),
+        {"course": args.course, "day": day, "kind": KIND, "as_of": as_of})
     rows = cur.fetchall()
     if not rows:
         msg = f"Nothing past due in {args.course}" + (f" for day {day}" if day else "") + "."
@@ -1301,7 +1382,13 @@ def cmd_worklist(args, conn):
     # --latest is the automated contract: the most recently due track, and only if it has never
     # had a successful run. Anything older is left alone — see the docstring.
     if args.latest:
-        top = rows[0]
+        # Two tracks can share one deadline. phys-110 sets no per-day dates, so a lesson's M and
+        # T sections close at the same instant, and "the most recently due track" names two rows
+        # rather than one. Taking rows[0] then picks between them on tie-break alone and the
+        # loser is never offered again — the same track is re-reported and skipped every run.
+        # Choosing among only the tied rows is NOT walking backwards through the term: they are
+        # all the deadline that just passed, which is exactly the window this path is for.
+        top = _pick_latest(rows)
         out = {"course": args.course, "day": top["track"], "slug": top["slug"],
                "offering_id": str(top["offering_id"]), "due_at": str(top["due_at"]),
                "sections": top["section_codes"], "submissions": top["submissions"],
@@ -1327,8 +1414,12 @@ def cmd_worklist(args, conn):
     print(f"{'lesson':22} {'day':>3} {'due':16} {'sections':14} {'subs':>4} {'assessed':>8}  status")
     print("-" * 96)
     for r in rows:
+        # "analyzed None" is what this printed when a track had stored scopes but no run row —
+        # the legitimate pre-migration-009 case the needs_run comment describes, rendered as if
+        # something had gone wrong.
         state = ("never analyzed" if r["needs_run"]
-                 else f"analyzed {str(r['last_success'])[:16]}")
+                 else f"analyzed {str(r['last_success'])[:16]}" if r["last_success"]
+                 else "analyzed (pre-run-log)")
         if r["last_status"] and r["last_status"] != "success" and r["needs_run"]:
             state = f"last run {r['last_status']}"
         print(f"{r['slug']:22} {r['track'] or '-':>3} {str(r['due_at'])[:16]:16} "
@@ -1766,6 +1857,10 @@ def main():
                     help="the automated contract: report ONLY the most recently due track, and "
                          "whether to run it. Never looks further back — see cmd_worklist")
     wl.add_argument("--json", action="store_true", help="machine-readable output")
+    wl.add_argument("--as-of", dest="as_of", metavar="TS",
+                    help="REHEARSAL: treat this instant as 'now' when deciding what is past due "
+                         "(e.g. '2026-08-10T06:00Z'). Writes nothing, prints a warning banner, "
+                         "and is never used by the automated path")
 
     st = sub.add_parser("status", help="list analysis scopes + staleness (the verify step)")
     st.add_argument("--lesson", "--activity", "--interaction", dest="activity",

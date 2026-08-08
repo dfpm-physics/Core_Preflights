@@ -8,6 +8,93 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-07 (seventh) — Matthew Recker via Claude
+
+### `worklist` was closing out one day track per lesson and reporting success for both
+
+Found by reading `cmd_worklist` before the term's first close-out, with phys-110 `preflight-02`
+due Sunday 2026-08-09 2359 and 39 submissions already in.
+
+**The bug.** There is **one** `analysis_reports` row per offering, holding every day track's scopes
+side by side. `has_analysis` decided "already analyzed" by counting that row — with no day filter —
+while its sibling `last_success` was correctly day-scoped. So the moment *any* track of a lesson was
+aggregated, every other track of the same lesson had `needs_run = false` forever: `--latest`
+reported `skip` with "analysis already stored for this lesson", and the human work list printed
+`analyzed` beside a track that had never been touched. The T sections would have gone the whole term
+without a section scope, and because `__all__` is only written once every section has one, the
+whole-course scope would never have been written either. Nothing would have errored.
+
+**A second half the finding had not named.** `--latest` took `rows[0]` from an `order by due_at
+desc, slug` — which is a *tie* whenever two tracks share a deadline, and then the winner was
+whatever the plan happened to emit first. Per-day deadlines turn out to be a per-course habit, not
+a schema rule: phys-215 sets `assignment_due_dates` on all 74 of its offerings and its tracks close
+a day apart, but **phys-110 sets them on 1 of 37**, so every other phys-110 lesson has both tracks
+resolving to the offering default and closing at the same instant. Sunday's lesson is one of those.
+Two tied rows, an arbitrary pick, and the loser skipped forever.
+
+**Fixed both.** `has_analysis` now asks whether *this* track is represented — every section id of
+the track present as a key in `payload->'scopes'`, which also catches a half-written run. The
+predicate has exactly one definition (`track_covered_sql`), spliced into the query at a marker and
+imported by the test, so the two cannot drift. `--latest` breaks a tie by preferring a track that
+still needs a run, and the ordering is deterministic. Verified against real historical data: the
+`-training` offerings correctly show their M and T tracks analyzed separately, minutes apart.
+
+**`supabase/admin/worklist_dayscope_test.py`** — 19 checks, all passing, and **it writes nothing**.
+The SQL half evaluates the real predicate over synthetic payloads passed as parameters; the Python
+half needs no database. That mattered here: the states worth testing only occur after a deadline,
+and "wait for one" is why this survived to be found by reading.
+
+**`worklist --as-of <ts>`** — a read-only rehearsal that moves the clock for the past-due test only,
+prints a banner, and writes nothing. It is how the fix was verified before any deadline existed, and
+it lets a new operator practise Sunday's run on Friday.
+
+Also fixed: the work list printed `analyzed None` for a track with stored scopes but no run row —
+the legitimate pre-migration-009 case, rendered as if something had broken.
+
+### Onboarding, scoped to what someone actually needs
+
+The director needs more people able to run a close-out, quickly. The only setup document was
+`MACHINE-SETUP.md`, which is full development parity — three credentials, a 968 MB corpus, the Node
+harnesses — written as a task prompt for an agent building a second dev desktop. Most of it is not
+needed to close out a lesson, and reading it end to end is how a two-day runway disappears.
+
+- **`scripts/onboarding/prep_doctor.py`** — reports per **capability** (`/lesson-aggregate`,
+  `/preflight-analyze`, `/lesson-cycle`, `/interaction-backfill`, publish) rather than per setup
+  step, each with its blocker and the command that fixes it. Stdlib-only and runs with plain
+  `python` **before the venv exists** — it shells out to the venv interpreter for anything needing
+  psycopg2. Read-only; never prints a credential's value, only whether one is present. Output is
+  ASCII because the machine it is written for has a cp1252 console and nobody has told its owner
+  about `PYTHONIOENCODING` yet.
+- **`docs/operations/ONBOARD-AGGREGATION.md`** — the capability-scoped path. Its central point is
+  the split the modality-blind aggregator creates: an **interactive** lesson needs no grading, so
+  aggregation needs one credential file and no download (~10 min), while a **written** preflight
+  needs the service key and the textbook corpus. It also says plainly that the aggregation is *not*
+  a script — `pull` → **a model writes the prose** → `write-analysis` — so onboarding means getting
+  Claude Code working against the clone, not just Python.
+- `MACHINE-SETUP.md` now opens with both pointers, and its verify block gains the doctor and the
+  new test.
+- **`MACHINE-SETUP.md` is now registered in `DOC-SOURCES.json`**, which it never was — the setup
+  runbook, carrying until yesterday a `textbook_base_path` that resolves 0 of 58 manifest entries.
+  A machine set up from a stale copy of it grades a whole cohort without grounding.
+
+`.ai/skills/lesson-cycle/SKILL.md` gains the tie-break rule and `--as-of`.
+
+**Wave 0.1 is closed — the exposed legacy schema is no longer reachable.** `public` has been
+removed from Supabase → Settings → API → Exposed schemas by the director. Verified here by
+unauthenticated REST probe with the publishable key: every `public` table now answers
+`PGRST106 — "Only the following schemas are exposed: graphql_public, app"`, where earlier the same
+probe counted 73 rows of `public.students` (cadet ID, name, section) and 64 of `public.responses`.
+
+`app` remains exposed, as the site requires, and **every one of its tables returns 0 rows to an
+anonymous caller** — `students`, `instructors`, `submissions`, `submission_activities`, `grades`,
+`analysis_reports`, `activities`, `assignment_offerings`, `sections`. RLS is carrying that load by
+itself and is carrying it correctly.
+
+No DDL was run — nothing in this entry touches the schema, two days before the term's first
+close-out.
+
+---
+
 ## 2026-08-07 (sixth) — Matthew Recker via Claude
 
 ### Audit Phase 0 verified against the live database, then Waves 0–1 of the remediation

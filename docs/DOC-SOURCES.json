@@ -320,6 +320,38 @@
         "docs/contracts/INTERACTION-PREFILL-LINK.md"
       ],
       "note": "A FROZEN SNAPSHOT of PREP's own contract, taken 2026-07-30 when preflight-kit was extracted from this project, and hash-locked by _builder/preflight-kit/MANIFEST.sha256. It is deliberately a second copy: the kit is portable and self-contained, and tools/localize.py and tools/verify.py both operate on these files. Registering it here is the mechanism that stops the duplication being silent — a flag means PREP's authoritative copy moved, and the decision is whether that is a schema:2 event under _builder/preflight-kit/PROVENANCE.md. As of the import the two ALREADY differ (data contract by 1 line, prefill link by 35); PREP's is newer, and re-syncing the kit is deliberately not part of the import. Do not 'fix' by editing the kit copy alone — that breaks MANIFEST.sha256."
+    },
+    {
+      "doc": "docs/operations/ONBOARD-AGGREGATION.md",
+      "kind": "operations",
+      "tier": null,
+      "reviewed": "2026-08-07",
+      "sources": [
+        ".ai/instructions/CORE.md",
+        ".ai/skills/lesson-cycle/SKILL.md",
+        ".ai/skills/lesson-aggregate/SKILL.md",
+        "supabase/admin/lesson_aggregate.py",
+        "scripts/onboarding/prep_doctor.py",
+        "scripts/grounding/check_grounding.py",
+        "docs/operations/MACHINE-SETUP.md",
+        "requirements.txt"
+      ],
+      "note": "Capability-scoped onboarding for a new close-out operator, as distinct from MACHINE-SETUP.md's full development parity. lesson_aggregate.py is a source because this document states what worklist prints and what --as-of does; prep_doctor.py because it reproduces the capability list; check_grounding.py because it quotes the expected 58 of 58."
+    },
+    {
+      "doc": "docs/operations/MACHINE-SETUP.md",
+      "kind": "operations",
+      "tier": null,
+      "reviewed": "2026-08-07",
+      "sources": [
+        ".ai/instructions/CORE.md",
+        ".ai/instructions/PROJECT.md",
+        "requirements.txt",
+        "supabase/admin/app_tier_check.py",
+        "scripts/grounding/check_grounding.py",
+        "textbook-pdfs/README.md"
+      ],
+      "note": "Was unindexed until 2026-08-07 and had carried a textbook_base_path that resolves zero of 58 manifest entries — precisely the silent rot this index exists to catch. A machine set up from a stale copy of this file is a machine that grades a whole cohort without textbook grounding."
     }
   ]
 }

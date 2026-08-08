@@ -73,10 +73,24 @@ class. `pull` warns about that, but by then you have already spent the run.
 .venv/Scripts/python supabase/admin/lesson_aggregate.py worklist --course <code> [--day D] [--latest] [--json]
 ```
 
+`--as-of <ts>` is a read-only **rehearsal**: it moves the clock for the "which tracks are past
+due" test only, prints a banner, and writes nothing. Use it to see what a close-out will look like
+before its deadline — the states worth practising on do not otherwise exist until the night they
+matter. Never pass it on the automated path.
+
 ### Automated (`--latest`) — one lesson, never a sweep
 
 Take **only the most recently due day track**, and run it only when `action` comes back `run`.
 If it comes back `skip`, record a `skipped` run and stop.
+
+**Two tracks can share one deadline**, and then "the most recently due track" names two rows
+rather than one. Per-day deadlines are a per-course habit, not a rule the schema enforces:
+phys-215 sets them on every offering so its M and T tracks close a day apart, while phys-110 sets
+them on almost none, so both its tracks fall back to the offering default and close at the same
+instant. `--latest` picks the tied track that still needs a run — so the second call after the
+first track lands offers the sibling rather than re-offering the finished one. That is not the
+backwards walk forbidden below: every tied row carries the deadline that just passed. It still
+takes one track per invocation, so a same-instant lesson is two runs back to back.
 
 **Do not walk backwards through the term**, however tempting an older "unanalyzed" lesson looks.
 That state is usually legitimate: a student on an approved extension submits days late, and late

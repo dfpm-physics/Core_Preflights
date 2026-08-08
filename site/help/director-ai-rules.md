@@ -73,6 +73,13 @@ M-day it summarizes the M sections, on T-day the T sections, and only then does 
 course-level view covering all of them. A course-wide summary is never written over a partial
 cohort — if a section has not been aggregated yet, the whole-course panel simply waits.
 
+**"M-day and T-day" is about the deadlines, not the calendar.** Whether your two tracks close on
+different days depends on how the course sets its due dates: Physics 215 gives each section its own
+deadline, so its two runs really are a day apart, while Physics 110 mostly leaves both on the
+assignment's single deadline, so both tracks close the same night and the two runs happen back to
+back. Either way it is still one run per track, and the whole-course panel still appears only after
+the second.
+
 **It also reconciles misconceptions.** Both the artifact and the grading run may invent a label for
 a misunderstanding that does not fit the known list, so the same misunderstanding can arrive under
 two names and split into two bars. Aggregation records which invented labels mean the same thing,

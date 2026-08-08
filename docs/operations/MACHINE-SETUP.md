@@ -1,5 +1,18 @@
 # Setup task: bring this clone to full working parity
 
+> **Only need to close out a lesson?** Read
+> [`ONBOARD-AGGREGATION.md`](ONBOARD-AGGREGATION.md) instead — the capability-scoped path, about
+> ten minutes and no 968 MB download for an interactive lesson. This document is **full
+> development parity**, which is more than a close-out operator needs.
+>
+> Either way, start by asking the machine what it already has:
+> ```
+> python scripts/onboarding/prep_doctor.py
+> ```
+> Read-only, stdlib-only, and it runs **before** the venv exists. It reports per capability with
+> the specific blocker and fix for each, so the steps below can be done in any order and re-checked
+> as you go.
+
 You are in the `Core_Preflights` repo (PREP). The repo is already cloned and current here. Your job
 is to install everything the clone does **not** carry, so this machine can do every task the other
 development desktop can — run the lesson cycle, drive the admin DB tooling, run the optional Node
@@ -178,9 +191,11 @@ of a change. If it is all you ran, say so explicitly in the CHANGELOG entry.
 ## 6. Verify — run all of these and report each result
 
 ```
+python scripts\onboarding\prep_doctor.py
 .venv\Scripts\python supabase\admin\app_tier_check.py
 .venv\Scripts\python supabase\admin\db_check.py
 .venv\Scripts\python supabase\admin\lesson_aggregate.py worklist --course phys-215
+.venv\Scripts\python supabase\admin\worklist_dayscope_test.py
 python scripts\docs\check_doc_sources.py
 python scripts\grounding\check_grounding.py
 ```
@@ -195,7 +210,15 @@ Expected:
   textbook context; fix it before your first run rather than after.
 - **`db_check.py`** — connects as `claude_code_recker`, reads real rows, `ALTER`/`DROP` come back
   **DENIED**.
-- **`worklist`** — returns the course's past-due day tracks.
+- **`prep_doctor.py`** — every capability `OK`. It is the summary the rest of this list details;
+  a `BLOCKED` line names the file or command that fixes it.
+- **`worklist`** — returns the course's past-due day tracks. Early in a term the honest answer is
+  often `Nothing past due`, which is a pass. To see it populated without waiting for a deadline,
+  add `--as-of 2026-08-10T06:30Z` — a read-only rehearsal that moves the clock for that one
+  predicate and prints a banner saying so.
+- **`worklist_dayscope_test.py`** — 19 checks, all pass. It guards the rule that "already
+  analyzed" is asked **per day track**: one `analysis_reports` row holds every track's scopes, so
+  counting the row made a lesson's second track report `skip` forever and never get aggregated.
 - **`check_doc_sources.py`** — read-only; exits non-zero when a derived doc is stale. On a fresh
   clean clone it should pass.
 
