@@ -109,7 +109,7 @@ export async function loadManager(ctx) {
     .order('position', { ascending: true, nullsFirst: false });
   if (!isDirector) offeringQ = offeringQ.eq('is_published', true);
 
-  const [{ data: offeringRows }, { data: enrolRows }] = await Promise.all([
+  const [offeringRes, enrolRes] = await Promise.all([
     offeringQ,
     sectionIds.length
       ? db.from('enrollments')
@@ -117,6 +117,25 @@ export async function loadManager(ctx) {
           .in('section_id', sectionIds).eq('status', 'active')
       : Promise.resolve({ data: [] }),
   ]);
+
+  // A FAILED QUERY IS NOT AN EMPTY COURSE, and until 2026-08-08 this could not tell them apart:
+  // both `error`s were destructured away, so a dropped connection, a PostgREST 5xx or an RLS
+  // change came back as `data: null` → zero lessons → report.html's "this lesson is not in this
+  // course" branch, which `location.replace`s to the dashboard. What the reader sees is a spinner
+  // for as long as supabase-js spends retrying (tens of seconds), then the page they were on
+  // disappearing, with nothing said anywhere. The URL is gone too, so there is not even a thing to
+  // retry. Throwing puts it in front of report.html's runPage() guard, which names it.
+  //
+  // Convention, not invention — faculty-tasks.js already does `if (error) throw error` on every
+  // probe for exactly this reason.
+  if (offeringRes.error) {
+    throw new Error(`Could not load this course's lessons: ${offeringRes.error.message}`);
+  }
+  if (enrolRes.error) {
+    throw new Error(`Could not load the roster for your sections: ${enrolRes.error.message}`);
+  }
+  const { data: offeringRows } = offeringRes;
+  const { data: enrolRows } = enrolRes;
 
   // Every scheduled lesson, whichever way it can be worked. This used to be
   // `.filter(o => o.interactive)` — "this page is only about interactive work" — which meant a
@@ -139,7 +158,11 @@ export async function loadManager(ctx) {
   // it slowed as the term filled up. Everything reaches through the offering now.
   const submissions = [];
   for (const ids of chunked(enrollments.map(e => e.id))) {
-    const { data } = await db.from('submissions').select(SUBMISSION_SELECT).in('enrollment_id', ids);
+    const { data, error } = await db.from('submissions').select(SUBMISSION_SELECT).in('enrollment_id', ids);
+    // Same rule as above, and it matters more on a chunked read: a course large enough to need a
+    // second chunk would drop that chunk's submissions silently, and every completion count on
+    // the page would be understated by exactly the students in it — wrong, but plausible.
+    if (error) throw new Error(`Could not load submissions: ${error.message}`);
     submissions.push(...(data || []).map(shapeSubmission));
   }
 

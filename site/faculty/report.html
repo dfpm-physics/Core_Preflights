@@ -98,7 +98,7 @@
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
-    import { esc, lastFirst, wireModalDismiss } from '../js/util.js';
+    import { esc, lastFirst, runPage, wireModalDismiss } from '../js/util.js';
     import * as I from '../js/faculty-rollup.js';
     // Extensions are granted from the "Did not submit" list. Reusing the Grade tab's writer rather
     // than composing a second upsert here: one (enrollment, offering) UNIQUE key, one code path, so
@@ -123,8 +123,21 @@
     // Deliberately a query param and not an account preference: this leaves no persisted state, so
     // a director cannot switch it on, forget, and file the panel as a bug three weeks later.
     const kdeTunerRequested = new URLSearchParams(location.search).get('kde') === '1';
-    if (!ctx) { /* redirected */ }
-    else { init(); if (kdeTunerRequested && ctx.isDirectorForCurrent?.()) mountKdeTuner(); }
+    // runPage, not a bare init() — and this page was the last data-dense faculty surface without
+    // it. Everything below start() is async and the page opens on a `.center-load` spinner, so a
+    // throw anywhere between the spinner and the first render left it turning with the cause
+    // visible only in a console nobody has open. The two .catch() handlers in showReport() were
+    // each added after an incident of exactly that kind; neither covers the ENTRY POINT, which is
+    // where a rejected loadManager or a failing renderScope() lands. A page that fails should say
+    // so (util.js, "Failure surfacing").
+    //
+    // It also fixes a latent ordering hazard: runPage defers init through a microtask, so the
+    // module-level `let vm = …` declarations below are initialised before anything can read them.
+    // The bare call worked only because start() happened to reach an `await` first.
+    runPage(ctx, async () => {
+      await init();
+      if (kdeTunerRequested && ctx.isDirectorForCurrent?.()) mountKdeTuner();
+    });
 
     let vm = null, reportInteraction = null;
     // Structured report data for the open lesson: rows = null while loading, [] once loaded.
@@ -141,13 +154,15 @@
     // query failed" is a fault the reader should report rather than plan a lesson around.
     let reportLoadError = null;
 
-    function init() {
+    // Awaited, not fired and forgotten: runPage()'s catch only covers what init() hands back, so
+    // a bare `start()` here would put every failure in the load path back outside the guard.
+    async function init() {
       initTheme();
       // Report is not a nav destination — switching course leaves this lesson's context, so
       // send the user back to the interactions list rather than show a stale cross-course rollup.
       renderNav(ctx, { active: '', onCourseChange: () => { location.href = 'dashboard.html'; } });
       wireModals();
-      start();
+      await start();
     }
 
     function wireModals() {

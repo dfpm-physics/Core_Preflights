@@ -8,6 +8,58 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-08 — Matthew Recker via Claude
+
+### The lesson rollup could spin forever, and then delete itself
+
+Reported as "the rollup spins and never loads". **The reported instance was not reproducible** —
+see below for what was checked — but chasing it found the mechanism that produces exactly that
+symptom, and two fixes that turn it into a message.
+
+**`faculty-rollup.js loadManager()` could not tell a failed query from an empty course.** Both
+`error`s were destructured away (`const [{ data: offeringRows }, { data: enrolRows }] = …`), so a
+dropped connection, a PostgREST 5xx or an RLS change came back as `data: null` → zero lessons →
+`report.html`'s "this lesson is not in this course" branch, which `location.replace`s to the
+dashboard. What a reader sees is the spinner for as long as supabase-js spends retrying — measured
+at **over 6 seconds and under 45** with the request blocked outright, and unbounded if the request
+is merely slow — and then the page they were on vanishing, with nothing said anywhere and the URL
+gone too. Both queries now throw, as does the chunked `submissions` read: on a course large enough
+to need a second chunk, a dropped chunk silently understated every completion count on the page by
+exactly the students in it. Convention, not invention — `faculty-tasks.js` already does
+`if (error) throw error` on every probe.
+
+**`report.html` was the last data-dense faculty page not wrapped in `runPage()`.** Its two
+`.catch()` handlers were each added after an incident of this kind; neither covers the entry point,
+which is where a rejected `loadManager` or a failing `renderScope()` lands. So the throw above would
+itself have been silent. It is now guarded, `init()` is awaited rather than fired and forgotten, and
+deferring through `runPage`'s microtask also closes a latent ordering hazard — the module's
+`let vm = …` declarations sit *below* the old bare `init()` call and were only ever initialised in
+time because `start()` happened to reach an `await` first.
+
+Verified in Chrome against the live project, signed in: with `rest/v1/assignment_offerings` blocked
+the page now shows *"Could not load this course's lessons: TypeError: Failed to fetch"* and stays
+put, where before the fix the same run sat on the spinner and then landed on the dashboard. Three
+rollups — phys-110 `preflight-02` and the two phys-215 training lessons aggregated that day — still
+render unchanged.
+
+**What was checked and found healthy**, so the next person does not repeat it: every offering in
+all four course offerings through the real data layer at director visibility (114 lessons —
+`loadManager`, `loadInteractionData`, `loadAnalysis`, `summarizeReports`, no throw, no hang); the
+deployed GitHub Pages copy of `report.html`, `faculty-rollup.js`, `schema.js`, `util.js`, `nav.js`,
+`faculty-lessons.js` and `auth.js` against local `HEAD` (identical, modulo line endings); and
+sixteen shape invariants over the tables the page reads (no malformed `due_by_day`, no orphaned
+`offering_activities`, no duplicate `assignment_due_dates`, no non-object `payload`). The phys-110
+`preflight-02` deadline fix had landed correctly by then — `due_by_day` now carries distinct M and
+T instants.
+
+**Unrelated regression noticed while running the suite, and NOT fixed here** because it belongs to
+the artifact-library work in flight: `tests/app-schema` is at 449 passed / 4 failed, all four in the
+user-dropdown test, all reporting the same new `artifacts` entry. One of them is a real
+authorization question rather than a stale expectation — *"a plain instructor does NOT"* and *"nor
+does a DIRECTOR of the current course"* both now see Artifacts in the dropdown.
+
+---
+
 ## 2026-08-07 (seventh) — Matthew Recker via Claude
 
 ### `worklist` was closing out one day track per lesson and reporting success for both
