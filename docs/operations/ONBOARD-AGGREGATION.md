@@ -36,22 +36,38 @@ after each step; it never writes anything and never prints a credential's value.
 
 ## 1. Which path do you need?
 
-**Answer one question: does the lesson have written questions, or is it a Claude artifact?**
+**Ask which activity is the GRADED one.** That is the whole question, and it is a property of the
+offering, not of the student.
 
-| | Interactive lesson (artifact) | Written preflight |
+| The graded activity is… | interactive (an artifact) | written questions |
 |---|---|---|
 | Who produces the per-student assessment | the artifact, at submit time | `/preflight-analyze`, afterwards |
 | You need | **the light path** | **the full path** |
 | Setup time | ~10 minutes | ~10 minutes + a 968 MB download |
 
 This is the whole reason the two paths exist. The cohort rollup is *modality-blind*: it folds a
-`schema: 1` assessment per student regardless of where it came from. For an artifact lesson that
-assessment already exists, so aggregation is all there is to do. For a written preflight nothing
-has assessed anything yet, and grading has to happen first — which is what needs the service key
-and the textbook PDFs.
+`schema: 1` assessment per student regardless of where it came from. When the artifact is the
+graded activity that assessment already exists, so aggregation is all there is to do. When written
+questions are, nothing has assessed anything yet and grading must run first — which is what needs
+the service key and the textbook PDFs.
 
-**Check which one you are facing before installing anything.** A course's early lessons are often
-written preflights, so do not assume the light path is enough.
+**An offering can carry both activities, and that does not mean the student picks.** The second one
+is usually attached as `practice`, and **a practice activity can never be chosen for credit** — the
+database enforces it. So seeing an interactive activity on the lesson tells you nothing about which
+path you need. Read `grading_role`:
+
+```sql
+select act.modality, oa.grading_role, oa.is_visible
+  from offering_activities oa
+  join activities act on act.id = oa.activity_id
+ where oa.assignment_offering_id = '<offering uuid>';
+```
+
+**Do not assume the light path is enough.** As of 2026-08-07 both phys-310 `lesson-01` and phys-110
+`preflight-02` carry an interactive activity — and on both it is `practice`, with written questions
+graded. All 10 and all 39 submissions are written accordingly. Across the whole system 29
+interactive activities *are* the graded one (27 of them in phys-215), so the light path is real —
+just not for the lessons closing this week.
 
 ---
 
