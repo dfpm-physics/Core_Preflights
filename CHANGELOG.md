@@ -49,6 +49,32 @@ problem — it writes to the retired `public` schema (no `Accept-Profile: app`),
 site serves has read since the 2026-07-28 cutover. The live `app` rows were created some other way,
 without the per-day map.
 
+Checked afterwards: **no other course offering has an empty `due_by_day`** — phys-215 fall-2026 and
+training-fall-2026 (37 each) and phys-310 fall-2026 (3, single-track) are all complete.
+
+### And the three documents that should have caught it
+
+The bug survived because nothing written down said an empty per-day map was dangerous, so all three
+places a reader would look are now fixed:
+
+- **`.ai/instructions/CORE.md` §2** gains the rule itself: `{}` is not "no schedule yet", it means
+  the `due_at` fallback applies to everyone. With why a spot check misses it (the fallback *is* the
+  M date, so every M deadline reads correctly), the detection query, the repair script, and the
+  standing instruction to verify a transcribed schedule against `site/data/academic-calendar.json`
+  before writing it.
+- **`docs/operations/SYSTEM_GUIDE.md`**, "Update the due dates" — said that saving in Lessons
+  rewrites the per-section rows, but not that an assignment *never* saved there has no per-day map
+  at all. That is the gap this term fell into, in the document an operator reads to stand up a term.
+- **`site/help/director-course-structure.md`** listed deadline precedence as **three** levels and
+  omitted the per-meeting-day schedule entirely, crediting the M/T split to the section level. A
+  director following that list had no reason to know level 3 existed, let alone to check it. Now
+  four levels, plus what to check before a semester starts. *(A help doc that contradicts the
+  system is a bug — CORE.md §5.)*
+
+`docs/DOC-SOURCES.json`: the 16 documents flagged by the CORE.md edit were re-read against their
+sources; the two above were wrong and were fixed, the rest were correct and had their `reviewed`
+date bumped.
+
 ## 2026-08-08 — Matthew Recker via Claude
 
 ### The lesson rollup could spin forever, and then delete itself
