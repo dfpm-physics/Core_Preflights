@@ -49,12 +49,27 @@ string. The functions share no `_shared/` module, so covering them means either 
 helper five times or introducing one — a larger change than was asked for. Left as a known gap
 rather than half-done silently.
 
-**⚠ Pushing this does NOT deploy it.** There is no `.github/workflows/`, and GitHub Pages serves
-only the static site. Until someone runs `supabase functions deploy reset-student-password`, the
-live function is the old one and a director will still see the raw 25P02 text. Verification so
-far is **the helper's logic only**, exercised under Node against six representative errors
-(transient and genuine); Deno is not installed on this machine, so the function was **not
-type-checked and not run end-to-end**, and its behaviour against a real 25P02 is unproven.
+**Deployed the same day — live as version 2, 2026-08-09 20:25:44 UTC.** Pushing does *not* deploy
+an edge function: there is no `.github/workflows/`, and GitHub Pages serves only the static site.
+The deploy is a separate command, and **two things make it fail on this Mac**, both worth knowing
+before the next one:
+
+- **Docker is not installed**, and `supabase functions deploy` bundles through Docker unless you
+  pass **`--use-api`**, which bundles server-side instead. Without the flag it stalls.
+- A hung `supabase login` waiting on its browser callback looks exactly like a hung deploy. The
+  CLI had a valid stored token the whole time — `supabase functions list` is the cheap way to
+  check before re-authenticating.
+
+The working command:
+`supabase functions deploy reset-student-password --project-ref shzvpmlnqfmzfmuxkowi --use-api`
+
+**What is and is not verified.** The helper's logic was exercised under Node against six
+representative errors, transient and genuine, pulled out of the shipped file rather than retyped.
+Deno is not installed here, so the function was **not type-checked**. The **new message text has
+not been observed in production**: forcing a real 25P02 is not something we can do on demand, and
+the one changed string reachable by a deliberate fault (`sections`) sits behind an authorization
+gate the test faculty account does not pass. So the transient branch is proven by logic test and
+by deployment, not by having seen it fire.
 
 ---
 
