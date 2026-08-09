@@ -8,6 +8,56 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-09 (second) — Casey Pellizzari via Claude
+
+### A password reset showed a course director a raw Postgres transaction error
+
+Resetting one Physics 215 cadet's password failed three times running with:
+
+> ⚠ Could not fetch sections: current transaction is aborted, commands ignored until end of
+> transaction block
+
+**Nothing was wrong with the account, the roster, RLS, or the request.** SQLSTATE **25P02** is
+never produced by the query it is attached to. Supavisor runs in transaction-pooling mode, so a
+server connection left inside a failed transaction poisons whoever borrows it next — the query
+that reports the error is simply the one that drew the poisoned connection. The operator is shown
+the wreckage downstream of a cause they are never shown.
+
+Diagnosis (read-only, nothing mutated): the message comes from
+`supabase/functions/reset-student-password/index.ts` — a service-role read of `app.sections`. That
+exact read then ran **30/30 clean at 0.2s mean**, and the cadet's record was fine throughout
+(section M3B, enrollment `active`, `auth_user_id` set, real `@afacademy.af.edu` address). One of
+five probe calls to the function itself **timed out at 60s** during the same window and all five
+succeeded minutes later, so the API layer was genuinely unhealthy and recovered. Connections were
+20 of 60 — no saturation. The error also proved the director's *authorization* had succeeded,
+since it came from a step past that gate.
+
+The retry worked. What changed was almost certainly that the poisoned connection was retired —
+by its own idle/lifetime timeout, or by the ~40 requests the diagnosis pushed through the pool.
+Those two cannot be separated from outside, and neither was a fix.
+
+**The change:** `reset-student-password` now classifies database errors before showing them. A
+`TRANSIENT_SQLSTATES` set (25P02, 40001, 53300, 57014, 57P01, 57P03, 08000/08003/08006) yields
+*"The database was briefly unavailable, so this did not go through. Nothing was changed — please
+try again in a moment."* plus the bare SQLSTATE, which means nothing to a director and is the
+first thing the next operator will want. Every other error keeps its raw message and now also
+names the step it failed at. All four database call sites in the function route through it.
+
+**Not fixed, deliberately — five sibling call sites leak the same way**, including
+`provision-students/index.ts:112`, which produces the *identical* "Could not fetch sections"
+string. The functions share no `_shared/` module, so covering them means either duplicating the
+helper five times or introducing one — a larger change than was asked for. Left as a known gap
+rather than half-done silently.
+
+**⚠ Pushing this does NOT deploy it.** There is no `.github/workflows/`, and GitHub Pages serves
+only the static site. Until someone runs `supabase functions deploy reset-student-password`, the
+live function is the old one and a director will still see the raw 25P02 text. Verification so
+far is **the helper's logic only**, exercised under Node against six representative errors
+(transient and genuine); Deno is not installed on this machine, so the function was **not
+type-checked and not run end-to-end**, and its behaviour against a real 25P02 is unproven.
+
+---
+
 ## 2026-08-09 — Casey Pellizzari via Claude
 
 ### Five Physics 215 preflights were due a day late — after their own lesson

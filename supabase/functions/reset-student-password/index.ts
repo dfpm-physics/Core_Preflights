@@ -53,6 +53,43 @@ function defaultPasswordFor(studentId: number | string): string {
   return String(studentId).slice(-6);
 }
 
+// ── Transient database faults vs. real ones ───────────────────────────────────────────────────
+// SQLSTATEs that mean "the database was briefly unavailable", not "your request was wrong". A
+// course director can act on none of them, and the raw text actively misleads.
+//
+// 25P02 is the one that prompted this (2026-08-09, a reset that failed three times running and
+// then worked). It means the pooled connection this query was handed was ALREADY inside a failed
+// transaction: Supavisor runs in transaction-pooling mode, so a server connection left aborted
+// poisons whoever borrows it next. The query itself is fine — the same read ran 30/30 clean
+// minutes later. So the operator is shown the wreckage downstream of a cause they are never
+// shown, phrased as though the roster or their permissions were at fault. Both were fine.
+//
+// Keep the SQLSTATE in the message. It means nothing to a director and is the first thing the
+// next operator will want.
+const TRANSIENT_SQLSTATES = new Set([
+  "25P02", // in_failed_sql_transaction — a poisoned pooled connection
+  "40001", // serialization_failure
+  "53300", // too_many_connections
+  "57014", // query_canceled — usually a statement timeout
+  "57P01", // admin_shutdown
+  "57P03", // cannot_connect_now — e.g. the project waking from a free-tier pause
+  "08000", "08003", "08006", // connection exceptions
+]);
+
+/**
+ * Turn a database error into a sentence the person at the keyboard can act on.
+ *
+ * `what` names the step in plain language and reads after "Could not …", so a genuine,
+ * non-transient failure still says exactly where it happened and still carries the raw message.
+ */
+function dbError(what: string, err: { code?: string; message: string }): string {
+  if (err.code && TRANSIENT_SQLSTATES.has(err.code)) {
+    return "The database was briefly unavailable, so this did not go through. Nothing was " +
+           `changed — please try again in a moment. (${err.code} while trying to ${what}.)`;
+  }
+  return `Could not ${what}: ${err.message}`;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -104,7 +141,7 @@ serve(async (req) => {
       .eq("id", caller.id)
       .maybeSingle();
 
-    if (instrErr) return ok({ error: "Could not verify caller: " + instrErr.message });
+    if (instrErr) return ok({ error: dbError("verify your account", instrErr) });
     if (!callerInstructor) return ok({ error: "Caller is not an instructor" });
 
     const isGlobalAdmin = callerInstructor.is_global_admin === true;
@@ -131,7 +168,7 @@ serve(async (req) => {
       .select("id")
       .eq("course_offering_id", courseOfferingId);
 
-    if (sectErr) return ok({ error: "Could not fetch sections: " + sectErr.message });
+    if (sectErr) return ok({ error: dbError("look up this course's sections", sectErr) });
 
     const sectionIds = (sections || []).map((s: { id: string }) => s.id);
     if (!sectionIds.length) return ok({ error: "This course has no sections." });
@@ -144,7 +181,7 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    if (enrErr) return ok({ error: "Could not look up the student: " + enrErr.message });
+    if (enrErr) return ok({ error: dbError("look up the student", enrErr) });
     if (!enrollment) return ok({ error: "That student is not enrolled in this course." });
 
     const student = enrollment.students as unknown as {
@@ -167,7 +204,7 @@ serve(async (req) => {
       }
     );
 
-    if (updErr) return ok({ error: "Could not reset the password: " + updErr.message });
+    if (updErr) return ok({ error: dbError("reset the password", updErr) });
 
     // Deliberately NOT returning the password. The caller can derive it from the cadet ID they
     // already have; putting it in an HTTP response body would write it to any proxy log and
