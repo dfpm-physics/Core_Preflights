@@ -417,6 +417,16 @@ Each scheduled assignment carries a per-meeting-day schedule in `assignment_offe
 box and a time box per meeting day the offering's sections actually use, so a course meeting W/F
 needs no code change. Saving rewrites the per-section rows for every current section.
 
+**An assignment that has never been saved in Lessons has an EMPTY `due_by_day`, and that is not a
+blank waiting to be filled — it means "the fallback applies to everyone."** Every T-day section
+then inherits the M-day date and is due one to four days early, four whenever the T meeting follows
+a weekend. It is invisible from the outside, because the fallback *is* the M date and so every
+M-day deadline reads correctly: Physics 110 Fall 2026 ran this way on 36 of its 37 preflights until
+2026-08-09, and the one that was right was the one somebody had opened in the editor. **The Lessons
+editor is the only thing that writes the per-day map** — a term builder or an import does not — so
+after building a term, check `due_by_day` rather than the dates you see on screen. CORE.md §2 has
+the detection query and the repair script.
+
 **Which date goes on which lesson comes from the academy calendar, not from counting.** A preflight
 is due the evening before its class, and which calendar days are M-days and which are T-days is a
 property of the USAFA Academic Calendar — it is not in the database and it is not a pattern you can

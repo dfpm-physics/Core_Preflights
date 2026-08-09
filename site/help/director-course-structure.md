@@ -157,11 +157,23 @@ Two courses can both have an M1A.
 A student's deadline comes from the first of these that exists:
 
 1. An **extension** granted to that student
-2. Their **section's** deadline for that assignment
-3. The assignment's **default** deadline for the semester
+2. Their **section's** own deadline for that assignment
+3. The assignment's **per-meeting-day schedule** — one date for M-day sections, another for T-day
+4. The assignment's **default** deadline for the semester
 
-That is how M-day and T-day sections get different due dates, and how one student can be given more
-time without moving anyone else's deadline.
+That is how one student can be given more time without moving anyone else's deadline, and how
+M-day and T-day sections get different due dates.
+
+**Levels 3 and 4 are where a whole term can go quietly wrong.** The per-meeting-day schedule is
+written when you save an assignment in **Lessons**, and only then. An assignment that has never
+been saved there has no schedule, which does not mean "not set yet" — it means everyone falls to
+level 4 and every T-day section is due on the **M-day** date, one to four days early. You cannot
+see it by looking: the default *is* the M-day date, so every M-day deadline reads correctly while
+every T-day one is wrong. Physics 110 ran that way on 36 of its 37 preflights until 9 August 2026.
+
+If a term was built for you rather than entered by hand, open one T-day lesson and check the date
+against your syllabus before the semester starts. Saving an assignment in Lessons fixes it, and
+also updates every current section.
 
 ## Publishing and releasing are two different things
 

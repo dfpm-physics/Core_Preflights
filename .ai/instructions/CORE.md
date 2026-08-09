@@ -222,6 +222,34 @@ Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
 
   If a course ever wants a different answer, add a line. If that map reaches four or five, it has
   earned a column and the unseal is worth asking for.
+- **An EMPTY `due_by_day` is not "no schedule yet" — it silently puts every section on the M-day
+  deadline.** *(Added 2026-08-09, after it did exactly that to 285 cadets.)* Precedence is
+  `extension > assignment_due_dates > due_by_day > due_at`, and `{}` means *"`due_at` applies to
+  everyone"* — a documented default, not a gap. So a T-day section inherits the M-day date and is
+  due **one to four days early**, four whenever the T meeting follows a weekend.
+  - **Only the lesson editor writes the per-day map.** `site/faculty/lessons.html` populates
+    `due_by_day` *and* materializes the per-section `assignment_due_dates` rows on save
+    (`dueByDayRow` / `dueDateRows` in `site/js/faculty-lessons.js`). An offering created any other
+    way — a term builder, a REST insert, a hand-written script — gets neither, and looks correct
+    because `due_at` is right.
+  - **It is invisible to a spot check.** Every M-day date reads correctly, because `due_at` *is*
+    the M date (`defaultDueFrom` stores the earliest per-day value). Phys-110 Fall 2026 ran this
+    way across 36 of 37 offerings; the one that was fine, `preflight-02`, was the one someone had
+    opened in the editor. Check `due_by_day`, never `due_at`, when asking whether a term is
+    scheduled.
+  - **Detection**, for any course with more than one meeting day — the count should be zero:
+    ```
+    SELECT count(*) FROM app.assignment_offerings
+     WHERE course_offering_id = '<uuid>' AND (due_by_day IS NULL OR due_by_day = '{}'::jsonb);
+    ```
+  - **Repair:** `scripts/fall2026/set_110_due_dates.py` (DML tier, dry-run by default, idempotent)
+    writes all three locations from a syllabus schedule table. It is phys-110's dates in a
+    `--course`-shaped script; another course needs its own `MEETINGS` table, not a new mechanism.
+  - **Verify a transcribed schedule against `site/data/academic-calendar.json` before writing it.**
+    The academy calendar is an independent source that names each teaching day `M<n>`/`T<n>`, so a
+    dropped or misread row shows up as a mismatch instead of as a wrong deadline. Expect the Graded
+    Reviews to disagree — a syllabus schedules those off the M/T grid — and confirm the
+    disagreements are only those.
 - **Publishing an assignment is not releasing it.** *(Added 2026-08-04.)* A published offering
   appears to a student only in the **7 days before that student's own deadline**
   (`LOOKAHEAD_DAYS` in `site/js/schema.js`, with `releaseAt`/`isReleased`), so a cadet cannot work
