@@ -8,6 +8,112 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-09 (third) — Casey Pellizzari via Claude
+
+### The disk IO budget was being drained by temp files, not by PREP
+
+Supabase warned that the project was depleting its **disk IO budget**, against a background of
+students and faculty reporting intermittent failures. The plan was upgraded to **Pro**, and compute
+was moved **Nano → Micro** and then **Micro → Small**. This entry records what the cause actually
+was, because none of the obvious suspects were it.
+
+**It was never reads.** The database is **22 MB** and fits entirely in RAM: heap cache-hit ratio
+**100.00%**, index cache-hit **99.99%**, and **3,355 disk block reads total** across a 79-day stats
+window. It was not writes either — WAL over the same 79 days was **273 MB**, which is nothing.
+
+**It was temp files: 98 GB across 36,190 of them.** A temp file is written when a sort or hash
+exceeds `work_mem` and spills to disk. That was, by a wide margin, the largest consumer of disk IO
+on the instance.
+
+**PREP's own queries were not responsible, and this was measured rather than assumed.** Signed in
+as the test faculty account and ran the real paths through PostgREST while watching the temp-file
+counters — the roster join, the grade-queue nested embed, `submission_activities`, `grades`,
+`submissions`, `sections`, `assignment_due_dates`. Every one returned in **0.19–0.57s with zero
+temp files**. The RLS policies are also fine: they use the correct `IN (SELECT app.staff_sections())`
+form, and all eight helper functions are `STABLE` + `SECURITY DEFINER`.
+
+*(One real but non-causal finding, left unfixed: every set-returning RLS helper declares the
+default `ROWS 1000` while actually returning a handful. The planner therefore misestimates their
+cardinality by ~250×. It caused no measurable harm here — the queries are fast — but it is a cheap
+`ALTER FUNCTION … ROWS n` if a future plan goes bad. DDL on `app`, so it needs the CORE.md §0 gate.)*
+
+**The spill was periodic, identical, and platform-side.** Sampling on Micro at idle, with one
+connection and no users on the site:
+
+```
+elapsed  tempfiles   tempMB      elapsed  tempfiles   tempMB
+     30          0     0.00          180          2     6.72
+     60          0     0.00          210          0     0.00
+     90          0     0.00          240          0     0.00
+    120          2     6.72          270          0     0.00
+    150          0     0.00          301          2     6.72
+TOTAL over 301s: 6 temp files, 20.1 MB  ->  ~5.7 GB/day
+```
+
+Exactly 2 files, exactly 6.72 MB, on a 60–120s cycle, whether anyone was using PREP or not. That
+is a recurring background job, not student load — and **Micro did not stop it.**
+
+**Small did.** Re-measured immediately after the switch, on a sample running **29% busier** (69 vs
+53 transactions per 30s):
+
+```
+TOTAL over 361s: 0 temp files, 0.0 MB  ->  0.00 GB/day
+```
+
+Twelve consecutive samples, zero spill. The operative setting is `work_mem`:
+
+| Setting | Micro | Small | |
+|---|---|---|---|
+| `shared_buffers` | 256 MB | 512 MB | ×2 |
+| `effective_cache_size` | 768 MB | 1536 MB | ×2 |
+| `maintenance_work_mem` | 64 MB | 128 MB | ×2 |
+| `max_connections` | **60** | **90** | ×1.5 |
+| `work_mem` | **3.4 MB** | **5.0 MB** | ×1.5 |
+| `max_parallel_workers` | 2 | 2 | unchanged |
+
+*Note `work_mem` does not scale linearly with RAM.* The prediction going in was that ~7 MB would be
+needed, reasoning from the 6.72 MB written; 5.0 MB was enough, because the bytes an external merge
+sort **writes** overstate the working set it is sorting. The real set was between 3.4 and 5.0 MB.
+
+**Why this probably explains 2026-08-09 (second) as well.** Depleted IO budget throttles the disk
+to baseline, queries queue behind it, transactions time out mid-flight and leave pooled connections
+aborted. That is precisely the **25P02** and the 60-second timeout recorded in that entry, and it
+happened at roughly 20 submissions per hour. The two incidents are very likely one cause.
+
+**Sizing context, for whoever revisits this.** 933 active enrollments (phys-110 473, phys-215 448,
+phys-310 12) across 43 sections, with **111 published offerings still ahead** through 2026-12-09.
+On the day this was written, **841 cadets had their first real deadline that night** — against a
+database whose entire recorded history was **483 submissions**, a busiest-ever hour of **20** and a
+busiest-ever minute of **8**. The system had never carried real load; `max_connections` 60 → 90 was
+as much the reason to move as the temp files were.
+
+**What is NOT established.**
+
+- **The query was never identified.** That needs `pg_stat_statements`, which lives in the
+  `extensions` schema — **both `claude_code_recker` and `prep_app_read` are denied there**. It is
+  readable from the Dashboard SQL Editor, which runs as `postgres`. Worth doing if the spill
+  returns or grows past 5.0 MB:
+  ```sql
+  select calls,
+         pg_size_pretty((temp_blks_written * 8192)::bigint) as temp_total,
+         round(mean_exec_time::numeric, 1) as mean_ms,
+         left(regexp_replace(query, '\s+', ' ', 'g'), 300) as query
+  from extensions.pg_stat_statements
+  where temp_blks_written > 0
+  order by temp_blks_written desc limit 20;
+  ```
+- **Both measurements were taken at idle.** They prove the recurring background job stopped
+  spilling. They do **not** prove nothing spills under a real deadline; a query with a working set
+  above 5.0 MB still would.
+- **`pg_stat_database` counters survive restarts**, so the cumulative 98 GB spans Nano *and* Micro
+  and overstates where the project stood at the end. Only rate samples separate the tiers.
+
+**Operational note: a compute change restarts Postgres.** Two restarts landed on the evening before
+a deadline (21:18 and 21:51 UTC). Brief, but not something to discover at 2300 with hundreds of
+cadets mid-submission — scale before a deadline window, never during one.
+
+Read-only throughout; no schema, data, or application code was touched.
+
 ## 2026-08-09 (second) — Casey Pellizzari via Claude
 
 ### A password reset showed a course director a raw Postgres transaction error
