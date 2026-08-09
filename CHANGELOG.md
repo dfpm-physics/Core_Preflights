@@ -8,6 +8,47 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-09 — Casey Pellizzari via Claude
+
+### Every Physics 110 T-day section was due on the M-day deadline
+
+**36 of the 37 phys-110 Fall 2026 preflights carried an empty `due_by_day` (`{}`)** — no per-day
+schedule at all. Deadline precedence is `extension > assignment_due_dates > due_by_day > due_at`,
+and `{}` means "`due_at` applies to everyone", so all **twelve T-day sections (285 cadets)**
+inherited the M-day deadline and were due **one to four days early** — four days on lessons 4, 9,
+15, 20, 27, 32 and 34, where the T meeting follows a weekend. `preflight-02` was the lone
+exception: it had been saved through the lesson editor, so it alone had the per-day map and its 21
+materialized per-section rows.
+
+**The M-day dates were already correct.** All 37 `due_at` values matched the syllabus, and the run
+moved none of them — the fix only adds the T track that was never written. Every affected deadline
+therefore moves **later**; no cadet lost time and no submitted work was invalidated. Only one
+T-track item was in flight (a single draft on `preflight-03`, whose deadline moved a day later).
+
+Fixed by a new **`scripts/fall2026/set_110_due_dates.py`** (DML tier, dry-run by default,
+idempotent), which writes all three storage locations so the UI cannot silently undo the change:
+`due_by_day` (the per-day map, and the thing that makes a section added later correct with no
+lesson re-save), the materialized `assignment_due_dates` rows, and the `due_at` fallback. Result:
+**37/37 offerings now carry both M and T**, and **777 per-section rows (37 × 21)** all agree with
+the map. Timestamps are built in Postgres (`(date + time) AT TIME ZONE 'America/Denver'`) so the
+term's November DST change is handled without depending on a local tz database — verified in the
+read-back: August resolves to `05:59:59Z` (UTC−6) and December to `06:59:59Z` (UTC−7). The jsonb
+strings are rendered in the exact shape the lesson editor writes, so a lesson opened afterwards
+round-trips unchanged.
+
+**Source of truth: Table 1, pp. 9-10 of `Physics_110_Fall_2026_Syllabus (4Aug2026)_8639.pdf`**,
+which gives each lesson's M-day and T-day *meeting* date; a preflight is due 2359 the night before
+(syllabus p. 3). The transcription was verified against `site/data/academic-calendar.json` — an
+independent source — and **all 37 preflight lessons agree on both tracks**. The only three
+disagreements in the whole term are lessons 13/24/36, the Graded Reviews, which the syllabus
+schedules off the academy's M/T grid and gives no T-day meeting; they have no preflight.
+
+*Note for whoever touches this next:* `scripts/fall2026/build_110_preflights.py` already held the
+correct dates, and its `SCHEDULE` table still matches this syllabus exactly. It was never the
+problem — it writes to the retired `public` schema (no `Accept-Profile: app`), which nothing the
+site serves has read since the 2026-07-28 cutover. The live `app` rows were created some other way,
+without the per-day map.
+
 ## 2026-08-08 — Matthew Recker via Claude
 
 ### The lesson rollup could spin forever, and then delete itself
