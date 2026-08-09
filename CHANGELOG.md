@@ -75,6 +75,36 @@ places a reader would look are now fixed:
 sources; the two above were wrong and were fixed, the rest were correct and had their `reviewed`
 date bumped.
 
+### No agent keeps private memory on this project — every `.md` lives in the repo
+
+Earlier the same day, this session wrote three notes into Claude Code's **private per-project memory
+store** (`~/.claude/projects/…/memory/`), which is outside the repo and invisible to Codex, to
+other operators, and to the director. The director's instruction: *"I don't want local memory. All
+.md files should live in the repo."* The store has been **deleted**, and the durable content moved
+here:
+
+- **`.ai/instructions/CORE.md` §0** turns the existing "do not rely on agent memory for anything
+  durable" bullet into "do not write to it at all", and names the repo home for each kind of note.
+  The stronger rule is the right one: a *populated* private store is worse than an empty one,
+  because it reads as though the fact has been recorded — so nobody writes it where the next
+  operator can see it — and it then goes stale with nothing checking it, where anything in the repo
+  is covered by `check_doc_sources.py`.
+- **`docs/ROADMAP.md` P1.16** — a committed driver for the written grading path
+  (`supabase/admin/grade_written.py`). This was the one note with real content: aggregation has a
+  109 KB driver and the interactive path an 18 KB one, while the written path has **no committed
+  code at all**, so its fetch/grade/upsert layer is re-derived from prose on every run — which is
+  where a forgotten `Accept-Profile: app` or finalized-grade guard would come from. **Proposed, not
+  approved**, which is exactly what the roadmap is for. P1 had been empty since 2026-07-27.
+- **`docs/operations/MACHINE-SETUP.md` §1 and `ONBOARD-AGGREGATION.md` §2** now say that every
+  command line in them is Windows and that a POSIX machine uses `.venv/bin/python` with forward
+  slashes. Both documents were Windows-only in all 9 of their command lines with nothing saying so,
+  and this project is operated from both.
+
+The third note — that one particular laptop is provisioned and its credentials are in place — was
+**not** moved. It is one machine's state rather than a fact about the system, `prep_doctor.py`
+answers the same question in a second and cannot go stale, and a shared repo is not the place to
+record where credentials are installed.
+
 ## 2026-08-08 — Matthew Recker via Claude
 
 ### The lesson rollup could spin forever, and then delete itself

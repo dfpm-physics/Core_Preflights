@@ -131,9 +131,48 @@ likely reason the second account would not authenticate with a correctly copy-pa
 
 ## 2. P1 — First weeks of term
 
-**Empty as of 2026-07-27.** The last entry, P1.12's whole-section half, was **descoped by the
-director** rather than built — the reasoning is in [P3.17](#p317--whole-section-extension-grant--s--parked-not-planned)
-and the shipped half is in [§8](#p112--bulk--whole-section-extensions---done-2026-07-22--remainder-descoped-2026-07-27).
+*Emptied 2026-07-27 — the last entry, P1.12's whole-section half, was **descoped by the director**
+rather than built ([P3.17](#p317--whole-section-extension-grant--s--parked-not-planned) has the
+reasoning; the shipped half is in [§8](#p112--bulk--whole-section-extensions---done-2026-07-22--remainder-descoped-2026-07-27)).
+Reopened 2026-08-09 with P1.16.*
+
+### P1.16 — A committed driver for the written grading path · **M** · *proposed 2026-08-09, undecided*
+
+**The two halves of `/lesson-cycle` are tooled very unevenly**, and that asymmetry is the largest
+variable cost in a nightly run:
+
+| Half | Driver |
+|---|---|
+| Cohort aggregation | `supabase/admin/lesson_aggregate.py` — 109 KB; `pull` / `worklist` / `write-analysis` / `status` |
+| Interactive grading | `supabase/admin/grade_interactive.py` — 18 KB |
+| **Written grading** | **nothing committed** — `.ai/skills/preflight-analyze/` ships a SKILL and references, and no code |
+
+So the written path's fetch → grade → upsert layer is **re-derived from prose on every run**. That
+is where the risk sits, not just the time: a forgotten `Accept-Profile: app` header writes to the
+retired `public` schema, and a forgotten finalized-grade guard overwrites a human's decision. Both
+are one-line omissions that the aggregation and interactive drivers cannot make, because they were
+written down once and reviewed.
+
+**Build:** `supabase/admin/grade_written.py`, mirroring the existing two — `pull` /
+`write-grades` (carrying the never-clobber-a-finalized-grade guard) / `status`. Stdlib-only and
+dry-run by default, per CORE.md §2 and §4. Nothing about the **grading judgment** moves into code:
+the three-state rule and the tailored `warn` feedback stay in `SKILL.md`, which is the half an agent
+should be doing. Only the I/O is mechanized.
+
+**Verify** by replaying the 2026-08-08 `preflight-03-training` M run and confirming it reproduces
+those 36 grade rows exactly.
+
+**What it does and does not buy.** Measured 2026-08-09: aggregation is near-flat with roster size
+(12 scopes in the sandbox against 14 for a live phys-215 M night), while tailored `warn` feedback is
+genuinely linear — roughly 72 individual corrections at 179 students and 115 at 285. **A driver
+does not touch the linear half**, so do not expect it to make a large night short; it removes the
+re-derivation and the two silent-failure modes. Nightly load is one course on one track (~200
+students, worst case 285 on phys-110's T track): across 78 deadline slots only one has two courses
+due, and it is phys-110 + phys-310 — not the two large courses.
+
+**Why P1 and not C.** It is not debt; it is a missing third of the cycle's tooling, and the term is
+running. **It is a proposal, not a decision** — raised when the director asked why a run was slow,
+and not yet accepted or declined.
 
 ---
 

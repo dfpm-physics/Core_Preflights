@@ -82,6 +82,10 @@ Enough to run `/lesson-aggregate` on any lesson whose students are already asses
    ```
    Never install these globally and never copy a `.venv` between machines.
 
+   **The command lines here are Windows.** On macOS or Linux use **`.venv/bin/python`** and forward
+   slashes throughout — `.venv/bin/python supabase/admin/worklist_dayscope_test.py`. Nothing else
+   about the setup differs.
+
 2. **`supabase/admin/.env`** — ask the course director for it, out of band. Never by email
    attachment to a list, never pasted into a chat that logs. It carries the `prep_app_*` database
    roles. `supabase/admin/.env.template` shows the shape but not the values.

@@ -59,6 +59,16 @@ that ended it.)*
   other agent or to humans.** If a fact matters to whoever works next, it must live in the
   **repo** — this file, a design doc, or `CHANGELOG.md`. Do not rely on agent memory for
   anything durable.
+
+  **Do not write to it at all.** *(Course director's instruction, 2026-08-09, after a session
+  created one.)* An agent whose harness offers a private memory store leaves that store **empty**
+  on this project, and puts the note in the repo instead. The rule is stronger than "don't rely on
+  it" because a *populated* private store is worse than an empty one: it reads as though the fact
+  has been recorded, so nobody writes it down where the next operator can see it, and it goes stale
+  with nothing checking it — the repo has `check_doc_sources.py`, a private store has nothing.
+  There is a home here for every kind of note that store would hold — an open proposal goes in
+  [`docs/ROADMAP.md`](../../docs/ROADMAP.md), a setup fact in `docs/operations/`, a decision in
+  `docs/decisions/`, an event in `CHANGELOG.md`. **Every `.md` lives in the repo.**
 - **Log every state-changing run in `CHANGELOG.md`** (schema, bulk data, roster, publishes) —
   **except routine analysis runs**, which record themselves in `app.analysis_runs` instead. A term
   is ~40 lessons closed out twice each; 80+ hand-written entries would bury what that file is read

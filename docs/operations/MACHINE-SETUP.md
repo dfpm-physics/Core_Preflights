@@ -50,6 +50,13 @@ Reference machine: Python 3.14.0, psycopg2 2.9.12. Never install these globally,
 `.venv` between machines. On Windows set `PYTHONIOENCODING=utf-8` before any script that prints
 report text — reports carry emoji and cp1252 stdout crashes on them.
 
+> **Every command line in this document is written for Windows, because the reference machine is.**
+> On macOS or Linux the interpreter is **`.venv/bin/python`**, not `.venv\Scripts\python`, and paths
+> take forward slashes — so `.venv/bin/python supabase/admin/app_tier_check.py`. The
+> `PYTHONIOENCODING` line above is Windows-only; a POSIX shell is already UTF-8. Nothing else
+> differs: the same venv, the same three credential files at the same paths, the same checks.
+> Operators do run this project from both, so translate rather than assuming a command is broken.
+
 ---
 
 ## 2. Credentials — three gitignored files
