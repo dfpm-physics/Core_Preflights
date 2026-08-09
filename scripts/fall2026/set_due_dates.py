@@ -1,29 +1,44 @@
 #!/usr/bin/env python
-"""Give every Physics 110 Fall 2026 preflight its real M-day AND T-day deadline.
+"""Set every Fall 2026 preflight's real M-day AND T-day deadline, for one course.
 
-WHY
-    36 of the 37 phys-110 offerings carry an EMPTY `due_by_day` (`{}`), so they have no per-day
+One mechanism, one schedule table per course (`SCHEDULES` below). A course is added by
+transcribing its syllabus into a new entry — never by forking this file.
+
+WHY, phys-110 (repaired 2026-08-09)
+    36 of the 37 phys-110 offerings carried an EMPTY `due_by_day` (`{}`), so they had no per-day
     schedule at all. Precedence is  extension > assignment_due_dates > due_by_day > due_at
     (site/js/db-schema.js), and `{}` means "due_at applies to everyone" — so all twelve T-day
-    sections inherit the M-day deadline and are due one to four days early. `preflight-02` is the
-    single exception: it was saved through the lesson editor and has both the per-day map and its
-    21 materialized per-section rows.
+    sections inherited the M-day deadline and were due one to four days early. `preflight-02` was
+    the single exception: it had been saved through the lesson editor and had both the per-day map
+    and its 21 materialized per-section rows. The M-day dates were already correct, so that run
+    moved no deadline earlier — it only added the T track that was never written.
 
-    The M-day dates themselves were already correct — all 37 `due_at` values match the syllabus.
-    Nothing here moves an M deadline; this only adds the T track that was never written.
+WHY, phys-215 (repaired 2026-08-09)
+    A different fault with the same repair. Every phys-215 offering already had a populated
+    `due_by_day` and its 17 per-section rows, but FIVE of them — preflight-02, 03, 04, 05 and 07 —
+    sat exactly ONE DAY LATE on both tracks, in all three storage locations. The other 32 were
+    correct, so this was never a systematic build error; it looks like hand editing.
+
+    One day late is not a cosmetic error here: an M-day preflight due the night before the T-day
+    meeting is due AFTER its own M-day lesson has been taught, which is the one thing a preflight
+    must not be. Unlike the phys-110 run, this one moves deadlines EARLIER — see the guard on
+    `--only` and read the plan before committing.
 
 SOURCE OF TRUTH
-    Table 1, "PHYS 110 Fall 2026 Course Schedule", pp. 9-10 of
-    `Physics_110_Fall_2026_Syllabus (4Aug2026)_8639.pdf`. The table gives each lesson's M-day and
-    T-day MEETING date; a preflight is due 2359 the night before ("completed/submitted by 2359 the
-    night before the lesson is taught to your section", syllabus p. 3), so every deadline below is
-    `meeting date - 1 day` at 23:59:59 America/Denver.
+    Each course's own syllabus schedule table, naming each lesson's M-day and T-day MEETING date:
+      phys-110  Table 1, pp. 9-10, `Physics_110_Fall_2026_Syllabus (4Aug2026)_8639.pdf`
+      phys-215  the schedule table, p. 11, `Physics_215__Fall_2026__Syllabus (2).pdf`
+    A preflight is due 2359 the night before ("completed/submitted by 2359 the night before the
+    lesson is taught to your section"), so every deadline below is `meeting date - 1 day` at
+    23:59:59 America/Denver.
 
-    Transcription verified against `site/data/academic-calendar.json` (the USAFA academic calendar
-    feed, an independent source): all 37 preflight lessons agree on BOTH tracks. The only three
-    disagreements in the whole term are lessons 13/24/36, the Graded Reviews — the syllabus
-    schedules those off the academy's M/T grid and gives them no T-day meeting. They have no
-    preflight, so they are absent here.
+    Both transcriptions are verified against `site/data/academic-calendar.json` (the USAFA academic
+    calendar feed, an independent source) — every meeting date is a real teaching day of the
+    declared track. Graded Reviews are absent from both tables: they carry no preflight and the
+    syllabus gives them no T-day meeting. For phys-110 those are lessons 13/24/36 and they are the
+    term's only three disagreements with the academy grid; for phys-215 they are 12/23/35 and they
+    sit ON the grid, which is why phys-215's lesson numbers equal the academy's M/T numbers exactly
+    and phys-110's do not.
 
 WHAT IT WRITES  (three places, and all three or none)
     A deadline is stored in three places that must agree, or the UI silently undoes the change:
@@ -47,9 +62,10 @@ WHAT IT WRITES  (three places, and all three or none)
 IDEMPOTENT: a deadline already at its target is not rewritten, and a second run reports zero
 changes. Runs as the DML tier — data only, no DDL. Dry-run by default (CORE.md §4).
 
-Usage:
-  .venv/bin/python scripts/fall2026/set_110_due_dates.py
-  .venv/bin/python scripts/fall2026/set_110_due_dates.py --commit
+Usage (Windows: .venv\\Scripts\\python):
+  .venv/bin/python scripts/fall2026/set_due_dates.py --course phys-215
+  .venv/bin/python scripts/fall2026/set_due_dates.py --course phys-215 --commit
+  .venv/bin/python scripts/fall2026/set_due_dates.py --course phys-215 --only preflight-03,preflight-04
 """
 
 import argparse
@@ -74,10 +90,16 @@ TZ = "America/Denver"
 DUE_TIME = "23:59:59"  # course policy, both courses as of 2026-08-06 (CORE.md §2)
 YEAR = 2026
 
-# ── Syllabus Table 1: lesson number -> (M-day meeting date, T-day meeting date) ────────────────
-# MEETING dates, not deadlines. Lesson 1 has no preflight ("N" in the Pre-Flt column) and
-# lessons 13/24/36 are the Graded Reviews (no preflight, no T-day meeting); all four are absent.
-MEETINGS = {
+# ── Syllabus schedules: course -> lesson number -> (M-day meeting, T-day meeting) ──────────────
+# MEETING dates, not deadlines. Lesson 1 has no preflight ("N" in the Pre-Flt column) and the
+# Graded Reviews have neither a preflight nor a T-day meeting; both are absent from every table.
+#
+# The two courses share the academy's M/T teaching grid but slot their Graded Reviews at different
+# lesson numbers, so the lesson -> date mapping diverges between them from lesson 12 to 13 and
+# from 23 to 24, and re-converges at 14 and 25. Do not derive one from the other.
+SCHEDULES = {}
+
+SCHEDULES["phys-110"] = {  # Graded Reviews at 13 / 24 / 36
     2:  ("Aug 10", "Aug 11"),
     3:  ("Aug 12", "Aug 13"),
     4:  ("Aug 14", "Aug 17"),
@@ -117,6 +139,46 @@ MEETINGS = {
     41: ("Dec 9",  "Dec 10"),
 }
 
+SCHEDULES["phys-215"] = {  # Graded Reviews at 12 / 23 / 35
+    2:  ("Aug 10", "Aug 11"),
+    3:  ("Aug 12", "Aug 13"),
+    4:  ("Aug 14", "Aug 17"),
+    5:  ("Aug 18", "Aug 19"),
+    6:  ("Aug 20", "Aug 21"),
+    7:  ("Aug 24", "Aug 25"),
+    8:  ("Aug 26", "Aug 27"),
+    9:  ("Aug 28", "Aug 31"),
+    10: ("Sep 1",  "Sep 2"),
+    11: ("Sep 3",  "Sep 4"),
+    13: ("Sep 10", "Sep 14"),
+    14: ("Sep 15", "Sep 16"),
+    15: ("Sep 17", "Sep 21"),
+    16: ("Sep 22", "Sep 23"),
+    17: ("Sep 24", "Sep 25"),
+    18: ("Sep 28", "Sep 29"),
+    19: ("Sep 30", "Oct 1"),
+    20: ("Oct 2",  "Oct 5"),
+    21: ("Oct 6",  "Oct 7"),
+    22: ("Oct 8",  "Oct 9"),
+    24: ("Oct 15", "Oct 16"),
+    25: ("Oct 19", "Oct 20"),
+    26: ("Oct 21", "Oct 22"),
+    27: ("Oct 23", "Oct 26"),
+    28: ("Oct 27", "Oct 28"),
+    29: ("Oct 29", "Oct 30"),
+    30: ("Nov 2",  "Nov 3"),
+    31: ("Nov 4",  "Nov 5"),
+    32: ("Nov 6",  "Nov 9"),
+    33: ("Nov 10", "Nov 12"),  # T skips Wed Nov 11 (Veterans Day)
+    34: ("Nov 13", "Nov 16"),
+    36: ("Nov 19", "Nov 20"),
+    37: ("Nov 23", "Nov 24"),  # Thanksgiving break falls between L37 and L38
+    38: ("Dec 1",  "Dec 2"),
+    39: ("Dec 3",  "Dec 4"),
+    40: ("Dec 7",  "Dec 8"),
+    41: ("Dec 9",  "Dec 10"),
+}
+
 MONTHS = {"Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12}
 
 
@@ -125,10 +187,10 @@ def parse(s):
     return date(YEAR, MONTHS[mon], int(day))
 
 
-def schedule():
+def schedule(course):
     """slug -> {'M': 'YYYY-MM-DD', 'T': 'YYYY-MM-DD'} — the night BEFORE each meeting."""
     out = {}
-    for n, (m, t) in sorted(MEETINGS.items()):
+    for n, (m, t) in sorted(SCHEDULES[course].items()):
         out[f"preflight-{n:02d}"] = {
             "M": (parse(m) - timedelta(days=1)).isoformat(),
             "T": (parse(t) - timedelta(days=1)).isoformat(),
@@ -175,12 +237,20 @@ def resolve(cur, sched):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--course", default="phys-110", help="course CODE — only this course is touched")
+    ap.add_argument("--course", required=True, choices=sorted(SCHEDULES),
+                    help="course CODE — only this course is touched")
     ap.add_argument("--term", default="fall-2026", help="term CODE")
+    ap.add_argument("--only", default="",
+                    help="comma-separated slugs; restrict the write to these. Everything else is "
+                         "still checked and reported, just not written.")
     ap.add_argument("--commit", action="store_true", help="write; otherwise everything rolls back")
     args = ap.parse_args()
 
-    sched = schedule()
+    sched = schedule(args.course)
+    only = {s.strip() for s in args.only.split(",") if s.strip()}
+    unknown_only = sorted(only - set(sched))
+    if unknown_only:
+        sys.exit(f"--only names slug(s) not in the {args.course} schedule: {unknown_only}")
     env = read_env(ENV_FILE)
     conn = connect(env)
     cur = conn.cursor()
@@ -235,6 +305,7 @@ def main():
     print(f"\n{'slug':<15}{'M deadline':<22}{'T deadline':<22}{'due_by_day':<14}due_at")
     n_map = n_due = 0
     off_updates, dbd_updates, sec_rows = [], [], []
+    earlier, held = [], []
     for slug in sorted(sched):
         o = by_slug[slug]
         m_ts, m_iso = resolved[slug]["M"]
@@ -245,16 +316,29 @@ def main():
         have_dbd = o["due_by_day"] or {}
         dbd_state = "ok" if have_dbd == want_dbd else ("ADD" if not have_dbd else "REWRITE")
         due_state = "ok" if o["due_at"] == want_due else f"MOVE {o['due_at']:%b %d}→{want_due:%b %d}"
-        if dbd_state != "ok":
+
+        # A deadline that moves EARLIER takes time away from students who are working right now.
+        # It is sometimes the correct repair — a preflight due after its own lesson is worse — but
+        # it is never a detail, so it is counted separately and reported on its own line.
+        for track, (ts, _iso) in sorted(resolved[slug].items()):
+            was = (have_dbd or {}).get(track)
+            if was and _iso < was:
+                earlier.append((slug, track, was, _iso))
+
+        skip = only and slug not in only
+        if skip and (dbd_state != "ok" or due_state != "ok"):
+            held.append(slug)
+        if dbd_state != "ok" and not skip:
             n_map += 1
             dbd_updates.append((o["id"], want_dbd))
-        if due_state != "ok":
+        if due_state != "ok" and not skip:
             n_due += 1
             off_updates.append((o["id"], want_due))
-        for s in sections:
-            sec_rows.append((o["id"], s["id"], resolved[slug][s["meeting_days"][0]][0]))
+        if not skip:
+            for s in sections:
+                sec_rows.append((o["id"], s["id"], resolved[slug][s["meeting_days"][0]][0]))
         print(f"{slug:<15}{m_ts:%a %b %d %H:%M:%S}     {t_ts:%a %b %d %H:%M:%S}     "
-              f"{dbd_state:<14}{due_state}")
+              f"{dbd_state:<14}{due_state}{'   [held by --only]' if skip else ''}")
 
     cur.execute("""SELECT count(*) AS n FROM app.assignment_due_dates d
                      JOIN app.assignment_offerings ao ON ao.id = d.assignment_offering_id
@@ -262,9 +346,16 @@ def main():
     before_sec = cur.fetchone()["n"]
 
     print(f"\nplan: due_by_day {n_map} to write · due_at {n_due} to move · "
-          f"per-section rows {before_sec} → {len(sec_rows)}")
-    if n_due:
-        print("  ⚠  a due_at is moving — M-day deadlines were believed already correct; check the diff above")
+          f"per-section rows touched {len(sec_rows)} (course holds {before_sec})")
+    if held:
+        print(f"  --only is holding {len(held)} offering(s) that need a change: {sorted(held)}")
+    if earlier:
+        print(f"\n  ⚠  {len(earlier)} deadline(s) move EARLIER. Students lose time on these:")
+        for slug, track, was, now in earlier:
+            mark = "" if (not only or slug in only) else "   [held]"
+            print(f"       {slug} {track}: {was} → {now}{mark}")
+        print("     Check submissions in flight before committing. A preflight due AFTER its own")
+        print("     lesson is the worse error, but that is a judgement for the course director.")
 
     # ── Write ───────────────────────────────────────────────────────────────────────────────
     if dbd_updates:

@@ -171,9 +171,20 @@ level 4 and every T-day section is due on the **M-day** date, one to four days e
 see it by looking: the default *is* the M-day date, so every M-day deadline reads correctly while
 every T-day one is wrong. Physics 110 ran that way on 36 of its 37 preflights until 9 August 2026.
 
-If a term was built for you rather than entered by hand, open one T-day lesson and check the date
-against your syllabus before the semester starts. Saving an assignment in Lessons fixes it, and
-also updates every current section.
+**A schedule that exists can still be wrong, and that is the harder one to catch.** The same day,
+five Physics 215 preflights turned out to be dated exactly one day late — with a complete
+per-meeting-day schedule and every section row present. The other thirty-two were right, which is
+why nobody noticed. A preflight one day late is due *after the lesson it prepares you for*, so the
+cadets answer it having already sat the class.
+
+So: before the semester starts, check **every** lesson's dates against your syllabus, not one.
+A single spot check would have passed on either course — on Physics 110 because the M-day date it
+showed was correct, and on Physics 215 because there was an 86% chance of landing on a good one.
+Saving an assignment in Lessons rewrites its schedule and every current section's row.
+
+Ask your system administrator if you would rather have it checked all at once; there is a script
+that compares a whole term against a syllabus schedule and reports every disagreement without
+changing anything.
 
 ## Publishing and releasing are two different things
 

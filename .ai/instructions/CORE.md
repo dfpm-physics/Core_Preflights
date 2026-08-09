@@ -252,14 +252,33 @@ Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
     SELECT count(*) FROM app.assignment_offerings
      WHERE course_offering_id = '<uuid>' AND (due_by_day IS NULL OR due_by_day = '{}'::jsonb);
     ```
-  - **Repair:** `scripts/fall2026/set_110_due_dates.py` (DML tier, dry-run by default, idempotent)
-    writes all three locations from a syllabus schedule table. It is phys-110's dates in a
-    `--course`-shaped script; another course needs its own `MEETINGS` table, not a new mechanism.
+  - **Repair:** `scripts/fall2026/set_due_dates.py --course <code>` (DML tier, dry-run by default,
+    idempotent) writes all three locations from that course's syllabus schedule table. Adding a
+    course is a new entry in its `SCHEDULES` dict and nothing else — **never a fork of the file.**
+    *(It was `set_110_due_dates.py` until 2026-08-09, when phys-215 needed it and the schedule
+    became data instead of the script's identity.)*
+  - **An empty map is not the only way a term goes wrong, and the other way is louder.** *(Added
+    2026-08-09.)* Phys-215 Fall 2026 had a populated map and all 629 per-section rows, and **five
+    offerings were still exactly one day late on both tracks** — `preflight-02`, `03`, `04`, `05`,
+    `07`, with the other 32 correct, which is the signature of hand editing rather than a build.
+    One day late is not cosmetic: an M-day preflight due the night before the **T**-day meeting is
+    due *after its own M-day lesson has been taught*, so the cohort answers it having already sat
+    the class and the instructor teaches with no readiness data. **Check dates against the
+    syllabus, not just `due_by_day` for emptiness.**
+  - **A repair that moves a deadline EARLIER is a different decision from one that moves it later,
+    and only a human makes it.** The phys-110 fix only ever added time; the phys-215 fix took a day
+    away from 138 cadets who had not yet submitted, on ~13 hours' notice. `set_due_dates.py`
+    reports every earlier-moving deadline on its own line and will not let one pass unremarked;
+    `--only <slugs>` restricts the write while still reporting the rest. Count what is in flight
+    (`submissions`, `grades`) before committing, and put the decision to the course director.
   - **Verify a transcribed schedule against `site/data/academic-calendar.json` before writing it.**
     The academy calendar is an independent source that names each teaching day `M<n>`/`T<n>`, so a
-    dropped or misread row shows up as a mismatch instead of as a wrong deadline. Expect the Graded
-    Reviews to disagree — a syllabus schedules those off the M/T grid — and confirm the
-    disagreements are only those.
+    dropped or misread row shows up as a mismatch instead of as a wrong deadline. Check that every
+    meeting date is a real teaching day **of the declared track** — that catches a whole-column
+    shift, which comparing lesson numbers does not. Whether a course's lesson numbers equal the
+    academy's day numbers depends on where its Graded Reviews fall: phys-215's do sit on the grid
+    and its numbers match exactly, phys-110's do not and its lessons 13/24/36 disagree. Neither is
+    the error; assuming either one is.
 - **Publishing an assignment is not releasing it.** *(Added 2026-08-04.)* A published offering
   appears to a student only in the **7 days before that student's own deadline**
   (`LOOKAHEAD_DAYS` in `site/js/schema.js`, with `releaseAt`/`isReleased`), so a cadet cannot work

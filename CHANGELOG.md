@@ -10,6 +10,50 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-09 — Casey Pellizzari via Claude
 
+### Five Physics 215 preflights were due a day late — after their own lesson
+
+Found while scheduling an unattended close-out for `preflight-02`: the job refused, correctly,
+because that lesson's M deadline was still a day out. It should not have been.
+
+**`preflight-02`, `03`, `04`, `05` and `07` each sat exactly one day late on BOTH tracks**, in all
+three storage locations. The other 32 offerings were correct, every offering already had a
+populated `due_by_day` and its full 17 per-section rows — so this is not the phys-110 fault and not
+a build error; the signature is hand editing. The consequence is worse than it sounds: an M-day
+preflight due the night before the **T**-day meeting is due *after its own M-day lesson has been
+taught*. `preflight-02` M was due Monday night for a Monday lesson, so 186 M-day cadets would have
+answered it having already sat the class, and their instructors would have taught with no readiness
+data at all.
+
+Corrected against **the schedule table on p. 11 of `Physics_215__Fall_2026__Syllabus (2).pdf`**
+(preflight due 2359 the night before each meeting). The transcription was verified against
+`site/data/academic-calendar.json`: all 37 preflight lessons land on a real teaching day of the
+declared track, and phys-215's lesson numbers match the academy's M/T numbering exactly — which
+phys-110's do not, because the two courses slot their Graded Reviews at different lesson numbers
+(215 at 12/23/35, 110 at 13/24/36). Read back independently afterwards: **37/37 offerings and all
+629 per-section rows agree with the syllabus, 0 mismatches**, DST confirmed across the term
+(Aug `05:59:59Z`, Dec `06:59:59Z`). A second run is a clean no-op.
+
+**This fix moved deadlines EARLIER, which the phys-110 one never did** — `preflight-02` M went to
+that same evening with 138 of 186 M-day cadets not yet submitted, roughly 13 hours' notice. That
+was put to the course director with the counts in hand and taken deliberately, on the grounds that
+a preflight arriving after its own lesson is the worse failure. The 48 cadets who had already
+submitted are unaffected; nothing was graded on any of the five.
+
+`scripts/fall2026/set_110_due_dates.py` → **`scripts/fall2026/set_due_dates.py`**. The mechanism
+was already `--course`-shaped; only the schedule table was phys-110's, so the table became data
+(`SCHEDULES[<course>]`) rather than the script's identity, and adding a course is now one dict
+entry instead of a fork. Two additions earned by this run: every deadline that moves **earlier** is
+reported on its own line with a note to count what is in flight first, and `--only <slugs>`
+restricts the write while still reporting the rest. Re-running it against phys-110 is a verified
+no-op (0 to write, 777 rows unchanged), so the refactor regressed nothing.
+
+`.ai/instructions/CORE.md` §2 gains the two rules this cost: an empty `due_by_day` is not the only
+way a term goes wrong — check dates against the syllabus, not just the map for emptiness — and a
+repair that moves a deadline earlier is a decision for the director, not a detail of the run. The
+academic-calendar cross-check now says to verify each date is a teaching day *of its declared
+track*, which catches a whole-column shift; comparing lesson numbers does not, and whether those
+numbers should match at all is per-course.
+
 ### Every Physics 110 T-day section was due on the M-day deadline
 
 **36 of the 37 phys-110 Fall 2026 preflights carried an empty `due_by_day` (`{}`)** — no per-day
@@ -25,7 +69,7 @@ moved none of them — the fix only adds the T track that was never written. Eve
 therefore moves **later**; no cadet lost time and no submitted work was invalidated. Only one
 T-track item was in flight (a single draft on `preflight-03`, whose deadline moved a day later).
 
-Fixed by a new **`scripts/fall2026/set_110_due_dates.py`** (DML tier, dry-run by default,
+Fixed by a new **`scripts/fall2026/set_due_dates.py`** (then `set_110_due_dates.py`) (DML tier, dry-run by default,
 idempotent), which writes all three storage locations so the UI cannot silently undo the change:
 `due_by_day` (the per-day map, and the thing that makes a section added later correct with no
 lesson re-save), the materialized `assignment_due_dates` rows, and the `due_at` fallback. Result:
