@@ -332,7 +332,7 @@ function statTiles(a, ctx) {
   const L = ctx.lesson.short;
   const compLabel = ctx.status === 'today' ? 'Active preflight complete'
     : ctx.status === 'past' ? `Lesson ${L} complete` : `Upcoming preflight (L${L})`;
-  const compSub = ctx.status === 'today' ? `Lesson ${L} · ${a.done}/${a.total} · before next class`
+  const compSub = ctx.status === 'today' ? `Lesson ${L} · ${a.done}/${a.total} · in class now`
     : ctx.status === 'past' ? `Lesson ${L} · ${a.done}/${a.total} · already covered`
     : `Lesson ${L} · ${a.done}/${a.total} · not yet due · early submissions`;
   return `<div class="stat-grid">
@@ -444,7 +444,11 @@ function spotlight(a, ctx) {
         : (a.mis.length ? `<div class="mis-list">${mis}</div>` : `<div class="empty-note">No common misconceptions flagged.</div>`)
           + (a.flags ? `<div class="callout">🚩 <span><b>${a.flags}</b> student${a.flags === 1 ? '' : 's'} flagged for follow-up</span></div>` : '');
 
-  const eyebrowTxt = st === 'today' ? 'Active preflight · due before next class'
+  // "due the night before class" rather than "due before next class": the active preflight is now
+  // the most recently due one (faculty-data.js → activeLessonId), so its M-day deadline is behind
+  // us while its T-day one may not be. The policy phrasing is true on both tracks all day; the old
+  // one stopped being true for an M-day instructor the moment they finished teaching it.
+  const eyebrowTxt = st === 'today' ? 'Active preflight · due the night before class'
     : st === 'past' ? 'Past preflight · already covered in class' : 'Upcoming preflight · not yet due';
   const metaTxt = st === 'today' ? 'What to know before you walk into class'
     : st === 'past' ? 'How this one landed' : 'Preview — students working ahead';

@@ -8,6 +8,46 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-10 — Matthew Recker via Claude
+
+### The faculty dashboard opened on the NEXT lesson, so both class days were taught with the wrong one on screen
+
+Reported on the morning of L2's M-day: the dashboard's active-preflight spotlight was showing
+**Lesson 03**, whose deadline is tomorrow night, while the course was in class teaching **Lesson
+02**. Both Fall 2026 courses were affected — verified read-only against live data, where the old
+rule picked `preflight-03` for phys-110 and phys-215 alike.
+
+**Why it happened.** `loadFacultyDashboard` picked *the next deadline still ahead of us*. An
+offering carries two deadlines — its M-day sections' and its T-day sections' — and `due_at` is the
+**earlier** of the two, i.e. the M-day one (CORE.md §2, `due_by_day`). A preflight is due the night
+before its lesson, so the moment L2's M deadline passed at 2359, every dashboard in the course
+advanced to L3 and stayed there through **both** of L2's class days. The lesson the instructor was
+about to walk into was never the one on screen; the lesson on screen was one nobody had worked yet.
+
+**The fix is one rule: the most recently due lesson, not the next one due**
+(`activeLessonId()` in `site/js/faculty-data.js`). It lands on the lesson in class now for
+**M-day, T-day and both-day instructors at once**, because the deadlines interleave — L2's M
+deadline passes the night before L2's M class and remains the most recent one through L2's T class
+the following day, since L3's does not pass until that evening. Checked against the real Fall 2026
+schedule, including the awkward shapes: a Monday T-day class three days after its own M-day
+(L4: M Aug 14 / T Aug 17), and the Graded Review gaps, where the dashboard now rests on the last
+lesson taught rather than jumping ahead to one nobody has started. Before the term's first
+deadline it falls back to the first lesson due, so week one does not open on an empty page.
+
+The lookahead arrows and the "↩ Today" pill are unchanged, so the next lesson is still one click
+away. Two labels moved with the rule: the spotlight eyebrow now reads *"due the night before
+class"* — true on both tracks all day, where *"due before next class"* stopped being true for an
+M-day instructor the moment they finished teaching — and the completion tile's subtitle says
+*"in class now"*.
+
+**Verification.** Twelve new checks in `tests/app-schema/test-dashboard-rows.mjs` pin the rule
+across a full M/T cycle using the verbatim phys-215 dates from `scripts/fall2026/set_due_dates.py`,
+including the deadline instant itself, the term-start fallback and undated offerings (24 passed).
+`test-imports.mjs` passes. The live comparison above was a read-only REST query and wrote nothing.
+Node-only verification so far — **not yet clicked through in a browser** (CORE.md §2).
+
+---
+
 ## 2026-08-09 (third) — Casey Pellizzari via Claude
 
 ### The disk IO budget was being drained by temp files, not by PREP

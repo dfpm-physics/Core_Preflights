@@ -111,13 +111,47 @@ export function buildLessonRows({ submissions, lessons, offerings, grades, exten
 }
 
 /**
+ * The lesson the dashboard opens on — the MOST RECENTLY DUE one, not the next one due.
+ *
+ * A preflight is due the night before its lesson, and one offering carries two deadlines: the
+ * M-day sections' and the T-day sections' (`due_at` is the earlier of the two, so it is the
+ * M-day one). Picking the next deadline still ahead of us therefore skipped past the lesson
+ * being taught the moment its M deadline passed — at 2359 the night before the M-day class,
+ * every instructor's dashboard jumped to the NEXT lesson, and both days' classes were then
+ * taught with the following lesson's near-empty numbers on screen. Reported 2026-08-10, on the
+ * morning of L2's M-day, with the dashboard showing L3.
+ *
+ * The last deadline already behind us names the lesson in class now, on both tracks, because the
+ * deadlines interleave: L2's M deadline passes the night before L2's M class and stays the most
+ * recent one through L2's T class the next day, since the next deadline (L3's M) does not pass
+ * until that evening. So an M instructor, a T instructor and someone teaching both all see the
+ * lesson they are actually walking into. The lookahead arrows and the "↩ Today" pill still reach
+ * everything else.
+ *
+ * Before the term's first deadline nothing is behind us, so it falls back to the first lesson
+ * due — otherwise week one would open on an empty page.
+ *
+ * @param {Array<{offeringId: string, due: ?string}>} lessons  ordered by deadline, ascending
+ * @param {Date} [now]  injected so tests are not clock-dependent
+ * @returns {string|null} the offering id, or null when there are no lessons
+ */
+export function activeLessonId(lessons, now = new Date()) {
+  if (!lessons || !lessons.length) return null;
+  const withDue = lessons.filter(l => l.due);
+  if (!withDue.length) return lessons[lessons.length - 1].offeringId;
+  const t = +now;
+  const past = withDue.filter(l => +new Date(l.due) <= t);
+  return past.length ? past[past.length - 1].offeringId : withDue[0].offeringId;
+}
+
+/**
  * Just-in-Time-Teaching dashboard model.
  *
  * @returns {{
  *   noCourse?, noSections?, isDirector, courseTitle, myName,
  *   sections: Array<{id, code, instructorName, isMine, n}>,
  *   lessons:  Array<{offeringId, slug, title, due, num, short}>,   // published, due asc
- *   activeId: string|null,                                         // the next-due lesson
+ *   activeId: string|null,                                         // see activeLessonId()
  *   rowsByLesson: Record<string, Array<{student_id, sectionId, status, effort, report_data}>>,
  *   sectionSize: Record<string, number>,
  *   counts: { sections, students, lessons },
@@ -196,18 +230,7 @@ export async function loadFacultyDashboard(ctx) {
     });
   lessons.forEach((l, i) => { if (l.short == null) l.short = String(i + 1).padStart(2, '0'); });
 
-  // The "today" lesson: the next one still due; if all are past, the most recent.
-  let activeId = null;
-  if (lessons.length) {
-    const now = Date.now();
-    const withDue = lessons.filter(l => l.due);
-    if (withDue.length) {
-      const upcoming = withDue.filter(l => +new Date(l.due) >= now);
-      activeId = upcoming.length ? upcoming[0].offeringId : withDue[withDue.length - 1].offeringId;
-    } else {
-      activeId = lessons[lessons.length - 1].offeringId;
-    }
-  }
+  const activeId = activeLessonId(lessons);
 
   // 4) All work, grades and extensions for the in-scope roster, in one pass each. Chunked so the
   //    .in() URL stays under GET length limits on a large course.
