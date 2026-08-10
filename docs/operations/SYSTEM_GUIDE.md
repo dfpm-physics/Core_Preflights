@@ -139,8 +139,14 @@ After uploading, the Roster tab shows how many students lack login accounts. Cli
 > the enrollment `dropped`, which takes the cadet out of the roster, grading, the gradebook and
 > every class number while keeping their account, submissions and grades. Removed cadets sit in a
 > collapsed list under the roster table with a **Re-enroll** button, and a roster import that names
-> them again brings them back automatically. Purging a row outright is an operator-tier script
-> action, not a button.
+> them again **in the same section** brings them back automatically. Purging a row outright is an
+> operator-tier script action, not a button.
+>
+> **Section changes no longer need the Move button either** — as of 2026-08-10 the import performs
+> them, relocating the enrollment row so submissions and grades travel with the cadet, and lists
+> every move in the preview first. Before that it could only add or remove, so a cadet who changed
+> section came out **enrolled twice**; see `sectionMoves()` in `site/js/roster-import.js` and
+> `scripts/fall2026/repair_duplicate_enrollments.py` for the repair that cleaned up Fall 2026.
 >
 > The retired `public` procedure follows.
 

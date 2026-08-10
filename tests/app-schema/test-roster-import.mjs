@@ -9,7 +9,7 @@ import {
   parseDelimited, sniffDelimiter, mapHeaders, normalizeName, emailProblem,
   studentIdProblem, rowMatchesCourse, identityFlags, termKey,
   parseRosterFile, reconcile, summarize,
-  departures, returning,
+  departures, returning, sectionMoves,
   REQUIRED_FIELDS,
   sectionDefaultsFrom,
 } from '../../site/js/roster-import.js';
@@ -429,11 +429,72 @@ eq('a dropped cadet named in the file is returning', back.length, 1);
 eq('…carrying the enrollment id to reactivate', back[0].enrollment_id, 'en-4');
 eq('an active cadet named in the file is not "returning" — they never left',
    returning([row(3001111111, 'M1A')], ENROLLED).length, 0);
-// No scope rule here on purpose: putting back a cadet the registrar still lists is the safe
-// direction, so it applies wherever the file names them.
-eq('a dropped cadet is returned even from a section the file otherwise covers differently',
-   returning([{ student_id: 3004444444, section_code: 'T3A' }], ENROLLED).length, 1);
 eq('nobody named, nobody returning', returning([], ENROLLED).length, 0);
+
+/* THE SECTION HAS TO MATCH. This assertion used to read the other way — "a dropped cadet is
+ * returned even from a section the file otherwise covers differently", expecting 1 — on the
+ * grounds that reactivating is the safe direction. It is not, once sectionMoves() exists: a cadet
+ * who moved M5B -> M1B leaves a dropped M5B row behind, and a cadet-keyed match reactivates it on
+ * the very next import, putting them back in a section they left WHILE they are active in the one
+ * they are in. That is the duplicate-enrollment bug arriving by a second route. Reactivation means
+ * "this enrollment is back", and only a file naming them in THAT section says so. (2026-08-10 —
+ * the 25 rows the phys-215 repair dropped are exactly the rows the old rule would resurrect.) */
+eq('a dropped enrollment is NOT revived when the file names that cadet in another section',
+   returning([{ student_id: 3004444444, section_code: 'T3A' }], ENROLLED).length, 0);
+eq('…and is revived when the file names them in the same section',
+   returning([{ student_id: 3004444444, section_code: 'M1A' }], ENROLLED).length, 1);
+
+/* ── section moves ─────────────────────────────────────────────────────────── */
+section('sectionMoves');
+
+// The plain case, and the whole reason this exists: the file puts an actively enrolled cadet
+// somewhere else. Before 2026-08-10 the upsert inserted a second row and the old one stayed
+// active, so the cadet held two enrollments and their work landed on an arbitrary one.
+const m1 = sectionMoves([row(3001111111, 'T3A')], ENROLLED);
+eq('a cadet the file puts in another section is a move', m1.moves.length, 1);
+eq('…carrying the enrollment id to relocate', m1.moves[0].enrollment_id, 'en-1');
+eq('…and the section to relocate it to', m1.moves[0].to_section_code, 'T3A');
+eq('…and nothing ambiguous about it', m1.ambiguous.length, 0);
+
+eq('a cadet already in the section the file names is not a move',
+   sectionMoves([row(3001111111, 'M1A')], ENROLLED).moves.length, 0);
+eq('a cadet with no enrollment at all is not a move — they are a new enrollment',
+   sectionMoves([row(3009999999, 'M1A')], ENROLLED).moves.length, 0);
+eq('a DROPPED enrollment is not moved — that is returning()\'s question',
+   sectionMoves([row(3004444444, 'T3A')], ENROLLED).moves.length, 0);
+eq('nobody named, nothing moved', sectionMoves([], ENROLLED).moves.length, 0);
+eq('no enrollments, nothing moved', sectionMoves([row(3001111111, 'T3A')], null).moves.length, 0);
+
+// Same string/number hazard departures() has: PostgREST hands back a bigint as a string.
+eq('a string student_id in the file still matches a numeric enrollment',
+   sectionMoves([{ student_id: '3001111111', section_code: 'T3A' }], ENROLLED).moves.length, 1);
+
+/* WHAT IT REFUSES TO GUESS. Each of these is a repair, not an import, and writing anything would
+ * be the same class of mistake as the bug — picking one of a cadet's rows because it sorted first
+ * is exactly how the work ended up on the stale enrollment in the first place. */
+const DUPED = [
+  ...ENROLLED,
+  { enrollment_id: 'en-5', status: 'active', student_id: 3001111111, name: 'Ann Alpha', section_id: 's-t3a', section_code: 'T3A' },
+];
+const m2 = sectionMoves([row(3001111111, 'M5A')], DUPED);
+eq('a cadet already holding two active enrollments is ambiguous, not moved', m2.moves.length, 0);
+eq('…and is reported for a human', m2.ambiguous.length, 1);
+check('…with a reason naming both sections',
+      /2 active/.test(m2.ambiguous[0].reason) && /M1A/.test(m2.ambiguous[0].reason));
+
+// Moving INTO a section where the cadet already has a row would be a UNIQUE violation on
+// (student_id, section_id) — and a question about which of the two rows owns their work.
+const m3 = sectionMoves([row(3004444444, 'M1A')], [
+  { enrollment_id: 'en-6', status: 'active', student_id: 3004444444, name: 'Dot Delta', section_id: 's-t3a', section_code: 'T3A' },
+  { enrollment_id: 'en-4', status: 'dropped', student_id: 3004444444, name: 'Dot Delta', section_id: 's-m1a', section_code: 'M1A' },
+]);
+eq('a move onto an existing dropped row is ambiguous, not moved', m3.moves.length, 0);
+check('…and says so', /already has a dropped enrollment in M1A/.test(m3.ambiguous[0].reason));
+
+// One cadet on two rows of the same file is a broken export. There is no right answer to pick.
+const m4 = sectionMoves([row(3001111111, 'T3A'), row(3001111111, 'T5B')], ENROLLED);
+eq('a cadet named in two sections in one file is never moved', m4.moves.length, 0);
+check('…and is reported as a bad file', /more than one section/.test(m4.ambiguous[0].reason));
 
 section('summarize');
 const sum = summarize(parsed, rec);

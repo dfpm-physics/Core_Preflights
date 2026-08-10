@@ -649,19 +649,122 @@ export function departures(parsed, enrolled) {
  * enrollment upsert in commitRoster() is `ignoreDuplicates`, so it finds their row, changes
  * nothing, and leaves the `dropped` status exactly where it was.
  *
- * NO scope rule here, deliberately. departures() is narrow because removing somebody is the
- * dangerous direction; putting a cadet the registrar still lists back into the course is the safe
- * one, so it applies wherever the file names them.
+ * ── THE SECTION HAS TO MATCH, AND THAT IS NOT THE SCOPE RULE IN DISGUISE ────────────────────
+ * departures() is narrow because removing somebody is the dangerous direction, and putting a cadet
+ * the registrar still lists back into the course is the safe one. This still holds. What does NOT
+ * hold is matching on the cadet alone, which is what this did until 2026-08-10 and which made it
+ * the second half of a loop that manufactured duplicate enrollments:
+ *
+ *   a cadet moves M5B -> M1B, sectionMoves() relocates their enrollment and the M5B row is left
+ *   `dropped` (or a repair script drops it) -> the next import names that cadet, matches them on
+ *   id alone, and reactivates M5B -> two active enrollments again, and every faculty surface now
+ *   shows the cadet in a section they left, next to the one they are in.
+ *
+ * Reactivation is not "this cadet is back", it is "this ENROLLMENT is back", and only a file that
+ * names them in THAT SECTION says so. A cadet the file names elsewhere is a move, not a return;
+ * a cadet the file does not name is neither. The 25 phys-215 rows dropped by the 2026-08-10
+ * repair are exactly the rows a cadet-keyed match would have resurrected on the next import.
  *
  * @param {Array} rows      staged rows from parseRosterFile
  * @param {Array} enrolled  every enrollment in the offering, active and dropped
  */
 export function returning(rows, enrolled) {
-  const named = new Set((rows || []).map(r => Number(r.student_id)));
+  const named = new Set((rows || []).map(r => `${Number(r.student_id)}|${r.section_code}`));
   return (enrolled || [])
-    .filter(e => e.status === 'dropped' && named.has(Number(e.student_id)))
+    .filter(e => e.status === 'dropped'
+              && named.has(`${Number(e.student_id)}|${e.section_code}`))
     .sort((a, b) => String(a.section_code).localeCompare(String(b.section_code))
                  || String(a.name || '').localeCompare(String(b.name || '')));
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════
+ * Section moves — the cadet who is still here, somewhere else
+ * ════════════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Cadets whose active enrollment sits in a section the file no longer puts them in.
+ *
+ * WHY THIS EXISTS. A registrar export states, per cadet, ONE section. Until 2026-08-10 an import
+ * could express only two answers to it — enroll, or drop — and a section change is neither. The
+ * enrollment upsert keys on `(student_id, section_id)`, so the new section had no matching row and
+ * was INSERTED; the old row was untouched, because departures() correctly refuses to call a cadet
+ * named in the file a departure. Every mover therefore ended up holding two active enrollments.
+ *
+ * That is not a cosmetic double-listing. `myEnrollmentIds(ctx)[0]` in student-data.js picks one of
+ * a cadet's enrollments ARBITRARILY to write work against, so submissions landed on whichever row
+ * sorted first — routinely the stale one, in the section the cadet had left. Faculty surfaces
+ * filter `status = 'active'` and show both. Fall 2026 shipped 25 such pairs in phys-215 and 17 in
+ * phys-110 before anyone noticed, because the only symptom is a cadet appearing twice.
+ *
+ * ── A MOVE, NOT A DROP-AND-ADD ───────────────────────────────────────────────────────────────
+ * The enrollment row is the anchor for everything per-student — submissions, grades, extensions
+ * all hang off `enrollment_id`. Relocating the row carries the cadet's work with them, which is
+ * what a section change means and what the per-student dropdown in Course Admin has always done
+ * (updateStudentSection()). Dropping the old row and inserting a new one would strand a term of
+ * work on an inactive enrollment: invisible to the gradebook, and the cadet re-appears as a
+ * non-submitter in their new section. That is the exact damage the 2026-08-10 repair script had
+ * to undo by hand, from the registrar CSV, because nothing in the database could tell which of a
+ * cadet's two rows was the real one.
+ *
+ * ── WHAT IT REFUSES TO GUESS ─────────────────────────────────────────────────────────────────
+ * A move is only unambiguous when the cadet holds exactly ONE active enrollment and the section
+ * the file names has NO row of theirs already. Anything else is returned as `ambiguous` and
+ * written by nobody:
+ *
+ *   - the target section already holds a row of theirs (active = they are already double-enrolled,
+ *     the corrupt state this function exists to stop creating; dropped = a UNIQUE violation waiting
+ *     for the UPDATE, and a question about which row owns their work);
+ *   - two or more active enrollments, i.e. an offering that is already duplicated;
+ *   - the file names one cadet in two different sections, which is a bad export, not a move.
+ *
+ * These are rare, they are all repairs rather than imports, and the honest response is to show the
+ * operator the names and point them at the repair script. Silently picking one row would be the
+ * same class of mistake as the bug.
+ *
+ * @param {Array} rows      staged rows from parseRosterFile
+ * @param {Array} enrolled  every enrollment in the offering, active and dropped
+ * @returns {{ moves: Array, ambiguous: Array }} moves carry `to_section_code` alongside the
+ *          enrollment row they relocate; ambiguous rows carry a `reason` for the operator.
+ */
+export function sectionMoves(rows, enrolled) {
+  // One cadet named in two sections is a broken export, not a move. Recorded, never resolved.
+  const wanted = new Map(), conflicted = new Set();
+  for (const r of rows || []) {
+    const id = Number(r.student_id);
+    if (wanted.has(id) && wanted.get(id) !== r.section_code) conflicted.add(id);
+    wanted.set(id, r.section_code);
+  }
+
+  const mine = new Map();
+  for (const e of enrolled || []) {
+    const id = Number(e.student_id);
+    if (!mine.has(id)) mine.set(id, []);
+    mine.get(id).push(e);
+  }
+
+  const moves = [], ambiguous = [];
+  for (const [id, to] of wanted) {
+    const held = mine.get(id) || [];
+    const active = held.filter(e => e.status === 'active');
+    const elsewhere = active.filter(e => e.section_code !== to);
+    if (!elsewhere.length) continue;               // already there, or not enrolled at all
+
+    const target = held.find(e => e.section_code === to);
+    const reason = conflicted.has(id)
+      ? `named in more than one section in this file`
+      : active.length > 1
+        ? `holds ${active.length} active enrollments (${active.map(e => e.section_code).join(', ')})`
+        : target
+          ? `already has a ${target.status} enrollment in ${to}`
+          : null;
+
+    if (reason) ambiguous.push({ ...elsewhere[0], to_section_code: to, reason });
+    else moves.push({ ...elsewhere[0], to_section_code: to });
+  }
+
+  const bySection = (a, b) => String(a.section_code).localeCompare(String(b.section_code))
+                           || String(a.name || '').localeCompare(String(b.name || ''));
+  return { moves: moves.sort(bySection), ambiguous: ambiguous.sort(bySection) };
 }
 
 /** Summary counts for the preview header. */

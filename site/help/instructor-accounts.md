@@ -162,8 +162,32 @@ their record belongs to them rather than to one offering. They appear in a colla
 this course** list under the roster table, each with a **Re-enroll** button.
 
 **And it undoes itself.** If a cadet was removed by mistake, importing a later export that names
-them again puts them straight back with their work intact. You do not have to find them or fix
-anything by hand; the import tells you it re-enrolled them.
+them again **in that same section** puts them straight back with their work intact. You do not have
+to find them or fix anything by hand; the import tells you it re-enrolled them. An export that
+names them in a *different* section is not a re-enrollment — it is a section change, below.
+
+### Cadets who changed section
+
+**The import moves them, and their work moves with them.** A cadet the export puts in a different
+section than the one they are sitting in is neither an arrival nor a departure, and the preview
+lists them separately — old section, new section, by name — before you commit. There is nothing to
+decide: the registrar export is what says where a cadet belongs, and this is the same move the
+**Move** button on each roster row performs. Their enrollment is relocated rather than replaced, so
+their submissions and grades follow them and nothing is re-graded or re-collected.
+
+*(New on 2026-08-10, and it fixes a real problem rather than adding a convenience. Until then an
+import could only add or remove, so a cadet who changed section was **enrolled twice** — active in
+both the old section and the new one. They showed up twice in the gradebook, counted twice in every
+class average, and, worse, their preflights landed on whichever of the two enrollments the site
+happened to pick, which was routinely the section they had left. Fall 2026 shipped 25 such cadets in
+Physics 215 and 17 in Physics 110 before anyone spotted it, because the only symptom is a name
+appearing twice.)*
+
+**A few cases the import will not settle by itself**, and it says so rather than guessing: a cadet
+who is already enrolled twice, one who already has a record in the section the file moves them to,
+or one the file itself names in two different sections. Those are listed as needing attention and
+left completely untouched — everything else in the file still imports normally. Tell your course
+director; sorting them out needs the registrar export and a script, not a click here.
 
 ### Sections, and starting a course that has none
 

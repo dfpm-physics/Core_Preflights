@@ -8,6 +8,76 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-10 (fourth) — Casey Pellizzari via Claude
+
+### The roster importer now MOVES a cadet who changed section, instead of enrolling them twice
+
+The defect behind the third entry below, fixed at the source. Three functions keyed on
+`student_id` where the real unit is `(student, section)`:
+
+- **`sectionMoves()` — new**, in `site/js/roster-import.js`. A cadet the registrar file places in
+  a different section than their active enrollment is now a **move**: `commitRoster()` UPDATEs the
+  existing enrollment's `section_id`, so the cadet's submissions and grades travel with them. It
+  runs **before** the enrollment upsert, because once the upsert has inserted a row in the target
+  section the move is a UNIQUE violation on `(student_id, section_id)` — and, previously, that
+  insert *was* the bug. It refuses to guess in three cases (a cadet already double-enrolled, a
+  target section that already holds a row of theirs, a file naming one cadet in two sections);
+  those are reported to the operator and written by nobody.
+- **`returning()` — corrected** to match on `(student, section)` too, **and this half mattered
+  more than the new function.** It reactivated any dropped enrollment belonging to a cadet the
+  file names, so the 25 rows yesterday's repair had just dropped would have been revived by the
+  very next import — rebuilding all 25 duplicates. Simulated against live phys-215 state: the old
+  rule reactivates exactly 25, the new rule reactivates 0, and an unchanged re-import is now a
+  total no-op (0 departures, 0 returns, 0 moves, 0 ambiguous).
+- **`departures()` — unchanged**, deliberately. A cadet who moved is still named in the file, so
+  calling them a departure was never right; its student-keyed match is correct for the question it
+  asks, and its skipped-row protection depends on it.
+
+The preview lists every move (name, from, to) and every case it declined, before the director
+commits; neither is a decision, because the registrar export is the authority on where a cadet
+sits and this is the same relocation the per-row **Move** button already performed.
+
+**Verification.** 174/174 assertions in `tests/app-schema/test-roster-import.mjs`, which gains a
+`sectionMoves` block and one **corrected** assertion — the old suite asserted that a dropped
+enrollment is revived from a *different* section, i.e. it encoded the bug. Plus the live
+simulation above. `roster-import.js` was then re-checked **in a browser** (`python -m http.server`,
+admin.html loaded, module dynamically imported): same results, so this is not a Node-only claim.
+
+**What is still unproven:** the new preview blocks in `site/faculty/admin.html` are syntax-checked
+and their only construction site is guarded, but **no roster file has been imported through the
+changed UI** — doing so writes to the live roster, and there is no staging copy to do it against.
+The first real import should be watched.
+
+### phys-110 Fall 2026: 17 duplicated enrollments reconciled against the registrar
+
+Same defect, same repair as phys-215, run with
+`scripts/fall2026/repair_duplicate_enrollments.py --course phys-110 --expect 17 --commit` against
+the 2026-08-10 registrar export (470 cadets, 21 sections — every section code matching the
+offering, and all 17 cadets resolving to one of their two enrollments).
+
+Wrote: 13 submissions repointed, 5 grades repointed, 4 AI zeros deleted, 6 AI zeros un-finalized,
+17 enrollments dropped. **0 blocked** — no human-authored grade was in the way. Snapshot
+round-tripped before the first write. Read back after: 473 active enrollments, **0 cadets holding
+more than one**, all 17 sitting on exactly the registrar's section, and **0 submissions left
+attached to a dropped enrollment**.
+
+**Ten of the seventeen straddled the M/T tracks**, so those cadets were not merely listed twice —
+they were being held to the wrong day's deadline.
+
+**Still owed a re-grade:** 3000138964, 3000139045, 3000139339, 3000139715, 3000140737, 3000141449
+each hold a committed `preflight-02` submission under an un-finalized `ai_suggested` **0.0** — the
+"No submission received" zero written against the enrollment before their work moved onto it.
+Un-finalized, so no cadet can see it, but `/preflight-analyze phys-110 preflight-02` has not been
+run and the rollup will count them as zeros until it is.
+
+**Not touched, and left for the course director:** three cadets hold a *single* enrollment that
+disagrees with the registrar (3000139454 T5A→M3B, 3000141268 T5D→T3C, 3000141258 T5D→M5D) — a
+re-section is a decision, not a repair. The fixed importer will now perform exactly these three as
+moves on the next roster import. Three further active cadets are absent from the registrar file
+(3000140863, 3000141201, and the 3008888888 test account).
+
+---
+
 ## 2026-08-10 (third) — Casey Pellizzari via Claude
 
 ### phys-215 Fall 2026: 25 duplicated enrollments reconciled against the registrar

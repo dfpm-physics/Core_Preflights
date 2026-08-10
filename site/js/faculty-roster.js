@@ -335,6 +335,38 @@ export async function reactivateEnrollments(enrollmentIds) {
   return { reactivated: error ? 0 : ids.length, error };
 }
 
+/**
+ * Relocate enrollments the registrar file places in a different section — the bulk form of
+ * updateStudentSection(). See sectionMoves() in roster-import.js for why this is a move and not a
+ * drop-and-add: the row is the anchor for the cadet's submissions and grades, so it travels.
+ *
+ * One statement each, for the same reason step 2 of commitRoster() updates conflicts one at a
+ * time — a bulk upsert cannot say "these rows to these different sections" without re-writing
+ * columns nobody approved. Moves are rare (the worst Fall 2026 import would have been 25) and a
+ * PATCH each is cheaper than the failure mode.
+ *
+ * Stops at the first failure and reports how far it got, so the caller can say something true.
+ * Every move already applied is correct and idempotent; re-importing the same file re-runs only
+ * the ones that did not land, because a cadet already in the named section is not a move.
+ */
+export async function moveEnrollments(moves, byCode) {
+  let moved = 0;
+  for (const m of moves || []) {
+    const target = byCode[m.to_section_code];
+    if (!target) {
+      return { moved, error: { message: `Cannot move ${m.name} to ${m.to_section_code}: `
+                                      + `no such section in this course.` } };
+    }
+    const { error } = await updateStudentSection(m.enrollment_id, target.id);
+    if (error) {
+      return { moved, error: { message: `Moving ${m.name} from ${m.section_code} to `
+                                      + `${m.to_section_code} failed: ${error.message}` } };
+    }
+    moved++;
+  }
+  return { moved, error: null };
+}
+
 /** Create any sections the file referenced that the offering does not have yet. */
 export async function createSections(ctx, codes) {
   if (!codes.length) return { created: 0, error: null };
@@ -352,8 +384,9 @@ export async function createSections(ctx, codes) {
  * @param {object} ctx
  * @param {Array}  fresh      rows for cadets we have not seen — always written in full
  * @param {Array}  conflicts  reconciled conflicts, each carrying the operator's `resolution`
- * @param {object} plan       { departing[], returning[] } — enrollment rows the operator confirmed
- *                            for removal, and dropped enrollments the file re-names
+ * @param {object} plan       { departing[], returning[], moves[] } — enrollment rows the operator
+ *                            confirmed for removal, dropped enrollments the file re-names in the
+ *                            same section, and enrollments the file relocates to another section
  * @param {object} meta       { filename } for the audit row
  *
  * FIVE WRITES, IN THIS ORDER, AND THE ORDER MATTERS.
@@ -366,13 +399,19 @@ export async function createSections(ctx, codes) {
  *   2. UPDATE only the conflicts explicitly resolved as `overwrite`, one statement each. A
  *      bulk upsert cannot express "these ten yes, those thirty no" without also re-writing the
  *      thirty, which is exactly the data loss `attach` exists to prevent.
- *   3. UPSERT enrollments for everyone in the file regardless of resolution, because being in
+ *   3. MOVE the enrollments the file puts in a different section, BEFORE the upsert below and not
+ *      after it. The upsert keys on `(student_id, section_id)`, so once it has inserted a row in
+ *      the target section the move becomes a UNIQUE violation — and if it somehow did not, the
+ *      cadet would be left holding both rows, which is the exact bug this step was added to fix
+ *      (2026-08-10; see sectionMoves() in roster-import.js). Moving first makes step 4 a no-op
+ *      for that cadet, which is what "they are already enrolled where the file says" should mean.
+ *   4. UPSERT enrollments for everyone in the file regardless of resolution, because being in
  *      the file IS the enrollment claim. ignoreDuplicates keeps a re-import idempotent — and it
- *      is also why step 4 has to exist, because a row that already exists is left exactly as it
+ *      is also why step 5 has to exist, because a row that already exists is left exactly as it
  *      was, `dropped` status included.
- *   4. REACTIVATE the dropped enrollments the file names. Being in the file is the same claim it
- *      was in step 3; step 3 simply cannot express it for a row that already exists.
- *   5. DROP the departures the operator confirmed. LAST, so a failure anywhere above leaves the
+ *   5. REACTIVATE the dropped enrollments the file names IN THAT SECTION. Being in the file is the
+ *      same claim it was in step 4; step 4 simply cannot express it for a row that already exists.
+ *   6. DROP the departures the operator confirmed. LAST, so a failure anywhere above leaves the
  *      roster additive-only — the state it was in before this feature existed — rather than a
  *      roster that has removed people without adding their replacements.
  *
@@ -427,7 +466,15 @@ export async function commitRoster(ctx, fresh, conflicts, plan = {}, meta = {}) 
     }
   }
 
-  // 3 — enrollments for everyone named in the file.
+  // 3 — cadets the file places in a different section. Before the upsert; see the header.
+  const { moved, error: mErr } = await moveEnrollments(plan.moves || [], byCode);
+  if (mErr) {
+    return { error: { message: `${mErr.message} ${moved} of ${(plan.moves || []).length} section `
+                             + `move(s) were applied; nothing else has been written. Re-run the `
+                             + `import to finish — the moves already applied will be skipped.` } };
+  }
+
+  // 4 — enrollments for everyone named in the file.
   const enrollments = all.map(r => ({
     student_id: r.student_id,
     section_id: byCode[r.section_code].id,
@@ -438,12 +485,12 @@ export async function commitRoster(ctx, fresh, conflicts, plan = {}, meta = {}) 
   });
   if (eErr) return { error: eErr };
 
-  // 4 — cadets the file names whose enrollment we had dropped. See reactivateEnrollments().
+  // 5 — cadets the file names whose enrollment we had dropped. See reactivateEnrollments().
   const { reactivated, error: rErr } =
     await reactivateEnrollments((plan.returning || []).map(e => e.enrollment_id));
   if (rErr) return { error: rErr };
 
-  // 5 — the departures the operator confirmed, one at a time in the UI or in bulk. `dropped`,
+  // 6 — the departures the operator confirmed, one at a time in the UI or in bulk. `dropped`,
   // never deleted: their work stays, and every other reader in the app already ignores them.
   const { dropped, error: dErr } =
     await dropEnrollments((plan.departing || []).map(e => e.enrollment_id));
@@ -482,6 +529,8 @@ export async function commitRoster(ctx, fresh, conflicts, plan = {}, meta = {}) 
             + `records and work were kept.` : null,
     reactivated ? `${reactivated} previously dropped enrollment(s) reactivated — named in this `
                 + `file again.` : null,
+    moved ? `${moved} cadet(s) moved to the section this file names. Their enrollment row was `
+          + `relocated, so their submissions and grades moved with them.` : null,
   ].filter(Boolean);
 
   // The audit row is best-effort on purpose. The roster landed; failing the whole import
@@ -498,7 +547,7 @@ export async function commitRoster(ctx, fresh, conflicts, plan = {}, meta = {}) 
     ...counts,
   });
 
-  return { error: null, counts, invisible, dropped, reactivated,
+  return { error: null, counts, invisible, dropped, reactivated, moved,
            auditWarning: aErr ? aErr.message : null };
 }
 

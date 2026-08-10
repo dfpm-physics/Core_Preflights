@@ -535,12 +535,15 @@
       // computed here rather than at commit so the operator decides in front of the names.
       const departing = RI.departures(parsed, enrollmentState);
       const returning = RI.returning(parsed.rows, enrollmentState);
+      // …and who is still here but somewhere else. Not a decision — see sectionMoves() — but the
+      // director sees the list, because a move relocates the row their work hangs off.
+      const { moves, ambiguous: ambiguousMoves } = RI.sectionMoves(parsed.rows, enrollmentState);
       // `keep` holds the enrollment ids the operator has un-ticked, i.e. explicitly rescued from
       // removal. Kept as an opt-OUT set rather than an opt-in one so the default is what the file
       // says, and so re-rendering the preview does not quietly re-arm somebody they just spared.
       // rawText is kept so "create these sections" can re-run this exact parse against the
       // new sections without asking the operator to pick the file again.
-      staged = { parsed, fresh, conflicts, departing, returning,
+      staged = { parsed, fresh, conflicts, departing, returning, moves, ambiguousMoves,
                  keep: carry.keep instanceof Set ? carry.keep : new Set(),
                  approved, filename, rawText: text,
                  summary: RI.summarize(parsed, { fresh, conflicts }, departing) };
@@ -749,6 +752,43 @@
           previous work intact: ${esc(staged.returning.map(r => lastFirst(r.name)).join(', '))}.
         </div>` : '';
 
+      // Section changes. Also never a decision — the registrar is the authority on where a cadet
+      // sits, and the per-student dropdown on this same page already moves people without asking.
+      // Shown because a move relocates the enrollment row their work hangs off, and because a
+      // director reading "12 already on file" would otherwise have no idea anyone changed section.
+      const moveBlock = staged.moves.length ? `
+        <div class="alert alert-info" style="margin-top:14px">
+          <strong>${staged.moves.length} cadet${staged.moves.length !== 1 ? 's' : ''}
+          ${staged.moves.length !== 1 ? 'are' : 'is'} in a different section in this file</strong>
+          and will be moved. Their submissions and grades move with them.
+          <div class="table-wrap" style="margin-top:8px"><table>
+            <thead><tr><th>Name</th><th>From</th><th>To</th></tr></thead>
+            <tbody>${staged.moves.map(m => `<tr>
+              <td>${esc(lastFirst(m.name))}</td>
+              <td>${esc(m.section_code)}</td>
+              <td><strong>${esc(m.to_section_code)}</strong></td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+        </div>` : '';
+
+      // The moves we refused to guess at. A warning rather than a blocker: everything else in the
+      // file is still correct and still worth importing, and these need a person with the repair
+      // script, not a click here. See sectionMoves() for what lands in this list.
+      const ambiguousBlock = staged.ambiguousMoves.length ? `
+        <div class="alert alert-warn" style="margin-top:14px">
+          <strong>${staged.ambiguousMoves.length} cadet${staged.ambiguousMoves.length !== 1 ? 's' : ''}
+          could not be moved automatically</strong> and will be left exactly as
+          ${staged.ambiguousMoves.length !== 1 ? 'they are' : 'it is'} — nothing about
+          ${staged.ambiguousMoves.length !== 1 ? 'them' : 'them'} is written by this import.
+          <ul style="margin:8px 0 0 18px">
+            ${staged.ambiguousMoves.map(a => `<li>${esc(lastFirst(a.name))}
+              (${esc(a.section_code)} → ${esc(a.to_section_code)}): ${esc(a.reason)}</li>`).join('')}
+          </ul>
+          <div class="muted" style="margin-top:6px">These are repairs rather than imports. Ask for
+            <code>scripts/fall2026/repair_duplicate_enrollments.py</code> to be run against the
+            registrar export.</div>
+        </div>` : '';
+
       box.innerHTML = `
         ${identityOffer}
         ${sectionOffer}
@@ -774,6 +814,8 @@
             ${fresh.length > 25 ? `<tr><td colspan="5" class="muted">…and ${fresh.length - 25} more</td></tr>` : ''}
             </tbody></table></div></details>` : ''}
         ${conflictBlock}
+        ${moveBlock}
+        ${ambiguousBlock}
         ${returnBlock}
         ${departureBlock}
         <div class="row" style="gap:10px;margin-top:14px">
@@ -914,9 +956,9 @@
       btn.disabled = true;
       st.style.color = 'var(--muted)'; st.textContent = 'Importing…';
 
-      const { error, counts, invisible, dropped, reactivated, auditWarning } = await R.commitRoster(
+      const { error, counts, invisible, dropped, reactivated, moved, auditWarning } = await R.commitRoster(
         ctx, staged.fresh, staged.conflicts,
-        { departing: removing, returning: staged.returning },
+        { departing: removing, returning: staged.returning, moves: staged.moves },
         { filename: staged.filename, rowsInFile: staged.summary.inFile,
           sectionsCreated: staged.sectionsCreated || 0, overrides: overrideNote() });
 
@@ -928,6 +970,7 @@
       st.style.color = 'var(--green)';
       st.innerHTML = `✓ ${counts.students_created} added, ${counts.students_updated} updated, `
         + `${counts.students_untouched} left as-is`
+        + (moved ? `, ${moved} moved section` : '')
         + (dropped ? `, ${dropped} removed` : '')
         + (reactivated ? `, ${reactivated} re-enrolled` : '')
         // Worth saying out loud: some of those "new" students turned out to already exist in a
