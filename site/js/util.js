@@ -173,18 +173,59 @@ export function topmostOpenModal() {
 }
 
 /* ── People / formatting ────────────────────────────────────────────────────── */
-export function initials(name) {
-  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+
+/**
+ * Generational suffixes that belong to the SURNAME, not to the given names.
+ *
+ * Deliberately short. `I` is excluded because a lone capital I is far more likely to be a middle
+ * initial than a first-generation suffix, and the roman numerals past VIII are excluded because
+ * nothing at this scale reaches them. `2nd`/`3rd` are not here because the registrar does not
+ * emit them — add one when an export actually contains it, not in anticipation.
+ */
+const NAME_SUFFIXES = new Set(['jr', 'sr', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii']);
+
+/**
+ * Split a stored First-Last name into its given names and its surname.
+ *
+ * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────────────────
+ * "the last whitespace token is the surname" is right for 99% of a roster and catastrophically
+ * wrong for the rest. The registrar exports a suffix INSIDE the last-name field —
+ * `"Fulkman IV,John William"` — which roster-import.js correctly stores as
+ * `John William Fulkman IV`. Reading the final token back as the surname then renders that cadet
+ * as **"IV, John William Fulkman"** on every roster, grade and report page, files them under I in
+ * every sort, and — worse than cosmetic — writes `Last Name = IV` into the Blackboard grade export.
+ * Fifteen cadets across the two Fall 2026 courses are affected.
+ *
+ * The suffix is peeled only when something is left to be a surname (three tokens or more), so a
+ * two-token name can never end up with an empty last name. The residual risk is a genuine
+ * one-letter surname `V` sitting third in a three-token name; that is rarer than the suffix case
+ * this fixes, and unlike it, it is visible to whoever reads the roster.
+ *
+ * @param {string} name a stored `students.name` / `instructors.name`, First-Last
+ * @returns {{first: string, last: string}} `last` carries any suffix; either may be ''
+ */
+export function splitName(name) {
+  const p = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!p.length) return { first: '', last: '' };
+  if (p.length === 1) return { first: '', last: p[0] };
+
+  const tail = p[p.length - 1].replace(/\.$/, '').toLowerCase();
+  const take = (p.length >= 3 && NAME_SUFFIXES.has(tail)) ? 2 : 1;
+  return { first: p.slice(0, -take).join(' '), last: p.slice(-take).join(' ') };
 }
 
-/** "First Last" -> "Last, First" for roster-style sorting/display. */
+export function initials(name) {
+  const { first, last } = splitName(name);
+  if (!first && !last) return '?';
+  if (!first) return last.slice(0, 2).toUpperCase();
+  return (first[0] + last[0]).toUpperCase();
+}
+
+/** "First Last" -> "Last, First" for roster-style sorting/display. Suffix-aware; see splitName(). */
 export function lastFirst(name) {
-  const p = String(name || '').trim().split(/\s+/);
-  if (p.length < 2) return name || '';
-  return p[p.length - 1] + ', ' + p.slice(0, -1).join(' ');
+  const { first, last } = splitName(name);
+  if (!first) return name || '';
+  return `${last}, ${first}`;
 }
 
 export function pct(n, d) { return d > 0 ? Math.round((n / d) * 100) : 0; }

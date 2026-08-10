@@ -15,7 +15,7 @@
 // Plan: docs/app/PLAN-2026-07-16-ADMIN.md §4.
 
 import { db } from './supabase.js';
-import { lastFirst } from './util.js';
+import { lastFirst, splitName } from './util.js';
 import { gradeAssignmentList } from './faculty-grade.js';
 
 /* ── Roles: TWO, as of 2026-07-27 ─────────────────────────────────────────────
@@ -400,9 +400,9 @@ export function buildGradesCsv(matrix, sectionCodeOf) {
   const lines = [head.map(csvCell).join(',')];
 
   matrix.students.forEach(s => {
-    const parts = String(s.name).trim().split(/\s+/);
-    const last = parts.length > 1 ? parts[parts.length - 1] : s.name;
-    const first = parts.length > 1 ? parts.slice(0, -1).join(' ') : '';
+    // splitName(), not the last whitespace token: a cadet stored "John William Fulkman IV" must
+    // export as Fulkman IV / John William, or Blackboard files them under Last Name = "IV".
+    const { first, last } = splitName(s.name);
     lines.push([
       s.studentId, last, first, sectionCodeOf(s.sectionId) || '',
       ...matrix.columns.map(c => {

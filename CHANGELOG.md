@@ -8,6 +8,49 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-10 (fifth) — Casey Pellizzari via Claude
+
+### A generational suffix is part of the surname — fifteen cadets were filed under "IV" and "Jr"
+
+Reported by the course director: Physics 215's `Fulkman IV,John William` renders in PREP with the
+last name **`IV`**.
+
+**Nothing is wrong with the stored data.** The registrar puts the suffix *inside* the last-name
+field — `"Fulkman IV,John William"` — and `normalizeName()` correctly stores `John William
+Fulkman IV`. The defect is on the display side: `lastFirst()` in `site/js/util.js` took the final
+whitespace token as the surname, so it flipped that to **`IV, John William Fulkman`**. Fifteen
+cadets in `app.students` carry a suffix (`Jr` ×7, `II` ×2, `III` ×2, `IV` ×2, `V` ×2); every one
+of them was mis-rendered and mis-sorted on every roster, grade and report page, which is where
+`lastFirst()` is used — `faculty-admin`, `faculty-grade`, `faculty-report`, `faculty-roster`.
+
+- **`splitName(name)` — new**, in `site/js/util.js`, and now the one place that knows a suffix
+  belongs to the surname. It peels a trailing `Jr`/`Sr`/`II`–`VIII` (optional period, any case)
+  only when three or more tokens remain, so a two-token name can never end up with an empty
+  surname. `I` is excluded deliberately: a lone capital I is a middle initial far more often than
+  it is a first-generation suffix.
+- **`lastFirst()` and `initials()`** now both derive from it. `initials('John William Fulkman IV')`
+  was `JI`; it is `JF`.
+- **`buildGradesCsv()` in `site/js/faculty-admin.js`** had the identical split open-coded, and this
+  was the one that mattered beyond cosmetics: the export's **`Last Name` column feeds Blackboard**,
+  so those fifteen cadets were being filed under `IV`/`Jr` in a gradebook nobody here ever looks
+  at. It now calls `splitName()`.
+
+**`defaultStaffPassword()` was left alone on purpose.** It also takes the last token, but it is
+documented as a *mirror* of `create-instructor` and `reset-staff-password` — a browser module and a
+Deno edge function share no import path. "Fixing" only this copy would make the page tell a
+director a password the server will not accept. A suffixed staff name still derives from the
+suffix, and there is a test pinning that so the next reader does not treat it as an oversight.
+
+**Verification.** 487 passing assertions, 11 of them new; the 4 failures and the `test-isolation`
+sign-in error are present on an unmodified tree too (test-nav state pollution under the shared
+runner, and the 3008888888 test account's password) and are untouched by this. The new checks pin
+the **round trip** — `normalizeName()` in one module, `lastFirst()` in another, written years
+apart — in `test-roster-import.mjs`, plus the three CSV columns in `test-lesson-due.mjs`, which is
+where `faculty-admin.js` is already exercised. **No data migration**: every affected name is
+already stored correctly, so this is display-side only and takes effect on the next Pages rebuild.
+
+---
+
 ## 2026-08-10 (fourth) — Casey Pellizzari via Claude
 
 ### The roster importer now MOVES a cadet who changed section, instead of enrolling them twice

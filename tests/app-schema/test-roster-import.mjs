@@ -4,7 +4,7 @@
 // The fixtures below are deliberately nasty, because the real registrar export is. Every case
 // here is one that the previous three-column parser got wrong or could not express.
 
-import { check, eq, section } from './harness.mjs';
+import { check, eq, section, installBrowser } from './harness.mjs';
 import {
   parseDelimited, sniffDelimiter, mapHeaders, normalizeName, emailProblem,
   studentIdProblem, rowMatchesCourse, identityFlags, termKey,
@@ -13,6 +13,12 @@ import {
   REQUIRED_FIELDS,
   sectionDefaultsFrom,
 } from '../../site/js/roster-import.js';
+
+// The display half of the name pipeline lives in util.js, which resolves its icon base from
+// location.pathname at import time — hence the stub and the dynamic import. roster-import.js
+// itself needs neither; that is the whole point of it being pure.
+installBrowser({ pathname: '/site/faculty/admin.html' });
+const { lastFirst, splitName, initials } = await import('../../site/js/util.js');
 
 
 /* ── Delimited parsing ─────────────────────────────────────────────────────── */
@@ -86,6 +92,36 @@ eq('leaves an already-First-Last name alone', normalizeName('Jane Doe'), 'Jane D
 eq('collapses runs of whitespace', normalizeName('  Doe,   Jane  '), 'Jane Doe');
 eq('empty stays empty', normalizeName(''), '');
 eq('a lone surname survives', normalizeName('Doe'), 'Doe');
+
+/* ── The suffix round trip ─────────────────────────────────────────────────────
+ * The registrar puts a generational suffix INSIDE the last-name field —
+ * `"Fulkman IV,John William"` — so normalizeName() stores `John William Fulkman IV`, which is
+ * right, and the display side then has to know that `IV` is not the surname. These two halves
+ * are in different modules and were written years apart; that is exactly why the round trip is
+ * pinned here rather than each half being tested against its own idea of the other.
+ * Real case, 2026-08-10: fifteen cadets rendered as "IV, John William Fulkman".
+ */
+section('normalizeName -> lastFirst, with a generational suffix');
+
+eq('the suffix stays with the surname on import',
+   normalizeName('Fulkman IV,John William'), 'John William Fulkman IV');
+eq('…and the display flip keeps it there',
+   lastFirst(normalizeName('Fulkman IV,John William')), 'Fulkman IV, John William');
+eq('Jr survives the same trip',
+   lastFirst(normalizeName('Degenhart Jr,William Warren')), 'Degenhart Jr, William Warren');
+eq('a one-given-name cadet too',
+   lastFirst(normalizeName('Thomas Jr,Issac')), 'Thomas Jr, Issac');
+eq('an ordinary name is untouched', lastFirst(normalizeName('Doe, Jane M.')), 'Doe, Jane M.');
+eq('a surname that merely ENDS in a suffix letter is not peeled',
+   lastFirst('Jane Ivy'), 'Ivy, Jane');
+eq('two tokens are never split, or the surname would vanish',
+   lastFirst('Jane Jr'), 'Jr, Jane');
+eq('a trailing period on the suffix is tolerated',
+   lastFirst('John Calvin North Jr.'), 'North Jr., John Calvin');
+eq('splitName reports both halves', splitName('John William Fulkman IV'),
+   { first: 'John William', last: 'Fulkman IV' });
+eq('a lone name is all surname', splitName('Madonna'), { first: '', last: 'Madonna' });
+eq('initials skip the suffix', initials('John William Fulkman IV'), 'JF');
 
 section('emailProblem');
 check('accepts a real address', emailProblem('jane.doe@afacademy.af.edu') === null);

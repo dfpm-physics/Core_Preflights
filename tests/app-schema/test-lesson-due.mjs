@@ -134,6 +134,36 @@ eq('extra whitespace does not change the answer', A.defaultStaffPassword('  Jane
 eq('an empty name derives nothing', A.defaultStaffPassword(''), '');
 eq('…and so does a surname with nothing alphanumeric in it', A.defaultStaffPassword('Jane ***'), '');
 
+// defaultStaffPassword deliberately does NOT use splitName(): it mirrors two edge functions that
+// derive from the last token, and a browser module cannot import a Deno one. Changing it here
+// alone would make the page tell a director a password the server will not accept.
+eq('a suffixed staff name still derives from the last token, matching the edge functions',
+   A.defaultStaffPassword('William Warren Degenhart Jr'), 'jr1234');
+
+/* ── 6b. The Blackboard export's Last Name column ─────────────────────────── */
+
+section('faculty-admin.js — buildGradesCsv splits names on the surname');
+
+// This column is consumed by Blackboard, so a wrong split is not a cosmetic problem: it files the
+// cadet under "IV" in somebody else's gradebook, where nobody here will ever see it.
+const csvMatrix = {
+  columns: [{ id: 'c1', title: 'Preflight 2', points_possible: 2 }],
+  students: [
+    { studentId: 3000139519, name: 'John William Fulkman IV', sectionId: 's1', enrollmentId: 'e1' },
+    { studentId: 3000139454, name: 'Giselle Emelise Rojas',   sectionId: 's1', enrollmentId: 'e2' },
+    { studentId: 3000000001, name: 'Cher',                    sectionId: 's1', enrollmentId: 'e3' },
+  ],
+  cell: () => 2,
+};
+const csvRows = A.buildGradesCsv(csvMatrix, () => 'M1A').split('\r\n');
+
+eq('the suffix stays with the last name',
+   csvRows[1].split(',').slice(1, 3).join('|'), '"Fulkman IV"|"John William"');
+eq('an ordinary name is unaffected',
+   csvRows[2].split(',').slice(1, 3).join('|'), '"Rojas"|"Giselle Emelise"');
+eq('a single-token name is all last name, as before',
+   csvRows[3].split(',').slice(1, 3).join('|'), '"Cher"|""');
+
 /* ── 7. The three copies of the rule must agree ───────────────────────────── */
 
 section('the staff password rule has three copies — they may not drift');
