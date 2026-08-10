@@ -88,8 +88,11 @@
       }
     }
 
+    // No tag when `completion.path` is null — a zero for work that was never submitted took no
+    // path, and a "Written" tag there would name an attempt the cadet never made
+    // (student-lessons.js, the completion invariant).
     function pathTag(l) {
-      if (!l.completion) return '';
+      if (!l.completion?.path) return '';
       return l.completion.path === 'interaction'
         ? `<span class="tag gold">Interactive</span>`
         : `<span class="tag blue">Written</span>`;
@@ -207,7 +210,9 @@
           <div><div style="font-size:0.78em;opacity:0.8;text-transform:uppercase;letter-spacing:0.05em">Assignment grade</div>
             <div style="font-size:2em;font-weight:800">${pts} / ${max} pts</div></div>
           <div style="font-size:0.85em;opacity:0.85;text-align:right">
-            Graded on effort<br>via the ${l.completion.path === 'interaction' ? 'interactive' : 'written'} version</div>
+            ${l.completion.path
+              ? `Graded on effort<br>via the ${l.completion.path === 'interaction' ? 'interactive' : 'written'} version`
+              : 'Graded on effort<br>no work was submitted'}</div>
         </div>
       </div>`;
     }

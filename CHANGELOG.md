@@ -8,6 +8,70 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-10 (sixth) — Casey Pellizzari via Claude
+
+### Missing a preflight locked a cadet out of PREP entirely
+
+Reported by the course director: Physics 110 cadets could not get in. The page rendered
+**"Cannot read properties of null (reading 'path')"** and nothing else — not a broken lesson
+card, the whole dashboard, because `main()` builds every row in one template literal with no
+per-row `try`/`catch`. Named: Emma Martinez, Cam Parker, Nathan Lillie, Tatiana Valdez, Brakkon
+Bench. Two of them described it as *not being able to log in*; all six accounts are in fact
+healthy — confirmed, unbanned, no forced rotation, and every one had signed in successfully, two
+of them today. They were signing in and then hitting the error page.
+
+**Nothing was wrong with the data.** The student lesson view derived one fact two ways:
+
+| | derived from |
+|---|---|
+| `resolveState()` returned `GRADED` | `grades.is_finalized` |
+| `completion` was built | `submissions.status === 'committed'` |
+
+Those agree for every cadet who submits, which is why this survived the cutover and months of
+use. They disagree for every cadet who does **not**: `/preflight-analyze` zeroes each
+non-submitter once a deadline passes (`diagnostic.no_submission`) and finalizes that zero,
+producing a finalized grade with no submission row at all. State said `GRADED`; completion said
+`null`; and every renderer in a `GRADED` branch reads `completion.points` / `completion.path`
+unguarded. **Simply missing preflight-02 locked a cadet out of the site.**
+
+So the bug was dormant until the first at-scale zeroing run and then hit everyone at once — the
+10:36 scheduled phys-110 close-out (*"Graded 163 submitted + zeroed 42 non-submitters"*) and the
+11:21 phys-215 run (*"…+ zeroed 34"*). **39 enrollments** across the two courses held the fatal
+shape, and every future lesson would have added more.
+
+- **`deriveCompletion(item)` — new export** in `site/js/student-lessons.js`, lifted out of the
+  projection so a test can reach it, and now derived from *the same fact the state is*: a
+  completion exists when the submission is committed **or** a finalized grade exists.
+  `resolveState()` is exported alongside it for the same reason.
+- **`completion.path` is now nullable.** A zero for work that was never submitted took no path
+  through the lesson, and calling it `'preflight'` would tell a cadet they were graded on a
+  written attempt they never made. The three renderers that name the path say **"nothing
+  submitted"** (dashboard), **"no work was submitted"** (grade card), and show no path tag
+  (list) instead.
+- **`tests/app-schema/test-student-completion.mjs` — new**, 18 assertions, registered in
+  `run.mjs`. What it pins is the *relationship* between the two derivations, including a sweep of
+  all 72 submission × grade × modality × deadline combinations. Testing either function against
+  its own idea of the states would have proved nothing: each was self-consistent and correct in
+  isolation, and the bug lived in the gap between them. Verified to fail against the pre-fix rule
+  before being accepted.
+
+**No data migration, and no grades changed.** The 39 zeros are correct and stay as they are.
+
+*Verification:* full offline+live suite, 4 failures and one `test-isolation` throw, all of which
+are present on an unmodified tree (the four `test-nav` dropdown assertions under the shared
+runner, and the `3009999999` test cadet whose password no longer works — pre-existing, still
+unfixed). `node --check` on the module, and both edited pages' inline module scripts extracted
+and parse-checked. **Node-only verification** — the browser check was the reproduction, not the
+fix, since signing in as an affected cadet is not something anyone here can do.
+
+*Separately, and not fixed:* **Noah Straub** (3000141486), also reported, does **not** have the
+fatal shape — his account is healthy and his active T3C enrollment is fine. What he does have is
+a finalized zero stranded on his **dropped** M5D enrollment while his active T3C submission sits
+ungraded. That is fallout from the 2026-08-10 enrollment repair, it is a grading question rather
+than a rendering one, and it needs a director's decision.
+
+---
+
 ## 2026-08-10 (fifth) — Casey Pellizzari via Claude
 
 ### A generational suffix is part of the surname — fifteen cadets were filed under "IV" and "Jr"

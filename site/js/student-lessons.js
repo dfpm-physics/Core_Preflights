@@ -76,7 +76,7 @@ export const STATE_DOT = {
  * locks which ACTIVITY carries credit, but nothing stops a student refining their written
  * answers afterwards, and nothing should.
  */
-function resolveState(item) {
+export function resolveState(item) {
   const grade = item.grade;
   if (grade?.is_finalized) return STATE.GRADED;
 
@@ -89,6 +89,40 @@ function resolveState(item) {
   }
   if (item.isPast) return STATE.MISSED;
   return item.answered > 0 ? STATE.DRAFT : STATE.NOT_STARTED;
+}
+
+/**
+ * What the student has FINISHED for one lesson, or null while it is still in play.
+ *
+ * ── THE INVARIANT ────────────────────────────────────────────────────────────────
+ * `resolveState(item) === STATE.GRADED` implies this returns non-null. Every renderer in a
+ * GRADED branch reads `completion.points` and `completion.path` unguarded, and neither student
+ * page wraps a row in try/catch — so one row that breaks the invariant throws out of main() and
+ * replaces the student's whole dashboard with an error page.
+ *
+ * It broke on 2026-08-10 for 39 phys-110 and phys-215 cadets. This was derived from the
+ * SUBMISSION (`status === 'committed'`) while the state is derived from the GRADE
+ * (`is_finalized`), so the two could disagree — and they do for every cadet /preflight-analyze
+ * zeroes after a deadline (`diagnostic.no_submission`): a finalized grade with no submission row
+ * at all. resolveState() called that GRADED, this returned null, and simply missing preflight-02
+ * locked a cadet out of the site. Exported, and tested against resolveState(), so the two
+ * derivations cannot drift apart again silently.
+ */
+export function deriveCompletion(item, offering = item) {
+  const committed = item.submission?.status === 'committed';
+  const finalized = !!item.grade?.is_finalized;
+  if (!committed && !finalized) return null;
+  return {
+    // null when there was nothing to take a path THROUGH — a zero for work never submitted.
+    // Deliberately not 'preflight': that tells a cadet they were graded on a written attempt
+    // they never made. Renderers treat null as "no work submitted".
+    path: item.chosenActivity?.modality === 'interactive' ? 'interaction'
+        : item.submission ? 'preflight' : null,
+    points: displayPoints(item.grade, offering) ?? 0,
+    understanding: item.grade?.diagnostic?.overall_understanding ?? null,
+    is_finalized: finalized,
+    completed_at: item.submission?.committedAt || null,
+  };
 }
 
 /**
@@ -133,8 +167,6 @@ export async function loadLessonStatuses(ctx) {
     const writtenGraded = written?.gradingRole === 'graded';
     const policy = policyOf(item);   // 'choice' | 'interaction' | 'preflight'
 
-    // `completion` keeps its old shape so the page's renderers are untouched, but it is now
-    // derived from the single grades row rather than a separate lesson_completions table.
     const committed = item.submission?.status === 'committed';
     // WHICH path the student actually committed to, or null while still open. The renderers used
     // STATE.COMPLETE as a stand-in for "committed to the interactive", which is not the same fact:
@@ -142,13 +174,8 @@ export async function loadLessonStatuses(ctx) {
     // returns GRADED and COMPLETE is reached only when the interactive submission did NOT grade
     // (no `#d=` payload). That made the stand-in fire in exactly the wrong half of the cases.
     const committedModality = committed ? (item.chosenActivity?.modality || null) : null;
-    const completion = committed ? {
-      path: item.chosenActivity?.modality === 'interactive' ? 'interaction' : 'preflight',
-      points: displayPoints(item.grade, item) ?? 0,
-      understanding: item.grade?.diagnostic?.overall_understanding ?? null,
-      is_finalized: !!item.grade?.is_finalized,
-      completed_at: item.submission?.committedAt || null,
-    } : null;
+
+    const completion = deriveCompletion(item);
 
     return {
       id: item.offeringId,

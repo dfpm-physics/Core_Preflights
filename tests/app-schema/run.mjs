@@ -83,12 +83,16 @@ for (const s of OFFLINE) {
 //   test-lesson-isolation  same module, but installs a RECORDING stub as window.db so the
 //                 assertions are about the writes saveLesson() issues — that scheduling a
 //                 container another term runs copies it rather than sharing one row
+//   test-student-completion  imports student-lessons.js for the two derivations a student page
+//                 renders from — resolveState() and deriveCompletion(). What it pins is that
+//                 they AGREE; each was self-consistent while together they blanked the
+//                 dashboard of every cadet who missed a preflight
 for (const suite of ['test-imports.mjs', 'test-rollup.mjs', 'test-system-prefs.mjs',
                      'test-run-banner.mjs', 'test-help-status.mjs', 'test-prefs.mjs',
                      'test-tasks.mjs', 'test-gradebook.mjs', 'test-grade.mjs', 'test-ei.mjs',
                      'test-dashboard-rows.mjs', 'test-student-detail.mjs', 'test-feedback.mjs',
                      'test-feedback-admin.mjs', 'test-lesson-due.mjs',
-                     'test-lesson-isolation.mjs']) {
+                     'test-lesson-isolation.mjs', 'test-student-completion.mjs']) {
   const r = spawnSync(process.execPath, [resolve(import.meta.dirname, suite)],
                       { encoding: 'utf8' });
   process.stdout.write(r.stdout || '');

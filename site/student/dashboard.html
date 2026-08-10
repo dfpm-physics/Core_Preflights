@@ -127,6 +127,14 @@
         <div class="list">${items.map(lessonItem).join('')}</div></section>`;
     }
 
+    // `completion.path` is null when the grade is a zero for work that was never submitted, so
+    // there is no version to name. Saying "written" there would credit a cadet with an attempt
+    // they did not make (student-lessons.js, the completion invariant).
+    function pathWord(c) {
+      if (!c?.path) return 'nothing submitted';
+      return c.path === 'interaction' ? 'interactive' : 'written';
+    }
+
     function gradedSection(items) {
       if (!items.length) return '';
       const badge = (l) => {
@@ -140,7 +148,7 @@
           <a class="list-item" href="lessons.html?l=${encodeURIComponent(l.id)}">
             <span class="status-dot green"></span>
             <div class="li-body"><div class="li-title">${esc(l.title)}</div>
-              <div class="li-meta">Graded on effort · ${l.completion.path === 'interaction' ? 'interactive' : 'written'}</div></div>
+              <div class="li-meta">Graded on effort · ${pathWord(l.completion)}</div></div>
             <div class="li-right">${badge(l)}<span class="li-arrow">›</span></div>
           </a>`).join('')}</div></section>`;
     }
