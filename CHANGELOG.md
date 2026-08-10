@@ -39,12 +39,11 @@ So the bug was dormant until the first at-scale zeroing run and then hit everyon
 11:21 phys-215 run (*"…+ zeroed 34"*). **41 grade rows** across the two courses held the fatal
 shape, and every future lesson would have added more.
 
-**39 of those 41 were written today. The other two date from 2026-07-30** — an instructor
-finalizing a grade by hand for a cadet with no submission produces the same shape, and it did,
-for **Rowan Whitfield** and **Priya Freeman** (both phys-215 M1A). Neither reported it. They had
-been unable to load PREP for eleven days, which is worth knowing on its own: this failure is
-silent from our side, because a page that throws logs nothing anywhere we can see. Whether other
-cadets simply stopped trying is not something the data can answer.
+**34 real cadets were actually locked out**, across nine M-day sections (M1A, M1B, M1C, M3A, M3B,
+M3C, M5A, M5B, M5D). Of the other seven rows, five sit on **dropped** enrollments that no page
+queries, and two belong to **seeded fixtures with no auth account**, who cannot sign in at all.
+The earliest row that reached a real cadet is `2026-08-10T10:52:07` — so nobody was affected
+before today, and the outage is exactly as old as the first zeroing run.
 
 - **`deriveCompletion(item)` — new export** in `site/js/student-lessons.js`, lifted out of the
   projection so a test can reach it, and now derived from *the same fact the state is*: a
@@ -84,11 +83,20 @@ faculty-rollup, faculty-student, faculty-ei for staff — the one query that doe
 `courseExtensions()`, which reads `extensions` and not `grades`), and `lesson_aggregate.py` joins
 through `submissions`, of which these rows have none. Nobody sees them and nothing counts them.
 
-*Method note, because it nearly produced a wrong answer here:* **PostgREST caps a response at
-1000 rows no matter what `limit` says.** `app.enrollments` holds 1001. A single unpaged read
-therefore dropped exactly one row — Straub's — and the first version of the scan above reported
-8 stranded grades instead of 9, having silently lost the one the question was about. Verify a
-row count against `Prefer: count=exact` before trusting any full-table read.
+*Two method notes, because each one produced a wrong answer here before being caught:*
+
+- **PostgREST caps a response at 1000 rows no matter what `limit` says.** `app.enrollments` holds
+  1001. A single unpaged read dropped exactly one row — Straub's — and the first scan of stranded
+  grades reported 8 instead of 9, having silently lost the one row the question was about. Verify
+  against `Prefer: count=exact` before trusting any full-table read. Other tables are under the
+  cap today (`grades` 609, `submissions` 816, `students` 957) and will not stay that way.
+- **A student row is not a student.** `app.students` holds 72 seeded fixtures in the
+  `30009[89]xxxx` range, none with an `auth_user_id`. Counting grade rows and reporting them as
+  affected people put two fixtures — "Rowan Whitfield" and "Priya Freeman" — into an earlier draft
+  of this entry as cadets locked out of PREP for eleven days. They have no accounts and never
+  could have signed in. **Join to `auth_user_id` and to `enrollments.status` before any count
+  becomes a claim about people.** Caught by the course director, who knew they were not on the
+  roster.
 
 ---
 
