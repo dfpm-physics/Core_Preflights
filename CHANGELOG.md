@@ -8,6 +8,57 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-10 (third) — Casey Pellizzari via Claude
+
+### phys-215 Fall 2026: 25 duplicated enrollments reconciled against the registrar
+
+**Symptom.** The lesson rollup said 4 M5A cadets had not submitted `preflight-02`; the Grade
+tab and the dashboard said 6. All three were reporting honestly about different things.
+
+**Cause — a roster importer that adds on a section change instead of moving.**
+`commitRoster()` (`site/js/faculty-roster.js`) upserts enrollments with
+`onConflict: 'student_id,section_id', ignoreDuplicates: true`. A cadet who MOVES sections is
+a new `(student, section)` pair, so they gain a second `active` enrollment; step 5 drops only
+the departures an operator confirmed, and a cadet who merely changed sections is still in the
+file, so they are never flagged. The 2026-07-28 roster build plus an 2026-08-06 re-import left
+**25 cadets doubly enrolled** in phys-215 (386 active rows for 361 people). phys-110 has the
+same defect from its 2026-08-07 import — 17 cadets, not yet repaired.
+
+**Why the two counts differed.** `faculty-rollup.js` builds its done-set as a Set of
+`student_id`; Grade and the dashboard key on `enrollment_id`. Only a duplicate makes those
+disagree — a cadet who submitted under either enrollment reads as done in BOTH sections.
+Its own per-section completion numbers count by enrollment, so the page contradicted itself
+(badge 20/24, section card 18/24). **Not yet fixed — see Follow-ups.**
+
+**Why the stale row could not simply be dropped.** Student pages write work through
+`myEnrollmentIds(ctx)[0]` — an arbitrary pick — so all 18 submissions had landed on the stale
+enrollment. Dropping it would have stranded them on an inactive row that every faculty
+surface filters out, turning submitted cadets into non-submitters in their real section.
+
+**The registrar was the only authority.** Enrolment dates do not identify the real section and
+work location provably does not. Reconciled against the official `AFA_AA_CLASS_ROSTER_BY_ACADORG`
+export (361 cadets, 17 sections — an exact match for the database in both directions, membership
+and section names). In all 25 cases the registrar-correct enrollment was the **August** one.
+
+**Repaired** with `scripts/fall2026/repair_duplicate_enrollments.py` (new; stdlib, dry-run by
+default, refuses any pair it cannot resolve against the roster, snapshot to `_snapshots/`
+verified before writing): 18 submissions repointed, 7 grades repointed, 4 superseded AI zeros
+deleted, 6 un-finalized, 25 stale enrollments dropped. Read-back confirms **361 active rows /
+361 cadets / 0 duplicates / 0 sections disagreeing with the registrar**. Grades move only
+behind a submission, and a grade whose `source` is not `ai_suggested` is never touched.
+
+**Follow-ups owed.**
+1. **8 cadets need `preflight-02` re-graded.** Their grades were written at 11:21Z against
+   enrollments that had no submission then; the work has since moved onto them, so the rows
+   read "No submission received" over real work. All are un-finalized (invisible to the cadet
+   under `grades_own_finalized`) except one instructor-authored 2.0, which was left alone.
+2. **Fix the importer**, or the next roster load rebuilds the whole problem.
+3. **Fix `faculty-rollup.js`** to key on enrollment like every other surface.
+4. **phys-110** awaits its registrar export.
+
+*Scope note: the repair touched enrollments/submissions/grades only. No DDL, no schema change,
+and `analysis_reports` was not rewritten.*
+
 ## 2026-08-10 (second) — Casey Pellizzari via Claude
 
 ### The dashboard's due chip showed only the M-day deadline, on every course
