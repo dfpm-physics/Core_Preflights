@@ -1709,7 +1709,11 @@ a.tbtn { text-decoration: none; display: inline-flex; align-items: center; }
 .ring .ring-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
 .ring-pct { font-size: 2em; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .ring-cap { font-size: 0.78em; color: var(--muted); }
+/* nowrap because the chip now carries BOTH tracks' deadlines ("due Aug 12 / Aug 13"). It fits the
+   200px minimum of the ring column, but without this a narrow render would break the pill after
+   the slash and put a bare "Aug 13" on a second line, which reads as a different date entirely. */
 .due-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 0.76em; font-weight: 600;
+  white-space: nowrap;
   color: var(--alert-warn-fg); background: var(--alert-warn-bg);
   border: 1px solid var(--alert-warn-bd); border-radius: 999px; padding: 3px 10px; }
 

@@ -5,7 +5,7 @@ import { check, eq, section } from './harness.mjs';
 import {
   shapeOffering, shapeSubmission, effectiveDue, isOpen, deriveStatus,
   releaseAt, isReleased, releaseNote, LOOKAHEAD_DAYS,
-  resolveDueBySection, withResolvedDue,
+  resolveDueBySection, withResolvedDue, dueDayDates,
   canSwitchActivity, isActivityAvailable, pointsFromEffort, displayPoints,
   questionsOf, questionPoints, answeredCount, lessonNumber, chunked,
   taughtSectionIds, actionableSections, isArtifactLaunchable,
@@ -216,6 +216,30 @@ check('resolveDueBySection does not mutate the offering it was given', (() => {
   resolveDueBySection(o, SECTIONS);
   return Object.keys(o.dueBySection).length === 1;
 })());
+
+/* ── dueDayDates: what the dashboard chip prints ───────────────────────────── */
+section('dueDayDates');
+
+// The bug: the chip showed `due_at`, and defaultDueFrom() sets that to the EARLIEST per-day
+// value — the M date on every Fall 2026 row. A T-day instructor read the wrong night off the one
+// card that exists to tell them what happens before class.
+eq('both tracks come back, earliest first',
+   dueDayDates(dayOff()).join('|'), [M_DUE, T_DUE].join('|'));
+eq('...and a map declared T-first still sorts by date, not key order',
+   dueDayDates({ dueByDay: { T: T_DUE, M: M_DUE } }).join('|'), [M_DUE, T_DUE].join('|'));
+eq('two tracks sharing one deadline collapse to a single date',
+   dueDayDates({ dueByDay: { M: M_DUE, T: M_DUE } }).length, 1);
+eq('a three-day pattern is not truncated to two — nothing here assumes M/T',
+   dueDayDates({ dueByDay: { M: M_DUE, W: T_DUE, F: LATER } }).length, 3);
+eq('no per-day schedule returns nothing, NOT the offering default',
+   dueDayDates({ dueAt: M_DUE, dueByDay: {} }).length, 0);
+eq('a malformed due_by_day (array) is ignored rather than throwing',
+   dueDayDates({ dueByDay: [M_DUE] }).length, 0);
+eq('an offering that never went through shapeOffering does not throw',
+   dueDayDates({ dueAt: M_DUE }).length, 0);
+eq('dueDayDates(undefined) does not throw', dueDayDates(undefined).length, 0);
+eq('an unparseable date is dropped, and the good one survives',
+   dueDayDates({ dueByDay: { M: 'not-a-date', T: T_DUE } }).join('|'), T_DUE);
 
 /* ── isOpen ────────────────────────────────────────────────────────────────── */
 section('isOpen');

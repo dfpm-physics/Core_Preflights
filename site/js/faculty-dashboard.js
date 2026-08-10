@@ -36,7 +36,7 @@
 import { loadFacultyDashboard } from './faculty-data.js';
 import { summarizeReports } from './faculty-rollup.js';
 import { loadTasks, renderTasks } from './faculty-tasks.js';
-import { actionableSections, titleTopic } from './schema.js';
+import { actionableSections, titleTopic, dueDayDates } from './schema.js';
 import { loadEiForSections, summarizeEi, renderEiPanel } from './faculty-ei.js';
 import { esc, iconHTML, fmtDate } from './util.js';
 
@@ -453,7 +453,20 @@ function spotlight(a, ctx) {
   const metaTxt = st === 'today' ? 'What to know before you walk into class'
     : st === 'past' ? 'How this one landed' : 'Preview — students working ahead';
   const statusWord = st === 'today' ? 'Today' : st === 'past' ? 'Past' : 'Upcoming';
-  const dueTxt = L.due_date ? `due ${esc(fmtDate(L.due_date))}` : (st === 'past' ? 'earlier preflight' : st === 'upcoming' ? 'not yet due' : 'current preflight');
+  /* BOTH tracks' deadlines, not just the M-day one (2026-08-10). The chip read `due_date`, which
+   * is the offering default — and defaultDueFrom() sets that to the EARLIEST per-day value, so on
+   * every Fall 2026 row it is the M date. A T-day instructor was told the wrong night, on a card
+   * whose whole job is "what to know before you walk into class".
+   *
+   * Day letters are deliberately not printed. The per-day map is keyed by whatever days the course
+   * meets, so labelling them would either hard-code M/T or add noise for a course that meets on
+   * one day; "Aug 12 / Aug 13" is already unambiguous, earliest first. Two tracks sharing a
+   * deadline, or one that renders to the same calendar day, collapse to a single date rather than
+   * printing it twice. An offering with no per-day schedule keeps the old single-date behaviour. */
+  const dayTxt = [...new Set(dueDayDates(L).map(fmtDate))].filter(Boolean).join(' / ');
+  const dueTxt = dayTxt ? `due ${esc(dayTxt)}`
+    : L.due_date ? `due ${esc(fmtDate(L.due_date))}`
+      : (st === 'past' ? 'earlier preflight' : st === 'upcoming' ? 'not yet due' : 'current preflight');
   const dueChip = st === 'today' ? `⏳ ${dueTxt}` : st === 'past' ? `✓ ${dueTxt}` : `🔭 ${dueTxt}`;
 
   const scopeCtl = dir() ? scopeControl() : '';

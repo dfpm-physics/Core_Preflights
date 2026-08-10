@@ -20,7 +20,7 @@
       "doc": "site/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-08-09",
+      "reviewed": "2026-08-10",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -151,7 +151,7 @@
       "doc": "site/help/director-course-structure.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-09",
+      "reviewed": "2026-08-10",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/003_term_calendar.sql",
@@ -168,7 +168,7 @@
       "doc": "site/help/director-schema-reference.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-04",
+      "reviewed": "2026-08-10",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/002_rls.sql",
@@ -192,7 +192,7 @@
         "supabase/migrations/app/019_effort_partial_credit_flat.sql",
         "site/js/schema.js"
       ],
-      "note": "Every table and field transcribed from the app-schema migrations and verified against information_schema on the live database. Owns the enforced-rules list and the exact accepted values. Inline SVG depends on the .sf-* classes in styles.css. Omits RLS policy predicates - help docs are world-readable at every tier. SOURCES MUST LIST EVERY MIGRATION: the list stopped at 006 until 2026-07-22, so 007-009 landed without ever flagging this page and analysis_runs went undocumented for two days. Add the new file here whenever a migration is added. ei_sessions states its staff-only access rule in plain language and nothing more: that absence of a student policy is load-bearing (notes may hold a candid read of a cadet), so do not delete the sentence - and do not 'complete' it by pasting the policy SQL either. schema.js became a source on 2026-08-04 — it owns the release window that opens_at overrides, and the is_published row is only correct while that rule is described beside it."
+      "note": "Every table and field transcribed from the app-schema migrations and verified against information_schema on the live database. Owns the enforced-rules list and the exact accepted values. Inline SVG depends on the .sf-* classes in styles.css. Omits RLS policy predicates - help docs are world-readable at every tier. SOURCES MUST LIST EVERY MIGRATION: the list stopped at 006 until 2026-07-22, so 007-009 landed without ever flagging this page and analysis_runs went undocumented for two days. Add the new file here whenever a migration is added. ei_sessions states its staff-only access rule in plain language and nothing more: that absence of a student policy is load-bearing (notes may hold a candid read of a cadet), so do not delete the sentence - and do not 'complete' it by pasting the policy SQL either. schema.js became a source on 2026-08-04 — it owns the release window that opens_at overrides, and the is_published row is only correct while that rule is described beside it. LISTING THE MIGRATION IS NOT THE SAME AS ABSORBING IT: 017_due_by_day was in this list from the day it landed, and the page still said three deadline sources and omitted due_by_day from assignment_offerings until 2026-08-10. The flag fired every time; nobody read the doc against the source it named. When this page is flagged, re-read the section the source touches, not just the date."
     },
     {
       "doc": "site/help/instructor-accounts.md",

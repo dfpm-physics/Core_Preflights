@@ -67,7 +67,7 @@ are covered further down; none of them can affect a grade.
   <text class="sf-t" x="203" y="239" text-anchor="middle">assignment_due_dates</text>
   <rect class="sf-box" x="308" y="220" width="178" height="30" rx="6"/>
   <text class="sf-t" x="397" y="239" text-anchor="middle">extensions</text>
-  <text class="sf-cap" x="502" y="239">deadline: extension, then section, then the offering</text>
+  <text class="sf-cap" x="502" y="239">deadline: extension, section, day schedule, then the offering</text>
   <text class="sf-cap" x="591" y="266" text-anchor="middle">scheduled into one semester</text>
   <text class="sf-cap" x="785" y="266" text-anchor="middle">graded or practice</text>
 
@@ -172,9 +172,21 @@ One semester's run, and the people in it:
 
 ### Which deadline applies
 
-Three sources, highest first: a student's **extension**, then their section's entry in
-**assignment_due_dates**, then the offering's own `due_at`. A section with no entry of its own
-falls back to the offering; an assignment with no `due_at` and no section entry has no deadline.
+Four sources, highest first: a student's **extension**, then their section's entry in
+**assignment_due_dates**, then the assignment's **per-meeting-day schedule** (`due_by_day` on the
+offering, matched against the section's meeting days), then the offering's own `due_at`. An
+assignment with none of them has no deadline.
+
+The day schedule is what makes a section correct **without** a row of its own: a section added
+after the term was scheduled has no `assignment_due_dates` entry, and before this level existed it
+fell straight to `due_at` — which is the *earliest* per-day date, so a T-day section was silently
+due on the M-day deadline. An explicit per-section row still wins, which is what keeps
+`assignment_due_dates` meaningful: it is a deliberate override, not the normal path.
+
+**An empty `due_by_day` is a real answer, not a blank.** `{}` means "`due_at` applies to
+everyone", so an offering that was never saved in the Lessons editor puts every section on the
+M-day date and looks correct on every M-day section. See
+[Course structure](help.html?doc=course-structure) for how to check a term.
 
 A **revoked** extension does not count as an extension — the row survives revocation so it still
 appears on the director's extensions report, but the deadline reverts to the section's.
@@ -251,7 +263,8 @@ and costs the student nothing — so the legitimate case wins.
 | `points_possible` | What it is worth this semester |
 | `grading_mode` | Vestigial since 2026-07-23 — see below. Always `points`; the assignment editor stopped offering a choice on 2026-07-27 |
 | `switch_policy` | Whether a student may change activity after committing |
-| `due_at` | Default deadline, overridden per section |
+| `due_at` | Default deadline, overridden per section. Set to the **earliest** per-day date, so on a two-track course it is the M-day one — it is not "the assignment's deadline" and nothing should show it as such |
+| `due_by_day` | The per-meeting-day schedule — one deadline per day letter, `{"M": …, "T": …}`, matched against each section's meeting days. **Written only by the Lessons editor.** Empty means `due_at` applies to everyone |
 | `opens_at` | When students may see it. **Empty is the normal case** and does not mean "always" — it selects the standard rolling window, 7 days before each student's own deadline. A value overrides that with one fixed instant for every section, earlier or later, and does not follow a due date changed afterwards |
 | `is_published` | Whether the assignment is **ready**. Not the same as whether students can see it — see `opens_at` above; both must be satisfied |
 | `content_snapshot` | What this class was given, captured at term close |

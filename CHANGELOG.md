@@ -8,6 +8,47 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-10 (second) — Casey Pellizzari via Claude
+
+### The dashboard's due chip showed only the M-day deadline, on every course
+
+The spotlight card's `⏳ due …` chip read `due_date`, which is the offering's `due_at` — and
+`defaultDueFrom()` sets that to the **earliest** per-day value, so on every Fall 2026 row it is the
+M-day date. A T-day instructor was told the wrong night, on the one card whose stated job is *"what
+to know before you walk into class"*. Same root cause as the active-lesson bug in the entry below:
+`due_at` is not the lesson's deadline, it is the earlier of two.
+
+The chip now prints **every distinct deadline the lesson schedules, earliest first, joined with a
+slash** — `due Aug 12 / Aug 13`. New `dueDayDates()` in `site/js/schema.js` reads `due_by_day`
+(migration 017), which all 114 published offerings carry: phys-110 and phys-215 have two keys,
+phys-310 has one and so renders a single date exactly as before. `faculty-data.js` carries
+`dueByDay` onto the lesson object; an offering with no per-day map keeps the old `due_at` fallback.
+
+**Day letters are deliberately not printed.** The map is keyed by whatever days the course actually
+meets, so labelling them would either hard-code M/T — the assumption `isMDay()` was deleted from
+`util.js` for — or add noise to a one-day course. Two tracks sharing a deadline, or resolving to the
+same calendar day, collapse to one date rather than printing it twice. `.due-chip` gained
+`white-space: nowrap`: the pill is 156px in a 200px column, and a break after the slash would leave
+a bare "Aug 13" reading as a different date.
+
+**`check_doc_sources.py` flagged three help docs, and one of them was genuinely wrong.**
+`director-schema-reference.md` — which *owns* the field-level detail — said the deadline had **three**
+sources and omitted `due_by_day` from the `assignment_offerings` field table entirely, while
+`director-course-structure.md` beside it has described four levels correctly all along. Migration
+`017_due_by_day.sql` has been in that page's source list since the day it landed, so the flag fired
+on every schema change since and nobody read the page against the source it named. Fixed: the
+"Which deadline applies" section, the `due_by_day` and `due_at` rows (the latter now says outright
+that it is the earliest per-day date and is *not* the assignment's deadline), and the diagram
+caption. The index note now says listing a migration is not the same as absorbing it. The other two
+were checked and are correct; all three `reviewed` dates bumped.
+
+**Verification.** Nine checks in `tests/app-schema/test-schema.mjs` cover sort order, the collapse,
+a three-day pattern, malformed and absent maps. Rendered in a browser against the real stylesheet
+at the real column width — both tracks, one track, the `due_at` fallback, no deadline at all, and a
+pair spanning a month boundary (`due Aug 31 / Sep 1`) — all single-line and inside the column. The
+`tests/browser/` faculty sandbox fixture now carries `dueByDay` too; without it that page only ever
+exercised the fallback. The live check of `due_by_day` coverage was a read-only REST query.
+
 ## 2026-08-10 — Casey Pellizzari via Claude
 
 ### The nightly lesson cycle now has a home in the repo, and the invocation it documented did not work

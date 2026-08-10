@@ -82,10 +82,18 @@
     const clamp=(x,lo,hi)=>Math.max(lo,Math.min(hi,x));
 
     function buildModel(activeIdx) {
-      const lessons = LESSONS.map(([id, title], i) => ({
-        id, title, due_date: `2026-0${2 + Math.floor(i / 3)}-${String(5 + i).padStart(2, '0')}T23:59:59`,
-        num: i + 2, short: String(i + 2).padStart(2, '0'),
-      }));
+      const lessons = LESSONS.map(([id, title], i) => {
+        // due_date is the offering default, which real data sets to the EARLIEST per-day value —
+        // the M date. dueByDay carries both tracks, and the due chip prints both. The fixture
+        // mirrors that shape rather than the M date alone, so the chip renders here the way it
+        // renders live; a fixture with no dueByDay only ever exercises the fallback.
+        const mDay = `2026-0${2 + Math.floor(i / 3)}-${String(5 + i).padStart(2, '0')}T23:59:59`;
+        const tDay = new Date(new Date(mDay).getTime() + 86400000).toISOString();
+        return {
+          id, title, due_date: mDay, dueByDay: { M: mDay, T: tDay },
+          num: i + 2, short: String(i + 2).padStart(2, '0'),
+        };
+      });
       const activeId = lessons[activeIdx].id;
       const sectionSize = {}; SECTIONS.forEach(s => sectionSize[s.id] = s.n);
       const rowsByLesson = {};

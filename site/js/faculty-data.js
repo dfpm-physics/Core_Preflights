@@ -221,6 +221,10 @@ export async function loadFacultyDashboard(ctx) {
         // leaving it lets the view stay untouched by the schema move.
         id: o.offeringId,
         due_date: o.dueAt,
+        // The per-day schedule, carried through so the card can show BOTH tracks' deadlines.
+        // `due_date` above is the offering default, which is the earliest per-day value — the
+        // M-day date on every Fall 2026 row. See dueDayDates() in schema.js.
+        dueByDay: o.dueByDay,
         offeringId: o.offeringId, slug: o.slug, title: o.title,
         due: o.dueAt, num,
         short: num != null ? String(num).padStart(2, '0') : null,

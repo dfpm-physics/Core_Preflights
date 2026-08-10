@@ -423,6 +423,39 @@ export function resolveDueBySection(offering, sections) {
   return { dueBySection, dueDerivedFor };
 }
 
+/**
+ * Every distinct deadline this offering schedules, earliest first, as ISO strings.
+ *
+ * For display. `due_at` alone cannot answer "when is this lesson due" on a course that meets on
+ * two tracks: defaultDueFrom() sets it to the EARLIEST per-day value, which on every Fall 2026
+ * row is the M-day date, so anything showing `due_at` shows a T-day instructor the wrong night.
+ *
+ * Returns instants, not day letters, and the caller decides how to join them. The map is keyed by
+ * whatever days the course actually meets — this must not assume M/T, for the same reason
+ * `isMDay()` was deleted from util.js. Two days sharing one deadline collapse to one entry.
+ *
+ * An offering with no per-day schedule returns `[]`, not `[dueAt]`: "there is no per-day
+ * schedule" and "the schedule happens to be one date" are different facts, and only the caller
+ * knows whether `due_at` is the right thing to fall back to.
+ *
+ * @param {object} offering  a shapeOffering() result
+ * @returns {string[]}
+ */
+export function dueDayDates(offering) {
+  const byDay = offering?.dueByDay;
+  if (!byDay || typeof byDay !== 'object' || Array.isArray(byDay)) return [];
+  const seen = new Set();
+  return Object.values(byDay)
+    .filter(Boolean)
+    .filter(v => {
+      const t = +new Date(v);
+      if (isNaN(t) || seen.has(t)) return false;
+      seen.add(t);
+      return true;
+    })
+    .sort((a, b) => +new Date(a) - +new Date(b));
+}
+
 /** Apply resolveDueBySection() to an offering in place, and return it. */
 export function withResolvedDue(offering, sections) {
   if (!offering) return offering;
