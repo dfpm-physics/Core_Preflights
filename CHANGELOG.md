@@ -36,8 +36,15 @@ unguarded. **Simply missing preflight-02 locked a cadet out of the site.**
 
 So the bug was dormant until the first at-scale zeroing run and then hit everyone at once — the
 10:36 scheduled phys-110 close-out (*"Graded 163 submitted + zeroed 42 non-submitters"*) and the
-11:21 phys-215 run (*"…+ zeroed 34"*). **39 enrollments** across the two courses held the fatal
+11:21 phys-215 run (*"…+ zeroed 34"*). **41 grade rows** across the two courses held the fatal
 shape, and every future lesson would have added more.
+
+**39 of those 41 were written today. The other two date from 2026-07-30** — an instructor
+finalizing a grade by hand for a cadet with no submission produces the same shape, and it did,
+for **Rowan Whitfield** and **Priya Freeman** (both phys-215 M1A). Neither reported it. They had
+been unable to load PREP for eleven days, which is worth knowing on its own: this failure is
+silent from our side, because a page that throws logs nothing anywhere we can see. Whether other
+cadets simply stopped trying is not something the data can answer.
 
 - **`deriveCompletion(item)` — new export** in `site/js/student-lessons.js`, lifted out of the
   projection so a test can reach it, and now derived from *the same fact the state is*: a
@@ -64,11 +71,24 @@ unfixed). `node --check` on the module, and both edited pages' inline module scr
 and parse-checked. **Node-only verification** — the browser check was the reproduction, not the
 fix, since signing in as an affected cadet is not something anyone here can do.
 
-*Separately, and not fixed:* **Noah Straub** (3000141486), also reported, does **not** have the
-fatal shape — his account is healthy and his active T3C enrollment is fine. What he does have is
-a finalized zero stranded on his **dropped** M5D enrollment while his active T3C submission sits
-ungraded. That is fallout from the 2026-08-10 enrollment repair, it is a grading question rather
-than a rendering one, and it needs a director's decision.
+*Separately, and NOT a problem:* **Noah Straub** (3000141486), also reported, never had the fatal
+shape on a section he is in. His zero sits on his **dropped** M5D enrollment; his active T3C
+enrollment is correct and simply has not been graded yet, the T track not having run. Confirmed
+by the course director 2026-08-10.
+
+Nine grade rows sit on dropped enrollments this way, five of them finalized — the residue of the
+2026-08-10 enrollment repair, four of which are M→T moves zeroed by an M-day run for a section
+the cadet had already left. **They are inert and need no cleanup:** every frontend query scopes
+to `status = 'active'` (auth.js for students; faculty-data, faculty-grade, faculty-gradebook,
+faculty-rollup, faculty-student, faculty-ei for staff — the one query that does not filter is
+`courseExtensions()`, which reads `extensions` and not `grades`), and `lesson_aggregate.py` joins
+through `submissions`, of which these rows have none. Nobody sees them and nothing counts them.
+
+*Method note, because it nearly produced a wrong answer here:* **PostgREST caps a response at
+1000 rows no matter what `limit` says.** `app.enrollments` holds 1001. A single unpaged read
+therefore dropped exactly one row — Straub's — and the first version of the scan above reported
+8 stranded grades instead of 9, having silently lost the one the question was about. Verify a
+row count against `Prefer: count=exact` before trusting any full-table read.
 
 ---
 
