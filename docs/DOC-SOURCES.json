@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-08-09",
+  "updated": "2026-08-10",
   "_comment": [
     "Dependency index for documents that MUST STAY CURRENT. Each entry names the authoritative",
     "sources a document was derived from, and the date it was last checked against them.",
@@ -352,6 +352,19 @@
         "textbook-pdfs/README.md"
       ],
       "note": "Was unindexed until 2026-08-07 and had carried a textbook_base_path that resolves zero of 58 manifest entries — precisely the silent rot this index exists to catch. A machine set up from a stale copy of this file is a machine that grades a whole cohort without textbook grounding."
+    },
+    {
+      "doc": "docs/operations/SCHEDULED-LESSON-CYCLE.md",
+      "kind": "operations",
+      "tier": null,
+      "reviewed": "2026-08-10",
+      "sources": [
+        ".ai/instructions/CORE.md",
+        ".ai/skills/lesson-cycle/SKILL.md",
+        "supabase/admin/app_tier_check.py",
+        "scripts/grounding/check_grounding.py"
+      ],
+      "note": "Records the one scheduled lesson-cycle that exists (Linux box, phys-215, 01:00 nightly), because the repo deliberately ships no scheduler and CORE.md forbids keeping the fact in agent memory. SKILL.md is a source because this page restates its unattended contract AND corrects it: the documented `claude -p \"/lesson-cycle\"` slash form returns \"Unknown command\" with num_turns=0 and exit 0 on any clone without a .claude/skills/ mirror, which CORE.md section 4 forbids creating. app_tier_check.py and check_grounding.py are sources because the gate table names them and states what passing looks like."
     }
   ]
 }

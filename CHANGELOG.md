@@ -8,6 +8,40 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-10 — Casey Pellizzari via Claude
+
+### The nightly lesson cycle now has a home in the repo, and the invocation it documented did not work
+
+A scheduled `/lesson-cycle` for phys-215 runs on the Linux box at 01:00 nightly. Nothing recorded
+that anywhere: the repo ships no scheduler on purpose, and the setup notes had been living in a
+Claude Code private memory store — which CORE.md §0 forbade on 2026-08-09, for exactly the reason
+this demonstrates. The store's copy described a cron entry that no longer existed and a blocker
+fixed days earlier, and nothing flagged either, because `check_doc_sources.py` cannot see it.
+New page: `docs/operations/SCHEDULED-LESSON-CYCLE.md`, registered in `docs/DOC-SOURCES.json`.
+The private store is now empty.
+
+**`claude -p "/lesson-cycle phys-215"` does not work, and fails silently.** That is the form
+`.ai/skills/lesson-cycle/SKILL.md` §"Running unattended" shows. Skills live at
+`.ai/skills/<name>/SKILL.md` as agent-neutral runbooks and CORE.md §4 forbids a `.claude/skills/`
+mirror, so on a clone that follows the rule there is no registered slash command: `claude -p`
+answers `Unknown command: /lesson-cycle` in ~40 ms with `num_turns: 0` — **and exits 0**. A wrapper
+that trusts the exit code reports success and notifies OK every night while grading nothing. Caught
+here only because the run returned too fast to be real. The wrapper now invokes by runbook path and
+refuses when the agent took zero turns. **SKILL.md still shows the slash form and should be
+corrected** — it is the source a future operator will copy.
+
+Also worth recording for the next machine: `textbook_base_path` had been pointing at the clone's
+`textbook-pdfs/`, which resolves **0 of 58** manifest entries, so grading would have run ungrounded
+while warning once. `scripts/grounding/check_grounding.py` is the only thing that catches this, and
+it is now a gate on every scheduled run alongside `app_tier_check.py` and a PostgREST probe — checks
+that credentials *work*, rather than that files exist.
+
+Verified end to end: a hand run took 22 turns, correctly skipped the already-closed `preflight-02`
+M track, and wrote its `analysis_runs` row. No writes to `grades` or `analysis_reports`, no commit,
+no push — the scheduled job does neither, since CORE.md §0 exempts routine analysis runs from the
+CHANGELOG and a commit would leave the branch ahead of `origin/main` and refuse itself the next
+night.
+
 ## 2026-08-10 — Matthew Recker via Claude
 
 ### The faculty dashboard opened on the NEXT lesson, so both class days were taught with the wrong one on screen
