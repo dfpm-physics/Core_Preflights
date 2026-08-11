@@ -8,6 +8,39 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-11 (fourth) — Matthew Recker via Claude
+
+### Course Admin → Students: the roster import moved to the top of the tab
+
+At the course director's request. The **Import the registrar's roster** disclosure was the second
+card on the tab, below the cadet lookup and roster table; it is now the first, and the roster table
+sits under it.
+
+The previous order was a deliberate choice and the code said so, which is why the comment above
+`renderStudents()` was rewritten rather than left asserting the opposite: a destructive bulk import
+was kept off the top of a page directors open many times a term. **What makes the move safe is
+that the import is still a collapsed `<details>`** — what is now at the top of the page is a single
+summary line, not a dropzone, and the preview-and-review step before anything is written is
+unchanged. It still auto-opens when the course has no roster yet, which is the case the placement
+most helps.
+
+Two strings that said the import was *below* now say *above* — the "Nobody enrolled yet" empty
+state, and the alert shown when you add a student to a course that has no sections.
+
+**Files:** `site/faculty/admin.html` only. No CSS change: `.imp-card` carries no rule of its own, so
+the two cards stack the same way either way.
+
+**Verified:** both blocks present with every referenced `id` still appearing exactly once
+(`imp`, `dropzone`, `csv-preview`, `q`, `add-stu-btn`, `prov-box`, `prov-result`, `roster-table`);
+the page serves 200 from `python -m http.server` with the import block ahead of the lookup in the
+delivered HTML; and no order-dependent DOM traversal exists in `admin.html`,
+`faculty-roster.js` or `roster-import.js` — every handler is wired by `getElementById` *after*
+`panel.innerHTML` is assigned, so the reorder cannot detach one. **Not verified in a signed-in
+browser:** the panel is built by JS behind faculty auth, so the rendered tab was not viewed. The
+change is a reorder of two sibling blocks inside one template string, with no logic touched.
+
+---
+
 ## 2026-08-11 (third) — Matthew Recker via Claude
 
 ### Two grader rules: "I couldn't find the reading" is not an answer, and OpenStax is invisible

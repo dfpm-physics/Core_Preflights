@@ -257,10 +257,14 @@
     }
 
     /* ═══════════════════════════ Students ═══════════════════════════
-     * Looking a cadet up, and everything that changes who is enrolled, on one tab. The order is
-     * deliberate: the roster table is FIRST and the import is behind a disclosure below it,
-     * because looking somebody up is the frequent action and a destructive bulk import should
-     * not be the thing at the top of the page you open twenty times a term.
+     * Looking a cadet up, and everything that changes who is enrolled, on one tab.
+     *
+     * The import is FIRST, at the course director's request (2026-08-11). It was below the roster
+     * table until then, on the reasoning that looking somebody up is the frequent action and a
+     * destructive bulk import should not sit at the top of a page you open twenty times a term.
+     * That reasoning is not wrong, and what protects against it is that the import is still behind
+     * a collapsed <details> — the thing at the top of the page is a summary line, not a dropzone,
+     * and nothing is written without the preview-and-review step either way.
      */
     async function renderStudents() {
       const panel = document.getElementById('panel');
@@ -270,20 +274,6 @@
       droppedRoster = dropped || [];
 
       panel.innerHTML = `
-        <div class="card">
-          <div class="row wrap" style="justify-content:space-between;gap:12px;align-items:flex-end">
-            <div class="field grow" style="margin-bottom:0;min-width:220px">
-              <label for="q">Find a cadet</label>
-              <input id="q" type="search" placeholder="Name, cadet ID, squadron or section"
-                     autocomplete="off" value="${esc(query)}">
-            </div>
-            <button class="btn btn-secondary btn-sm" id="add-stu-btn">+ Add student</button>
-            <div id="prov-box"></div>
-          </div>
-          <div id="prov-result" style="font-size:0.85em;margin-top:8px"></div>
-          <div id="roster-table"></div>
-        </div>
-
         <details class="card imp-card" id="imp"${total ? '' : ' open'}>
           <summary><strong>Import the registrar's roster</strong>
             <span class="muted" style="font-size:0.85em">— adds and updates cadets in bulk</span></summary>
@@ -302,7 +292,21 @@
             <div class="dz-ic">📄</div><div><strong>Choose a file</strong> or drag &amp; drop it here</div>
           </div>
           <div id="csv-preview" style="display:none;margin-top:16px"></div>
-        </details>`;
+        </details>
+
+        <div class="card">
+          <div class="row wrap" style="justify-content:space-between;gap:12px;align-items:flex-end">
+            <div class="field grow" style="margin-bottom:0;min-width:220px">
+              <label for="q">Find a cadet</label>
+              <input id="q" type="search" placeholder="Name, cadet ID, squadron or section"
+                     autocomplete="off" value="${esc(query)}">
+            </div>
+            <button class="btn btn-secondary btn-sm" id="add-stu-btn">+ Add student</button>
+            <div id="prov-box"></div>
+          </div>
+          <div id="prov-result" style="font-size:0.85em;margin-top:8px"></div>
+          <div id="roster-table"></div>
+        </div>`;
 
       document.getElementById('q').addEventListener('input', (e) => {
         query = e.target.value; renderRosterTable();
@@ -347,7 +351,7 @@
       if (!host) return;
       if (!roster.length) {
         host.innerHTML = `<div class="empty-state" style="margin-top:14px"><div class="es-ic">🧑‍🎓</div>
-          <h3>Nobody enrolled yet</h3><p>Import the registrar's export below to get started.</p></div>
+          <h3>Nobody enrolled yet</h3><p>Import the registrar's export above to get started.</p></div>
           ${droppedHTML()}`;
         // The drawer can be the only thing on screen — a roster every one of whose cadets was
         // removed still needs its Re-enroll buttons to work.
@@ -1018,7 +1022,7 @@
     function openAddStudent() {
       if (!offeringSections.length) {
         alert('This course has no sections yet — a cadet is enrolled INTO a section, not into the '
-            + 'course.\n\nEither import the registrar\'s roster below (it offers to create every '
+            + 'course.\n\nEither import the registrar\'s roster above (it offers to create every '
             + 'section the file names), or add one under Staff → Section coverage.');
         return;
       }
