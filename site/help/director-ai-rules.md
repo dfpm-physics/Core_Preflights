@@ -157,9 +157,25 @@ a fixed rule turns it into points. An instructor can change it afterwards like a
 Nothing else in PREP publishes a grade without a person.
 
 **The traffic is one-way: a re-run never overwrites a person's work.** It skips any grade an
-instructor has finalized, and any grade an instructor has edited — including one saved as a draft
-and not yet published. An afternoon of adjusted scores and rewritten comments cannot be reverted by
-running the analysis again.
+instructor has finalized, and any **question** an instructor has left feedback on — including one
+saved as a draft and not yet published. An afternoon of adjusted scores and rewritten comments
+cannot be reverted by running the analysis again.
+
+**The protection is per question, not per student, and that changed on 11 August 2026.** It used to
+skip the whole cadet as soon as any part of their grade had been edited. That sounded safer and was
+not: the grading panel saves *every* question the moment you edit *one*, and it defaults a question
+you never opened to full credit with no comment. So commenting on Q2 and leaving Q3 alone stored Q3
+as a green cell nobody had read, and every later run skipped that cadet for good — 18 questions
+across one lesson before it was caught. A question now counts as graded when it carries feedback,
+because that is the only mark in the data that only a grader makes. A question with no feedback, in
+a record the AI has never assessed, is one nobody has graded, and the next run grades it.
+
+Two consequences worth knowing. **A correct answer you approve silently, without typing a comment,
+looks the same as one you never opened** — the AI will grade it, almost always to the same green
+full credit, and the result still waits for you unfinalized. If you want a question left strictly
+alone, leave a comment on it, however short. And **your own questions stay yours**: a run that fills
+in the blanks preserves your scores, your wording and your colours exactly, and the record stays
+marked as yours rather than being relabelled as the AI's.
 
 Students who submit late under an extension are not picked up by a re-run, because the run happened
 before they submitted. They are listed for their instructor to grade by hand instead; re-running a
