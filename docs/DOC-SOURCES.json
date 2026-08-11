@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-08-10",
+  "updated": "2026-08-11",
   "_comment": [
     "Dependency index for documents that MUST STAY CURRENT. Each entry names the authoritative",
     "sources a document was derived from, and the date it was last checked against them.",
@@ -269,6 +269,16 @@
         ".ai/README.md"
       ],
       "note": "Defines how skills are written and where they live. CORE.md sets the operating rules every skill must respect and `.ai/README.md` defines the directory layout it writes into."
+    },
+    {
+      "doc": "_builder/courses/phys-110/phys110_fall2026_schedule.md",
+      "kind": "reference",
+      "tier": null,
+      "reviewed": "2026-08-11",
+      "sources": [
+        "_builder/courses/phys-110/Physics_110_Fall_2026_Syllabus (4Aug2026)_8639.pdf"
+      ],
+      "note": "A hand transcription of TABLE 1 (page 10) of the syllabus cadets are issued, and the file scripts/fall2026/set_reading_descriptions.py reads for a lesson's assigned reading -- which it writes into app.assignments.description, where every phys-110 cadet reads it. Added 2026-08-11, the day the syllabus first entered the repo; before that the script reported phys-110 as uncoverable on every run. Registered for the reason its phys-310 sibling was: a transcription that goes stale in silence is this repo's known failure mode. The transcription was verified structurally rather than by re-reading -- all 37 preflight lessons' M/T meeting dates match SCHEDULES['phys-110'] in scripts/fall2026/set_due_dates.py, which was itself checked against site/data/academic-calendar.json, so a dropped row or shifted column would break that agreement. The READING values have no such independent check and are exactly why this entry exists. NOTE the syllabus's Reading column is Cengage SECTION numbers, not the OpenStax PAGE ranges in activities.content.reference_pages; the two are reading-shaped and one column apart. The PDF is binary, so the checker can only compare mtimes -- enough, because any syllabus revision at all warrants re-reading Table 1."
     },
     {
       "doc": "_builder/courses/phys-310/phys310_fall2026_schedule.md",

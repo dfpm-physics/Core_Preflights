@@ -15,11 +15,13 @@ WHY
     book, and it is not what a cadet is assigned. Do not substitute one for the other.
 
 SOURCE OF TRUTH — PARSED, NEVER TRANSCRIBED
-    The `Reading` column of the two builder schedule files, read at run time:
+    The `Reading` column of the three schedule files under `_builder/courses/`, read at run time:
+      phys-110  _builder/courses/phys-110/phys110_fall2026_schedule.md
       phys-215  _builder/courses/phys-215/phys215_fall2026_schedule.md
       phys-310  _builder/courses/phys-310/phys310_fall2026_schedule.md
-    Both are themselves copies of the courses' syllabus schedules and both declare their column
-    headers as a parsing contract ("Keep the column headers exactly as written").
+    All three are transcriptions of their courses' syllabus schedules, all three sit beside the
+    source they were transcribed from, and all three declare their column headers as a parsing
+    contract ("Keep the column headers exactly as written").
 
     This script PARSES those tables rather than embedding a copy of them, deliberately. A hand
     transcription sitting between a source and a load-bearing string is what produced this repo's
@@ -27,15 +29,16 @@ SOURCE OF TRUTH — PARSED, NEVER TRANSCRIBED
     schedule edit therefore reaches the site on the next run of this script, with nothing to
     re-transcribe and nothing to go stale.
 
-phys-110 IS NOT COVERED, AND CANNOT BE FROM THIS REPO
-    There is no `_builder/courses/phys-110/`, no phys-110 schedule file, and no phys-110 syllabus
-    in the tree — so the repo holds no reading-section data for that course at all. Its 37
-    assignments are left untouched. `scripts/fall2026/build_110_preflights.py` says so in its own
-    header ("No reading links"), and the only reading-shaped data phys-110 has is the OpenStax
-    `reference_pages` this script explicitly does not use. Adding phys-110 means adding its
-    syllabus's reading column as a schedule file under `_builder/courses/phys-110/` with the same
-    `Lsn` / `Topic` / `Reading` headers; this script then picks it up as a new COURSES entry and
-    nothing else changes.
+ADDING A COURSE
+    One schedule file with `Lsn` / `Topic` / `Reading` headers under `_builder/courses/<id>/`, plus
+    one COURSES entry naming it and mapping DB slug -> lesson number. Nothing else changes.
+
+    That is exactly what phys-110 cost on 2026-08-11. This script had reported it as uncoverable on
+    every run — no schedule file, no syllabus in the tree, and the only reading-shaped data it had
+    was the OpenStax `reference_pages` above — until the course director supplied
+    `Physics_110_Fall_2026_Syllabus (4Aug2026)_8639.pdf` and its TABLE 1 was transcribed.
+    `build_110_preflights.py` still says "No reading links" in its own header; that is now the
+    stale claim, not this one.
 
 WHAT IT WRITES
     `app.assignments.description` only. One column, one table. No offering, deadline, question,
@@ -114,6 +117,10 @@ def _phys215_slug_map(lessons):
 
 
 COURSES = {
+    "phys-110": {
+        "schedule": "_builder/courses/phys-110/phys110_fall2026_schedule.md",
+        "slug_map": lambda lessons: {f"preflight-{n:02d}": n for n in lessons},
+    },
     "phys-215": {
         "schedule": "_builder/courses/phys-215/phys215_fall2026_schedule.md",
         "slug_map": _phys215_slug_map,           # callable: derived from the parsed lessons
@@ -130,12 +137,12 @@ COURSES = {
 }
 
 # Courses that exist in the DB but have no reading-section source in this repo. Named here so the
-# omission is reported on every run instead of being silently absent.
-NO_SOURCE = {
-    "phys-110": "no _builder/courses/phys-110/ and no syllabus schedule in the repo - the only "
-                "reading-shaped data it has is OpenStax `reference_pages`, which is page numbers "
-                "in the grounding text, not the syllabus's assigned sections",
-}
+# omission is reported on every run instead of being silently absent. Empty is the good state.
+#
+# phys-110 was the entry here until 2026-08-11, when the course director supplied
+# `Physics_110_Fall_2026_Syllabus (4Aug2026)_8639.pdf` and its Table 1 was transcribed into a
+# schedule file. Adding a course really is one file plus one COURSES entry, as that entry claimed.
+NO_SOURCE = {}
 
 EMPTY_READING = {"", "-", "—", "–", "n/a", "none"}
 

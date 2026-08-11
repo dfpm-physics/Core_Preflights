@@ -12,16 +12,17 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ### The site never told a cadet what to read
 
-Every phys-215 assignment carried the same generic description — *"Complete before class. Full
-credit for a genuine, thoughtful effort."* — and every phys-310 assignment carried `NULL`. The
-**assigned reading existed only in the syllabus and in the builder's schedule file**, so the one
-line a cadet sees under an assignment title on `site/student/assignments.html` said nothing about
-what to read before answering it.
+Every phys-110 and phys-215 assignment carried the same generic description — *"Complete before
+class. Full credit for a genuine, thoughtful effort."* — and every phys-310 assignment carried
+`NULL`. The **assigned reading existed only in the syllabus**, so the one line a cadet sees under an
+assignment title on `site/student/assignments.html` said nothing about what to read before answering
+it.
 
-`app.assignments.description` now leads with it: **78 rows** written, one column, one table.
+`app.assignments.description` now leads with it: **115 rows** written, one column, one table.
 
 | course | rows | example |
 |---|---:|---|
+| phys-110 | 37 | `Reading: 2.1-2.6 · Complete before class. Full credit for a genuine, thoughtful effort.` |
 | phys-215 | 37 live + 37 `training-fall-2026` sandbox twins | `Reading: 22.2–22.3 · Complete before class. Full credit for a genuine, thoughtful effort.` |
 | phys-310 | 4 | `Reading: 2.1, 2.5, 2.6` |
 
@@ -40,17 +41,44 @@ The training sandbox twins are included because they have been **separate rows**
 2026-07-28 content isolation split, so writing them touches nothing live — and a sandbox that
 disagrees with the real course is the thing that split exists to prevent. `--skip-training` opts out.
 
-### phys-110 is NOT covered, and this repo cannot cover it
+### phys-110 was uncoverable for about twenty minutes
 
-Its 37 assignments were left untouched, deliberately. There is no `_builder/courses/phys-110/`, no
-phys-110 schedule file, and no phys-110 syllabus anywhere in the tree, so **the repo holds no
-reading-section data for that course at all** — `build_110_preflights.py` says as much in its own
-header (*"No reading links"*). The only reading-shaped data phys-110 has is the OpenStax
-`reference_pages` above, which is precisely what this change is not.
+It was reported as exactly that — no `_builder/courses/phys-110/`, no schedule file, no syllabus
+anywhere in the tree, so **the repo held no reading-section data for that course at all**, and
+`build_110_preflights.py` still says *"No reading links"* in its own header. The course director's
+response was to drop `Physics_110_Fall_2026_Syllabus (4Aug2026)_8639.pdf` into the repo root, which
+made the claim false while the run was still going.
 
-Covering it is one file: its syllabus's reading column as
-`_builder/courses/phys-110/phys110_fall2026_schedule.md`, with the same `Lsn` / `Topic` / `Reading`
-headers. The script then picks it up as a new `COURSES` entry and nothing else changes.
+**TABLE 1, page 10** was transcribed to
+[`_builder/courses/phys-110/phys110_fall2026_schedule.md`](_builder/courses/phys-110/phys110_fall2026_schedule.md)
+and **37 more rows** written, for **115 in total across the three courses**. Adding a course really
+did cost one schedule file and one `COURSES` entry, as the script claimed it would.
+
+**The transcription was verified structurally, not by re-reading it.** Re-reading your own
+transcription mostly re-confirms your own misreading. Instead: **all 37 preflight lessons' M-day and
+T-day meeting dates match `SCHEDULES["phys-110"]` in `set_due_dates.py`** exactly — a table that was
+itself checked against `site/data/academic-calendar.json`, an independent source. A dropped row or a
+shifted column moves a date and breaks that agreement, so the match is what makes the row alignment
+trustworthy. The title/topic guard then passed on all 37 independently. The **reading values** have
+no such check, which is why the file is registered in `docs/DOC-SOURCES.json` against the syllabus.
+
+**The syllabus PDF now lives beside its transcription** at `_builder/courses/phys-110/`, which is
+where phys-310's source workbook already sat. `_builder/` is not served by Pages, and
+`.gitattributes` marks `_builder/courses/**` as `-text`, so the binary is stored byte-exact.
+`set_due_dates.py` has named this exact filename as phys-110's source of truth for dates since it
+was written; that reference now resolves inside the repo instead of pointing at somebody's desktop.
+
+**phys-110 is still not a builder course** and the new directory does not make it one — there is no
+`COURSE_PROFILE.md`, so `localize.py` can bake no kit and no artifact can be built for it. The
+schedule file says so in its own header, because a directory under `_builder/courses/` implies
+otherwise.
+
+One cell to confirm: **lesson 26 reads `10.4-10.5 / 11.1`**, transcribed verbatim including the
+slash. The syllabus separates multi-range readings inconsistently — a comma on lesson 11, a
+semicolon on lesson 25, a slash here — and at the rendered resolution the slash is the one glyph
+that could plausibly be a comma. It changes the punctuation a cadet sees, not which sections they
+read. Lessons 30 and 31 sharing `11.4`, and lessons 12 and 17 re-covering earlier ground, were
+checked and are the syllabus's own doing.
 
 ### The script parses the schedule; it does not carry a copy of it
 
@@ -66,7 +94,7 @@ nothing to re-transcribe and nothing to go stale.
 
 Every row's DB title is checked against the schedule's topic before it is written
 (accent/punctuation/case-insensitive, so `Elec. Fields` vs `Electric Fields` passes but a wrong
-lesson does not). All 78 passed; a mismatch aborts the whole run rather than writing one bad
+lesson does not). All 115 passed; a mismatch aborts the whole run rather than writing one bad
 reading, and there is deliberately no `--force`. The guard is what makes phys-310's hand-written
 slug map safe, since three of its four assignments are `lesson-NN` and the fourth is a minted
 artifact slug (`phys310-binding-energy-and-stability-e0ceabee`, which is lesson **3**).
