@@ -951,6 +951,7 @@
           <span class="spacer"></span>
           ${pool.length > randN ? `<button class="tbtn" id="${p}-all" type="button" aria-pressed="false">Show all ${total}</button>` : ''}
           ${randN > 0 && pool.length > randN ? `<button class="tbtn" id="${p}-shuffle" type="button">↻ Shuffle random</button>` : ''}
+          ${total > 1 ? `<button class="tbtn" id="${p}-sel" type="button" aria-pressed="false">Select all shown</button>` : ''}
           <button class="tbtn" id="${p}-copy" type="button">Copy selected</button>
         </div>
         <div class="sr-quotes" id="${p}-list"></div>
@@ -990,6 +991,33 @@
     // be written here in a second copy of the sentence built in responsesSection(), which is
     // exactly the drift a second panel would have made permanent: two panels × two copies is four
     // places to keep one sentence right.
+    /**
+     * The two labels that depend on what is selected, recomputed from the DOM.
+     *
+     * Read rather than tracked, because the selection already lives in the DOM (`.sel`) and is
+     * re-derived on every render from the quote TEXT — a parallel count would be a second source
+     * of truth for the same fact, and the one that goes stale. Called from three places: after a
+     * render, after a card click, and after the select-all button.
+     */
+    function refreshSelUI(p) {
+      const list = document.getElementById(`${p}-list`); if (!list) return;
+      const shown = list.querySelectorAll('.sr-quote').length;
+      const n = list.querySelectorAll('.sr-quote.sel').length;
+      const copyBtn = document.getElementById(`${p}-copy`);
+      if (copyBtn) copyBtn.textContent = n ? `Copy selected (${n})` : 'Copy selected';
+      const selBtn = document.getElementById(`${p}-sel`);
+      if (selBtn) {
+        // "All" means all CURRENTLY DISPLAYED, which in the sampled view is the 8 on screen and
+        // not the pool behind them — the button is a shortcut for clicking what you can see, so
+        // pairing it with "Show all" is how you reach the whole cohort. Flipping to Clear at that
+        // point is what makes it undoable: without it, deselecting means clicking every card back.
+        const all = shown > 0 && n === shown;
+        selBtn.setAttribute('aria-pressed', String(all));
+        selBtn.classList.toggle('on', all);
+        selBtn.textContent = all ? 'Clear selection' : 'Select all shown';
+      }
+    }
+
     function drawResponses(p, keepSelected) {
       const st = respStates[p];
       const list = document.getElementById(`${p}-list`); if (!list || !st) return;
@@ -1006,10 +1034,8 @@
       });
       const note = document.getElementById(`${p}-note`);
       if (note) note.textContent = '· ' + PANEL_NOTE[p](st);
-      const copyBtn = document.getElementById(`${p}-copy`);
-      const updateCopy = () => { const n = list.querySelectorAll('.sr-quote.sel').length; copyBtn.textContent = n ? `Copy selected (${n})` : 'Copy selected'; };
-      list.querySelectorAll('.sr-quote').forEach(c => c.addEventListener('click', () => { c.classList.toggle('sel'); updateCopy(); }));
-      updateCopy();
+      list.querySelectorAll('.sr-quote').forEach(c => c.addEventListener('click', () => { c.classList.toggle('sel'); refreshSelUI(p); }));
+      refreshSelUI(p);
     }
     const PANEL_NOTE = { sr: reflectionNote, fr: freeNote };
 
@@ -1039,12 +1065,21 @@
         drawResponses(p);
       });
       document.getElementById(`${p}-shuffle`)?.addEventListener('click', () => { st.sample = sampleN(st.pool, st.randN); drawResponses(p); });
+      // Wired ONCE, here, rather than inside drawResponses: the cards are replaced on every render
+      // so their listeners go with them, but this button is not — binding it there would stack a
+      // fresh listener on every names toggle, shuffle and show-all.
+      document.getElementById(`${p}-sel`)?.addEventListener('click', () => {
+        const cards = [...document.querySelectorAll(`#${p}-list .sr-quote`)];
+        const select = cards.some(c => !c.classList.contains('sel'));
+        cards.forEach(c => c.classList.toggle('sel', select));
+        refreshSelUI(p);
+      });
       document.getElementById(`${p}-copy`)?.addEventListener('click', async () => {
         const sel = [...document.querySelectorAll(`#${p}-list .sr-quote.sel`)]; if (!sel.length) return;
         const btn = document.getElementById(`${p}-copy`);
         const text = sel.map(c => st.namesOn ? `"${c.dataset.text}"\n— ${c.dataset.name} (${c.dataset.sec})` : `"${c.dataset.text}"`).join('\n\n');
-        try { await navigator.clipboard.writeText(text); const old = btn.textContent; btn.textContent = '✓ Copied'; setTimeout(() => { btn.textContent = old; }, 1200); }
-        catch (e) { btn.textContent = 'Copy blocked'; setTimeout(() => { const n = document.querySelectorAll(`#${p}-list .sr-quote.sel`).length; btn.textContent = n ? `Copy selected (${n})` : 'Copy selected'; }, 1400); }
+        try { await navigator.clipboard.writeText(text); btn.textContent = '✓ Copied'; setTimeout(() => refreshSelUI(p), 1200); }
+        catch (e) { btn.textContent = 'Copy blocked'; setTimeout(() => refreshSelUI(p), 1400); }
       });
     }
 
@@ -1445,7 +1480,83 @@
       document.getElementById('sm-body').innerHTML = panel
         + `<div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn btn-secondary btn-sm" id="sm-full">View full report ↗</button></div>`;
       document.getElementById('sm-full').addEventListener('click', () => openFullReport(studentId, name));
+      wireOverrides(studentId, name, section);
       document.getElementById('student-modal').classList.add('open');
+    }
+
+    /**
+     * Wire the clear/restore controls in the student panel. Re-run on every open, and after every
+     * decision, because both rebuild `#sm-body` — so these listeners go with the markup they were
+     * attached to and never accumulate.
+     */
+    function wireOverrides(studentId, name, section) {
+      const body = document.getElementById('sm-body');
+      const row = reportByStudent[String(studentId)];
+      if (!body || !row) return;
+
+      body.querySelectorAll('[data-ov-restore]').forEach(b => b.addEventListener('click',
+        () => applyOverride(row, b.dataset.ovRestore, false, null, studentId, name, section)));
+
+      // Clearing is two-step. A reason is REQUIRED for an integrity flag (CLEARABLE_FLAGS) and the
+      // field is the only place to type one, so the click opens the form rather than acting.
+      body.querySelectorAll('[data-ov-clear]').forEach(b => b.addEventListener('click', () => {
+        const flag = b.dataset.ovClear;
+        const from = b.dataset.ovFrom || null;
+        const required = !!I.CLEARABLE_FLAGS[flag]?.reasonRequired;
+        const form = document.createElement('span');
+        form.className = 'ov-form';
+        form.innerHTML = `<input class="ov-why" type="text" maxlength="200"
+            placeholder="${required ? 'Why is this not an issue?' : 'Reason (optional)'}"
+            aria-label="Reason for clearing this flag">
+          <button class="tbtn ov-go" type="button">Clear flag</button>
+          <button class="tbtn ov-cancel" type="button">Cancel</button>
+          <span class="ov-err"></span>`;
+        b.replaceWith(form);
+        const why = form.querySelector('.ov-why');
+        why.focus();
+        const go = () => applyOverride(row, flag, true, why.value, studentId, name, section, form, from);
+        form.querySelector('.ov-go').addEventListener('click', go);
+        form.querySelector('.ov-cancel').addEventListener('click', () => openStudent(studentId, name, section));
+        why.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+      }));
+    }
+
+    async function applyOverride(row, flag, cleared, reason, studentId, name, section, form, from) {
+      const btn = form?.querySelector('.ov-go');
+      const errEl = form?.querySelector('.ov-err');
+      if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+      if (errEl) errEl.textContent = '';
+
+      const { error } = await I.setFlagOverride(ctx, {
+        offeringId: reportInteraction,
+        enrollmentId: row.enrollment_id,
+        flag, cleared, from: cleared ? from : null, reason,
+      });
+      if (error) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Clear flag'; }
+        const msg = error.message || 'Could not save that.';
+        if (errEl) errEl.textContent = msg; else alert(msg);
+        return;
+      }
+
+      // Mirror the write into the loaded rows instead of refetching the lesson. The pills and the
+      // counts recompute from `reportRows` (summarizeReports reads `report_data`), so this is all
+      // renderAggregate needs — and a reload would tear down the modal the instructor is working
+      // in, mid-review of a student.
+      const next = { ...(row.flag_overrides || {}) };
+      if (cleared) {
+        next[flag] = {
+          cleared: true, from: from ?? null, by: ctx.user.id, at: new Date().toISOString(),
+          ...(String(reason || '').trim() ? { reason: String(reason).trim() } : {}),
+        };
+      } else {
+        delete next[flag];
+      }
+      row.flag_overrides = Object.keys(next).length ? next : null;
+      row.report_data = I.applyFlagOverrides(row.report_data_ai, row.flag_overrides);
+
+      renderAggregate();
+      openStudent(studentId, name, section);
     }
 
     // The full Markdown report for one student, in its own modal (stacks above the student summary).
@@ -1469,6 +1580,39 @@
       // Report markdown is an inert, user-controllable blob — sanitize at render time.
       body.innerHTML = md ? DOMPurify.sanitize(marked.parse(md))
         : `<div class="alert alert-info">This student hasn't submitted a report for this interaction yet.</div>`;
+    }
+
+    /**
+     * One clearable flag's control: the offer to overrule it while it stands, the decision and its
+     * undo once it has been overruled.
+     *
+     * An AI can raise "Inappropriate resources" on a cadet whose only crime was running the
+     * preflight twice to understand it better. The instructor is the one who knows that, and if
+     * the pill cannot be cleared the integrity signal turns into noise the first time it is wrong
+     * about somebody. See the header over applyFlagOverrides() in faculty-rollup.js for where the
+     * decision is stored and why it is not stored with the flag it overrules.
+     *
+     * Rendered inert, with the reason, when there is no grade row to record the decision on —
+     * better than a button that fails on click.
+     */
+    function overrideControl(flag, raised, ov, row, fromValue) {
+      const o = ov?.[flag];
+      if (o?.cleared) {
+        const when = o.at ? new Date(o.at).toLocaleDateString() : '';
+        const bits = [
+          o.from ? `was <b>${esc(String(o.from))}</b>` : '',
+          when ? esc(when) : '',
+          o.reason ? `“${esc(o.reason)}”` : '',
+        ].filter(Boolean).join(' · ');
+        return `<span class="ov-done">cleared${bits ? ` — ${bits}` : ''}</span>`
+             + `<button class="tbtn ov-btn" data-ov-restore="${esc(flag)}">Restore</button>`;
+      }
+      if (!raised) return '';
+      if (!row?.grade_id) {
+        return `<span class="muted ov-none">Grade this student before clearing the flag</span>`;
+      }
+      return `<button class="tbtn ov-btn" data-ov-clear="${esc(flag)}"
+                      data-ov-from="${esc(String(fromValue ?? ''))}">Not an issue</button>`;
     }
 
     // Per-student structured panel shown above the Markdown report. Built from report_data
@@ -1515,15 +1659,28 @@
       if (r && r.sentiment) reflBits.push(esc(r.sentiment));
       const reflText = r && r.text ? `<div class="sp-quote">${esc(r.text)}</div>` : '';
 
+      // The two NEGATIVE flags an instructor can overrule. `d` here is already corrected
+      // (applyFlagOverrides ran in loadReportRows), so a cleared honor status reads as 'none' and
+      // the tag below simply does not render — the decision itself comes from `flag_overrides`.
+      const ov = row?.flag_overrides || null;
+
       const honor = d?.honor;
-      const honorHTML = honor && (honor.status === 'disclosed' || honor.status === 'concern')
-        ? `<span class="tag ${honor.status === 'concern' ? 'danger' : 'gold'}">${esc(honor.status)}</span>${honor.note ? ` ${esc(honor.note)}` : ''}` : '';
+      const honorRaised = honor?.status === 'disclosed' || honor?.status === 'concern';
+      const honorTag = honorRaised
+        ? `<span class="tag ${honor.status === 'concern' ? 'danger' : 'gold'}">${esc(honor.status)}</span>${honor.note ? ` ${esc(honor.note)}` : ''}`
+        : '';
+      const honorCtl = overrideControl('honor', honorRaised, ov, row, honor?.status);
+      const honorHTML = [honorTag, honorCtl].filter(Boolean).join(' ');
 
       const flags = d?.flags;
+      const nfuRaised = flags?.needs_follow_up === true;
       const flagBits = [];
-      if (flags?.needs_follow_up === true) flagBits.push('<span class="tag gold">needs follow-up</span>');
+      if (nfuRaised) flagBits.push('<span class="tag gold">needs follow-up</span>');
       if (flags?.notable === true) flagBits.push('<span class="tag blue">notable</span>');
       if (flags?.note) flagBits.push(esc(flags.note));
+      // Kept OUT of flagBits: those are joined with " · " as a list of what the AI said, and the
+      // control is not one of them — appending it put a dangling separator before the button.
+      const nfuCtl = overrideControl('needs_follow_up', nfuRaised, ov, row, true);
 
       // Everything else the producer emitted, verbatim. This widens what used to be a single
       // hard-coded `flags.note` read: any other key an artifact or /preflight-analyze invented was
@@ -1545,7 +1702,7 @@
         ${mcs ? `<div class="sp-row"><span class="sp-k">Misconceptions</span><span class="sp-v"><ul class="sp-list">${mcs}</ul></span></div>` : ''}
         ${reflBits.length || reflText ? `<div class="sp-row"><span class="sp-k">Reflection</span><span class="sp-v">${reflBits.join(' · ')}${reflText}</span></div>` : ''}
         ${honorHTML ? sect('Integrity', honorHTML) : ''}
-        ${flagBits.length ? sect('Flags', flagBits.join(' · ')) : ''}
+        ${flagBits.length || nfuCtl ? sect('Flags', flagBits.join(' · ') + nfuCtl) : ''}
         ${residualHTML ? `<div class="sp-row"><span class="sp-k">Other flags</span><span class="sp-v"><ul class="sp-list">${residualHTML}</ul></span></div>` : ''}
         ${d?.ai_summary ? sect('Summary', esc(d.ai_summary)) : ''}
         ${d?.key_strengths ? sect('Strengths', esc(d.key_strengths)) : ''}

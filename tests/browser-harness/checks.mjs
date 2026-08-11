@@ -28,6 +28,10 @@ const BASE = arg('base', 'http://localhost:8000');
 const EMAIL = arg('email', FAC.email || null);
 const PASSWORD = arg('password', FAC.password || null);
 const LESSON = arg('lesson');
+// The response panels render only on a SINGLE-SECTION scope (report.html responsesSection), and
+// the default scope is 'mine' — which is one section only if the account teaches exactly one. So
+// the select-all checks below need a section pinned, or they self-skip on an absent panel.
+const SECTION = arg('section');
 const TIER = arg('tier', 'director');
 if (!EMAIL || !PASSWORD) {
   console.error('No faculty credentials. Set PREP_TEST_FACULTY_* in supabase/admin/.env, '
@@ -125,9 +129,15 @@ if (TIER === 'instructor') {
 /* ── Rollup: P0.10 KDE tuner gating, P1.5 chart style ─────────────────────── */
 if (LESSON) {
   section('rollup');
-  await go(`/site/faculty/report.html?i=${encodeURIComponent(LESSON)}`);
+  const SEC_Q = SECTION ? `&section=${encodeURIComponent(SECTION)}` : '';
+  await go(`/site/faculty/report.html?i=${encodeURIComponent(LESSON)}${SEC_Q}`);
   check('the KDE tuner is ABSENT from a plain rollup', (await count('#kde-tuner')) === 0);
 
+  // Wait for it rather than sampling at a fixed 1200ms. The aggregate renders after its own async
+  // load, so `go()`'s flat sleep raced it — this check passed or failed run to run on Supabase
+  // latency alone, with the failure text ("obj-hist=0") reading exactly like a real regression.
+  // The catch keeps a genuinely absent panel reportable as a FAIL instead of an unhandled timeout.
+  await page.waitForSelector('.obj-hist, .lr-fine', { timeout: 10000 }).catch(() => {});
   const hist = await count('.obj-hist');
   const curve = await count('.lr-fine');
   check('understanding-by-objective renders the integer histogram by default',
@@ -135,16 +145,116 @@ if (LESSON) {
   check('…and it matches the effort chart markup (.eff-bar)',
         (await count('.obj-hist .eff-bar')) > 0);
 
+  // The response panels need a SINGLE-SECTION scope (report.html responsesSection), and the
+  // default 'mine' is only that for an account teaching exactly one section. So drive the page's
+  // own scope control to the first individual section rather than making the caller supply a uuid
+  // — which also means this keeps working when the test account is re-staffed. --section still
+  // pins one explicitly.
+  //
+  // This runs BEFORE the panel checks below, and that ordering is the point. They used to run on
+  // whatever the default scope produced, so on a multi-section account every one of them was
+  // asserting against a panel that was not there: the P0.6 name check "passed" by counting zero
+  // names in zero cards, and the toggle check failed as `aria-pressed=null` on every run — a
+  // standing red that had stopped meaning anything. Absence is what this file exists to catch, so
+  // it must not be what it silently tolerates.
+  if (!(await count('#sr-list .sr-quote'))) {
+    const picked = await page.evaluate(() => {
+      const host = document.getElementById('rm-scope');
+      if (!host) return null;
+      const btn = [...host.querySelectorAll('button[data-scope]')]
+        .find(b => !['mine', 'all'].includes(b.dataset.scope));
+      if (btn) { btn.click(); return btn.textContent.trim(); }
+      const sel = host.querySelector('select');
+      const opt = sel && [...sel.options].find(o => !['mine', 'all'].includes(o.value));
+      if (!opt) return null;
+      sel.value = opt.value;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      return opt.textContent.trim();
+    });
+    if (picked) {
+      await new Promise(r => setTimeout(r, 900));
+      console.log(`  (scoped to section ${picked} for the response-panel checks)`);
+    }
+  }
+  const shown = await count('#sr-list .sr-quote');
+
   const namesOn = await page.$eval('#sr-names', el => el.getAttribute('aria-pressed'))
     .catch(() => null);
   check('student names are off by default on the showcase panel', namesOn === 'false',
         `aria-pressed=${namesOn}`);
   // P0.6: the fix was that names are NOT IN THE DOM while the toggle is off — hidden-but-present
-  // is one Ctrl+F away in a projected classroom.
+  // is one Ctrl+F away in a projected classroom. Only meaningful with cards on screen, hence the
+  // scope switch above.
   check('…and no name is present in the DOM while it is off',
-        (await count('.sr-quote [data-name], .sr-quote .sr-name')) === 0);
+        shown > 0 && (await count('.sr-quote [data-name], .sr-quote .sr-name')) === 0,
+        shown === 0 ? 'no cards rendered — nothing was checked' : '');
 
-  await go(`/site/faculty/report.html?i=${encodeURIComponent(LESSON)}&kde=1`);
+  // Select-all: it acts on what is DISPLAYED, which in the sampled view is not the whole pool.
+  // Asserted against the rendered card count rather than a fixed number, because the panel is 3 AI
+  // picks + 5 random where the pool allows and neither is guaranteed on a real cohort.
+  if (shown > 1) {
+    await page.click('#sr-sel');
+    const selAll = await count('#sr-list .sr-quote.sel');
+    check('select-all selects every displayed card', selAll === shown, `${selAll}/${shown}`);
+    check('…and the copy button counts them',
+          (await page.$eval('#sr-copy', el => el.textContent)).includes(`(${shown})`));
+    check('…and the button offers the way back',
+          (await page.$eval('#sr-sel', el => el.textContent)).trim() === 'Clear selection');
+
+    await page.click('#sr-sel');
+    check('clicking again clears the selection', (await count('#sr-list .sr-quote.sel')) === 0);
+    check('…and the copy button drops its count',
+          (await page.$eval('#sr-copy', el => el.textContent)).trim() === 'Copy selected');
+
+    // The names toggle re-renders and preserves selection (srCard: hiding a name is not enough),
+    // so the label has to be recomputed from the new DOM or it goes stale against it.
+    await page.click('#sr-sel');
+    await page.click('#sr-names');
+    check('a re-render keeps the selection', (await count('#sr-list .sr-quote.sel')) === shown);
+    check('…and the select-all label survives it',
+          (await page.$eval('#sr-sel', el => el.textContent)).trim() === 'Clear selection');
+    await page.click('#sr-names');
+  } else {
+    check(`select-all: SKIPPED, panel shows ${shown} card(s)`, true);
+  }
+
+  /* Clearing an AI-raised flag. Everything up to the network call — this walks the real path
+   * (pill → student list → panel → the control → the form) but CANCELS rather than confirming,
+   * because the write lands on a real cadet's grade and a smoke test is not a reason to put a
+   * decision on somebody's record. What the write itself does is covered in test-rollup.mjs. */
+  const nfu = await page.$('#rm-flagbar [data-flag="needs_follow_up"]');
+  if (nfu) {
+    await nfu.click();
+    await new Promise(r => setTimeout(r, 500));
+    const first = await page.$('#fm-body [data-id]');
+    check('a flag pill lists the students it counted', !!first);
+    if (first) {
+      await first.click();
+      await new Promise(r => setTimeout(r, 600));
+      const clearBtn = await page.$('#sm-body [data-ov-clear="needs_follow_up"]');
+      check('the student panel offers to clear the flag', !!clearBtn);
+      if (clearBtn) {
+        await clearBtn.click();
+        await new Promise(r => setTimeout(r, 250));
+        check('…and clicking it asks for a reason rather than acting immediately',
+              (await count('#sm-body .ov-form .ov-why')) === 1);
+        // needs_follow_up is the flag whose reason is optional; honor's placeholder differs.
+        const ph = await page.$eval('#sm-body .ov-why', el => el.placeholder).catch(() => '');
+        check('…marked optional for a follow-up flag', /optional/i.test(ph), `placeholder="${ph}"`);
+        await page.click('#sm-body .ov-cancel');
+        await new Promise(r => setTimeout(r, 400));
+        check('…and Cancel puts the button back, having written nothing',
+              (await count('#sm-body [data-ov-clear="needs_follow_up"]')) === 1
+              && (await count('#sm-body .ov-form')) === 0);
+      }
+      await page.evaluate(() => document.querySelectorAll('.modal.open, .open')
+        .forEach(m => m.classList.remove('open')));
+    }
+  } else {
+    check('flag-clear checks: SKIPPED, no needs_follow_up flag in this scope', true);
+  }
+
+  await go(`/site/faculty/report.html?i=${encodeURIComponent(LESSON)}${SEC_Q}&kde=1`);
   const tuner = await count('#kde-tuner');
   if (TIER === 'instructor') {
     check('?kde=1 does NOT give an instructor the tuner', tuner === 0);

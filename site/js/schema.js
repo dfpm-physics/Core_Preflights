@@ -41,6 +41,44 @@ export const GRADE_SELECT =
   'id,enrollment_id,assignment_offering_id,submission_id,points_earned,points_possible,' +
   'effort,question_scores,diagnostic,source,is_finalized,graded_by,graded_at,updated_at';
 
+/* ── The student-side pair. Same tables, deliberately less. ─────────────────────────────────
+ *
+ * The two constants above are FACULTY-shaped and were being used by the student loaders too,
+ * which shipped every diagnostic PREP holds about a cadet to that cadet's own browser on every
+ * page load. RLS permits it — these are their own rows (`sa_own`, `grades_own_finalized`) — so
+ * nothing was leaking across students. But the site was asking for columns it never renders, and
+ * the most sensitive strings the system produces were among them:
+ *
+ *   • `submission_activities.content` on an INTERACTIVE activity is the contract's `d` payload —
+ *     `honor.status` (`disclosed` / `concern`) and its free-text `note`, `flags.needs_follow_up`,
+ *     `reading_reflection.meaningful`, per-objective understanding, misconceptions. The faculty
+ *     rollup turns those into "Inappropriate resources" and "Integrity concern" pills. A cadet
+ *     with devtools open could read the finding about themselves.
+ *   • `grades.diagnostic` is the same material for a written preflight.
+ *   • `report_markdown` is the prose report; no student page has ever rendered it.
+ *
+ * `grades_own_finalized` at least withholds a grade until it is published. `sa_own` has no such
+ * gate: an interactive `d` is readable by its author the instant it is written.
+ *
+ * PROJECT.md claimed student pages "omit it from their explicit Supabase selects and rendering".
+ * The rendering half was true; this makes the other half true. The same reasoning — and the same
+ * shape of fix — is already in faculty-gradebook.js (`GB_GRADE_SELECT` / `GB_SUBMISSION_SELECT`).
+ *
+ * WHY `content` IS ABSENT HERE RATHER THAN FILTERED. It is one column carrying two unrelated
+ * things: a cadet's own written ANSWERS on a written activity, which they must have to resume a
+ * draft, and the AI's assessment of them on an interactive one. PostgREST cannot select different
+ * columns for different rows, so the student loader fetches this shape and then asks separately
+ * for the written activities' content by `activity_id` — see loadAssignmentStatuses().
+ */
+export const SUBMISSION_SELECT_STUDENT =
+  'id,enrollment_id,assignment_offering_id,chosen_activity_id,status,committed_at,' +
+  'unlocked_by,unlocked_at,updated_at,' +
+  'submission_activities(id,activity_id,payload_bytes,is_final,updated_at)';
+
+export const GRADE_SELECT_STUDENT =
+  'id,enrollment_id,assignment_offering_id,submission_id,points_earned,points_possible,' +
+  'effort,question_scores,source,is_finalized,graded_by,graded_at,updated_at';
+
 /** A per-student deadline override, with its grant and revocation provenance (migration 007).
  *  ALWAYS pair this with `.is('revoked_at', null)` when computing a deadline — see the note
  *  on effectiveDue(). Fetch revoked rows only where the point is to report on them. */

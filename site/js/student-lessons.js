@@ -119,7 +119,10 @@ export function deriveCompletion(item, offering = item) {
     path: item.chosenActivity?.modality === 'interactive' ? 'interaction'
         : item.submission ? 'preflight' : null,
     points: displayPoints(item.grade, offering) ?? 0,
-    understanding: item.grade?.diagnostic?.overall_understanding ?? null,
+    // No `understanding` here. It read `grade.diagnostic.overall_understanding`, nothing on any
+    // student page ever rendered it, and as of 2026-08-10 the student grade select does not fetch
+    // `diagnostic` at all (schema.js, GRADE_SELECT_STUDENT) — so keeping the field would leave a
+    // permanently-null property that reads as live. The diagnostic is faculty-side by design.
     is_finalized: finalized,
     completed_at: item.submission?.committedAt || null,
   };

@@ -923,6 +923,21 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
 .stu-panel .sp-list li { margin: 2px 0; }
 .stu-panel .sp-quote { margin-top: 6px; padding: 6px 10px; border-left: 3px solid var(--border); color: var(--muted); font-style: italic; }
 
+/* Instructor overrides of an AI-raised flag (report.html, overrideControl).
+   The button is quiet on purpose — overruling the AI should be available at a glance and never
+   look like the recommended action, so it reads as a smaller, lighter sibling of .tbtn rather
+   than as a call to action sitting next to a red integrity tag. */
+.stu-panel .ov-btn { font-size: 0.74em; padding: 3px 8px; margin-left: 8px; vertical-align: middle; }
+.stu-panel .ov-done { font-size: 0.84em; color: var(--muted); font-style: italic; }
+.stu-panel .ov-done b { font-style: normal; color: var(--text-soft); }
+.stu-panel .ov-none { font-size: 0.78em; margin-left: 8px; }
+.stu-panel .ov-form { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: 4px; }
+.stu-panel .ov-why { font: inherit; font-size: 0.82em; padding: 4px 8px; min-width: 210px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); }
+.stu-panel .ov-why:focus { outline: none; border-color: var(--blue-lt); }
+.stu-panel .ov-form .tbtn { font-size: 0.74em; padding: 3px 8px; }
+.stu-panel .ov-err:not(:empty) { font-size: 0.78em; color: var(--red); flex-basis: 100%; }
+
 .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
 table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
 th { background: var(--th-bg); color: #fff; padding: 10px 12px; text-align: left; white-space: nowrap; }

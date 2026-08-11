@@ -19,7 +19,7 @@
 
 import { db } from './supabase.js';
 import {
-  OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT,
+  OFFERING_SELECT, SUBMISSION_SELECT, SUBMISSION_SELECT_STUDENT, GRADE_SELECT_STUDENT,
   shapeOffering, shapeOfferings, withResolvedDue, offeringSections,
   shapeSubmission, effectiveDue, deriveStatus, isOpen,
   releaseAt, isReleased, LOOKAHEAD_DAYS,
@@ -81,17 +81,47 @@ export async function loadAssignmentStatuses(ctx, { includeLocked = false } = {}
 
   // Their work + their grades + any extension. Scoped by enrollment, which is what every
   // per-student table in this model keys on.
-  let submissions = [], grades = [], extensions = [];
+  //
+  // The STUDENT selects, not the faculty ones (schema.js) — no `diagnostic`, no `report_markdown`,
+  // no `submission_activities.content`. A cadet's page never renders any of it, and `content` on
+  // an interactive activity is the AI's assessment OF them, honor status included.
+  //
+  // Their own written ANSWERS live in that same column, though, and the draft-resume path needs
+  // them — so they are fetched as a fourth query narrowed to the written activities of the
+  // offerings just loaded. Filtering by `activity_id` is what makes the split safe: no interactive
+  // activity's id is in the list, so no `d` can come back however RLS is written. It costs no
+  // round trip (the offerings are already resolved, so it joins the same Promise.all) and it is a
+  // structural guarantee rather than a client-side strip, which would be theatre — the data would
+  // already have crossed the wire.
+  const writtenActivityIds = offerings.map(o => o.written?.id).filter(Boolean);
+
+  let submissions = [], grades = [], extensions = [], answerRows = [];
   if (enrollmentIds.length) {
-    const [subs, grds, exts] = await Promise.all([
-      db.from('submissions').select(SUBMISSION_SELECT).in('enrollment_id', enrollmentIds),
-      db.from('grades').select(GRADE_SELECT).in('enrollment_id', enrollmentIds),
+    const [subs, grds, exts, answers] = await Promise.all([
+      db.from('submissions').select(SUBMISSION_SELECT_STUDENT).in('enrollment_id', enrollmentIds),
+      db.from('grades').select(GRADE_SELECT_STUDENT).in('enrollment_id', enrollmentIds),
       db.from('extensions').select('assignment_offering_id, extended_due_at')
         .in('enrollment_id', enrollmentIds),
+      writtenActivityIds.length
+        ? db.from('submission_activities').select('submission_id,activity_id,content')
+            .in('activity_id', writtenActivityIds)
+        : Promise.resolve({ data: [] }),
     ]);
     submissions = (subs.data || []).map(shapeSubmission);
     grades = grds.data || [];
     extensions = exts.data || [];
+    answerRows = answers.data || [];
+  }
+
+  // Graft the answers back onto the activity entries shapeSubmission() already built, so every
+  // reader downstream still finds them at `submission.activities[writtenId].content` and nothing
+  // outside this function has to know the fetch was split.
+  if (answerRows.length) {
+    const subById = Object.fromEntries(submissions.map(s => [s.id, s]));
+    answerRows.forEach(r => {
+      const act = subById[r.submission_id]?.activities?.[r.activity_id];
+      if (act) act.content = r.content || null;
+    });
   }
 
   const subByOffering   = Object.fromEntries(submissions.map(s => [s.offeringId, s]));

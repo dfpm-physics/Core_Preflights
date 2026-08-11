@@ -334,14 +334,17 @@ eq('a staff row in a different offering is ignored',
      { course_offering_id: 'off-2', section_id: 'sec-z', role: 'director' },
    ])), ['sec-a']);
 
-/* ── confirmEffortRows — publishing full credit confirms a capped effort ──────
+/* ── confirmEffortRows — publishing full credit confirms a low effort ─────────
  * The reading-reflection gate is a CEILING (effort = min(effort, 2)), and on the written path it
  * costs nothing: points come from question_scores, where yellow is full credit. So a student could
  * sit under a "Reflection capped" pill while holding every point the assignment was worth.
  * Finalizing full credit is the instructor asserting the work was worth full marks, which raises
  * the effort to 3. These pin the boundaries, because every one of them is a plausible "simplify
- * this to `effort = 3`" away from being wrong. */
-section('confirmEffortRows: finalizing full credit raises a capped effort');
+ * this to `effort = 3`" away from being wrong.
+ *
+ * The floor moved from 1 to 0 on 2026-08-10 — see the 0 cases below. 3 and above are the boundary
+ * that still holds, and the one an over-simplification would break. */
+section('confirmEffortRows: finalizing full credit raises a low effort');
 
 const CTX = { user: { id: 'instr-1' } };
 const capped = (effort, extra = {}) => ({
@@ -370,8 +373,21 @@ eq('…recording what it was and who confirmed it',
 eq('a capped 1 is also raised to 3',
    G.confirmEffortRows(CTX, OFFERING, STUDENTS, fullCredit, capped(1)).map(r => r.diagnostic.effort), [3]);
 
-// 0 is not a cap — it is "no substantive participation anywhere", which full credit cannot assert.
-eq('0 is left alone', G.confirmEffortRows(CTX, OFFERING, STUDENTS, fullCredit, capped(0)), []);
+// 0 moves too, as of 2026-08-10. It is not only "no substantive participation anywhere": it is
+// also what /preflight-analyze writes for a student it found no work from, which includes work the
+// site LOST. An instructor awarding full credit over that zero is asserting the work existed.
+const fromZero = G.confirmEffortRows(CTX, OFFERING, STUDENTS, fullCredit, capped(0));
+eq('a 0 is raised to 3', fromZero.map(r => r.diagnostic.effort), [3]);
+eq('…recording that it came from 0', fromZero.map(r => r.diagnostic.effort_override.from), [0]);
+
+// The lost-submission shape specifically: /preflight-analyze's non-submitter zero, published over.
+eq('a no_submission zero is raised too',
+   G.confirmEffortRows(CTX, OFFERING, STUDENTS, fullCredit, capped(0, { no_submission: true }))
+     .map(r => r.diagnostic.effort), [3]);
+check('…and no_submission survives — the override records the correction, it does not rewrite '
+      + 'what the AI saw',
+      G.confirmEffortRows(CTX, OFFERING, STUDENTS, fullCredit, capped(0, { no_submission: true }))[0]
+        .diagnostic.no_submission === true);
 
 // Never lowers, never exceeds 3.
 eq('an effort already above the cap is untouched',

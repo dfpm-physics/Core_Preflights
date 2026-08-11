@@ -53,7 +53,7 @@
       "doc": "site/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-08-09",
+      "reviewed": "2026-08-10",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -62,9 +62,10 @@
         "site/js/nav.js",
         "site/js/auth.js",
         "site/js/faculty-tasks.js",
-        "site/faculty/lessons.html"
+        "site/faculty/lessons.html",
+        "site/faculty/report.html"
       ],
-      "note": "The 3-state toggle, question_scores shape, and the 'all my sections' scoping rule. If the Grade tab's behaviour changes, this doc is wrong before anything else is. nav.js is a source because the page has NO nav entry (P1.14, 2026-07-23) — the doc's 'getting to the Grade page' section is the only place that is written down, so a nav change silently invalidates it. grade.html is a source because the hand-grading queue is rendered there, not in the data module. faculty-tasks.js is a source since 2026-07-27: the due-out boxes are the documented route to this page, and they are now one box per assignment that deep-links into it, so a change to that registry invalidates the 'Getting to the Grade page' section. lessons.html is a source since 2026-07-29: the Assignments page now carries a Grade button that deep-links here, so it is one of the enumerated routes and a change to it invalidates the list."
+      "note": "The 3-state toggle, question_scores shape, and the 'all my sections' scoping rule. If the Grade tab's behaviour changes, this doc is wrong before anything else is. nav.js is a source because the page has NO nav entry (P1.14, 2026-07-23) — the doc's 'getting to the Grade page' section is the only place that is written down, so a nav change silently invalidates it. grade.html is a source because the hand-grading queue is rendered there, not in the data module. faculty-tasks.js is a source since 2026-07-27: the due-out boxes are the documented route to this page, and they are now one box per assignment that deep-links into it, so a change to that registry invalidates the 'Getting to the Grade page' section. lessons.html is a source since 2026-07-29: the Assignments page now carries a Grade button that deep-links here, so it is one of the enumerated routes and a change to it invalidates the list. report.html is a source since 2026-08-10: the doc's last section documents the Report tab's two response panels — their controls, their sampling and their selection behaviour — and had been describing that page since it was written with nothing connecting the two, so a change there could never have flagged it."
     },
     {
       "doc": "site/help/director-ai-rules.md",
@@ -190,9 +191,11 @@
         "supabase/migrations/app/017_due_by_day.sql",
         "supabase/migrations/app/018_feedback_completed.sql",
         "supabase/migrations/app/019_effort_partial_credit_flat.sql",
-        "site/js/schema.js"
+        "site/js/schema.js",
+        "site/js/faculty-grade.js",
+        "site/js/faculty-rollup.js"
       ],
-      "note": "Every table and field transcribed from the app-schema migrations and verified against information_schema on the live database. Owns the enforced-rules list and the exact accepted values. Inline SVG depends on the .sf-* classes in styles.css. Omits RLS policy predicates - help docs are world-readable at every tier. SOURCES MUST LIST EVERY MIGRATION: the list stopped at 006 until 2026-07-22, so 007-009 landed without ever flagging this page and analysis_runs went undocumented for two days. Add the new file here whenever a migration is added. ei_sessions states its staff-only access rule in plain language and nothing more: that absence of a student policy is load-bearing (notes may hold a candid read of a cadet), so do not delete the sentence - and do not 'complete' it by pasting the policy SQL either. schema.js became a source on 2026-08-04 — it owns the release window that opens_at overrides, and the is_published row is only correct while that rule is described beside it. LISTING THE MIGRATION IS NOT THE SAME AS ABSORBING IT: 017_due_by_day was in this list from the day it landed, and the page still said three deadline sources and omitted due_by_day from assignment_offerings until 2026-08-10. The flag fired every time; nobody read the doc against the source it named. When this page is flagged, re-read the section the source touches, not just the date."
+      "note": "Every table and field transcribed from the app-schema migrations and verified against information_schema on the live database. Owns the enforced-rules list and the exact accepted values. Inline SVG depends on the .sf-* classes in styles.css. Omits RLS policy predicates - help docs are world-readable at every tier. SOURCES MUST LIST EVERY MIGRATION: the list stopped at 006 until 2026-07-22, so 007-009 landed without ever flagging this page and analysis_runs went undocumented for two days. Add the new file here whenever a migration is added. ei_sessions states its staff-only access rule in plain language and nothing more: that absence of a student policy is load-bearing (notes may hold a candid read of a cadet), so do not delete the sentence - and do not 'complete' it by pasting the policy SQL either. schema.js became a source on 2026-08-04 — it owns the release window that opens_at overrides, and the is_published row is only correct while that rule is described beside it. LISTING THE MIGRATION IS NOT THE SAME AS ABSORBING IT: 017_due_by_day was in this list from the day it landed, and the page still said three deadline sources and omitted due_by_day from assignment_offerings until 2026-08-10. The flag fired every time; nobody read the doc against the source it named. When this page is flagged, re-read the section the source touches, not just the date. faculty-grade.js and faculty-rollup.js became sources on 2026-08-10: `grades.diagnostic` is free-form jsonb, so its CONTENTS are defined by the code that writes them and by no migration at all — `effort_override` (faculty-grade.js) and `flag_overrides` (faculty-rollup.js) are instructor decisions living in that column, and listing only the migrations would never flag this page when a new key appears in it."
     },
     {
       "doc": "site/help/instructor-accounts.md",

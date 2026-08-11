@@ -442,12 +442,169 @@ export async function loadInteractionData(ctx, offeringId, studentIds) {
         && typeof writtenWork.content?.[freeQ.id] === 'string'
         && writtenWork.content[freeQ.id].trim())
         ? writtenWork.content[freeQ.id].trim() : null,
-      report_data: reportData,
+      // Flags an instructor has judged inapplicable, neutralized in `report_data` so every
+      // consumer — the header pills, summarizeReports' counts, the per-student panel — sees the
+      // corrected view without each one re-implementing the rule. See applyFlagOverrides().
+      report_data: applyFlagOverrides(reportData, overridesOf(grade)),
+      // What the AI actually said, before any instructor override. Kept because the panel has to
+      // be able to UNDO one — restoring means re-deriving from the original, and the corrected
+      // copy no longer knows what it was corrected from. Costs no clone: applyFlagOverrides
+      // returns this same reference whenever it changes nothing, which is the usual case.
+      report_data_ai: reportData,
+      // …and the decisions themselves, as a TOP-LEVEL row field rather than inside report_data,
+      // for the same reason `free_response` is one: report_data is the frozen schema:1 shape, and
+      // "a human overrode this" is not a field the contract defines. The panel reads it to say who
+      // cleared what, and to offer the undo.
+      flag_overrides: overridesOf(grade),
+      // Whether there is a grade row to write an override ONTO. There nearly always is — an
+      // interactive commit auto-creates one (migration 015) — but written work sitting ungraded
+      // has none, and the control must explain itself rather than fail on click.
+      grade_id: grade?.id || null,
       report_markdown: interactiveWork?.reportMarkdown || null,
       updated_at: interactiveWork?.updatedAt || writtenWork?.updatedAt || null,
     });
   });
   return out;
+}
+
+/* ── Instructor overrides of AI-raised flags ─────────────────────────────────────────────────
+ *
+ * An artifact can raise `honor.status = 'disclosed'` on a cadet whose only crime was running the
+ * preflight twice to understand it better. That is the AI reading a rule it was given a little too
+ * literally, and the instructor is the one who knows it. The pill has to be clearable, or the
+ * integrity signal becomes noise the first time it is wrong about someone.
+ *
+ * WHERE THE DECISION IS STORED, and why not with the flag it overrides.
+ *   On `grades.diagnostic.flag_overrides` — never on the payload that raised the flag.
+ *
+ *   The forcing constraint is RLS: schema `app` gives staff SELECT on submission_activities
+ *   (`sa_staff_read`) and no write policy at all — `sa_student_write` is the student's own. So an
+ *   artifact's `content` is literally unwritable by faculty, and making it writable is DDL on
+ *   `app`, which is the CORE.md §0 coordination gate rather than a UI change.
+ *
+ *   It is also the right place independently, which is why this is not a workaround. The `d`
+ *   payload is the record of what the AI observed; the instructor's judgement is a different fact
+ *   with a different author, and it belongs on the grade — the human's artifact. Same reasoning,
+ *   same shape, as `effort_override` in faculty-grade.js: never rewrite the AI's reading, record
+ *   that a human overrode its consequence, and who.
+ *
+ *   And it works for BOTH modalities from one place. An interactive taker's flags ride on the
+ *   submission, a written taker's on the grade — but every one of them has a grade row, so the
+ *   override lands in the same column either way and the reader below does not branch on modality.
+ *
+ * WHAT IS CLEARABLE: the two NEGATIVE triage signals, `honor` and `needs_follow_up`.
+ *   - `notable` is positive; there is nothing to clear.
+ *   - `refl_capped` is deliberately absent. It already has a defined lifecycle — publishing full
+ *     credit raises the capped effort and the pill clears itself (confirmEffortRows) — and a second
+ *     mechanism for one pill would be two sources of truth for the same state.
+ */
+
+/** The overrides recorded on a grade, or null. Defensive: `diagnostic` is free-form jsonb. */
+export function overridesOf(grade) {
+  const ov = grade?.diagnostic?.flag_overrides;
+  return ov && typeof ov === 'object' && !Array.isArray(ov) ? ov : null;
+}
+
+/**
+ * Neutralize the flags an instructor has cleared, without touching what the AI actually said.
+ *
+ * Returns `d` UNCHANGED (same reference) when there is nothing to apply, so the common path
+ * allocates nothing, and a shallow copy otherwise — never a mutation, because `d` here is the
+ * live `submission_activities.content` object other readers still hold.
+ *
+ * `honor` collapses to `'none'` rather than to null: null means "integrity was not asked about"
+ * in the contract (§5.6), which is a different claim from "asked, and the instructor says it is
+ * fine". `none` is precisely the latter — "no improper help, including appropriate collaboration".
+ */
+export function applyFlagOverrides(d, overrides) {
+  if (!d || typeof d !== 'object' || !overrides) return d;
+  let out = d;
+  const fork = () => { if (out === d) out = { ...d }; return out; };
+
+  if (overrides.honor?.cleared
+      && (d.honor?.status === 'disclosed' || d.honor?.status === 'concern')) {
+    fork().honor = { ...d.honor, status: 'none' };
+  }
+  if (overrides.needs_follow_up?.cleared && d.flags?.needs_follow_up === true) {
+    fork().flags = { ...d.flags, needs_follow_up: false };
+  }
+  return out;
+}
+
+/** Flags this UI can clear, with whether an explanation is demanded. */
+export const CLEARABLE_FLAGS = {
+  // Required, for the same reason migration 007 requires one on an extension: a cleared integrity
+  // finding is exactly the kind of decision someone will want the story behind, months later and
+  // from a different person's account.
+  honor: { label: 'integrity flag', reasonRequired: true },
+  // Not required. This one is a nudge to check in with somebody, not a finding about them, and
+  // demanding prose to dismiss a nudge is friction with no reader at the other end.
+  needs_follow_up: { label: 'follow-up flag', reasonRequired: false },
+};
+
+/**
+ * Record — or withdraw — one instructor override on one student's grade.
+ *
+ * Read-modify-write on a jsonb column, so it re-reads `diagnostic` immediately before writing
+ * rather than trusting the copy the page loaded: a rollup can sit open for an hour while
+ * /preflight-analyze re-grades underneath it, and a blind write would revert whatever it wrote.
+ * This is still not atomic — closing that needs the write pushed into SQL, which is DDL — so it
+ * narrows the window rather than removing it. Nothing else writes `flag_overrides`.
+ *
+ * @param flag     a key of CLEARABLE_FLAGS
+ * @param cleared  true to clear the flag, false to restore it (drops the override entirely)
+ */
+export async function setFlagOverride(ctx, { offeringId, enrollmentId, flag, cleared, from, reason }) {
+  const spec = CLEARABLE_FLAGS[flag];
+  if (!spec) return { error: { message: `Not a clearable flag: ${flag}` } };
+  const why = String(reason || '').trim();
+  if (cleared && spec.reasonRequired && !why) {
+    return { error: { message: `A reason is required to clear the ${spec.label}.` } };
+  }
+
+  const { data: row, error: readErr } = await db.from('grades')
+    .select('id, diagnostic')
+    .eq('enrollment_id', enrollmentId).eq('assignment_offering_id', offeringId)
+    .maybeSingle();
+  if (readErr) return { error: readErr };
+  if (!row) {
+    return { error: { message: 'This student has no grade for this assignment yet, so there is '
+                             + 'nowhere to record the decision. Grade it first.' } };
+  }
+
+  const diagnostic = (row.diagnostic && typeof row.diagnostic === 'object') ? row.diagnostic : {};
+  const existing = overridesOf({ diagnostic }) || {};
+  const next = { ...existing };
+  if (cleared) {
+    next[flag] = {
+      cleared: true, from: from ?? null,
+      by: ctx.user.id, at: new Date().toISOString(),
+      ...(why ? { reason: why } : {}),
+    };
+  } else {
+    // Restoring DELETES the entry rather than writing `cleared: false`. A withdrawn decision is
+    // not a decision to leave standing, and grade_events below keeps the history either way.
+    delete next[flag];
+  }
+
+  const nextDiagnostic = { ...diagnostic };
+  if (Object.keys(next).length) nextDiagnostic.flag_overrides = next;
+  else delete nextDiagnostic.flag_overrides;
+
+  const { error } = await db.from('grades').update({ diagnostic: nextDiagnostic }).eq('id', row.id);
+  if (error) return { error };
+
+  // Append-only audit, best-effort — the same posture as finalizeScores(): a failed log entry
+  // must not make a successful decision look like it did not happen.
+  const { error: logErr } = await db.from('grade_events').insert({
+    grade_id: row.id,
+    event: cleared ? 'flag_cleared' : 'flag_restored',
+    actor: ctx.user.id,
+    detail: { flag, from: from ?? null, ...(why ? { reason: why } : {}) },
+  });
+  if (logErr) console.warn('[rollup] override saved, but the audit entry failed:', logErr.message);
+
+  return { error: null };
 }
 
 /**

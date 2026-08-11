@@ -10,6 +10,7 @@
 import { check, section, anonClient } from './harness.mjs';
 import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT, ENROLLMENT_JOIN,
+  SUBMISSION_SELECT_STUDENT, GRADE_SELECT_STUDENT,
   STAFF_SELECT, ENROLLMENT_SELECT,
 } from '../../site/js/schema.js';
 
@@ -34,6 +35,29 @@ await shapeOk('SUBMISSION_SELECT on submissions', () =>
 
 await shapeOk('GRADE_SELECT on grades', () =>
   db.from('grades').select(GRADE_SELECT).in('enrollment_id', [NIL]));
+
+// The student pair, which must parse AND must not name the diagnostic columns. The second half is
+// the whole point of them existing, and a projection test that only checked they parse would pass
+// just as happily on the faculty strings.
+await shapeOk('SUBMISSION_SELECT_STUDENT on submissions', () =>
+  db.from('submissions').select(SUBMISSION_SELECT_STUDENT).in('enrollment_id', [NIL]));
+
+await shapeOk('GRADE_SELECT_STUDENT on grades', () =>
+  db.from('grades').select(GRADE_SELECT_STUDENT).in('enrollment_id', [NIL]));
+
+await shapeOk('the written-answers fetch the student loader splits out', () =>
+  db.from('submission_activities').select('submission_id,activity_id,content')
+    .in('activity_id', [NIL]));
+
+check('the student submission select asks for no report_markdown',
+      !SUBMISSION_SELECT_STUDENT.includes('report_markdown'));
+check('…and no submission_activities.content — the interactive `d`',
+      !SUBMISSION_SELECT_STUDENT.includes('content'));
+check('the student grade select asks for no diagnostic',
+      !GRADE_SELECT_STUDENT.includes('diagnostic'));
+// …while the faculty ones still do. The rollup's flag pills are built from exactly these.
+check('the faculty selects still carry them, or the rollup goes blank',
+      SUBMISSION_SELECT.includes('content') && GRADE_SELECT.includes('diagnostic'));
 
 await shapeOk('STAFF_SELECT on staff_assignments', () =>
   db.from('staff_assignments').select(STAFF_SELECT).eq('instructor_id', NIL));

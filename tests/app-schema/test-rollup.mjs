@@ -1003,4 +1003,97 @@ check('report.html catches a loadInteractionData rejection',
 check('…and renders it as an error rather than leaving "Computing…" up',
       /reportLoadError/.test(reportSrc));
 
+/* ── Instructor overrides of an AI-raised flag ───────────────────────────────
+ * An artifact flagged a phys-310 cadet for "Inappropriate resources" because she ran the preflight
+ * more than once. The instructor has to be able to overrule that, or the integrity signal becomes
+ * noise the first time it is wrong about somebody. These pin the read side: what a cleared flag
+ * does to the payload, what it must NOT do, and that the counts follow. */
+section('faculty-rollup.js — clearing a flag an instructor judges inapplicable');
+
+const { applyFlagOverrides, overridesOf, CLEARABLE_FLAGS } =
+  await import('../../site/js/faculty-rollup.js');
+
+const mary = () => ({
+  schema: 1, effort: 4, overall_understanding: 4,
+  honor: { status: 'disclosed', note: 'Ran the preflight more than once.' },
+  flags: { needs_follow_up: true, notable: false },
+  reading_reflection: { meaningful: true, engagement: 4 },
+});
+const CLEAR_HONOR = { honor: { cleared: true, from: 'disclosed', by: 'instr-1', at: '2026-08-10T20:00:00Z', reason: 'Repeat attempts are fine.' } };
+
+const cleared = applyFlagOverrides(mary(), CLEAR_HONOR);
+eq('a cleared integrity flag reads as none', cleared.honor.status, 'none');
+// 'none' and null are different claims in the contract (§5.6): null is "integrity was not asked
+// about", which is not what an instructor saying "this is fine" means.
+check('…as `none`, not as null — those mean different things', cleared.honor.status !== null);
+eq('…and the AI\'s note survives, because the reading is not being rewritten',
+   cleared.honor.note, 'Ran the preflight more than once.');
+eq('…while nothing else about the assessment moves', cleared.overall_understanding, 4);
+eq('…including the OTHER flag, which was not the one cleared',
+   cleared.flags.needs_follow_up, true);
+
+// The source object is shared with other readers, so this must copy rather than mutate.
+const src = mary();
+applyFlagOverrides(src, CLEAR_HONOR);
+eq('the payload it was given is not mutated', src.honor.status, 'disclosed');
+
+eq('clearing needs_follow_up lowers only that',
+   applyFlagOverrides(mary(), { needs_follow_up: { cleared: true } }).flags.needs_follow_up, false);
+check('…and leaves the integrity status alone',
+      applyFlagOverrides(mary(), { needs_follow_up: { cleared: true } }).honor.status === 'disclosed');
+
+// Same reference back when nothing applies — the usual case, and it must not allocate per student.
+const untouched = mary();
+check('no overrides -> the same object, not a copy', applyFlagOverrides(untouched, null) === untouched);
+check('a non-cleared entry is not an override', applyFlagOverrides(untouched, { honor: {} }) === untouched);
+
+// A stale override — the flag it was written against is no longer raised, because a re-grade
+// replaced the payload. It must be inert, not resurrect a status of its own.
+const clean = { schema: 1, honor: { status: 'none' }, flags: { needs_follow_up: false } };
+check('an override for a flag that is not raised changes nothing',
+      applyFlagOverrides(clean, CLEAR_HONOR) === clean);
+eq('…and cannot invent an honor status where there was none',
+   applyFlagOverrides({ schema: 1, flags: {} }, CLEAR_HONOR).honor, undefined);
+
+check('overridesOf tolerates a grade with no diagnostic', overridesOf({}) === null);
+check('…and a diagnostic with no overrides', overridesOf({ diagnostic: { effort: 3 } }) === null);
+check('…and an array, which is not an override map',
+      overridesOf({ diagnostic: { flag_overrides: ['honor'] } }) === null);
+eq('…and returns the map when there is one',
+   overridesOf({ diagnostic: { flag_overrides: CLEAR_HONOR } }).honor.from, 'disclosed');
+
+// A cleared flag has to leave the COHORT counts, not just the student panel — the header pill is
+// what sends an instructor looking, so a cleared one that still counted would send them to a
+// student with nothing to see.
+const counted = summarizeReports([{ path: 'interactive', effort: 4, report_data: mary() }]);
+eq('an uncleared integrity flag counts toward the pill', counted.honor.disclosed, 1);
+const notCounted = summarizeReports([
+  { path: 'interactive', effort: 4, report_data: applyFlagOverrides(mary(), CLEAR_HONOR) }]);
+eq('…and a cleared one does not', notCounted.honor.disclosed, 0);
+eq('…nor does the follow-up flag once cleared',
+   summarizeReports([{ path: 'interactive', effort: 4,
+     report_data: applyFlagOverrides(mary(), { needs_follow_up: { cleared: true } }) }])
+     .flags.needs_follow_up, 0);
+
+// Which flags are clearable is a policy claim, so it is asserted rather than left to the UI.
+check('only the two NEGATIVE triage flags are clearable',
+      JSON.stringify(Object.keys(CLEARABLE_FLAGS).sort()) === '["honor","needs_follow_up"]');
+check('an integrity flag cannot be cleared without a reason',
+      CLEARABLE_FLAGS.honor.reasonRequired === true);
+// Not required here on purpose: this one is a nudge to check in with somebody, not a finding.
+check('a follow-up flag can', CLEARABLE_FLAGS.needs_follow_up.reasonRequired === false);
+// refl_capped already clears itself when full credit is published (confirmEffortRows); a second
+// mechanism for one pill would be two sources of truth for the same state.
+check('reflection-capped is deliberately NOT clearable by hand',
+      !('refl_capped' in CLEARABLE_FLAGS) && !('reading_reflection' in CLEARABLE_FLAGS));
+
+check('report.html offers the control on both clearable flags',
+      /data-ov-clear=/.test(reportSrc) && /overrideControl\('honor'/.test(reportSrc)
+      && /overrideControl\('needs_follow_up'/.test(reportSrc));
+check('…and an undo for a decision already made', /data-ov-restore=/.test(reportSrc));
+// The button would otherwise fail on click for a student whose work is not graded yet — there is
+// no grade row to record the decision on.
+check('…and explains itself instead of offering a button with nowhere to write',
+      /grade_id[\s\S]{0,200}?Grade this student before clearing/.test(reportSrc));
+
 process.exitCode = summary() ? 0 : 1;

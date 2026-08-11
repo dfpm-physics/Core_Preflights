@@ -161,10 +161,23 @@ at 2 when it judges their reading reflection wasn't a real attempt — but on a 
 that cap costs nothing, because points come from the questions and yellow is still full credit. So
 a student could sit under a **Reflection capped** flag on the Report tab while holding every point
 the assignment was worth. When you finalize with full credit on every question that carries points,
-that contradiction is resolved in the student's favour: an effort of 1 or 2 is raised to 3, and the
+that contradiction is resolved in the student's favour: an effort below 3 is raised to 3, and the
 flag clears. It never lowers an effort, never goes above 3, and never touches a student who lost
 points somewhere. The AI's original reading is kept on the record — this notes that you overrode
 its consequence, not that it never happened.
+
+**That includes an effort of 0**, which matters when you are correcting a zero rather than
+confirming a low score. The AI also writes 0 for every student it found no work from once the
+deadline passed — so a 0 can mean "nothing was handed in" *or* "nothing reached us", and those
+look identical on the record. If a submission went missing and you award the points back, publishing
+that full credit now lifts the effort with it, instead of leaving the student in the low-effort band
+on the strength of work the site had already lost. *(Zeros were excluded until 10 August 2026, on
+the reasoning that full credit cannot retroactively assert participation. That is a fair reading of
+a zero the student earned, and the wrong reading of one the system caused.)*
+
+Understanding ratings are **not** raised, and neither is the **Needs follow-up** flag cleared. Full
+credit on a preflight is a statement about engagement — yellow is full credit precisely because the
+answer can be wrong — so it settles effort and nothing else.
 
 > A third button, **Mark section reviewed**, sat here until 2026-07-27. It recorded that you had
 > been through the AI's proposals, for a director who was going to publish afterwards. There is no
@@ -251,6 +264,42 @@ differs named beneath it — so you can see whether something is your whole coho
 description of the misunderstanding and a couple of things students actually wrote, unattributed. A
 label and a percentage on their own rarely tell you what went wrong.
 
+### Clearing a flag that does not apply
+
+The pills along the top count students the AI flagged. Click one to list them, then a name to see
+that student's summary. **Two of those flags you can overrule from there:**
+
+| Flag | Control | Reason |
+|---|---|---|
+| **Inappropriate resources** / **Integrity concern** | **Not an issue** | Required |
+| **Needs follow-up** | **Not an issue** | Optional |
+
+The AI is applying a rule it was given, and it does not know your class. A cadet flagged for
+inappropriate resources may simply have run the preflight twice because she wanted to understand it
+better — which is a good thing, and not what the flag is for. You are the one who knows that, so
+the pill has to be clearable. Otherwise the first flag that is wrong about somebody teaches everyone
+to ignore the rest.
+
+Clearing one **removes that student from the pill's count**, so the cohort numbers reflect your
+judgement rather than the AI's first pass. It changes nothing about their grade, their points, or
+their understanding rating.
+
+**A reason is required for an integrity flag**, for the same reason one is required to grant an
+extension: this is the kind of decision someone will want the story behind, months later and
+possibly from someone else's account. The follow-up flag is a nudge rather than a finding, so its
+reason is optional.
+
+**Nothing is erased and nothing is final.** The AI's original reading stays on the record — the
+panel shows what the flag was and who cleared it — and **Restore** puts it back. Every clear and
+every restore is logged against the grade.
+
+Two flags are deliberately *not* clearable here. **Notable** is a compliment, and **Reflection
+capped** already clears itself when you publish full credit (above) — giving it a second, manual
+switch would mean two different things could set the same pill.
+
+One limit: the decision is recorded on the student's grade, so a student whose work has not been
+graded yet has nowhere to put it. The panel says so instead of offering a button that would fail.
+
 **There are two response panels, and they answer different questions.** *Student Reading
 Reflections* is what the class made of the reading — this is the one the AI picks showcase quotes
 from, marked **AI pick** and pinned at the top. *Student Free Responses* is what they wrote for the
@@ -262,6 +311,12 @@ a straight random sample, and it is absent entirely on an assignment with no wri
 picks still at the top — useful when you are looking for a particular student rather than something
 to read aloud. Both hide names by default and both let you select responses and copy them for
 slides.
+
+**Select all shown** ticks every response currently on screen, and turns into **Clear selection**
+once they all are. It follows what is displayed, not what exists: in the sampled view that is the
+handful of cards in front of you, so reach for **Show all** first if you want the whole section.
+Switching to Show all, or shuffling the sample, starts the selection over — turning names on does
+not, so you can select first and decide about attribution afterwards.
 
 It appears once the assignment has been graded *and* aggregated, which happens after the deadline for
 that section — so a section whose deadline has not passed yet will still show placeholders.

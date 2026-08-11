@@ -96,7 +96,11 @@ section('the ordinary paths are untouched');
 const wrote = deriveCompletion(item({ submission: committedSub, chosenActivity: { modality: 'written' }, grade: finalFull }));
 eq('a committed written submission still completes as preflight', wrote?.path, 'preflight');
 eq('…carrying its points', wrote?.points, 2);
-eq('…and its understanding diagnostic', wrote?.understanding, 4);
+// The diagnostic is faculty-side and the student grade select stopped fetching it (2026-08-10),
+// so completion must not carry a field derived from it — a null that looks like a real reading is
+// worse than its absence. Asserted as absent, not as null, so re-adding it fails here.
+check('…and NOT the understanding diagnostic, which students never see',
+      !('understanding' in (wrote || {})));
 eq('…and when it committed', wrote?.completed_at, '2026-08-09T05:58:00.000Z');
 
 const played = deriveCompletion(item({ submission: committedSub, chosenActivity: { modality: 'interactive' }, grade: finalFull }));

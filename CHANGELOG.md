@@ -8,6 +8,276 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-10 (eleventh) — Matthew Recker via Claude
+
+### Cadets were being sent every diagnostic PREP holds about them
+
+Not shown — **sent**. No student page has ever rendered a misconception, a triage flag or an
+integrity status, and that half of the claim in PROJECT.md was true. The other half was not: the
+student loaders were using the FACULTY select constants, so `loadAssignmentStatuses` — which every
+student page runs on every visit — asked for `grades.diagnostic`, `submission_activities.content`
+and `report_markdown` for every assignment the cadet had.
+
+`content` on an interactive activity is the contract's `d`. That is `honor.status`
+(`disclosed` / `concern`) and its free-text `note`, `flags.needs_follow_up`,
+`reading_reflection.meaningful`, per-objective understanding and the misconception list — the
+material the rollup turns into **"Inappropriate resources"** and **"Integrity concern"** pills. The
+`note` is, by the contract's own definition, *"only meaningful when status is disclosed/concern"*:
+it is the sentence describing the suspicion. It was arriving in the browser of the cadet it is
+about, one devtools tab away.
+
+**No RLS hole** — these are the cadet's own rows, `sa_own` and `grades_own_finalized`, and nothing
+crossed between students. The site was asking for columns it never uses. One asymmetry is worth
+recording though: `grades_own_finalized` withholds a grade until it is published, but **`sa_own`
+has no such gate**, so an interactive `d` was readable by its author from the instant they submitted
+it.
+
+- **`SUBMISSION_SELECT_STUDENT` and `GRADE_SELECT_STUDENT`** — new in `site/js/schema.js`, and the
+  student loaders now use them. Same shape as `faculty-gradebook.js`'s `GB_*` pair, which solved
+  this exact problem for a different reason (payload size) and set the precedent.
+- **`content` is fetched separately rather than filtered**, because that one column carries two
+  unrelated things: a cadet's own written ANSWERS, which the draft-resume path must have, and the
+  AI's assessment of them. PostgREST cannot select different columns for different rows, so the
+  loader asks for the written activities' content by `activity_id`. **That is the safety property**
+  — no interactive activity's id is in the list, so no `d` can come back however RLS is written. It
+  costs no round trip (the offerings are already resolved, so it joins the same `Promise.all`) and
+  it is structural rather than a client-side strip, which would be theatre: the data would already
+  have crossed the wire.
+- **`completion.understanding` is gone** from `student-lessons.js`. It read
+  `grade.diagnostic.overall_understanding`, nothing rendered it, and with `diagnostic` no longer
+  fetched it would have become a permanently-null property that reads as live. Its test now asserts
+  the field is **absent**, not null, so re-adding it fails.
+
+**Deliberately unchanged:** the `ensureSubmission` path still uses the faculty select. It returns
+the single submission a cadet is actively working on, whose `d` they just sent from their own
+browser in the URL hash — hiding it back from them there would be theatre of a different kind.
+
+*Two things this does NOT close*, both stated so nobody reads more into it than it does. The report
+the artifact writes still shows the cadet their **Overall Readiness Flag** and **Misconceptions
+Surfaced** at the end of the lesson, and `interaction-submit.html` previews that same markdown
+before they submit — both by the design in `04_OUTPUT_REPORT_SPEC.md`, which calls it *"what the
+cadet sees"*. Changing that is a spec edit plus a republish of 30 artifacts, each minting a new slug
+and a new lesson row. What a cadet has never seen, and now cannot fetch either, is the derived
+triage: the honor classification, `needs_follow_up`, `notable`.
+
+### Faculty can now clear a flag the AI got wrong
+
+Reported: a phys-310 cadet was flagged **Inappropriate resources** for doing the preflight more than
+once. That is not misconduct — it is a cadet wanting to understand the material — and the AI cannot
+know the difference, because it is applying a rule it was given. If the pill cannot be overruled,
+the integrity signal becomes noise the first time it is wrong about somebody.
+
+**On the rollup**, opening a flagged student now offers **Not an issue** beside the flag; once
+cleared the panel shows what it was, who cleared it and why, and offers **Restore**. Clearing
+removes the student from the pill's cohort count, so the header numbers carry the instructor's
+judgement rather than the AI's first pass. Nothing about points, feedback or understanding moves.
+
+**Two flags are clearable, and only two.** `honor` (both `disclosed` and `concern`) and
+`needs_follow_up` — the negative ones. `notable` is a compliment. **`refl_capped` is deliberately
+excluded**: it already clears itself when full credit is published (the effort-floor entry below),
+and a second mechanism for one pill would be two sources of truth for the same state.
+
+**A reason is required to clear an integrity flag**, optional for a follow-up flag. The same split
+migration 007 made for extensions, for the same reason — an integrity decision is one someone will
+want the story behind later, possibly from a different person's account; a nudge is not.
+
+**Where the decision is stored, and why not with the flag it overrules.** On
+`grades.diagnostic.flag_overrides`, never on the payload that raised the flag. Three reasons, and
+the first is a hard constraint rather than a preference:
+
+- **RLS forbids the obvious place.** Schema `app` gives staff SELECT on `submission_activities`
+  (`sa_staff_read`) and **no write policy at all** — `sa_student_write` is the student's own. An
+  artifact's `content` is literally unwritable by faculty, and making it writable is DDL on `app`,
+  which is the CORE.md §0 coordination gate rather than a UI change.
+- **It is independently correct.** The `d` payload is the record of what the AI observed; the
+  instructor's judgement is a different fact with a different author, and it belongs on the grade —
+  the human's artifact. Identical reasoning and shape to `effort_override`.
+- **One place serves both modalities.** An interactive taker's flags ride on the submission and a
+  written taker's on the grade, but every student with work has a grade row, so the reader never
+  branches on modality.
+
+`applyFlagOverrides()` is applied once, at the bridge in `loadReportRows()`, so the pills, the
+counts (`summarizeReports`), the flagged-student list and the per-student panel all see the
+corrected view without each re-implementing the rule. It returns the same object reference when
+nothing applies, and never mutates — the payload it is handed is live `submission_activities.content`
+that other readers still hold. A cleared `honor` collapses to `'none'`, not null: null means
+*"integrity was not asked about"* in contract §5.6, which is a different claim from an instructor
+saying it is fine.
+
+Every clear and restore appends to `grade_events` (`flag_cleared` / `flag_restored`) — the column is
+free text, so no migration was needed. Restoring **deletes** the override rather than writing
+`cleared: false`; a withdrawn decision is not one to leave standing, and the audit log keeps the
+history either way. A student with no grade row yet has nowhere to record a decision, so the control
+says so instead of offering a button that would fail.
+
+*Verification:* `test-rollup.mjs` +27 assertions (253 pass) covering the payload rules, the
+non-mutation, the same-reference fast path, a stale override, the cohort counts, and which flags are
+clearable. `test-rest.mjs` +7, which assert not just that the student selects PARSE but that they do
+not name the diagnostic columns — a projection test checking only the former would pass just as
+happily on the faculty strings. `test-student-completion.mjs` updated. Full suite **494 pass / 4
+fail**, the four being the pre-existing `test-nav` dropdown assertions; `test-student.mjs` and
+`test-isolation.mjs` both still throw on the `3009999999` cadet whose password no longer works
+(pre-existing — the earlier entry named one suite, it is two).
+
+Browser-verified against live: the flag pill → student list → panel → control → the reason form →
+Cancel, added to `tests/browser-harness/checks.mjs` and passing. That walk deliberately **cancels
+rather than confirms**, because the write lands on a real cadet's grade and a smoke test is not a
+reason to put a decision on somebody's record.
+
+**The write itself was then proven end-to-end on a seeded fixture** — "Rowan Whitfield"
+(`3000980000`, no auth account) in the **training sandbox** term, who happened to carry exactly the
+reported shape, `honor: disclosed` plus `needs_follow_up`. Under a real signed-in faculty session,
+18 assertions: the reason requirement enforced by the data layer and not merely the form, the
+override written with its provenance, the AI's `honor.status` untouched beneath it, the audit row
+appended, and after Restore the `diagnostic` **byte-identical to how it started**. No real cadet's
+record was written to.
+
+*Docs:* `instructor-grading.md` documents the control, what it does to the counts, why the reason is
+required, and the two flags that are not clearable. `director-schema-reference.md`'s `diagnostic`
+row now names both override keys. **`faculty-grade.js` and `faculty-rollup.js` are now registered
+sources for the schema reference** — `diagnostic` is free-form jsonb, so its contents are defined by
+the code that writes them and by no migration, and a source list of migrations alone could never
+have flagged that page when a new key appeared in it.
+
+---
+
+## 2026-08-10 (tenth) — Matthew Recker via Claude
+
+### Select all the responses on screen, instead of clicking eight cards
+
+Both rollup response panels — *Student Reading Reflections* and *Student Free Responses* — let an
+instructor click cards to select them and copy the set for slides. Selecting the whole panel meant
+clicking every card, and the panel is 8 cards by default and the entire section under **Show all**.
+
+- **New `Select all shown` control** in each panel's toolbar, rendered whenever a panel holds more
+  than one card. It flips to **Clear selection** once everything displayed is selected, which is
+  what makes it undoable — without the second state the only way back is clicking each card again.
+- **It acts on what is DISPLAYED, not on the pool behind it.** In the sampled view that is the ~8
+  cards on screen; pair it with **Show all** to reach the whole section. That is the requested
+  behaviour and also the only defensible one: a control that silently selected 20 responses while
+  showing 8 would put unseen student writing on the clipboard, and from there onto a projector.
+- **Named for the neighbour it sits beside.** "Select all" alone reads as a twin of **Show all N**
+  one button to its left; `Select all shown` says which of the two it is.
+
+Two panels, one implementation — `responsePanel()` is already parameterized by a DOM prefix, so the
+control and its handler are written once and both panels get it.
+
+**The label logic moved out of the render closure into `refreshSelUI(p)`**, called from three
+places (after a render, after a card click, after the button). It reads the selection off the DOM
+rather than tracking a count, because the DOM is already the source of truth — selection is keyed
+on quote TEXT so it can survive the re-render the names toggle performs, and a parallel counter
+would be the copy that goes stale. That also removed the third hand-written copy of the
+`Copy selected (n)` string, in the clipboard-failure path.
+
+The handler is wired in `wireResponsePanel()` and deliberately **not** inside `drawResponses()`:
+the cards are replaced on every render so their listeners go with them, but the toolbar buttons are
+not, and binding there would stack a listener per names-toggle, shuffle and show-all.
+
+### The rollup checks in the browser harness were asserting against a panel that was not there
+
+Found while verifying the above. `tests/browser-harness/checks.mjs` walked the rollup at whatever
+scope the account defaulted to — and the response panels render **only on a single-section scope**,
+which 'mine' is not for an account teaching several. So on this machine the P0.6 privacy check
+("no student name is in the DOM while the toggle is off") passed by counting zero names in zero
+cards, and its companion had been failing as `aria-pressed=null` on every run: a standing red that
+had stopped carrying information. Absence is the failure mode this file exists to catch.
+
+- **It now drives the page's own scope control** to the first individual section before the panel
+  checks, reading the segmented buttons or the dropdown, whichever `renderScope()` produced. No
+  uuid to supply, and it keeps working when the test account is re-staffed. `--section <uuid>` was
+  added to pin one explicitly.
+- **The name check now fails, rather than passes, when no cards rendered.**
+- **The objective-histogram check waits for its panel** instead of sampling after `go()`'s flat
+  1200 ms. That check passed or failed run to run on Supabase latency alone, and its failure text
+  (`obj-hist=0`) was indistinguishable from a real regression. Stable across repeated runs now.
+- **Seven new assertions** covering select-all: every displayed card selected, the copy count, the
+  flip to Clear selection, the clear, the count dropping, and selection *and* label surviving the
+  names re-render.
+
+*Verification:* the harness run against live phys-110 `preflight-02`, section M1A (24 cadets, 8
+cards) — 16 passed, and the two remaining failures are the pre-existing staff-table ones, unrelated
+and present before this change. Both panel states also screenshotted and looked at, which is how
+the "Show all 20" / "Select all shown" adjacency got its wording. The extracted inline module
+parses (`node --check`).
+
+*Also:* `site/help/instructor-grading.md` documents the control, including which actions reset a
+selection (Show all and Shuffle do; the names toggle does not). **`site/faculty/report.html` is now
+a registered source for that doc** in `docs/DOC-SOURCES.json` — the doc's last section has
+described the Report tab's response panels since it was written, with nothing connecting the two,
+so a change there could never have flagged it.
+
+---
+
+## 2026-08-10 (ninth) — Matthew Recker via Claude
+
+### Publishing full credit over a ZERO now raises the effort too, not just over a cap
+
+`confirmEffortRows()` in `site/js/faculty-grade.js` raises a low `diagnostic.effort` to 3 when an
+instructor finalizes full credit on every question that carries points — the act asserts the work
+was worth full marks, so the charts and the **Reflection capped** flag stop contradicting the grade
+that was actually published. It accepted 1 and 2 and **deliberately excluded 0**, on the reasoning
+that no substantive participation anywhere is not something full credit can retroactively assert.
+
+**That reads the zero as a finding about the student, and it is not always one.**
+`/preflight-analyze` also writes `effort: 0` — with `no_submission: true` — for every cadet it found
+no work from once a deadline passes, so a zero equally means *the system has no work for this
+person*. Today it meant exactly that: submissions were lost, instructors awarded the two points
+back by hand, and the effort stayed at 0. Those cadets sat in the low-effort band, under a
+reflection-capped flag, on the strength of work the site had already conceded it lost. An
+instructor awarding the points there is not overriding a judgement about thin work — they are
+stating that the work existed.
+
+**The floor moves from 1 to 0.** Nothing else about the rule changes, and the boundaries that were
+already load-bearing still are: it only ever raises, never to more than 3, and never touches a
+student who lost points anywhere. `effort_override.from` now records a 0 where it used to record
+only 1 or 2.
+
+**What is deliberately NOT raised**, and the reason is the same one that makes yellow full credit:
+a preflight grades pre-class engagement, not mastery. So `overall_understanding` stands,
+`flags.needs_follow_up` is not cleared, `reading_reflection.meaningful` keeps the AI's original
+reading, and `no_submission` stays on the record — the override notes that a human corrected the
+*consequence*, not that the AI never saw what it saw. `grades.effort` (the interactive path, where
+effort IS the grade through the migration-019 trigger) is untouched on every path; this is the
+written path's diagnostic column and it moves no points.
+
+### Backfilled the three rows that were already published
+
+The rule fires at the moment of finalizing, so work published before it changed keeps the old
+effort until somebody happens to reopen and re-publish the column. **New:**
+`scripts/fall2026/raise_confirmed_effort.py` — stdlib, dry-run by default, idempotent, and it reads
+each row back after writing.
+
+It applies the same predicate as the UI rather than a re-derivation of it, expressed against stored
+data: full credit is read off the row's own `question_scores` (every entry with `max > 0` has
+`status != 'zero'` and `score == max`), so the two cannot drift apart when an assignment is
+re-authored. Five guards, all of which must hold — finalized, an integer effort of 0–2, full
+credit, no `effort_override` already present, and `grades.effort IS NULL` so an interactive row's
+points can never move.
+
+Run against live: **376 finalized rows scanned across 115 offerings, 3 raised.** All three were the
+incident above — `preflight-02`, section M1C, `no_submission: true`, 2.0/2.0 awarded by an
+instructor today at 17:49 and 19:24 UTC. **No rows at effort 1 or 2 needed anything**, which is the
+expected result: the UI path has been raising those since it shipped (15 rows already carried an
+override). A second dry run reports nothing to do.
+
+*Verification:* `tests/app-schema/test-grade.mjs` 62 assertions, 0 failures, including four new
+`confirmEffortRows` cases — a 0 raised, the override recording `from: 0`, the `no_submission` shape
+specifically, and `no_submission` surviving the raise. The old `0 is left alone` assertion is gone;
+the 3-and-above boundary tests stay, since those are what an over-simplification would break.
+Full offline+live suite 487 passed / 4 failed, the four being the pre-existing `test-nav` dropdown
+assertions under the shared runner, alongside the equally pre-existing `test-isolation` throw for
+the `3009999999` test cadet whose password no longer works. `node --check` on the module.
+`python scripts/docs/check_doc_sources.py` flags `instructor-grading.md` only for its source being
+**uncommitted** — that is the checker firing before the change lands, by design, and it clears on
+commit; the doc itself is updated and re-attested. **Node-only verification of the module** — the
+live write was verified by read-back instead, and the browser path was not re-exercised.
+
+*Also:* `site/help/instructor-grading.md` — the instructor-facing paragraph now covers the zero
+case and says plainly that understanding and Needs follow-up are not touched, which it had never
+stated either way. `reviewed` bumped in `docs/DOC-SOURCES.json`.
+
+---
+
 ## 2026-08-10 (eighth) — Casey Pellizzari via Claude
 
 ### Job 1's nightly notifications were reaching nobody, and the doc could not have caught it

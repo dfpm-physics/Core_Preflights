@@ -333,14 +333,24 @@ function gradeRows(ctx, offering, students, gradeData, isFinalized, gradeMap = {
  *
  * When an instructor FINALIZES — the deliberate, published act, not a draft save — and has
  * awarded full credit on every question that carries points, they have asserted the work was
- * worth full marks. Raise a capped effort to 3, the bottom of the "earns what the assignment
- * is worth" band, so the charts and the pill agree with the grade that was actually published.
+ * worth full marks. Raise a capped OR ZEROED effort to 3, the bottom of the "earns what the
+ * assignment is worth" band, so the charts and the pill agree with the grade that was actually
+ * published.
  *
  * Deliberately narrow:
- *  - **Only 1 and 2 move, and only ever up to 3.** The gate is a ceiling, not a fixed value, so
+ *  - **0, 1 and 2 all move, and only ever up to 3.** The gate is a ceiling, not a fixed value, so
  *    a student can land on 1 by engaging thinly everywhere *and* failing the reflection. Both
- *    are confirmed by the same act. 0 is left alone: no substantive participation anywhere is
- *    not something full credit can retroactively assert.
+ *    are confirmed by the same act.
+ *
+ *    **0 was excluded until 2026-08-10**, on the reasoning that no substantive participation
+ *    anywhere is not something full credit can retroactively assert. That reads the zero as a
+ *    finding about the student, and it is not always one: `/preflight-analyze` also writes
+ *    `effort: 0` (with `no_submission: true`) for every student it finds nothing from once a
+ *    deadline passes, so a zero equally means *the system has no work for this person* — which is
+ *    what it meant for the submissions lost on 2026-08-10. An instructor who then awards two
+ *    points is not overriding a judgement about thin work; they are stating that the work existed.
+ *    Leaving those students on 0 kept them in the low-effort band and under the follow-up flag on
+ *    the strength of a submission the site had already conceded it lost.
  *  - **It never lowers an effort** and never exceeds 3 — an instructor confirming full credit
  *    says "at least enough", not "exemplary".
  *  - **The AI's own reading survives** in `reading_reflection.meaningful` and in
@@ -373,7 +383,7 @@ export function confirmEffortRows(ctx, offering, students, gradeData, gradeMap =
     const d = prior.diagnostic;
     if (!d || typeof d !== 'object') return null;
     const from = d.effort;
-    if (!(from === 1 || from === 2)) return null;      // 0, >=3, null and non-integers stand
+    if (!(from === 0 || from === 1 || from === 2)) return null;   // >=3, null, non-integers stand
 
     return {
       enrollment_id: enrollmentOf[sid],

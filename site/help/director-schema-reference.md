@@ -399,7 +399,7 @@ An unlock must record who performed it. The database refuses an anonymous one.
 | `points_earned`, `points_possible` | The score, and the maximum |
 | `effort` | 0–5 rating. Present on a grade earned through the interactive path, empty on a written one — and its presence is what selects the effort conversion |
 | `question_scores` | Per-question score, status, and feedback. The written path's mechanism |
-| `diagnostic` | Understanding, misconceptions, and flags. **Never affects points** |
+| `diagnostic` | Understanding, misconceptions, and flags. **Never affects points.** Also holds the instructor's overrides of what the AI concluded — `effort_override` when publishing full credit lifts a capped effort, and `flag_overrides` when someone clears an integrity or follow-up flag as inapplicable. Both record what it was, who decided, and when; neither rewrites the AI's own reading |
 | `source` | `instructor`, `ai_suggested`, `derived`, or `imported`. `derived` is a grade the database computed for itself, which today means an interactive lesson's effort grade |
 | `is_finalized` | Whether the student can see it |
 | `graded_by`, `graded_at` | Who finalized it. Empty on a `derived` grade — nobody did |
