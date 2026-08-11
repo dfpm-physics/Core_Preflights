@@ -25,7 +25,9 @@ You are analyzing student submissions for a physics preflight assignment at USAF
    `misconceptions[]`, reading-reflection judgment, flags — so a written preflight and an
    interactive lesson can be summarized by the same cohort aggregator
    ([`references/WRITTEN-SCHEMA1.md`](references/WRITTEN-SCHEMA1.md))
-6. Write suggested grades back to Supabase (`is_finalized = false`, `source = 'ai_suggested'`)
+6. Write suggested grades back to Supabase (`is_finalized = false`, `source = 'ai_suggested'`) —
+   never over a finalized grade, and never over a question that already carries an instructor's
+   feedback, but always over one that carries none
 7. Print a per-section run report in the conversation
 
 **Every one of those is per student.** This skill does not summarize a class, a section, or a
@@ -503,14 +505,21 @@ Keep the returned `id`. **Update it once Step 9 has read back clean:**
 PATCH {SUPA_URL}/rest/v1/analysis_runs?id=eq.{RUN_ID}
 Headers: WRITE_HEADERS + Prefer: return=minimal
 Body: { "status": "success", "finished_at": "{ISO}",
-        "summary": "Graded 32 of 36 in M1A, M3A; skipped 4 finalized.",
+        "summary": "Graded 32 of 36 in M1A, M3A; skipped 4 finalized; filled 2 ungraded questions in 1 instructor draft.",
         "detail": { "students_in_scope": 36, "graded": 32, "missing": 0,
                     "skipped_finalized": 4, "skipped_instructor": 0,
+                    "filled_questions": 2, "filled_rows": 1,
                     "sections": ["M1A", "M3A"] } }
 ```
 
 - `invoked_by` is `"scheduled"` when this ran under `/lesson-cycle` from a scheduler, `"human"`
   otherwise. `actor` is the requesting instructor's `instructors.id` when you know it, else null.
+- **`filled_questions` / `filled_rows` are the guard-2 merges** — individual questions that carried
+  no feedback from anybody, inside instructor drafts this skill had never assessed, and how many
+  students those questions belonged to. Those students are counted in `graded` as well, because
+  they were: partially. `skipped_instructor` now counts only students where **every** graded
+  question already had an instructor's feedback, so a run before 2026-08-11 and a run after it
+  report different numbers for the same data, and `filled_*` is what explains the difference.
 - `status`: `success` when every in-scope student was graded or deliberately skipped; `partial`
   when you completed but did less than asked; `skipped` when there was nothing to do; `failed`
   with `error` set (the message, not a stack trace) when you stopped.
@@ -563,35 +572,105 @@ Always include `status` — the admin UI relies on it to show the three-state co
 Compute `points_earned` = sum of all question scores. It must be ≤ `POINTS_POSSIBLE`
 (a DB CHECK enforces this); Step 2's points check is what makes that true.
 
-### First: never clobber a human's work
+### First: never clobber a human's work — and never skip what nobody graded
 
 ```
-GET {SUPA_URL}/rest/v1/grades?select=enrollment_id,is_finalized,source&assignment_offering_id=eq.{OFFERING_ID}&enrollment_id=in.({ENROLLMENT_IDS})
+GET {SUPA_URL}/rest/v1/grades?select=enrollment_id,is_finalized,source,question_scores,diagnostic&assignment_offering_id=eq.{OFFERING_ID}&enrollment_id=in.({ENROLLMENT_IDS})
 Headers: READ_HEADERS
 ```
 
-**Drop two groups from the payload, and report both counts as skipped:**
+**Guard 1 — a finalized row is dropped whole.** `is_finalized = true` is an instructor's published
+decision; a re-run must not silently revert it. (The pre-`app` skill had no such guard and would
+have overwritten a finalized score.) Report the count as `skipped_finalized`.
 
-1. **`is_finalized = true`** — a finalized grade is an instructor's published decision; a re-run
-   must not silently revert it. (The pre-`app` skill had no such guard and would have overwritten
-   a finalized score.)
-2. **`source = 'instructor'`** (even when `is_finalized = false`) — this is an instructor's saved
-   but unpublished draft. It is the case that actually bites on a re-run: an instructor spends an
-   afternoon adjusting scores and comments, saves without publishing, and a re-run scoped to
-   "everyone who submitted" silently reverts all of it to a fresh AI suggestion.
+**Guard 2 — an instructor draft protects a QUESTION, not a student.** `source = 'instructor'` with
+`is_finalized = false` is a saved but unpublished draft, and it is the case that actually bites on
+a re-run: an instructor spends an afternoon adjusting scores and comments, saves without
+publishing, and a re-run scoped to "everyone who submitted" reverts all of it to a fresh AI
+suggestion. **The unit of that protection is the individual question.** For each such row:
 
-> **Why `source` can now be trusted for this.** Until 2026-07-21 the Grade view hardcoded
+- **The row carries a `schema: 1` diagnostic** (or a `diagnostic.q2_effort` key) → this skill has
+  already assessed this student, so every cell is either the instructor's edit or a grade this
+  skill stands behind, and an empty `feedback` means *"read, and correct"*. **Skip the whole
+  student**, and count them as `skipped_instructor`.
+- **The row carries no diagnostic** → this skill has never seen this student. Decide **per
+  question**, over the questions worth more than 0 points:
+
+  | Stored cell | Means | Do |
+  |---|---|---|
+  | `feedback` is non-empty | An instructor wrote this | **Preserve it byte-for-byte.** Do not re-grade, do not re-word, do not restatus |
+  | `feedback` is empty or `""`, any status | **Nobody has graded this question** | Grade it normally |
+  | the question is absent from `question_scores` | Nobody has graded this question | Grade it normally |
+
+  If every graded question already carries feedback, there is nothing to do — skip the student and
+  count them as `skipped_instructor`. Otherwise this student is **in scope**, and the payload for
+  them is a **merge** (below), not a replacement.
+
+**Zero-point questions are never the trigger.** Q1 is worth 0 points and is deliberately left
+without feedback (Rule 3 is about a deduction, and CORE.md §2's Q1 privacy rule keeps that card
+unrendered). An empty `feedback` on a 0-point question means nothing; skip those questions when
+asking whether anybody has graded this row.
+
+> **Why the guard is per question.** *(Corrected 2026-08-11, at the course director's instruction,
+> after the 2026-08-10 nightly run skipped 23 of 193 cadets and 18 of their questions turned out to
+> have been graded by nobody at all.)* The guard used to drop the whole row, and that assumed
+> `source = 'instructor'` meant a human had looked at every question in it. It does not.
+> `gradeRows()` in `site/js/faculty-grade.js` writes **every** question the moment **any one** of
+> them is edited, and `buildGradeData()` defaults an untouched question to `status:'full'` at full
+> points with empty feedback — or to `'zero'` when the Grade page was loaded before the cadet
+> committed. So an instructor who writes feedback on Q2 and never opens Q3 stamps the row
+> `instructor`, stores Q3 as a green full-credit cell nobody read, and every later run skipped that
+> cadet forever. **The stored cell is indistinguishable from one a human approved** — which is why
+> the discriminator has to be `feedback`, the one thing only a grader produces.
+>
+> This does not weaken guard 2 in the case it was written for. An instructor who deducts must leave
+> feedback (Rule 3), a `warn` carries feedback by definition, and a whole afternoon of adjustments
+> is a row full of feedback — all still untouchable. What is now re-graded is exactly the green
+> cell with no comment in a row this skill has never assessed, and no other row shape.
+>
+> **The residual case is deliberate and the director's call:** an instructor who silently approves a
+> correct answer without typing anything leaves the same trace as an untouched one, and this skill
+> will re-grade it. It is almost always re-graded green to the same score, and the row stays
+> `is_finalized = false` for review either way. Preventing it properly means the Grade page
+> recording that a question was *seen* — a frontend change, tracked separately.
+
+> **Why `source` can be trusted this far.** Until 2026-07-21 the Grade view hardcoded
 > `source:'instructor'` on every row it wrote, so a single click of *Save draft* relabelled every
 > AI suggestion in the section — the column could not distinguish a reviewed grade from an
-> untouched one, and this guard would have skipped the whole section. `gradeRows()` in
-> `site/js/faculty-grade.js` now marks a row `instructor` only when that student's card was
-> actually edited, and preserves the prior `source` otherwise. **This guard depends on that fix;
-> do not apply it to a deployment that predates it.**
+> untouched one, and this guard would have skipped the whole section. `gradeRows()` now marks a row
+> `instructor` only when that student's card was actually edited, and preserves the prior `source`
+> otherwise. **This guard depends on that fix; do not apply it to a deployment that predates it.**
 
 A student on an approved extension submits *after* this run, so they will not be in it at all. They
 are not lost: the Grade tab's "Extensions ready to grade" queue lists exactly those cadets once
 their own deadline passes, and they are graded by hand. Do not re-run the whole assignment to pick
 up a handful of late submissions — that is the scenario guard 2 exists for.
+
+### Merging into an instructor's draft
+
+Only a student already in the grading scope can reach this point — guard 2 reads over
+`{ENROLLMENT_IDS}`, the set Step 5 selected for having written content. **Never fill a question for
+a student who submitted nothing.** There is no work to grade there, and a blank the instructor did
+not write is not yours to score; the zeroing rules above own that case and they stay row-level.
+
+A student who reached this point through guard 2 gets a payload assembled differently from every
+other student. Four rules, and all four are load-bearing:
+
+1. **`question_scores` is the union**, not the new grade. Every preserved cell goes back **exactly
+   as it was read** — same `score`, same `max`, same `feedback`, same `status`. Every filled cell is
+   graded by the normal Step 7/8 rules. A question you did not grade must not change.
+2. **`points_earned` is recomputed over the merged set** — the preserved scores plus the new ones.
+   It is not the sum of what you graded, and it is not what the row held before.
+3. **`source` stays `"instructor"`.** This is the one place this skill does not write
+   `"ai_suggested"`. The row still contains a human's work and the admin UI's provenance must keep
+   saying so; relabelling it would also hand the *next* run a row it thinks it owns.
+4. **Write the full `schema: 1` diagnostic anyway**, exactly as for any other student. The
+   diagnostic describes the *student's submission*, which you have read in full — it does not
+   describe the questions you happened to score, and `/lesson-aggregate` needs it whole. A partial
+   diagnostic is worse than none: `lesson_aggregate.py` reads `q3_understanding` independently of
+   the `schema` key, so half a payload shifts the cohort's understanding statistics without
+   shifting anything that would reveal it. These rows are precisely the ones missing from the
+   rollup today.
 
 ### Then: the students who submitted nothing get a zero
 
@@ -617,8 +696,12 @@ be reconciled against the percentage they added up to.
 4. with **no written content and no interactive commit** — not in `submittedEnrollments`, and not
    on the interactive path (they are graded by the migration-015 trigger on commit; never write
    over that);
-5. not skipped by the two guards above — a finalized grade or an instructor draft is still an
-   instructor's decision, and "they handed in nothing" is not new information that overrides it.
+5. **carrying no grade row from a human at all** — not finalized, and not `source = 'instructor'`.
+   Here the guards stay row-level in both cases: a finalized grade or an instructor draft is still
+   an instructor's decision, and "they handed in nothing" is not new information that overrides it.
+   Guard 2's per-question fill does not apply, because there is no work to grade — filling a blank
+   cell with a zero the instructor did not write is exactly the clobbering the guard exists to
+   prevent.
 
 **A draft with real content is NOT a zero.** Step 5 already says to grade a student whose written
 content is non-empty even when they never pressed Submit. That rule wins here: they wrote
@@ -731,7 +814,13 @@ and `q3_understanding` keep their existing rubrics and must survive the write un
 
 Send all students in a single batch upsert. `UNIQUE (enrollment_id, assignment_offering_id)` means
 re-running updates suggestions without creating duplicates. Leave `graded_by` unset — this skill is
-not a person, and the column names the instructor who finalized.
+not a person, and the column names the instructor who finalized. **On a merged row, leave
+`graded_by` unset too**: the instructor named there graded the questions you preserved, and
+overwriting it would erase who they were.
+
+**`"source": "ai_suggested"` is right for every student except a guard-2 merge**, which carries
+`"source": "instructor"` per the merge rules above. That is the only exception in this skill, and
+it is not a relabelling — the row already said `instructor` and continues to.
 
 ### Read back and verify exactly
 
@@ -740,8 +829,17 @@ GET {SUPA_URL}/rest/v1/grades?select=enrollment_id,points_earned,points_possible
 Headers: READ_HEADERS
 ```
 
-Require exactly one row per graded enrollment, with `source = "ai_suggested"` and
-`is_finalized = false`. Where `q2`/`q3` exists on the assignment, require an integer in `[0,5]` at
+Require exactly one row per graded enrollment, with `is_finalized = false` and
+`source = "ai_suggested"` — except on a guard-2 merge, where `source` must come back
+**`"instructor"`**; a merged row that reads back `ai_suggested` is a failed run, not a cosmetic
+difference, because it has silently changed who owns the row.
+
+**On every merged row, verify the preserved cells came back byte-identical** to what the guard-2
+read returned — `score`, `max`, `feedback` and `status` on each question you did not grade — and
+that `points_earned` equals the sum over the merged set. A preserved cell that changed means you
+overwrote an instructor; report it as a failure and do not claim success.
+
+Where `q2`/`q3` exists on the assignment, require an integer in `[0,5]` at
 `diagnostic.q2_effort` / `diagnostic.q3_understanding`; where absent, require the key to be absent.
 Then run the `schema: 1` checks in
 [`references/WRITTEN-SCHEMA1.md`](references/WRITTEN-SCHEMA1.md) §Verification — including that no
@@ -752,8 +850,13 @@ success.
 After exact read-back verification, report: "Wrote suggested grades plus the schema:1 per-student
 assessment (effort, understanding, {K} misconceptions across the cohort, flags) and the hidden
 Q2-effort / Q3-understanding diagnostics for {N} students ({day_filter} sections); skipped {M}
-already-finalized. Grades are marked is_finalized=false — instructors must review and finalize in
-the admin panel."
+already-finalized and {I} fully instructor-graded; filled {Q} ungraded question(s) inside {R}
+instructor drafts without touching their graded questions. Grades are marked is_finalized=false —
+instructors must review and finalize in the admin panel."
+
+**Report {Q} and {R} even when they are zero.** A run that filled nothing looks identical to a run
+built before this guard existed, and the whole point of the 2026-08-11 change is that the previous
+behaviour was invisible.
 
 State the objectives situation explicitly in that report — "objectives: [] (no `objective_key`
 authored on this assignment's questions)" or the count emitted. A reader must not have to guess
@@ -783,7 +886,8 @@ Generated: {date}   Term: {TERM_LABEL}
 | Took the interactive path | {N} |
 | Missing | {N} |
 | Skipped — finalized | {N} |
-| Skipped — instructor-edited draft | {N} |
+| Skipped — instructor-graded throughout | {N} |
+| Filled — ungraded questions in an instructor draft | {Q} in {R} student(s) |
 | Average score | {X.X} / {POINTS_POSSIBLE} |
 
 ### Missing Students
@@ -833,8 +937,8 @@ Grade tab already shows each answer beside its score.
 
 ## Important Rules
 
-1. **Never finalize grades** — always write `is_finalized: false` and `source: "ai_suggested"`. Instructors confirm in the admin panel.
-2. **Never overwrite a finalized grade** — filter them out before the upsert (Step 9) and report the count.
+1. **Never finalize grades** — always write `is_finalized: false`, and `source: "ai_suggested"` on every row except a guard-2 merge, which keeps the `"instructor"` it already had (Step 9). Instructors confirm in the admin panel.
+2. **Never overwrite a finalized grade, and never overwrite a question that carries feedback** — filter both out before the upsert (Step 9) and report the counts. The converse is equally binding: **never skip a question that carries no feedback.** Feedback is the only evidence in the data that a human graded a question, so a green cell with no comment, in a row this skill has never assessed, has been graded by nobody. Guard 2 is per question for that reason.
 3. **Never deduct without feedback** — every score of zero must have a non-empty `feedback` string explaining why.
 4. **Three states, simple rule** — Green = correct. Yellow = genuine on-topic attempt with flawed reasoning (full credit + tailored corrective feedback). Red = blank, off-topic, or not a good-faith attempt (zero credit). When in doubt between yellow and red, choose yellow.
 5. **Yellow gets full credit** — `warn` status always has `score = q.points`. Never assign partial credit on free-response; it's either full points (green or yellow) or zero (red).

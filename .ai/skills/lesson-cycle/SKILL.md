@@ -107,8 +107,8 @@ hand is often that they want an *older* one.
 
 **Re-running an already-analyzed lesson is allowed and is frequently the point** — a late or
 extension submission has just been graded by hand and the rollup should now include it. Confirm the
-choice, then proceed. The re-run is safe: grading skips finalized and instructor-edited rows, and
-aggregation merges per scope.
+choice, then proceed. The re-run is safe: grading skips finalized rows and every question that
+already carries an instructor's feedback, and aggregation merges per scope.
 
 ### Then, whichever path chose it: confirm that track is closed
 
@@ -132,13 +132,16 @@ A purely interactive lesson has nothing for this half to do: the artifact alread
 student's `schema: 1` at submit time. Say so and go to Step 3.
 
 Run `/preflight-analyze <course> <assignment-slug> [day]` — read that SKILL.md and follow it. It
-writes `grades` and nothing else, and it skips rows that are `is_finalized = true` or
-`source = 'instructor'`.
+writes `grades` and nothing else. It skips a row that is `is_finalized = true`, and inside an
+instructor's unpublished draft it protects each **question** that carries feedback while grading
+the ones that carry none — so a cadet whose instructor commented on Q2 and left Q3 blank is graded
+on Q3 rather than dropped.
 
 **Before continuing, verify grading actually produced what the aggregator needs.** Every graded
 enrollment must carry a `schema: 1` payload in `grades.diagnostic`. If the skipped-row counts are
 non-zero, those students have no assessment and will be a denominator with nothing in it — decide
-whether to proceed or fix them by hand first, and say which you chose.
+whether to proceed or fix them by hand first, and say which you chose. A guard-2 merge is **not**
+one of those: it writes the full diagnostic, so a partially instructor-graded student now counts.
 
 ## Step 3 — Aggregate
 
@@ -177,9 +180,17 @@ tell "the cycle ran and did both halves" from "someone ran grading alone".
 
 ```json
 { "graded": true, "graded_students": 32, "skipped_finalized": 4, "skipped_instructor": 0,
+  "filled_questions": 2, "filled_rows": 1,
   "scopes_written": ["M1A", "M3A"], "all_scope": "deferred",
   "sub_runs": ["<analysis_runs.id of the grading run>", "<…of the aggregation run>"] }
 ```
+
+`filled_questions` / `filled_rows` come straight from the grading run — individual questions that
+carried no feedback from anybody, graded inside an instructor's draft without touching the
+questions they had graded (`preflight-analyze` Step 9, guard 2). Copy them through even when zero.
+Those students now reach the aggregation half too, because a guard-2 merge writes the full
+`schema: 1` diagnostic; before 2026-08-11 they were dropped whole and contributed nothing to the
+cohort.
 
 Status: `success` when both halves completed; `partial` when it ran but did less than asked (the
 usual case being `__all__` deferred); `skipped` when it correctly declined — deadline not passed,
@@ -269,5 +280,7 @@ follow, and they are not negotiable:
    call or a SQL statement here, stop — it belongs in one of them.
 5. **Student text stays in the scratchpad.** The pull file carries reflections and graded answers.
    It never lands under the repo tree.
-6. **Report what was skipped.** Finalized grades, instructor-edited drafts, sections still open,
-   `__all__` deferred — a run that silently does less than asked is worse than one that refuses.
+6. **Report what was skipped, and what was filled.** Finalized grades, fully instructor-graded
+   students, questions filled inside an instructor's draft, sections still open, `__all__`
+   deferred — a run that silently does less than asked is worse than one that refuses, and one
+   that silently does *more* is worse again.

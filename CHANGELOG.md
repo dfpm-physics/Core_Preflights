@@ -10,6 +10,56 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-11 — Casey Pellizzari via Claude
 
+### The grading guard is now per question, so a half-graded student is finished rather than skipped
+
+The repair below fixed the 18 questions already in the database. This fixes the rule that will
+otherwise recreate them every night, at the course director's instruction: *"If the instructor
+leaves feedback prior to the lesson-cycle, then leave it as is. However, if there is no feedback
+for the specific question, then grade it."*
+
+**`feedback` is now the discriminator, because it is the only mark in the data that only a grader
+makes.** `/preflight-analyze` Step 9 guard 2 used to drop a whole grade row on
+`source = 'instructor'`. It now drops individual **questions**:
+
+- `is_finalized = true` still drops the row whole — unchanged, and still Rule 2.
+- An instructor draft **carrying a `schema: 1` diagnostic** is still skipped whole. This skill has
+  already assessed that student, so an empty `feedback` there means "read, and correct."
+- An instructor draft **with no diagnostic** is decided per question, over the questions worth more
+  than 0 points. Feedback present → preserved byte-for-byte. Feedback absent, or the question
+  absent entirely → graded.
+
+A student who reaches grading that way gets a **merge**, not a replacement, and the four rules are
+written out in Step 9: `question_scores` is the union with every preserved cell returned exactly as
+read, `points_earned` is recomputed over the merged set, **`source` stays `"instructor"`** (the
+only place this skill does not write `ai_suggested` — the row still holds a human's work and
+relabelling it would also hand the next run a row it thinks it owns), and the **full `schema: 1`
+diagnostic is written anyway**. That last one matters beyond grading: the diagnostic describes the
+student's submission, not the questions that happened to get scored, and these are exactly the rows
+missing from the cohort rollup today. A *partial* diagnostic would be worse than none, because
+`lesson_aggregate.py` reads `q3_understanding` independently of the `schema` key.
+
+Read-back verification gained two checks — a merged row must come back `source = "instructor"`
+(coming back `ai_suggested` is a failed run, not a cosmetic difference), and every preserved cell
+must be byte-identical to what the guard read.
+
+**What this deliberately does not protect.** An instructor who silently approves a correct answer
+without typing a comment leaves exactly the trace an untouched question leaves, so it will be
+re-graded — almost always green to the same score, and unfinalized for review either way. The
+director's call, recorded as such. Preventing it properly means the Grade page recording that a
+question was *seen*, which is a frontend change and is not in this commit; the root cause in
+`faculty-grade.js` is still live and will keep producing these cells until it lands.
+
+`skipped_instructor` now counts only students whose every graded question already had feedback, so
+it will read lower than before against identical data. Two new counters explain the difference and
+are reported even when zero: `filled_questions` and `filled_rows`, in `analysis_runs.detail`, in
+`/lesson-cycle`'s handoff JSON, and in the per-section run report.
+
+Also updated: `site/help/director-ai-rules.md`, whose "a re-run never overwrites a person's work"
+paragraph promised the row-level behaviour and now describes the per-question rule, why it changed,
+and the two consequences a director needs — comment on a question to leave it strictly alone, and
+your own scores and wording survive a fill untouched. `site/help/ai-and-your-work.md` was checked
+and needed no change; it never described the guard.
+
 ### An untouched question was stored as full credit, and nothing could tell that from a grade
 
 The 2026-08-11 nightly cycle graded phys-215 `preflight-02` T-day and skipped 23 of 193 students —
