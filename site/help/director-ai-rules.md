@@ -42,6 +42,25 @@ Three states only — `full` (green), `warn` (yellow), `zero` (red) — and **ye
 credit**. Yellow is a flag on an answer that was wrong or vague, paired with feedback that corrects
 it. The posture is deliberately liberal: preflights measure pre-class engagement, not mastery.
 
+**One answer is deliberately not covered by that generosity: a reason for not answering.** A
+reading reflection that only explains why the cadet could not answer — could not find the assigned
+reading, has not obtained the book, has not read it yet — is graded **red, no credit**, in the same
+pool as *"Nothing"* and *"I don't know"*. It is not a judgment about honesty, and flagging the
+problem is the right thing for a cadet to do; the point is for reflecting on the reading, and no
+reflection happened. **Override it whenever you disagree** — if the cohort could not find the
+reading because the reading was not posted, that is a regrade, and a red cell is what tells you
+there is something to regrade. A default full credit would not. Where a cadet read something else
+and reflected on *that*, the reflection is graded normally. *(Changed 11 August 2026, after the
+Fall `preflight-02` runs awarded the point to answers of this kind.)*
+
+**It never cites the book it grades against.** The AI is grounded in OpenStax; cadets in both
+courses read a Cengage text, numbered differently — the electrostatics they know as chapter 22 is
+OpenStax chapter 5. So feedback uses the physics and the vocabulary of the grounding text but never
+its section, page or figure numbers, never names it, and never calls it "the reading". This is the
+rule the interactive lessons have always followed; it was added to the written path on 11 August
+2026, after feedback told one cadet her correct figure reference did not match "the assigned
+OpenStax reading" and gave her two numbers from a book she does not own.
+
 ### Hidden diagnostics
 
 The run also writes a per-student assessment that sits beside the grade and never becomes one:

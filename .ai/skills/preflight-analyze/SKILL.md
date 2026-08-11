@@ -352,9 +352,12 @@ Do not grade Q1, do not write feedback on it, and do not include individual read
 printed report or the per-instructor bullets. It is reported only as a class distribution.
 
 **Identifying Q1 and Q2.** Prefer `role: "reading_time"` / `role: "reading_reflection"` on the
-question object. As of 2026-07-21 **no live activity carries a role** — the Fall builder predates
-the convention — so fall back to the prompt text, which is verbatim-identical across all 74. Fall
-back to position (`q1`, `q2`) last, and say in the run report which signal you used.
+question object. **42 of 115 written activities now carry one** (verified against live data
+2026-08-11, including both Fall 2026 `preflight-02` offerings) — so the role is real and worth
+checking first, but it is still absent on most, and the fallbacks stay. Fall back to the prompt
+text, which is verbatim-identical across all 74, then to position (`q1`, `q2`) last, and say in the
+run report which signal you used. *(This said "no live activity carries a role" from 2026-07-21
+until 2026-08-11, which stopped being true without anything noticing.)*
 
 ### Grading Decision — THREE STATES ONLY
 
@@ -373,8 +376,64 @@ The bar for red is HIGH. Only award zero when the response is:
 - Explicitly "I don't know" / "didn't do the reading" / "N/A"
 - Entirely off-topic or gibberish with no connection to the question
 - A single isolated word with no reasoning whatsoever
+- **An account of why the student could not answer, and nothing else** — see the next section
 
 **Never give zero for imperfect physics.** A student who names the wrong force, reverses a sign, misidentifies which charges move, or describes the mechanism incorrectly but is clearly reasoning about the right phenomenon gets yellow (full credit + feedback), not red (zero). Hedging language ("I think...", "maybe...") does NOT make an answer red — if there's a genuine attempt underneath the hedge, it's at least yellow.
+
+#### A reason for not answering is not an answer
+
+*(Added 2026-08-11 at the course director's instruction, after Fall 2026 `preflight-02`.)*
+
+Cadets who could not locate the assigned reading, had not obtained the book yet, or had not done
+the reading wrote Q2 answers that were honest, cooperative, and contained no reflection at all —
+*"Could not find where assigned reading was posted"*, *"I was not confused about the reading. But
+how to acquire the textbook"*, *"I don't know what to read!"* Every one of them was graded yellow
+and given the point, because the liberal posture above reads an on-topic, plainly good-faith
+sentence as at-minimum-yellow.
+
+**That is the wrong default.** Q2 asks *"What did you find most confusing or most interesting about
+the reading?"* An answer reporting an obstacle says the student cannot answer the question — which
+is exactly what *"Nothing"* and *"I don't know"* say. It belongs in that pool: **`zero`, red, 0
+points**, however reasonable its tone. This is not a judgment about honesty, and reporting the
+problem is the right thing for a cadet to do. The point is for reflecting on the reading, and no
+reflection happened.
+
+**An instructor can override it, and that is the point of putting it in red.** A director who
+decides a cohort-wide access failure should not cost the class a point regrades in one pass. What
+must not happen is the credit being awarded *by default*, because a default is invisible — a green
+or yellow cell tells the instructor there is nothing here to look at.
+
+**Red when the obstacle is the whole answer:**
+- could not find, could not locate, or did not know where the assigned reading was
+- does not have, has not bought, or cannot access the book
+- has not done the reading yet, or ran out of time
+- read something but says nothing whatever about it
+
+**Grade the reflection normally whenever there IS one.** A cadet who could not find the assigned
+sections, read something else, and reflected on *that* has done what the question asks — *"could
+not find an assigned reading, however I did read over general articles regarding Electric Charge …
+I found the inverse square law to be interesting as it was a concept I learned in Chem 200"* is a
+yellow or green answer with a note attached, not an obstacle report. Judge the reflection that is
+present and ignore the apology around it.
+
+This is the same judgment that already drives `reading_reflection.meaningful` in the `schema: 1`
+payload, and that field was **correctly `false`** on every case above while the grade said full
+credit. Keep the two consistent: **an answer judged not meaningful *because no reflection took
+place* is red.** The converse does not hold — a shallow but real reflection can be `meaningful:
+false` and still earn yellow.
+
+**Feedback names where the reading is; it does not scold.** Rule 3 (every zero carries feedback)
+applies, and unlike the generic red string this one should answer the obstacle the student actually
+named — the book, the location, or the time:
+
+> "There's no reflection on the reading here, and that is what this question asks for — it carries
+> a point on every preflight. The assigned sections are on the assignment itself, under the title;
+> if you cannot find them or do not have the book yet, tell your instructor this week rather than
+> leaving the question."
+
+*(The "under the title" pointer became true on 2026-08-11, when `assignments.description` started
+leading with `Reading: 22.2–22.3` — see `CHANGELOG.md`. Those are the **cadet's** section numbers,
+which is exactly why they are safe to quote and `reference_pages` is not.)*
 
 ### Feedback Rules
 
@@ -386,7 +445,9 @@ The bar for red is HIGH. Only award zero when the response is:
   1. **Read the student's answer carefully.** Identify the specific flaw: wrong mechanism, reversed direction, missing concept, circular reasoning, etc.
   2. **Acknowledge anything correct** in the answer (if present) in one short clause — e.g., "You're right that the charges redistribute…"
   3. **Name and correct the specific error** using the question's `expected_response` field (if set) and `REFERENCE_TEXT` (if loaded) as your physics source of truth — but rephrase it to address the student's actual mistake, not just restate the model answer.
-  4. If `REFERENCE_TEXT` is available, anchor the correction in the textbook language where possible (e.g., "As the text notes on p. 47…" or simply by using the same terminology the book uses).
+  4. If `REFERENCE_TEXT` is available, use its **terminology and its physics** — never its
+     *location*. State the mechanism directly, in plain words. See "The grounding text is
+     invisible" below; it is a hard rule, not a preference.
 
   **Format guide:**
   - Open by naming what the student got right or what they were attempting, if applicable.
@@ -394,12 +455,50 @@ The bar for red is HIGH. Only award zero when the response is:
   - Close with the correct 1–2 sentence explanation drawn from `expected_response` / `REFERENCE_TEXT`.
   - Tone: instructional and supportive. Never punitive.
   - Do NOT copy `expected_response` verbatim — synthesize a targeted correction.
+  - Never cite a section, page or figure number from `REFERENCE_TEXT` (see below).
   - Length: 2–3 sentences max. Concise beats comprehensive.
 
   Example (for a student who wrote "the charges repel because the rod has the same charge as the conductor"):
   > "You're on the right track that charge is involved — but the key is that the conductor starts neutral, not charged. When the rod approaches, free electrons in the conductor redistribute toward or away from the rod, creating an induced dipole. Because the attracting face is closer than the repelling face, the net force is attractive, not repulsive."
 
-- **Red** (`zero`): `feedback = "No answer provided."` (if blank) or a brief note on what was expected (if off-topic/gibberish).
+- **Red** (`zero`): `feedback = "No answer provided."` (if blank) or a brief note on what was expected (if off-topic/gibberish). For an obstacle report, answer the obstacle — see "A reason for not answering is not an answer" above.
+
+#### The grounding text is invisible — never cite it to a student
+
+*(Added 2026-08-11 at the course director's instruction.)*
+
+`REFERENCE_TEXT` is **OpenStax University Physics**, and **that is not the book the cadets hold.**
+Physics 110 and Physics 215 both assign a **Cengage** text, numbered differently throughout: the
+electrostatics the cadets know as chapter **22** is OpenStax chapter **5**, and the kinematics they
+know as chapter **2** is OpenStax chapter **3**. Both courses' syllabus `Reading` columns are in the
+cadets' numbering — see [`_builder/courses/phys-215/COURSE_PROFILE.md`](../../../_builder/courses/phys-215/COURSE_PROFILE.md)
+§Grounding and `_builder/courses/phys-110/phys110_fall2026_schedule.md`. OpenStax is the *grader's*
+grounding reference and nothing else.
+
+So a citation in feedback is wrong twice: it exposes an internal detail, **and it points the student
+at a number that does not exist in their book.** It has already happened. One Fall 2026 cadet cited
+*"figure 2.10C"* — correctly, from her own text — and was told her "numbering does not match the
+assigned OpenStax reading (this material is §3.3, and the matching picture is Figure 3.10)". Both
+of those numbers were right for a book she does not own, and the feedback corrected a citation that
+was never wrong.
+
+**In any student-facing string — `feedback` on any question, of any colour:**
+- **Never name the grounding text.** Not "OpenStax", not the volume, not the edition.
+- **Never cite its section, chapter, page, figure, table, example or equation numbers.**
+- **Never call it "the reading"** or "the text" as though the student read it — they read a
+  different book on the same physics.
+- **Do use its terminology and its physics freely.** That is what it is for: state the mechanism
+  directly and confidently, having checked yourself against the reference.
+
+**Echoing the student's own citation back is fine and is not this rule.** A cadet who writes
+*"section 2.3 was the most confusing for me"* can be answered with *"Naming section 2.3 is a good
+start"* — that is *their* number from *their* book. What is banned is a number that came out of
+`REFERENCE_TEXT`.
+
+The interactive lessons have followed this rule from the start, for the same reason
+(`_builder/preflight-kit/sources/02_TUTOR_SYSTEM_PROMPT.md`: *"do not call it 'the reading', and
+never cite section or page numbers to the cadet"*). The written path is where it was never written
+down.
 
 ### Physics Misconception Taxonomy
 Look for these patterns in free-response answers. **The `id` column is not decoration** — it is
@@ -940,7 +1039,7 @@ Grade tab already shows each answer beside its score.
 1. **Never finalize grades** — always write `is_finalized: false`, and `source: "ai_suggested"` on every row except a guard-2 merge, which keeps the `"instructor"` it already had (Step 9). Instructors confirm in the admin panel.
 2. **Never overwrite a finalized grade, and never overwrite a question that carries feedback** — filter both out before the upsert (Step 9) and report the counts. The converse is equally binding: **never skip a question that carries no feedback.** Feedback is the only evidence in the data that a human graded a question, so a green cell with no comment, in a row this skill has never assessed, has been graded by nobody. Guard 2 is per question for that reason.
 3. **Never deduct without feedback** — every score of zero must have a non-empty `feedback` string explaining why.
-4. **Three states, simple rule** — Green = correct. Yellow = genuine on-topic attempt with flawed reasoning (full credit + tailored corrective feedback). Red = blank, off-topic, or not a good-faith attempt (zero credit). When in doubt between yellow and red, choose yellow.
+4. **Three states, simple rule** — Green = correct. Yellow = genuine on-topic attempt with flawed reasoning (full credit + tailored corrective feedback). Red = blank, off-topic, or not a good-faith attempt (zero credit). When in doubt between yellow and red, choose yellow. **The one exception is an answer that only explains why the student could not answer** — could not find the reading, has no book, has not read it. Those are red by default however good-faith they are; the instructor overrides if they choose (Step 7).
 5. **Yellow gets full credit** — `warn` status always has `score = q.points`. Never assign partial credit on free-response; it's either full points (green or yellow) or zero (red).
 6. **Yellow feedback must be tailored** — never use the same feedback string for two different students' yellow answers on the same question. Each `warn` feedback must name the specific flaw in that student's response and correct it using `expected_response` and/or `REFERENCE_TEXT`. A generic "the reasoning may be incorrect" paste is not acceptable.
 7. **Protect the service key** — never print `SUPA_KEY` in the output. Reference it as `[service_key]` if you need to show a sample request.
@@ -949,4 +1048,5 @@ Grade tab already shows each answer beside its score.
 10. **Diagnostics never affect grades** — everything in `grades.diagnostic` (`q2_effort`, `q3_understanding`, and the whole `schema: 1` payload including its `effort`) is diagnostic only. Never use any of it in `question_scores`, `points_earned`, `points_possible`, status, feedback, finalization, or the analysis report, and never render or print individual per-student values. The `effort` inside `diagnostic` is **not** `grades.effort` and must not be written to that column: these offerings are `grading_mode='points'` (Step 2), where points come from `question_scores`.
 11. **Emit structure, not prose** — every misconception you identify in Step 7 must leave this skill as an entry in `misconceptions[]` in Step 9's `schema: 1` payload, against a taxonomy id. That structured list is the *only* way a finding reaches anyone: the rollup counts it into the prevalence bars, and `/lesson-aggregate` clusters it into the cohort trends. A misconception you only describe in the run report is a misconception nobody downstream can see. See [`references/WRITTEN-SCHEMA1.md`](references/WRITTEN-SCHEMA1.md).
 12. **Write no cohort output.** Never write `analysis_reports` — not readiness prose, not trends, not a per-question breakdown. That table belongs to `/lesson-aggregate`, which runs after the deadline over a whole section. This skill's blast radius is `grades`, and nothing else.
-12. **Never invent an objective breakdown** — emit `objectives: []` unless the questions carry `objective_key`. Fabricated objectives become axes on the faculty radar.
+13. **Never invent an objective breakdown** — emit `objectives: []` unless the questions carry `objective_key`. Fabricated objectives become axes on the faculty radar.
+14. **Never cite the grounding text to a student.** `REFERENCE_TEXT` is OpenStax; the cadets read Cengage, numbered differently. No section, chapter, page or figure number from it, no naming it, and never "the reading" — in any `feedback` string, of any colour. Use its physics and its vocabulary, not its locations (Step 7).

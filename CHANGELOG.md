@@ -8,6 +8,112 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-11 (third) — Matthew Recker via Claude
+
+### Two grader rules: "I couldn't find the reading" is not an answer, and OpenStax is invisible
+
+Both are changes to `/preflight-analyze`'s instructions. **No score was changed anywhere.** One
+feedback string was rewritten (below); the affected rows are listed and the regrade decision was
+the course director's, taken during this run.
+
+#### A reason for not answering was earning the point
+
+Q2 asks *"What did you find most confusing or most interesting about the reading?"* Cadets who could
+not locate the assigned sections, had not bought the book, or had not read it answered honestly and
+cooperatively — *"Could not find where assigned reading was posted"*, *"I was not confused about the
+reading. But how to acquire the textbook"*, *"I don't know what to read!"* — and the grader gave
+every one of them **yellow, full credit**, because the three-state rule reads an on-topic good-faith
+sentence as at-minimum-yellow.
+
+**They now grade red, 0 points**, in the same pool as *"Nothing"* and *"I don't know"*. The point is
+for reflecting on the reading and no reflection happened; the tone of the non-answer does not change
+that. An instructor overrides it whenever they disagree — **that is the point of using red.** A
+cohort-wide access failure deserves a regrade, and a red cell is what tells an instructor there is
+something to look at, where a default full credit shows nothing at all.
+
+The carve-out is explicit: **a cadet who could not find the assigned reading, read something else,
+and reflected on that is graded on the reflection.** One Fall 2026 answer does exactly this
+(read general articles on Coulombic force, connected the inverse-square law to Chem 200) and stays
+yellow or better.
+
+The judgment already existed one layer down and disagreed with the grade: `reading_reflection.
+meaningful` was **correctly `false`** on every one of these while `question_scores` said full
+credit. The two are now required to agree, in `references/QUESTION-DIAGNOSTICS.md` as well.
+
+#### The grader was citing the cadets' *other* book at them
+
+Feedback strings were quoting OpenStax section, page and figure numbers. **Cadets in both courses
+read Cengage**, numbered differently throughout — the electrostatics they know as chapter 22 is
+OpenStax chapter 5; the kinematics they know as chapter 2 is OpenStax chapter 3. So a citation was
+wrong twice: an internal detail exposed, pointing at a number that does not exist in their book.
+
+It had already done damage. A phys-110 cadet cited *"figure 2.10C"* — correctly, from her own text —
+and was told her "numbering does not match the assigned OpenStax reading (this material is §3.3, and
+the matching picture is Figure 3.10)". Both numbers were right for a book she does not own, and the
+feedback corrected a citation that was never wrong.
+
+The instruction that caused it has been replaced. Step 7 said: *anchor the correction in the
+textbook language where possible (e.g. "As the text notes on p. 47…")*. It now says to use the
+grounding text's **terminology and physics, never its locations**, and the ban is repeated as
+Important Rule 14 so it survives a partial read. Naming the text, citing any of its numbers, and
+calling it *"the reading"* are all out; echoing a number **the student themselves wrote** is fine
+and explicitly not covered.
+
+**The interactive lessons have followed this rule since the beginning** — the builder's tutor prompt
+carries it verbatim. The written path is simply where nobody had written it down.
+
+#### What is in the data right now
+
+Scanned all **840** graded rows across the two live Fall 2026 `preflight-02` offerings.
+
+| Case | Rows | State |
+|---|---:|---|
+| Obstacle-only Q2 given credit by **the AI** | 2 | phys-215 `3000138898`, `3000139491` — both `ai_suggested`, both **finalized** |
+| Obstacle-only Q2 given credit by **an instructor** | 2 | phys-215 `3000139264`, `3000139404` — hand-written feedback, `source: instructor`; the new rule does not reach back over a person's work |
+| Obstacle-only Q2 already graded **red** | 2 | phys-110 `3000138995`, `3000130340` — the old rule caught these two |
+| Read substitute material and reflected | 1 | phys-215 `3000139486` — **correct as yellow** under the new rule too |
+| Feedback citing OpenStax numbering | 2 | phys-110 `3000139715`, `ai_suggested`, names OpenStax outright and is the clear case. phys-215 `3000139723` cites *"Figure 5.5 in the reading"* but is stored `source: instructor`, so the data attributes it to a person however much the prose reads like the grader's |
+| Feedback quoting a section number **the student wrote** | 2 | phys-110 `3000129726`, `3000130336` — *"Naming section 2.3 is a good start"*. Explicitly **allowed** by the new rule: that is the cadet's number from the cadet's book |
+
+**Decided by the course director this run: `preflight-02` is not regraded.** The new rule applies
+from the next run forward. Lowering a *finalized* grade on a live gradebook is a decision that
+belongs to a person, and the two instructor-graded rows were protected by the never-clobber rule
+regardless — so the two AI-defaulted rows stay at full credit and `preflight-02` keeps a record
+that matches what its cadets were told. The first lesson graded under the new rule is
+`preflight-03`.
+
+**One write was made: the OpenStax citation was removed from `3000139715`'s Q3 feedback.** Grade
+`ebe04a1b`, unfinalized and unseen by the cadet, `warn`/1 point before and after — **only
+`question_scores.q3.feedback` changed**, and no score, status or other question was touched. The
+rewrite keeps the real point (an example should be stated in words, because a figure reference is
+not one the reader can see) and drops the false correction: her *"figure 2.10C"* was right for the
+book she owns. Applied through a guarded one-off — dry-run first, refusing to proceed unless the
+row was still unfinalized, still `ai_suggested`, and still carried the exact string the repair was
+planned against — then read back and verified.
+
+Two unrelated things the scan turned up, both worth a re-run rather than a repair: phys-110
+`3000139701` and `3000141151` carry *"No submission received."* because they **submitted after the
+grading run** (committed 08-11 03:20, graded 08-10 10:52). And `preflight-03` has **148 ungraded
+submissions** across the two courses, which is the first run the new rules will apply to.
+
+#### Also corrected
+
+`SKILL.md` claimed **no live activity carries a question `role`**, true when written on 2026-07-21
+and false since: **42 of 115** written activities carry one, including both `preflight-02`
+offerings. The fallback chain stays — 73 still do not — but the role is now worth checking first.
+Nothing was watching this claim.
+
+**Files:** `.ai/skills/preflight-analyze/SKILL.md`,
+`.ai/skills/preflight-analyze/references/QUESTION-DIAGNOSTICS.md`,
+`site/help/director-ai-rules.md`, `site/help/ai-and-your-work.md` (both registered in
+`DOC-SOURCES.json` against the skill, both updated in the same change).
+
+The student-facing help page now states the rule in advance, which it has to: a cadet who reports a
+problem instead of answering should know beforehand that it scores zero, and should be told to take
+it to their instructor rather than only to the question box.
+
+---
+
 ## 2026-08-11 (second) — Matthew Recker via Claude
 
 ### The site never told a cadet what to read

@@ -39,6 +39,15 @@ Yellow is not a penalty. Grading is deliberately generous: preflights measure wh
 with the reading before class, not whether you already understood it. A wrong answer honestly
 attempted still earns the points, and the feedback is where the value is — read it.
 
+**The one thing that generosity does not cover is telling us why you could not answer.** "I could
+not find the assigned reading", "I do not have the book yet", "I have not read it" — those are red,
+no credit, the same as leaving the question blank. That is not a judgment about your honesty, and
+you *should* say so if you are stuck. It is that the point is for reflecting on the reading, and
+there is no reflection to grade. Two things follow. **Tell your instructor rather than only the
+question box** — a reading you cannot find is a problem they want to hear about now, and they can
+change the grade if the fault was not yours. And **if you read something else and reflect on that,
+you are graded on the reflection** like anyone else.
+
 ## Interactive lessons
 
 Interactive lessons are graded on **effort**, not correctness. Work through the lesson and answer

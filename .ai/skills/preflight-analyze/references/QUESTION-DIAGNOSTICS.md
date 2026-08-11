@@ -25,6 +25,13 @@ from `docs/contracts/INTERACTION-DATA-CONTRACT.md` §5.2 to this single written 
 Do not lower Q2 effort because the student's reflection contains incorrect physics. Score how
 substantively the student engaged with the prompt.
 
+**An answer that only reports an obstacle scores 0–1 here, and its grade is red.** *"Could not find
+where the reading was posted"*, *"I don't have the book yet"*, *"I haven't read it"* — no
+reflection took place, so there is no engagement with the prompt to measure, however cooperative
+the sentence. Score the *reflection* whenever one is present, even if the student also mentions an
+obstacle. This diagnostic and the three-state grade must agree on that judgment; the grading rule
+is SKILL.md Step 7, "A reason for not answering is not an answer".
+
 ## Q3 understanding (`grades.diagnostic.q3_understanding`)
 
 Measure demonstrated physics understanding against `expected_response` and the configured textbook
