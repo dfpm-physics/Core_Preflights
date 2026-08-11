@@ -8,6 +8,33 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-10 (eighth) — Casey Pellizzari via Claude
+
+### Job 1's nightly notifications were reaching nobody, and the doc could not have caught it
+
+The phys-215 wrapper has published to its ntfy topic on every run since the schedule was set up.
+Nothing was subscribed to that topic, so none of it reached a phone. `curl` returned 200 every
+time, the log recorded nothing wrong, and the run summaries sat in ntfy.sh's 12-hour buffer until
+they expired.
+
+**ntfy is an app, not email and not SMS** — a published message reaches a phone only if the ntfy
+client is subscribed to the topic. That was never written down, so the setup step that makes the
+whole alert path work was invisible to anyone reading the page. Found on 2026-08-10 by sending a
+test publish and asking whether it arrived; it had not.
+
+What makes this worse than an ordinary gap is that the page's own **"the alarm is silence"** rule
+concealed it. A job whose notifications go nowhere produces exactly the same evidence as a job that
+is working — quiet nights — so the rule that was supposed to make failure visible is what made this
+particular failure invisible. `docs/operations/SCHEDULED-LESSON-CYCLE.md` now says so under that
+heading, along with the two things that mislead you while you debug it: subscribing does not
+backfill, and the public server buffers only 12 hours, so a newly subscribed phone shows nothing
+from past runs and looks broken when it is not.
+
+No code, schema, or data change — the wrapper was publishing correctly all along. The fix is on the
+phone. `check_doc_sources.py` clean.
+
+---
+
 ## 2026-08-10 (seventh) — Matthew Recker via Claude
 
 ### There are two scheduled lesson-cycles, not one — the second is now recorded

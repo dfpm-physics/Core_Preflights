@@ -124,6 +124,15 @@ Notification is sent from an EXIT trap, so refusals, crashes and the 45-minute t
 **A night with no notification means cron never fired or the box was asleep** — that is the only
 failure the job cannot report on its own.
 
+**ntfy delivers only to a subscribed client.** It is not email and not SMS. The wrapper publishes to
+a topic; that reaches a phone only if the ntfy app is subscribed to the topic, or a browser has the
+topic page open. Publishing succeeds either way — `curl` returns 200, the log records nothing wrong
+— so **a job publishing to a topic nobody is subscribed to is indistinguishable from a working
+one**, and the rule above is what hides it: silence is also what a good night looks like. Confirmed
+the hard way on 2026-08-10, when a test publish reached the server and no phone. On a new device
+subscribe *before* testing; subscribing does not backfill and ntfy.sh buffers 12 hours, so past runs
+never appear.
+
 **Do not commit the ntfy topic.** CORE.md §2 records that GitHub Pages already serves `docs/`
 publicly, and an ntfy topic is a bearer credential in both directions: anyone who reads it can also
 post to it. It stays in the wrapper, outside the repo.
