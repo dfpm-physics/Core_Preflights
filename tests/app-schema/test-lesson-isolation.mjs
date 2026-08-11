@@ -123,6 +123,52 @@ check('two mints of the SAME lesson differ — this is what lets two terms each 
 check('is a valid activity slug', L.isValidSlug(s1));
 check('the retired deterministic mint is gone', L.writtenSlugFor === undefined);
 
+/* ── 1b. The INTERACTION slug is the opposite case, and must not be mirrored over ──
+ * The editor mirrors the lesson id into the interaction slug while authoring a lesson with no
+ * artifact behind it. `interactionSlugIsPinned()` is what turns that off, and getting it wrong is
+ * silent in both directions: too eager and a new lesson loses the convenience, too lax and the
+ * frozen `#i=` surface is rewritten by a rename the director is *encouraged* to make.
+ *
+ * Live consequence, 2026-08-10: phys-310 lesson 4 was registered from the Artifacts page's own
+ * prefill link, which carries the artifact's slug in `id` (prefillLink() emits `['id', slug]`) and
+ * never sends `iid`. The old rule tested `iid` alone, so the mirror stayed armed; renaming the
+ * lesson id to the readable `lesson-04` rewrote the interaction slug to match, and the artifact's
+ * real slug had no activity row. A cadet finishing that lesson is refused at the submit page. */
+
+section('interactionSlugIsPinned — the mirror never overwrites an artifact-supplied slug');
+
+const ARTIFACT = 'phys310-radioactivity-77500fd7';
+
+check('PINNED: Artifacts-page prefill carries the slug in `id` — the regression that shipped',
+      L.interactionSlugIsPinned({
+        editingId: null,
+        prefill: { id: ARTIFACT, iurl: 'https://claude.ai/public/artifacts/a549135c' },
+        interactiveSlug: ARTIFACT,
+      }) === true);
+
+check('PINNED: hand-built link carrying `iid` (the only case the old rule caught)',
+      L.interactionSlugIsPinned({
+        editingId: null,
+        prefill: { id: 'lesson-04', iid: ARTIFACT },
+        interactiveSlug: ARTIFACT,
+      }) === true);
+
+check('PINNED: editing an existing lesson never re-mirrors',
+      L.interactionSlugIsPinned({
+        editingId: 'offering-1', prefill: null, interactiveSlug: ARTIFACT,
+      }) === true);
+
+check('ARMED: a brand-new lesson with no prefill — "one slug serves both" still applies',
+      L.interactionSlugIsPinned({
+        editingId: null, prefill: null, interactiveSlug: '',
+      }) === false);
+
+check('ARMED: a prefill carrying a URL but no slug leaves nothing to protect',
+      L.interactionSlugIsPinned({
+        editingId: null, prefill: { iurl: 'https://claude.ai/public/artifacts/a549135c' },
+        interactiveSlug: '',
+      }) === false);
+
 /* ── 2. Scheduling a container another term runs COPIES it ─────────────────── */
 
 section('saveLesson — scheduling a shared container copies it into this term');

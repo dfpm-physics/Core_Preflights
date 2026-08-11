@@ -719,7 +719,10 @@
         if (prefill.due_m) model.dueByDay.M = prefill.due_m;
         if (prefill.due_t) model.dueByDay.T = prefill.due_t;
       }
-      interactionSlugTouched = !!id || !!(prefill && prefill.iid != null);
+      // Disarm the lesson-id mirror whenever the interaction slug is already authoritative.
+      // Rule and reasoning live in faculty-lessons.js so a test can reach them.
+      interactionSlugTouched = L.interactionSlugIsPinned(
+        { editingId: id, prefill, interactiveSlug: model.interactive.slug });
       ensureDefaultQuestions();
 
       const pick = (pv, ev) => (pv != null && pv !== '' ? pv : (ev ?? ''));
@@ -1326,6 +1329,12 @@
 
       // Mirror the lesson id into the interaction slug (only while authoring a NEW artifact) until
       // the director sets one explicitly — "one slug serves both" is the default.
+      //
+      // It must never fire over a slug that came from a built artifact. That slug is the frozen
+      // `#i=` contract surface; the assignment id beside it is a container name a director is
+      // meant to make readable (`lesson-04` rather than `phys310-radioactivity-77500fd7`), and
+      // doing exactly that used to drag the interaction slug along with it. `interactionSlugTouched`
+      // is what stops it, and openEdit() above is where it gets set for the prefill case.
       document.getElementById('f-id').addEventListener('input', (e) => {
         if (editingId || interactionSlugTouched || model.existingInteractive) return;
         model.interactive.slug = e.target.value;

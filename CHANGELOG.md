@@ -8,6 +8,75 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-11 (fifth) — Matthew Recker via Claude
+
+### Renaming a lesson id silently rewrote the artifact's frozen `#i=` slug
+
+*"When I changed the assignment slug to lesson-04 it edited the interaction slug as well."* It did,
+and the editor was built to.
+
+**The two slugs pull in opposite directions**, which `faculty-lessons.js` already said out loud: a
+written activity's slug is site-minted and *"safe to change because nothing reconstructs this
+string"*, while an interactive activity's slug is *"the OPPOSITE case: it is the FROZEN contract
+surface"* — deployed artifacts post to `interaction-submit.html#i=<slug>`, so it must equal what
+the artifact carries. The **assignment id** beside it is neither: it is a container name a director
+is *meant* to make readable, which is the whole difference between phys-310 lesson 2's subtitle
+(`lesson-02`) and lesson 3's (`phys310-binding-energy-and-stability-e0ceabee`).
+
+**The editor mirrors the lesson id into the interaction slug** while authoring a lesson with no
+artifact behind it — "one slug serves both", a real convenience. `interactionSlugTouched` disarms
+it. That flag was computed as `!!id || !!(prefill && prefill.iid != null)` — and **the Artifacts
+page's own registration link does not send `iid`.** `prefillLink()` emits `['id', slug]`, so the
+artifact's slug arrives in `id`; `openEdit()` correctly copies it into the interaction slug, then
+declares the slug untouched. The mirror stays armed on the *sanctioned registration path*. The
+director renames the lesson id to something readable, and the frozen surface is rewritten to match,
+with no warning and nothing downstream noticing.
+
+**That is how phys-310 lesson 4 came to carry `lesson-04` as its interaction slug** (created
+2026-08-10 22:26; `updated_at` still equals `created_at`, so nothing has touched it since). The
+artifact posts a slug no activity has, `resolveActivityBySlug()` is an exact `.eq('slug', …)` with
+no fallback, and the cadet is stopped at the submit page with *"This assignment isn't set up
+yet — ask your instructor to add interaction …"* after working the whole lesson. **Zero
+submissions so far**, but the offering is published and visible and phys-310 is live.
+
+**The fix** is one predicate, and it now lives in `faculty-lessons.js` as
+`interactionSlugIsPinned()` rather than in the page — the same reasoning as `pinnedQuestion()`
+directly above it: page-resident logic that decides a contract surface is unreachable by every
+test, and this one was load-bearing enough that "it looked right" was not good enough twice. The
+rule is *pinned when the interaction slug already holds a value from either route*, which covers
+`iid`, `id`, and editing an existing lesson, and still leaves the mirror armed for a genuinely new
+lesson and for a prefill that carried a URL but no slug.
+
+**Five checks in `test-lesson-isolation.mjs`**, beside the `mintWrittenSlug` section it belongs
+with. Confirmed they go red against the old rule first: **exactly one fails**, the
+Artifacts-page-prefill case, which is the one that shipped.
+
+**Not fixed here, and it is the reason this was worth chasing:** lesson 4's stored slug is still
+wrong. Repairing it is a director action, not a data write — the interaction slug field is
+read-only once the activity exists, and a differing slug goes through the replace path
+(`replaceInteraction`), which is reached by opening the radioactivity artifact's registration link
+from the Artifacts page and choosing lesson 4 as the destination. That path deletes and recreates
+the activity; with 0 reports the cascade is empty. The authoritative slug is the one the Artifacts
+page shows as **slug in source** — `_builder`'s build log says `phys310-radioactivity-77500fd7`,
+but that same entry still says the lesson is "not published" while a published URL sits on the row,
+so the log is stale for this artifact and should not be the source.
+
+**Files:** `site/faculty/lessons.html`, `site/js/faculty-lessons.js`,
+`tests/app-schema/test-lesson-isolation.mjs`.
+
+**Verified:** the 5 new checks plus all 34 existing checks in `test-lesson-isolation.mjs` pass, and
+the new ones fail against the old rule. **This is a Node-only verification** (CORE.md §2) — the
+editor was not driven in a browser, so the reorder of who-sets-the-flag is proven at the unit level
+and not through a real save. A director registering the next artifact is the first real exercise.
+
+*Separately, `test-nav.mjs` has 4 pre-existing failures unrelated to this change: it expects the
+staff dropdown to hold `["account","help","system","tests"]` and the live nav now also offers
+`artifacts`, to plain instructors and directors as well as admins. Confirmed pre-existing by
+stashing this change and re-running. Whether Artifacts belongs in an instructor's menu is a policy
+question, so the test was left failing rather than updated to match.*
+
+---
+
 ## 2026-08-11 (fourth) — Matthew Recker via Claude
 
 ### Course Admin → Students: the roster import moved to the top of the tab

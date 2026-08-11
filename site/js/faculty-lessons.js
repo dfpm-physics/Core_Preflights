@@ -118,6 +118,31 @@ export const mintWrittenSlug = (courseCode, assignmentSlug) =>
  */
 export const isValidSlug = (s) => /^[a-z0-9-]+$/.test(String(s || '').trim());
 
+/**
+ * Does the interaction slug already have an authoritative value, so the editor's
+ * lesson-id → interaction-slug mirror must start DISARMED?
+ *
+ * The mirror ("one slug serves both") is a convenience for authoring a lesson with no built
+ * artifact behind it. It has to switch off the instant the slug is a real one, because the two
+ * fields pull in opposite directions: the interaction slug is the frozen `#i=` surface above,
+ * while the assignment id beside it is a container name the director is *meant* to make readable.
+ * Renaming `phys310-radioactivity-77500fd7` to `lesson-04` is the intended use of that field.
+ *
+ * The artifact's slug reaches a prefill by two routes — `iid` on a hand-built link, and `id` on
+ * the Artifacts page's own registration link, since `prefillLink()` emits `['id', slug]`. This
+ * lived in `lessons.html` testing only `iid`, so on the sanctioned registration path the mirror
+ * stayed armed over an artifact-supplied slug and the rename silently rewrote it. That is how
+ * phys-310 lesson 4 came to carry `lesson-04` as its interaction slug, which no artifact posts.
+ *
+ * It is here rather than in the page for the reason given above `pinnedQuestion()`: page-resident
+ * logic that decides a contract surface is unreachable by every test, and this one is load-bearing
+ * enough that "it looked right" is not a standard worth relying on twice.
+ *
+ * @param {{editingId?: any, prefill?: any, interactiveSlug?: string}} o
+ */
+export const interactionSlugIsPinned = ({ editingId, prefill, interactiveSlug }) =>
+  !!editingId || !!(prefill && interactiveSlug);
+
 /* ══════════════════════════════════════════════════════════════════════════════
  * Question roles — which questions are the pinned two, and what "absent" means
  *
