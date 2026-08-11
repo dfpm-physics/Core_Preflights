@@ -26,6 +26,19 @@
 //   Per offering, only the LATEST run matters. That is what makes "until corrected" work without
 //   any explicit clearing step: a failed Monday run stops showing the moment Tuesday's run
 //   succeeds, because the later row is the one being read.
+//
+// `run.summary` IS THIS BANNER'S TEXT, RENDERED VERBATIM
+//   Whoever writes an analysis_runs row is writing UI copy for a director, not a log line. The
+//   writers know it: supabase/admin/lesson_aggregate.py composes plain sentences and keeps scope
+//   keys — section uuids, and 'instr:<uuid>', which resolves to nothing a person can read — out
+//   of `summary` and in `detail`. It printed the key list until 2026-08-11, which is how sixteen
+//   identifiers ended up in a phone-width strip.
+//
+//   The same boundary decides the LEVEL. 'partial' is yellow, so it must mean "this rollup is
+//   owed something nobody is already on their way to delivering". A day-scoped run that defers
+//   the whole-course scope to the next track is the two-run cycle working as designed and records
+//   'success'; only a deferral that needs a person records 'partial'. Reading the reason back
+//   afterwards is `detail.all_scope_reason`.
 
 // NOTE: supabase.js is imported lazily inside mountRunBanners, NOT at module scope. It captures
 // window.db when it loads, so a static import here would give nav.js — which every page renders —

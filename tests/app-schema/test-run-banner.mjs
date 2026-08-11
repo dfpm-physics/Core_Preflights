@@ -47,6 +47,35 @@ eq('an OLD failure still shows — it has not been corrected',
 eq('a partial run warns rather than alarms',
    bannerFor(run({ status: 'partial', summary: "'__all__' deferred." }), 'P215')?.level, 'warn');
 
+// WHAT 'partial' HAS TO MEAN FOR THAT TO BE RIGHT (2026-08-11)
+//   Yellow is only affordable when it means "somebody must do something". The writer therefore
+//   splits the two ways the whole-course scope can be missing: a first-track run deferring it to
+//   the second track is the two-run cycle working and records 'success'; a deferral nothing will
+//   clear on its own records 'partial'. It recorded 'partial' for both until 2026-08-11, so about
+//   half of all nightly runs raised a warning for a healthy state.
+const firstTrack = run({
+  status: 'success',
+  summary: 'Aggregated 9 sections and 4 instructor summaries. The whole-course summary waits on '
+         + 'the T-day track — normal until that deadline passes.',
+});
+eq('a first-track deferral arrives as success and shows green',
+   bannerFor(firstTrack, 'Physics 110')?.level, 'success');
+eq('…carrying the sentence the writer composed, unaltered',
+   bannerFor(firstTrack, 'Physics 110')?.text, firstTrack.summary);
+
+// The summary IS the banner text, so a scope key in it is a scope key on a director's screen.
+// This is the regression the complaint was about: 12 section uuids resolved to codes, and 4
+// instructor scopes that resolve to nothing, printed as 'instr:<uuid>'.
+const actionable = run({
+  status: 'partial',
+  summary: 'Aggregated 12 sections and 4 instructor summaries. The whole-course summary is still '
+         + 'owed: M1A was aggregated before that work changed, and must be re-run before the '
+         + 'course can be summarized.',
+});
+eq('an actionable deferral still warns', bannerFor(actionable, 'Physics 110')?.level, 'warn');
+eq('…and carries no scope key a person cannot read',
+   /instr:|[0-9a-f]{8}-[0-9a-f]{4}/.test(bannerFor(actionable, 'Physics 110').text), false);
+
 // The row is written BEFORE the work starts (migration 009) precisely so a crash is visible.
 eq('a run still "running" long after it started is treated as a failure',
    bannerFor(run({ status: 'running', finished_at: null, started_at: hoursAgo(9) }), 'P215')?.level,

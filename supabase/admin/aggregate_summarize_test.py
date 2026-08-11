@@ -12,7 +12,7 @@ sys.path.insert(0, r"c:\01 -- AI Projects\Socratic Instruction\Core_Preflights\s
 
 from lesson_aggregate import (  # noqa: E402 (no connection opened)
     summarize, _pinned_question_id, _meets, _answer, _graded_response_questions, MAX_ANSWER,
-    _ambiguous_slug_message,
+    _ambiguous_slug_message, _all_scope_state, _scope_phrase, _run_summary, _fingerprint,
 )
 
 fails = []
@@ -417,6 +417,124 @@ no_alt = _ambiguous_slug_message("preflight-02", [
     offering("phys-110", "2026FA", None), offering("phys-215", "2026FA", None)])
 has("no activity slug → says so", no_alt, "no activity slug to disambiguate")
 has("…and never emits a literal None", no_alt, "None", present=False)
+
+# ══════════════════════════════════════════════════════════════════════════════════════
+# The analysis_runs audit line — what a director is told, and how loudly
+#
+# `summary` is rendered VERBATIM by site/js/run-banner.js as a strip on every faculty page, and
+# `status` picks its colour. Both are therefore UI decisions, and both are pure functions here,
+# so they are checked without a database exactly like summarize() above.
+# ══════════════════════════════════════════════════════════════════════════════════════
+print("\n=== the audit line: why '__all__' is missing decides the colour ===")
+
+SEC = {"M1A": "s-m1a", "M3A": "s-m3a", "T1A": "s-t1a", "T3A": "s-t3a", "X9Z": "s-x9z"}
+
+
+def report(code, sid, student, stamp="2026-08-10T00:00:00Z", days=None):
+    return {"section_id": SEC[code], "section_code": code, "student_id": student,
+            "updated_at": stamp, "effort": 4,
+            "meeting_days": days if days is not None else [code[0]]}
+
+
+def sec_scope(code, rows=None):
+    """A written section scope, with the fingerprint it would carry right after its own run."""
+    return {"section_code": code, "misconception_recommendation": "Open with the free-body diagram.",
+            "meta": {"source_fingerprint": _fingerprint(rows or [])}}
+
+
+def ctx(rows):
+    return {"rows": rows}
+
+
+# An M-day run on a two-track lesson: T has not closed yet. This is the two-run cycle working,
+# and it used to raise a yellow warning on roughly half of all nightly runs.
+m_rows = [report("M1A", None, 1), report("M3A", None, 2)]
+t_rows = [report("T1A", None, 3), report("T3A", None, 4)]
+m_written = {"s-m1a": sec_scope("M1A", [m_rows[0]]), "s-m3a": sec_scope("M3A", [m_rows[1]]),
+             "instr:1111": {"instructor_name": "Hyra", "readiness_summary": "…"}}
+first = _all_scope_state(ctx(m_rows + t_rows), m_written, "M", m_written)
+want("a first-track run is waiting on the other track, not failing", first["reason"], "awaiting-track")
+want("…and names that track, not its sections", first["tracks"], ["T"])
+want("…and reports coverage as incomplete", first["complete"], False)
+
+# The status expression the writer uses. Kept here in one line so the mapping from reason to
+# colour is asserted, not just the reason.
+def status_for(wrote_all, st):
+    return "success" if wrote_all or st["reason"] == "awaiting-track" else "partial"
+
+want("…so it records success, and the banner stays green", status_for(False, first), "success")
+want("…and says what it is waiting for, in a sentence",
+     _run_summary(m_written, False, first),
+     "Aggregated 2 sections (M1A, M3A) and 1 instructor summary. The whole-course summary waits "
+     "on the T-day track — normal until that deadline passes.")
+
+# Coverage complete, but a stored scope's cohort moved after its prose was written. Nothing
+# resolves this without a person, so it stays yellow — this is the real phys-110 case.
+moved = [report("M1A", None, 1, stamp="2026-08-11T21:23:00Z"), m_rows[1]]
+stale_stored = {**m_written, "s-t1a": sec_scope("T1A", [t_rows[0]]),
+                "s-t3a": sec_scope("T3A", [t_rows[1]])}
+t_written = {"s-t1a": stale_stored["s-t1a"], "s-t3a": stale_stored["s-t3a"]}
+stale = _all_scope_state(ctx(moved + t_rows), stale_stored, "T", t_written)
+want("a stored scope written before its work changed is stale", stale["stale"], ["M1A"])
+want("…every section is still covered", stale["complete"], True)
+want("…the reason is recorded as stale-prior", stale["reason"], "stale-prior")
+want("…and it stays a warning, because only a person can clear it",
+     status_for(False, stale), "partial")
+want("…naming the section and the remedy",
+     _run_summary(t_written, False, stale),
+     "Aggregated 2 sections (T1A, T3A). The whole-course summary is still owed: M1A was "
+     "aggregated before that work changed, and must be re-run before the course can be summarized.")
+
+# A section that meets on the day just covered and STILL has no scope is a gap in this run, not
+# somebody else's work.
+gap = _all_scope_state(ctx(m_rows), {"s-m1a": m_written["s-m1a"]}, "M", {"s-m1a": m_written["s-m1a"]})
+want("a section of the covered day with no scope is this run's gap", gap["reason"], "sections-missing")
+want("…which is a warning", status_for(False, gap), "partial")
+
+# THE GUARD ON THE DOWNGRADE. A section with empty meeting_days is excluded by every day filter,
+# so no day-scoped run will ever reach it (pull warns about exactly this). If it were treated as
+# "another track's job" the rollup would defer '__all__' forever, silently and in green.
+orphan = [report("X9Z", None, 9, days=[])]
+never = _all_scope_state(ctx(m_rows + orphan), m_written, "M", m_written)
+want("a section with NO meeting day is never another track's job", never["reason"], "sections-missing")
+want("…so it is reported, not deferred in silence", status_for(False, never), "partial")
+want("…and it is the section named", never["codes"], ["X9Z"])
+
+# Every section covered and current, and the model simply did not send '__all__'.
+done = {**m_written, "s-t1a": sec_scope("T1A", [t_rows[0]]), "s-t3a": sec_scope("T3A", [t_rows[1]])}
+held = _all_scope_state(ctx(m_rows + t_rows), done, "T", {"s-t1a": done["s-t1a"]})
+want("coverage complete and current, no '__all__' → withheld", held["reason"], "withheld")
+want("…which is a warning", status_for(False, held), "partial")
+
+# --day is provenance-only on write-analysis and a scheduled run may pass none. The covered track
+# is therefore derived from the sections the run WROTE; trusting --day alone would report every
+# section of the other track as neglected on any run that omitted the flag.
+no_day = _all_scope_state(ctx(m_rows + t_rows), m_written, None, m_written)
+want("with no --day, the covered track comes from the sections written", no_day["reason"],
+     "awaiting-track")
+
+print("\n=== the audit line never leaks a scope key ===")
+# A section scope's key is a uuid; an instructor scope's key is the literal 'instr:<uuid>', which
+# resolves to nothing a person can read. Sixteen of those was the original complaint.
+many = {SEC[c]: sec_scope(c) for c in ("M1A", "M3A", "T1A", "T3A")}
+many["s-5"] = {"section_code": "T5A"}
+many.update({f"instr:{u}": {"instructor_name": n}
+             for u, n in (("1a7bdeff-4541-4a99-b350-d2f49a53ace9", "Thornton"),
+                          ("bed8b760-4d63-40f0-a467-03beabb1c34d", "Hyra"))})
+phrase = _scope_phrase(many)
+want("more than four sections collapse to a count", phrase,
+     "5 sections and 2 instructor summaries")
+want("no raw uuid survives into the copy", "instr:" in phrase or "-4541-" in phrase, False)
+want("four or fewer are named, which is shorter than counting them",
+     _scope_phrase({SEC["M1A"]: sec_scope("M1A"), SEC["M3A"]: sec_scope("M3A")}),
+     "2 sections (M1A, M3A)")
+want("a whole-course run says so plainly",
+     _run_summary({"__all__": {"section_code": "__all__"}}, True, first),
+     "Wrote the whole-course summary.")
+want("…and mentions the sections when it wrote those too",
+     _run_summary({**m_written, "__all__": {"section_code": "__all__"}}, True, first),
+     "Aggregated 2 sections (M1A, M3A) and 1 instructor summary, and wrote the whole-course "
+     "summary.")
 
 print(f"\n{'ALL PASS' if not fails else str(len(fails)) + ' FAILED'}")
 for f in fails:

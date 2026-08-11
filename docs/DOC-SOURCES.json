@@ -39,7 +39,7 @@
       "doc": "site/help/ai-and-your-work.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-08-09",
+      "reviewed": "2026-08-11",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -71,7 +71,7 @@
       "doc": "site/help/director-ai-rules.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-09",
+      "reviewed": "2026-08-11",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -328,7 +328,7 @@
       "doc": "docs/operations/ONBOARD-AGGREGATION.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-09",
+      "reviewed": "2026-08-11",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/skills/lesson-cycle/SKILL.md",
@@ -360,7 +360,7 @@
       "doc": "docs/operations/SCHEDULED-LESSON-CYCLE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-10",
+      "reviewed": "2026-08-11",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/skills/lesson-cycle/SKILL.md",

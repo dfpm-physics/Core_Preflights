@@ -8,6 +8,68 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-11 — Matthew Recker via Claude
+
+### The run banner warned about a healthy state, in uuids
+
+A director reported a yellow banner reading *"Wrote 16 scope(s): T1A, … T5D,
+instr:1a7bdeff-4541-4a99-b350-d2f49a53ace9, instr:3cbafa56-…, instr:86c9bb89-…, instr:bed8b760-….
+'`__all__`' not written."* Their words: *"UUIDs are not super useful and I'm not sure what it's
+trying to tell us anyway."* Both halves were right, and they are two separate bugs in
+`supabase/admin/lesson_aggregate.py`'s `analysis_runs` writer.
+
+**`summary` is UI copy and was being written as a log line.** `site/js/run-banner.js` renders that
+column **verbatim** in a strip under the nav on every faculty page. The writer built it by joining
+the payload's scope keys — and while a section's key resolves to its code, an **instructor** scope's
+key is the literal string `instr:<uuid>`, which resolves to nothing a person can read. Sixteen
+identifiers, four of them raw uuids, on a phone-width strip. It now composes plain sentences with
+counts (*"Aggregated 12 sections and 4 instructor summaries"*). The exact keys moved to
+`detail.scope_keys`, and `detail.scopes_written` now carries section codes and instructor **names**,
+so debugging gained rather than lost.
+
+**`partial` was crying wolf on roughly half of all nightly runs.** The status was
+`success if '__all__' in scopes else 'partial'`, which cannot see *why* the whole-course scope is
+absent — and `partial` is the yellow warning. But deferring `__all__` to the second day track is the
+two-run cycle **working as designed** (`.ai/skills/lesson-cycle/SKILL.md`), so every first-track run
+warned about a healthy state. That is precisely the alarm fatigue `run-banner.js`'s own header says
+the banner exists to avoid. The writer now recomputes coverage **after** the merge — from live rows,
+never trusted from the input file, for the same reason `meta.n` is re-derived — and records the
+verdict in `detail.all_scope_reason`: `awaiting-track` (another track owes it; the next scheduled run
+clears it unaided) → `success`; `sections-missing`, `stale-prior`, `withheld` → `partial`.
+`detail.coverage` carries `complete`/`uncovered[]`/`stale[]` so the reason can be checked rather
+than believed.
+
+**The guard that makes the downgrade safe:** a section with empty `meeting_days` is excluded by
+*every* day filter, so no day-scoped run will ever reach it. Treating it as "another track's job"
+would defer `__all__` forever, silently and in green. It is classified `sections-missing` and stays
+yellow. The covered track is also derived from the sections a run actually **wrote**, not from
+`--day` — on `write-analysis` that flag is provenance only and a scheduled run may pass none.
+
+**No status value was added and no DDL was run** — `analysis_runs_status_ck` is untouched. Every
+consumer of `status` was checked: `run-banner.js` (the level map), `faculty-tasks.js` (flags only
+`failed` and stale `running`, so it never saw `partial`), `system-prefs.js` (a column list, no
+semantics), and `lesson_aggregate.py`'s own `worklist` — where `needs_run` is already false for a
+track whose sections all have scopes, so `--latest` behaviour is unchanged and only its `reason`
+string gets more accurate.
+
+**Verified against the two real rows.** `e73a5467` — the banner quoted above — correctly **stays
+yellow**: coverage was complete and the nine M-day scopes were stale, which is genuinely actionable.
+It now reads *"Aggregated 12 sections and 4 instructor summaries. The whole-course summary is still
+owed: 9 sections were aggregated before that work changed, and must be re-run before the course can
+be summarized."* A simulated M-day first-track run on the same lesson turns green and reads *"…The
+whole-course summary waits on the T-day track — normal until that deadline passes."* Tests: 23 new
+cases in `supabase/admin/aggregate_summarize_test.py` (pure, no DB) and 4 in
+`tests/app-schema/test-run-banner.mjs` (16/16). `test-tasks`, `test-rollup`, `test-nav`,
+`test-system-prefs` and `test-imports` still pass.
+
+*Pre-existing, not caused by this change and left alone:* `aggregate_summarize_test.py` fails one
+case (`a cross-TERM match may be a stale offering, and says so`) identically at `HEAD`, and its
+`sys.path.insert` still hardcodes an absolute path from a previous machine layout
+(`c:\01 -- AI Projects\Socratic Instruction\…`) that no longer exists — harmless only because the
+script's own directory is `sys.path[0]`.
+
+---
+
 ## 2026-08-11 — Casey Pellizzari via Claude
 
 ### An untouched question was stored as full credit, and nothing could tell that from a grade

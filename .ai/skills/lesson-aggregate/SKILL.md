@@ -460,10 +460,35 @@ quote membership, enforces "no quotes on `__all__`", and caps
 covered. Your input file still decides which scopes are written; the flag never filters anything.
 Pass `--invoked-by scheduled` when a scheduler started the run rather than a person.
 
-**The writer records the run in `app.analysis_runs`** — one row per offering written, with the
-scopes and whether `__all__` landed (`success`) or was deferred (`partial`). A `--dry-run` records
-nothing, because it did not happen. Do **not** also write a `CHANGELOG.md` entry for a routine
-aggregation; reserve that file for schema changes and one-off repairs.
+**The writer records the run in `app.analysis_runs`** — one row per offering written. A
+`--dry-run` records nothing, because it did not happen. Do **not** also write a `CHANGELOG.md`
+entry for a routine aggregation; reserve that file for schema changes and one-off repairs.
+
+**`summary` on that row is UI copy, not a log line.** `site/js/run-banner.js` renders it verbatim
+in a strip under the nav on every faculty page, and `status` picks the colour. The writer composes
+it accordingly — plain sentences, counts rather than scope keys. The exact keys stay in `detail`
+(`scope_keys` holds them literally; `scopes_written` holds section codes and instructor *names*),
+because `instr:<uuid>` resolves to nothing a director can read. It printed the key list until
+2026-08-11, which is how sixteen identifiers reached a phone-width banner.
+
+**`status` turns on whether anyone must act, not on whether `__all__` landed.** Yellow is only
+affordable while it means "something is owed that nobody is already delivering", so a deferral the
+next scheduled run clears by itself is **not** a warning. The writer recomputes coverage *after*
+the merge — from live rows, never trusted from the input file — and records the outcome in
+`detail.all_scope_reason`:
+
+| `all_scope_reason` | Meaning | `status` |
+|---|---|---|
+| *(absent)* | `__all__` was written this run | `success` |
+| `awaiting-track` | Every unaggregated section meets on a day this run did not cover. The two-run cycle, working. | `success` |
+| `sections-missing` | A section of a covered day still has no scope — or has empty `meeting_days`, so no day-scoped run will ever reach it | `partial` |
+| `stale-prior` | Every section is covered, but a stored scope predates a change to that section's work (Step 5) | `partial` |
+| `withheld` | Everything is covered and current, and `__all__` was still not sent | `partial` |
+
+`detail.coverage` carries `complete`, `uncovered[]` and `stale[]` as section codes, so the reason
+can be checked rather than taken on trust. Until 2026-08-11 every first-track run recorded
+`partial`, which raised a yellow warning for a healthy state on roughly half of all nightly runs —
+the alarm fatigue the banner exists to prevent.
 
 ## Step 5 — Verify
 

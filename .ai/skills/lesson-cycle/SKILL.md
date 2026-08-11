@@ -178,14 +178,26 @@ tell "the cycle ran and did both halves" from "someone ran grading alone".
 ```json
 { "graded": true, "graded_students": 32, "skipped_finalized": 4, "skipped_instructor": 0,
   "scopes_written": ["M1A", "M3A"], "all_scope": "deferred",
+  "all_scope_reason": "awaiting-track",
   "sub_runs": ["<analysis_runs.id of the grading run>", "<…of the aggregation run>"] }
 ```
 
-Status: `success` when both halves completed; `partial` when it ran but did less than asked (the
-usual case being `__all__` deferred); `skipped` when it correctly declined — deadline not passed,
-or no graded free-response question to grade; `failed` with `error` set when it stopped on an
-error. **A run that dies without updating its row leaves `status='running'`, which is the point** —
-that is how an abandoned overnight run becomes visible.
+Status: `success` when both halves completed; `partial` when it ran but left something owed that
+**nobody is already on their way to delivering**; `skipped` when it correctly declined — deadline
+not passed, or no graded free-response question to grade; `failed` with `error` set when it
+stopped on an error. **A run that dies without updating its row leaves `status='running'`, which is
+the point** — that is how an abandoned overnight run becomes visible.
+
+**A deferred `__all__` is not by itself `partial`.** Deferring it to the second day track is the
+two-run cycle working as designed, and reporting that as `partial` put a yellow banner in front of
+every director on roughly half of all nightly runs. Copy the aggregation sub-run's verdict: take
+`all_scope_reason` from the `lesson-aggregate` row and use `success` for `awaiting-track`,
+`partial` for `sections-missing`, `stale-prior` or `withheld`. That vocabulary, and what each
+reason means, is in `.ai/skills/lesson-aggregate/SKILL.md` Step 4.
+
+**`summary` is read by a person, on a phone.** `site/js/run-banner.js` prints it verbatim under the
+nav on every faculty page. Write plain sentences; keep uuids and `instr:<uuid>` scope keys in
+`detail`, where the aggregation writer also puts them.
 
 Still write a `CHANGELOG.md` entry when a run does something a *future maintainer* needs to know
 about — a schema change, a bulk correction, a one-off repair. Routine grade-and-aggregate cycles

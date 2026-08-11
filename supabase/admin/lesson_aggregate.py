@@ -974,6 +974,134 @@ def _run_finish(conn, run_id, status, summary=None, detail=None, error=None):
     conn.commit()
 
 
+# ── The audit line a director actually reads ─────────────────────────────────────────
+# `run-banner.js` prints `analysis_runs.summary` VERBATIM in a strip under the nav on every
+# faculty page. Everything in this block is therefore UI copy, not log output, and two rules
+# follow from that:
+#
+#   1. NEVER put a scope key in it. A section scope's key is a uuid (resolvable to its code); an
+#      instructor scope's key is the literal string 'instr:<uuid>', and there is nothing to
+#      resolve it to. Joining the key list put sixteen identifiers — four of them raw uuids — in
+#      front of a director on a phone. The exact keys stay in `detail.scope_keys`, which is where
+#      debugging wants them anyway.
+#   2. DEFERRING '__all__' IS USUALLY NORMAL, and must not read as a fault. The two-run cycle
+#      writes the whole-course scope on the SECOND day track's run BY DESIGN, so reporting
+#      'partial' on the first track raised a yellow warning for a healthy state on roughly half
+#      of all nightly runs — precisely the alarm fatigue run-banner.js exists to avoid. The
+#      cheapest way to stop crying wolf is to know WHY the scope is absent, which is what
+#      _all_scope_state works out.
+
+def _all_scope_state(c, scopes, day, bucket_scopes):
+    """Why the whole-course scope is, or is not, writable — recomputed AFTER the merge.
+
+    `pull` reports the same coverage before the model writes anything; this asks it again at the
+    only moment that knows what actually landed, and derives it from live rows rather than
+    trusting the input file, for the same reason `meta.n` is re-derived.
+
+    `reason` is one of:
+      `awaiting-track`    A section has never been aggregated, and every such section meets on a
+                          day this run did not cover. The other track owes it and the next
+                          scheduled run writes it unaided. **Normal progress.**
+      `sections-missing`  A section this run WAS responsible for still has no scope — it meets on
+                          a day just covered, or on no day at all, and a section with empty
+                          `meeting_days` is reached by no day-scoped run ever (`pull` warns about
+                          exactly this). **Actionable.**
+      `stale-prior`       Every section is covered, but a stored scope was written before that
+                          section's work changed. Folding it in now would synthesize over a cohort
+                          that has moved (SKILL.md Step 5). **Actionable.**
+      `withheld`          Every section is covered and current and '__all__' was still not sent.
+                          **Actionable** — nothing resolves it on its own.
+    """
+    by_sec = defaultdict(list)
+    for r in c["rows"]:
+        by_sec[r["section_id"]].append(r)
+
+    # The day tracks this run covered, taken from the sections it WROTE rather than from --day
+    # alone. On write-analysis --day is provenance only (it filters nothing), and a scheduled run
+    # may pass none at all — trusting it would report every section of the other track as
+    # neglected on any run that omitted the flag.
+    run_days = {str(d) for k in bucket_scopes if k != ALL and not k.startswith(INSTR)
+                for d in ((by_sec.get(k) or [{}])[0].get("meeting_days") or [])}
+    if day:
+        run_days.add(day)
+
+    uncovered, other_track, stale, tracks = [], [], [], set()
+    for sid, rows in sorted(by_sec.items(), key=lambda kv: kv[1][0]["section_code"]):
+        code = rows[0]["section_code"]
+        sc = scopes.get(sid) if isinstance(scopes.get(sid), dict) else None
+        # The same "has this section been aggregated?" test `pull` uses — ANY prose a section
+        # scope can carry. Testing readiness_summary alone would call every section unaggregated:
+        # that field moved to the instructor scope on 2026-07-22.
+        if not sc or not (sc.get("readiness_summary") or sc.get("misconception_trends")
+                          or sc.get("misconception_recommendation")):
+            uncovered.append(code)
+            days = {str(d) for d in (rows[0].get("meeting_days") or [])}
+            if days and not (days & run_days):
+                other_track.append(code)
+                tracks |= days
+            continue
+        stored = (sc.get("meta") or {}).get("source_fingerprint")
+        if stored and stored != _fingerprint(rows):
+            stale.append(code)
+
+    if uncovered:
+        every_missing_section_is_another_day_s = len(other_track) == len(uncovered)
+        reason = "awaiting-track" if every_missing_section_is_another_day_s else "sections-missing"
+        codes = uncovered if every_missing_section_is_another_day_s \
+            else [x for x in uncovered if x not in set(other_track)]
+    elif stale:
+        reason, codes = "stale-prior", stale
+    else:
+        reason, codes = "withheld", []
+    return {"reason": reason, "codes": codes, "tracks": sorted(tracks),
+            "uncovered": uncovered, "stale": stale, "complete": not uncovered}
+
+
+def _names(codes, cap=4):
+    """Name a few sections, or count them. The banner is one phone-width line."""
+    return ", ".join(codes) if len(codes) <= cap else f"{len(codes)} sections"
+
+
+def _scope_phrase(bucket_scopes):
+    """What this run wrote, as a director would say it — '12 sections and 4 instructor summaries'.
+
+    Counts, not keys (rule 1 above). Small courses still get their section codes, because naming
+    two sections is shorter than counting them and tells the reader more.
+    """
+    codes = sorted(s.get("section_code") or "?" for k, s in bucket_scopes.items()
+                   if k != ALL and not k.startswith(INSTR))
+    n_i = sum(1 for k in bucket_scopes if k.startswith(INSTR))
+    parts = []
+    if codes:
+        parts.append(f"{len(codes)} section{'' if len(codes) == 1 else 's'}"
+                     + (f" ({', '.join(codes)})" if len(codes) <= 4 else ""))
+    if n_i:
+        parts.append(f"{n_i} instructor summar{'y' if n_i == 1 else 'ies'}")
+    return " and ".join(parts)
+
+
+def _run_summary(bucket_scopes, wrote_all, state):
+    """One or two plain sentences: what this run wrote, and what the rollup is still owed."""
+    phrase = _scope_phrase(bucket_scopes)
+    if wrote_all:
+        return (f"Aggregated {phrase}, and wrote the whole-course summary." if phrase
+                else "Wrote the whole-course summary.")
+    lead = f"Aggregated {phrase}." if phrase else "Wrote no section scopes."
+    codes, n = state["codes"], len(state["codes"])
+    if state["reason"] == "awaiting-track":
+        tracks = " and ".join(f"{t}-day" for t in state["tracks"]) or "the other"
+        return (f"{lead} The whole-course summary waits on the {tracks} track — normal until "
+                f"that deadline passes.")
+    if state["reason"] == "sections-missing":
+        return (f"{lead} The whole-course summary is still owed: {_names(codes)} "
+                f"{'has' if n == 1 else 'have'} never been aggregated.")
+    if state["reason"] == "stale-prior":
+        return (f"{lead} The whole-course summary is still owed: {_names(codes)} "
+                f"{'was' if n == 1 else 'were'} aggregated before that work changed, and must be "
+                f"re-run before the course can be summarized.")
+    return f"{lead} The whole-course summary was not written, though every section is covered."
+
+
 def _existing_payload(conn, offering_id):
     cur = conn.cursor()
     cur.execute("""select payload from analysis_reports
@@ -1702,19 +1830,37 @@ def cmd_write(args, conn):
             print(f"  [{'dry' if args.dry_run else 'ok '}] offering {oid}: "
                   f"{len(bucket['scopes'])} scope(s) merged into {len(scopes)} stored")
             # Audit row. Only on a real write — a --dry-run did not happen and must not claim to.
-            # 'partial' when the whole-course scope was not among them: the lesson is aggregated
-            # but not finished, which is a different fact from a clean success.
+            #
+            # 'partial' is reserved for a rollup that is owed something NOBODY IS ALREADY ON THEIR
+            # WAY TO DELIVERING, because run-banner.js renders it as a yellow warning to every
+            # director of the course. A first-track run that defers '__all__' to the second track
+            # is the two-run cycle working exactly as designed (SKILL.md, "The two-run cycle"), so
+            # it records 'success' and says what it is waiting for. It reported 'partial' until
+            # 2026-08-11, which warned on about half of all nightly runs and taught directors to
+            # ignore the strip.
             if not args.dry_run:
-                codes = sorted(s.get("section_code") or k for k, s in bucket["scopes"].items())
+                day = (args.day or "").strip().upper() or None
+                wrote_all = ALL in bucket["scopes"]
+                state = _all_scope_state(c, scopes, day, bucket["scopes"])
+                # Readable in `detail` too: 'instr:<uuid>' is no more use to someone reading the
+                # audit trail than to a director. `scope_keys` keeps the literal payload keys, so
+                # a key can still be matched straight against analysis_reports.payload.scopes.
+                written = sorted(
+                    (f"{INSTR}{s.get('instructor_name') or k[len(INSTR):]}" if k.startswith(INSTR)
+                     else (s.get("section_code") or k))
+                    for k, s in bucket["scopes"].items())
                 _run_finish(
                     conn,
-                    _run_start(conn, c["meta"], "lesson-aggregate", args.invoked_by,
-                               (args.day or "").strip().upper() or None),
-                    "success" if ALL in bucket["scopes"] else "partial",
-                    summary=f"Wrote {len(bucket['scopes'])} scope(s): {', '.join(codes)}."
-                            + ("" if ALL in bucket["scopes"] else f" '{ALL}' not written."),
-                    detail={"scopes_written": codes,
-                            "all_scope": "written" if ALL in bucket["scopes"] else "deferred",
+                    _run_start(conn, c["meta"], "lesson-aggregate", args.invoked_by, day),
+                    "success" if wrote_all or state["reason"] == "awaiting-track" else "partial",
+                    summary=_run_summary(bucket["scopes"], wrote_all, state),
+                    detail={"scopes_written": written,
+                            "scope_keys": sorted(bucket["scopes"]),
+                            "all_scope": "written" if wrote_all else "deferred",
+                            **({} if wrote_all else {"all_scope_reason": state["reason"]}),
+                            "coverage": {"complete": state["complete"],
+                                         "uncovered": state["uncovered"],
+                                         "stale": state["stale"]},
                             "scopes_stored_total": len(scopes)},
                 )
             written += 1
