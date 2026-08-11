@@ -8,6 +8,77 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-11 (second) — Matthew Recker via Claude
+
+### The site never told a cadet what to read
+
+Every phys-215 assignment carried the same generic description — *"Complete before class. Full
+credit for a genuine, thoughtful effort."* — and every phys-310 assignment carried `NULL`. The
+**assigned reading existed only in the syllabus and in the builder's schedule file**, so the one
+line a cadet sees under an assignment title on `site/student/assignments.html` said nothing about
+what to read before answering it.
+
+`app.assignments.description` now leads with it: **78 rows** written, one column, one table.
+
+| course | rows | example |
+|---|---:|---|
+| phys-215 | 37 live + 37 `training-fall-2026` sandbox twins | `Reading: 22.2–22.3 · Complete before class. Full credit for a genuine, thoughtful effort.` |
+| phys-310 | 4 | `Reading: 2.1, 2.5, 2.6` |
+
+**Sections, not pages, and the distinction is the whole point.** *(Course director's correction
+mid-run.)* The reading is the **syllabus's** section numbering — Cengage for phys-215, Murray &
+Holbert for phys-310, both being the book the cadet actually holds. It is **not** the
+`reference_pages` range already sitting in `activities.content` (`98-125`, `170-179`): that is
+OpenStax page numbering, a *different book*, kept for RAG grounding and never assigned to anybody.
+The two are one column apart in the data and would look equally plausible on a card.
+
+The existing sentence is **preserved, not replaced** — the reading is prefixed to it. A row whose
+description was `NULL` gets the reading alone rather than inheriting phys-215's boilerplate, which
+is why the phys-310 strings are shorter.
+
+The training sandbox twins are included because they have been **separate rows** since the
+2026-07-28 content isolation split, so writing them touches nothing live — and a sandbox that
+disagrees with the real course is the thing that split exists to prevent. `--skip-training` opts out.
+
+### phys-110 is NOT covered, and this repo cannot cover it
+
+Its 37 assignments were left untouched, deliberately. There is no `_builder/courses/phys-110/`, no
+phys-110 schedule file, and no phys-110 syllabus anywhere in the tree, so **the repo holds no
+reading-section data for that course at all** — `build_110_preflights.py` says as much in its own
+header (*"No reading links"*). The only reading-shaped data phys-110 has is the OpenStax
+`reference_pages` above, which is precisely what this change is not.
+
+Covering it is one file: its syllabus's reading column as
+`_builder/courses/phys-110/phys110_fall2026_schedule.md`, with the same `Lsn` / `Topic` / `Reading`
+headers. The script then picks it up as a new `COURSES` entry and nothing else changes.
+
+### The script parses the schedule; it does not carry a copy of it
+
+New: [`scripts/fall2026/set_reading_descriptions.py`](scripts/fall2026/set_reading_descriptions.py)
+— DML tier, dry-run by default, idempotent (a second run reported `0 to write, 78 already right`).
+
+It **reads the `Reading` column out of the two builder schedule files at run time** rather than
+embedding a transcription, and reads the columns **by name** off the header row both files already
+declare as a parsing contract. A hand transcription sitting between a source and a load-bearing
+string is what produced this repo's one published-artifact defect — phys-310 lesson 2's slug, minted
+from a word that was never in the source. A schedule edit now reaches the site on the next run, with
+nothing to re-transcribe and nothing to go stale.
+
+Every row's DB title is checked against the schedule's topic before it is written
+(accent/punctuation/case-insensitive, so `Elec. Fields` vs `Electric Fields` passes but a wrong
+lesson does not). All 78 passed; a mismatch aborts the whole run rather than writing one bad
+reading, and there is deliberately no `--force`. The guard is what makes phys-310's hand-written
+slug map safe, since three of its four assignments are `lesson-NN` and the fourth is a minted
+artifact slug (`phys310-binding-energy-and-stability-e0ceabee`, which is lesson **3**).
+
+**Two things for the course director to look at, neither of them this change's doing:**
+- **phys-215 lessons 36 and 39 share a reading** — both `43.8, 43.10`, for *Double-Slit
+  Interference* and *Intro to Nuclear (Planetarium)*. That is what the schedule says and it was
+  transcribed faithfully; chapter 43 for a double-slit lesson looks like a schedule error, and it is
+  now visible to 300-odd cadets. Fix the schedule and re-run.
+- **phys-310 has 4 assignments in the database against 20 `PF = Y` lessons** in its schedule. The
+  other 16 have never been created, so there was nothing to write a reading onto.
+
 ## 2026-08-11 — Matthew Recker via Claude
 
 ### The run banner warned about a healthy state, in uuids
