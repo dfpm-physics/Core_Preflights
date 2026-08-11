@@ -8,6 +8,51 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-11 — Casey Pellizzari via Claude
+
+### An untouched question was stored as full credit, and nothing could tell that from a grade
+
+The 2026-08-11 nightly cycle graded phys-215 `preflight-02` T-day and skipped 23 of 193 students —
+1 finalized, 22 instructor-drafted. That much is `/preflight-analyze` Step 9 working as designed.
+What the design misses is that **its guard is per ROW and the damage is per QUESTION.**
+
+`buildGradeData()` in `site/js/faculty-grade.js` defaults an ungraded question to `status:'full'`
+at full points with empty feedback, and `gradeRows()` writes **every** question as soon as any one
+of them is edited. So an instructor who writes feedback on Q2 and never opens Q3 saves Q3 as a
+green full-credit cell, the row is stamped `source='instructor'`, and every future run skips the
+student forever. The stored result is **indistinguishable from a question an instructor read and
+approved** — there is no state meaning "nobody has looked at this".
+
+18 questions in that offering were in that condition (2 in T3C, 16 in T5C, which was hand-graded
+end to end). All 18 were assessed against `expected_response` and OpenStax Vol. 2 §5.1–5.2
+(pp. 172–177). **13 were correct as stored.** Five were not:
+
+- **One cadet held a zero on an 832-character answer.** The instructor's Grade page had loaded
+  2 h 22 min *before* that cadet committed, so `hasAnswer` was false and the default for an unseen
+  answer is `zero`, not `full`. Saving the sibling question wrote it. This is the stale-page case,
+  and it is the one that costs points: 1/2 for work that earns 2/2.
+- **Four were full-credit greens on answers carrying real errors** — polarization described in
+  place of charge transfer (twice), "electric force is conserved" for charge conservation, and
+  "induction" used for contact charging. Now `warn`: same full credit, plus the tailored
+  correction the cadet should have received.
+
+Repaired surgically rather than by re-running the skill, which would have reverted 22 instructors'
+work: only `question_scores[qN]` and the recomputed `points_earned` were written.
+`source`, `is_finalized`, `graded_by`, `graded_at`, `diagnostic` and every sibling question were
+left untouched and verified unchanged on read-back, so the rows remain instructor-owned
+**unpublished** drafts — nothing reached a student, and the instructor reviews before finalizing.
+One `grade_events` row per change (`event='rescored'`, before/after in `detail`), and an
+`analysis_runs` row covering all 18. Dry-run-by-default script, idempotent; a second pass writes
+nothing.
+
+**Two things this did NOT do.** The root cause is untouched — the Grade page still awards silent
+full credit to every unopened question on an edited card, and the next split-grading session will
+reproduce this. And the 22 skipped rows still carry **no `schema:1` diagnostic**, so those cadets
+contribute nothing to the cohort rollup; `/lesson-aggregate` worked around it for T5C by reading
+raw responses. A term-wide sweep found the same shape in three more places outside this run's
+scope — phys-110 `preflight-02` and phys-310 `lesson-01`, both on the other nightly job's courses,
+left alone deliberately.
+
 ## 2026-08-10 (eleventh) — Matthew Recker via Claude
 
 ### Cadets were being sent every diagnostic PREP holds about them
