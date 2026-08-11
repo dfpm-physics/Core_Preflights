@@ -8,6 +8,51 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-10 (seventh) — Matthew Recker via Claude
+
+### There are two scheduled lesson-cycles, not one — the second is now recorded
+
+`docs/operations/SCHEDULED-LESSON-CYCLE.md` was written this morning for the phys-215 job and
+opened *"This page records the one that exists."* That was true for about nine hours. A second
+scheduled cycle has been running on the course director's Windows box since 2026-08-07 — **phys-110
+and phys-310, 00:33 nightly** — and it was recorded nowhere in the repo, which is precisely the gap
+the phys-215 page was written to close. Its instructions lived only in a live Claude Code session,
+and session state is not version-controlled, is invisible to everyone else, and dies with the
+terminal. CORE.md §0's rule about private agent memory is aimed at exactly this shape of fact.
+
+- **The page now covers both jobs**, with a table at the top and each job under its own heading.
+  The phys-215 content is unchanged apart from the singular framing that had become false.
+- **The two are safe only because their courses are disjoint** — and they *do* overlap in
+  wall-clock time, since the 00:33 job can still be grading when the 01:00 job starts. That is now
+  stated as the safety property, with the standing instruction that adding a course to either means
+  checking it is not in the other.
+- **Job 2's weaknesses are documented rather than glossed.** It is a `CronCreate` job inside a live
+  session: it dies when the session closes, auto-expires after 7 days, has no wrapper, no disk log
+  and no notification, and forbids `git commit`/`git push` by prompt instruction rather than by
+  `--disallowedTools` as job 1 does. Anyone trusting it the way they trust job 1 would be wrong.
+- **A missing gate was found by reading job 1's table and has been added**:
+  `scripts/grounding/check_grounding.py`. Job 2 never required it. The 2026-08-10 run happened to
+  check grounding on its own initiative — that was a careful subagent, not correct instructions. A
+  wrong `textbook_base_path` makes `/preflight-analyze` warn once and grade the whole cohort
+  ungrounded with nothing downstream looking different.
+- **Four gotchas the job has already paid for** are written down: `pull` rejects a bare
+  `preflight-02` (both phys-110 and phys-215 have one live), `worklist`'s `submissions` count is
+  offering-wide and overstated the M track 267-vs-163, phys-110's M and T tracks stopped being tied
+  at `e93be5c`, and the at-scale zeroing that fed into the dashboard outage fixed in `d7bb539`.
+- **Being behind `origin/main` stays a human call for job 2**, unlike job 1 which resolves it with
+  `git pull --ff-only`. Decided today after the first real run refused: `e93be5c` had rewritten
+  every phys-110 T-day deadline ~15 hours earlier, and a run whose premise is "act on the deadline
+  that just passed" should not proceed from a checkout predating a mass deadline rewrite for that
+  course. The cost — a blocked night whenever someone pushes — was accepted knowingly.
+
+`docs/DOC-SOURCES.json` updated: `supabase/admin/lesson_aggregate.py` added as a source, since the
+page now documents `worklist --latest` semantics and the bare-slug rejection.
+
+*Verification:* `python scripts/docs/check_doc_sources.py` clean. Documentation only — no code, no
+schema, no data touched, and no grades changed.
+
+---
+
 ## 2026-08-10 (sixth) — Casey Pellizzari via Claude
 
 ### Missing a preflight locked a cadet out of PREP entirely

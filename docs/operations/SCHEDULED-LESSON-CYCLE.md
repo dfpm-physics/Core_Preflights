@@ -1,13 +1,28 @@
 # Running the lesson cycle on a schedule
 
 **The repo schedules nothing, on purpose.** `.ai/skills/lesson-cycle/SKILL.md` §"Running unattended"
-documents the invocation and leaves the scheduler to the operator. This page records the one that
-exists, so the arrangement is discoverable from the repo rather than living in one operator's head
+documents the invocation and leaves the scheduler to the operator. This page records the ones that
+exist, so the arrangement is discoverable from the repo rather than living in one operator's head
 or in an agent's private memory (CORE.md §0 forbids the latter).
 
-*Machine: the Linux box, `~/projects/Core_Preflights`. Set up 2026-08-10. Course: phys-215 only.*
+**There are two, on two machines, covering disjoint courses:**
+
+| Job | Machine | Courses | Fires |
+|---|---|---|---|
+| [phys-215 wrapper](#job-1--phys-215-linux-box) | Linux box, `~/projects/Core_Preflights` | phys-215 | 01:00 nightly |
+| [phys-110 / phys-310 session loop](#job-2--phys-110--phys-310-windows-box) | Windows box, `d:\01 -- AI Projects\Core_Preflights` | phys-110, phys-310 | 00:33 nightly |
+
+**The disjointness is the safety property, not the schedules.** They overlap in wall-clock time —
+job 2 can still be grading when job 1 starts — and that is only safe because no offering is in
+scope for both. CORE.md §0: two agents writing `grades` and `analysis_reports` for one offering
+with different views of the cohort is the failure the coordination gate exists to prevent. **If a
+course is ever added to one, check it is not in the other.**
 
 ---
+
+# Job 1 — phys-215, Linux box
+
+*Machine: the Linux box, `~/projects/Core_Preflights`. Set up 2026-08-10. Course: phys-215 only.*
 
 ## What runs
 
@@ -129,3 +144,107 @@ Before letting it run unwatched against a lesson that matters, run it by hand on
 `grades` and `analysis_reports` for one offering with different views of the cohort is the failure
 the coordination gate exists to prevent. An unattended job cannot designate an operator or confirm
 nobody else is mid-run; the reserved small-hours slot is a mitigation, not a substitute.
+
+---
+
+# Job 2 — phys-110 / phys-310, Windows box
+
+*Machine: the course director's Windows box, `d:\01 -- AI Projects\Core_Preflights`. Set up
+2026-08-07; first run that graded anything, 2026-08-10. Courses: phys-110 and phys-310 only.*
+
+## What runs
+
+| | |
+|---|---|
+| **Trigger** | a `CronCreate` job **inside a live Claude Code session**, `33 0 * * *` — 00:33 America/Denver |
+| **Wrapper** | none. There is no script; the schedule fires a prompt into the session |
+| **Logs** | none on disk. The record is the session transcript and the `app.analysis_runs` rows |
+| **Notification** | none. The operator reads the session |
+| **Writes** | whatever the two sub-skills write. The scheduler itself writes nothing to the DB |
+| **Commits / pushes** | **neither, ever** |
+
+## How it differs from job 1, and where it is weaker
+
+Job 1 is a hardened shell wrapper driving `claude -p`. Job 2 is a scheduled prompt inside an
+interactive session that fans out to subagents. **Read these before trusting it the way you trust
+job 1:**
+
+- **It dies when the session dies, and expires after 7 days regardless.** `CronCreate` jobs are
+  session-only — nothing is written to disk — and recurring ones auto-expire after 7 days. Job 1
+  survives a reboot; **job 2 does not survive closing the terminal.** It must be re-armed roughly
+  weekly, by hand.
+- **Silence is not an alarm here — there is no alarm.** Job 1 notifies from an EXIT trap, so
+  refusals and crashes report themselves. Job 2 reports into the session and nowhere else. If the
+  session is gone, nothing fires and nothing says so.
+- **`git commit` / `git push` are forbidden by instruction, not by tooling.** Job 1 denies both at
+  the tool layer with `--disallowedTools`. Job 2 relies on the prompt telling each subagent not to.
+  That has held, but it is a weaker guarantee.
+- **It cannot run on the Linux box, and job 1 cannot run here.** Grading needs the service-role
+  config, `supabase/admin/.env`, the `.venv`, and the ~968 MB textbook corpus that
+  `textbook_base_path` points at (CORE.md §3). Those live per-machine.
+
+## Shape of a night
+
+The scheduled prompt does the cheap part itself and delegates the expensive part, so a night with
+no work costs two subprocess calls and no agent:
+
+1. Run `worklist --course phys-110 --latest --json` and the same for phys-310. **Not in a
+   subagent** — it is two commands, and spawning an agent to make them costs more than they do.
+2. If neither returns `"action": "run"`, stop. Most nights end here.
+3. If phys-110 has work, spawn **one** `general-purpose` subagent to execute
+   `.ai/skills/lesson-cycle/SKILL.md` for phys-110, synchronously.
+4. If that subagent actually graded, wait 10 minutes, then repeat for phys-310.
+
+Subagents are used so the grading transcript — hundreds of student answers — is discarded when the
+agent ends instead of accumulating in the session.
+
+## The gates
+
+Same intent as job 1's, and for the same reason: each checks that a credential **works**, not that
+a file exists. All four run inside the subagent, before anything is written.
+
+| # | Gate | Catches |
+|---|---|---|
+| 1 | `supabase/admin/app_tier_check.py` | dead or rotated DB passwords |
+| 2 | REST probe on `/rest/v1/courses` with `Accept-Profile: app` | revoked service key; the free tier auto-pausing the project |
+| 3 | `scripts/grounding/check_grounding.py` | **the silent one** — grading runs ungrounded, warns once, and nothing downstream looks different |
+| 4 | clean tree, and `git fetch` showing neither behind nor ahead of `origin/main` | someone's uncommitted edits; a stale clone |
+
+**Gate 3 was missing until 2026-08-10** and was added after reading job 1's table. The 2026-08-10
+run happened to check grounding on its own initiative; that was the subagent being careful, not the
+instructions being right.
+
+## Being behind `origin/main` is a human call
+
+Job 1 resolves this itself at gate 6 with `git pull --ff-only`. **Job 2 deliberately does not.**
+The director decided on 2026-08-10, after the first real run refused: commit `e93be5c` had rewritten
+every phys-110 T-day deadline ~15 hours earlier, and a run whose whole premise is *"act on the
+deadline that just passed"* should not proceed from a checkout that predates a mass deadline rewrite
+for that course. The subagent reports and stops; a human merges and re-triggers.
+
+The cost is a blocked night whenever someone pushes. That was accepted knowingly.
+
+## Gotchas this job has already paid for
+
+- **`pull` rejects a bare slug.** `--lesson preflight-02` fails — both phys-110 and phys-215 have
+  one live this term. Use `--lesson phys-110-preflight-02-written`.
+- **`worklist`'s `submissions` count is offering-wide, not track-scoped.** It reported 267 for
+  preflight-02 day M; the M track actually held 163, the other 104 being T-track. Do not quote it
+  as the size of the track being run.
+- **phys-110's M and T tracks are no longer tied.** They used to close at the same instant because
+  `due_by_day` was empty on almost every offering; `e93be5c` (2026-08-09) gave each preflight its
+  own T-day deadline, so they are now typically 24h apart. Read the live dates — do not assume
+  either shape.
+- **Zeroing non-submitters is correct, and it broke the student dashboard once.** The first
+  at-scale run zeroed 42 non-submitters, which with job 1's 34 produced 41 grade rows carrying a
+  finalized zero and no submission — a shape `student-lessons.js` could not render, locking 34
+  cadets out of PREP entirely. Fixed in `d7bb539`; the zeros were correct and were kept. Expect
+  future runs to zero more, and do not withhold them.
+
+## Operating it
+
+There is no CLI. From the session that owns it: `CronList` to confirm the entry, `CronDelete <id>`
+to disable, and re-arm with `CronCreate` after the 7-day expiry or a session restart.
+
+**If this job is re-armed, re-read the prompt against this page first** — the prompt is the only
+copy of the instructions, and it lives in session state that nothing version-controls.

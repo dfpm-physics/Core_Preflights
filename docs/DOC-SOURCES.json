@@ -362,9 +362,10 @@
         ".ai/instructions/CORE.md",
         ".ai/skills/lesson-cycle/SKILL.md",
         "supabase/admin/app_tier_check.py",
-        "scripts/grounding/check_grounding.py"
+        "scripts/grounding/check_grounding.py",
+        "supabase/admin/lesson_aggregate.py"
       ],
-      "note": "Records the one scheduled lesson-cycle that exists (Linux box, phys-215, 01:00 nightly), because the repo deliberately ships no scheduler and CORE.md forbids keeping the fact in agent memory. SKILL.md is a source because this page restates its unattended contract AND corrects it: the documented `claude -p \"/lesson-cycle\"` slash form returns \"Unknown command\" with num_turns=0 and exit 0 on any clone without a .claude/skills/ mirror, which CORE.md section 4 forbids creating. app_tier_check.py and check_grounding.py are sources because the gate table names them and states what passing looks like."
+      "note": "Records BOTH scheduled lesson-cycles: job 1 (Linux box, phys-215, 01:00 nightly, shell wrapper driving claude -p) and job 2 (Windows box, phys-110 + phys-310, 00:33 nightly, a session-only CronCreate prompt fanning out to subagents). The repo deliberately ships no scheduler and CORE.md forbids keeping the fact in agent memory. The two are safe to overlap ONLY because their courses are disjoint — if a course is added to either, check it is not in the other. SKILL.md is a source because this page restates its unattended contract AND corrects it: the documented claude -p \"/lesson-cycle\" slash form returns \"Unknown command\" with num_turns=0 and exit 0 on any clone without a .claude/skills/ mirror, which CORE.md section 4 forbids creating. app_tier_check.py and check_grounding.py are sources because both gate tables name them and state what passing looks like; job 2 was missing the grounding gate until 2026-08-10. lesson_aggregate.py is a source because job 2 documents worklist --latest semantics, its offering-wide submissions count, and that pull rejects a bare lesson slug."
     }
   ]
 }
