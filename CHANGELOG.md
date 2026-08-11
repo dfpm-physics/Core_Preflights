@@ -949,8 +949,23 @@ Reported by the course director: Physics 110 cadets could not get in. The page r
 card, the whole dashboard, because `main()` builds every row in one template literal with no
 per-row `try`/`catch`. Named: Emma Martinez, Cam Parker, Nathan Lillie, Tatiana Valdez, Brakkon
 Bench. Two of them described it as *not being able to log in*; all six accounts are in fact
-healthy — confirmed, unbanned, no forced rotation, and every one had signed in successfully, two
-of them today. They were signing in and then hitting the error page.
+healthy — confirmed, unbanned, no forced rotation, exactly one active enrollment each, and every
+one had signed in successfully, two of them today. They were signing in and then hitting the
+error page.
+
+**Those cadets also reported trouble on Saturday 08-08 and Sunday 08-09, and that was a different
+incident — do not merge the two.** This crash could not have fired before today: the shape did
+not exist in the database until `10:52:08`. The weekend failures were the depleted **disk IO
+budget** recorded in `2026-08-09 (third)`, resolved that evening by moving to Pro and Nano →
+Micro → Small. Re-measured 2026-08-10 to confirm it stayed fixed: `work_mem` 5 MB, **zero temp
+files across 120 s and 128 commits**, heap cache-hit 99.99%, student REST paths 185–318 ms. A
+third, overlapping condition is the duplicated enrollments of `2026-08-10 (third)` and
+`(fourth)` — **40 cadets held two active enrollments in one course** across that same weekend
+(reconstructed from `enrolled_at`/`dropped_at` at Saturday noon UTC; the repair entries count 25
+phys-215 and 17 phys-110, measured after more had accrued). That does not crash the page, but it
+does make its deadline and its stitching ambiguous, and it covered two of the six named cadets —
+Straub and Valdez. Now zero. **Three distinct causes inside four days, with one symptom — "I
+can't get into PREP" — between them.**
 
 **Nothing was wrong with the data.** The student lesson view derived one fact two ways:
 
@@ -960,22 +975,41 @@ of them today. They were signing in and then hitting the error page.
 | `completion` was built | `submissions.status === 'committed'` |
 
 Those agree for every cadet who submits, which is why this survived the cutover and months of
-use. They disagree for every cadet who does **not**: `/preflight-analyze` zeroes each
-non-submitter once a deadline passes (`diagnostic.no_submission`) and finalizes that zero,
-producing a finalized grade with no submission row at all. State said `GRADED`; completion said
-`null`; and every renderer in a `GRADED` branch reads `completion.points` / `completion.path`
-unguarded. **Simply missing preflight-02 locked a cadet out of the site.**
+use. They disagree for every cadet who does **not**. The common case is
+`/preflight-analyze` zeroing each non-submitter once a deadline passes
+(`diagnostic.no_submission`) and finalizing that zero, producing a finalized grade with no
+submission row at all. State said `GRADED`; completion said `null`; and every renderer in a
+`GRADED` branch reads `completion.points` / `completion.path` unguarded. **Simply missing
+preflight-02 locked a cadet out of the site.**
 
-So the bug was dormant until the first at-scale zeroing run and then hit everyone at once — the
+**The trigger is broader than a zeroed non-submitter, which the first pass over this got wrong.**
+The condition is *any* finalized grade without a **committed** submission, and the 37 real rows
+break down four ways:
+
+| Rows | Source | Submission | Grade |
+|---|---|---|---|
+| 31 | `ai_suggested` | none | zero |
+| 3 | `instructor` | none | **full credit** |
+| 2 | `ai_suggested` | **draft** | full credit |
+| 1 | `instructor` | **draft** | full credit |
+
+So an instructor awarding credit to a cadet who never submitted breaks the page exactly as an
+automated zero does, and a **started-but-uncommitted draft** breaks it too — `'committed'` is a
+narrower test than "a submission row exists." Six of the 37 are not zeros at all. This matters
+beyond the incident: the crash needs no analysis run to occur, so hand grading alone could have
+reproduced it on any lesson.
+
+The bug was dormant until the first at-scale zeroing run and then hit everyone at once — the
 10:36 scheduled phys-110 close-out (*"Graded 163 submitted + zeroed 42 non-submitters"*) and the
-11:21 phys-215 run (*"…+ zeroed 34"*). **41 grade rows** across the two courses held the fatal
+11:21 phys-215 run (*"…+ zeroed 34"*). **44 grade rows** across the two courses held the fatal
 shape, and every future lesson would have added more.
 
-**34 real cadets were actually locked out**, across nine M-day sections (M1A, M1B, M1C, M3A, M3B,
-M3C, M5A, M5B, M5D). Of the other seven rows, five sit on **dropped** enrollments that no page
-queries, and two belong to **seeded fixtures with no auth account**, who cannot sign in at all.
-The earliest row that reached a real cadet is `2026-08-10T10:52:07` — so nobody was affected
-before today, and the outage is exactly as old as the first zeroing run.
+**37 real cadets were actually locked out** — 20 in phys-215 and 17 in phys-110 — across nine
+M-day sections (M1A, M1B, M1C, M3A, M3B, M3C, M5A, M5B, M5D). Of the other seven rows, five sit
+on **dropped** enrollments that no page queries, and two belong to **seeded fixtures with no auth
+account**, who cannot sign in at all. Every affected row was written between
+`2026-08-10T10:52:08` and `11:21:46` — so nobody was affected before today, and the outage is
+exactly as old as the first zeroing run.
 
 - **`deriveCompletion(item)` — new export** in `site/js/student-lessons.js`, lifted out of the
   projection so a test can reach it, and now derived from *the same fact the state is*: a
@@ -993,7 +1027,7 @@ before today, and the outage is exactly as old as the first zeroing run.
   isolation, and the bug lived in the gap between them. Verified to fail against the pre-fix rule
   before being accepted.
 
-**No data migration, and no grades changed.** The 39 zeros are correct and stay as they are.
+**No data migration, and no grades changed.** All 44 grades are correct and stay as they are.
 
 *Verification:* full offline+live suite, 4 failures and one `test-isolation` throw, all of which
 are present on an unmodified tree (the four `test-nav` dropdown assertions under the shared
@@ -1015,8 +1049,16 @@ faculty-rollup, faculty-student, faculty-ei for staff — the one query that doe
 `courseExtensions()`, which reads `extensions` and not `grades`), and `lesson_aggregate.py` joins
 through `submissions`, of which these rows have none. Nobody sees them and nothing counts them.
 
-*Two method notes, because each one produced a wrong answer here before being caught:*
+*Three method notes, because each one produced a wrong answer here before being caught:*
 
+- **Scan for the condition the code tests, not for the story you have about it.** This entry first
+  reported **41 rows and 34 cadets**, from a scan for `submission_id IS NULL` — because the
+  incident had been explained as "zeroed non-submitters have no submission row." The code tests
+  `status === 'committed'`, which is *narrower*: three cadets with an uncommitted **draft** were
+  equally broken and invisible to that scan. Corrected 2026-08-10 to **44 rows and 37 cadets**
+  after the course director asked whether the accounts were really clear. The deployed fix was
+  right throughout — it was written against the `'committed'` test, so it always covered all 44 —
+  but the blast radius was understated by three cadets for several hours.
 - **PostgREST caps a response at 1000 rows no matter what `limit` says.** `app.enrollments` holds
   1001. A single unpaged read dropped exactly one row — Straub's — and the first scan of stranded
   grades reported 8 instead of 9, having silently lost the one row the question was about. Verify
