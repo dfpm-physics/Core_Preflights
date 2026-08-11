@@ -99,13 +99,57 @@ reading, and there is deliberately no `--force`. The guard is what makes phys-31
 slug map safe, since three of its four assignments are `lesson-NN` and the fourth is a minted
 artifact slug (`phys310-binding-energy-and-stability-e0ceabee`, which is lesson **3**).
 
-**Two things for the course director to look at, neither of them this change's doing:**
-- **phys-215 lessons 36 and 39 share a reading** — both `43.8, 43.10`, for *Double-Slit
-  Interference* and *Intro to Nuclear (Planetarium)*. That is what the schedule says and it was
-  transcribed faithfully; chapter 43 for a double-slit lesson looks like a schedule error, and it is
-  now visible to 300-odd cadets. Fix the schedule and re-run.
-- **phys-310 has 4 assignments in the database against 20 `PF = Y` lessons** in its schedule. The
-  other 16 have never been created, so there was nothing to write a reading onto.
+**One thing for the course director to look at, not this change's doing:** **phys-310 has 4
+assignments in the database against 20 `PF = Y` lessons** in its schedule. The other 16 have never
+been created, so there was nothing to write a reading onto.
+
+### Four phys-215 readings were wrong, and the builder file said it was a byte-for-byte copy
+
+*(Same day, after the above. The course director: "The build reading list might have been made
+earlier and might not be correct" — and supplied `Physics_215__Fall_2026__Syllabus.pdf`.)*
+
+They were right. `_builder/courses/phys-215/phys215_fall2026_schedule.md` had described itself as an
+unmodified byte-for-byte copy of the kit's pilot schedule since 2026-08-04. Compared row by row
+against the syllabus's page-11 table, **four of its 37 readings disagreed**:
+
+| Lsn | was | is | what it was |
+|---:|---|---|---|
+| 3 | `22.3` | `22.3, Lab Manual` | the lab-technique reading, missing entirely |
+| 5 | `22.5` | `22.6` | lesson 4's upper bound, repeated |
+| 36 | `43.8, 43.10` | `36.1–36.2` | **lesson 39's reading**, on a double-slit lesson |
+| 37 | `36.1–36.2` | `37.1–37.3` | **lesson 36's reading** |
+
+**Lessons 36 and 37 were shifted by one row.** That is why the previous entry above flagged 36 and
+39 as sharing `43.8, 43.10` and guessed it was a schedule error — it was a *transcription* error,
+and the duplicate was the only symptom. **The other three left no symptom at all.** A wrong section
+number that is adjacent to the right one looks exactly like a right one; nothing in the repo could
+have caught `22.5` for `22.6`, and nothing did, for a week.
+
+8 rows rewritten (4 lessons × live + training). The idempotent re-composition **replaced** the stale
+`Reading:` prefix rather than stacking a second one, which is the case that design existed for.
+
+**Timing, because two of these were already in front of cadets:** `preflight-03`'s M-day deadline
+was **that same night** with **45 submissions already in**, so its correction adds a reading some
+cadets had already skipped — additive, and better late than wrong. `preflight-05` was six days out
+with 1 submission; lessons 36 and 37 are in November with none.
+
+**Deliberately not changed.** Two TOPIC strings also disagree — lesson 3 (`Coulomb's Law, Lab
+Techniques` vs `Coulomb's Law and Superposition`) and lesson 16 (`RC Circuits & Pre-Lab Activity`
+vs `RC Circuits`). Topic text is **load-bearing for phys-215**: it is baked into every published
+artifact's slug, header and component name, and the live `app.assignments` titles match the strings
+in the schedule file, not the syllabus. Renaming either desynchronizes a published artifact from its
+registration and breaks the title guard. That is a republish-and-re-register decision, and it is the
+course director's. Readings carry no such constraint, which is why they could simply be corrected.
+
+**The kit's `preflight-kit/examples/phys215_fall2026_schedule.md` still carries all four errors**,
+deliberately: the kit is never edited per course, and it is an example. Do not re-copy from it.
+
+The syllabus is filed at `_builder/courses/phys-215/` beside its transcription, and the schedule is
+now registered in `docs/DOC-SOURCES.json` against it — the mechanism that would have caught this.
+
+**phys-310 was not re-verified**, because no phys-310 syllabus was supplied. Its registered source
+is the workbook already in the repo, re-transcribed 2026-08-05; that remains the authority. If a
+newer phys-310 syllabus exists, the same comparison is worth running.
 
 ## 2026-08-11 — Matthew Recker via Claude
 

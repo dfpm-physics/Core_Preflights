@@ -281,6 +281,16 @@
       "note": "A hand transcription of TABLE 1 (page 10) of the syllabus cadets are issued, and the file scripts/fall2026/set_reading_descriptions.py reads for a lesson's assigned reading -- which it writes into app.assignments.description, where every phys-110 cadet reads it. Added 2026-08-11, the day the syllabus first entered the repo; before that the script reported phys-110 as uncoverable on every run. Registered for the reason its phys-310 sibling was: a transcription that goes stale in silence is this repo's known failure mode. The transcription was verified structurally rather than by re-reading -- all 37 preflight lessons' M/T meeting dates match SCHEDULES['phys-110'] in scripts/fall2026/set_due_dates.py, which was itself checked against site/data/academic-calendar.json, so a dropped row or shifted column would break that agreement. The READING values have no such independent check and are exactly why this entry exists. NOTE the syllabus's Reading column is Cengage SECTION numbers, not the OpenStax PAGE ranges in activities.content.reference_pages; the two are reading-shaped and one column apart. The PDF is binary, so the checker can only compare mtimes -- enough, because any syllabus revision at all warrants re-reading Table 1."
     },
     {
+      "doc": "_builder/courses/phys-215/phys215_fall2026_schedule.md",
+      "kind": "reference",
+      "tier": null,
+      "reviewed": "2026-08-11",
+      "sources": [
+        "_builder/courses/phys-215/Physics_215__Fall_2026__Syllabus.pdf"
+      ],
+      "note": "The build skill reads this for a lesson's topic and reading, and scripts/fall2026/set_reading_descriptions.py reads its Reading column into app.assignments.description, where every cadet sees it. Registered 2026-08-11, the day the current syllabus first entered the repo -- and registering it immediately found four wrong readings. The file had described itself as a byte-for-byte unmodified copy of preflight-kit/examples/phys215_fall2026_schedule.md since 2026-08-04; against the syllabus's page-11 table, lesson 3 was missing ', Lab Manual', lesson 5 read 22.5 for 22.6, and lessons 36 and 37 were SHIFTED BY ONE ROW (36 carried lesson 39's '43.8, 43.10'). Only the shift was detectable without the syllabus, and only because it left 36 and 39 duplicated; the other three looked entirely plausible. That is the whole argument for this entry. NOTE the Reading column is CENGAGE section numbers (the book cadets hold) and cannot be mapped mechanically onto the OpenStax text the tutor is grounded in. Two TOPIC strings still disagree with the syllabus (lessons 3 and 16) and are deliberately left alone: topic text is baked into this course's published artifact slugs and matches the live app.assignments titles, so changing one is a republish, not an edit. The kit example still carries all four reading errors and was not corrected -- the kit is never edited per course. The PDF is binary, so the checker can only compare mtimes; enough, because any syllabus revision warrants re-reading the table."
+    },
+    {
       "doc": "_builder/courses/phys-310/phys310_fall2026_schedule.md",
       "kind": "reference",
       "tier": null,

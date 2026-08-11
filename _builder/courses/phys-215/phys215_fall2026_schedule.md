@@ -1,10 +1,42 @@
 # PHYS 215 — General Physics II · E&M and Optics · Fall 2026
 
-Copied byte-for-byte on 2026-08-04 from `preflight-kit/examples/phys215_fall2026_schedule.md`,
-where it ships as the pilot's reference schedule. The table below is unmodified; only this header
-and the conventions at the foot were added. The skill reads this file to look up a lesson's topic
-and reading. Keep the column headers exactly as written — `Lsn`, `Topic`, `Reading`, and `PF` are
-the ones that are parsed.
+Copied on 2026-08-04 from `preflight-kit/examples/phys215_fall2026_schedule.md`, where it ships as
+the pilot's reference schedule. The skill reads this file to look up a lesson's topic and reading,
+and `scripts/fall2026/set_reading_descriptions.py` reads the `Reading` column into
+`app.assignments.description`, where every cadet sees it. Keep the column headers exactly as
+written — `Lsn`, `Topic`, `Reading`, and `PF` are the ones that are parsed.
+
+> **⚠ The `Reading` column was NOT byte-identical to the syllabus, and four lessons were wrong.**
+> This file said it was copied byte-for-byte and unmodified until 2026-08-11, when the course
+> director supplied the current syllabus — `Physics_215__Fall_2026__Syllabus.pdf`, now filed beside
+> this file — and a row-by-row comparison against its page-11 schedule table found four
+> disagreements. **The syllabus is authoritative and this column now matches it.**
+>
+> | Lsn | was | is | why it mattered |
+> |---:|---|---|---|
+> | 3 | `22.3` | `22.3, Lab Manual` | the lab-technique reading was missing entirely |
+> | 5 | `22.5` | `22.6` | repeated lesson 4's upper bound; cadets were sent to the wrong section |
+> | 36 | `43.8, 43.10` | `36.1–36.2` | **lesson 39's reading**, on a double-slit lesson |
+> | 37 | `36.1–36.2` | `37.1–37.3` | **lesson 36's reading** |
+>
+> **Lessons 36 and 37 were shifted by one row**, which is why 36 and 39 both read `43.8, 43.10` —
+> a duplicate visible in this file all along, and the only one of the four a reader could have
+> caught without the syllabus. The other three look entirely plausible. That is the argument for
+> registering this file in `docs/DOC-SOURCES.json` against the PDF rather than trusting a copy.
+>
+> **The kit's `preflight-kit/examples/phys215_fall2026_schedule.md` still carries all four errors.**
+> It was deliberately not corrected: the kit is never edited per course, and it is an example. Do
+> not re-copy from it.
+
+> **Two TOPIC strings also disagree with the syllabus, and were deliberately NOT changed:**
+> lesson 3 is `Coulomb's Law, Lab Techniques` in the syllabus and `Coulomb's Law and Superposition`
+> here; lesson 16 is `RC Circuits & Pre-Lab Activity` there and `RC Circuits` here. **Topic text is
+> load-bearing for this course** — it is baked into every published artifact's slug, header, and
+> component name (see below), and the live `app.assignments` titles match the strings *here*, not
+> the syllabus's. Renaming either would desynchronize a published artifact from its registration
+> and break the title guard in `set_reading_descriptions.py`. Changing them is the course
+> director's call, and it is a republish-and-re-register, not an edit. Readings carry no such
+> constraint, which is why they could simply be corrected.
 
 `PF` = does this lesson get a preflight (`Y` / `N`). **37 of 41 lessons are marked `Y`** — only
 lesson 1 and the three Graded Reviews are not.
@@ -39,9 +71,9 @@ either, which is why 41 lessons and 37 `PF=Y` rows yield fewer artifacts than ei
 |----:|-------|-------|-------|---------|:--:|:--------:|:--:|------|
 | 1 | Thu 6 Aug | Fri 7 Aug | Course Admin / Vector Review | 3.1–3.4, 22.1 | N | CSEM | Y | Elec. Charge & Fields |
 | 2 | Mon 10 Aug | Tue 11 Aug | Electric Charge, Coulombic Force | 22.2–22.3 | Y | | Y | Elec. Charge & Fields |
-| 3 | Wed 12 Aug | Thu 13 Aug | Coulomb's Law and Superposition | 22.3 | Y | | Y | Elec. Charge & Fields |
+| 3 | Wed 12 Aug | Thu 13 Aug | Coulomb's Law and Superposition | 22.3, Lab Manual | Y | | Y | Elec. Charge & Fields |
 | 4 | Fri 14 Aug | Mon 17 Aug | Electric Fields and Superposition | 22.4–22.5 | Y | | Y | Elec. Charge & Fields |
-| 5 | Tue 18 Aug | Wed 19 Aug | Charged Particles in Uniform Elec. Fields | 22.5 | Y | EPQ1 | Y | Elec. Charge & Fields |
+| 5 | Tue 18 Aug | Wed 19 Aug | Charged Particles in Uniform Elec. Fields | 22.6 | Y | EPQ1 | Y | Elec. Charge & Fields |
 | 6 | Thu 20 Aug | Fri 21 Aug | LAB: Quantized Charge | Lab Handout | Y | LAB1 | N | Elec. Charge & Fields |
 | 7 | Mon 24 Aug | Tue 25 Aug | Charge Distributions, Electric Flux | 23.1–23.2 | Y | | Y | Elec. Charge & Fields |
 | 8 | Wed 26 Aug | Thu 27 Aug | Gauss's Law and Its Applications | 23.3–23.4 | Y | | Y | Elec. Charge & Fields |
@@ -72,8 +104,8 @@ either, which is why 41 lessons and 37 `PF=Y` rows yield fewer artifacts than ei
 | 33 | Tue 10 Nov | Wed 12 Nov | Image Formation from Lenses | 35.3–35.4 | Y | | Y | Optics & Nature of Light |
 | 34 | Fri 13 Nov | Mon 16 Nov | LAB: Thin Lenses | Lab Handout | Y | LAB5 | **C** | Optics & Nature of Light |
 | 35 | *17 November* | | **GRADED REVIEW 3** | | N | | N | — |
-| 36 | Thu 19 Nov | Fri 20 Nov | Double-Slit Interference | 43.8, 43.10 | Y | | Y | Optics & Nature of Light |
-| 37 | Mon 23 Nov | Tue 24 Nov | Diffraction, Resolution | 36.1–36.2 | Y | | Y | Optics & Nature of Light |
+| 36 | Thu 19 Nov | Fri 20 Nov | Double-Slit Interference | 36.1–36.2 | Y | | Y | Optics & Nature of Light |
+| 37 | Mon 23 Nov | Tue 24 Nov | Diffraction, Resolution | 37.1–37.3 | Y | | Y | Optics & Nature of Light |
 | 38 | Tue 1 Dec | Wed 2 Dec | LAB: Single/Double-Slit Diffraction | Lab Handout | Y | LAB6 | N | Optics & Nature of Light |
 | 39 | Thu 3 Dec | Fri 4 Dec | Intro to Nuclear (Planetarium) | 43.8, 43.10 | Y | | Y | Modern |
 | 40 | Mon 7 Dec | Tue 8 Dec | Polarization | 37.6 | Y | EPQ7 | Y | Modern |
