@@ -8,6 +8,62 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-11 (sixth) — Matthew Recker via Claude
+
+### phys-310 lesson 3's assignment slug is now `lesson-03`
+
+`app.assignments.slug` on `8fd20078` went from `phys310-binding-energy-and-stability-e0ceabee` to
+**`lesson-03`**, so all four phys-310 containers read `lesson-NN` and the Assignments page subtitle
+is legible. **Only that one column changed.**
+
+**The artifact's slug did not move, and that is the whole point.** The interactive activity still
+carries `phys310-binding-energy-and-stability-e0ceabee` — the frozen `#i=` surface — and the
+read-back asserts it explicitly rather than trusting that an untouched column stayed untouched.
+
+**The editor forbids this, and the DB does not.** `lessons.html` sets `idField.disabled = !!existing`
+with the reason *"activities and grades hang off it"*. They hang off **uuids**:
+`assignments_slug_unique` is `(course_id, slug)`, both inbound FKs (`activities`,
+`assignment_offerings`) reference `assignments(id)`, the only trigger is `assignments_touch`, and
+`lesson-03` was free. The lock is a sensible default — a slug is not a thing to rename casually —
+but it is not a data constraint, and this rename was the case it was over-fitting.
+
+**A stale comment nearly stopped this, and it was wrong in an instructive way.**
+`scripts/fall2026/set_reading_descriptions.py` keys phys-310 by assignment slug in a literal
+`slug_map`, and its comment explained lesson 3's odd value as the course's slugs coming *"from the
+topic and not the number by design — see its COURSE_PROFILE.md 'Slug namespacing'."* That profile
+section was read before renaming, and **all three of its decisions govern the ARTIFACT slug**
+(`phys310-<topic>-<8 hex>`, the `#i=` surface); none mentions the assignment container. Lesson 3's
+container had simply kept whatever the Artifacts prefill link put in the id field, because nobody
+renamed it. Two different strings that happened to be equal, and the comment read one as evidence
+about the other — turning a stray value into an apparent design. The comment now says so, at length,
+because that inference is easy to repeat.
+
+Map updated in the same change (`"lesson-03": 3`). A slug missing from the map fails **loudly**
+(*"no lesson number mapped for this slug"*), so the two could not have silently disagreed — but they
+would have stopped the reading descriptions from being written.
+
+**Verified:** the rename read back with offerings, activity count and the interactive slug all
+unchanged, and `set_reading_descriptions.py --course phys-310` (dry run, real DB) now resolves all
+four rows — `lesson-03 → L3, 2.7, 3.1` — with **0 problems**, which exercises the title guard
+against the schedule rather than just the map.
+
+*Left alone deliberately:* the written activity is still
+`phys-310-phys310-binding-energy-and-stability-e0ceabee-written-841afe25`. The stem is cosmetic —
+`mintWrittenSlug`'s contract is that nothing reconstructs that string — so renaming it would be
+churn on a globally-UNIQUE value for no behavioural gain.
+
+### The import-panel move left a help doc wrong
+
+`site/help/instructor-accounts.md` said the roster importer sits *"below the student table"*. It has
+been above it since the (fourth) entry today. Fixed, with the move dated in place.
+
+**It was caught late, and by the tool built to catch it.** `check_doc_sources.py` flagged this the
+moment `admin.html` was edited; the output was piped to `/dev/null` in favour of reading the exit
+code, so the flag was seen as a number and not as a document. The checker names the flagged file for
+a reason — read what it prints.
+
+---
+
 ## 2026-08-11 (fifth) — Matthew Recker via Claude
 
 ### Renaming a lesson id silently rewrote the artifact's frozen `#i=` slug
@@ -51,15 +107,41 @@ lesson and for a prefill that carried a URL but no slug.
 with. Confirmed they go red against the old rule first: **exactly one fails**, the
 Artifacts-page-prefill case, which is the one that shipped.
 
-**Not fixed here, and it is the reason this was worth chasing:** lesson 4's stored slug is still
-wrong. Repairing it is a director action, not a data write — the interaction slug field is
-read-only once the activity exists, and a differing slug goes through the replace path
-(`replaceInteraction`), which is reached by opening the radioactivity artifact's registration link
-from the Artifacts page and choosing lesson 4 as the destination. That path deletes and recreates
-the activity; with 0 reports the cascade is empty. The authoritative slug is the one the Artifacts
-page shows as **slug in source** — `_builder`'s build log says `phys310-radioactivity-77500fd7`,
-but that same entry still says the lesson is "not published" while a published URL sits on the row,
-so the log is stale for this artifact and should not be the source.
+### …and the lesson 4 row it produced was repaired
+
+**One field, one row:** phys-310 lesson 4's interactive activity
+(`a90f21a0-22a2-4e19-b39e-f52ef001341c`) went from `lesson-04` to
+**`phys310-radioactivity-77500fd7`**.
+
+**The slug was read out of the hosted artifact** — `const INTERACTION_ID = "phys310-radioactivity-77500fd7"`,
+which is the exact line `slugFromSource()` extracts — and matched `_builder`'s build log
+independently. It was **not** taken from the build log alone, and deliberately so: that entry still
+says lesson 4 is *"not published"* while a published URL sits on the activity, so either someone
+published without updating it or the artifact was rebuilt, and a rebuild mints a fresh 8-hex. Two
+sources, one of them the artifact itself, is what closed that gap. Three other routes were tried
+and are all shut: `storage.objects` is `permission denied for schema storage` for both
+`prep_app_read` and `claude_code_recker`, and the public artifact URL serves a shell with no source.
+
+**A direct `UPDATE`, not the UI's replace path.** Both inbound foreign keys
+(`offering_activities`, `submission_activities`) reference `activities(id)`, not the slug; the only
+trigger is `touch_updated_at`; and the row had **0 stored reports**. So the rename keeps the same
+activity uuid and the existing offering wiring, where `replaceInteraction()` would have deleted and
+recreated the row for no benefit. Guards refused a slug not in minted shape, a current slug other
+than `lesson-04`, a target already taken, and any stored report.
+
+**Verified after the write:** the receiver's lookup (`.eq('slug', …)`) returns exactly one row for
+the artifact's slug; the offering behind it is published, visible and graded, so a cadet can now
+submit; the Artifacts library's `registeredSlugs()` match now succeeds, so the card reads
+**Registered**; and no activity is left on `lesson-04`. The assignment slug is untouched and still
+the readable `lesson-04`, which was the point of the whole exercise.
+
+**A sweep for the same defect elsewhere** found six interactive activities whose slug is not in
+minted shape. Five are phys-215 **training-sandbox** rows (`preflight-NN-training`) carrying
+descriptive slugs like `lesson-02-electric-charge-coulombs-law`; shape is not proof of breakage —
+if the artifact posts that same string it resolves fine — and the Artifacts library is the only
+thing that can actually answer per artifact. The sixth is phys-310 `lesson-01`, whose
+`artifact_url` is `NULL`, so it launches nothing and is inert rather than broken. **Every
+interactive activity in the live phys-215 term passed.** None were changed.
 
 **Files:** `site/faculty/lessons.html`, `site/js/faculty-lessons.js`,
 `tests/app-schema/test-lesson-isolation.mjs`.

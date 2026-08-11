@@ -101,10 +101,20 @@ SEP = " · "  # middle dot, matching the card-meta separator the site already us
 #   slug_map  - DB assignment slug -> schedule lesson number
 #
 # phys-215 slugs ARE lesson numbers (`preflight-14`, plus the `-training` sandbox twin), so the
-# map is derived. phys-310 slugs are not: three are `lesson-NN` and one is a minted artifact slug
-# (`phys310-binding-energy-and-stability-e0ceabee`, lesson 3), because that course's slugs come
-# from the topic and not the number by design - see its COURSE_PROFILE.md "Slug namespacing". The
-# title guard below is what makes the hand-written half of that map safe.
+# map is derived. phys-310's are hand-written but all four are now `lesson-NN`; the title guard
+# below is what makes that half safe.
+#
+# Lesson 3 was the odd one out until 2026-08-11: its ASSIGNMENT slug was
+# `phys310-binding-energy-and-stability-e0ceabee`, and this comment explained that away as the
+# course's slugs coming "from the topic and not the number by design". That was wrong, and the
+# error is worth naming because it is easy to repeat. COURSE_PROFILE.md's "Slug namespacing"
+# decisions govern the ARTIFACT slug - the frozen `#i=` surface, `phys310-<topic>-<8 hex>` - and
+# say nothing about the assignment container. Lesson 3's container simply kept the value the
+# Artifacts prefill link had put in the id field, because nobody renamed it. The two are different
+# strings that happened to be equal, and reading one as evidence about the other is what made a
+# stray value look like a design.
+#
+# The artifact slug is unchanged and still lives on the interactive activity.
 # ---------------------------------------------------------------------------------------------
 
 
@@ -127,10 +137,10 @@ COURSES = {
     },
     "phys-310": {
         "schedule": "_builder/courses/phys-310/phys310_fall2026_schedule.md",
-        "slug_map": {                            # literal: four rows, two naming schemes
+        "slug_map": {                            # literal: four rows, all `lesson-NN`
             "lesson-01": 1,
             "lesson-02": 2,
-            "phys310-binding-energy-and-stability-e0ceabee": 3,
+            "lesson-03": 3,
             "lesson-04": 4,
         },
     },

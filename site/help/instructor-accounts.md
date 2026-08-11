@@ -84,8 +84,9 @@ Adding somebody grants them nothing in any other course or any other semester.
 
 ## Importing a roster
 
-**Admin → Students**, in the collapsed **Import the registrar's roster** panel below the student
-table. A course-director action.
+**Admin → Students**, in the collapsed **Import the registrar's roster** panel at the top of the
+tab, above the student table. A course-director action. *(It sat below the table until 11 August
+2026.)*
 
 Use the registrar's export as-is — save it as CSV (or tab-separated text) and drop it on that
 panel. It must contain **Cadet EMPLID**, **Cadet Name**, **Email**, and **Section**. **Cadet
