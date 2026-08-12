@@ -8,6 +8,75 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-12 — Casey Pellizzari via Claude
+
+### Granting an extension now re-opens the grade that was blocking it
+
+Raised by the course director: extending a finalized assignment took two steps — reopen the
+grade, then set the extension — and the first one is easy to forget.
+
+**Forgetting it failed silently, which is the actual defect.** A finalized grade outranks the
+deadline on every student surface: `resolveState()` reads `is_finalized` before anything else
+(`site/js/student-lessons.js:81`), and `site/student/assignments.html:194` branches on that state
+before it ever consults `isPast` — the read-only lock an extension exists to lift lives in the
+`else`. So an extension granted over a published grade moved a date nothing looked at. The chip
+rendered, the director's extensions report counted it, and the cadet stayed locked out with
+nothing anywhere reporting the disagreement. Same shape as the empty `due_by_day` of
+`2026-08-09`: correct-looking on every screen that would show the problem.
+
+`setExtension()` now re-opens the grade itself. It is in the **data layer**, not in the three
+modals that grant extensions (Grade, Student, and Report's bulk grant), so a fourth entry point
+cannot be added without it.
+
+**It is deliberately conditional, and the conditions are the interesting part.** Re-opening does
+two things and only one of them is implied by granting an extension: it lets the cadet work
+again — intended — and it removes their score from their view entirely, since
+`grades_own_finalized` stops returning an unfinalized row at all. Those come apart for a cadet
+who handed work in late, was graded, and is granted an extension afterwards so the record shows
+the lateness forgiven. Nothing there is waiting to be resubmitted, and retracting a correct
+published grade over a bookkeeping fix is a surprise the cadet meets before the grader does. So
+two facts the system already holds decide it:
+
+| Fact | Effect |
+|---|---|
+| new deadline is **in the past** | leave the grade alone — forgiving lateness, not giving time |
+| a **committed** submission exists | leave the grade alone — the work is in |
+| otherwise (no submission, or a draft) | re-open, and say so |
+
+An instructor who does want a cadet to redo submitted work still has **Reopen**. Discarding
+graded work should stay a deliberate click.
+
+Three supporting pieces:
+
+- **The grader is told.** A silent un-publish is the one outcome here that reaches the cadet
+  before it reaches anyone else, and it leaves a re-finalize owed. All three grant paths now say
+  what happened; the bulk path reports a count.
+- **The audit entry says why.** `grade_events` gains `detail: { cause: 'extension',
+  extended_due_at, reason }` instead of the bare `{}` a manual reopen writes. A month later, an
+  unexplained `reopened` beside a grade nobody remembers touching is indistinguishable from a
+  mistake. The extension's reason is *copied*, not referenced, so the entry still explains itself
+  if the extension is later amended or removed.
+- **The rule is pinned by a test.** `extensionReopensGrade()` is exported and pure —
+  `tests/app-schema/test-extension-reopen.mjs`, 17 assertions, registered in `run.mjs`. Most of
+  them are negative: what this must *not* take down. It also sweeps all 48 date × grade ×
+  submission combinations to prove the cheap date-only pre-check is never stricter than the full
+  rule, which is the one way this could skip a reopen with nothing erroring.
+
+Also updated: `site/help/instructor-grading.md` (Extensions section, with both leave-alone cases
+named) and its `reviewed` date in `docs/DOC-SOURCES.json`.
+
+**Verification — read this before assuming it is proven.** Node-only, per CORE.md §2: the new
+suite plus `test-imports`, `test-grade`, `test-dashboard-rows` and `test-student-completion` all
+pass, and the three edited pages' inline modules pass `node --input-type=module --check`.
+**Nothing was exercised against the live database or in a browser**, because doing so means
+granting a real extension and un-publishing a real cadet's grade. What is unproven is therefore
+the round trip, not the rule: that the two reads return the shapes assumed here, that the
+`grades` update passes `grades_staff_write` for a non-director instructor, and that the
+`grade_events` insert accepts the richer `detail`. Worth one deliberate pass on a test cadet
+before a grader meets it.
+
+---
+
 ## 2026-08-11 (sixth) — Matthew Recker via Claude
 
 ### phys-310 lesson 3's assignment slug is now `lesson-03`

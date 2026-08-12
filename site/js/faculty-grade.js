@@ -462,16 +462,18 @@ export async function reopenScore(ctx, offeringId, enrollmentId) {
  *   setExtension    — grant or amend. Any staff of the section. `reason` is REQUIRED (007):
  *                     the director's report counts these per instructor, and a count with a
  *                     blank reason column cannot start the conversation it exists to start.
+ *                     Also RE-OPENS a published grade when the extension can only mean
+ *                     "let them work" — see reopenForExtension() for which cases those are.
  *   removeExtension — the granter's undo, for a genuine mistake. Erases the row, so it is
  *                     refused by the DB once the student has committed work under it.
  *   revokeExtension — the director's override. Soft: the row stays and keeps counting.
  *                     Also refused after a committed submission, and the trigger rejects it
  *                     from anyone who does not direct the offering.
  */
-export function setExtension(ctx, offeringId, enrollmentId, iso, reason) {
+export async function setExtension(ctx, offeringId, enrollmentId, iso, reason) {
   const why = String(reason || '').trim();
-  if (!why) return Promise.resolve({ error: { message: 'A reason is required to grant an extension.' } });
-  return db.from('extensions').upsert({
+  if (!why) return { error: { message: 'A reason is required to grant an extension.' } };
+  const res = await db.from('extensions').upsert({
     enrollment_id: enrollmentId,
     assignment_offering_id: offeringId,
     extended_due_at: iso,
@@ -481,6 +483,103 @@ export function setExtension(ctx, offeringId, enrollmentId, iso, reason) {
     // one row per (enrollment, offering), so this is the reinstatement path too.
     revoked_at: null, revoked_by: null, revoked_reason: null,
   }, { onConflict: 'enrollment_id,assignment_offering_id' });
+  if (res.error) return res;
+  return { ...res, reopened: await reopenForExtension(ctx, offeringId, enrollmentId, iso, why) };
+}
+
+/* ── Re-opening a grade to make an extension mean something ──────────────────
+ *
+ * WHY THIS EXISTS. A finalized grade outranks the deadline everywhere a student can see it:
+ * resolveState() checks `is_finalized` before it checks anything else, and the assignment page
+ * branches on that state before it ever reads `isPast`. So the read-only lock an extension is
+ * meant to lift is in a branch a graded student never reaches. Extending someone who has been
+ * graded moved a date nothing looked at — the chip rendered, the director's report counted it,
+ * and the student stayed locked out with nothing reporting the discrepancy. The fix used to be
+ * "reopen first, then extend", which is a two-step whose first step is invisible when forgotten.
+ *
+ * WHY IT IS NOT UNCONDITIONAL. Re-opening does two things, and only one of them is implied by
+ * granting an extension. It lets the student work again — intended — and it takes their score
+ * off their screen entirely (grades_own_finalized: an unfinalized row is not merely greyed out,
+ * it stops being SELECTable), which is not. The case that separates them is a student who handed
+ * work in late, was graded, and is granted an extension afterwards so the lateness is forgiven on
+ * the record. Nothing there is waiting to be resubmitted, and retracting a correct published
+ * grade over a bookkeeping fix is a surprise the student discovers before the instructor does.
+ *
+ * So the two conditions below are the question "could this extension mean anything other than
+ * let-them-work?", asked of facts the system already holds:
+ *
+ *   FUTURE DEADLINE — a back-dated extension cannot be giving anybody time. It is forgiving
+ *                     lateness that already happened, which is the record-keeping case exactly.
+ *   NOTHING COMMITTED — no submission, or one still in draft, means there is no work in hand to
+ *                     protect and the zero can only be standing in for work not yet done. A
+ *                     COMMITTED submission is left alone: an instructor who wants to throw out
+ *                     graded work and let a student redo it still has Reopen, and that decision
+ *                     is deliberate enough to deserve a deliberate click.
+ *
+ * This lives in the data layer rather than in the three modals that call it (Grade, Student,
+ * Report — the last granting in bulk) so a fourth entry point cannot be added without it.
+ *
+ * Failures are reported and swallowed: the extension is the operation the user asked for and it
+ * has already landed, so it must not be lost to a follow-up write. Same bargain as the audit
+ * insert in finalizeScores().
+ */
+
+/**
+ * The rule itself, with the database taken out of it: does this extension mean "let them work"?
+ *
+ * Exported and pure so the two conditions are pinned by a test rather than only by the prose
+ * above — the lesson of test-student-completion.mjs is that a rule which lives in one function
+ * and is described in another place drifts. Called twice by reopenForExtension(): once on `iso`
+ * alone, to skip two reads when the date already settles it, and once with the rows. A missing
+ * `grade` key means "not read yet" and passes the probe; a `grade` of null means "no grade row"
+ * and does not.
+ *
+ * @param {{iso: string, grade?: {is_finalized?: boolean}|null,
+ *          submission?: {status?: string}|null}} facts
+ * @param {number} now  epoch ms; injectable so a test does not depend on the clock.
+ */
+export function extensionReopensGrade({ iso, grade, submission }, now = Date.now()) {
+  const when = Date.parse(iso);
+  if (!Number.isFinite(when) || when <= now) return false;   // back-dated: forgiving lateness
+  if (grade === undefined) return true;                      // date-only probe, rows not read yet
+  if (!grade?.is_finalized) return false;                    // nothing published to take back down
+  return submission?.status !== 'committed';                 // work already in: leave it alone
+}
+
+/** Apply the rule above. @returns {Promise<boolean>} whether a grade was taken back down. */
+async function reopenForExtension(ctx, offeringId, enrollmentId, iso, reason) {
+  if (!extensionReopensGrade({ iso })) return false;   // cheap: skip two reads on a back-date
+
+  const { data: grade, error: gErr } = await db.from('grades')
+    .select('id, is_finalized')
+    .eq('assignment_offering_id', offeringId).eq('enrollment_id', enrollmentId)
+    .maybeSingle();
+  if (gErr) return false;
+
+  const { data: sub, error: sErr } = await db.from('submissions')
+    .select('status')
+    .eq('assignment_offering_id', offeringId).eq('enrollment_id', enrollmentId)
+    .maybeSingle();
+  if (sErr) return false;
+
+  if (!extensionReopensGrade({ iso, grade, submission: sub })) return false;
+
+  const { error } = await db.from('grades').update({ is_finalized: false }).eq('id', grade.id);
+  if (error) {
+    console.warn('[grade] extension granted, but re-opening the grade failed:', error.message);
+    return false;
+  }
+
+  // `cause` is the whole point of logging this separately: a month later, a bare 'reopened'
+  // event beside a grade nobody remembers touching reads as an unexplained retraction. The
+  // extension's own reason is copied in rather than referenced, so the entry still says why
+  // if the extension is later amended or removed.
+  const { error: logErr } = await db.from('grade_events').insert({
+    grade_id: grade.id, event: 'reopened', actor: ctx.user.id,
+    detail: { cause: 'extension', extended_due_at: iso, reason },
+  });
+  if (logErr) console.warn('[grade] re-opened by extension, but the audit event failed:', logErr.message);
+  return true;
 }
 
 export function removeExtension(offeringId, enrollmentId) {

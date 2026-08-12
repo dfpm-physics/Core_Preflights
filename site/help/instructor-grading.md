@@ -220,6 +220,19 @@ Granting one **requires a reason**. Your course director sees every extension in
 what makes that count a conversation rather than a number. *(That report was its own page and its
 own navigation entry until 2026-07-30.)*
 
+**If the cadet already has a published grade, granting a future extension re-opens it**, and you
+are told so when it happens. This is not an extra step you can skip: a published grade outranks
+the deadline on every screen a cadet sees, so an extension granted over the top of one used to
+move a date nothing looked at — the extension showed up on your page and on the director's
+report, and the cadet stayed locked out. Re-opening also **hides their score until you finalize
+again**, so finish the grading you re-opened.
+
+Two cases deliberately leave a published grade alone, because neither can mean *let them work*:
+a **back-dated** extension, which forgives lateness that has already happened rather than giving
+anybody time; and a cadet who has **already submitted**, where the work is in and the extension
+is usually clearing a late flag. If you do want a cadet to redo work they turned in, use
+**Reopen** — throwing out a graded submission should be a decision you make on purpose.
+
 **Remove** erases an extension, and is meant for a genuine mistake such as granting it to the wrong
 cadet. It stops working once the student has submitted under it: withdrawing a deadline after the
 work is in would only turn an on-time submission into a late one. If you need to pull an extension

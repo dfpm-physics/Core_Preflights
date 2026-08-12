@@ -1198,12 +1198,12 @@
       const btn = document.getElementById('xm-save');
       btn.disabled = true; status.textContent = 'Granting…';
       const when = new Date(iso).toISOString();
-      let ok = 0; const errs = [];
+      let ok = 0, reopenedN = 0; const errs = [];
       // Sequential, not Promise.all: these are upserts on one table and a partial failure must be
       // reportable per student rather than collapsing to one rejected promise.
       for (const enr of extTargets) {
-        const { error } = await G.setExtension(ctx, reportInteraction, enr, when, reason);
-        if (error) errs.push(error.message); else ok++;
+        const { error, reopened } = await G.setExtension(ctx, reportInteraction, enr, when, reason);
+        if (error) errs.push(error.message); else { ok++; if (reopened) reopenedN++; }
       }
       btn.disabled = false;
       if (errs.length) {
@@ -1216,6 +1216,12 @@
       // work — so there is nothing to re-render. Say what happened instead of silently closing.
       const note = document.getElementById('dns-sec')?.querySelector('.lr-eyebrow .dim');
       if (note) note.textContent += ` · ${ok} extension${ok === 1 ? '' : 's'} granted`;
+      // A bulk grant is where a silent re-open would do the most damage unnoticed — this list is
+      // built from students who did not submit, so most of a batch can come back down at once.
+      if (reopenedN) alert(`${ok} extension${ok === 1 ? '' : 's'} granted.\n\n${reopenedN} of them ` +
+                           `had a published grade, which has been re-opened — otherwise the ` +
+                           `extension would not have let them back in. Those scores are hidden ` +
+                           `until you finalize again on the Grade page.`);
     }
 
     // Rollup body — effort + radar tiles, AI panels, per-objective rows, student responses.

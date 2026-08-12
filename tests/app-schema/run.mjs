@@ -87,12 +87,16 @@ for (const s of OFFLINE) {
 //                 renders from — resolveState() and deriveCompletion(). What it pins is that
 //                 they AGREE; each was self-consistent while together they blanked the
 //                 dashboard of every cadet who missed a preflight
+//   test-extension-reopen  imports faculty-grade.js for extensionReopensGrade() — which cases
+//                 granting an extension may take a published grade back down in, and the two it
+//                 must leave alone. The interesting assertions are the negative ones
 for (const suite of ['test-imports.mjs', 'test-rollup.mjs', 'test-system-prefs.mjs',
                      'test-run-banner.mjs', 'test-help-status.mjs', 'test-prefs.mjs',
                      'test-tasks.mjs', 'test-gradebook.mjs', 'test-grade.mjs', 'test-ei.mjs',
                      'test-dashboard-rows.mjs', 'test-student-detail.mjs', 'test-feedback.mjs',
                      'test-feedback-admin.mjs', 'test-lesson-due.mjs',
-                     'test-lesson-isolation.mjs', 'test-student-completion.mjs']) {
+                     'test-lesson-isolation.mjs', 'test-student-completion.mjs',
+                     'test-extension-reopen.mjs']) {
   const r = spawnSync(process.execPath, [resolve(import.meta.dirname, suite)],
                       { encoding: 'utf8' });
   process.stdout.write(r.stdout || '');

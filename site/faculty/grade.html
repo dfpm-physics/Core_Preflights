@@ -704,10 +704,17 @@
       // Enforced by a NOT NULL + CHECK in migration 007 too; caught here so the operator
       // gets a sentence instead of a Postgres constraint name.
       if (!reason) { err.textContent = 'A reason is required — your director sees it on the extensions report.'; return; }
-      const { error } = await G.setExtension(
+      const name = document.getElementById('ext-name').textContent;
+      const { error, reopened } = await G.setExtension(
         ctx, current.offeringId, enrollmentOf[extSid], new Date(val).toISOString(), reason);
       if (error) { err.textContent = 'Save failed: ' + error.message; return; }
       document.getElementById('ext-modal').classList.remove('open');
+      // Say it rather than letting the row quietly lose its finalized state. The grade coming
+      // back down is what makes the extension work, but it also hides a score the student may
+      // already have seen — and it leaves a re-finalize owed, which is easy to forget.
+      if (reopened) alert(`Extension granted.\n\n${name} had a published grade, so it has been ` +
+                          `re-opened — otherwise the extension would not have let them back in. ` +
+                          `Their score is hidden until you finalize again.`);
       loadView();
     }
     async function removeExt(sid, name) {
