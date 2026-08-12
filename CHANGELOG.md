@@ -10,6 +10,46 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-12 — Casey Pellizzari via Claude
 
+### Backfill: three cadets whose live extension was still behind a published grade
+
+The rule below covers extensions granted from now on. It does nothing for the ones already in
+that state, so this is its backfill — the same relationship `raise_confirmed_effort.py` has to
+`confirmEffortRows()`. New script `scripts/fall2026/reopen_extended_grades.py` (stdlib, dry-run
+by default, idempotent), applying the identical four guards against stored rows.
+
+**Scanned 54 live extensions across all three courses; re-opened 3.**
+
+| Cadet | Course | Section | Extended to | Was |
+|---|---|---|---|---|
+| Aman Muratbekov (3000139219) | phys-110 | T5A | 2026-08-12 2359 | 0/2 published, nothing submitted |
+| Elizabeth Hanah Sistrunk (3000139431) | phys-110 | T5A | 2026-08-13 2359 | 0/2 published, nothing submitted |
+| Sean Cristopher Carney (3000140076) | phys-215 | T1B | 2026-08-12 2359 | 0/2 published, nothing submitted |
+
+All three are `/preflight-analyze` non-submitter zeros that were finalized, against extensions
+granted for a technical problem reaching the site. Points, feedback and `question_scores` are
+untouched — only `is_finalized` moved, so finalizing again in the Grade tab restores the score
+exactly.
+
+**51 rows were left alone, and the largest group is worth recording.** 28 extensions had already
+**expired**. Re-opening those is not merely unhelpful, it is harmful: `effectiveDue()` honours the
+extension, so once the extended deadline passes the cadet is locked by the deadline whatever the
+grade says — the re-open would withdraw their score from view (`grades_own_finalized` stops
+returning an unfinalized row) without letting them work. A cadet who needs more time than the
+extension gave them needs a **new extension**, which is a human's decision, not a backfill's. The
+other 23: 21 grades not published (nothing blocking the student) and 2 with no grade row at all.
+
+The director's "only where the response is blank" guard was already the fourth guard and excluded
+nobody today — no future-dated extension sat over a committed submission. It stays, because the
+retroactive case (late work, graded, extension recorded afterwards to clear the late flag) is
+exactly the one where re-opening surprises the cadet before it reaches the grader.
+
+*Verification:* run read back from the database rather than from the PATCH responses — 3 of 3
+unfinalized, and a second dry run reports 0 to re-open, so the script is idempotent. Each
+re-open wrote a `grade_events` row carrying `cause: "extension-backfill"`, the new deadline and
+the granting reason; `actor` is NULL because a script is not an instructor, with `actor_note`
+naming the script instead. Not checked in a browser — the cadet-facing effect (the assignment
+leaving the graded state and becoming workable) is inferred from `resolveState()`, not observed.
+
 ### Granting an extension now re-opens the grade that was blocking it
 
 Raised by the course director: extending a finalized assignment took two steps — reopen the
