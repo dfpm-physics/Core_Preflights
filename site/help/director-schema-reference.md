@@ -451,6 +451,12 @@ It exists because a retroactive rescore once corrupted totals silently in the pr
 a score is disputed, or a total looks wrong, this is where the history is. Staff can read the events
 for grades in the sections they staff.
 
+**A reopen says why it happened when it was not a person clicking Reopen.** Granting an extension to
+a cadet who already has a published grade re-opens it automatically — otherwise the extension would
+not let them back in — and that event carries the extension's new deadline and reason alongside it.
+Without that, the most common reopen in the system would be the one with the least explanation
+attached: an unexplained retraction beside a grade nobody remembers touching.
+
 ### Knowing when a semester is due to be frozen
 
 `terms_awaiting_freeze` lists every term that still has unfrozen offerings, with how many are done,
