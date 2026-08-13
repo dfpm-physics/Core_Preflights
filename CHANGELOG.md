@@ -63,6 +63,30 @@ until a key validates. Zero page errors; the one console 404 is Chrome's automat
 
 **Not verified:** a live conversation, a real report, or a submission — all need an actual Gemini
 key, and submission additionally needs a **student** account, since the receiver rejects staff.
+
+#### Follow-ups the same day, after the first real run
+
+- **Double scrollbar fixed.** The artifact sets `.app` to the full `window.innerHeight` inline,
+  because on claude.ai it renders in an auto-sizing embed where anything viewport-relative causes a
+  measure→grow loop. Re-hosted on a normal page with a banner above it, the document became
+  `innerHeight + banner` tall: the page scrolled *and* the app scrolled inside it, with the composer
+  below the fold. Fixed **in the wrapper only** — the page is a non-scrolling flex column and `.app`
+  is forced to fill the remainder, so the artifact's inline height goes inert. Not one line of the
+  artifact changed; `PUBLISH-ARTIFACT.md` forbids touching that sizing. Verified: no page scrollbar,
+  `scrollHeight == innerHeight`.
+- **The key is remembered on the device**, in `localStorage` under `prep.gemini.apikey`, and only
+  after it has actually validated — a typo is never stored. A **Forget key** control appears beside
+  Re-check when one is saved, for shared machines. **Deliberately not the database:** storing 285
+  cadets' third-party API credentials server-side would make PREP the custodian of live billable
+  keys that `service_role` and every staff-readable policy could reach, and it would need DDL on
+  `app` (§0). The device-local version needs no migration, no RLS review, and no custody.
+- **Measured why free-tier quota runs out so fast**, and it is not the chat history: the graded
+  system prompt is **62,888 chars (~15,700 tokens) resent on every single turn**, which is **93–96%
+  of all input tokens** in a 6–14 turn session. A 10-turn session costs ~165k input tokens, ~157k of
+  which is the same prompt sent ten times. **Gemini context caching does not help** — explicit
+  caching needs a paid account and a 32,768-token minimum (the prompt is smaller than that), and
+  rate limits count cached tokens anyway. The only real levers are sending fewer tokens per turn or
+  a paid tier. Recorded, not acted on: trimming grounding is a pedagogical decision.
 Nothing under `site/` changed, so the deploy path gains no dependency and no build step
 (`CORE.md` §2); the React/Babel CDN scripts are confined to `tests/browser/`, which already loads
 from that CDN.

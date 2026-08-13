@@ -20,24 +20,41 @@
 <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.25.6/babel.min.js"></script>
 <style>
-  html,body{margin:0;padding:0;background:#eef1f5;
+  /* THE SCROLLING FIX. The artifact sets .app to the full window.innerHeight
+     inline, because on claude.ai it renders in an auto-sizing embed and anything
+     viewport-relative there creates a measure->grow loop (its own comment says so,
+     and PUBLISH-ARTIFACT.md forbids changing it). Re-hosted on a normal page, that
+     assumption is wrong: a banner above it made the document innerHeight + banner
+     tall, so the PAGE scrolled and the app scrolled inside it, with the composer
+     pushed below the fold.
+     Fixed here, in the wrapper, without touching a line of the artifact: the page
+     is a non-scrolling flex column, and .app is forced to fill exactly the space
+     left over. The !important is what overrides the artifact's inline height --
+     that inline value becomes inert, which is the intent. */
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#eef1f5;
     font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
-  #banner{background:#7c2d12;color:#fff;padding:8px 14px;font-size:12.5px;line-height:1.5}
+  #page{display:flex;flex-direction:column;height:100vh;height:100dvh}
+  #banner{flex:0 0 auto;background:#7c2d12;color:#fff;padding:6px 14px;
+    font-size:12px;line-height:1.45}
   #banner strong{color:#fed7aa}
-  #root{padding:10px}
-  #boom{display:none;margin:14px;padding:14px;border-radius:10px;background:#fef2f2;
-        border:1px solid #fecaca;color:#991b1b;font-size:13px;white-space:pre-wrap}
+  #root{flex:1 1 auto;min-height:0;overflow:hidden}
+  #root .app{height:100% !important;max-height:100% !important}
+  #boom{flex:0 0 auto;display:none;margin:14px;padding:14px;border-radius:10px;
+        background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font-size:13px;
+        white-space:pre-wrap}
 </style>
 </head>
 <body>
-<div id="banner">
-  <strong>GEMINI TEST BUILD</strong> &mdash; PHYS 215 Lesson 4, converted from the published Claude
-  artifact. Runs on <strong>your own Google AI Studio key</strong>, sent only to Google as a request
-  header and never stored or included in the report. Not published, not registered, not
-  cadet-reachable. Submitting needs a <strong>student</strong> account &mdash; the receiver rejects staff.
+<div id="page">
+  <div id="banner">
+    <strong>GEMINI TEST BUILD</strong> &mdash; PHYS 215 Lesson 4, converted from the published Claude
+    artifact. Runs on <strong>your own Google AI Studio key</strong>, sent only to Google as a request
+    header, remembered only in this browser, never stored by PREP. Not published, not registered, not
+    cadet-reachable. Submitting needs a <strong>student</strong> account.
+  </div>
+  <div id="boom"></div>
+  <div id="root"></div>
 </div>
-<div id="boom"></div>
-<div id="root"></div>
 
 <script type="text/babel" data-presets="react">
 const { useState, useRef, useEffect } = React;
@@ -128,6 +145,9 @@ function scoreModel(name) {
 // one. Write-only from the start screen, read only by rawCall -- never serialized,
 // never logged, and never reachable from the report or the submit URL.
 const apiKeyRef = { current: "" };
+
+// localStorage key. Namespaced like the site's other client-side state (cp.theme).
+const KEY_STORE = "prep.gemini.apikey";
 
 // Submission endpoint — INTERACTION-DATA-CONTRACT.md §2, frozen. Copied, not
 // retyped. A wrong URL fails SILENTLY: the cadet does the whole session, clicks
@@ -1844,8 +1864,19 @@ function Lesson04Preflight() {
   const [mode, setMode] = useState(null);          // "graded" | "study" — set once, never reassigned
   const [started, setStarted] = useState(false);
   const [cadetId, setCadetId] = useState("");      // holds the last name; do NOT rename
-  const [apiKey, setApiKey] = useState("");        // GEMINI TEST BUILD -- leaves this device
-                                                   // only as an x-goog-api-key header to Google.
+  // GEMINI TEST BUILD -- leaves this device only as an x-goog-api-key header to
+  // Google, and is remembered only in this browser's localStorage. It is never sent
+  // to PREP, never written to the database, and never enters the report or submit URL.
+  const [apiKey, setApiKey] = useState(() => {
+    try { return localStorage.getItem(KEY_STORE) || ""; } catch (e) { return ""; }
+  });
+  const [keyRemembered, setKeyRemembered] = useState(() => {
+    try { return !!localStorage.getItem(KEY_STORE); } catch (e) { return false; }
+  });
+  function forgetKey() {
+    try { localStorage.removeItem(KEY_STORE); } catch (e) {}
+    setKeyRemembered(false); setApiKey("");
+  }
   const [messages, setMessages] = useState([]);    // { role, content, hidden? }
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1952,6 +1983,8 @@ function Lesson04Preflight() {
       const picked = await discoverModel(activeModelRef);
       setModelName(picked);
       setConnStatus("ok"); setConnMsg("");
+      // Only a key that actually worked is remembered -- never a typo.
+      try { localStorage.setItem(KEY_STORE, apiKey.trim()); setKeyRemembered(true); } catch (e) {}
     } catch (err) {
       setConnStatus("unavailable"); setModelName("");
       setConnMsg(errorMessage(err, { afterRetries: true }));
@@ -2185,6 +2218,12 @@ function Lesson04Preflight() {
               >
                 Re-check
               </button>
+              {keyRemembered && (
+                <button className="conn-recheck" onClick={forgetKey}
+                        title="Remove the saved key from this browser">
+                  Forget key
+                </button>
+              )}
             </div>
             {connStatus === "unavailable" && <div className="conn-msg">{connMsg}</div>}
 
