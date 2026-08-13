@@ -8,6 +8,67 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-13 — Matthew Recker via Claude
+
+### A Gemini-transport test build of the PHYS 215 Lesson 4 preflight, in `tests/browser/`
+
+**Why:** cadets on free Claude accounts are hitting **HTTP 429** on the published artifacts and
+cannot start their preflight. This is the first end-to-end look at a second AI platform as a
+fallback path — running on the **cadet's own free Google AI Studio key** rather than on
+claude-in-claude auth.
+
+`tests/browser/test-gemini-lesson04.html` is the published Lesson 4 artifact converted to Google's
+Generative Language API and wrapped in a standalone page. **Not published, not registered, not
+cadet-reachable** — it sits behind the same `guard.js` director gate as every other page in that
+directory. It exists to be tried, not to be used.
+
+**Everything above the transport is byte-identical to the published build.** The conversion was
+done by a byte-level script, not by hand: all four `String.raw` grounding blocks
+(`TEXTBOOK_REFERENCE` 17,013 · `LESSON_CONFIG` 10,352 · `EXTENSION_PROBLEMS` 7,907 ·
+`REPORT_FORMAT` 3,517 bytes) were hash-compared before and after and are unchanged, as are
+`INTERACTION_ID` (`lesson-04-electric-fields-and-superposition-479afcad`) and `SUBMIT_ENDPOINT`.
+The source is uniformly CRLF and was read and written as **bytes** throughout — the line-ending
+trap in `PROJECT.md` turns a four-line edit into a whole-file rewrite otherwise.
+
+What changed, all of it in the transport layer:
+
+- **The model is discovered at runtime, not baked in.** The conversion instructions named
+  `gemini-1.5-pro` / `gemini-1.5-flash`; both are legacy and would `404` on a key issued today —
+  which is exactly the dead-end `PUBLISH-ARTIFACT.md` §4 warns a baked-in list produces. Instead
+  the page calls `ListModels` with the cadet's own key, scores what comes back (prefers a current
+  GA Flash, rejects preview/media/embedding variants), and uses the best. It cannot strand on a
+  retired name, and it adapts to whatever tier the key has.
+- **The key rides in an `x-goog-api-key` header**, not the `?key=` query parameter Google's
+  quickstarts use. A query string lands in browser history and in any `Referer` the page emits.
+- **429 is handled as its own case.** In the Claude build the capacity branch is
+  `529 || >= 500`, so a 429 falls through to a generic *"the tutor request failed (HTTP 429)"* with
+  no retry. Here it is retried with backoff and then reported as a quota message that distinguishes
+  the per-minute limit from the daily one.
+- Gemini's request shape (`systemInstruction` / `contents` / `parts`, roles `user|model`), plus
+  explicit handling for a 200-with-no-text response (`SAFETY` / `MAX_TOKENS` finish reasons), which
+  would otherwise render as an empty tutor turn.
+
+**The key cannot reach the report.** It is held in a module-scope ref, read only by `rawCall`, and
+the conversion script asserts that no line mentioning it also touches
+`compressToEncodedURIComponent`, `submitUrl`, `SUBMIT_ENDPOINT`, or the structured payload. It is
+never stored and is gone when the tab closes.
+
+**Verified in real Chrome, and that is the point.** `PROJECT.md` records that `node --check`
+silently *passes* invalid JSX, so publishing has been the only JSX parser this project had.
+Babel-in-the-browser is now a second one: the page was driven with the `tests/browser-harness`
+Puppeteer + real Chrome, the gate stubbed by request interception so the shipped file is what got
+tested. Result: no Babel error, component mounted, start screen renders with the last-name field,
+the password-type key field, the connection light, the honour-code box and both buttons disabled
+until a key validates. Zero page errors; the one console 404 is Chrome's automatic `/favicon.ico`.
+
+**Not verified:** a live conversation, a real report, or a submission — all need an actual Gemini
+key, and submission additionally needs a **student** account, since the receiver rejects staff.
+Nothing under `site/` changed, so the deploy path gains no dependency and no build step
+(`CORE.md` §2); the React/Babel CDN scripts are confined to `tests/browser/`, which already loads
+from that CDN.
+
+---
+
 ## 2026-08-12 (second) — Matthew Recker via Claude
 
 ### A `lesson-cycle-loop` skill was drafted and **archived unshipped**, pending review
