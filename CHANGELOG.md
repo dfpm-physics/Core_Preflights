@@ -8,6 +8,49 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-12 (second) — Matthew Recker via Claude
+
+### A `lesson-cycle-loop` skill was drafted and **archived unshipped**, pending review
+
+`_archive/lesson-cycle-loop-skill/` holds a complete draft skill for arming job 2 — the Windows
+box's 00:33 phys-110/phys-310 run. **It is not registered and not callable**, by the director's
+decision on the day it was written. Nothing in `.ai/skills/`, `CORE.md` §4, or
+`docs/DOC-SOURCES.json` refers to it, and that is the intended state, not an oversight.
+
+The problem it was written against is real and is still open: that loop is armed by a prompt held
+in **session state, which nothing version-controls**.
+`docs/operations/SCHEDULED-LESSON-CYCLE.md` closes by saying so — *"the prompt is the only copy of
+the instructions"*. Closing the terminal destroys the procedure, and every re-arm is a
+reconstruction from memory or from a transcript, which is a chance to drop a gate. That is how the
+grounding gate went missing until 2026-08-10.
+
+What the draft holds, if it is ever revived:
+
+- `SKILL.md` — arming, the four preflight refusals, the master-runs-`worklist`-only rule, and the
+  disjointness check against job 1. No grading logic; it delegates to `lesson-cycle`.
+- `references/MASTER-PROMPT.md` — the master and subagent prompts **verbatim**, with a table
+  tracing each clause to the failure that bought it (the master that pre-ran gates and paid twice,
+  an unknown course code reading as a quiet night, `e93be5c` untying phys-110's tracks, the
+  `analysis_runs_finished_ck` clock skew needing the literal `"now"`, the subagent that
+  fast-forwarded `origin/main` when told to stop).
+
+**Reviving it takes four steps, and skipping any one leaves a half-registered skill:** move it to
+`.ai/skills/lesson-cycle-loop/`, add the `CORE.md` §4 index row, add the `DOC-SOURCES.json` entry,
+and recreate a thin launcher **outside the repo** at `~/.claude/skills/lesson-cycle-loop/SKILL.md`
+— never a `.claude/skills/` mirror, which `CORE.md` §4 forbids and `DOC-SOURCES.json` already
+records a ruling against. Then cold-run it, which was never done.
+
+### `skill-author` cites a script that does not exist
+
+Found while following it, not fixed. Its **Step 7** tells the author to run
+`python scripts/skills/sync_claude_skills.py --check` and `--write` — **there is no
+`scripts/skills/` directory in this repo**, so the skill's own machine-verification step cannot be
+run as written, and its claim that `.claude/` slash-command stubs are generated describes a
+mechanism that was never built. Its **Step 0** roster is stale in both directions: it names
+`project-bootstrap`, which does not exist, and omits `lesson-cycle`, `lesson-aggregate`,
+`preflight-analyze`, `interaction-backfill`, and `setup-preflight` — five of the nine skills
+actually on disk, including the one most often run.
+
 ## 2026-08-12 — Casey Pellizzari via Claude
 
 ### Backfill: three cadets whose live extension was still behind a published grade
