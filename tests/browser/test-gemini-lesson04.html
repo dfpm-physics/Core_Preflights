@@ -1204,7 +1204,10 @@ A 2–4 sentence narrative summary in the AI's voice — what the conversation w
 // SYSTEM PROMPTS
 // ═══════════════════════════════════════════════════════════════════════════
 
-function buildSystemPrompt(cadetId, localTime) {
+// phase: "probe" (default) | "report" | "extension" -- see sysFor() in the component.
+// Both deferred blocks sit at the very TAIL of this prompt, which is why they can be
+// dropped without disturbing a line of the instructions above them.
+function buildSystemPrompt(cadetId, localTime, phase) {
   return `You are a physics tutor for a USAFA cadet who has just completed the assigned reading for an
 upcoming Physics 215 class. Run a focused Socratic conversation — paced by independent per-topic
 budgets (see PACING below), typically on the order of 10 minutes of active discussion but with no
@@ -1573,11 +1576,10 @@ assignment.
 ${TEXTBOOK_REFERENCE}
 
 ${LESSON_CONFIG}
-
-${EXTENSION_PROBLEMS}
-
-OUTPUT_REPORT_FORMAT (produce exactly this structure):
-${REPORT_FORMAT}`;
+${phase === "extension" ? "\n" + EXTENSION_PROBLEMS + "\n" : ""}\
+${phase === "probe" || !phase
+    ? ""
+    : "\nOUTPUT_REPORT_FORMAT (produce exactly this structure):\n" + REPORT_FORMAT}`;
 }
 
 function buildStudySystemPrompt() {
@@ -1837,6 +1839,14 @@ function finalizePayload(raw, activeSec, msgs) {
 
 // ── Bubble classification ────────────────────────────────────────────────────
 const REPORT_MARKER = "# JiTT Conversation Report";
+
+// The close sequence is fixed by the tutor prompt: summary -> the integrity question,
+// which it must ask VERBATIM and then WAIT for -> the report. So seeing that question
+// means the report is at most one turn away, and the mandated wait is what guarantees
+// the lead time needed to put REPORT_FORMAT back in context before it is used.
+// Two alternates, because a model that lightly rewords the opener still says the rest.
+const INTEGRITY_ASKED =
+  /one last thing before I put together your report|did you receive any outside help during this conversation/i;
 const EXT_TRIGGER = "[The report above is complete and has been shown to the cadet. Now deliver the "
   + "post-report extension offer as your own separate message, exactly per the AFTER THE REPORT — "
   + "EXTENSION section. Do not repeat or modify the report.]";
@@ -1899,7 +1909,26 @@ function Lesson04Preflight() {
   const [modelName, setModelName] = useState("");          // shown on the start screen
   useEffect(() => { apiKeyRef.current = apiKey.trim(); }, [apiKey]);
 
-  const sysRef = useRef("");        // system prompt, built once at start
+  const sysRef = useRef("");        // study mode's prompt, and the graded opener
+  const sysArgsRef = useRef(null);  // { cadetId, localTime } -- graded only
+  const reportPhaseRef = useRef(false);
+
+  // Compose the system prompt for the CURRENT phase instead of reusing one built at
+  // start. Study mode is untouched: it needs its practice problems from turn one and
+  // never produces a report, so it keeps the prompt built in startSession.
+  function sysFor() {
+    const a = sysArgsRef.current;
+    if (!a) return sysRef.current;
+    // Belt and braces on the primary trigger: once the report exists we are in the
+    // extension, and once active time passes the whole planned budget the close can
+    // arrive at any turn -- so stop deferring rather than risk a report with no format.
+    const overBudget =
+      activeSecRef.current >= PROBE_TOPIC_COUNT * PER_TOPIC_BUDGET_MIN * 60;
+    const phase = hasReport ? "extension"
+      : (reportPhaseRef.current || overBudget) ? "report"
+      : "probe";
+    return buildSystemPrompt(a.cadetId, a.localTime, phase);
+  }
   const extSentRef = useRef(false); // extension trigger fires once
 
   const [appHeight, setAppHeight] = useState(null);
@@ -2007,10 +2036,15 @@ function Lesson04Preflight() {
   async function startSession(selectedMode) {
     if (started) return;
     if (selectedMode === "graded" && !cadetId.trim()) return;
+    const localTime = new Date().toLocaleString();
     const sys = selectedMode === "graded"
-      ? buildSystemPrompt(cadetId.trim(), new Date().toLocaleString())
+      ? buildSystemPrompt(cadetId.trim(), localTime, "probe")
       : buildStudySystemPrompt();
     sysRef.current = sys;
+    sysArgsRef.current = selectedMode === "graded"
+      ? { cadetId: cadetId.trim(), localTime: localTime }
+      : null;
+    reportPhaseRef.current = false;
     setMode(selectedMode);
     setStarted(true);
     bumpActivity();
@@ -2058,7 +2092,7 @@ function Lesson04Preflight() {
     const note = mode === "graded" ? pacingNote(activeSecRef.current, PROBE_TOPIC_COUNT) : null;
     setLoading(true); setError(null);
     try {
-      const reply = await callTutor(activeModelRef, history, sysRef.current, note);
+      const reply = await callTutor(activeModelRef, history, sysFor(), note);
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch (err) {
       setError({
@@ -2087,6 +2121,17 @@ function Lesson04Preflight() {
   // Splits off the jitt-data payload and REWRITES the stored message with the stripped markdown, so
   // the bubble, the API history, and `r` can never carry the block — one operation, no chance of
   // one of the three keeping it.
+  // Phase trigger. Runs before the report-detection effect below and on the same
+  // messages, so the format is restored one turn ahead of the report that needs it.
+  useEffect(() => {
+    if (mode !== "graded" || reportPhaseRef.current) return;
+    const m = messages[messages.length - 1];
+    if (!m || m.role !== "assistant") return;
+    if (INTEGRITY_ASKED.test(m.content) || m.content.includes(REPORT_MARKER)) {
+      reportPhaseRef.current = true;
+    }
+  }, [messages, mode]);
+
   useEffect(() => {
     if (mode !== "graded" || hasReport) return;
     const idx = messages.length - 1;
@@ -2121,7 +2166,7 @@ function Lesson04Preflight() {
     setMessages((prev) => [...prev, repair]);
     (async () => {
       try {
-        const reply = await callTutor(activeModelRef, history, sysRef.current, null);
+        const reply = await callTutor(activeModelRef, history, sysFor(), null);
         setMessages((prev) => [...prev, { role: "assistant", hidden: true, content: reply }]);
         const { data } = extractPayload(reply);
         if (data) {
@@ -2149,7 +2194,7 @@ function Lesson04Preflight() {
     (async () => {
       setLoading(true);
       try {
-        const reply = await callTutor(activeModelRef, history, sysRef.current, null);
+        const reply = await callTutor(activeModelRef, history, sysFor(), null);
         setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
       } catch (err) {
         setError({ kind: err.kind, text: errorMessage(err, { afterRetries: true }) });

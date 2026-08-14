@@ -86,7 +86,34 @@ key, and submission additionally needs a **student** account, since the receiver
   which is the same prompt sent ten times. **Gemini context caching does not help** — explicit
   caching needs a paid account and a 32,768-token minimum (the prompt is smaller than that), and
   rate limits count cached tokens anyway. The only real levers are sending fewer tokens per turn or
-  a paid tier. Recorded, not acted on: trimming grounding is a pedagogical decision.
+  a paid tier.
+- **Acted on it: the two tail blocks are now deferred to the phase that needs them.** On the
+  director's suggestion, and using the trigger he identified. `buildSystemPrompt` takes a `phase`
+  (`probe` | `report` | `extension`, defaulting to `probe`), and both deferred blocks sit at the
+  very tail of the prompt — which is why they can be dropped without disturbing a line of the
+  instructions above them. Measured by executing the real function at each phase:
+
+  | phase | chars | `EXTENSION_PROBLEMS` | `REPORT_FORMAT` |
+  |---|---|---|---|
+  | `probe` | 50,941 | — | — |
+  | `report` | 54,401 | — | ✓ |
+  | `extension` | 62,173 | ✓ | ✓ |
+
+  **2,808 tokens (18%) off every probing turn**, which is where nearly every turn is; a 10-turn
+  session drops from ~155,400 to ~131,000 input tokens.
+
+  **The trigger is exact, not heuristic.** The tutor prompt mandates the integrity self-report
+  question *verbatim* and orders it to WAIT for the answer before reporting — so matching that
+  question in a tutor reply restores `REPORT_FORMAT` a guaranteed full turn before the report is
+  produced. Two belts behind it: `REPORT_MARKER` appearing at all, and active time passing the whole
+  planned budget (`PROBE_TOPIC_COUNT × PER_TOPIC_BUDGET_MIN`), because a report generated without
+  its format would fail `REPORT_MARKER` detection and cost the cadet the entire session.
+  `EXTENSION_PROBLEMS` needs no trigger — the extension provably cannot precede the report.
+
+  Study mode is untouched: it needs its practice problems from turn one and never produces a report.
+  Verified by executing `buildSystemPrompt` for all three phases plus the no-argument default and
+  asserting block presence, that the instructions above the tail are byte-identical across phases,
+  and that `TEXTBOOK_REFERENCE` / `LESSON_CONFIG` survive in all of them.
 Nothing under `site/` changed, so the deploy path gains no dependency and no build step
 (`CORE.md` §2); the React/Babel CDN scripts are confined to `tests/browser/`, which already loads
 from that CDN.
