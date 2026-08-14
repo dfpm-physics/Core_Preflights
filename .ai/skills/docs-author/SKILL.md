@@ -66,6 +66,7 @@ interesting the work was.
 | "How do the pieces fit together?" | **Architecture** — `docs/architecture/` |
 | "How do I operate the system from outside the app?" (SQL, migrations, scripts, deploys) | **Runbook** — `docs/operations/` |
 | "What state was the system in on date X, and what was wrong with it?" | **Audit** — `docs/audits/` |
+| "Here is a defect — verify it independently, then fix it" | **Finding** — `docs/findings/` |
 | "What changed, when, and who did it?" | **`CHANGELOG.md` only** — always, for every shipped change |
 | "How must an AI agent behave here?" | **`CORE.md`** — the operating contract, not a doc |
 
@@ -76,6 +77,10 @@ Two of these overlap and need a hard line:
   deploys. The reason is not taste: help docs are **public static assets** (Step 2), so an
   operational procedure that references credentials, hostnames, or internal paths *cannot* be a
   help doc at any tier.
+- **Audit vs. finding.** Both are point-in-time and neither is registered in `DOC-SOURCES.json`, so
+  the line is **who acts next**: an audit describes a system to a reader, a finding assigns work to
+  a successor and carries a status that is closed when the fix lands. Findings also ban student
+  identifiers outright — see `docs/findings/README.md`.
 - **Design doc vs. help doc.** A design doc is a **point-in-time record** — it captures reasoning,
   is archived after the work lands, and is superseded rather than rewritten. This is why ADRs are
   immutable by convention and carry a status
