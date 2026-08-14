@@ -271,10 +271,16 @@
       const pub = arts.filter((a) => a.published_url).length;
       const reg = arts.filter((a) => state.registered.has(a.slug)).length;
       const reviewed = arts.filter((a) => state.reviews.artifacts?.[a.slug]?.objectives).length;
-      // Backup availability. The tile below keeps the neutral blue accent whatever this count
-      // is: an artifact with no Gemini backup is not a fault the way an unregistered published
+      // Backup availability. The tile below keeps the neutral blue accent whatever these counts
+      // are: an artifact with no Gemini backup is not a fault the way an unregistered published
       // artifact is, so it never turns red.
+      //
+      // The two absences are not the same thing and the sub-line must not merge them. An
+      // UNPUBLISHED artifact has nothing to back up — that is most of phys-310 and it is a
+      // decision, not a gap. A PUBLISHED one without a backup is the case worth naming: cadets
+      // can reach it, so a cadet that claude.ai turns away has nowhere to go.
       const bk = arts.filter((a) => AL.backupFor(state.backups, a.slug)).length;
+      const bkGap = arts.filter((a) => a.published_url && !AL.backupFor(state.backups, a.slug)).length;
       const shown = arts.filter((a) =>
         state.filter === 'all' ? true
         : state.filter === 'unregistered' ? !state.registered.has(a.slug)
@@ -300,7 +306,8 @@
           ${tile('blue', 'bolt', '🛟', state.backups.error ? '?' : bk, 'Backup builds',
                  state.backups.error ? 'list could not be read'
                  : bk === arts.length ? 'every artifact has one'
-                 : `${arts.length - bk} without one`)}
+                 : bkGap ? `${bkGap} published without one`
+                 : `${arts.length - bk} unpublished, none needed`)}
         </div>
 
         ${reg < pub ? `<div class="alert alert-warn"><div>
