@@ -74,3 +74,4 @@ _builder/courses/*/index.json
 # localize.py wipes and rewrites it on every run.
 _builder/courses/*/build/
 _builder/preflight-kit/build/
+break_in_case_of_emergency/gpt_instruction.md

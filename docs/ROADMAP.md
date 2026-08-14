@@ -569,6 +569,116 @@ something there is already a right way to do.
 If it is ever built, `faculty/extensions.html` is the home — that page is still **read + revoke
 only**, and a page that can revoke in bulk but not grant is the asymmetry that would make the case.
 
+### P3.18 — Agent swimlanes: bounded roles instead of one general agent · **XL** · *director's proposal 2026-08-14, undecided*
+
+*Director's proposal, raised as "I suspect there is a lot of crossed wires due to the wide range of
+instructions in this project." Recorded here in full — plan, rewards and risks — because the first
+increment is cheap and the last one is not, and the difference is the whole decision.*
+
+**The proposal as raised:** define lanes an agent stays in — **web** (site features and bugs),
+**database**, **artifact builder**, **grader**, and a **researcher** that works an issue list — plus
+a **mastermind** as the default entry point that identifies which lanes a task needs, dispatches
+them sequentially or concurrently (asking first, if concurrent), and combines the results. A human
+who already knows what they need may invoke a lane directly.
+
+**The diagnosis is right; the mechanism is worth restating.** Always-loaded context is ~1,050 lines
+(`CORE.md` 533 + `PROJECT.md` 496 + wiring), which is heavy but survivable. The sharper problem is
+that CORE.md is a **hazard list whose hazards are unevenly relevant**: a grading run does not need
+the CRLF/`.gitattributes` trap, the Jekyll underscore rule or the builder's sharp-edges table, but
+it does need §0 shared state, §3 secrets and §5 CHANGELOG. There is a real core-vs-lane split
+available.
+
+**The reframe that makes it worth building: a lane is a capability boundary, not a prompt.**
+Instruction overload is a soft problem addressed with better prose. A verifier lane defined with no
+Edit/Write tool is *structurally* incapable of the failure it exists to avoid. That is the part
+prose cannot buy, and it falls out as a permission matrix:
+
+| Lane | Live DB | Repo writes |
+|---|---|---|
+| Grader | writes `grades` (standing authorization, CORE.md §5) | CHANGELOG + run record |
+| Database | **no autonomous DDL** — emits migration SQL for the director (CORE.md §0) | migrations + docs |
+| Web | read-only | `site/` |
+| Artifact | none | `_builder/` |
+| Verifier | read-only | a finding's status line |
+
+**Three of the five lanes already exist. Do not rebuild them.**
+
+| Lane | Already is | Remaining work |
+|---|---|---|
+| Grader | [`lesson-cycle`](../.ai/skills/lesson-cycle/SKILL.md) → [`preflight-analyze`](../.ai/skills/preflight-analyze/SKILL.md) (1,110 lines) → [`lesson-aggregate`](../.ai/skills/lesson-aggregate/SKILL.md) | a dispatch entry |
+| Artifact | `_builder/preflight-kit/skill/preflight-factory-v2/SKILL.md` (2,432 lines) + [`gemini-port`](../.ai/skills/gemini-port/SKILL.md) | a dispatch entry |
+| Researcher | [`docs/findings/`](findings/README.md) — the lifecycle, the fixer-is-not-the-finder rule, the PII rules and the falsifiability requirement are all already written and enforced | name it **verify-finding**, not "researcher", so its deliverable is a status transition rather than an essay |
+| **Web** | **nothing** | the real gap |
+| **Database** | **nothing** | the real gap |
+
+**Rewards.** A bounded brief on a bounded blast radius; tool restrictions that make a read-only lane
+provably read-only; the option of worktree-isolated concurrency for genuinely independent work; and
+a lane roster that tells a *human* where a task belongs, which is most of the value even if no agent
+ever routes anything.
+
+**Risks, in the order they will actually bite.**
+
+- **Every recorded disaster in this repo is cross-lane, and specialization hides that.** The
+  effort→points curve has **six copies that must agree** — one DB trigger and five display-side, so
+  a web lane that fixes the display desyncs the gradebook. The deadline hour lives in **three places
+  that must move together**, one of them a frontend file. `LOOKAHEAD_DAYS = 7` has copies in JS and
+  in three help docs. The `due_by_day` incident was database + grading + a frontend constant + a
+  human decision, in one event. **Mitigation:** a short set of cross-cutting invariants restated in
+  *every* lane file. The duplication is correct; the alternative is a specialist confidently editing
+  one copy of an invariant it cannot see.
+- **Concurrency collides with CORE.md §0 rule 4** — *"never run two agents in the same working
+  tree"* — and subagents share the working directory by default. So concurrent lanes must be
+  read-only *or* worktree-isolated, and any live mutation still designates one operator. The
+  director's instinct to require approval before running concurrently is right and should be made
+  stricter than requested.
+- **N lane files is more instruction, not less**, unless each lane file is a *complete* brief. The
+  design rule that keeps this honest: **an agent should read CORE.md §0/§3/§5 plus one lane file,
+  and nothing else, and still do the job.** A lane that cannot meet that is drawn wrong.
+- **Handoff is lossy.** A subagent returns a report, not its reasoning, and this repo is unusually
+  invested in recording *why*. Lanes must write to the repo — findings, CHANGELOG, decision docs —
+  not merely back to a caller.
+
+**Skills or agents — the fork, and how to take it without breaking a rule.** CORE.md §4 forbids
+`.claude/skills/` and `.agents/skills/` mirrors, and the shared skills are correspondingly
+agent-neutral; note they are read on demand by convention rather than surfaced by any harness's
+skill listing. Claude Code subagents, however, need `.claude/agents/*.md` frontmatter (model, tool
+restrictions, worktree isolation), which is inherently vendor-specific. **Resolve it the way the
+repo already resolves it for instructions:** the lane brief lives once, agent-neutral, under `.ai/`;
+`.claude/agents/*.md` is thin wiring that names the brief and supplies only the frontmatter — the
+same relationship [`CLAUDE.md`](../CLAUDE.md) has to [`CORE.md`](../.ai/instructions/CORE.md). That
+buys capability boundaries without a content mirror.
+
+**Do not split CORE.md to feed the lanes — not initially.** Its power is that it is one file
+everyone reads; splitting it can produce exactly the drift it exists to prevent. Lane files should
+*point into* CORE sections and add lane-specific material. Revisit only if the diet turns out to be
+the binding constraint.
+
+**Build the mastermind last, and possibly not at all.** A router must know enough about every lane
+to route, so it either carries a summary of everything — rebuilding the overload at the top — or
+routes badly; and it adds a hop to every task, including one-line fixes. The proposal already
+contains its own cheaper alternative: *a human may invoke a lane directly*. **With well-named lanes
+the director is a better router than a model**, at zero overhead. Build the mastermind only if
+dispatch proves to be the friction, which is a question the lanes themselves will answer.
+
+**Sequence.** (1) **web** and **database** lanes — the two that do not exist and where the incidents
+cluster; each is **M** and independently useful. (2) **verify-finding**, against the existing
+`docs/findings/` lifecycle — **S**. (3) dispatch entries pointing at the grader and artifact skills
+— **S**. (4) mastermind, **L**, conditional on (1)–(3) proving the need. Author each through
+[`skill-author`](../.ai/skills/skill-author/SKILL.md), which is already the gate for whether a
+procedure warrants a skill — the proposal should pass its own repo's test rather than route around
+it.
+
+**Falsification — a cheap diagnostic to run before any of it.** Classify the last ~20 CHANGELOG
+entries and the open findings by whether a lane would have **prevented** the mistake or **caused**
+it. This repo is documented well enough that the answer is retrievable. If most of them are
+cross-lane — and the `due_by_day`, six-copies and `LOOKAHEAD_DAYS` cases suggest they are — then
+crossed wires is a symptom of *shared invariants*, not of role confusion, and the money goes into
+an invariant registry instead of a lane roster. If the classification instead shows repeated
+lane-local errors (a grading run breaking site markup, a web change touching a migration), the
+lanes are the right instrument and the first two should be built at once.
+
+Depends on: nothing. It touches no live data and no schema. **It is a proposal, not a decision.**
+
 ---
 
 ## 5. C — Cleanup and debt

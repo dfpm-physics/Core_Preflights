@@ -10,6 +10,92 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-14 — Matthew Recker via Claude
 
+### Roadmap P3.18 — agent swimlanes recorded as a proposal, with its risks and its cheap first step
+
+The director proposed defining lanes an agent stays in — web, database, artifact builder, grader, a
+researcher working an issue list, and a mastermind routing between them — to reduce instruction
+overload. Written up in [`docs/ROADMAP.md`](docs/ROADMAP.md) **P3.18**. **No code, no skills and no
+agent definitions were created; nothing is authorized to build.**
+
+Four things the write-up establishes that the proposal as raised did not:
+
+- **Three of the five lanes already exist** — grader is `/lesson-cycle`, artifact is
+  `preflight-factory-v2`, and the researcher's issue list is `docs/findings/`, whose lifecycle and
+  falsifiability rules are already enforced. **The only real gaps are web and database**, which is
+  what makes the first increment **M** rather than **XL**.
+- **A lane is worth more as a capability boundary than as a prompt.** Tool restrictions in
+  `.claude/agents/*.md` frontmatter make a read-only lane provably read-only; prose cannot.
+- **The dominant risk is cross-lane invariants, not overload.** The effort→points curve has six
+  copies that must agree, the deadline hour three, `LOOKAHEAD_DAYS` several — so a specialist can
+  confidently edit one copy of an invariant it cannot see. Concurrency additionally collides with
+  CORE.md §0 rule 4 (never two agents in one working tree), so concurrent lanes must be read-only or
+  worktree-isolated.
+- **The mastermind is sequenced last and may not be needed** — a router must know every lane to
+  route, rebuilding the overload at the top, and the proposal already contains the cheaper
+  alternative of a human invoking a lane by name.
+
+Resolving skills-vs-agents without breaking CORE.md §4's no-mirrors rule: the lane brief lives once,
+agent-neutral, under `.ai/`; `.claude/agents/*.md` carries only the vendor-specific frontmatter —
+the same relationship `CLAUDE.md` has to `CORE.md`. The item also carries a falsification test to
+run *before* building anything: classify recent CHANGELOG entries and open findings by whether a
+lane would have prevented the mistake or caused it.
+
+### The 29 republished phys-215 artifacts are wired up — and the wiring reaches no cadet yet
+
+recker republished all 29 phys-215 artifacts carrying the backup-version button and supplied the
+new URLs. This repoints the database at them and puts the patched sources in Storage.
+
+- **`app.activities.content->artifact_url` updated for 29 rows**, verified 29/29 by read-back.
+  The slug did **not** change — a hand patch keeps `INTERACTION_ID`, so this is an `artifact_url`
+  update, not a new lesson row.
+- **94 objects pushed** to `artifact-sources` (46 `source.jsx`, 46 `build.json`, 2 `index.json`).
+  Round trip verified: all 46 pulled back byte-identical, all 46 carrying `BACKUP_ENDPOINT`.
+- **`BUILD-LOG.md`**: 29 `Published` rows updated to 2026-08-14 and the new URLs.
+- Gemini backup builds are **unchanged**, correctly — `to_gemini.py` strips the button, so a
+  patched source and an unpatched one produce identical output. Confirmed: 29 already current.
+
+**THE BUTTON STILL REACHES NO CADET, and the reason is not the one we were tracking.**
+Republishing was supposed to be the last step. It is not, because *interactive lessons are barely
+offered*. Of **74** assignment offerings, only **6** carry an interactive activity at all:
+
+| offering | term | reality |
+|---|---|---|
+| phys-215 `preflight-02` … `preflight-07` (5) | **TRAINING SANDBOX — Fall 2026** | not real cadets |
+| phys-110 `preflight-02` (1) | Fall 2026, live, due 2026-08-10 | real, and already past due |
+
+The 29 activities repointed above hang off 29 assignments with **zero offerings** between them.
+They are correct and they are unreachable, because nothing is scheduled against them.
+
+**The one genuinely live interactive lesson is phys-110's, and it is the one we cannot help.**
+`lesson-02-1-d-motion-position-velocity-and-acceleration-b17964f2` has no source in
+`_builder/courses/phys-110/` (that directory holds a syllabus and a schedule, no artifacts), and
+phys-110 is not in `sync_artifacts.py`'s `COURSES`, so its `.jsx` is not in the bucket either. No
+source means no button and no backup build.
+
+Honest status: the backup route is built, deployed and verified end-to-end, and it works the
+moment a phys-215 interactive lesson is actually offered. Making that true is a scheduling
+decision, not an engineering one.
+
+**Recoverability, per [`safe-change`](.ai/skills/safe-change/SKILL.md).** Two independent undo
+paths, both established *before* either write, both in gitignored `_snapshots/`:
+
+- `artifact_url_pre_backup_button.json` — the pre-image of all 39 interactive activities.
+- `artifact-sources-pre-button/` — the 46 stored `.jsx` exactly as they were, 7,573,839 bytes,
+  with a sha256 manifest. And separately **proved** that `add_backup_button.py --revert` on the
+  local copies reproduces those remote bytes exactly, 46 of 46 — so the undo does not depend on
+  the snapshot surviving. `_snapshots/` is gitignored by design, so another machine would use
+  `--revert`.
+
+**The push ran through a staff session, not the service-role key**, which is not on this machine.
+Rather than reimplement the upload, `sync_artifacts.py`'s single request function was swapped and
+the tool's own logic ran unchanged — preserving `build_payload`'s index derivation, `classify`'s
+sha256 skip, and the rule that **refuses to overwrite the review sidecars the site owns** (both
+were correctly skipped). A staff session is also strictly *less* privileged than the documented
+path: it obeys migration 023's RLS rather than bypassing it.
+
+**Also corrected:** `BUILD-LOG.md` asserted *"Not one lesson row is registered on the DFPM site."*
+All 29 are registered; that changed some time after 2026-08-05 and nothing updated the log.
+
 ### Gemini backup builds: every published artifact now has a hosted fallback, and a route to it
 
 Cadets on free Claude accounts hit HTTP 429 and cannot do their preflight at all. The 2026-08-13
