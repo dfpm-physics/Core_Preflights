@@ -355,6 +355,22 @@ from the committed `.template`:
 | `supabase/admin/.env` | The three `prep_app_*` role credentials for schema `app` (same pooler host), plus the temporary `PREP_TEST_FACULTY_*` login for the P0.5 browser walkthrough | — generated when `app_schema_bootstrap.sql` is run |
 
 Notes:
+- **`PREP_TEST_FACULTY_*` is a WRITE credential, not an AUDIT one, and the difference is invisible.**
+  *(Added 2026-08-14, after it produced a confident, wrong, published conclusion.)* That account is
+  a director of exactly **two** course offerings — phys-110 Fall 2026 and the phys-215 **TRAINING
+  SANDBOX** — and **cannot see phys-215 Fall 2026 at all.** It is an ordinary staff session, so RLS
+  applies to every read. Counting through it returned **74** assignment offerings where there are
+  **115**, and **6** offerings carrying an interactive activity where there are **39** — the live
+  term filtered out silently, with the sandbox copy still visible to make the answer look right.
+
+  Using it to *write* is good practice and deliberately safer than the service role: it can do
+  nothing a director could not do from the browser. Using it to answer **"how many are there"** is
+  unsound, because RLS answers *"what may you see"* and never tells you which question it answered.
+  A `count(*)` that is silently a `count(*) WHERE visible_to_me` is indistinguishable from a fact.
+
+  **Any claim about totals, coverage, or absence comes from `prep_app_read` over the pooler** (or
+  the service role) — see `supabase/admin/.env` and the pattern in
+  `scripts/artifacts/sync_artifacts.py`. Remember the pooler username is `<role>.<project_ref>`.
 - The first path is **Claude-branded but agent-neutral in practice** — the Python scripts read it via
   `~/.claude/skills/preflight-analyze/config.json`, and a Codex operator creates the same file.
   **Decided (not yet executed):** neutralize this to a `$PREP_CONFIG` env var (or

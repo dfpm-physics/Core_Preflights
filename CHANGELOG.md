@@ -54,27 +54,50 @@ new URLs. This repoints the database at them and puts the patched sources in Sto
 - Gemini backup builds are **unchanged**, correctly — `to_gemini.py` strips the button, so a
   patched source and an unpatched one produce identical output. Confirmed: 29 already current.
 
-**THE BUTTON STILL REACHES NO CADET, and the reason is not the one we were tracking.**
-Republishing was supposed to be the last step. It is not, because *interactive lessons are barely
-offered*. Of **74** assignment offerings, only **6** carry an interactive activity at all:
+**THE BUTTON IS LIVE AND REACHES CADETS.** All **29** repointed lessons have a published offering
+in phys-215 Fall 2026, so the republished artifacts — button included — are what cadets open now.
 
-| offering | term | reality |
-|---|---|---|
-| phys-215 `preflight-02` … `preflight-07` (5) | **TRAINING SANDBOX — Fall 2026** | not real cadets |
-| phys-110 `preflight-02` (1) | Fall 2026, live, due 2026-08-10 | real, and already past due |
+> **This paragraph first said the opposite, and the correction is the more useful record.**
+> *(Written and corrected 2026-08-14, the same day, after the director said so.)* The original
+> claimed the button reached nobody, that only 6 of 74 offerings carried an interactive activity,
+> and that the 29 repointed rows had zero offerings. **Every one of those numbers was an artifact
+> of RLS**, and the mistake was mine: I audited a live term through the `PREP_TEST_FACULTY`
+> session and read what it returned as what exists.
+>
+> **That account is a director of exactly two course offerings — phys-110 Fall 2026 and the
+> phys-215 TRAINING SANDBOX — and it cannot see phys-215 Fall 2026 at all.** So the real term's
+> 37 offerings were filtered out of every query, silently and with no error, and the sandbox
+> copy was still visible to make the result look plausible. Re-run against `prep_app_read` over
+> the pooler, which is not RLS-filtered:
+>
+> | | via the staff session | actually |
+> |---|---|---|
+> | assignment offerings | 74 | **115** |
+> | offerings with an interactive activity | 6 | **39** — of which **29 are phys-215 Fall 2026** |
+> | the 29 repointed slugs having a live offering | 0 | **29** |
+>
+> **The lesson generalizes past this incident: a staff session is the right instrument for a
+> WRITE and the wrong one for an AUDIT.** It is correctly less privileged than the service role,
+> which is why the push used it — but the same property makes a completeness claim unsound,
+> because RLS answers "what may you see", never "what is there", and it does not say which it
+> gave you. Any statement of the form *"only N exist"* has to come from `prep_app_read` or the
+> service role. A `count(*)` that is silently a `count(*) WHERE visible_to_me` reads exactly like
+> a fact.
 
-The 29 activities repointed above hang off 29 assignments with **zero offerings** between them.
-They are correct and they are unreachable, because nothing is scheduled against them.
+phys-215 Fall 2026 runs **37 published offerings**: all 37 carry a written activity and **29 also
+carry an interactive one**. The 8 without are exactly the six labs (`preflight-06`, `11`, `17`,
+`27`, `34`, `38`) plus `16` (RC Circuits) and `40` (Polarization) — the two `BUILD-LOG.md` records
+as having no grounding source. Per the director: four lessons mandate the interactive, five mandate
+the free response, the rest are the cadet's choice, and the interactive becomes visible once the
+required free response is done — so an interactive path is always available.
 
-**The one genuinely live interactive lesson is phys-110's, and it is the one we cannot help.**
-`lesson-02-1-d-motion-position-velocity-and-acceleration-b17964f2` has no source in
-`_builder/courses/phys-110/` (that directory holds a syllabus and a schedule, no artifacts), and
-phys-110 is not in `sync_artifacts.py`'s `COURSES`, so its `.jsx` is not in the bucket either. No
-source means no button and no backup build.
-
-Honest status: the backup route is built, deployed and verified end-to-end, and it works the
-moment a phys-215 interactive lesson is actually offered. Making that true is a scheduling
-decision, not an engineering one.
+**One genuinely live interactive lesson still cannot be helped**, and this part of the original
+entry stands: phys-110 `preflight-02` runs
+`lesson-02-1-d-motion-position-velocity-and-acceleration-b17964f2`, which has no source in
+`_builder/courses/phys-110/` (that directory holds a syllabus and a schedule, no artifacts) and
+phys-110 is not in `sync_artifacts.py`'s `COURSES`, so its `.jsx` is in neither the tree nor the
+bucket. No source means no button and no backup build. phys-310 Fall 2026's 4 interactive
+offerings are likewise unpatched — recker republished phys-215 only.
 
 **Recoverability, per [`safe-change`](.ai/skills/safe-change/SKILL.md).** Two independent undo
 paths, both established *before* either write, both in gitignored `_snapshots/`:
