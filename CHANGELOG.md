@@ -8,7 +8,7 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
-## 2026-08-13 — Matthew Recker via Claude
+## 2026-08-13 (fifth) — Matthew Recker via Claude
 
 ### A Gemini-transport test build of the PHYS 215 Lesson 4 preflight, in `tests/browser/`
 
@@ -90,6 +90,206 @@ key, and submission additionally needs a **student** account, since the receiver
 Nothing under `site/` changed, so the deploy path gains no dependency and no build step
 (`CORE.md` §2); the React/Babel CDN scripts are confined to `tests/browser/`, which already loads
 from that CDN.
+
+## 2026-08-13 (fourth) — Matthew Recker via Claude
+
+### Grading refuses to zero a cadet whose work is attached to an enrollment they have left
+
+Fixes §6.1 and §6.2 of
+[`docs/findings/2026-08-13-orphaned-submission-on-dropped-enrollment.md`](docs/findings/2026-08-13-orphaned-submission-on-dropped-enrollment.md).
+**§6.3 (the RLS hole itself, DDL) and §6.4 are NOT done** and are still owed to the director.
+
+**Verification came first, and it moved the plan.** The finding shipped `Open — awaiting
+verification`; a read-only pass against the live database (`prep_app_read`, plus `pg_proc` /
+`pg_policies`) settled all four of its §4 open questions and cleared all four §8 falsifiers:
+
+- **The RLS hole is real and applied.** Live `my_enrollments()` is byte-identical to
+  `002_rls.sql:115-118` — no status filter — while `my_offerings()` beside it does filter. The
+  asymmetry is not just intended, it is deployed.
+- **`submission_activities` has the same hole and it is wider.** `sa_student_write` is `FOR ALL`
+  — INSERT, UPDATE **and DELETE** — with `my_enrollments()` in both `USING` and `WITH CHECK`. The
+  §6.3 migration must repoint **three** policies, not the two the finding listed.
+- **Blast radius across all three courses is zero.** 1001 enrollments, 76 non-active (26 phys-110
+  / 49 phys-215 / 1 phys-310), and **no submission of any status sitting on any of them**. The
+  2026-08-13 repair cleared the only case that existed.
+- **The two-row state was systemic and is already fixed upstream.** Not inference from timestamps
+  as the finding assumed: the roster importer used to drop-and-add, this file's 2026-08-10 entry
+  records **40 cadets holding two active enrollments** in one weekend, and `sectionMoves()` closed
+  it. **That drops §6.4 from the highest-leverage fix to the lowest** — what is left there is
+  defense against hand-written inserts, not against the path that caused this.
+
+**What shipped:**
+
+- **`/preflight-analyze` Step 9 gained a sixth condition.** Before writing a non-submission zero it
+  now checks for work on **every** enrollment that student holds, not just the active one in scope,
+  and **refuses** rather than zeroing — the student, not the enrollment, is the unit of "handed in
+  nothing". Counted as `stranded_skipped` in `analysis_runs.detail`; any value above 0 closes the
+  run `partial`, because those cadets are then graded by nobody until a human repoints the
+  submission. It refuses on a stranded **draft** too: §8 names a stranded draft as a signal to
+  re-diagnose, which cannot happen if the run already zeroed it.
+- **The same condition in `scripts/fall2026/zero_non_submitters.py`**, which implements the identical
+  rule independently for assignments graded before it existed. The finding did not account for this
+  second site; both now carry a change-one-change-both header. Extracted as `stranded_index()` so it
+  is testable offline, with 9 new cases in `zero_non_submitters_test.py` (**49 pass, 0 fail**).
+- **`scripts/checks/orphaned_submissions.py` — new.** Stdlib + REST, read-only, `--course`,
+  `--json`, non-zero exit on a hit. **It asks a wider question than the finding's §5 query**: any
+  submission on a non-active enrollment, classified afterwards by what the stranding costs
+  (`ZEROED` → `zeroed-unfinalized` → `will-be-zeroed` → `graded-elsewhere` → `inert`). That closes
+  one of the two blind spots §5 names — a move between *courses* is now found — and leaves only the
+  hard-deleted row, which is the RLS fix's job. Also warns on cadets holding two active enrollments,
+  the precursor state.
+- **Gated in `/lesson-cycle` Step 0.3.** Exit 1 stops the run before anything is written. Both
+  scheduled jobs inherit it without a wrapper change, because it lives in the skill.
+
+**Two defects found in `zero_non_submitters.py` while adding the condition, both fixed:**
+
+- **It could not run at all.** No `Accept-Profile: app` header, so every query resolved against the
+  default profile (`graphql_public` on this project) and 404'd with PGRST205 on the first call.
+- **Its `get()` did not page.** PostgREST caps a response at 1000 rows whatever `limit` says, and
+  `submissions` across 37 offerings would cross that routinely. **In a script that searches for the
+  ABSENCE of work, a truncated page reads as "they handed in nothing" and writes a zero.** Same cap
+  already cost this project one wrong answer (2026-08-10, `enrollments` at 1001 rows). Both new
+  scripts page explicitly; the detector printing `1001 enrollments` is the proof it works.
+
+*Verification:* the offline suites above; `orphaned_submissions_test.py` **23 pass, 0 fail**, which
+reconstructs this incident from fixtures and asserts the gate **fails** on it — against the live
+database the check now correctly returns zero findings forever, so its failing path is otherwise
+never exercised. Live dry runs of `zero_non_submitters.py` on phys-110 (`nothing to zero`, all 471
+enrollments accounted for) and of the detector across all courses (`PASS`, 0 stranded), both
+read-only. No database writes of any kind.
+
+*Docs:* `site/help/director-ai-rules.md` gained the refusal case and what a director should do with
+it — a zero for completed work is indistinguishable from a real one, so the run declining to guess
+is the point. `docs/operations/SCHEDULED-LESSON-CYCLE.md` records the new skill-level gate against
+both jobs. `site/help/ai-and-your-work.md` and `docs/operations/ONBOARD-AGGREGATION.md` were read
+against their sources, found still correct, and their `reviewed` dates bumped.
+
+*Note for whoever commits this:* a second session was writing in this same working tree
+concurrently (the finding and entry below), which CORE.md §0 rule 4 exists to prevent. Stage
+explicit paths; the changes are separable.
+
+## 2026-08-13 (third) — Matthew Recker via Claude
+
+### Finding: student identifiers and education records are committed to this public repository
+
+Auditing this file after the finding below turned up a second, larger problem, now written up as
+[`docs/findings/2026-08-13-student-pii-committed-to-public-repo.md`](docs/findings/2026-08-13-student-pii-committed-to-public-repo.md).
+**Nothing was changed** — the write-up is the deliverable; remediation is a separate decision.
+
+CORE.md §3 forbids student PII in any committed file and names this one explicitly. The rule has
+been broken repeatedly over roughly two months, in three tracked files, several of whose records
+pair an identifier with an *education record* — a grade outcome, a non-submission status, a section
+reassignment. Two aggravating facts, both verified by unauthenticated request on 2026-08-13:
+
+- **The repository is public**, not merely Pages-served. `api.github.com` and
+  `raw.githubusercontent.com` both answer 200 with no credentials, as does every affected path over
+  Pages. The Jekyll underscore exclusion that shields `_archive/` and `_builder/` does not reach them.
+- **Redacting the working tree would not undo it.** The values are in git history on a public
+  remote, and the routes that genuinely remove them there — going private, or a history rewrite
+  against CORE.md §0's never-force-push rule — are the course director's call, not an operator's.
+
+**The root cause is a missing check, not carelessness.** Every other durable rule here has a machine
+behind it — `check_doc_sources.py`, dry-run-by-default, `MANIFEST.sha256`, `check_grounding.py`. The
+PII rule has nothing, and an unenforced convention written by two agents across two months failed
+the way unenforced conventions do. The finding's §6.2 proposes the missing scanner; it needs no
+authorization and is the only item that prevents recurrence.
+
+Sharp edge recorded there: a naive `\b3\d{9}\b` sweep returns ~2,255 hits across 40 files and is
+**almost entirely false positives** — the retired POC roster, the training sandbox, and the test
+accounts are all synthetic and must not be redacted. Worse, one affected file is *fixture* data that
+reads as invented and is not, so it survives any redaction pass done by eye.
+
+Per the directory's own rule the finding names no cadet, and it withholds line numbers as well —
+it is published on the same public site as the data it describes, and its §7 argues that trade
+rather than leaving it implicit.
+
+## 2026-08-13 (second) — Matthew Recker via Claude
+
+### New: `docs/findings/` — defects written up for a successor to verify and fix
+
+A defect found mid-run had nowhere good to land. `CHANGELOG.md` records what *changed*,
+`ROADMAP.md` what we *intend*, `docs/decisions/` what we *chose*. None of them is "here is
+something broken, here is the evidence, here is how to prove it yourself, go fix it" — which is
+what you need when the fixer is a different operator or a different AI arriving with no context.
+
+- [`docs/findings/README.md`](docs/findings/README.md) — the convention: when a finding earns its
+  place, naming (`YYYY-MM-DD-<slug>.md`), the status lifecycle (`Open` → `Verified` → `Fixed in
+  <commit>` → `Rejected`), and how it differs from `docs/audits/`. **The line against an audit is
+  who acts next:** an audit describes a system to a reader, a finding assigns work.
+- The first one: [`2026-08-13-orphaned-submission-on-dropped-enrollment.md`](docs/findings/2026-08-13-orphaned-submission-on-dropped-enrollment.md),
+  covering the defect behind the repair below.
+- `docs/README.md` and `.ai/skills/docs-author/SKILL.md` updated so the new artifact is routable —
+  an artifact the routing skill does not know about is one nobody will use.
+
+**Two rules, both load-bearing.** Findings carry **no student identifiers at all** — no names, no
+IDs, no record UUIDs, no section-plus-circumstance that re-identifies a cadet in a ~20-person
+section. Everything under `docs/` is served publicly (CORE.md §2) and FERPA covers indirect
+identifiers. The doc ships **the detection query instead of the rows**, which is also simply
+better: a finding naming three affected students is stale when a fourth appears, while one carrying
+the query stays true and lets its reader confirm the count. And findings are **not** registered in
+`DOC-SOURCES.json` — they are closed, not refreshed, like `decisions/`, `contracts/` and `audits/`.
+
+Findings also separate **verified** from **inferred**, each verified claim naming the file:line or
+query behind it, because the reader's first job is deciding whether to trust the diagnosis.
+
+## 2026-08-13 — Matthew Recker via Claude
+
+### One cadet's preflight-03 was zeroed because their submission hung off a dropped enrollment
+
+One cadet in phys-110 Fall 2026 (`preflight-03`) transferred between sections. Their committed
+submission was attached to the **old enrollment**, which had been marked `dropped` the day before
+they submitted; the grade was written against the **new, active enrollment**, which had no
+submission on it. The two never met.
+
+*(The cadet is not identified here. CORE.md §3 bars student PII from committed files, this one
+named explicitly, and the repo is publicly readable. The record ids are in the run's snapshot
+outside the repo and in `app.analysis_runs`; the class of defect is located by the query in
+[`docs/findings/2026-08-13-orphaned-submission-on-dropped-enrollment.md`](docs/findings/2026-08-13-orphaned-submission-on-dropped-enrollment.md) §5.)*
+
+**The mechanism is `/preflight-analyze` Step 9's zero rule, working exactly as written.** Every
+roster query in the skill filters `status = 'active'` (Step 4c), so the cadet's work was invisible
+to it — on **both** day tracks, since the submission sat on a T-day enrollment and the student on
+an M-day one. The M-day run of 2026-08-12 07:22:59Z therefore saw an active enrollment past its
+deadline with no submission and correctly wrote the documented zero: 0.0/2.0,
+`diagnostic.no_submission = true`. An instructor finalized it at 2026-08-12 18:57:47Z. **The work
+had never been graded by anyone, on either track**, and nothing in the data said so — a
+`no_submission` zero is indistinguishable from a real one on the row itself.
+
+Repaired, at the course director's instruction, under `.ai/skills/safe-change/SKILL.md`
+(snapshot → verify → dry-run → `--commit`), in three writes against **two rows**, both addressed by
+primary key:
+
+1. `submissions.enrollment_id` on the one committed submission: the dropped T3C enrollment → the
+   active M5C one. `submission_activities` follow via `submission_id` and needed no change. M5C
+   held no other submission for this offering, so `UNIQUE (enrollment_id, assignment_offering_id)`
+   was not at risk — checked before the write, not assumed.
+2. That grade row **unfinalized** (`is_finalized = false`). The row was kept, not deleted.
+3. That one student re-graded to the `/preflight-analyze` rules — 2.0/2.0, `source = 'ai_suggested'`,
+   `is_finalized = false`, `submission_id` now populated, `no_submission` gone, and a full
+   `schema: 1` diagnostic. Q3 is correct against the authored `expected_response` and the reference
+   grounding (constant *g* downward through the whole flight, non-zero at the apex); Q2 is a genuine
+   reflection. Both green, so both carry empty feedback per the skill's green rule.
+
+**Counts — intended 2 rows, written 2, skipped 0.** The blast-radius query (a submission on a
+`dropped` enrollment) found **exactly one case across all 37 phys-110 offerings and 497
+enrollments**, and returns zero after the repair. Read-back confirmed exactly one `grades` row and
+one `submissions` row moved across the whole course offering, both of them this cadet's; the two
+enrollment rows and the `submission_activities` row are byte-identical to the pre-image. Recorded
+in `app.analysis_runs` (`e5293551`) as well as here, because a one-off repair is not a routine
+analysis run.
+
+**Deliberately not done, and left for the director:**
+
+- **`/lesson-aggregate` was not re-run.** The M5C section scope in the `preflight-03` rollup was
+  computed without this cadet and still is. The `__all__` scope was already outstanding before
+  this repair — the 2026-08-13 07:28Z run closed `partial` with five M-day sections stale.
+- **`grades.graded_by` was left pointing at the instructor who finalized the zero.** It is stale on
+  an unfinalized AI suggestion, but clearing it was outside what was authorized and it is
+  overwritten the moment the row is re-finalized.
+- **The upstream defect was not fixed.** PREP accepted a committed submission against an enrollment
+  that had been dropped 19 hours earlier (dropped 2026-08-10 21:10:37Z, submitted 2026-08-11
+  16:13:47Z). Nothing prevents that recurring, and nothing reports it; the detection query above is
+  the only way it currently surfaces.
 
 ---
 

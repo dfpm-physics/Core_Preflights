@@ -168,5 +168,95 @@ eq("a question with no id is skipped rather than keyed on None",
 eq("an interactive-only offering yields an empty question map, and still a zero total",
    Z.zero_row({**OFFERING, "questions": []}, "e", datetime.now(timezone.utc))["question_scores"], {})
 
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# CONDITION 6 — work on another of the student's own enrollments
+#
+# Added 2026-08-13 with the condition itself. This is the check that stands between a cadet who
+# changed section and a permanent zero for work they submitted on time, so it is tested against
+# the shape that actually caused it: two enrollment rows, the submission on the dropped one.
+# docs/findings/2026-08-13-orphaned-submission-on-dropped-enrollment.md
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+section("stranded_index — the sixth condition")
+
+STU = 3000990001
+E_ACTIVE, E_DROPPED = "enr-active", "enr-dropped"
+OFF = "off-1"
+
+# The observed shape: one active row (in scope, about to be zeroed) and one dropped row holding
+# the committed submission.
+ALL_ENR = [
+    {"id": E_ACTIVE, "student_id": STU, "status": "active"},
+    {"id": E_DROPPED, "student_id": STU, "status": "dropped"},
+]
+SUB_ON_DROPPED = [
+    {"id": "s1", "enrollment_id": E_DROPPED, "assignment_offering_id": OFF, "status": "committed"}
+]
+
+idx = Z.stranded_index(ALL_ENR, [E_ACTIVE], SUB_ON_DROPPED)
+eq("a committed submission on a dropped enrollment is found",
+   idx.get((STU, OFF)), [("dropped", "committed")])
+
+# The whole point: with the index non-empty for this key, main() refuses. Assert the key shape
+# main() looks up, because a mismatch there would fail open — silently, and as a zero.
+eq("the key is (student_id, offering_id), which is what main() looks up",
+   (STU, OFF) in idx, True)
+
+eq("a student with no sibling enrollments has no entry",
+   Z.stranded_index([{"id": E_ACTIVE, "student_id": STU, "status": "active"}],
+                    [E_ACTIVE], []), {})
+
+# Condition 4 already owns work on the row being judged. If condition 6 also counted it, EVERY
+# submitter would look stranded and nobody would ever be zeroed -- the guard would quietly
+# disable the rule it is protecting.
+eq("a submission on the IN-SCOPE enrollment is not stranded",
+   Z.stranded_index(ALL_ENR, [E_ACTIVE],
+                    [{"id": "s2", "enrollment_id": E_ACTIVE,
+                      "assignment_offering_id": OFF, "status": "committed"}]),
+   {})
+
+# The bulk state the roster importer used to create (CHANGELOG 2026-08-10, 40 cadets): two ACTIVE
+# rows. Work on the one out of scope is stranded exactly as a dropped one is -- a day filter puts
+# a cadet's other active section out of scope routinely.
+eq("a second ACTIVE enrollment out of scope counts too",
+   Z.stranded_index([{"id": E_ACTIVE, "student_id": STU, "status": "active"},
+                     {"id": "enr-other", "student_id": STU, "status": "active"}],
+                    [E_ACTIVE],
+                    [{"id": "s3", "enrollment_id": "enr-other",
+                      "assignment_offering_id": OFF, "status": "committed"}]).get((STU, OFF)),
+   [("active", "committed")])
+
+# A DRAFT on a stranded row is still a refusal. It is condition 4's rule ("a draft with real
+# content is not a zero") applied to the row nobody can see -- and the finding's sec.8 names a
+# stranded draft as a signal to re-diagnose, which cannot happen if the run zeroed it first.
+eq("a DRAFT on a stranded enrollment also blocks the zero",
+   Z.stranded_index(ALL_ENR, [E_ACTIVE],
+                    [{"id": "s4", "enrollment_id": E_DROPPED,
+                      "assignment_offering_id": OFF, "status": "draft"}]).get((STU, OFF)),
+   [("dropped", "draft")])
+
+# Two offerings, one stranded. Zeroing must stay per assignment: a stranded preflight-03 is no
+# reason to skip the same cadet's preflight-04.
+idx2 = Z.stranded_index(ALL_ENR, [E_ACTIVE], SUB_ON_DROPPED)
+eq("another offering for the same student is unaffected", (STU, "off-2") in idx2, False)
+
+# Another cadet's stranded work must not shield this one.
+eq("the index does not leak across students",
+   Z.stranded_index(ALL_ENR + [{"id": "enr-x", "student_id": 3000990002, "status": "dropped"}],
+                    [E_ACTIVE],
+                    [{"id": "s5", "enrollment_id": "enr-x",
+                      "assignment_offering_id": OFF, "status": "committed"}]).get((STU, OFF)),
+   None)
+
+# A submission on an enrollment belonging to nobody in scope must not crash the index.
+eq("an unknown enrollment_id is ignored rather than raising",
+   Z.stranded_index(ALL_ENR, [E_ACTIVE],
+                    [{"id": "s6", "enrollment_id": "enr-unknown",
+                      "assignment_offering_id": OFF, "status": "committed"}]),
+   {})
+
+
 print(f"\n{PASSED} passed, {FAILED} failed")
 sys.exit(1 if FAILED else 0)

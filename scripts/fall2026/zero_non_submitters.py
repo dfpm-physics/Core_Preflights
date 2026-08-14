@@ -19,7 +19,7 @@ WHY THIS EXISTS
     full analysis over them. Re-running `/preflight-analyze` costs an AI pass over every submission
     to fix students who submitted nothing; this is the cheap half on its own.
 
-WHO GETS A ZERO  (all five, or nothing is written)
+WHO GETS A ZERO  (all six, or nothing is written)
     1. active enrollment in the offering
     2. past its OWN effective deadline — extension -> per-section `assignment_due_dates` ->
        offering `due_at`, in that precedence. Computed per student: an M-day and a T-day section
@@ -33,8 +33,19 @@ WHO GETS A ZERO  (all five, or nothing is written)
        `/preflight-analyze` applies: a published decision or a saved instructor draft is a human's
        call, and "they handed in nothing" does not override it.
 
+    6. no submission on ANY of that student's own enrollments for the offering — not just the
+       active one being considered. Added 2026-08-13, after conditions 1-5 zeroed a cadet for work
+       they had submitted on time: they had changed section, their submission stayed on the old
+       (now dropped) enrollment, and every one of the five read true on the survivor. This one
+       REFUSES rather than zeroing, and asks the question the rule was always trying to answer —
+       "does this STUDENT have work?" — so it also covers entry paths nobody has enumerated.
+       docs/findings/2026-08-13-orphaned-submission-on-dropped-enrollment.md
+
     A DRAFT WITH REAL CONTENT IS NOT A ZERO. Somebody who wrote answers and never pressed Submit is
     graded on what they wrote (SKILL.md Step 5). They are reported here, and skipped.
+
+    THE SAME SIX CONDITIONS LIVE IN `.ai/skills/preflight-analyze/SKILL.md` Step 9, which is where
+    the live path implements them. CHANGE ONE, CHANGE BOTH — they are one decision written twice.
 
 WHAT IT DOES NOT CHANGE
     Any cohort number. `/lesson-aggregate` and the rollup read students who have a submission
@@ -89,18 +100,47 @@ def load_config():
             f"Could not read Supabase credentials from {CONFIG_PATH}: {exc}\n"
             "Run /setup-preflight, or copy .ai/skills/preflight-analyze/config.json.template."
         )
-    READ_HEADERS = {"apikey": SUPA_KEY, "Authorization": f"Bearer {SUPA_KEY}"}
+    # The profile headers are NOT optional and their absence is not a partial failure: without
+    # them PostgREST resolves against its default profile (`graphql_public` on this project) and
+    # every query 404s with PGRST205 before reaching schema `app`. This script shipped without
+    # them and could not run at all; added 2026-08-13. Same pattern as reopen_extended_grades.py.
+    READ_HEADERS = {
+        "apikey": SUPA_KEY,
+        "Authorization": f"Bearer {SUPA_KEY}",
+        "Accept-Profile": "app",
+    }
     WRITE_HEADERS = {
         **READ_HEADERS,
         "Content-Type": "application/json",
+        "Content-Profile": "app",
         "Prefer": "resolution=merge-duplicates,return=representation",
     }
 
 
+PAGE = 1000
+
+
 def get(path):
-    req = urllib.request.Request(f"{SUPA_URL}/rest/v1/{path}", headers=READ_HEADERS)
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.load(r)
+    """GET, PAGED. PostgREST caps a response at 1000 rows whatever `limit` says.
+
+    Paging is not defensive tidiness here, it is correctness: every query below is a search for
+    ABSENCE — no submission, no extension, no grade — so a silently truncated page reads as
+    "they handed in nothing" and this script writes a zero over work it simply did not fetch.
+    The cap has already cost this project one wrong answer (CHANGELOG 2026-08-10: a single unpaged
+    read of `app.enrollments`, 1001 rows, dropped exactly one cadet and under-reported a scan).
+    Un-paged, `submissions` across 37 offerings x 100 enrolments would exceed 1000 routinely.
+    """
+    rows, offset = [], 0
+    while True:
+        sep = "&" if "?" in path else "?"
+        url = f"{SUPA_URL}/rest/v1/{path}{sep}limit={PAGE}&offset={offset}"
+        req = urllib.request.Request(url, headers=READ_HEADERS)
+        with urllib.request.urlopen(req, timeout=60) as r:
+            page = json.load(r)
+        rows += page
+        if len(page) < PAGE:
+            return rows
+        offset += PAGE
 
 
 def upsert(path, rows):
@@ -235,6 +275,37 @@ def load_offering_context(course_id, slug=None):
     return co, sections, offerings, enrollments
 
 
+def stranded_index(all_enrollments, scope_ids, sibling_submissions):
+    """(6) Map (student_id, offering_id) -> the OTHER enrollments of theirs that carry work.
+
+    Pure so it can be exercised without a database; the condition it implements is the one that
+    decides whether a real cadet is zeroed for work they actually did.
+
+    `all_enrollments` is every enrollment row belonging to the students in scope, ANY status.
+    `scope_ids` is the set of enrollments being considered for a zero — excluded from the index,
+    because a submission on the row we are judging is condition 4's business, not condition 6's.
+    Anything left over is a sibling: the same cadet, a different enrollment row. A submission there
+    is theirs, whether that row is `dropped` (the observed defect) or a second `active` one in
+    another section (the state the roster importer used to create in bulk).
+    """
+    scope = set(scope_ids)
+    sib_status, sib_student = {}, {}
+    for e in all_enrollments:
+        if e["id"] in scope:
+            continue
+        sib_status[e["id"]] = e.get("status") or "?"
+        sib_student[e["id"]] = e["student_id"]
+
+    index = {}
+    for s in sibling_submissions:
+        enr = s.get("enrollment_id")
+        if enr not in sib_student:
+            continue
+        key = (sib_student[enr], s.get("assignment_offering_id"))
+        index.setdefault(key, []).append((sib_status[enr], s.get("status") or "?"))
+    return index
+
+
 def zero_row(offering, enrollment_id, now):
     """The payload SKILL.md § 'Then: the students who submitted nothing get a zero' specifies."""
     question_scores = {}
@@ -325,9 +396,38 @@ def main():
     grade_by = {(g["enrollment_id"], g["assignment_offering_id"]): g for g in grades}
     ext_by = {(x["enrollment_id"], x["assignment_offering_id"]): x["extended_due_at"] for x in extensions}
 
-    to_write, report = [], []
+    # ── (6) THE STUDENT, NOT THE ENROLMENT, IS THE UNIT OF "HANDED IN NOTHING" ────────────────
+    # Conditions 1-5 all read one enrolment row, and `enrollments` above is active-only. A cadet
+    # who changed section can hold two rows -- the old one dropped, the new one active -- and their
+    # submission stays on whichever row they made it against. If that is the dropped row, all five
+    # conditions read true on the survivor and this script writes a confident zero over completed,
+    # on-time work. It is silent: a `no_submission` zero is indistinguishable from a real one, and
+    # the cadet is in no grading queue because those iterate submissions.
+    #   It happened -- phys-110 preflight-03, 2026-08-13.
+    #   docs/findings/2026-08-13-orphaned-submission-on-dropped-enrollment.md
+    # So look for work on EVERY enrolment the student holds, of any status, and REFUSE rather than
+    # zero. Refuse, do not repoint: moving submissions.enrollment_id is a data repair under
+    # .ai/skills/safe-change/SKILL.md with a UNIQUE (enrollment_id, assignment_offering_id)
+    # collision to check first. It is a human's call, never a side effect of grading.
+    student_of = {e["id"]: e["student_id"] for e in enrollments}
+    scope_students = sorted({student_of[e] for e in scope if e in student_of})
+    all_enr = []
+    for chunk in chunked(scope_students):
+        all_enr += get(f"enrollments?select=id,student_id,status&student_id={in_list(chunk)}")
+
+    sibling_ids = sorted({e["id"] for e in all_enr} - set(scope))
+    sibling_subs = []
+    for chunk in chunked(sibling_ids):
+        sibling_subs += get(
+            "submissions?select=id,enrollment_id,assignment_offering_id,status"
+            f"&assignment_offering_id={in_list(offering_ids)}&enrollment_id={in_list(chunk)}"
+        )
+    stranded_by = stranded_index(all_enr, scope, sibling_subs)
+
+    to_write, report, stranded_report = [], [], []
     tally = {"zeroed": 0, "already_zero": 0, "submitted": 0, "draft_with_content": 0,
-             "interactive": 0, "not_due": 0, "extended": 0, "human_graded": 0, "graded": 0}
+             "interactive": 0, "not_due": 0, "extended": 0, "human_graded": 0, "graded": 0,
+             "stranded_skipped": 0}
 
     for o in offerings:
         per_assignment = []
@@ -376,6 +476,17 @@ def main():
                 tally["graded"] += 1
                 continue
 
+            # (6) LAST CHECK BEFORE THE WRITE — work on another of their own enrolments.
+            stranded = stranded_by.get((student_of.get(enr), o["id"]))
+            if stranded:
+                where = ", ".join(f"{es} enrolment, {ss} submission" for es, ss in sorted(stranded))
+                stranded_report.append(
+                    f"{o['slug'] or o['title']}: {name_of.get(enr)} "
+                    f"({code_of.get(sec, '?')}) — {where}"
+                )
+                tally["stranded_skipped"] += 1
+                continue
+
             to_write.append(zero_row(o, enr, now))
             per_assignment.append(f"{name_of.get(enr)} ({code_of.get(sec, '?')})")
             tally["zeroed"] += 1
@@ -386,7 +497,10 @@ def main():
     term = (co.get("terms") or {}).get("label") or (co.get("terms") or {}).get("code") or "?"
     print(f"\n{args.course} · {term}" + (f" · day {args.day}" if args.day else "")
           + (f" · {args.slug}" if args.slug else " · every published assignment"))
-    print(f"{len(scope)} active enrolments · {len(offerings)} assignment(s) · now {iso(now)}\n")
+    print(f"{len(scope)} active enrolments · {len(offerings)} assignment(s) · now {iso(now)}")
+    # State the denominator of condition 6. A silent "0 stranded" is indistinguishable from a
+    # condition that never ran, which is the failure mode this whole guard exists to prevent.
+    print(f"condition 6 searched {len(sibling_ids)} other enrollment(s) held by these students\n")
 
     for slug, names in report:
         print(f"  {slug} — {len(names)} to zero")
@@ -394,6 +508,17 @@ def main():
             print(f"      {n}")
     if not report:
         print("  nothing to zero")
+
+    # Not a tally line. Each one is a cadet whose completed work is attached to the wrong enrolment
+    # and is currently graded by nobody -- the exact silent failure this guard exists to stop.
+    if stranded_report:
+        print(f"\n  !! {len(stranded_report)} NOT ZEROED — work found on another of their own "
+              f"enrolments:")
+        for line in sorted(stranded_report):
+            print(f"      {line}")
+        print("      These need a human. The submission must be repointed to the active enrolment")
+        print("      FIRST (see .ai/skills/safe-change/SKILL.md); re-running grading first only")
+        print("      re-zeroes them. Detect the full set with scripts/checks/orphaned_submissions.py.")
 
     print("\n  skipped:")
     for k, label in [

@@ -608,6 +608,7 @@ Body: { "status": "success", "finished_at": "{ISO}",
         "detail": { "students_in_scope": 36, "graded": 32, "missing": 0,
                     "skipped_finalized": 4, "skipped_instructor": 0,
                     "filled_questions": 2, "filled_rows": 1,
+                    "stranded_skipped": 0,
                     "sections": ["M1A", "M3A"] } }
 ```
 
@@ -619,6 +620,11 @@ Body: { "status": "success", "finished_at": "{ISO}",
   they were: partially. `skipped_instructor` now counts only students where **every** graded
   question already had an instructor's feedback, so a run before 2026-08-11 and a run after it
   report different numbers for the same data, and `filled_*` is what explains the difference.
+- **`stranded_skipped` is Step 9 condition 6** — zero candidates who turned out to hold a submission
+  on another of their own enrollments, and were therefore left ungraded rather than zeroed. **Any
+  value above 0 closes the run `partial`** and is a work order for a human, not a statistic: each
+  one is a cadet whose completed work is attached to the wrong enrollment and is currently graded
+  by nobody. Say so in `summary`, in those words.
 - `status`: `success` when every in-scope student was graded or deliberately skipped; `partial`
   when you completed but did less than asked; `skipped` when there was nothing to do; `failed`
   with `error` set (the message, not a stack trace) when you stopped.
@@ -801,10 +807,62 @@ be reconciled against the percentage they added up to.
    Guard 2's per-question fill does not apply, because there is no work to grade — filling a blank
    cell with a zero the instructor did not write is exactly the clobbering the guard exists to
    prevent.
+6. **holding no submission on ANY of their own enrollments for this offering** — not just the
+   active one in scope. See the sub-step below; this one is a **refusal**, not a filter.
 
 **A draft with real content is NOT a zero.** Step 5 already says to grade a student whose written
 content is non-empty even when they never pressed Submit. That rule wins here: they wrote
 something, so they are graded on it, not zeroed.
+
+#### Condition 6 — the student, not the enrollment, is the unit of "handed in nothing"
+
+*Added 2026-08-13, after this rule zeroed a cadet for work they had submitted on time.
+[`docs/findings/2026-08-13-orphaned-submission-on-dropped-enrollment.md`](../../../docs/findings/2026-08-13-orphaned-submission-on-dropped-enrollment.md)
+is the full account.*
+
+Conditions 1–5 are all evaluated **per enrollment**, and Step 4c fetched only `status = 'active'`
+ones. A cadet who changes section can hold two rows — the old one `dropped`, the new one `active` —
+and **their submission stays on whichever row it was made against.** If that is the dropped row,
+every condition above reads true on the survivor and this skill writes a confident zero over
+completed work. Nothing downstream contradicts it: a `no_submission` zero is indistinguishable from
+a real one, and the cadet appears in no grading queue because `pastDueUngraded()` iterates
+submissions.
+
+So before writing **any** zero, fetch this offering's submissions once more **without the active
+filter**, keyed by student rather than by enrollment:
+
+```
+GET {SUPA_URL}/rest/v1/enrollments?select=id,student_id,status&student_id=in.({STUDENT_IDS_OF_ZERO_CANDIDATES})
+Headers: READ_HEADERS
+```
+
+```
+GET {SUPA_URL}/rest/v1/submissions?select=id,enrollment_id,status&assignment_offering_id=eq.{OFFERING_ID}&enrollment_id=in.({ALL_ENROLLMENT_IDS_OF_THOSE_STUDENTS})
+Headers: READ_HEADERS
+```
+
+**If any row comes back for a zero candidate, do not write the zero.** Instead:
+
+- **skip that student entirely** — write no grade row of any kind for them;
+- **name it in the run report** as `stranded submission — NOT zeroed` with the section code and the
+  stranded enrollment's status (no student names in anything committed to the repo);
+- **count it in `analysis_runs.detail` as `stranded_skipped`**, and close the run `partial` rather
+  than `success`, because you did less than you were asked to.
+
+**Refuse; do not repoint.** Moving `submissions.enrollment_id` is a data repair under
+[`safe-change`](../safe-change/SKILL.md) with a `UNIQUE (enrollment_id, assignment_offering_id)`
+collision to check first — it is a human's call, not a side effect of grading. And **never
+"fix" it by re-running grading after unfinalizing**: the submission is still on the dropped
+enrollment, so a re-run re-zeroes the row. The submission must be repointed first, which makes the
+obvious repair order strictly worse than doing nothing.
+
+This condition is deliberately wider than the defect that produced it. It asks "does this student
+have work?", which is the question the zero rule was always trying to answer — so it also covers
+entry paths nobody has enumerated, including any that survive the RLS fix.
+
+> **The same rule lives in a second place.** `scripts/fall2026/zero_non_submitters.py` implements
+> conditions 1–5 independently, for the assignments graded before the rule existed. It carries
+> condition 6 too. **Change one, change both** — they are the same decision written twice.
 
 The payload is an ordinary grade row, so nothing downstream needs a special case:
 

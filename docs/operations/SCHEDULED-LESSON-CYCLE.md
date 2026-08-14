@@ -106,6 +106,18 @@ with the cohort half-graded.
 After the run it re-checks for commits and a dirty tree, and says so in the notification — either
 would refuse the job at gate 4 or 5 the following night.
 
+**Both jobs gained an eighth check on 2026-08-13, and neither wrapper changed.** It lives in the
+skill — `/lesson-cycle` Step 0.3 runs `scripts/checks/orphaned_submissions.py` and stops on exit 1
+— so every path that reaches the skill inherits it, including job 2's subagent and any manual run.
+It catches a cadet whose submitted work is attached to an enrollment they have since left: the
+roster query cannot see the work, and the grading half would otherwise write a **non-submission
+zero for an assignment they completed on time**, indistinguishable afterwards from a real zero.
+Read-only, stdlib, a couple of seconds. Diagnosis:
+[`docs/findings/2026-08-13-orphaned-submission-on-dropped-enrollment.md`](../findings/2026-08-13-orphaned-submission-on-dropped-enrollment.md).
+*Listing it in neither table above is deliberate — these tables are the **wrapper** gates, and a
+skill-level check that both jobs get for free is exactly the kind of thing that rots when it is
+copied into two places.*
+
 ## It commits nothing and pushes nothing
 
 SKILL.md says not to push, and to commit the CHANGELOG record. **CORE.md §0 overrides the second
@@ -222,6 +234,9 @@ a file exists. All four run inside the subagent, before anything is written.
 **Gate 3 was missing until 2026-08-10** and was added after reading job 1's table. The 2026-08-10
 run happened to check grounding on its own initiative; that was the subagent being careful, not the
 instructions being right.
+
+Job 2 also inherits the skill-level orphaned-submission check described under job 1's table — it
+runs inside `/lesson-cycle` Step 0.3, so the subagent gets it without this prompt naming it.
 
 ## Being behind `origin/main` is a human call
 

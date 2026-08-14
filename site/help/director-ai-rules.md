@@ -29,6 +29,20 @@ submit replaces the zero by itself; once you have *published* the column, reopen
 And **it changes no class-level number**: aggregation reads students who have a submission, and a
 non-submitter has none, so the effort distribution and readiness prose are untouched.
 
+**One case where it refuses to zero, and tells you instead** (added 2026-08-13). A cadet who
+changes section can end up on two enrollment records — the old one closed, the new one current —
+and their submitted work stays attached to whichever one they were on when they submitted. If that
+is the closed record, the current one genuinely has no work on it, and every test above reads
+"handed in nothing" for a cadet who handed in on time. So before writing any zero the run now
+checks **every** enrollment record that cadet holds. If it finds work anywhere, it **writes no
+grade at all** for them and names them in the run summary.
+
+What you should do with that: it is a records problem, not a grading one, and re-running the
+analysis will not clear it — the work has to be reattached to the current record first, which is a
+repair a person makes. **Ask for it before you finalize that column.** Until it is done that cadet
+has no grade rather than a wrong one, which is the deliberate choice: a zero for completed work
+looks exactly like a real zero, and neither you nor the cadet would have any way to tell.
+
 It produces no class-level output at all. It used to also write a per-instructor misconception
 report; that was retired in July 2026, because an instructor is not a unit of analysis — a single
 report pooled all of an instructor's sections, so it could never be shown for one section. Anything

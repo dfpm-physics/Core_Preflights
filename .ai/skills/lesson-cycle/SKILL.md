@@ -64,7 +64,30 @@ class. `pull` warns about that, but by then you have already spent the run.
    ```
 2. **Clean tree, current branch.** `git status --porcelain` empty and `git fetch` showing no
    divergence from `origin/main`. **Refuse to run otherwise** — see the coordination note below.
-3. **Announce the scope** before writing anything: course, lesson, day track, section codes, and
+3. **No cadet's work is stranded off the roster.** Read-only, stdlib, a couple of seconds:
+   ```
+   python scripts/checks/orphaned_submissions.py --course <code>
+   ```
+   **Exit 1 means stop and tell the human** — do not grade past it. A cadet who changed section can
+   hold two enrollment rows, and their submission stays on whichever one they made it against. If
+   that row is now `dropped`, the roster query in Step 2 cannot see the work, and the surviving
+   active enrollment gets a confident **non-submission zero for an assignment they completed on
+   time**. It happened on 2026-08-13 (phys-110 `preflight-03`) and nothing reported it: a
+   `no_submission` zero is indistinguishable from a real one, and the cadet appears in no grading
+   queue, because those iterate submissions.
+
+   `/preflight-analyze` Step 9 condition 6 now refuses to write that zero, so the damage is
+   contained either way — but it refuses **per student, mid-run**, which leaves the lesson
+   half-closed. Checking first turns that into a decision made before anything is written.
+   Repointing a submission is a data repair under [`safe-change`](../safe-change/SKILL.md), and
+   **the obvious repair order is the wrong one**: re-running grading before the submission moves
+   simply re-zeroes the cadet. Diagnosis and the four fixes:
+   [`docs/findings/2026-08-13-orphaned-submission-on-dropped-enrollment.md`](../../../docs/findings/2026-08-13-orphaned-submission-on-dropped-enrollment.md).
+
+   A `[warn]` about cadets holding **two active** enrollments does not fail the check and does not
+   block a run — it is the upstream state that strands work when one of the two is later dropped,
+   and it wants a human before the next roster import, not before this lesson.
+4. **Announce the scope** before writing anything: course, lesson, day track, section codes, and
    how many students are in scope.
 
 ## Step 1 — Choose the lesson. The two paths differ here, and the difference matters.
@@ -198,6 +221,13 @@ Status: `success` when both halves completed; `partial` when it ran but left som
 not passed, or no graded free-response question to grade; `failed` with `error` set when it
 stopped on an error. **A run that dies without updating its row leaves `status='running'`, which is
 the point** — that is how an abandoned overnight run becomes visible.
+
+**A non-zero `stranded_skipped` from the grading half IS `partial`, and belongs in `summary`.**
+Those are cadets `/preflight-analyze` Step 9 condition 6 declined to zero because their work sits
+on another of their own enrollments — so they are graded by nobody until a human repoints the
+submission. `summary` is read on a phone by the instructor who would otherwise never learn of it;
+say how many and for which lesson, in plain words. Do not name cadets there — `analysis_runs` is
+readable by any staff member of the offering.
 
 **A deferred `__all__` is not by itself `partial`.** Deferring it to the second day track is the
 two-run cycle working as designed, and reporting that as `partial` put a yellow banner in front of
