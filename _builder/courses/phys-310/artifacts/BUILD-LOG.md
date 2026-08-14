@@ -53,7 +53,7 @@ moment to catch a reconstruction error is before any of these is published.**
 | **Queued** | **nothing. The queue is empty** — every PHYS 310 lesson that has a Murray reading now has an artifact |
 | **Blocked — no reading assigned** | **1** (Admin Overview — the reading is the syllabus), **16** (Lab 2), **20** (Lab 3). All three are `PF = Y` in the schedule, so none is a deliberate skip. Blocked on recker to say what they should cover, or to mark them `PF = N` |
 | **Not a preflight** | 5, 7, 11, 12, 17, 21, 22, 23, 27, 28, 29, 30, 33–41 — lectures, field trips, Graded Reviews, case-study days, the final |
-| **Published** | **1 of 17.** Lesson 2 only, on 2026-07-31 |
+| **Published** | **3 of 17.** Lessons 2, 3 and 4. All three were REPUBLISHED on 2026-08-14 carrying the backup-version button, and their `artifact_url` repointed the same day. *(This row said "1 of 17, lesson 2 only" until 2026-08-14: lessons 3 and 4 had been published and registered in the database, and nothing updated this log. `index.json` is DERIVED from this file, so the staleness propagated into Storage on the next push.)* |
 | **Registered on the DFPM site** | **none.** Not one lesson row exists for this course, and `course_id: phys-310` has never been confirmed to exist on the receiver at all |
 
 **Seventeen lessons in this course can hold a preflight**, not twenty. The schedule marks twenty
@@ -112,7 +112,7 @@ row (contract §3.2), leaving two live artifacts for one lesson unless the old o
 |---|---|
 | **File** | [`phys310_preflight_atoms_and_nuclei.jsx`](phys310_preflight_atoms_and_nuclei.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-atoms-and-nuclei-83022f32` |
-| **Published** | 2026-07-31 — https://claude.ai/public/artifacts/e2f07bf2-ef86-44d7-90fc-ff95207d2e32 |
+| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/e4bd61c0-49ef-40a3-a734-646a82ec33bc |
 | **Component** | `Phys310AtomsAndNucleiPreflight` |
 | **Built** | 2026-07-31 |
 | **Grounding** | Murray corpus **§2.1** Atomic Theory, **§2.5** Nuclear Structure, **§2.6** Sizes and Masses of Nuclei — **the only three sections in the corpus that are `STATUS: REVIEWED`**, attested by recker on 2026-07-31 against the physical book |
@@ -133,7 +133,7 @@ row (contract §3.2), leaving two live artifacts for one lesson unless the old o
 |---|---|
 | **File** | [`phys310_preflight_binding_energy_and_stability.jsx`](phys310_preflight_binding_energy_and_stability.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-binding-energy-and-stability-e0ceabee` |
-| **Published** | not published |
+| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/4267efcd-50cd-4b7a-9f64-0745601706ec |
 | **Component** | `Phys310BindingEnergyAndStabilityPreflight` |
 | **Built** | 2026-08-05 · 2097 lines |
 | **Grounding** | Murray corpus **§2.7** Binding Energy, **§3.1** Nuclear Stability — **both `STATUS: PENDING`**. Mass constants carried from §2.6 (reviewed) and tagged as carried |
@@ -195,7 +195,7 @@ by assuming both fragments land exactly on the peak.
 |---|---|
 | **File** | [`phys310_preflight_radioactivity.jsx`](phys310_preflight_radioactivity.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-radioactivity-77500fd7` |
-| **Published** | not published |
+| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/d6a51ba6-6c76-4abd-be65-498d4818a124 |
 | **Component** | `Phys310RadioactivityPreflight` |
 | **Built** | 2026-08-05 · 2136 lines |
 | **Grounding** | Murray corpus **§3.2** Modes of Radioactive Decay, **§3.3** The Radioactive Decay Law, **§3.4** Decay Chains and Natural Radioactivity — **all three `STATUS: PENDING`**. Plus a labelled carry-forward block from §3.1 and §2.5 (see below) |

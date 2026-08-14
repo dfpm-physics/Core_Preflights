@@ -40,6 +40,43 @@ the same relationship `CLAUDE.md` has to `CORE.md`. The item also carries a fals
 run *before* building anything: classify recent CHANGELOG entries and open findings by whether a
 lane would have prevented the mistake or caused it.
 
+### phys-310 wired up too — and a stale build log that had been quietly deleting data
+
+recker republished phys-310 lessons 2, 3 and 4 with the backup-version button. Same flow as
+phys-215, with one instrument change and one defect found.
+
+- **`activities.content->artifact_url` updated for 3 rows**, written with **`prep_app_dml`** and
+  verified with **`prep_app_read`** — a different role for the check than for the write, so the
+  verification cannot inherit the write's blind spot. This is the rule added to CORE.md §3 an hour
+  earlier, applied.
+- **`BUILD-LOG.md`** — 3 `Published` rows updated; **4 objects** pushed (3 `build.json` +
+  `index.json`); round trip confirms all three carry the new URLs.
+
+**The phys-310 build log said lessons 3 and 4 were "not published". They were** — both had been
+published and registered in the database, and nothing ever updated the log. That is not merely
+untidy, because **`index.json` is DERIVED from `BUILD-LOG.md`**: my earlier push regenerated it
+from the stale log and **silently dropped `published_url` for both lessons**, so the artifact
+library would have shown two published artifacts as unpublished. Repairing the log repaired the
+index on the next push (verified: 3 of 17 with a URL, all three current).
+
+**The general shape is worth keeping.** A push does not merely *add* — it re-derives, so anything
+the log has forgotten is deleted from Storage by an operation that reads as additive. `push` prints
+what it will change and this was visible in that list; it was not read closely enough. The check
+that catches it is comparing `index.json`'s `published_url` set against the database before and
+after, which costs one query.
+
+**Where the live interactive lessons now stand** — 39 published, counted with `prep_app_read`:
+
+| | |
+|---|---|
+| **32** | point at a republished, button-carrying artifact — **29** phys-215 Fall 2026, **3** phys-310 |
+| **6** | run artifacts with no source in the tree or bucket: five phys-215 **TRAINING SANDBOX** lessons on pre-repository slugs, and phys-110 Fall 2026 `preflight-02` |
+| **1** | phys-310 `lesson-01` has **no `artifact_url` at all** — a published interactive offering pointing at nothing |
+
+The last row is new information and nobody asked for it: that offering is live and published, and a
+cadet choosing the interactive path on it has nowhere to go. Not fixed here — it needs an artifact
+built, which is a director's decision.
+
 ### The 29 republished phys-215 artifacts are wired up — and the wiring reaches no cadet yet
 
 recker republished all 29 phys-215 artifacts carrying the backup-version button and supplied the
