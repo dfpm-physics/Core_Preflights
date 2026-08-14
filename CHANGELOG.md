@@ -8,6 +8,60 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-20 — Casey Pellizzari via Claude
+
+### A cadet's sign-in address can drift from their roster address, and the error blames the password
+
+**Why:** a phys-215 cadet reported that "my c29 email and student ID password are invalid." The
+password was fine. **Their Supabase Auth address was not the address on the roster**, so every
+sign-in attempt failed on the email — and Supabase returns the identical *"Invalid login
+credentials"* for an unknown address as for a wrong password, so the cadet reported the only cause
+they could see.
+
+`app.students.email` and the Auth address are written together exactly once, at provisioning. A
+later roster import updates the roster copy alone — Auth is a separate service and no trigger
+reaches it — so the two diverge silently. This account was provisioned 2026-07-28 with a stale
+class-year prefix and a punctuated surname; the 2026-08-10 registrar import corrected the roster
+row and left Auth untouched. The cadet had **never signed in successfully, not once, since
+provisioning.**
+
+**The cost was not just access.** The account carried two deadline extensions granted for
+"computer/access difficulties" and "ongoing access issues" — an instructor correctly believed the
+cadet, and gave them more time for a fault that no amount of time could fix. Both extensions
+expired, and three preflights now sit at zero with no submission. *An extension is the wrong
+instrument for a broken credential, and nothing in the system distinguished the two.*
+
+**New check:** [`scripts/checks/auth_email_mismatch.py`](scripts/checks/auth_email_mismatch.py) —
+stdlib, read-only by default, exits non-zero on any mismatch. It compares every provisioned
+cadet's roster address against their live Auth address.
+
+**It deliberately does not bulk-fix, because the two cases are opposite:**
+
+| Case | Syncing Auth to the roster |
+|---|---|
+| never signed in | costs nothing — the Auth address is a credential nobody is using |
+| has signed in | **locks them out** of an account that works today |
+
+A sweep that "corrected" every mismatch would break the working accounts in order to fix the broken
+ones. `--fix` therefore takes one cadet at a time, refuses a cadet who has signed in unless
+`--force`, and refuses outright when another Auth account already holds the target address.
+
+**Applied to one account** (the never-signed-in case): Auth address synced to the roster address,
+confirmed in the same call because PREP has no SMTP and an unconfirmed change would strand the
+account pending a mail nobody can send. The password was not touched — it is still the provisioned
+default and the forced-rotation flag is intact.
+
+**Five other cadets remain mismatched and were left alone on purpose.** All five have signed in
+recently on their Auth address: they found the working one. Changing those is a notify-first
+decision for the course director, not a repair.
+
+**Verified:** the new address was read back from Auth after the write rather than trusting the
+response, and a full re-scan no longer lists the account. **Not verified:** nobody has actually
+signed in as this cadet — the fix is confirmed at the Auth record, not at the login form. The
+cadet's next sign-in attempt is the real test.
+
+---
+
 ## 2026-08-19 — Matthew Recker via Claude
 
 ### The five PHYS 110 backup builds threw on the first tutor turn, and the porter now cannot ship that again
