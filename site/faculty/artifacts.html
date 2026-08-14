@@ -17,7 +17,7 @@
     .al-list { border: 1px solid var(--border); border-radius: var(--radius);
       background: var(--card); box-shadow: var(--shadow-sm); overflow: hidden; }
     .al-head, .al-row { display: grid;
-      grid-template-columns: 54px minmax(180px, 2.1fr) minmax(140px, 1.15fr) 112px 138px 88px;
+      grid-template-columns: 54px minmax(170px, 2.1fr) minmax(128px, 1.05fr) 104px 138px 84px 88px;
       gap: 14px; align-items: center; padding: 10px 16px; }
     .al-head { background: var(--surface-sunken); border-bottom: 1px solid var(--border);
       font-size: 0.7em; letter-spacing: 0.09em; text-transform: uppercase;
@@ -48,6 +48,12 @@
     .al-shape { font-size: 0.8em; color: var(--text-soft); font-variant-numeric: tabular-nums; }
     .al-shape em { font-style: normal; color: var(--muted); }
 
+    /* Backup build (detail rail). The list column needs no class of its own — it is a `.tag`,
+       like the Review column beside it. */
+    .al-bklinks { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 11px; }
+    .al-bkrouter { font-size: 0.78em; color: var(--muted); }
+    .al-bkrouter:hover { color: var(--blue-lt); }
+
     /* pipeline: built → published → source archived → registered */
     .al-pipe { display: flex; gap: 3px; align-items: center; }
     .al-lamp { width: 18px; height: 7px; border-radius: 2px;
@@ -57,12 +63,13 @@
     .al-pipe .lbl { font-size: 0.7em; color: var(--muted); margin-left: 5px; white-space: nowrap; }
 
     @media (max-width: 900px) {
-      .al-head, .al-row { grid-template-columns: 44px minmax(0, 1fr) 138px 84px; gap: 10px; }
+      .al-head, .al-row { grid-template-columns: 44px minmax(0, 1fr) 138px 76px 84px; gap: 10px; }
       .al-head .c-keys, .al-head .c-shape, .al-row .al-keys, .al-row .al-shape { display: none; }
     }
     @media (max-width: 560px) {
       .al-head, .al-row { grid-template-columns: 38px minmax(0, 1fr) 120px; }
-      .al-head .c-flag, .al-row .c-flag { display: none; }
+      .al-head .c-flag, .al-row .c-flag,
+      .al-head .c-backup, .al-row .c-backup { display: none; }
     }
 
     /* `.lesson-head` is designed to BLEED to the edge of a 24px-padded container — report.html,
@@ -200,6 +207,7 @@
       index: null,        // the loaded index.json
       reviews: null,      // review-notes.json for that course
       registered: new Map(),
+      backups: { builds: {}, error: null },   // site/data/backup-builds.json (all courses)
       filter: 'all',
       slug: null,         // null = library view
       build: null, source: null, outline: null, block: null,
@@ -218,6 +226,10 @@
     }
 
     async function load() {
+      // Outside the try on purpose. The Gemini backup manifest is an annotation on the library,
+      // not part of it — a fetch that fails must show as "availability unknown", never as "the
+      // artifact library is not reachable". `loadBackups()` never rejects; it reports.
+      state.backups = await AL.loadBackups();
       try {
         state.index = await AL.loadIndex(state.course);
         state.reviews = await AL.loadReviews(state.course);
@@ -259,10 +271,15 @@
       const pub = arts.filter((a) => a.published_url).length;
       const reg = arts.filter((a) => state.registered.has(a.slug)).length;
       const reviewed = arts.filter((a) => state.reviews.artifacts?.[a.slug]?.objectives).length;
+      // Backup availability. The tile below keeps the neutral blue accent whatever this count
+      // is: an artifact with no Gemini backup is not a fault the way an unregistered published
+      // artifact is, so it never turns red.
+      const bk = arts.filter((a) => AL.backupFor(state.backups, a.slug)).length;
       const shown = arts.filter((a) =>
         state.filter === 'all' ? true
         : state.filter === 'unregistered' ? !state.registered.has(a.slug)
         : state.filter === 'unreviewed' ? !state.reviews.artifacts?.[a.slug]?.objectives
+        : state.filter === 'nobackup' ? !AL.backupFor(state.backups, a.slug)
         : !a.published_url);
 
       main.innerHTML = `
@@ -280,6 +297,10 @@
           ${tile(reg < arts.length ? 'red' : 'green', reg < arts.length ? 'warning' : 'done',
                  reg < arts.length ? '🚩' : '✅', reg, 'Registered',
                  reg < arts.length ? `${arts.length - reg} unreachable by cadets` : 'all reachable')}
+          ${tile('blue', 'bolt', '🛟', state.backups.error ? '?' : bk, 'Backup builds',
+                 state.backups.error ? 'list could not be read'
+                 : bk === arts.length ? 'every artifact has one'
+                 : `${arts.length - bk} without one`)}
         </div>
 
         ${reg < pub ? `<div class="alert alert-warn"><div>
@@ -295,7 +316,7 @@
           </div>
           <div class="seg" role="group" aria-label="Filter">
             ${[['all', `All ${arts.length}`], ['unregistered', 'Not registered'],
-               ['unreviewed', 'Not reviewed'], ['draft', 'Unpublished']]
+               ['unreviewed', 'Not reviewed'], ['draft', 'Unpublished'], ['nobackup', 'No backup']]
               .map(([k, l]) => `<button aria-pressed="${k === state.filter}" data-filter="${k}">${esc(l)}</button>`).join('')}
           </div>
         </div>
@@ -303,7 +324,8 @@
         <div class="al-list">
           <div class="al-head">
             <span>#</span><span>Lesson</span><span class="c-keys">Objectives</span>
-            <span class="c-shape">Shape</span><span>Pipeline</span><span class="c-flag">Review</span>
+            <span class="c-shape">Shape</span><span>Pipeline</span>
+            <span class="c-backup">Backup</span><span class="c-flag">Review</span>
           </div>
           ${shown.map(rowHTML).join('') || '<div class="al-cardbody"><span class="muted">Nothing matches this filter.</span></div>'}
         </div>
@@ -311,7 +333,15 @@
         <p class="al-foot"><b>${esc(state.index.course_title || state.course)}.</b>
           Sources are read from the private <code>artifact-sources</code> bucket; the
           <b>registered</b> lamp is a live read of <code>activities</code>. Nothing on this page
-          writes to the gradebook.</p>`;
+          writes to the gradebook.
+          <br><b>Backup</b> is the Gemini build a cadet is offered when claude.ai turns them away
+          — the same lesson, submitted under the same slug, so its report lands in this
+          artifact's activity row and rolls up identically. It is a fallback, not an
+          alternative, and an artifact never published on claude.ai has none by design. Builds
+          are regenerated with <code>scripts/artifacts/to_gemini.py</code>, never hand-edited.
+          ${state.backups.error ? `<br><b>The backup list could not be read</b>
+            (${esc(state.backups.error)}), so the Backup column says <code>?</code> rather than
+            guessing.` : ''}</p>`;
 
       main.querySelectorAll('[data-course]').forEach((b) => b.onclick = async () => {
         state.course = b.dataset.course; state.slug = null; await load();
@@ -330,6 +360,24 @@
           <div class="stat-sub">${esc(sub)}</div></div>
       </div>`;
 
+    // The Backup column is a tag, never a link — `.al-row` IS a <button>, and an anchor nested
+    // inside one is invalid HTML that would also fire the row's own click on the way out. The
+    // links live on the artifact's page, one click away.
+    //
+    // An unreadable manifest must render as UNKNOWN and not as absence: "—" on every row would
+    // turn one failed fetch into a column of confident, wrong claims about cadet fallbacks.
+    function backupTag(a) {
+      if (state.backups.error) {
+        return '<span class="tag" title="The backup list could not be read, so availability is'
+          + ' unknown.">?</span>';
+      }
+      const b = AL.backupFor(state.backups, a.slug);
+      return b
+        ? `<span class="tag blue" title="Gemini fallback build · ${esc(b.path)}">Gemini</span>`
+        : '<span class="tag" title="No backup build. An artifact that was never published on'
+          + ' claude.ai has nothing to back up.">—</span>';
+    }
+
     function rowHTML(a) {
       const rev = state.reviews.artifacts?.[a.slug];
       const nRej = rev ? Object.values(rev.objectives || {}).filter((o) => o.decision === 'rejected').length : 0;
@@ -345,6 +393,7 @@
             ${(a.dropped || []).map((o) => `<span class="al-key drop" title="dropped on review">${esc(o.key)}</span>`).join('')}</span>
           <span class="al-shape">${a.topic_count} × <em>~${esc(a.budget)} min</em></span>
           <span>${lamps(a)}</span>
+          <span class="c-backup">${backupTag(a)}</span>
           <span class="c-flag">${flag}</span>
         </button>`;
     }
@@ -412,6 +461,7 @@
           </div>
           <div class="al-rail">
             ${registerCard(a, art, reg)}
+            ${backupCard(state.slug)}
             ${builtFromCard(meta, art)}
           </div>
         </div>`;
@@ -489,6 +539,45 @@
             <button class="btn btn-sm" id="loadsrc">Read it here</button></div>
           <div id="srcbody"></div>
         </div>`;
+    }
+
+    // The Gemini backup for this artifact. A small rail card, deliberately: the Claude artifact
+    // is what this page is about and the backup is one fact about it. Both links open in a new
+    // tab so the library keeps its place — and the second one is the cadet's own route in, which
+    // is the only way to see what a cadet is actually shown before they see it.
+    function backupCard(slug) {
+      const head = '<div class="al-cardhead"><span class="card-title">Backup build</span></div>';
+      const card = (inner) =>
+        `<div class="card al-card-flush" style="margin-top:18px">${head}${inner}</div>`;
+
+      if (state.backups.error) {
+        return card(`<div class="al-cardbody"><span class="muted">Whether this lesson has a
+          backup is unknown here — <code>site/data/backup-builds.json</code> could not be read
+          (${esc(state.backups.error)}).</span></div>`);
+      }
+      const b = AL.backupFor(state.backups, slug);
+      if (!b) {
+        return card(`<div class="al-cardbody"><span class="muted">None, which is the ordinary
+          state for an artifact that was never published on claude.ai — there is nothing to back
+          up. A backup is generated per published artifact with
+          <code>scripts/artifacts/to_gemini.py</code>.</span></div>`);
+      }
+      return card(`
+        <dl class="al-dl">
+          <div><dt>Lesson</dt><dd>${b.lessonNo == null ? '—' : esc(String(b.lessonNo))}${
+            b.title ? ` · ${esc(b.title)}` : ''}</dd></div>
+          <div><dt>File</dt><dd class="mono">${esc(b.path)}</dd></div>
+        </dl>
+        <div class="al-cardbody">
+          <span class="muted">The same lesson on Google Gemini, run with the cadet's own free API
+            key and offered only when claude.ai turns them away — a fallback, not an alternative.
+            It submits under <b>this same slug</b>, so its reports land in this artifact's
+            activity row and roll up identically. Regenerated, never hand-edited.</span>
+          <div class="al-bklinks">
+            <a class="btn btn-sm" href="${esc(b.url)}" target="_blank" rel="noopener">Open the backup</a>
+            <a class="al-bkrouter" href="${esc(b.router)}" target="_blank" rel="noopener">What a cadet sees →</a>
+          </div>
+        </div>`);
     }
 
     function builtFromCard(meta, art) {

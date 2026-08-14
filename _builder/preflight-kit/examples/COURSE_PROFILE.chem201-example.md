@@ -35,6 +35,7 @@ integrity_statement:    This conversation is covered by the university's academi
 # ── Submission backend (see docs/BACKEND_OPTIONS.md) ──────────────────────────
 submit_endpoint:        https://stateu-chem.github.io/preflights/site/student/interaction-submit.html
 prefill_base:           https://stateu-chem.github.io/preflights/site/faculty/lessons.html
+backup_base:            https://stateu-chem.github.io/preflights/site/student/backup.html
 schedule_file:          chem201_spring2027_schedule.md
 
 # ── Session shape ─────────────────────────────────────────────────────────────

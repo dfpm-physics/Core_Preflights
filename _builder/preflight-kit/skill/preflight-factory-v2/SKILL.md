@@ -8,19 +8,26 @@ name: preflight-factory-v2
 description: "Generate a self-contained Claude-in-Claude React preflight artifact for any lesson, given one or more PDFs of the lesson's textbook pages. Use when the user uploads a lesson PDF (or PDFs) and asks to \"make a preflight,\" \"generate a JiTT artifact,\" \"build a tutor app,\" or similar — or says they want to generate a preflight for a specific lesson topic. The artifact runs a Socratic conversation in-browser, powered by the Anthropic API, paced by independent per-topic time budgets with an idle-aware timer, and submits both a Markdown JiTT report and a structured data payload to the course site. It also offers an untimed, report-free Study Mode. Always use this skill before writing any React code when a lesson PDF is involved."
 ---
 
-# Preflight Factory Skill — v2.0 (rev 3)
+# Preflight Factory Skill — v2.0 (rev 4)
 
 > **Revision history.** v2.0 added the idle-aware timer, per-topic budgets, offer-to-extend, Study
 > Mode, and the sharpened tone. **Rev 2** made the skill **standalone** (no dependency on any external
 > reference artifact — only this file plus the project's constant files), folded in the **value-based
 > 5-second timer** model, added **connection-resilience + retry** and a start-screen status light, and
 > **unpinned the model** (configurable, non-dated, with automatic fallback).
-> **Rev 3** (this file) re-syncs the whole submission path to `INTERACTION-DATA-CONTRACT.md` as
+> **Rev 3** re-syncs the whole submission path to `INTERACTION-DATA-CONTRACT.md` as
 > amended 2026-07-28: the **corrected endpoint** (`site/student/interaction-submit.html`), the
 > **corrected prefill base** (`site/faculty/lessons.html`), and — the substantive change — the
 > **required `d` structured-data payload**, which the artifact now emits, strips from the cadet's
 > view, and submits alongside `r`. Rev 3 also corrects what the artifact tells the cadet about
 > resubmission, and drops the retired `.md + .pdf` bundle track.
+> **Rev 4** (this file) adds the **backup-version route**: when the on-mount connection check comes
+> back `unavailable`, the start screen offers a button to `BACKUP_ENDPOINT` — a *router* on the
+> course site that resolves the artifact's own `INTERACTION_ID` to a backup build of the same
+> lesson running on a different model provider. The backup emits `r` and `d` and submits to the
+> same endpoint under the same slug, so it is graded and rolled up exactly like the Claude path.
+> **It is not a revival of the retired `.md + .pdf` track** — see "The backup version" in the
+> Resilience section for why those are different things.
 
 Generate a self-contained **Claude-in-Claude React preflight artifact** for any lesson. The artifact
 hosts a Socratic JiTT tutoring session entirely in-browser via the Anthropic API —
@@ -33,6 +40,16 @@ retired: it cannot produce the `d` payload the grading and rollup pipeline now r
 §3.1), so it cannot produce a gradable submission. Do not offer it, and do not generate one.
 `02_TUTOR_SYSTEM_PROMPT.md` and `04_OUTPUT_REPORT_SPEC.md` remain live as the verbatim **sources**
 this skill copies behavior and report text from; they are no longer a parallel delivery track.
+
+> **The rev-4 backup version is not that track, and the distinction is the payload.** The retired
+> bundle was a *document* handed to whatever AI the cadet happened to have; nothing in it could emit
+> `d`, so nothing produced through it could be graded or rolled up — which is the whole reason it
+> was killed. The backup version is *this artifact's own code* on a different transport: same probe
+> topics, same system prompt, same `REPORT_FORMAT`, same `schema: 1` payload, same
+> `INTERACTION_ID`, submitting `r` **and** `d` to the same endpoint. The gradebook cannot tell the
+> two apart, and neither can the cohort rollup. The prohibition above is about a delivery path that
+> **cannot produce a gradable submission**; it was never a prohibition on a second runtime. Do not
+> read the backup button as a violation of it, and do not "fix" an artifact by deleting the button.
 
 **This skill is self-contained.** Building an artifact requires only (a) this file and (b) the
 project constant files it cites — `02_TUTOR_SYSTEM_PROMPT.md`, `03_LESSON_CONFIG_SPEC.md`,
@@ -102,6 +119,28 @@ changes are behavioral and structural, concentrated in the artifact (Step 6):
     moment the report is committed, and a second report is refused (contract §7 step 7). The artifact
     must not tell the cadet otherwise.
 13. **The `.md + .pdf` track is gone.** Submission is only through the artifact.
+
+**Rev 4 additions (the backup route — read with items 10 and 13 above):**
+
+14. **A way out of a failed connection check.** The start-screen light already told the cadet the
+    tutor was unreachable; rev 4 gives them somewhere to go. When `connStatus === "unavailable"`, a
+    navy-outline button appears under the red light linking to `BACKUP_ENDPOINT + "?i=" +
+    INTERACTION_ID`. Everything else about the light is unchanged — Re-check is still there, still
+    first, and Start is still not hard-blocked.
+15. **`BACKUP_ENDPOINT` is a ROUTER, never a backup's own URL.** The artifact sends its own
+    `INTERACTION_ID` to one fixed page on the course site and that page decides which build to
+    open — or says there isn't one. A published artifact cannot be edited in place, so any URL
+    baked into it must be one that can never move. The indirection is what lets backups be added,
+    replaced or withdrawn by editing the site alone, with nothing republished. **Never hard-code a
+    direct backup URL** (Common Mistake 35).
+16. **It is not the retired `.md + .pdf` track.** The backup runs the same artifact code, emits `r`
+    and `d`, and submits under the same slug to the same endpoint, so it is graded and rolled up
+    identically. Item 13 retired a path that could not produce `d`; this one does. See the callout
+    at the top of this file.
+17. **The model-list dead end is now a detour, not a wall.** The `MODEL_CANDIDATES` list is still
+    baked in and still cannot self-heal — the artifact stays broken until the instructor republishes
+    — but the cadet can finish the lesson today. Do not overstate this in cadet-facing copy: the
+    Claude version is the intended path, and Re-check comes first.
 
 **Precedence note for the generator:** where the verbatim sections of `02_TUTOR_SYSTEM_PROMPT.md`
 conflict with a v2.0/rev-3 spec below, **the spec in this file wins.** The companion-edit callouts
@@ -483,10 +522,15 @@ const MODEL_CANDIDATES = [
   "claude-haiku-4-5",    // fallback — lighter/often higher availability and broader tier access
 ];
 // If EVERY candidate 404s (all retired/unavailable on this account), rawCall throws { kind: "model" }
-// and the UI dead-ends gracefully: red start-screen light + "model isn't available… may need an
-// updated model" message, and a Retry button on a failed turn. The app cannot self-heal here — the
-// list is baked into the published artifact — so the fix is the instructor re-publishing with a
-// current alias. Non-dated aliases make simultaneous retirement unlikely except across a whole model
+// and the UI degrades gracefully: red start-screen light + "model isn't available… may need an
+// updated model" message, a Retry button on a failed turn, and (rev 4) the backup-version button
+// under the red light.
+// The app STILL cannot self-heal — the list is baked into the published artifact — so the fix is
+// the instructor re-publishing with a current alias. What rev 4 changed is only the cadet's side of
+// it: they are no longer dead-ended, because BACKUP_ENDPOINT gives them a way to finish the lesson
+// today. That is a route around the failure, not a repair of it. The artifact is still broken, the
+// next cadet hits the same wall, and the instructor still has to republish.
+// Non-dated aliases make simultaneous retirement unlikely except across a whole model
 // generation; keep at least two live families here to make it rarer still.
 const MAX_TOKENS = 4096;          // CONSTANT
 const ENDPOINT = "https://api.anthropic.com/v1/messages"; // CONSTANT
@@ -501,6 +545,14 @@ const INTERACTION_ID = "lesson-NN-topic-slug"; // e.g. lesson-02-electric-charge
 // A wrong URL fails SILENTLY: the cadet does the whole session and the report goes nowhere.
 const SUBMIT_ENDPOINT =
   "https://dfpm-physics.github.io/Core_Preflights/site/student/interaction-submit.html";
+
+// Backup transport, for when the connection check fails. This is a ROUTER on the course site,
+// NOT a direct link to a backup lesson: the artifact sends its own INTERACTION_ID and the site
+// resolves which build to open. The indirection is the point -- a published artifact cannot be
+// edited in place, so it must never hard-code a URL that could move. Backups can then be added,
+// replaced or withdrawn by editing the site alone, with no artifact republished.
+const BACKUP_ENDPOINT =
+  "https://dfpm-physics.github.io/Core_Preflights/site/student/backup.html";
 
 // Stamped into d.producer so a cohort-wide anomaly can be traced to the build that caused it.
 // Use the build's year-month.
@@ -589,6 +641,14 @@ present — it is the single source of truth for look and text rendering):
 What is per-lesson (substitute these and nothing else): the four content constants
 (`TEXTBOOK_REFERENCE`, `LESSON_CONFIG`, `EXTENSION_PROBLEMS`, `REPORT_FORMAT`), `INTERACTION_ID`,
 `PROBE_TOPIC_COUNT`, the component name `Lesson[NN]Preflight`, and the header label strings.
+
+**"And nothing else" forbids *varying* a constant per lesson; it does not license omitting one.**
+`MODEL_CANDIDATES`, `MAX_TOKENS`, `ENDPOINT`, `SUBMIT_ENDPOINT`, `BACKUP_ENDPOINT`,
+`ARTIFACT_VERSION`, `IDLE_PAUSE_MS` and `PER_TOPIC_BUDGET_MIN` are **global** — every artifact
+carries the identical values, copied and not retyped. `BACKUP_ENDPOINT` in particular is the same
+router URL in every lesson of the course; the per-lesson part of the backup link is
+`INTERACTION_ID`, which the artifact already has. There is no per-lesson backup URL to substitute,
+and inventing one is Common Mistake 35.
 
 > **Two structural notes:** (1) the start screen does not collect a class-section — section is
 > handled outside the artifact, so do not add the input, its validation, or any `normSection` state,
@@ -1059,10 +1119,10 @@ function errorMessage(err, { afterRetries = false } = {}) {
   switch (err && err.kind) {
     case "capacity":
       return afterRetries
-        ? "The tutor service is at capacity right now and didn't free up after several tries. On a free Claude account this can be a usage/capacity limit that resets later — wait a bit and Retry, or use a different account."
+        ? "The tutor service is at capacity right now and didn't free up after several tries. On a free Claude account this can be a usage/capacity limit that resets later — wait a bit and Retry, or use a different account. If it won't clear, take the backup version offered on the start screen."
         : "The tutor service is busy right now — retrying…";
     case "model":
-      return "The tutor model isn't available to this account. Try a different Claude account, or tell your instructor the preflight may need an updated model.";
+      return "The tutor model isn't available to this account. Try a different Claude account or the backup version offered on the start screen, and tell your instructor the preflight may need an updated model.";
     case "network":
       return "Couldn't reach the tutor — check your connection and Retry.";
     default:
@@ -1076,6 +1136,16 @@ logged-in user's account. **Never add**: API key input fields, Bearer/`x-api-key
 `anthropic-version` header, or any other auth mechanism — adding any of these breaks the
 claude-in-claude pattern. The retry/fallback logic above changes the body's `model` and retries, but
 **never** the headers.
+
+> **Why the two backup mentions say "on the start screen" (rev 4).** These strings do double duty:
+> the same `errorMessage()` output is the start-screen `connMsg` *and* the text in the
+> conversation-view error bar. On the start screen the backup button is sitting directly underneath,
+> so "below" would read naturally — but in the error bar there is no button, and a cadet told to
+> click something that isn't there is worse off than one told nothing. Naming the start screen is
+> true in both places. Only these two cases mention it: `network` is the cadet's own connection, and
+> the default branch is an unclassified HTTP failure that Retry usually clears. Do not bolt "or use
+> the backup" onto every message — a route offered constantly stops reading as a last resort, and
+> the Claude version is still the intended path.
 
 > **Why typed errors (rev 2).** The old code threw `"Request failed (529)."` and the UI told the
 > cadet to "check your connection" — wrong and confusing, since a 529 is a server-side *capacity*
@@ -1618,6 +1688,59 @@ them why a failure is likely and offers Re-check:
 {connStatus === "unavailable" && <div className="conn-msg">{connMsg}</div>}
 ```
 
+### The backup version (rev 4)
+
+Immediately after the `conn-msg` line above — same `unavailable` condition, so the two appear and
+disappear together — render the backup route:
+
+```jsx
+{connStatus === "unavailable" && (
+  <div className="backup-row">
+    <a className="backup-btn" href={BACKUP_ENDPOINT + "?i=" + INTERACTION_ID}
+       rel="noopener noreferrer">
+      Open the backup version &rarr;
+    </a>
+    <p className="backup-hint">
+      Same lesson, same report, same submission &mdash; but it runs on your own free Google
+      AI Studio key and <strong>the experience is less polished</strong>. Try Re-check first;
+      the Claude version is still the intended path.
+    </p>
+  </div>
+)}
+```
+
+**It is a user-clicked `<a href>` with `rel="noopener noreferrer"` and NO `target` — copied from
+the Submit anchor, deliberately.** Everything in "How Report Submission Works" about escaping the
+sandbox applies here unchanged: scripted navigation is blocked, and in Claude's React runtime a
+**user-clicked** link routes through the external-link handler, which opens an external tab after
+an approval prompt. That is the only path out of the artifact, so this is the same
+`<a className="submit-btn" href={submitUrl} rel="noopener noreferrer">` construction with a
+different class. Do **not** write it as `window.open`, do **not** add `target="_blank"` or
+`target="_top"` (all three are blocked), and do not fire it from an effect when the check fails —
+a cadet who is about to hit Re-check must not be navigated away from the artifact.
+
+**It is navy-outline, not amber, and that is not an oversight.** A degraded-mode warning wants
+amber, and it does not get it: `THEME_REFERENCE.md` §1 reserves amber for the extension bubble, the
+timer warn state and the Yellow readiness callout, and closes the one exception it grants — the
+connection dot — with *"Do not let it spread: nothing else outside the rules above gets these
+colors."* This button is not that dot. It is a full-width action button, which is exactly the
+element the reservation exists to protect, and the red `.conn-msg` directly above it is already
+carrying the alarm. So it matches `.study-btn` — white fill, 1.5px navy border — because it is the
+same *kind* of thing: the secondary way to take the lesson. If a future build reaches for
+`#fefce8`/`#fde047` here, that is the mistake this paragraph exists to stop.
+
+`BACKUP_ENDPOINT` is a **router**, and the artifact passes only its own slug (`?i=` +
+`INTERACTION_ID`). It does not know, and must not know, which build the router will open, whether
+one exists, or where it lives — see the constant's comment in Step 6 and Common Mistake 35. If no
+backup is registered for the slug, the router says so; that is a better failure than a 404 baked
+into a thousand published artifacts.
+
+**This is not the retired `.md + .pdf` track.** That track is still retired and still must not be
+offered. The backup build runs this artifact's own logic and emits `r` and `d` to the same
+`SUBMIT_ENDPOINT` under the same `INTERACTION_ID`, so it grades and rolls up identically — which is
+precisely what the retired bundle could not do. Full comparison in the callout near the top of this
+file.
+
 ### Conversation-view error bar with Retry
 
 This **supersedes** the static error bar in `THEME_REFERENCE.md` §3 (`⚠ {error} — check your
@@ -1642,6 +1765,9 @@ deliberate, instructor-requested exception scoped to the tiny start-screen statu
 or callout), so the "nothing else is green" rule still holds everywhere it matters. Flag it in
 `THEME_REFERENCE.md` so the exception is documented.
 
+The rev-4 `.backup-*` rules go in the same block and take **no** reserved color — navy outline, per
+the reasoning above. The exception granted to `.conn-dot` covers `.conn-dot` and stops there.
+
 ```css
 .conn-row { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; }
 .conn-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
@@ -1651,10 +1777,23 @@ or callout), so the "nothing else is green" rule still holds everywhere it matte
                 color: var(--navy); border: 1px solid #cbd5e1; border-radius: var(--radius-sm); cursor: pointer; }
 .conn-recheck:disabled { opacity: .5; cursor: default; }
 .conn-msg { font-size: 11px; color: #dc2626; margin-top: 4px; line-height: 1.5; }
+.backup-row { margin-top: 10px; }
+.backup-btn { display: block; box-sizing: border-box; width: 100%; text-align: center;
+              padding: 9px 10px; background: var(--white); color: var(--navy);
+              border: 1.5px solid var(--navy); border-radius: var(--radius-sm);
+              font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer; }
+.backup-btn:hover { background: #f1f5f9; }
+.backup-hint { font-size: 11px; color: var(--text-muted); margin-top: 6px; line-height: 1.5; }
 .error-retry { margin-left: 10px; padding: 2px 10px; font-size: 12px; font-weight: 600;
                background: var(--white); color: #dc2626; border: 1px solid #fecaca;
                border-radius: var(--radius-sm); cursor: pointer; }
 ```
+
+`.backup-btn` is an anchor, so it needs three things `.study-btn` (a `<button>`) gets for free:
+`display: block` + `text-align: center` to fill and center like a button, `box-sizing: border-box`
+so the 1.5px border does not push `width: 100%` past the card, and `text-decoration: none` to drop
+the underline. The `:hover` fill `#f1f5f9` is `.study-btn`'s, matched on purpose — the two buttons
+are the same weight of action and should not look like different systems.
 
 ---
 
@@ -1673,8 +1812,8 @@ import React, { useState, useRef, useEffect } from "react";
 
 // ── per-lesson constants (Step 6): INTERACTION_ID, OBJECTIVE_KEYS, PROBE_TOPIC_COUNT,
 //    TEXTBOOK_REFERENCE, LESSON_CONFIG, EXTENSION_PROBLEMS, REPORT_FORMAT ──
-// ── global constants: MODEL_CANDIDATES, MAX_TOKENS, ENDPOINT, SUBMIT_ENDPOINT, ARTIFACT_VERSION,
-//    IDLE_PAUSE_MS, PER_TOPIC_BUDGET_MIN ──
+// ── global constants: MODEL_CANDIDATES, MAX_TOKENS, ENDPOINT, SUBMIT_ENDPOINT, BACKUP_ENDPOINT,
+//    ARTIFACT_VERSION, IDLE_PAUSE_MS, PER_TOPIC_BUDGET_MIN ──
 // ── helpers (above): sleep, backoffMs, rawCall, callTutor, errorMessage, pacingNote,
 //    extractPayload, finalizePayload ──
 // ── from THEME_REFERENCE.md: STYLE, RichText, useKatex, useLzString, FieldLines ──
@@ -1882,9 +2021,14 @@ useEffect(() => {
 There are two top-level `<div className="app" style={appStyle}>` branches, gated on `started`:
 
 1. **Start screen** (`!started`): the briefing card with the boxed Honor Code (see "Honor Code
-   callout"), then the **connection light** (above), then the identity card (see "Start screen
-   identity card") whose Start button calls `begin`, plus the **Study Mode** button calling
+   callout"), then the **connection light** (above) — immediately followed by its `.conn-msg` and
+   then the `.backup-row` **backup button**, both gated on the same `connStatus === "unavailable"`
+   so they appear and vanish together — then the identity card (see "Start screen identity card")
+   whose Start button calls `begin`, plus the **Study Mode** button calling
    `beginStudy` (see "Start screen identity card" spec). Render `<style>{STYLE}</style>` once here.
+   Order matters here: the backup sits under the red light and above the identity card, so a cadet
+   whose light is green never sees it, and one whose light is red reads *why* before being offered
+   the way around it.
 2. **Conversation view** (`started`): the `THEME_REFERENCE.md` §3 skeleton, with these mode-aware
    substitutions:
    - **Header right:** graded → `<div className={"timer"}>{timerStr}</div>` + `.timer-label`
@@ -2016,6 +2160,12 @@ composer focus) is exactly as in the theme skeleton and the effects above.
       on a 529); a sustained-capacity message appears after retries are exhausted
 - [ ] **Start-screen connection light (rev 2):** pings on mount, shows green/amber/red + Re-check;
       conversation error bar shows the typed message + a Retry button that re-runs the failed turn
+- [ ] **Backup version (rev 4):** `BACKUP_ENDPOINT` is the router URL verbatim (not a direct backup
+      link, not per-lesson); the `.backup-row` renders only on `connStatus === "unavailable"`,
+      directly under `.conn-msg`; the link is `BACKUP_ENDPOINT + "?i=" + INTERACTION_ID` as an
+      `<a href>` with `rel="noopener noreferrer"` and **no** `target` and no `window.open`; the
+      button is navy-outline (`.backup-btn`, matching `.study-btn`) and **not** amber; the hint says
+      the Claude version is the intended path and points at Re-check first
 - [ ] **Standalone:** no reference to any external artifact; `STYLE`/`RichText`/`useLzString`/layout
       come from `THEME_REFERENCE.md`; all logic is from this skill's "Canonical Component Logic"
 - [ ] Messages map `visibleMessages` (hidden seed/extension-trigger turns are sent to the API but not
@@ -2106,6 +2256,15 @@ After delivering, offer to:
 Do **not** offer a `.md + .pdf` bundle for cadets using other AIs. That track is retired: it has no
 way to emit the `d` payload, so anything produced through it cannot be graded or rolled up. If the
 instructor asks for one, say why rather than building it.
+
+**The rev-4 backup version is not an exception to that, because it is not that thing.** If an
+instructor asks "isn't the backup the same idea?", the answer is no and the reason is one sentence:
+the bundle was a document the cadet fed to some other AI, which could not emit `d`; the backup is
+this artifact's own code on another provider, emitting `r` **and** `d` to the same endpoint under
+the same `INTERACTION_ID`. One produces an ungradable submission by construction, the other is
+indistinguishable from a Claude submission in the gradebook and the rollup. Building a backup build
+is also **not** part of this skill's job — this skill only emits the button, and the button points
+at a router the course site owns.
 
 ---
 
@@ -2259,3 +2418,16 @@ instructor asks for one, say why rather than building it.
 34. **Telling the cadet they can resubmit (rev 3).** On a graded lesson the grade finalizes when the
     first report commits and a second is refused. Any footer text, tutor reply, or briefing copy
     implying otherwise is telling the cadet something false about their grade.
+
+35. **Hard-coding a direct backup URL instead of the router (rev 4).** The tempting version of this
+    feature points the button straight at the backup build — it is one fewer hop and it is obviously
+    "simpler." It is also unfixable. A published Claude artifact **cannot be edited in place**: a
+    change means republishing, which mints a new artifact URL and a new lesson registration. So
+    every URL the artifact learns must be one that can never move, and a specific backup build is
+    the opposite of that — it gets replaced, relocated, or withdrawn, and each of those would
+    silently 404 every published artifact that named it, at the exact moment a cadet needed it. Send
+    `BACKUP_ENDPOINT + "?i=" + INTERACTION_ID` and let the site resolve it. Same reasoning, three
+    more forms of the same mistake: do not add a `?url=` or `?path=` parameter naming the build; do
+    not make `BACKUP_ENDPOINT` per-lesson; and do not suppress the button for a lesson you think has
+    no backup — whether one exists is the router's answer to give, and it changes without the
+    artifact hearing about it.

@@ -400,6 +400,7 @@ The canonical domain procedures are agent-neutral Markdown runbooks under `.ai/s
 | `setup-preflight` | First-time machine setup — writes the config file above. |
 | `docs-author` | Decide whether a concept warrants documentation and which kind, then write it — in-app help docs (`site/help/`) or design docs (`docs/`). Read before adding any `.md` to either. |
 | `safe-change` | **The gated procedure for any change that is hard to undo** — deletes, bulk updates, migrations, publishes, credential rotation, history rewrites. Arrived with the builder 2026-08-07; PREP's equivalent was prose in §0 with no runbook behind it. Read it before the operation, not after. |
+| `gemini-port` | Port one **published** Claude artifact to its Gemini-API backup build under `site/gemini/`, for cadets whose free Claude account is answering 429. Transport only — same slug, same grounding, same submit contract; `scripts/artifacts/to_gemini.py` refuses rather than warns. Verified in a real browser, because that page is the only JSX parser a backup build gets. |
 | `skill-author` | Decide whether a procedure warrants a skill, then write or revise it. Read before adding any `SKILL.md`. |
 | `integration-package` | Build, verify, archive or resume a package for an external AI surface that calls into this system — i.e. `.ai/integrations/custom-gpt/`. |
 

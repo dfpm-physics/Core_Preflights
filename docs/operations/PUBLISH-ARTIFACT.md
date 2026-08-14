@@ -4,10 +4,24 @@
 cadets can open. **Answers:** *how do I publish this without Claude quietly changing it?*
 
 Publishing is the **irreversible step**. A published artifact lives at its own URL, serves whatever
-it was published with, and **cannot be fixed by editing this repository** — only by republishing,
-which mints a new slug (§4) and therefore a new lesson row. Read `CORE.md` §6 and follow
+it was published with, and **cannot be fixed by editing this repository** — only by republishing.
+Read `CORE.md` §6 and follow
 [`safe-change`](../../.ai/skills/safe-change/SKILL.md) before running this on anything cadets will
 see.
+
+> **Republishing does NOT automatically mint a new slug, and conflating the two is expensive in
+> both directions.** *(Corrected 2026-08-14; this sentence used to say it did.)* The slug is a
+> literal string in the source, and publishing copies the file byte-for-byte — so what mints a new
+> one is a **factory rebuild**, which generates a fresh 8-hex suffix (§4). A **hand patch** that
+> leaves `INTERACTION_ID` untouched republishes to a new *claude.ai URL* under the *same slug*:
+> submissions keep landing in the same `activities` row, and the only database change needed is
+> that lesson's `artifact_url`.
+>
+> Getting this wrong the safe-looking way is what costs: believing every republish needs a new
+> lesson row turns a 46-file patch into 46 unnecessary registrations and splits each lesson's
+> cohort in two. Getting it wrong the other way — hand-copying a suffix forward onto a genuine
+> rebuild — is the failure §4 warns about. **Check whether `INTERACTION_ID` changed; do not infer
+> it from the fact that you republished.**
 
 **Sequence:** this runbook, then [`PREFILL-LINK.md`](PREFILL-LINK.md). Publishing produces the
 public URL; the prefill link registers it. **Until the prefill link is saved, a published artifact
@@ -113,15 +127,24 @@ Then open the published URL and **run one turn** — enter a last name, start, a
 question. This is the only real syntax check the file gets. Confirm on the start screen: last-name
 field, `Start Preflight →`, the Study Mode button, the boxed Honor Code, and the connection dot.
 
+**If the source carries `BACKUP_ENDPOINT`** (every artifact has since 2026-08-14), the backup
+button renders only when the connection check *fails*, so a healthy publish will not show it and
+its absence proves nothing. Check the source instead — `grep -c BACKUP_ENDPOINT` — and confirm the
+lesson has a build in [`site/data/backup-builds.json`](../../site/data/backup-builds.json). A
+button whose slug has no entry sends the cadet to a page that correctly says "no backup for this
+lesson yet", which is honest but useless to someone whose tutor just died.
+
 ---
 
 ## 4. Know what you just made permanent
 
 - **The slug is baked in.** `INTERACTION_ID` carries a per-offering 8-hex suffix
   (`INTERACTION-DATA-CONTRACT.md` §3.2) minted once at build time and **not reproducible**.
-  Rebuilding this lesson mints a *different* one, which registers as a *new lesson row* rather than
-  updating this one. That is intended — it is what keeps one term's reports out of another term's
-  delete. Never hand-copy a suffix forward to avoid it.
+  *Rebuilding* this lesson through the factory mints a *different* one, which registers as a *new
+  lesson row* rather than updating this one. That is intended — it is what keeps one term's reports
+  out of another term's delete. Never hand-copy a suffix forward to avoid it.
+  **A hand patch is the other case:** it does not touch `INTERACTION_ID`, so republishing it keeps
+  the slug and needs only an `artifact_url` update. See the callout at the top.
 - **The model list is baked in.** If every entry in `MODEL_CANDIDATES` is retired, the artifact
   dead-ends politely and the only fix is republishing. Keeping two live model *families* is what
   makes that unlikely.

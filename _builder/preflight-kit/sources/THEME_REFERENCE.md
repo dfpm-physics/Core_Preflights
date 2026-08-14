@@ -26,6 +26,7 @@ If the instructor wants the look changed, change it HERE, once. Every future art
 | Honor box | `#f8fafc` fill / 2px `--navy` border | Start-screen Honor Code callout |
 | Study button | `--white` fill / 1.5px `--navy` border | Study Mode secondary button |
 | Connection dot | `#16a34a` ok · `#f59e0b` checking · `#dc2626` unavailable | Start-screen model-reachability light |
+| Backup button | `--white` fill / 1.5px `--navy` border — **no reserved color** | Backup-version route, shown only under a red connection light |
 | Readiness callouts | green `#f0fdf4`/`#86efac`, amber `#fefce8`/`#fde047`, red `#fef2f2`/`#fecaca` | Flag tint matches flag |
 | Text | `#0f172a` primary / `#64748b` soft / `#94a3b8` muted | |
 | Geometry | 760px max column · **fixed 680px shell height** (never viewport-relative) · radius 12px / 6px · bubble tail radius 3px | App shell |
@@ -40,6 +41,16 @@ Semantic color rules (do not violate):
 outside those reservations. It is a 10px status dot, not a bubble or callout, and the traffic-light
 convention is what makes it readable at a glance — an instructor-approved exception scoped to that
 one element. Do not let it spread: nothing else outside the rules above gets these colors.
+
+**The backup button is where that rule was tested, and held.** `.backup-btn` appears only when the
+connection check has failed — a degraded-mode action, which naturally wants amber — and it does not
+get amber. It is a full-width action button, exactly the kind of element the reservation exists to
+protect, and the red `.conn-msg` immediately above it is already carrying the alarm; a second
+warning color under it would compete rather than clarify. So it takes navy outline on white,
+matching `.study-btn` down to the `#f1f5f9` hover, because the two are the same kind of thing: the
+secondary way to take the lesson. **It is deliberately un-tinted — if a future artifact reaches for
+`#fefce8`/`#fde047` here, that is the drift this paragraph exists to catch.** The `.conn-dot`
+exception covers `.conn-dot`, and stops there.
 
 ---
 
@@ -141,6 +152,18 @@ const STYLE = `
                   cursor: pointer; }
   .conn-recheck:disabled { opacity: .5; cursor: default; }
   .conn-msg { font-size: 11px; color: #dc2626; margin-top: 4px; line-height: 1.5; }
+
+  /* Backup version — shown only under a red connection light. NO reserved color: navy
+     outline, matching .study-btn, per the second exception note in section 1. It is an
+     anchor rather than a button (a real click is the only way out of the sandbox), so it
+     needs display/text-align/box-sizing/text-decoration that .study-btn gets for free. */
+  .backup-row { margin-top: 10px; }
+  .backup-btn { display: block; box-sizing: border-box; width: 100%; text-align: center;
+                padding: 9px 10px; background: var(--white); color: var(--navy);
+                border: 1.5px solid var(--navy); border-radius: var(--radius-sm);
+                font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer; }
+  .backup-btn:hover { background: #f1f5f9; }
+  .backup-hint { font-size: 11px; color: var(--text-muted); margin-top: 6px; line-height: 1.5; }
 
   /* ── Messages ── */
   /* min-height: 0 is REQUIRED — without it this flex item expands the shell instead of
@@ -266,7 +289,12 @@ Every artifact contains exactly these elements, in this order. Nothing added, no
    the Honor Code as a bold `.honor-box` callout — not ordinary card text) and the identity card
    (last-name input, `Start Preflight →` gated on non-empty, plus the `.study-btn` Study Mode entry
    and its `.study-hint`). The `.conn-row` connection light sits between them, pinging the model on
-   mount so a cadet learns the tutor is unreachable before investing ten minutes.
+   mount so a cadet learns the tutor is unreachable before investing ten minutes. When that check
+   comes back unavailable, and only then, two more elements render directly under the light and
+   above the identity card: the red `.conn-msg` explaining the failure, then the `.backup-row`
+   holding the `.backup-btn` route to the backup version and its `.backup-hint`. Both are gated on
+   the same condition, so they appear and vanish together and a cadet with a green light never sees
+   either. The order is the argument: the failure is explained before the way around it is offered.
    **There is no class-section input** — section is handled outside the artifact, so do not collect,
    validate, or store it.
 3. **Message area** (`.messages`) — four bubble variants: `.bubble.assistant` (tutor, blue-light,

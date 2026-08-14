@@ -80,6 +80,18 @@ BASELINE = {
     "prefill_base": (
         "https://dfpm-physics.github.io/Core_Preflights/site/faculty/lessons.html"
     ),
+    # The backup router the artifact links to when its connection check fails (SKILL.md
+    # rev 4). It MUST be listed here even though nothing about it varies per lesson:
+    # without an entry, the generic `physics -> <discipline>` rule below rewrites its HOST
+    # (dfpm-physics -> dfpm-chemistry) and a localized fork ships a dead URL. The two other
+    # endpoints have been guarded this way since the kit was written; this one was added
+    # after a review found it unguarded, and confirmed the mangling empirically.
+    #
+    # The leftover scan would not have caught it: that watches institution/learner/course/
+    # grounding tokens, not endpoints.
+    "backup_base": (
+        "https://dfpm-physics.github.io/Core_Preflights/site/student/backup.html"
+    ),
 }
 
 
@@ -148,6 +160,7 @@ def build_rules(p: dict) -> list:
         # endpoints first — exact, unambiguous strings
         (BASELINE["submit_endpoint"], p["submit_endpoint"], "lit"),
         (BASELINE["prefill_base"], p["prefill_base"], "lit"),
+        (BASELINE["backup_base"], p["backup_base"], "lit"),
         # integrity: longest phrase before the bare institution token
         (BASELINE["integrity_code_name"], p["integrity_code_name"], "lit"),
         # Grounding text, as ONE regex that swallows any trailing volume marker.
@@ -250,6 +263,7 @@ def endpoint_rules(p: dict) -> list:
     return [
         (BASELINE["submit_endpoint"], p["submit_endpoint"], "lit"),
         (BASELINE["prefill_base"], p["prefill_base"], "lit"),
+        (BASELINE["backup_base"], p["backup_base"], "lit"),
         (BASELINE["course_id"], p["course_id"], "lit"),
     ]
 

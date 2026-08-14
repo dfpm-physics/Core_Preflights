@@ -8,6 +8,88 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-14 — Matthew Recker via Claude
+
+### Gemini backup builds: every published artifact now has a hosted fallback, and a route to it
+
+Cadets on free Claude accounts hit HTTP 429 and cannot do their preflight at all. The 2026-08-13
+test build proved the transport works for one lesson; this turns it into a pipeline and wires the
+published artifacts to it.
+
+**The route is a router, not a link, and that was the design decision.** A Claude artifact links to
+`site/student/backup.html?i=<its own slug>` and nothing else. The site resolves the slug to a build.
+The alternative — baking each backup's URL into its artifact — would mean that changing, replacing
+or withdrawing any backup required *republishing the Claude artifact*, which mints a new claude.ai
+URL and a lesson-row update. The artifact now knows only two things that never move: this page, and
+its own slug. Everything mutable is a commit to this repository.
+
+- **`scripts/artifacts/to_gemini.py`** (new, stdlib, dry-run by default) ports one published
+  artifact to `site/gemini/<course>/<slug>.html`. Transport only: it asserts the four `String.raw`
+  grounding blocks, `REPORT_FORMAT`, `INTERACTION_ID` and `SUBMIT_ENDPOINT` are byte-identical, and
+  **refuses rather than warns**. Same slug deliberately — contract §3.2 mints per *offering*, not
+  per transport, so a second slug would split one lesson's cohort in two.
+- **`site/student/backup.html`** (new) — the router. No auth: a cadet arrives here because Claude
+  just failed them, and there is no session yet to check. The gate is still where it always was, at
+  submit.
+- **`scripts/artifacts/add_backup_button.py`** (new) added the fallback button to **all 46** Claude
+  sources — a `BACKUP_ENDPOINT` constant, navy-outline `.backup-*` CSS, and a block that renders
+  only when `connStatus === "unavailable"`.
+- **`preflight-factory-v2` → rev 4**, so new artifacts emit the button from the factory instead.
+  `MANIFEST.sha256` regenerated; `tools/verify.py` passes 22/22.
+- **`.ai/skills/gemini-port/`** (new runbook), registered in CORE.md §4.
+
+**32 builds generated and all 32 verified in real Chrome** (29 phys-215, 3 published phys-310).
+That verification is not a formality: `node --check` silently passes invalid JSX, so publishing has
+been the only JSX parser this project has — and a backup build never gets published. The
+Babel-in-browser page *is* its parser, so each of those 32 loads was that file's first-ever parse.
+
+**14 phys-310 artifacts were deliberately NOT built.** They were never published on claude.ai, and
+the whole public-exposure argument for these pages is that they carry no more than the published
+artifact already does — which is untrue of one nobody published. `--include-unpublished` exists and
+needs a human's decision.
+
+**Two things this does not do.** The button reaches no cadet until each artifact is **republished**
+on claude.ai and its `artifact_url` updated — the sources are ahead of what is live. And rev 4 does
+not reach the builder until a human re-uploads `SKILL.md` into each course's Claude Project, which
+is hand-managed and unversioned.
+
+**Three defects found and fixed on the way:**
+
+- **`localize.py` would have shipped a dead backup URL.** `BACKUP_ENDPOINT` had no whole-URL guard,
+  so the generic `physics → <discipline>` rule rewrote its *host*; a chem201 port produced
+  `dfpm-chemistry.github.io`. Confirmed empirically, then fixed with a `backup_base` key across
+  `BASELINE`, `build_rules`, `endpoint_rules`, both example profiles, the template, and both course
+  profiles. The leftover scan could never have caught it — it watches institution/learner/course
+  tokens, not endpoints.
+- **`PUBLISH-ARTIFACT.md` said republishing mints a new slug.** True of a factory *rebuild*, false
+  of a *hand patch* that leaves `INTERACTION_ID` alone. With 46 hand-patched artifacts now awaiting
+  republish, that reading would have turned an `artifact_url` update into 46 unnecessary lesson
+  rows, splitting every cohort. Corrected in both places, in both directions.
+- **A `robots.txt` was written and then deleted.** This is a GitHub Pages *project* site, so a
+  repo-root `robots.txt` serves at `/Core_Preflights/robots.txt` and crawlers only ever read
+  `/robots.txt` at the host root — it would have been inert while looking exactly like a working
+  control. The per-page `noindex` meta tag, which does work, is on all 32.
+
+**`site/vendor/`** (new, ~2.9 MB: React 18.3.1, ReactDOM, Babel standalone 7.25.6, lz-string 1.5.0)
+serves the backup builds from our own origin rather than a CDN. These pages hold the cadet's Google
+API key in `localStorage`, and a CDN that served a modified script could read it; same-origin static
+files cannot be swapped by a third party. No build step is introduced — CORE.md §2 holds.
+
+**This commit adds ~9 MB to a 45 MB repository, and that deserves stating plainly** given that
+PROJECT.md keeps ~8 MB of `.jsx` out of git on exactly this reasoning. The difference is that the
+`.jsx` had somewhere else to live: Storage. These do not. GitHub Pages serves from the repository,
+and a signed-out cadet has to be able to fetch them, so committing them is what makes them exist.
+`site/gemini/` is 6.1 MB over 32 files and `site/vendor/` is 2.9 MB.
+
+**The churn is the part to watch, not the initial size.** `to_gemini.py` skips files whose bytes
+already match, so regenerating one lesson costs one blob — but a change to the shared HTML wrapper
+rewrites all 32 and costs ~6 MB of new objects. If that becomes a problem, the lever is
+pre-compiling the JSX at port time instead of shipping Babel: it would drop the 2.9 MB vendor
+payload and shrink every page. It is not done here because it would make the generator require
+Node, and CORE.md §2 keeps `scripts/` stdlib-Python so any operator can run it.
+
+---
+
 ## 2026-08-13 (fifth) — Matthew Recker via Claude
 
 ### A Gemini-transport test build of the PHYS 215 Lesson 4 preflight, in `tests/browser/`

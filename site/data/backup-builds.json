@@ -1,0 +1,197 @@
+{
+  "schema": 1,
+  "builds": {
+    "lesson-02-electric-charge-coulombic-force-3a8e4e18": {
+      "course": "phys-215",
+      "lesson_no": 2,
+      "title": "Electric Charge, Coulombic Force",
+      "path": "gemini/phys-215/lesson-02-electric-charge-coulombic-force-3a8e4e18.html"
+    },
+    "lesson-03-coulombs-law-and-superposition-485f9923": {
+      "course": "phys-215",
+      "lesson_no": 3,
+      "title": "Coulomb's Law and Superposition",
+      "path": "gemini/phys-215/lesson-03-coulombs-law-and-superposition-485f9923.html"
+    },
+    "lesson-04-electric-fields-and-superposition-479afcad": {
+      "course": "phys-215",
+      "lesson_no": 4,
+      "title": "Electric Fields and Superposition",
+      "path": "gemini/phys-215/lesson-04-electric-fields-and-superposition-479afcad.html"
+    },
+    "lesson-05-charged-particles-in-uniform-elec-fields-1c5bc31d": {
+      "course": "phys-215",
+      "lesson_no": 5,
+      "title": "Charged Particles in Uniform Elec. Fields",
+      "path": "gemini/phys-215/lesson-05-charged-particles-in-uniform-elec-fields-1c5bc31d.html"
+    },
+    "lesson-07-charge-distributions-electric-flux-32174e58": {
+      "course": "phys-215",
+      "lesson_no": 7,
+      "title": "Charge Distributions, Electric Flux",
+      "path": "gemini/phys-215/lesson-07-charge-distributions-electric-flux-32174e58.html"
+    },
+    "lesson-08-gausss-law-and-its-applications-5f57cc30": {
+      "course": "phys-215",
+      "lesson_no": 8,
+      "title": "Gauss's Law and Its Applications",
+      "path": "gemini/phys-215/lesson-08-gausss-law-and-its-applications-5f57cc30.html"
+    },
+    "lesson-09-electric-potential-difference-b3ba716f": {
+      "course": "phys-215",
+      "lesson_no": 9,
+      "title": "Electric Potential Difference",
+      "path": "gemini/phys-215/lesson-09-electric-potential-difference-b3ba716f.html"
+    },
+    "lesson-10-electric-potential-potential-energy-c627bfa9": {
+      "course": "phys-215",
+      "lesson_no": 10,
+      "title": "Electric Potential, Potential Energy",
+      "path": "gemini/phys-215/lesson-10-electric-potential-potential-energy-c627bfa9.html"
+    },
+    "lesson-13-capacitance-energy-and-dielectrics-7444aa79": {
+      "course": "phys-215",
+      "lesson_no": 13,
+      "title": "Capacitance, Energy, and Dielectrics",
+      "path": "gemini/phys-215/lesson-13-capacitance-energy-and-dielectrics-7444aa79.html"
+    },
+    "lesson-14-current-resistance-and-electrical-power-06497f19": {
+      "course": "phys-215",
+      "lesson_no": 14,
+      "title": "Current, Resistance, and Electrical Power",
+      "path": "gemini/phys-215/lesson-14-current-resistance-and-electrical-power-06497f19.html"
+    },
+    "lesson-15-dc-circuit-analysis-kirchhoffs-rules-d9d8a7a3": {
+      "course": "phys-215",
+      "lesson_no": 15,
+      "title": "DC Circuit Analysis, Kirchhoff's Rules",
+      "path": "gemini/phys-215/lesson-15-dc-circuit-analysis-kirchhoffs-rules-d9d8a7a3.html"
+    },
+    "lesson-18-moving-charged-particle-in-a-magnetic-field-cd95f8b3": {
+      "course": "phys-215",
+      "lesson_no": 18,
+      "title": "Moving Charged Particle in a Magnetic Field",
+      "path": "gemini/phys-215/lesson-18-moving-charged-particle-in-a-magnetic-field-cd95f8b3.html"
+    },
+    "lesson-19-magnetic-force-on-current-carrying-wires-4a147cca": {
+      "course": "phys-215",
+      "lesson_no": 19,
+      "title": "Magnetic Force on Current-carrying Wires",
+      "path": "gemini/phys-215/lesson-19-magnetic-force-on-current-carrying-wires-4a147cca.html"
+    },
+    "lesson-20-magnetic-dipoles-and-torque-3190fefe": {
+      "course": "phys-215",
+      "lesson_no": 20,
+      "title": "Magnetic Dipoles and Torque",
+      "path": "gemini/phys-215/lesson-20-magnetic-dipoles-and-torque-3190fefe.html"
+    },
+    "lesson-21-sources-of-magnetic-fields-85e63bf8": {
+      "course": "phys-215",
+      "lesson_no": 21,
+      "title": "Sources of Magnetic Fields",
+      "path": "gemini/phys-215/lesson-21-sources-of-magnetic-fields-85e63bf8.html"
+    },
+    "lesson-22-amperes-law-gausss-law-in-magnetism-bd81d7d5": {
+      "course": "phys-215",
+      "lesson_no": 22,
+      "title": "Ampère's Law, Gauss's Law in Magnetism",
+      "path": "gemini/phys-215/lesson-22-amperes-law-gausss-law-in-magnetism-bd81d7d5.html"
+    },
+    "lesson-24-faradays-law-of-induction-motional-emf-8cbe647d": {
+      "course": "phys-215",
+      "lesson_no": 24,
+      "title": "Faraday's Law of Induction, Motional EMF",
+      "path": "gemini/phys-215/lesson-24-faradays-law-of-induction-motional-emf-8cbe647d.html"
+    },
+    "lesson-25-lenzs-law-induced-electric-field-1a98a6d0": {
+      "course": "phys-215",
+      "lesson_no": 25,
+      "title": "Lenz's Law, Induced Electric Field",
+      "path": "gemini/phys-215/lesson-25-lenzs-law-induced-electric-field-1a98a6d0.html"
+    },
+    "lesson-26-generators-and-motors-ac-transformers-1bbf05b9": {
+      "course": "phys-215",
+      "lesson_no": 26,
+      "title": "Generators and Motors, AC, Transformers",
+      "path": "gemini/phys-215/lesson-26-generators-and-motors-ac-transformers-1bbf05b9.html"
+    },
+    "lesson-28-displacement-current-dc9f8b07": {
+      "course": "phys-215",
+      "lesson_no": 28,
+      "title": "Displacement Current",
+      "path": "gemini/phys-215/lesson-28-displacement-current-dc9f8b07.html"
+    },
+    "lesson-29-maxwells-equations-7a27dd4c": {
+      "course": "phys-215",
+      "lesson_no": 29,
+      "title": "Maxwell's Equations",
+      "path": "gemini/phys-215/lesson-29-maxwells-equations-7a27dd4c.html"
+    },
+    "lesson-30-electromagnetic-waves-em-spectrum-40677a45": {
+      "course": "phys-215",
+      "lesson_no": 30,
+      "title": "Electromagnetic Waves, EM Spectrum",
+      "path": "gemini/phys-215/lesson-30-electromagnetic-waves-em-spectrum-40677a45.html"
+    },
+    "lesson-31-light-reflection-refraction-ec714375": {
+      "course": "phys-215",
+      "lesson_no": 31,
+      "title": "Light, Reflection, Refraction",
+      "path": "gemini/phys-215/lesson-31-light-reflection-refraction-ec714375.html"
+    },
+    "lesson-32-image-formation-from-mirrors-fbd3ac8d": {
+      "course": "phys-215",
+      "lesson_no": 32,
+      "title": "Image Formation from Mirrors",
+      "path": "gemini/phys-215/lesson-32-image-formation-from-mirrors-fbd3ac8d.html"
+    },
+    "lesson-33-image-formation-from-lenses-d3ec7a43": {
+      "course": "phys-215",
+      "lesson_no": 33,
+      "title": "Image Formation from Lenses",
+      "path": "gemini/phys-215/lesson-33-image-formation-from-lenses-d3ec7a43.html"
+    },
+    "lesson-36-double-slit-interference-8b6dbbb7": {
+      "course": "phys-215",
+      "lesson_no": 36,
+      "title": "Double-Slit Interference",
+      "path": "gemini/phys-215/lesson-36-double-slit-interference-8b6dbbb7.html"
+    },
+    "lesson-37-diffraction-resolution-89cef48b": {
+      "course": "phys-215",
+      "lesson_no": 37,
+      "title": "Diffraction, Resolution",
+      "path": "gemini/phys-215/lesson-37-diffraction-resolution-89cef48b.html"
+    },
+    "lesson-39-intro-to-nuclear-4084143d": {
+      "course": "phys-215",
+      "lesson_no": 39,
+      "title": "Intro to Nuclear",
+      "path": "gemini/phys-215/lesson-39-intro-to-nuclear-4084143d.html"
+    },
+    "lesson-41-photoelectric-effect-wave-particle-518e76f6": {
+      "course": "phys-215",
+      "lesson_no": 41,
+      "title": "Photoelectric Effect, Wave/Particle",
+      "path": "gemini/phys-215/lesson-41-photoelectric-effect-wave-particle-518e76f6.html"
+    },
+    "phys310-atoms-and-nuclei-83022f32": {
+      "course": "phys-310",
+      "lesson_no": 2,
+      "title": "Energy, Atoms, and Nuclei",
+      "path": "gemini/phys-310/phys310-atoms-and-nuclei-83022f32.html"
+    },
+    "phys310-binding-energy-and-stability-e0ceabee": {
+      "course": "phys-310",
+      "lesson_no": 3,
+      "title": "Binding Energy and Stability",
+      "path": "gemini/phys-310/phys310-binding-energy-and-stability-e0ceabee.html"
+    },
+    "phys310-radioactivity-77500fd7": {
+      "course": "phys-310",
+      "lesson_no": 4,
+      "title": "Radioactivity",
+      "path": "gemini/phys-310/phys310-radioactivity-77500fd7.html"
+    }
+  }
+}

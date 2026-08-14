@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Backup lesson · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <style>
+    .backup-wrap { max-width: 640px; margin: 0 auto; }
+    .backup-lesson { font-size: 15px; font-weight: 700; margin: 0 0 2px; }
+    .backup-course { font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
+                     color: var(--text-muted, #94a3b8); margin: 0 0 14px; }
+    .backup-open { display: block; text-align: center; margin: 18px 0 6px; font-size: 15px; }
+    .backup-steps { font-size: 13px; line-height: 1.7; padding-left: 20px; margin: 10px 0 0; }
+    .backup-steps code { font-size: 12px; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="backup-wrap" id="wrap">
+      <div class="center-load"><span class="spinner"></span><span>Finding the backup lesson…</span></div>
+    </div>
+  </main>
+
+  <script type="module">
+    /* ─────────────────────────────────────────────────────────────────────────
+       THE BACKUP ROUTER.
+
+       A published Claude artifact links here, passing only its own slug:
+
+           .../site/student/backup.html?i=<INTERACTION_ID>
+
+       and this page resolves that slug to a backup build. THAT INDIRECTION IS THE
+       WHOLE POINT. A Claude artifact cannot be edited in place -- changing one means
+       republishing it on claude.ai, which mints a new artifact URL and means updating
+       the lesson row that points at it. So the artifact must never learn a URL that
+       could change. It knows two things that never change: this page, and its own
+       slug. Everything mutable -- which lessons have a backup, where each one lives,
+       whether one is temporarily withdrawn -- lives in `site/data/backup-builds.json`
+       and is edited by committing to this repository.
+
+       NO AUTH, DELIBERATELY. A cadet arrives here because the Claude tutor just failed
+       them. Requiring a PREP sign-in first would put a second obstacle in front of
+       someone already blocked, and there is nothing here worth gating: the page is a
+       signpost, and the backup build it points at is as public as the published Claude
+       artifact already is. The cadet still signs in at the END, to submit -- that is
+       where the real gate has always been, and it is unchanged.
+
+       This page is intentionally dependency-free: no Supabase client, no auth module,
+       no nav. It has to work when other things are not working.
+       ───────────────────────────────────────────────────────────────────────── */
+
+    const wrap = document.getElementById('wrap');
+    const slug = new URLSearchParams(location.search).get('i') || '';
+
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    const COURSE_LABEL = { 'phys-215': 'Physics 215', 'phys-110': 'Physics 110',
+                           'phys-310': 'Physics 310' };
+
+    function shell(inner) { wrap.innerHTML = inner; }
+
+    function noBackup(title, detail) {
+      shell(`
+        <div class="card">
+          <h1 class="backup-lesson">${esc(title)}</h1>
+          <div class="alert alert-warn" style="margin-top:12px">${detail}</div>
+          <p class="muted" style="font-size:13px;margin-top:14px">
+            Keep trying the Claude version &mdash; a busy-server error usually clears within a few
+            minutes. If it does not clear before your deadline, tell your instructor: they can grant
+            an extension, and they would rather hear from you early than late.
+          </p>
+        </div>`);
+    }
+
+    (async function () {
+      if (!slug) {
+        noBackup('No lesson specified',
+          'This page needs to know which lesson you were working on. Open it from the ' +
+          'Claude lesson’s start screen rather than typing the address in.');
+        return;
+      }
+
+      let manifest;
+      try {
+        // Cache-bust: this file changes whenever a backup is added or withdrawn, and a
+        // stale copy would send a cadet to a lesson that is no longer there.
+        const res = await fetch('../data/backup-builds.json?_=' + Date.now(),
+                                { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        manifest = await res.json();
+      } catch (e) {
+        noBackup('Could not load the backup list',
+          'The list of backup lessons could not be reached (' + esc(e.message) + '). ' +
+          'This is a problem on our side, not yours — please tell your instructor.');
+        return;
+      }
+
+      const build = (manifest.builds || {})[slug];
+      if (!build) {
+        noBackup('No backup for this lesson yet',
+          'There is no backup version of this lesson. Not every lesson has one.');
+        return;
+      }
+
+      const course = COURSE_LABEL[build.course] || build.course || '';
+      const lesson = build.lesson_no ? `Lesson ${build.lesson_no}` : '';
+      const title = build.title || slug;
+
+      shell(`
+        <div class="card">
+          <p class="backup-course">${esc(course)}${lesson ? ' &middot; ' + esc(lesson) : ''}</p>
+          <h1 class="backup-lesson">${esc(title)} &mdash; backup version</h1>
+
+          <div class="alert alert-warn" style="margin-top:14px">
+            <strong>Use this only if the Claude version will not load.</strong>
+            The Claude version is the intended way to do this preflight and it is the better
+            experience. This backup runs the same lesson on Google Gemini using
+            <strong>your own free API key</strong>, and it is rougher: slower to start, and the
+            tutor may be less consistent.
+          </div>
+
+          <p style="font-size:13.5px;line-height:1.65;margin-top:14px">
+            <strong>Your work counts exactly the same.</strong> The backup asks the same questions,
+            produces the same report, and submits to PREP through the same page. Your instructor
+            cannot tell which one you used, and neither can the gradebook.
+          </p>
+
+          <p style="font-size:13.5px;line-height:1.65;margin-top:12px">You will need a free Google
+            AI Studio key &mdash; it takes about a minute:</p>
+          <ol class="backup-steps">
+            <li>Go to <strong>aistudio.google.com/apikey</strong> and sign in with any Google account.</li>
+            <li>Click <strong>Create API key</strong>. Do <strong>not</strong> enable billing &mdash;
+                the free tier is enough, and a key with no billing attached cannot cost you money.</li>
+            <li>Copy the key (it starts with <code>AIza</code>) and paste it into the lesson.</li>
+          </ol>
+          <p class="muted" style="font-size:12px;margin-top:10px">
+            The key is sent only to Google and is remembered only in your own browser, so you enter
+            it once per device. PREP never receives it and it is never part of your report.
+          </p>
+
+          <a class="btn btn-primary backup-open" href="../${esc(build.path)}">
+            Open the backup lesson &rarr;
+          </a>
+          <p class="muted" style="font-size:12px;text-align:center">
+            Try the Claude version again first if you have not in the last few minutes.
+          </p>
+        </div>`);
+    })();
+  </script>
+</body>
+</html>

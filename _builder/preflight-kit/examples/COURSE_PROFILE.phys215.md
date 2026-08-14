@@ -45,6 +45,7 @@ integrity_statement:    This conversation is governed by the USAFA Honor Code. P
 # Standing up your own? Both must be real, reachable URLs before you build anything.
 submit_endpoint:        https://dfpm-physics.github.io/Core_Preflights/site/student/interaction-submit.html
 prefill_base:           https://dfpm-physics.github.io/Core_Preflights/site/faculty/lessons.html
+backup_base:            https://dfpm-physics.github.io/Core_Preflights/site/student/backup.html
 schedule_file:          phys215_fall2026_schedule.md
 
 # ── Session shape ─────────────────────────────────────────────────────────────

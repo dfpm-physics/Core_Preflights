@@ -63,6 +63,13 @@ _snapshots/
 # they are the human record of what was built and what was approved, and they diff well.
 _builder/courses/*/artifacts/*.jsx
 
+# index.json is DERIVED (sync_artifacts.py builds it from BUILD-LOG.md and uploads it), and it
+# arrives beside the .jsx on a pull. Ignored for the same reason: a committed copy of a derived
+# file drifts from the record it was derived from, and nothing would report the drift.
+# to_gemini.py reads it and fails with "run sync_artifacts.py pull first" when it is absent,
+# which is the correct behaviour on a fresh clone rather than a missing dependency.
+_builder/courses/*/index.json
+
 # preflight-kit localizer output — regenerate with `python tools/localize.py`. Never committed;
 # localize.py wipes and rewrites it on every run.
 _builder/courses/*/build/

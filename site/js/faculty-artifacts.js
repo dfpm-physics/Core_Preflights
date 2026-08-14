@@ -24,6 +24,10 @@
 //   Note the failure mode — Storage answers `NoSuchBucket` for BOTH a denied request and a
 //   mistyped path, so an unexpected "bucket not found" is worth checking the path over before
 //   concluding it is a policy problem.
+//
+//   ONE read here is neither authenticated nor from the bucket: the Gemini backup manifest, a
+//   static JSON committed under `site/`. See "the Gemini backup builds" near the foot of this
+//   file — including why a failure to read it must never take the artifact list down with it.
 
 import { db } from './supabase.js';
 
@@ -230,6 +234,86 @@ export async function registeredSlugs(slugs) {
     for (const row of data || []) out.set(row.slug, row);
   }
   return out;
+}
+
+// ── the Gemini backup builds ─────────────────────────────────────────────────
+//
+// A cadet on a free claude.ai account can be turned away with an HTTP 429 and simply not be able
+// to do the preflight. So an artifact published on claude.ai also gets a BACKUP BUILD: the same
+// lesson with the transport swapped to Google Gemini against the cadet's own free API key,
+// served from this site at `site/gemini/<course>/<slug>.html`. When the Claude artifact's
+// connection check fails it offers a button to `site/student/backup.html?i=<slug>`, and that
+// router resolves the slug through the manifest read below.
+//
+// FOUR THINGS THIS PAGE MUST NOT MISSTATE ABOUT THEM:
+//   · A backup submits under the SAME slug as the Claude artifact, so its report lands in the
+//     same activity row and rolls up identically. It is not a second assignment and cannot
+//     split a cohort.
+//   · It is a FALLBACK, not an alternative. The Claude artifact is the intended path; the backup
+//     is rougher and exists for the cadet that path has locked out.
+//   · Backups are REGENERATED, never hand-edited — `scripts/artifacts/to_gemini.py` writes them
+//     and the generated HTML carries a DO-NOT-EDIT banner.
+//   · An artifact with NO backup is normal, not broken: one that was never published on
+//     claude.ai has nothing to back up.
+//
+// A manifest that will not load must degrade to "availability unknown" and never to a broken
+// library — the Claude artifacts are this page's job and the backup column is an annotation on
+// them. `loadBackups()` therefore resolves rather than rejects, and hands back the reason.
+
+const BACKUP_MANIFEST = '../data/backup-builds.json';
+
+/** The cadet-facing router, relative to `site/faculty/`. */
+export const BACKUP_ROUTER = '../student/backup.html';
+
+let backupsOnce = null;
+
+/**
+ * Read `site/data/backup-builds.json` once per page load and reuse it. One in-flight promise,
+ * kept: the manifest covers every course, so switching courses must not refetch it.
+ *
+ * Cache-busted the same way the cadet router does it — the file changes whenever a build is
+ * added or withdrawn, and a stale copy would tell a director a backup exists that does not.
+ *
+ * Resolves to `{ builds, error }` and NEVER rejects. A non-null `error` means availability is
+ * UNKNOWN, and a caller has to render it as unknown rather than as "none": one failed fetch
+ * would otherwise become a page full of confident, wrong claims.
+ */
+export function loadBackups() {
+  if (!backupsOnce) {
+    backupsOnce = (async () => {
+      try {
+        const res = await fetch(`${BACKUP_MANIFEST}?_=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const doc = await res.json();
+        const builds = doc && typeof doc.builds === 'object' && doc.builds ? doc.builds : {};
+        return { builds, error: null };
+      } catch (err) {
+        return { builds: {}, error: err.message || String(err) };
+      }
+    })();
+  }
+  return backupsOnce;
+}
+
+/**
+ * One slug's backup build, or `null` when it has none.
+ *
+ * `path` is taken from the manifest verbatim and never rebuilt from course + slug. The manifest
+ * is what the cadet router resolves, so a path re-derived here could disagree with where a cadet
+ * is actually sent — silently, and only for the artifact whose naming was the exception. It is
+ * stored relative to `site/`, and this page sits one directory below that, hence the `../`.
+ */
+export function backupFor(backups, slug) {
+  const b = backups && backups.builds ? backups.builds[slug] : null;
+  if (!b || !b.path) return null;
+  return {
+    course: b.course || '',
+    lessonNo: b.lesson_no ?? null,
+    title: b.title || '',
+    path: b.path,
+    url: `../${b.path}`,
+    router: `${BACKUP_ROUTER}?i=${encodeURIComponent(slug)}`,
+  };
 }
 
 // ── the registration link ────────────────────────────────────────────────────
