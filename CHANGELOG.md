@@ -58,17 +58,28 @@ the release window, not a security boundary:
 `set_due_dates.py` dry against both syllabi: **74/74 offerings correct** across phys-110 and
 phys-215, zero empty `due_by_day` maps, every per-section row agreeing (296+333 and 333+444). The
 7-day release window (`LOOKAHEAD_DAYS`) is the confirmed third explanation for a "locked out"
-report — a cadet reaching for a lesson more than 7 days early sees nothing, correctly. Two gaps
+report — a cadet reaching for a lesson more than 7 days early sees nothing, correctly. One gap
 recorded for follow-up: **phys-310 has no `SCHEDULES` entry**, so its dates have no automated
-syllabus cross-check; and **the test cadet's sign-in is broken** (pre-existing), which blocks
-`test-prefs`, the live student suites, and the student browser pass.
+syllabus cross-check.
+
+**The test-cadet "sign-in failure" was a stale hardcoded credential, not a broken account.** The
+director had signed in with the last-6 provisioning default and been forced to choose 8+ characters
+(Supabase minimum), making the account's real password the **last eight digits of the id** — while
+`harness.mjs` and `pass.mjs` still carried the last-6 default. Both copies now hold the last-8 form
+and name each other. That unblocked `test-prefs`, the three live suites, and the student browser
+pass, all run the same day.
 
 **Verification:** `test-grace.mjs` — 74 checks, green — pins the boundary at ±1s on all four
 deadline sources, the refusal issuing zero writes, an extension rescuing a late submit, and the
-graded/practice split. Full offline suite green except three pre-existing `test-nav` failures (a
-stale expectation against the artifacts nav entry, untouched here). Faculty browser pass 9/9 pages
-clean. **The student pages were not browser-walked** (test-cadet credential above) — their coverage
-this run is the recording-stub suite plus code review, per CORE.md §2 this note is that statement.
+graded/practice split. **Full suite including the live half: 546 passed, 6 failed, and the live
+write path is green** — the test cadet saved and committed against a not-past-due target through
+the new deadline check, on the real database. Browser passes clean on both tiers: faculty 9/9,
+student 5/5. The six failures are all pre-existing: four stale `test-nav` expectations (the
+artifacts nav entry), the known `test-student` two-graded-activities selection (roadmap §5), and
+one that is **new information rather than new breakage** — the live isolation suite's *"student
+sees only sections in offerings they are enrolled in"* fails at **21 sections visible**. Nothing
+here touches sections or RLS; the suite was simply blind while the credential was stale, so its age
+is unknown. Filed in ROADMAP §5 beside the P3.9 visibility question.
 
 ### Student names, IDs and scores reclassified; the tree swept for names; a check behind the rule
 

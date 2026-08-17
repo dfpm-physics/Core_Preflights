@@ -19,9 +19,11 @@ export const SUPABASE_URL = 'https://shzvpmlnqfmzfmuxkowi.supabase.co';
 export const SUPABASE_ANON = 'sb_publishable_wHlVYRPryp7fgByHaDujZw_AXvonsru';
 
 // The deliberate test row at the top of the valid cadet-ID range (app.students CHECK is
-// 3000000000..3009999999). Password follows the documented provisioning default: the last
-// six digits of the id. No real cadet account is involved.
-export const TEST_STUDENT = { id: 3009999999, email: '3009999999@usafa.edu', password: '999999' };
+// 3000000000..3009999999). NOT the provisioning default (last six digits): Supabase requires
+// 8+ characters at forced rotation, so the director rotated this account to the LAST EIGHT
+// digits of the id (2026-08-17). browser-harness/pass.mjs holds a copy — change both.
+// No real cadet account is involved.
+export const TEST_STUDENT = { id: 3009999999, email: '3009999999@usafa.edu', password: '09999999' };
 
 /* ── Assertions ───────────────────────────────────────────────────────────── */
 let passed = 0, failed = 0;

@@ -27,7 +27,9 @@ const STUDENT = flag('student');
 // the deliberate test cadet from tests/app-schema/harness.mjs; no real account is involved.
 const FAC = STUDENT ? {} : testFaculty();
 const EMAIL = arg('email', STUDENT ? '3009999999@usafa.edu' : FAC.email || null);
-const PASSWORD = arg('password', STUDENT ? '999999' : FAC.password || null);
+// Last EIGHT digits, not the last-six provisioning default: the account was rotated 2026-08-17
+// (Supabase requires 8+ chars). tests/app-schema/harness.mjs holds the other copy — change both.
+const PASSWORD = arg('password', STUDENT ? '09999999' : FAC.password || null);
 const OUT = arg('out', process.env.CLAUDE_SCRATCHPAD
   || resolve(process.env.TEMP || '/tmp', 'prep-browser-pass'));
 
