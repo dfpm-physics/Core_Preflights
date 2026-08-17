@@ -10,6 +10,24 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-17 — Matthew Recker via Claude
 
+### The isolation failure diagnosed: the RLS is fine — the test cadet is enrolled in the live term
+
+Read-only follow-up to the "saw 21 sections" failure below. `sections_read` behaves exactly as
+written: a student sees every section of each offering they are **actively enrolled in** (which
+per-day deadline resolution needs). 21 = the training sandbox's 4 + **live phys-215 fall-2026's
+17**, because the ZZ Test Cadet (3009999999) has held an active enrollment in live section
+**M3A since 2026-08-05**. `test-isolation.mjs`'s hardcoded `<= 4` bound was a working canary for
+exactly this and stays hardcoded.
+
+The live enrollment carries zero submissions and zero grades — nothing is polluted — but the
+absence of grades is itself the sharp part: three lessons have closed since 2026-08-05, every one
+of M3A's 18 real cadets was graded or zeroed each night, and the test cadet never was, **by a
+mechanism no run record names** (`analysis_runs.detail` has no test-skip key; the skill has no
+exclusion; the roster query would include them). An exclusion that lives in nobody-knows-where is
+one forgotten judgment call away from a synthetic cadet appearing in the live gradebook and every
+M3A cohort denominator. Filed in ROADMAP §5 with the decision owed: **drop the live M3A
+enrollment** (recommended) or bless it in writing and re-derive the test bound.
+
 ### Late submission closed at submit time, with a 120-second acceptance window
 
 The course director reported both symptoms of the same absence: some cadets submitted preflights
