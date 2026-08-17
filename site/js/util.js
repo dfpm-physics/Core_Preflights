@@ -190,9 +190,9 @@ const NAME_SUFFIXES = new Set(['jr', 'sr', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 
  * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────────────────
  * "the last whitespace token is the surname" is right for 99% of a roster and catastrophically
  * wrong for the rest. The registrar exports a suffix INSIDE the last-name field —
- * `"Fulkman IV,John William"` — which roster-import.js correctly stores as
- * `John William Fulkman IV`. Reading the final token back as the surname then renders that cadet
- * as **"IV, John William Fulkman"** on every roster, grade and report page, files them under I in
+ * `"Fixture IV,Testcadet Alpha"` (synthetic name, real shape) — which roster-import.js correctly
+ * stores as `Testcadet Alpha Fixture IV`. Reading the final token back as the surname then renders
+ * that cadet as **"IV, Testcadet Alpha Fixture"** on every roster, grade and report page, files them under I in
  * every sort, and — worse than cosmetic — writes `Last Name = IV` into the Blackboard grade export.
  * Fifteen cadets across the two Fall 2026 courses are affected.
  *

@@ -381,9 +381,22 @@ Notes:
   local folder name is hardcoded — if the folder is renamed, update this or `preflight-analyze` loses
   its textbook RAG grounding. The textbook PDFs themselves are **not in the repo** (~968 MB; gitignored;
   fetched from Teams — see `textbook-pdfs/README.md`).
-- **Never** put a service key, DB password, or student PII in a committed file (this one included),
-  in a URL/query string, or in the CHANGELOG. The anon key in `site/js/config.js` is intentionally public
-  (protected by RLS).
+- **Never** put a service key, DB password, or connection string in a committed file (this one
+  included), in a URL/query string, or in the CHANGELOG. The anon key in `site/js/config.js` is
+  intentionally public (protected by RLS).
+- **Never write a student's NAME where the cadet ID would carry the same meaning** — in a committed
+  file, a URL/query string, or the CHANGELOG. **Cadet IDs and scores are permitted.** *(Determined
+  2026-08-17: name + cadet ID + score are **not** treated as PII in this system, per institutional
+  guidance received — citation to be added by the course director. This reversed a blanket no-PII
+  rule that stood here until that date. Reasoning, what it supersedes, and the accept-as-is ruling
+  on git history: [`docs/decisions/STUDENT-DATA-CLASSIFICATION.md`](../../docs/decisions/STUDENT-DATA-CLASSIFICATION.md).)*
+  The ID is also the better engineering choice — it is the join key, it is unambiguous when two
+  cadets share a surname, and it does not go stale when a name changes. **Test and example fixtures
+  take synthetic names**, because a file that looks synthetic and is not survives every redaction
+  pass done by eye. Still barred outright: **free-text student writing paired with an identity** —
+  Q3 answers, showcase quotes, reflections — which the determination does not cover.
+  The machine behind this rule is `python scripts/checks/name_scan.py` (read-only, non-zero exit on
+  a hit, reads the roster live and never prints a name).
 
 **Two Storage buckets, and they are gated differently on purpose:**
 

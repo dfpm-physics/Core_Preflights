@@ -8,6 +8,153 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-17 — Matthew Recker via Claude
+
+### Late submission closed at submit time, with a 120-second acceptance window
+
+The course director reported both symptoms of the same absence: some cadets submitted preflights
+**after** their track's deadline while others were locked out. **Nothing anywhere enforced the
+deadline at the write layer** — `commitSubmission()` checked gradability and the activity lock but
+never the clock, the DB triggers do not check it, and the RLS write policies gate on enrollment
+membership only. So a fresh page load after the deadline showed MISSED with no submit affordance
+(the "locked out" reports), while a tab left open across the deadline kept a live submit button the
+database accepted (the late submissions). `submissionLateness()` even existed to *badge* late
+arrivals for graders — late work was being tolerated by design, and the director has now decided it
+is not: **hard cutoff at the effective deadline plus 120 seconds, uniformly, on every deadline
+source.** The displayed deadline does not move and the window is deliberately unadvertised — it
+exists to absorb in-flight requests (the interactive path crosses claude.ai → receiver → login →
+Submit) and clock skew, not to extend anything.
+
+What shipped, client side — **the DB trigger is the other half and is NOT here**; it needs DDL and
+rides the next coordinated migration batch, so until it lands this is a UI rule on the pattern of
+the release window, not a security boundary:
+
+- **`GRACE_MS = 120000`** (`site/js/schema.js`), the one constant, with its copies named in a
+  comment: the future migration, `preflight-analyze` SKILL Step 9, `zero_non_submitters.py`.
+- **`effectiveDue()`** returns `due` untouched and flips `isPast` only past `due + GRACE_MS` — so
+  extension, per-section override, day-track and offering default all inherit the window from the
+  one comparison, and nothing that displays a deadline changes. `submissionLateness()`'s default
+  tolerance moves 60s → `GRACE_MS`, so the grader's late badge can never flag a submission the
+  acceptance window allowed.
+- **`commitSubmission()` refuses a late commit** after re-fetching the deadline *fresh at submit
+  time* (offering, per-section rows, active extension — `revoked_at IS NULL`), so a stale tab
+  cannot smuggle a stale deadline. The refusal names the real deadline, says the draft is saved
+  (it is — the check runs before any write), and points at the instructor. Same check in
+  **`submitInteractionReport()`**, graded path only; the receiver page's old blanket past-due block
+  on **practice** reports is removed — it contradicted `student-getting-started.md`, which promises
+  practice unlocks at the deadline.
+- **Both zeroing copies carry the same 120s** — `preflight-analyze` SKILL Step 9 and
+  `scripts/fall2026/zero_non_submitters.py` — so a cadet who submits at 00:01 cannot be zeroed by a
+  run firing inside the window. (Timing was checked anyway: the two scheduled nightly runs fire at
+  +33 and +61 minutes.)
+- **`loadAssignmentStatuses()` now filters revoked extensions** (`.is('revoked_at', null)`),
+  closing a pre-existing violation of the `EXTENSION_SELECT` contract the new check made visible: a
+  cadet holding a *revoked* extension was shown the extended deadline, which the fresh-fetch
+  refusal would then contradict at submit.
+- **`tests/app-schema/test-student.mjs`** picks a not-past-due target for its write path — the old
+  selection took the *earliest* assignment, which this change now correctly refuses.
+
+**The reported lockouts are not a data problem today.** A read-only diagnostic ran
+`set_due_dates.py` dry against both syllabi: **74/74 offerings correct** across phys-110 and
+phys-215, zero empty `due_by_day` maps, every per-section row agreeing (296+333 and 333+444). The
+7-day release window (`LOOKAHEAD_DAYS`) is the confirmed third explanation for a "locked out"
+report — a cadet reaching for a lesson more than 7 days early sees nothing, correctly. Two gaps
+recorded for follow-up: **phys-310 has no `SCHEDULES` entry**, so its dates have no automated
+syllabus cross-check; and **the test cadet's sign-in is broken** (pre-existing), which blocks
+`test-prefs`, the live student suites, and the student browser pass.
+
+**Verification:** `test-grace.mjs` — 74 checks, green — pins the boundary at ±1s on all four
+deadline sources, the refusal issuing zero writes, an extension rescuing a late submit, and the
+graded/practice split. Full offline suite green except three pre-existing `test-nav` failures (a
+stale expectation against the artifacts nav entry, untouched here). Faculty browser pass 9/9 pages
+clean. **The student pages were not browser-walked** (test-cadet credential above) — their coverage
+this run is the recording-stub suite plus code review, per CORE.md §2 this note is that statement.
+
+### Student names, IDs and scores reclassified; the tree swept for names; a check behind the rule
+
+The course director determined that **a cadet's name, cadet ID and score are not PII in this
+system**, per institutional guidance received — **the citation for that verification is still
+outstanding and is the director's to add**. Until it lands, the reasoning below rests on an
+unpublished source, which the decision record says in its own status line.
+
+That closes
+[`docs/findings/2026-08-13-student-pii-committed-to-public-repo.md`](docs/findings/2026-08-13-student-pii-committed-to-public-repo.md)
+by reclassification rather than by repair, and it settles the history question the finding could
+not: **git history is accepted as-is** — no rewrite (CORE.md §0 forbids force-push and this removes
+the reason to seek an exception) and no repo-privating (the org's plan is unconfirmed and the site
+is live mid-term). That is the finding's §6.4 option **(c)**, chosen with (a) and (b) weighed.
+
+New decision record:
+[`docs/decisions/STUDENT-DATA-CLASSIFICATION.md`](docs/decisions/STUDENT-DATA-CLASSIFICATION.md).
+
+**What survives is a narrower rule: a student's name never appears where an ID suffices.** The ID
+is also the better engineering choice — it is the join key, it is unambiguous when two cadets share
+a surname, and it does not go stale when a name changes. Free-text student writing paired with an
+identity is still barred outright; the determination does not cover it.
+
+**The sweep found three files and ten people the 2026-08-13 search could not see.** That search was
+ID-anchored and named the blind spot itself in its §4: a cadet named in prose with no number beside
+them was invisible to it. Cross-referencing the live roster (958 `app.students` rows, 876 enrolled
+and provisioned once the synthetic blocks are excluded) against every tracked file turned up real
+cadet names on **32 lines across 5 files**, naming **13 individuals**.
+
+Redacted, keeping every record's meaning: **`CHANGELOG.md`** (12 lines — an extension table, a
+six-cadet outage report, a stranded-row note, and the suffix-rendering entry, whose worked example
+is now a synthetic name of the same token shape); **`tests/app-schema/test-lesson-due.mjs`** and
+**`tests/app-schema/test-roster-import.mjs`** (15 lines — fixture names replaced with synthetic
+ones of identical shape, cadet IDs left byte-identical, and both files now carry a comment saying
+which of the two is allowed). Both suites re-run: 52 and 185 assertions, zero failures.
+
+**`site/js/util.js` (3 lines) and `site/js/faculty-admin.js` (2 lines)** used a real cadet's name
+as the worked example in a comment about generational suffixes; `site/js/` was owned by another
+operator during the sweep, so the coordinator redacted both in this same change — synthetic name,
+same token shape as the fixtures. The tree now scans clean. `name_scan.py` is also wired into
+[`lesson-cycle`](.ai/skills/lesson-cycle/SKILL.md) Step 0 (report-and-hold-the-push, not a
+grading blocker).
+
+### `scripts/checks/name_scan.py` — the machine the finding asked for
+
+The finding's §2 identified the real root cause: *"Every other durable rule in this repo has a
+machine behind it… the PII rule has nothing."* It does now, narrowed to the rule that survived.
+
+Read-only, stdlib at import time, `--json`, exit 1 on a hit and **exit 2 when it cannot run** — a
+check that cannot run must not report clean. It reads the roster **live** (prep_app_read over the
+session pooler, service-role REST as fallback), holds it in memory, and writes it nowhere: a
+committed name list would be the exact thing the check exists to prevent. Output is `file:line` +
+cadet ID + a **masked** name, so the check never publishes what it is looking for.
+
+It will not flag fabricated data. A row must be provisioned *and* carry a registrar email, and the
+POC (`30001000xx`), sandbox (`3000980000+`, `3000990000`–`3000990071`) and test-account
+(`3008888888`, `3009999999`) blocks are hard-excluded — a check that flags the POC roster every run
+is one everybody learns to bypass. Placeholders that collide with a real roster row, such as
+SYSTEM_GUIDE.md's CSV example, sit in an `ALLOW` list keyed on `(path, student_id)`, so a
+*different* cadet's name in the same file still fires. `scripts/checks/name_scan_test.py` proves
+both directions offline with an invented roster: 39 assertions, zero failures.
+
+Two tokens of one roster row must land within 60 characters of each other on one line. **What that
+misses is stated in the script's header** — a first name alone, a nickname, a surname with nothing
+near it, and everything in git history.
+
+### The operating docs said the opposite and now do not
+
+- **`.ai/instructions/CORE.md` §3** — the blanket "never … student PII" bullet is split in two: one
+  for credentials, one for names, with IDs and scores explicitly permitted and the check named.
+- **`docs/findings/README.md`** — "No student PII. None." becomes the same standard. **"Ship the
+  query, not the rows" is untouched**; it was always the stronger argument, and it is about a
+  finding staying true as the data moves, not about disclosure. `docs/README.md`'s one-line summary
+  of that rule was corrected to match.
+- **`.ai/skills/docs-author/SKILL.md`** — its help-doc prohibition inherited the old term. It now
+  bars *any* individual student's data from a help doc, and says why the bar is **higher** there
+  than repo-wide: a help doc is read by students, and no explanation of a feature needs a real
+  cadet in it.
+- **`docs/operations/MACHINE-SETUP.md`** — same correction to its agent-rules list.
+
+Sixteen further indexed documents are flagged by `check_doc_sources.py` because CORE.md moved.
+Each was read against the change and **none is made wrong by it**; they need a `reviewed` bump, not
+an edit.
+
+---
+
 ## 2026-08-14 — Matthew Recker via Claude
 
 ### Roadmap P3.18 — agent swimlanes recorded as a proposal, with its risks and its cheap first step
@@ -604,9 +751,9 @@ by default, idempotent), applying the identical four guards against stored rows.
 
 | Cadet | Course | Section | Extended to | Was |
 |---|---|---|---|---|
-| Aman Muratbekov (3000139219) | phys-110 | T5A | 2026-08-12 2359 | 0/2 published, nothing submitted |
-| Elizabeth Hanah Sistrunk (3000139431) | phys-110 | T5A | 2026-08-13 2359 | 0/2 published, nothing submitted |
-| Sean Cristopher Carney (3000140076) | phys-215 | T1B | 2026-08-12 2359 | 0/2 published, nothing submitted |
+| 3000139219 | phys-110 | T5A | 2026-08-12 2359 | 0/2 published, nothing submitted |
+| 3000139431 | phys-110 | T5A | 2026-08-13 2359 | 0/2 published, nothing submitted |
+| 3000140076 | phys-215 | T1B | 2026-08-12 2359 | 0/2 published, nothing submitted |
 
 All three are `/preflight-analyze` non-submitter zeros that were finalized, against extensions
 granted for a technical problem reaching the site. Points, feedback and `question_scores` are
@@ -1639,8 +1786,8 @@ schema, no data touched, and no grades changed.
 Reported by the course director: Physics 110 cadets could not get in. The page rendered
 **"Cannot read properties of null (reading 'path')"** and nothing else — not a broken lesson
 card, the whole dashboard, because `main()` builds every row in one template literal with no
-per-row `try`/`catch`. Named: Emma Martinez, Cam Parker, Nathan Lillie, Tatiana Valdez, Brakkon
-Bench. Two of them described it as *not being able to log in*; all six accounts are in fact
+per-row `try`/`catch`. Six cadets were named in the report. Two of them described it as
+*not being able to log in*; all six accounts are in fact
 healthy — confirmed, unbanned, no forced rotation, exactly one active enrollment each, and every
 one had signed in successfully, two of them today. They were signing in and then hitting the
 error page.
@@ -1656,7 +1803,7 @@ third, overlapping condition is the duplicated enrollments of `2026-08-10 (third
 (reconstructed from `enrolled_at`/`dropped_at` at Saturday noon UTC; the repair entries count 25
 phys-215 and 17 phys-110, measured after more had accrued). That does not crash the page, but it
 does make its deadline and its stitching ambiguous, and it covered two of the six named cadets —
-Straub and Valdez. Now zero. **Three distinct causes inside four days, with one symptom — "I
+3000141486 and 3000141359. Now zero. **Three distinct causes inside four days, with one symptom — "I
 can't get into PREP" — between them.**
 
 **Nothing was wrong with the data.** The student lesson view derived one fact two ways:
@@ -1728,7 +1875,7 @@ unfixed). `node --check` on the module, and both edited pages' inline module scr
 and parse-checked. **Node-only verification** — the browser check was the reproduction, not the
 fix, since signing in as an affected cadet is not something anyone here can do.
 
-*Separately, and NOT a problem:* **Noah Straub** (3000141486), also reported, never had the fatal
+*Separately, and NOT a problem:* **3000141486**, also reported, never had the fatal
 shape on a section he is in. His zero sits on his **dropped** M5D enrollment; his active T3C
 enrollment is correct and simply has not been graded yet, the T track not having run. Confirmed
 by the course director 2026-08-10.
@@ -1752,7 +1899,7 @@ through `submissions`, of which these rows have none. Nobody sees them and nothi
   right throughout — it was written against the `'committed'` test, so it always covered all 44 —
   but the blast radius was understated by three cadets for several hours.
 - **PostgREST caps a response at 1000 rows no matter what `limit` says.** `app.enrollments` holds
-  1001. A single unpaged read dropped exactly one row — Straub's — and the first scan of stranded
+  1001. A single unpaged read dropped exactly one row — 3000141486's — and the first scan of stranded
   grades reported 8 instead of 9, having silently lost the one row the question was about. Verify
   against `Prefer: count=exact` before trusting any full-table read. Other tables are under the
   cap today (`grades` 609, `submissions` 816, `students` 957) and will not stay that way.
@@ -1770,13 +1917,14 @@ through `submissions`, of which these rows have none. Nobody sees them and nothi
 
 ### A generational suffix is part of the surname — fifteen cadets were filed under "IV" and "Jr"
 
-Reported by the course director: Physics 215's `Fulkman IV,John William` renders in PREP with the
-last name **`IV`**.
+Reported by the course director: a Physics 215 cadet (3000139519) whose registrar name carries a
+`IV` suffix renders in PREP with the last name **`IV`**.
 
 **Nothing is wrong with the stored data.** The registrar puts the suffix *inside* the last-name
-field — `"Fulkman IV,John William"` — and `normalizeName()` correctly stores `John William
-Fulkman IV`. The defect is on the display side: `lastFirst()` in `site/js/util.js` took the final
-whitespace token as the surname, so it flipped that to **`IV, John William Fulkman`**. Fifteen
+field — shape `"Fixture IV,Testcadet Alpha"` — and `normalizeName()` correctly stores
+`Testcadet Alpha Fixture IV`. The defect is on the display side: `lastFirst()` in `site/js/util.js`
+took the final whitespace token as the surname, so it flipped that to
+**`IV, Testcadet Alpha Fixture`**. Fifteen
 cadets in `app.students` carry a suffix (`Jr` ×7, `II` ×2, `III` ×2, `IV` ×2, `V` ×2); every one
 of them was mis-rendered and mis-sorted on every roster, grade and report page, which is where
 `lastFirst()` is used — `faculty-admin`, `faculty-grade`, `faculty-report`, `faculty-roster`.
@@ -1786,8 +1934,8 @@ of them was mis-rendered and mis-sorted on every roster, grade and report page, 
   only when three or more tokens remain, so a two-token name can never end up with an empty
   surname. `I` is excluded deliberately: a lone capital I is a middle initial far more often than
   it is a first-generation suffix.
-- **`lastFirst()` and `initials()`** now both derive from it. `initials('John William Fulkman IV')`
-  was `JI`; it is `JF`.
+- **`lastFirst()` and `initials()`** now both derive from it. `initials('Testcadet Alpha Fixture IV')`
+  was `TI`; it is `TF`.
 - **`buildGradesCsv()` in `site/js/faculty-admin.js`** had the identical split open-coded, and this
   was the one that mattered beyond cosmetics: the export's **`Last Name` column feeds Blackboard**,
   so those fifteen cadets were being filed under `IV`/`Jr` in a gradebook nobody here ever looks

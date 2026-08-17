@@ -138,7 +138,7 @@ eq('…and so does a surname with nothing alphanumeric in it', A.defaultStaffPas
 // derive from the last token, and a browser module cannot import a Deno one. Changing it here
 // alone would make the page tell a director a password the server will not accept.
 eq('a suffixed staff name still derives from the last token, matching the edge functions',
-   A.defaultStaffPassword('William Warren Degenhart Jr'), 'jr1234');
+   A.defaultStaffPassword('Testcadet Charlie Fixture Jr'), 'jr1234');
 
 /* ── 6b. The Blackboard export's Last Name column ─────────────────────────── */
 
@@ -146,21 +146,26 @@ section('faculty-admin.js — buildGradesCsv splits names on the surname');
 
 // This column is consumed by Blackboard, so a wrong split is not a cosmetic problem: it files the
 // cadet under "IV" in somebody else's gradebook, where nobody here will ever see it.
+//
+// FIXTURE NAMES MUST BE SYNTHETIC. Real cadet IDs are permitted here; real names are not — see
+// docs/decisions/STUDENT-DATA-CLASSIFICATION.md. The token SHAPE is what these cases test (a
+// generational suffix, a multi-token given name, a single token), so keep the shape and invent
+// the words.
 const csvMatrix = {
   columns: [{ id: 'c1', title: 'Preflight 2', points_possible: 2 }],
   students: [
-    { studentId: 3000139519, name: 'John William Fulkman IV', sectionId: 's1', enrollmentId: 'e1' },
-    { studentId: 3000139454, name: 'Giselle Emelise Rojas',   sectionId: 's1', enrollmentId: 'e2' },
-    { studentId: 3000000001, name: 'Cher',                    sectionId: 's1', enrollmentId: 'e3' },
+    { studentId: 3000139519, name: 'Testcadet Alpha Fixture IV', sectionId: 's1', enrollmentId: 'e1' },
+    { studentId: 3000139454, name: 'Testcadet Bravo Fixture',    sectionId: 's1', enrollmentId: 'e2' },
+    { studentId: 3000000001, name: 'Cher',                       sectionId: 's1', enrollmentId: 'e3' },
   ],
   cell: () => 2,
 };
 const csvRows = A.buildGradesCsv(csvMatrix, () => 'M1A').split('\r\n');
 
 eq('the suffix stays with the last name',
-   csvRows[1].split(',').slice(1, 3).join('|'), '"Fulkman IV"|"John William"');
+   csvRows[1].split(',').slice(1, 3).join('|'), '"Fixture IV"|"Testcadet Alpha"');
 eq('an ordinary name is unaffected',
-   csvRows[2].split(',').slice(1, 3).join('|'), '"Rojas"|"Giselle Emelise"');
+   csvRows[2].split(',').slice(1, 3).join('|'), '"Fixture"|"Testcadet Bravo"');
 eq('a single-token name is all last name, as before',
    csvRows[3].split(',').slice(1, 3).join('|'), '"Cher"|""');
 

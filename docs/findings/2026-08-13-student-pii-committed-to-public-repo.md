@@ -1,14 +1,31 @@
 # Real cadet identifiers and education records are committed to a public repository
 
-**Status:** Open — awaiting verification
+**Status:** Closed — reclassified by
+[`docs/decisions/STUDENT-DATA-CLASSIFICATION.md`](../decisions/STUDENT-DATA-CLASSIFICATION.md);
+name-hygiene sweep completed 2026-08-17
 
 *Found 2026-08-13 by Matthew Recker (via Claude) while auditing `CHANGELOG.md` after a separate
-finding was written. Nothing has been changed. See [`README.md`](README.md) for what a finding is
-and the no-PII rule that governs this file.*
+finding was written. See [`README.md`](README.md) for what a finding is and the name rule that now
+governs this file.*
 
-> **This document deliberately contains no cadet identifiers, no line numbers, and no quoted
-> values** — see §7 for why the line numbers are withheld specifically. §5 carries the detection
-> command; run it and you will have the exact list in one second.
+> **Closed by reclassification, not by repair — read this before acting on anything below.**
+> The premise of this finding was that a cadet's name, ID and score are protected data. On
+> 2026-08-17 the course director determined they are **not** PII in this system, per institutional
+> guidance received (citation to be added by the course director). What survives is a narrower
+> hygiene rule — **a student's name never appears where an ID suffices** — and the enforcement gap
+> in §2, which was the real defect all along and is now closed by `scripts/checks/name_scan.py`.
+>
+> **Git history is accepted as-is**: no rewrite (CORE.md §0 forbids force-push) and no
+> repo-privating. That is §6.4's option **(c)**, chosen deliberately with (a) and (b) weighed.
+> The working tree was swept on 2026-08-17 against the live roster and every real cadet name in a
+> file the sweep operator could edit was replaced by that cadet's ID, or by a synthetic name where
+> the file is a fixture.
+>
+> §3's file-by-file scope table has been **pruned**, as §7 below instructs: with the tree clean,
+> those counts described only what is in history, and leaving them would be a signpost pointing
+> there. §1–§2's reasoning and §6.2's outcome are kept, which is what §7 asked for.
+> **Sections 4, 5, 6 and 8 are preserved as written on 2026-08-13** — they record the state of the
+> question before the determination, including options that were rejected.
 
 ---
 
@@ -58,18 +75,20 @@ All three affected paths also return **200 over GitHub Pages** (`HEAD`, no auth)
 `_`-prefixed, so the Jekyll exclusion that protects `_archive/` and `_builder/` does not apply — as
 CORE.md §2 already says of `docs/`, `scripts/`, `supabase/` and `tests/`.
 
-**Scope, by file** — counts only, values withheld:
+**Scope, by file — PRUNED 2026-08-17 per §7.** The per-file counts of names and IDs are removed:
+the tree is clean, so they described only what is in history, and a table enumerating which file
+held how many identifiers is the signpost §7 says not to leave behind.
 
-| File | What is in it |
-|---|---|
-| `CHANGELOG.md` | **27 distinct real cadet IDs** across 15 lines. **4 of those lines pair a full legal name with an ID.** Several attach an education record: grade outcomes, per-question feedback judgments, non-submission status, section reassignments. Also quotes instructor feedback text alongside an ID |
-| `tests/app-schema/test-lesson-due.mjs` | **2 full names with their real IDs**, in fixture data. See below — this is the worst of the three |
-| `docs/operations/SYSTEM_GUIDE.md` | **Not PII.** One CSV-format example with a sequential placeholder ID and a generic name. Listed so nobody "fixes" it |
+Two things from it are kept, because they are still load-bearing:
 
-**The test fixture is the sharpest edge.** Its two rows sit among fixture data and read as invented
-names. They are not: one of the two IDs also appears in `CHANGELOG.md` as a real section-swap case,
-which is how the fixture was identified as live roster data at all. **A file that looks synthetic
-and is not will survive every redaction pass that works by eye.**
+- **`docs/operations/SYSTEM_GUIDE.md` is NOT a hit.** Its one CSV-format example uses a sequential
+  placeholder ID and a generic name. Listed so nobody "fixes" it. *(Confirmed again 2026-08-17:
+  the placeholder's name coincides with a real cadet's first and last name, so a naive sweep will
+  keep re-flagging it. It is still synthetic. Leave it.)*
+- **A file that looks synthetic and is not will survive every redaction pass that works by eye.**
+  That was learned here: `tests/app-schema/test-lesson-due.mjs` read as invented fixture data and
+  was live roster data. It is the reason `scripts/checks/name_scan.py` exists and the reason
+  fixtures now take names no cadet could hold.
 
 **What is NOT the problem, and must not be redacted:**
 
@@ -138,6 +157,11 @@ pre-commit path so a *new* violation is caught before it lands rather than two m
 This is the fix for the actual root cause (§2), it needs no authorization, it is independent of the
 disclosure question, and **it is the only item here that prevents recurrence.** If the repair
 operator ships one thing, ship this.
+
+> **Shipped 2026-08-17 as `scripts/checks/name_scan.py`, not `pii_scan.py`** — narrowed to the rule
+> that survived the reclassification. It checks names only; IDs are permitted now. It reads the
+> roster live rather than carrying a pattern, holds it in memory, and reports `file:line` + cadet ID
+> + a masked name, so the check itself never becomes the thing that publishes a name.
 
 ### 6.3 Redact the working tree
 

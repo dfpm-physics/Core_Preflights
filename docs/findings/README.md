@@ -39,16 +39,21 @@ system to a reader. A finding assigns work to a successor and is closed when tha
 
 ## The rules
 
-**No student PII. None.** Everything under `docs/` is served publicly by GitHub Pages (CORE.md §2 —
-only `_`-prefixed paths are excluded, and that exclusion is one `.nojekyll` away from being
-switched off). That means **no names, no student IDs, no enrollment or submission UUIDs, and no
-combination of section plus circumstance that would re-identify a cadet in a small section** —
-FERPA covers indirect identifiers, and PREP's sections are ~20 people.
+**No student names. Cadet IDs are allowed.** Everything under `docs/` is served publicly by GitHub
+Pages (CORE.md §2 — only `_`-prefixed paths are excluded, and that exclusion is one `.nojekyll`
+away from being switched off). **A student's name never appears where an ID would carry the same
+meaning**; the cadet ID, scores, and enrollment or submission UUIDs may. Free-text student writing
+paired with an identity — a Q3 answer, a showcase quote, a reflection — stays out.
 
-This is not a limitation on findings; it is what makes them good. **Ship the query, not the rows.**
-A finding that names three affected students is stale the moment a fourth appears, while a finding
-that carries the detection query stays true and lets its reader confirm the count for themselves.
-When specific records genuinely must be handed over, pass them out of band and say so in the doc.
+*(Changed 2026-08-17. This section read "No student PII. None." and barred IDs and UUIDs as well.
+Name + cadet ID + score are **not** treated as PII in this system, per institutional guidance
+received — citation to be added by the course director. Reasoning and the ruling on git history:
+[`../decisions/STUDENT-DATA-CLASSIFICATION.md`](../decisions/STUDENT-DATA-CLASSIFICATION.md).)*
+
+**Ship the query, not the rows** — unchanged, and it was always the stronger argument. A finding
+that enumerates three affected students is stale the moment a fourth appears, while a finding that
+carries the detection query stays true and lets its reader confirm the count for themselves. Reach
+for an ID when a specific record is the point; reach for the query when a *set* is.
 
 The same rule bars credentials, connection strings, and internal absolute paths.
 

@@ -8,7 +8,8 @@
 - `findings/` — one defect each, written for a *successor* to verify independently and fix. A work
   order with a status, closed when the fix lands. Distinct from `audits/` by who acts next: an audit
   describes a system to a reader, a finding assigns work. See `findings/README.md` — everything here
-  is publicly served, so findings carry **no student identifiers**, only the query that locates them.
+  is publicly served, so findings carry **no student names**; cadet IDs are allowed, and a *set* of
+  affected records is still handed over as the query that locates them, never as rows.
 - `app/` — build notes and plans from the PREP v2 (`app` schema) work. Historical.
 - `ROADMAP.md` — the living work tracker.
 

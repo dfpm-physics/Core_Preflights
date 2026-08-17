@@ -174,6 +174,24 @@ due, and it is phys-110 + phys-310 — not the two large courses.
 running. **It is a proposal, not a decision** — raised when the director asked why a run was slow,
 and not yet accepted or declined.
 
+### P1.17 — Deadline enforcement, the database half · **S** (SQL) + the DDL ceremony · *directed 2026-08-17*
+
+The client half shipped 2026-08-17 (see CHANGELOG): `commitSubmission()` and
+`submitInteractionReport()` refuse a commit past the effective deadline + 120 seconds
+(`GRACE_MS`, `site/js/schema.js`), re-fetched fresh at submit time. **Until a trigger enforces the
+same rule server-side, this is a UI rule on the release-window pattern** — the REST API still
+accepts a late write from anyone not going through those two functions, including a stale client
+that predates the deploy.
+
+Build: a trigger on `app.submissions` refusing `status → 'committed'` past the effective deadline
++ 120s, mirroring `effectiveDue()` precedence — extension (`revoked_at IS NULL`) →
+`assignment_due_dates` row → `due_by_day` × the enrollment's section `meeting_days` → `due_at` —
+with the grace as a literal named in the migration header as a copy of `GRACE_MS`. Instructors
+keep their reopen path (the trigger gates the student transition, not staff writes). **Rides the
+next coordinated DDL batch** (with the 2026-08-13 finding's §6.3 RLS repointing and §6.4 index),
+per CORE.md §0: SQL + `_ROLLBACK.sql` to the director, applied as one event, `app_rls_test.py`
+assertions both sides of the boundary.
+
 ---
 
 ## 3. P2 — Before end of term
@@ -703,6 +721,8 @@ port-status rows · `docs/app/README.md` "Not yet ported" · `student/interactio
 | Remove `scripts/training/seed_training_preflight02.py` data | script header | **Before the real roster upload** — ordering matters. Sharper than recorded: the seed draws from a small template pool, so **16 distinct answers are shared by up to 4 students each**. The rollup's showcase panel therefore renders visibly duplicate quotes (seen during P0.5), which reads as a sampler bug and is not one |
 | **Three** help docs still carry the "Starter stub" blockquote | `admin-system-operations.md` · `ai-and-your-work.md` · `director-ai-rules.md` | Was recorded as five, and the skill said "every current help doc" — both wrong as of 2026-07-27 (there are 8 served docs; 5 have been expanded). Corrected in `docs-author/SKILL.md`. All three had real errors fixed in them on 2026-07-27, so the remaining work is **expansion and the director's review of the wording**, not correction. `ai-and-your-work.md` is the one that matters — it is the student-facing promise about AI, and it is now the only page that tells a cadet a graded interactive lesson scores itself with no human in the loop |
 | `$PREP_CONFIG` neutralization (decided, not executed) | CORE.md:162-165 | One coordinated PR across every script + skill + doc |
+| phys-310 has no `SCHEDULES` entry in `set_due_dates.py` | `scripts/fall2026/set_due_dates.py` | Found 2026-08-17: its 4 offerings have populated `due_by_day` but **no automated syllabus cross-check exists for them** — the detector that caught both 2026-08-09 incidents cannot see this course. Adding the course is one dict entry once its schedule source is in hand, never a fork of the file |
+| The test cadet (3009999999) cannot sign in | `tests/` · `supabase/admin/.env` | Found 2026-08-17 (pre-existing): `Invalid login credentials` blocks `test-prefs`, all three live `tests/app-schema` suites, and the student browser pass — so the student-facing half of the site currently has **no** live-session verification path. Likely a stale password after a forced rotation; restore via `reset-student-password` (derives the default) and record the expected credential beside `PREP_TEST_FACULTY_*` |
 | No spacing/size scale token — padding is hand-tuned px | DESIGN.md:487-491 | Radius, shadow, color are tokenized; spacing is not |
 | Section lifecycle CRUD (create/rename/retire) | PLAN-2026-07-16-ADMIN.md:236-237 · `faculty-roster.js:325` | Sections are only ever born as a side effect of roster upload. **Half-built, found 2026-07-27:** `createSection()` is exported and has **zero callers** — the working path is `createSections()` (plural), which the import calls with the codes the file referenced. So the function exists and no screen reaches it. `admin-system-operations.md` listed "section creation" as a start-of-semester step until 2026-07-27; it is now documented as a consequence of the import, which is what it actually is |
 | No AI-picked quotes on the **Student Free Responses** panel | `faculty/report.html` `buildFreeResponses()` | Added 2026-07-30 with the panel, and deliberately: `analysis.selected_quotes` resolves through the reading reflection, and the director's instruction was explicitly "for now, we won't touch the lesson cycle". So every card there is a random sample and the sub-heading says so. Making it real means `/lesson-aggregate` selecting from a **second** field, which is a change to a skill, to the `analysis_reports` payload shape, and to the resolver — not to this page. **Falsification:** if instructors start reading the free-response panel aloud in class and complain that the sampler keeps missing the good ones, it has earned the aggregator change |

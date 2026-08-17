@@ -400,8 +400,8 @@ export function buildGradesCsv(matrix, sectionCodeOf) {
   const lines = [head.map(csvCell).join(',')];
 
   matrix.students.forEach(s => {
-    // splitName(), not the last whitespace token: a cadet stored "John William Fulkman IV" must
-    // export as Fulkman IV / John William, or Blackboard files them under Last Name = "IV".
+    // splitName(), not the last whitespace token: a cadet stored "Testcadet Alpha Fixture IV" must
+    // export as Fixture IV / Testcadet Alpha, or Blackboard files them under Last Name = "IV".
     const { first, last } = splitName(s.name);
     lines.push([
       s.studentId, last, first, sectionCodeOf(s.sectionId) || '',

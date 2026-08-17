@@ -99,8 +99,8 @@ Two of these overlap and need a hard line:
   format, `assignments`/`responses`/`scores` shape, an RLS policy, an assignment-id namespace, or
   any migration of live student data.
 - **Two or more operators** (human or agent) must align on it before it is safe to build.
-- It touches **security, privacy, or FERPA surface** — student PII, roles and access, what an
-  instructor may see across sections.
+- It touches **security, privacy, or FERPA surface** — how student data is classified, roles and
+  access, what an instructor may see across sections.
 - It is **novel** — no in-house precedent to copy.
 
 **CONSIDER one** if you answer yes to 3 or more of [Google's five questions](https://www.industrialempathy.com/posts/design-docs-at-google/):
@@ -182,10 +182,16 @@ who guesses a filename reads any of them, signed in or not. This is exactly
 decides what the page *lists*, nothing more.
 
 **Never in a help doc, at any tier:** a service key or any credential · a DB connection string,
-internal hostname, or absolute local path · student PII, including indirect identifiers that could
-re-identify someone in a small section (FERPA covers indirect identifiers) · answer keys · exact
-descriptions of a security control or how to bypass one. Content that must genuinely be restricted
-belongs behind Supabase RLS.
+internal hostname, or absolute local path · **any individual student's data — name, cadet ID,
+score, submission or free-text answer** · answer keys · exact descriptions of a security control or
+how to bypass one. Content that must genuinely be restricted belongs behind Supabase RLS.
+
+The student rule is stricter here than the repo-wide one on purpose. Repo-wide, a cadet ID and a
+score may be committed and only a *name* is barred
+([`docs/decisions/STUDENT-DATA-CLASSIFICATION.md`](../../../docs/decisions/STUDENT-DATA-CLASSIFICATION.md),
+CORE.md §3). A help doc is different: it is read by students, it explains how the system works, and
+**no explanation of a feature needs a real cadet in it** — so there is no case where a help doc
+gains anything from naming or numbering one. Use an invented example.
 
 ### Three of the eight docs are still stubs
 
@@ -254,8 +260,8 @@ as an orphan.
 2. **Help docs must be current; design docs must not be rewritten.** Update a help doc the moment
    the behavior changes. Supersede a design doc with a new one and link both directions — do not
    edit a landed decision into agreement with the present.
-3. **Every help doc is public.** No credential, no PII, no answer key, at any tier. If the content
-   cannot be public, it is not a help doc.
+3. **Every help doc is public.** No credential, no individual student's data, no answer key, at any
+   tier. If the content cannot be public, it is not a help doc.
 4. **One Diátaxis mode per help doc.** If it needs two honest titles, it is two documents.
 5. **Required content never lives in a callout.** Give it a heading.
 6. **A warning precedes the step it applies to**, never follows it.

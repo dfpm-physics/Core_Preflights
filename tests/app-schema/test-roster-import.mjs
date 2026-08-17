@@ -95,33 +95,37 @@ eq('a lone surname survives', normalizeName('Doe'), 'Doe');
 
 /* ── The suffix round trip ─────────────────────────────────────────────────────
  * The registrar puts a generational suffix INSIDE the last-name field —
- * `"Fulkman IV,John William"` — so normalizeName() stores `John William Fulkman IV`, which is
- * right, and the display side then has to know that `IV` is not the surname. These two halves
+ * `"Fixture IV,Testcadet Alpha"` — so normalizeName() stores `Testcadet Alpha Fixture IV`, which
+ * is right, and the display side then has to know that `IV` is not the surname. These two halves
  * are in different modules and were written years apart; that is exactly why the round trip is
  * pinned here rather than each half being tested against its own idea of the other.
- * Real case, 2026-08-10: fifteen cadets rendered as "IV, John William Fulkman".
+ * Real case, 2026-08-10: fifteen cadets rendered with the suffix as their surname.
+ *
+ * FIXTURE NAMES MUST BE SYNTHETIC. Real cadet IDs are permitted in this repo; real names are not
+ * — see docs/decisions/STUDENT-DATA-CLASSIFICATION.md. What these cases pin is the token SHAPE,
+ * so keep the shape and invent the words.
  */
 section('normalizeName -> lastFirst, with a generational suffix');
 
 eq('the suffix stays with the surname on import',
-   normalizeName('Fulkman IV,John William'), 'John William Fulkman IV');
+   normalizeName('Fixture IV,Testcadet Alpha'), 'Testcadet Alpha Fixture IV');
 eq('…and the display flip keeps it there',
-   lastFirst(normalizeName('Fulkman IV,John William')), 'Fulkman IV, John William');
+   lastFirst(normalizeName('Fixture IV,Testcadet Alpha')), 'Fixture IV, Testcadet Alpha');
 eq('Jr survives the same trip',
-   lastFirst(normalizeName('Degenhart Jr,William Warren')), 'Degenhart Jr, William Warren');
+   lastFirst(normalizeName('Fixture Jr,Testcadet Charlie')), 'Fixture Jr, Testcadet Charlie');
 eq('a one-given-name cadet too',
-   lastFirst(normalizeName('Thomas Jr,Issac')), 'Thomas Jr, Issac');
+   lastFirst(normalizeName('Fixture Jr,Testcadet')), 'Fixture Jr, Testcadet');
 eq('an ordinary name is untouched', lastFirst(normalizeName('Doe, Jane M.')), 'Doe, Jane M.');
 eq('a surname that merely ENDS in a suffix letter is not peeled',
    lastFirst('Jane Ivy'), 'Ivy, Jane');
 eq('two tokens are never split, or the surname would vanish',
    lastFirst('Jane Jr'), 'Jr, Jane');
 eq('a trailing period on the suffix is tolerated',
-   lastFirst('John Calvin North Jr.'), 'North Jr., John Calvin');
-eq('splitName reports both halves', splitName('John William Fulkman IV'),
-   { first: 'John William', last: 'Fulkman IV' });
+   lastFirst('Testcadet Delta Fixture Jr.'), 'Fixture Jr., Testcadet Delta');
+eq('splitName reports both halves', splitName('Testcadet Alpha Fixture IV'),
+   { first: 'Testcadet Alpha', last: 'Fixture IV' });
 eq('a lone name is all surname', splitName('Madonna'), { first: '', last: 'Madonna' });
-eq('initials skip the suffix', initials('John William Fulkman IV'), 'JF');
+eq('initials skip the suffix', initials('Testcadet Alpha Fixture IV'), 'TF');
 
 section('emailProblem');
 check('accepts a real address', emailProblem('jane.doe@afacademy.af.edu') === null);

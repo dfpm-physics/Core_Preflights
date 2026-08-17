@@ -276,8 +276,11 @@ output of each verification above.
 - **No DDL.** Schema changes go to me as migration SQL. Two migration chains exist and must not be
   interleaved: `supabase/migrations/` for `public`, `supabase/migrations/app/` for `app`.
   `021_lesson_finalize_and_extensions.sql` is deliberately unapplied — do not apply it.
-- **Student PII and student text stay in the session scratchpad**, never under the repo tree, never
-  in the CHANGELOG.
+- **A student's NAME, and any student-written text, stay in the session scratchpad** — never under
+  the repo tree, never in the CHANGELOG. **Cadet IDs and scores are permitted** and are the right
+  way to identify a record: see
+  [`docs/decisions/STUDENT-DATA-CLASSIFICATION.md`](../decisions/STUDENT-DATA-CLASSIFICATION.md)
+  and CORE.md §3. `python scripts/checks/name_scan.py` is the check.
 - **`CHANGELOG.md`** gets an entry for any shipped feature, fix, schema/data change, or doc edit —
   `## YYYY-MM-DD — <Human> via <Agent>`. Routine grade-and-aggregate runs are the exception: they
   record themselves in `app.analysis_runs` instead.

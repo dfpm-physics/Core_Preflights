@@ -87,7 +87,17 @@ class. `pull` warns about that, but by then you have already spent the run.
    A `[warn]` about cadets holding **two active** enrollments does not fail the check and does not
    block a run — it is the upstream state that strands work when one of the two is later dropped,
    and it wants a human before the next roster import, not before this lesson.
-4. **Announce the scope** before writing anything: course, lesson, day track, section codes, and
+4. **No student name is sitting in a tracked file.** Read-only, stdlib at import, a few seconds:
+   ```
+   python scripts/checks/name_scan.py
+   ```
+   **Exit 1 does not block grading** — the DB write path is unaffected — but the run's own record
+   lands in this repo, so report the hit to the human in the run summary and do not push until it
+   is redacted. Exit 2 means the check could not read the roster and proved nothing; say so rather
+   than reporting clean. Rule and reasoning:
+   [`docs/decisions/STUDENT-DATA-CLASSIFICATION.md`](../../../docs/decisions/STUDENT-DATA-CLASSIFICATION.md)
+   (cadet IDs are permitted; names are not, where an ID suffices).
+5. **Announce the scope** before writing anything: course, lesson, day track, section codes, and
    how many students are in scope.
 
 ## Step 1 — Choose the lesson. The two paths differ here, and the difference matters.
