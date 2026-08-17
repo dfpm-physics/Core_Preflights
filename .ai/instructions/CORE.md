@@ -387,7 +387,7 @@ Notes:
 - **Never write a student's NAME where the cadet ID would carry the same meaning** — in a committed
   file, a URL/query string, or the CHANGELOG. **Cadet IDs and scores are permitted.** *(Determined
   2026-08-17: name + cadet ID + score are **not** treated as PII in this system, per institutional
-  guidance received — citation to be added by the course director. This reversed a blanket no-PII
+  guidance received — citation to be added by Casey, who had the conversation. This reversed a blanket no-PII
   rule that stood here until that date. Reasoning, what it supersedes, and the accept-as-is ruling
   on git history: [`docs/decisions/STUDENT-DATA-CLASSIFICATION.md`](../../docs/decisions/STUDENT-DATA-CLASSIFICATION.md).)*
   The ID is also the better engineering choice — it is the join key, it is unambiguous when two

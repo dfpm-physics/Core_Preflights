@@ -85,7 +85,8 @@ is unknown. Filed in ROADMAP §5 beside the P3.9 visibility question.
 
 The course director determined that **a cadet's name, cadet ID and score are not PII in this
 system**, per institutional guidance received — **the citation for that verification is still
-outstanding and is the director's to add**. Until it lands, the reasoning below rests on an
+outstanding and is Casey's to add — Casey had the institutional conversation**. Until it lands,
+the reasoning below rests on an
 unpublished source, which the decision record says in its own status line.
 
 That closes

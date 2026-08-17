@@ -83,7 +83,7 @@ cadets share a surname, and it does not need re-editing when someone's name chan
 ## 5. Decision
 
 We will treat a cadet's **name, cadet ID and score as not PII in this system**, per institutional
-guidance received (citation to be added by the course director), and enforce a narrower standing
+guidance received (citation to be added by Casey, who had the conversation), and enforce a narrower standing
 rule instead: **a student's name never appears where an ID suffices.**
 
 What stays barred, unchanged and for different reasons:
@@ -152,10 +152,12 @@ and the operator who broke it redacts before committing.
 ## 8. Open questions
 
 - **The citation for the institutional verification is not in this document.** It is recorded here
-  as *per institutional guidance received (citation to be added by the course director)*.
+  as *per institutional guidance received (citation to be added by Casey, who had the conversation)*.
   Until the director supplies it, §5 rests on an unpublished source, and §7's falsifier cannot be
   evaluated against anything — there is nothing to compare a revision to.
-  **This is the one open item that blocks the doc from being complete.** Owner: course director.
+  **This is the one open item that blocks the doc from being complete.** Owner: **Casey** —
+  the institutional conversation was Casey's, so the citation is Casey's to supply
+  (reassigned from the course director 2026-08-17).
 - **Instructor and staff names are unclassified.** `tests/app-schema/test-lesson-due.mjs` used a
   cadet's name as a *staff*-name example, which is how the question surfaced. Nothing here decides
   whether an instructor's name may be committed. Owner: course director.

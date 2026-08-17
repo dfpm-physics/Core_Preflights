@@ -47,7 +47,7 @@ paired with an identity — a Q3 answer, a showcase quote, a reflection — stay
 
 *(Changed 2026-08-17. This section read "No student PII. None." and barred IDs and UUIDs as well.
 Name + cadet ID + score are **not** treated as PII in this system, per institutional guidance
-received — citation to be added by the course director. Reasoning and the ruling on git history:
+received — citation to be added by Casey, who had the conversation. Reasoning and the ruling on git history:
 [`../decisions/STUDENT-DATA-CLASSIFICATION.md`](../decisions/STUDENT-DATA-CLASSIFICATION.md).)*
 
 **Ship the query, not the rows** — unchanged, and it was always the stronger argument. A finding
