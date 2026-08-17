@@ -169,6 +169,12 @@
       // grade is auto-final and has no instructor review to catch a late, early or duplicate
       // submission, so these are enforced BEFORE submit, not after:
       //   pastDue      — the deadline has passed; a report can't be handed in late for credit.
+      //                  ON THE GRADED PATH ONLY. A practice report carries no credit, so refusing
+      //                  it late costs the student nothing and costs the research design the
+      //                  revealed-preference signal that is the reason practice work is stored.
+      //                  submitInteractionReport() draws the same line, and re-reads the deadline
+      //                  at write time — these stops are computed once at load, so a page held
+      //                  open across 2359 is refused there, not here.
       //   alreadyFinal — a finalized grade already exists; the first submitted report is the one
       //                  that counts, so a later one can't overwrite it.
       //   notReleased  — the assignment hasn't opened yet. This is the one stop that cannot be
@@ -177,8 +183,7 @@
       //                  next month's link by a classmate arrives here having never seen the
       //                  lesson listed. Letting that through would auto-grade a lesson the
       //                  release window is explicitly holding back.
-      // (Practice is a separate, softer case handled below — it records but never grades.)
-      const pastDue      = !!item?.isPast;
+      const pastDue      = !!item?.isPast && offered?.gradingRole !== 'practice';
       const alreadyFinal = !!item?.grade?.is_finalized;
       const notReleased  = !!item && item.released === false;
 
@@ -281,7 +286,10 @@
       status.style.display = '';
       if (error) {
         btn.disabled = false; btn.textContent = 'Submit this report';
-        status.textContent = '⚠ Submission failed — ' + (error.message || 'please try again.');
+        // Verbatim, unprefixed. The data layer refuses for reasons that are already sentences to
+        // the student — a closed deadline, an existing finalized grade — and "Submission failed"
+        // in front of one describes an outage rather than a rule.
+        status.textContent = '⚠ ' + (error.message || 'Submission failed — please try again.');
         status.style.color = 'var(--red)';
         return;
       }

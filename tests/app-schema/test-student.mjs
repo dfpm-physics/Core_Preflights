@@ -94,7 +94,10 @@ check('each interaction carries its activity slug', inters.every(i => !!i.slug))
 section('write path: draft -> save -> commit');
 
 // Pick an assignment that has BOTH modalities so the choice/lock rules are exercised.
-const target = items.find(i => i.written && i.interactive) || items.find(i => i.written);
+// Must not be past due: commitSubmission() refuses a late commit (GRACE_MS, schema.js), so a
+// past-due target would fail the write path for a reason this suite is not testing.
+const target = items.find(i => i.written && i.interactive && !i.isPast)
+            || items.find(i => i.written && !i.isPast);
 check('found an assignment to write against', !!target, 'no written activity available');
 
 if (target) {
@@ -151,8 +154,9 @@ if (target) {
   section('lock enforcement (submissions_lock_activity)');
 
   // Needs BOTH activities graded, otherwise the gradable check fires first and the lock
-  // is never reached.
-  const choiceTarget = items.find(i => i.isChoice && i.written && i.interactive);
+  // is never reached. Not past due, or commitSubmission()'s deadline refusal fires before
+  // either trigger this section exists to prove.
+  const choiceTarget = items.find(i => i.isChoice && i.written && i.interactive && !i.isPast);
   if (choiceTarget) {
     const { data: cs } = await ensureSubmission(ctx, choiceTarget.offeringId);
     check('a choice offering starts unlocked', cs.status !== 'committed');

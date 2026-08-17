@@ -518,6 +518,25 @@ export const shapeOfferings = (rows, ctx) =>
   (rows || []).map(shapeOffering).filter(Boolean)
     .map(o => withResolvedDue(o, offeringSections(ctx)));
 
+/* ── The acceptance window ──────────────────────────────────────────────────────────────────
+ * A deadline is enforced with a fixed tolerance: work handed in within GRACE_MS of the deadline
+ * is still accepted, anything past it is refused. The DISPLAYED deadline does not move — 2359 is
+ * what every date on the site shows and what a cadet is told — because an advertised grace period
+ * is simply a later deadline, and would need a grace period of its own.
+ *
+ * FOUR COPIES MUST AGREE. They are in JS, SQL, Python and prose, share no import path, and are
+ * connected by nothing but this comment:
+ *   • this constant — every client-side comparison (effectiveDue().isPast, submissionLateness())
+ *   • the deadline-enforcement migration in supabase/migrations/app/ — the server-side guard.
+ *     NOT YET WRITTEN; it lands later, and until it does the refusal below is a UI rule, in the
+ *     same standing as isReleased() (RLS still accepts a late write from the REST API directly)
+ *   • `.ai/skills/preflight-analyze/SKILL.md` Step 9 — condition 2 of the zeroing rule
+ *   • `scripts/fall2026/zero_non_submitters.py` — the same conditions implemented independently
+ *
+ * A copy that drifts LOW zeroes a cadet for a submission the site had already accepted.
+ */
+export const GRACE_MS = 120000;
+
 /**
  * The deadline that actually applies to one student.
  *
@@ -541,12 +560,18 @@ export const shapeOfferings = (rows, ctx) =>
  * is responsible for not passing a revoked row's date in. Every query that feeds a deadline
  * filters `revoked_at IS NULL`; see EXTENSION_SELECT.
  *
+ * `due` is the REAL deadline and is returned untouched — it is what the site displays, so the
+ * grace must never reach a date a student reads. `isPast` is the enforcement answer instead: it
+ * turns true GRACE_MS after `due`, so every source above gets the same tolerance whichever one
+ * won the precedence.
+ *
  * @param {object} offering  a shapeOffering() result
  * @param {string|null} sectionId
  * @param {string|null} extensionISO  an ACTIVE extension's date, or null
  * @param {Date} [now]  injected so tests are not clock-dependent
  * @returns {{ due: Date|null, isPast: boolean,
  *            source: 'extension'|'section'|'day'|'offering'|'none' }}
+ *          due = the displayed deadline; isPast = due + GRACE_MS is behind us
  */
 export function effectiveDue(offering, sectionId, extensionISO, now = new Date()) {
   let raw = null;
@@ -562,7 +587,7 @@ export function effectiveDue(offering, sectionId, extensionISO, now = new Date()
   if (!raw) return { due: null, isPast: false, source: 'none' };
   const due = new Date(raw);
   if (isNaN(due)) return { due: null, isPast: false, source: 'none' };
-  return { due, isPast: due < now, source };
+  return { due, isPast: (now - due) > GRACE_MS, source };
 }
 
 /**
@@ -581,10 +606,12 @@ export function effectiveDue(offering, sectionId, extensionISO, now = new Date()
  * @param {string|null} sectionId
  * @param {string|null} extensionISO  an ACTIVE extension's date, or null (see effectiveDue)
  * @param {string|null} committedAt   submissions.committed_at
- * @param {number} [graceMs]  tolerance for clock skew; a submission inside it is not late
+ * @param {number} [graceMs]  the acceptance window; a submission inside it is not late. Defaults
+ *   to GRACE_MS — the same tolerance the submit path enforces, because a badge saying "1 min late"
+ *   on a submission the site itself accepted describes the site, not the student.
  * @returns {{ late: boolean, due: Date|null, at: Date|null, ms: number }} ms = how late, if late
  */
-export function submissionLateness(offering, sectionId, extensionISO, committedAt, graceMs = 60000) {
+export function submissionLateness(offering, sectionId, extensionISO, committedAt, graceMs = GRACE_MS) {
   const none = { late: false, due: null, at: null, ms: 0 };
   if (!committedAt) return none;                       // draft — nothing was handed in
   const { due } = effectiveDue(offering, sectionId, extensionISO);

@@ -792,9 +792,12 @@ be reconciled against the percentage they added up to.
 **Write a zero grade for every enrollment that is ALL of:**
 
 1. in the filtered scope, `status = 'active'`;
-2. **past its own effective deadline** — extension → per-section `assignment_due_dates` →
-   offering `due_at`, in that precedence, exactly as `effectiveDue()` resolves it. Compute this per
-   student, not per assignment: an M-day and a T-day section do not come due together;
+2. **past its own effective deadline, plus the 120-second grace** (`GRACE_MS` in
+   `site/js/schema.js`) — extension → per-section `assignment_due_dates` → offering `due_at`, in
+   that precedence, exactly as `effectiveDue()` resolves it. Compute this per student, not per
+   assignment: an M-day and a T-day section do not come due together. The grace is the window the
+   site itself accepts a submission in, so zeroing anyone inside it would zero work the student
+   watched succeed;
 3. holding **no active extension** (`revoked_at IS NULL` and `extended_due_at` still in the
    future). This is the director's exception and the whole reason the rule is not simply "no
    submission by now";

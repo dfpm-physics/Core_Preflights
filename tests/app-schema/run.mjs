@@ -90,13 +90,17 @@ for (const s of OFFLINE) {
 //   test-extension-reopen  imports faculty-grade.js for extensionReopensGrade() — which cases
 //                 granting an extension may take a published grade back down in, and the two it
 //                 must leave alone. The interesting assertions are the negative ones
+//   test-grace   the deadline cutoff and its 120-second acceptance window. Half of it is pure
+//                 schema.js, but the half that matters imports student-data.js behind a RECORDING
+//                 stub — the assertions are about the queries and writes commitSubmission() and
+//                 submitInteractionReport() actually issue, including the ones a refusal must not
 for (const suite of ['test-imports.mjs', 'test-rollup.mjs', 'test-system-prefs.mjs',
                      'test-run-banner.mjs', 'test-help-status.mjs', 'test-prefs.mjs',
                      'test-tasks.mjs', 'test-gradebook.mjs', 'test-grade.mjs', 'test-ei.mjs',
                      'test-dashboard-rows.mjs', 'test-student-detail.mjs', 'test-feedback.mjs',
                      'test-feedback-admin.mjs', 'test-lesson-due.mjs',
                      'test-lesson-isolation.mjs', 'test-student-completion.mjs',
-                     'test-extension-reopen.mjs']) {
+                     'test-extension-reopen.mjs', 'test-grace.mjs']) {
   const r = spawnSync(process.execPath, [resolve(import.meta.dirname, suite)],
                       { encoding: 'utf8' });
   process.stdout.write(r.stdout || '');

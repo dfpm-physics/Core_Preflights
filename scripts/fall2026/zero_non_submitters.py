@@ -21,10 +21,11 @@ WHY THIS EXISTS
 
 WHO GETS A ZERO  (all six, or nothing is written)
     1. active enrollment in the offering
-    2. past its OWN effective deadline — extension -> per-section `assignment_due_dates` ->
-       offering `due_at`, in that precedence. Computed per student: an M-day and a T-day section
-       do not come due together, and zeroing a T-day cadet on Monday would be a lie with a
-       number on it.
+    2. past its OWN effective deadline PLUS THE 120-SECOND GRACE — extension -> per-section
+       `assignment_due_dates` -> offering `due_at`, in that precedence. Computed per student: an
+       M-day and a T-day section do not come due together, and zeroing a T-day cadet on Monday
+       would be a lie with a number on it. The grace is the window the site accepts a submission
+       in (`GRACE_MS`, site/js/schema.js), so a cadet inside it may still be mid-submit.
     3. no ACTIVE extension (`revoked_at IS NULL` and the extended date still in the future).
        The director's exception, and the reason the rule is not simply "no submission by now".
     4. no submitted work — no non-empty written content, AND not committed to the interactive
@@ -73,10 +74,17 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 CONFIG_PATH = os.path.expanduser("~/.claude/skills/preflight-analyze/config.json")
 NO_SUBMISSION_FEEDBACK = "No submission received."
+
+# The acceptance window the site enforces, mirrored here. FOUR COPIES MUST AGREE:
+# `GRACE_MS` in site/js/schema.js (the authority), the deadline-enforcement migration in
+# supabase/migrations/app/ (not yet written), `.ai/skills/preflight-analyze/SKILL.md` Step 9
+# condition 2, and this. Drifting LOW here is the dangerous direction: it writes a zero over a
+# submission the site had already accepted, and a `no_submission` zero looks like any other.
+GRACE = timedelta(milliseconds=120000)
 
 SUPA_URL = SUPA_KEY = None
 READ_HEADERS = WRITE_HEADERS = {}
@@ -183,6 +191,9 @@ def in_list(values):
 
 def effective_due(offering, section_id, extension_iso):
     """extension -> per-section row -> per-day schedule -> offering default.
+
+    Returns the REAL deadline; the grace belongs to the caller's comparison, exactly as schema.js
+    keeps it out of `due` and inside `isPast`.
 
     Mirrors `effectiveDue()` + `resolveDueBySection()` in site/js/schema.js. The per-day fold
     (migration 017) matters: most sections carry no explicit `assignment_due_dates` row and take
@@ -442,9 +453,9 @@ def main():
                 tally["extended"] += 1
                 continue
 
-            # (2) past their own deadline?
+            # (2) past their own deadline, and past the grace the site still accepts inside?
             due = effective_due(o, sec, ext_iso)
-            if due is None or due > now:
+            if due is None or (now - due) <= GRACE:
                 tally["not_due"] += 1
                 continue
 
@@ -526,7 +537,7 @@ def main():
         ("submitted", "submitted work"),
         ("draft_with_content", "drafted real answers, never submitted (graded on what they wrote)"),
         ("interactive", "took the interactive path (auto-graded on commit)"),
-        ("not_due", "not past their own deadline yet"),
+        ("not_due", "not past their own deadline yet, or still inside the grace window"),
         ("extended", "hold an active extension"),
         ("human_graded", "finalized or instructor-authored grade"),
         ("graded", "already have an AI grade for submitted work"),
