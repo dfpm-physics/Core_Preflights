@@ -10,6 +10,55 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-17 — Matthew Recker via Claude
 
+### Finding: a non-submission zero is never revisited, and the rollups count it as real
+
+New finding:
+[`docs/findings/2026-08-17-stale-non-submission-zeros.md`](docs/findings/2026-08-17-stale-non-submission-zeros.md).
+**Nothing was fixed** — the write-up is the deliverable.
+
+PREP accepts a submission forever but grades the roster once, at the deadline. A cadet who submits
+afterwards keeps the `no_submission` zero that run wrote. Verified across three layers that there is
+no deadline enforcement anywhere and that this is deliberate: `commitSubmission()` compares no dates
+(`site/js/student-data.js:348-383`), no RLS policy on `submissions` consults a deadline, and
+`isReleased()` is a floor rather than a window (`site/js/schema.js:691-694`). `submissionLateness()`
+exists precisely so a grader can *see* late work rather than be spared it. **The deadline is a
+grading fact, not a gate, and should stay that way.**
+
+**The part nobody had noticed is downstream.** `grep -c no_submission
+supabase/admin/lesson_aggregate.py` returns **0** — the one component that computes cohort means
+never reads the flag, though `orphaned_submissions.py` and `raise_confirmed_effort.py` both do. So
+those rows fold into section and course effort/understanding means as genuine zeros. Observed on
+phys-110 `preflight-04` M: 8 cadets across 4 of 9 sections, all with real reflection and
+free-response text; the worst-hit section's effort mean read 3.58 against 4.30 for the same section
+before the late work arrived. **The rollup got worse as more students did the work.** Same shape on
+`preflight-03` and on `preflight-04` M — three lessons in one week.
+
+Distinct from the 2026-08-13 orphaned-submission finding, and **its fix does not reach this one**:
+there the work was invisible on a dropped enrollment, so Step 9 condition 6 could refuse the zero.
+Here the work is attached correctly and simply did not exist yet when grading ran.
+
+Two edges recorded for whoever repairs it: one of the eight rows carried **no `no_submission` flag**
+despite an identical all-zero diagnostic, so the detection query keys on `effort = 0` instead; and a
+commit landed against an already-finalized grade, which `PROJECT.md`'s no-overwrite rule may not
+cover — it is documented for the interactive path.
+
+### phys-110 `preflight-04` — M re-aggregated, whole-course scope written
+
+Five M section scopes had gone stale after 11 late M-day submissions, so the 2026-08-17 scheduled
+T-day run withheld `__all__` as `stale-prior`. Re-ran the M-day aggregation only — 9 section and 7
+instructor scopes rewritten from current rows, no T scope and **no `grades` row touched** — and
+`__all__` was written at n=436. `status` now shows nothing stale across all 33 scopes.
+
+At the course director's explicit direction **no re-grade was performed**. That decision rested on
+the premise that a handful of unanalyzed cadets would be *excluded* from the rollup and therefore
+harmless; the finding above establishes that they are instead **counted as zeros**, which is the
+opposite direction of error. The written rollups for both lessons carry the depressed numbers.
+
+Recorded `invoked_by='human'`, which is accurate — it was directed interactively, not scheduler-fired
+— and therefore does not clear the director's banner, since `site/js/run-banner.js:123` filters on
+`invoked_by='scheduled'`. The row was **not** mislabelled to work around that.
+
+
 ### The isolation failure diagnosed: the RLS is fine — the test cadet is enrolled in the live term
 
 Read-only follow-up to the "saw 21 sections" failure below. `sections_read` behaves exactly as
