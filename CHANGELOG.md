@@ -24,6 +24,14 @@ no deadline enforcement anywhere and that this is deliberate: `commitSubmission(
 exists precisely so a grader can *see* late work rather than be spared it. **The deadline is a
 grading fact, not a gate, and should stay that way.**
 
+**Corrected on rebase, same day:** `acb61d0` closed the submission path hours after the finding
+was written, so the "no enforcement" reading is now historical and the finding's §6.1 argued
+against a change that had already shipped. The finding records both, because the shipped answer —
+a 120-second grace inside `effectiveDue()`, so near-misses stay gradable while the open-tab
+loophole closes — is better than the position argued here. **The core defect is untouched:**
+`acb61d0` does not modify `lesson_aggregate.py`, the RLS layer still consults no deadline by that
+commit's own admission (the trigger rides ROADMAP P1.17), and the eight stale zeros still stand.
+
 **The part nobody had noticed is downstream.** `grep -c no_submission
 supabase/admin/lesson_aggregate.py` returns **0** — the one component that computes cohort means
 never reads the flag, though `orphaned_submissions.py` and `raise_confirmed_effort.py` both do. So

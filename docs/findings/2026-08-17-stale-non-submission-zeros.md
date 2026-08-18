@@ -1,14 +1,21 @@
 # A non-submission zero is never revisited when the work arrives, and cohort analytics count it as real
 
-**Status:** Open — awaiting verification
+**Status:** Open — partly superseded within hours of being written; see the update below
 
 *Found 2026-08-17 by Matthew Recker (via Claude) while closing out phys-110 `preflight-04`. Nothing
 was fixed; the M-day re-aggregation described in §7 is the only action taken. See
-[`README.md`](README.md) for what a finding is and the no-PII rule that governs this file.*
+[`README.md`](README.md) for what a finding is and the name rule that governs this file.*
 
 > **No cadet identifiers appear below**, and section codes are omitted wherever a single student
 > would be identifiable in a ~20-person section. §5 carries the detection query, which stays correct
 > as the term moves. The specific records are available from the course director, out of band.
+
+> **UPDATE 2026-08-17, same day.** Commit `acb61d0` **closed the submission path** while this
+> was being written, so §1's "accepts a submission forever" and §6.1 are now historical — read
+> §3 and §6.1 for what changed. **The core defect is untouched:** `acb61d0` does not modify
+> `lesson_aggregate.py`, so §6.2 — the aggregator counting absence-zeros as
+> comprehension-zeros — stands exactly as written, and the eight rows already carrying stale
+> zeros still carry them.
 
 ---
 
@@ -47,8 +54,8 @@ Link 4 is the one nobody had noticed, and it is the reason this is a finding rat
 
 | Layer | What it does | Where |
 |---|---|---|
-| Client commit path | checks only that the activity is gradable and the choice is not already spent — **no date comparison at all** | `site/js/student-data.js:348-383` |
-| RLS | `002_rls.sql` mentions `due` five times, all of them policies **on the `assignment_due_dates` table itself**. No policy on `submissions` consults a deadline | `supabase/migrations/app/002_rls.sql` |
+| Client commit path | ~~no date comparison at all~~ **CLOSED by `acb61d0`, 2026-08-17.** Both commit paths now re-fetch the deadline at submit time and refuse past due + `GRACE_MS` (120 s) | `site/js/student-data.js:348-383` |
+| RLS | `002_rls.sql` mentions `due` five times, all of them policies **on the `assignment_due_dates` table itself**. No policy on `submissions` consults a deadline. **Still true after `acb61d0`**, whose own message says the DB trigger "is NOT here — it needs DDL and rides the next migration batch (ROADMAP P1.17)" — so the new rule is a UI rule, not a security boundary | `supabase/migrations/app/002_rls.sql` |
 | Release window | `isReleased()` returns `at == null \|\| at <= now` — **a floor, not a window.** Once an assignment opens it never closes | `site/js/schema.js:691-694` |
 
 **The system measures lateness rather than preventing it.** `submissionLateness()` and `lateBy()`
@@ -123,11 +130,29 @@ population that needs a human decision rather than a script.
 
 ## 6. Proposed fixes
 
-### 6.1 Do NOT close submissions at the deadline
+### 6.1 Closing the submission path — argued against here, shipped anyway the same day
 
-Stated first because it is the obvious move and it is wrong. Closing would break late work being
-gradable at all, which the lateness helpers exist to support, and the extension mechanism already
-covers the legitimate cases. **The deadline is a grading fact, not a gate — keep it that way.**
+**This section originally said "do NOT close submissions at the deadline."** It was overtaken by
+`acb61d0` within hours, and the shipped answer is better than the one argued for here. Recorded
+rather than deleted, because the reasoning is the part worth keeping.
+
+The argument against closing was that late work is still worth having, that `submissionLateness()`
+exists precisely to support it, and that extensions cover the legitimate cases. What it missed is
+the case `acb61d0` names: **a tab left open across the deadline could commit while a fresh page
+load correctly showed MISSED** — not a considered choice to accept late work, just two views of
+the same rule disagreeing.
+
+The shipped design keeps both properties: a **120-second grace** (`GRACE_MS`, `schema.js`) inside
+`effectiveDue()`'s `isPast`, applied to every deadline source and to both zeroing copies (Step 9
+and `zero_non_submitters.py`), with the due date itself never moving and the saved draft never
+touched. Near-misses stay gradable; the open-tab loophole closes.
+
+**Two things it does NOT fix, and they are why the rest of §6 stands:**
+
+- **It is a UI rule, not a boundary.** No RLS policy consults a deadline, by the commit's own
+  admission, so REST can still write a late commit until P1.17 lands the trigger.
+- **Extensions still deliver work after the zeroing run, legitimately.** The population this
+  finding is about keeps growing, just more slowly — and every row already in it is unchanged.
 
 ### 6.2 Teach the aggregator the flag — smallest change, clearest win
 
@@ -169,7 +194,8 @@ only fix that helps when nobody runs anything.
   unanalyzed students would be *excluded* and therefore harmless. They are not excluded; they are
   **counted as zeros** (§3). The direction of the error is the opposite of what was assumed:
   excluding them would have been harmless, and including them is not.
-- **Nothing in §6 has been implemented.**
+- **§6.1 was implemented by someone else the same day** (`acb61d0`), closing the submission path.
+  **Nothing else in §6 has been implemented**, and 6.2 — the aggregator — is untouched by it.
 - 6.2, 6.3 and 6.5 are ordinary changes. **None of §6 requires DDL.**
 - The already-written rollups for `preflight-03` and `preflight-04` carry the depressed numbers.
   Whether to re-run and overwrite prose a director may already have read is **a human decision.**
