@@ -10,6 +10,39 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-19 — Matthew Recker via Claude
 
+### The Assignments page now shows the Gemini backup, so an instructor can open what the cadet was offered
+
+**The backup existed and faculty had almost no way to reach it.** A cadet locked out of claude.ai by
+a 429 is sent to `site/student/backup.html?i=<slug>`. The only faculty surface that named a backup
+at all was the Artifacts library — a build-side view a director opens deliberately, not the list an
+instructor is already looking at when a cadet says the link did not work.
+
+Each lesson card on `site/faculty/lessons.html` now carries a **Backup** button beside Launch, in
+the left-hand read group and outside the director gate, for the same reason Launch is: opening a
+lesson is not editing it.
+
+**Through the router, never at a build path.** The link is `../student/backup.html?i=<slug>`, which
+is what `student-lessons.js` and `faculty-artifacts.js` already do — which build a slug resolves to
+is allowed to change, and only the router may know it. The page imports `loadBackups()` and
+`backupFor()` from `faculty-artifacts.js` rather than reading `site/data/backup-builds.json` itself,
+so there is still exactly one answer on this site to "where does this slug go".
+
+**Three states, because two would lie.** `loadBackups()` resolves with an `error` rather than
+rejecting, so availability can be genuinely UNKNOWN. A link when a build exists; **nothing** when the
+manifest loaded and this lesson has none, which is ordinary rather than broken — an artifact never
+published on claude.ai has nothing to back up; and a **disabled** button saying so when the manifest
+itself could not be read. Rendering unknown as "none" would have put a confident wrong claim on
+every card at once, which is the failure `loadBackups()`'s error channel exists to prevent. The
+manifest is fetched in parallel with the lessons and cached for the life of the page, so switching
+courses does not refetch it, and a manifest that will not load cannot stop the page rendering.
+
+**Verified in a real browser**, which is the only thing that could check it: four new assertions in
+`tests/browser-harness/lesson-editor.mjs`, signed in as the test faculty against phys-110 Fall 2026 —
+five of 37 cards offer a backup, every link goes through the router, every slug it names is one the
+manifest actually carries, and no lesson without an AI Interaction offers one. `backup.html?i=` was
+followed for one of them and resolves with no page errors and no failed requests.
+`browser-harness/pass.mjs`: 9/9 pages clean. `test-imports.mjs`: all 398 named imports resolve.
+
 ### Proposal: getting an artifact into the library without a clone
 
 `docs/decisions/ARTIFACT-UPLOAD.md`, **status PROPOSED — nothing built.** Written because the

@@ -292,11 +292,16 @@
     import { wireHoldButton } from '../js/hold-button.js';
     import { questionsOf, artifactUrlOf, isArtifactLaunchable } from '../js/schema.js';
     import * as L from '../js/faculty-lessons.js';
+    import { loadBackups, backupFor } from '../js/faculty-artifacts.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
     runPage(ctx, init);
 
     let vm = null, editingId = null, model = null, interactionSlugTouched = false;
+    /* The Gemini backup manifest, for the Backup button on each card. Starts as "unknown"
+     * rather than as "{}", because an empty builds map and a manifest that has not loaded yet
+     * are different claims and only one of them may be shown to a director as "no backup". */
+    let backups = { builds: {}, error: 'not loaded yet' };
     // Set only when saving would REPLACE an existing interactive activity with a different slug.
     let pendingSwap = null;   // { activityId, fromSlug, fromTitle, reports }
     let ragManifest = [];                   // approved RAG reference paths (shared manifest)
@@ -381,7 +386,11 @@
     async function load() {
       const root = document.getElementById('main');
       root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
-      vm = await L.loadManager(ctx);
+      // In parallel with the lessons: loadBackups() caches one promise for the life of the
+      // page, so this costs a single fetch no matter how often the course is switched, and it
+      // resolves rather than rejects — a manifest that will not load must never stop the
+      // Assignments page from rendering.
+      [vm, backups] = await Promise.all([L.loadManager(ctx), loadBackups()]);
 
       const newBtn = isDirector() ? `<button class="btn btn-primary" id="new-btn">+ New assignment</button>` : '';
       const head = `<div class="page-head">
@@ -491,6 +500,33 @@
           : `<button class="btn btn-ghost btn-sm" disabled title="${iurl
                 ? 'This assignment\'s AI Interaction URL is not a web address (must start with http:// or https://) — fix it with Edit.'
                 : 'This assignment\'s AI Interaction has no URL stored — add one with Edit.'}">Launch interaction ↗</button>`;
+      // Beside Launch, for the same audience and outside the director gate for the same reason:
+      // the Gemini BACKUP BUILD is where a cadet is sent when claude.ai turns them away with a 429,
+      // and an instructor fielding "the link didn't work" needs to open the same page the cadet was
+      // offered. Until now the only faculty surface that named a backup at all was the Artifacts
+      // library — a build-side view a director visits deliberately, not the list an instructor is
+      // already looking at when a cadet asks.
+      //
+      // Through the ROUTER (`student/backup.html?i=<slug>`), never at a build path. Which build a
+      // slug resolves to is allowed to change and only the router may know it — the rule
+      // student-lessons.js and faculty-artifacts.js both follow, and the reason this page imports
+      // their helper rather than reading the manifest itself.
+      //
+      // THREE states, and the third is why this is not a one-liner. `loadBackups()` resolves with
+      // an `error` instead of rejecting, so availability can be UNKNOWN, and rendering unknown as
+      // "none" would put a confident wrong claim on every card at once. So: a link when a build
+      // exists, NOTHING when the manifest loaded and this slug has none (an artifact never
+      // published on claude.ai has nothing to back up, which is ordinary rather than broken), and
+      // a disabled button that says so when the manifest itself could not be read.
+      const bkSlug = l.interactive?.slug || '';
+      const bk = (bkSlug && !backups.error) ? backupFor(backups, bkSlug) : null;
+      const backup = !l.interactive ? ''
+        : bk
+          ? `<a class="btn btn-ghost btn-sm" href="${esc(bk.router)}" target="_blank" rel="noopener"
+                title="Open the Gemini backup build — the same page a cadet is sent to when claude.ai turns them away">Backup ↗</a>`
+          : backups.error
+            ? `<button class="btn btn-ghost btn-sm" disabled title="The backup list could not be read (${esc(backups.error)}), so whether this lesson has a backup build is unknown.">Backup ↗</button>`
+            : '';
       const manage = isDirector() ? `
         <button class="btn btn-ghost btn-sm" data-edit="${esc(l.offeringId)}">Edit</button>
         <button class="btn btn-ghost btn-sm" data-pub="${esc(l.offeringId)}">${l.isPublished ? 'Unpublish' : 'Publish'}</button>
@@ -509,7 +545,7 @@
             </div>
           </div>
         </div>
-        <div class="row wrap" style="gap:8px;margin-top:14px;align-items:center">${grade}${rollup}${preview}${launch}<span class="grow"></span>${manage}</div>
+        <div class="row wrap" style="gap:8px;margin-top:14px;align-items:center">${grade}${rollup}${preview}${launch}${backup}<span class="grow"></span>${manage}</div>
       </div>`;
     }
 
