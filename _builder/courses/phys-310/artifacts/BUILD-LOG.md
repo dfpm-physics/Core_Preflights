@@ -44,7 +44,7 @@ publication is a republish and a *new lesson row* under contract §3.2, not an e
 moment to catch a reconstruction error is before any of these is published.**
 
 > **Lesson 6 (Lab 1) is the exception, and it is worth reading as a demonstration rather than an
-> escape.** On 2026-08-18 recker put the cadet's actual lab write-up and analysis workbook into the
+> escape.** On 2026-08-19 recker put the cadet's actual lab write-up and analysis workbook into the
 > repository, and that lesson was rebuilt against them. It is the only artifact in this course whose
 > Tier-1 grounding is a primary document. **What the comparison showed is the argument for the other
 > fifteen reviews:** the corpus's §3.5 entry, which flagged itself as the weakest in chapters 2–5,
@@ -58,11 +58,11 @@ moment to catch a reconstruction error is before any of these is published.**
 
 | | lessons |
 |---|---|
-| **Built** | **all seventeen.** 2 (published 2026-07-31), plus **3, 4, 6, 8, 9, 10, 13, 14, 15, 18, 19, 24, 25, 26, 31, 32 — all sixteen built 2026-08-05**, one subagent at a time. **Lesson 6 (Lab 1) was REBUILT 2026-08-18** against the real lab documents |
+| **Built** | **all seventeen.** 2 (published 2026-07-31), plus **3, 4, 6, 8, 9, 10, 13, 14, 15, 18, 19, 24, 25, 26, 31, 32 — all sixteen built 2026-08-05**, one subagent at a time. **Lesson 6 (Lab 1) was REBUILT 2026-08-19** against the real lab documents |
 | **Queued** | **nothing. The queue is empty** — every PHYS 310 lesson that has a Murray reading now has an artifact |
 | **Blocked — no reading assigned** | **1** (Admin Overview — the reading is the syllabus), **16** (Lab 2), **20** (Lab 3). All three are `PF = Y` in the schedule, so none is a deliberate skip. Blocked on recker to say what they should cover, or to mark them `PF = N` |
 | **Not a preflight** | 5, 7, 11, 12, 17, 21, 22, 23, 27, 28, 29, 30, 33–41 — lectures, field trips, Graded Reviews, case-study days, the final |
-| **Published** | **3 of 17.** Lessons 2, 3 and 4. All three were REPUBLISHED on 2026-08-14 carrying the backup-version button, and their `artifact_url` repointed the same day. *(This row said "1 of 17, lesson 2 only" until 2026-08-14: lessons 3 and 4 had been published and registered in the database, and nothing updated this log. `index.json` is DERIVED from this file, so the staleness propagated into Storage on the next push.)* |
+| **Published** | **4 of 17.** Lessons 2, 3, 4 and **6 (Lab 1, published 2026-08-19)**. The first three were REPUBLISHED on 2026-08-14 carrying the backup-version button, and their `artifact_url` repointed the same day. *(This row said "1 of 17, lesson 2 only" until 2026-08-14: lessons 3 and 4 had been published and registered in the database, and nothing updated this log. `index.json` is DERIVED from this file, so the staleness propagated into Storage on the next push.)* |
 | **Registered on the DFPM site** | **none.** Not one lesson row exists for this course, and `course_id: phys-310` has never been confirmed to exist on the receiver at all |
 
 **Seventeen lessons in this course can hold a preflight**, not twenty. The schedule marks twenty
@@ -271,7 +271,7 @@ a tutor note forbidding it from being presented as a claim about which decays ha
 
 ### Lesson 6 — Lab 1: Measurement of Half-Life
 
-> **REBUILT 2026-08-18, and it is the only artifact in this course grounded in a primary source.**
+> **REBUILT 2026-08-19, and it is the only artifact in this course grounded in a primary source.**
 > recker added the cadet's actual Lab 1 write-up and the analysis workbook to the repository that
 > day; both now live in [`../labs/lab-1/`](../labs/lab-1/) and are described in
 > [`../labs/README.md`](../labs/README.md). The 2026-08-05 build below the fold was grounded in
@@ -285,15 +285,16 @@ a tutor note forbidding it from being presented as a claim about which decays ha
 |---|---|
 | **File** | [`phys310_preflight_lab_1_measurement_of_half_life.jsx`](phys310_preflight_lab_1_measurement_of_half_life.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-lab-1-measurement-of-half-life-11c49dbc` |
-| **Published** | not published |
+| **Published** | 2026-08-19 — https://claude.ai/public/artifacts/986bfbc8-3b7c-48d9-92db-19c4370064d6 |
 | **Component** | `Phys310Lab1MeasurementOfHalfLifePreflight` |
-| **Built** | 2026-08-05 · **rebuilt 2026-08-18** · 2327 lines |
+| **Built** | 2026-08-05 · **rebuilt 2026-08-19** · 2327 lines |
 | **Grounding** | **PRIMARY:** `labs/lab-1/Lab1_Alt.pdf` (the graded write-up, 6 pp., 35 pts) and `labs/lab-1/Phys310 - Lab 1 - Analysis (2024).xlsx` (cell formulas read directly). **SECONDARY, tagged `[CORPUS]` in the reference:** §3.5 for σ=√N and background, §10.4 + §11.1 for ALARA, §3.3/§3.4 carried forward as the decay law |
 | **Cross-check** | none needed for the primary material — it *is* the source. DOE NP-01 covers counting statistics; not consulted |
 | **Cadets' reading** | their own Lab 1 write-up, plus Murray & Holbert 3.5 per the schedule |
 | **Probe topics** | 3 · ~3 active min each · ~10 min |
 | **Checks** | `check_artifact.py` 37 passed / 0 failed. LF throughout, 0 NUL. Diff against the pre-rebuild file is confined to the header comment, `INTERACTION_ID`, `OBJECTIVE_KEYS`, and the three content blocks — the component logic was not touched |
-| **Status** | **DRAFT** — not reviewed, not published, not registered |
+| **Backup build** | `site/gemini/phys-310/phys310-lab-1-measurement-of-half-life-11c49dbc.html`, built 2026-08-19, rendered 7/7 in headless Chrome |
+| **Status** | **PUBLISHED 2026-08-19.** Objectives not yet reviewed. Registration on the DFPM site not confirmed — publishing is not registering, and until a lesson row carries this slug no cadet can reach it |
 
 | # | key | label |
 |---|---|---|
@@ -342,7 +343,7 @@ against 0.05, and why two-thirds of nine points is 6 (challenging) · E **ALARA 
 > the lab to match the textbook**.
 
 > **⚠ ALARA IS AHEAD OF THE READING, on instruction, and the artifact says so to the tutor.**
-> recker asked on 2026-08-18 for one objective to be ALARA basics. It maps cleanly onto discussion
+> recker asked on 2026-08-19 for one objective to be ALARA basics. It maps cleanly onto discussion
 > question 6 (*the 3 main methods for decreasing exposure, and which we used in this lab*), and the
 > cadet is about to handle a source — but **radiation protection is lesson 14 and lesson 15
 > material, and this is lesson 6.** The corpus supplies the physics (§10.4 ALARA-below-the-limits,

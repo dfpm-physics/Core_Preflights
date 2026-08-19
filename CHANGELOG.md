@@ -8,7 +8,39 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
-## 2026-08-18 — Matthew Recker via Claude
+## 2026-08-19 — Matthew Recker via Claude
+
+### Two corrections to the entries above, made the same day
+
+**The date was wrong on all of it.** This session's work was stamped `2026-08-18`; it is
+`2026-08-19`. Corrected in 18 places across the CHANGELOG headings, `DOC-SOURCES.json` (two
+`reviewed` dates and `updated`), `BUILD-LOG.md`, `labs/README.md`, the Lab 1 artifact header and
+`sync_artifacts.py`. Every occurrence was introduced by this session — verified with `git log -S`
+before a blanket replace — so no older record was touched. It is not cosmetic: `reviewed` dates
+gate `check_doc_sources.py`, and a date behind its source keeps a document flagged forever. The
+three commits already pushed carry the wrong date in their *messages*, which is not rewritable and
+is left alone.
+
+**A push silently dropped the published URL, and the tool is working as designed.** `index.json`
+is DERIVED from `BUILD-LOG.md`, while the Artifacts page's Register panel writes `published_url`
+straight into the *Storage* copy. So after recker published Lab 1 and registered the URL through
+the site, the next `push` regenerated the index from a `BUILD-LOG.md` that still read *"not
+published"* and overwrote it. Nothing errored, and the row simply lost its URL.
+
+Recovered from the local pull, then fixed at the source: `BUILD-LOG.md` now carries
+`2026-08-19 — https://claude.ai/public/artifacts/986bfbc8-…`, the status summary reads **4 of 17
+published**, and the Lab 1 row's status is `PUBLISHED 2026-08-19` with registration explicitly
+unconfirmed. Re-pushed and verified by round trip: `pull` from Storage returns the URL and four
+published rows.
+
+**This is the same hazard that log's own header warns about** — *"the published URL lives nowhere
+else in this repository, it is not derivable from the source"* — and it is worth stating as a rule:
+**after anyone registers a published URL through the site, record it in `BUILD-LOG.md` before the
+next push, or the push will take it away.** The 2026-08-14 entry noted the reverse direction of the
+same coupling, where a stale log propagated into Storage.
+
+The Lab 1 Gemini build was regenerated on the corrected artifact and re-rendered: 7 passed,
+0 failed.
 
 ### The claude-in-claude auth warning inverts under the Gemini port, and now says so
 
@@ -41,7 +73,7 @@ trap in it.
 DB-credentialed machine, and `--as-staff` made that unnecessary: the push ran from the build
 machine, and the library now serves the rebuild. Its two open riders are NOT closed and are
 recorded here instead — CORE.md §1 still claims the repo "sits inside OneDrive" (false for the
-build machine, verified 2026-08-18), and CORE.md §3's config table still presents the
+build machine, verified 2026-08-19), and CORE.md §3's config table still presents the
 service-role key as the only way in, with no mention of `--as-staff`. Both are documentation
 corrections awaiting a pass over CORE.md.
 
@@ -98,7 +130,7 @@ separate unit of work rather than a rider on this one.
 
 ---
 
-## 2026-08-18 — Matthew Recker via Claude
+## 2026-08-19 — Matthew Recker via Claude
 
 ### PHYS 310 Lab 1 rebuilt against the real lab documents, and ALARA added as an objective
 

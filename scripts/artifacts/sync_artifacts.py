@@ -91,7 +91,7 @@ class Unusable(Exception):
 # WHY THIS EXISTS. This tool read a service-role key from CONFIG_PATH and nothing else, and
 # that key is deliberately NOT on every operating machine any more — scoped access replaced
 # it. Two pushes have now needed the same workaround: the 2026-08-14 backup-button
-# republish and the 2026-08-18 PHYS 310 Lab 1 rebuild. Both swapped the request function for
+# republish and the 2026-08-19 PHYS 310 Lab 1 rebuild. Both swapped the request function for
 # one carrying a staff session and let every other line of this tool run unchanged. Two
 # incidents of one monkeypatch is the argument for a committed flag.
 #

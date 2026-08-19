@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-08-18",
+  "updated": "2026-08-19",
   "_comment": [
     "Dependency index for documents that MUST STAY CURRENT. Each entry names the authoritative",
     "sources a document was derived from, and the date it was last checked against them.",
@@ -294,12 +294,12 @@
       "doc": "_builder/courses/phys-310/labs/README.md",
       "kind": "reference",
       "tier": null,
-      "reviewed": "2026-08-18",
+      "reviewed": "2026-08-19",
       "sources": [
         "_builder/courses/phys-310/labs/lab-1/Lab1_Alt.pdf",
         "_builder/courses/phys-310/labs/lab-1/Phys310 - Lab 1 - Analysis (2024).xlsx"
       ],
-      "note": "A transcription of what the Lab 1 analysis workbook COMPUTES -- the cell addresses and formulas behind net activity, the per-point uncertainty, the anchored manual fit, the reduced chi-square, and the regression block -- written so the next operator does not have to unzip an xlsx to ground a lesson in it. Registered the day the lab documents entered the repo (2026-08-18) and the Lab 1 artifact was rebuilt against them, because the transcription is load-bearing in the way this repo already knows it can go wrong: the artifact's TEXTBOOK_REFERENCE now states the workbook's uncertainty as a LINEAR SUM of the source and background terms, which is what cell D13 does and is NOT quadrature. The previous build asserted quadrature, from a reconstructed textbook section rather than from the sheet, and would have had a cadet arguing with the spreadsheet in front of them. If the workbook is revised, that claim and the reduced-chi-square/two-thirds pair are the first things to re-read. BOTH sources are binary, so the checker can only compare mtimes -- enough, because any revision to either warrants re-reading the cells."
+      "note": "A transcription of what the Lab 1 analysis workbook COMPUTES -- the cell addresses and formulas behind net activity, the per-point uncertainty, the anchored manual fit, the reduced chi-square, and the regression block -- written so the next operator does not have to unzip an xlsx to ground a lesson in it. Registered the day the lab documents entered the repo (2026-08-19) and the Lab 1 artifact was rebuilt against them, because the transcription is load-bearing in the way this repo already knows it can go wrong: the artifact's TEXTBOOK_REFERENCE now states the workbook's uncertainty as a LINEAR SUM of the source and background terms, which is what cell D13 does and is NOT quadrature. The previous build asserted quadrature, from a reconstructed textbook section rather than from the sheet, and would have had a cadet arguing with the spreadsheet in front of them. If the workbook is revised, that claim and the reduced-chi-square/two-thirds pair are the first things to re-read. BOTH sources are binary, so the checker can only compare mtimes -- enough, because any revision to either warrants re-reading the cells."
     },
     {
       "doc": "_builder/courses/phys-310/phys310_fall2026_schedule.md",
@@ -405,7 +405,7 @@
       "doc": ".ai/skills/gemini-port/SKILL.md",
       "kind": "skill",
       "tier": "internal",
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-19",
       "sources": [
         ".ai/instructions/CORE.md",
         "scripts/artifacts/to_gemini.py",

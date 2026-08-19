@@ -7,7 +7,7 @@ course director, so where the two disagree, **these win**.
 
 | lab | folder | lesson | built |
 |---|---|---:|---|
-| Lab 1 — Measurement of Half-Life | [`lab-1/`](lab-1/) | 6 | yes — rebuilt 2026-08-18 against these files |
+| Lab 1 — Measurement of Half-Life | [`lab-1/`](lab-1/) | 6 | yes — rebuilt 2026-08-19 against these files |
 | Lab 2 | — | 16 | blocked: no write-up, no reading |
 | Lab 3 | — | 20 | blocked: no write-up, no reading |
 
@@ -23,7 +23,7 @@ cadet will actually be holding.
 
 | file | what it is |
 |---|---|
-| `Lab1_Alt.pdf` | the graded write-up, 6 pages, 35 points. Added to the repo 2026-08-18 |
+| `Lab1_Alt.pdf` | the graded write-up, 6 pages, 35 points. Added to the repo 2026-08-19 |
 | `Phys310 - Lab 1 - Analysis (2024).xlsx` | the analysis workbook the write-up's §III tells cadets to open |
 
 **Filenames are kept exactly as issued.** `Alt` is the course's marker, not ours, and a rename would
