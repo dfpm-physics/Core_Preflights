@@ -37,6 +37,14 @@ like an artifact that legitimately lacks the block. Caught by checking the bytes
 trusting the transform log. Any future anchor written against factory comment art has the same
 trap in it.
 
+**ROADMAP P1.18 removed, because it is done.** It existed only to hand the Storage push to a
+DB-credentialed machine, and `--as-staff` made that unnecessary: the push ran from the build
+machine, and the library now serves the rebuild. Its two open riders are NOT closed and are
+recorded here instead — CORE.md §1 still claims the repo "sits inside OneDrive" (false for the
+build machine, verified 2026-08-18), and CORE.md §3's config table still presents the
+service-role key as the only way in, with no mention of `--as-staff`. Both are documentation
+corrections awaiting a pass over CORE.md.
+
 ### PHYS 310 Lab 1: Gemini backup build, and a browser check for backup builds generally
 
 recker published the rebuilt Lab 1 artifact on claude.ai and recorded its URL through the
