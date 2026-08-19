@@ -343,7 +343,7 @@
       "doc": "docs/operations/PUBLISH-ARTIFACT.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-14",
+      "reviewed": "2026-08-19",
       "sources": [
         "_builder/preflight-kit/contracts/INTERACTION-DATA-CONTRACT.md",
         "_builder/preflight-kit/skill/preflight-factory-v2/SKILL.md",

@@ -137,11 +137,43 @@ class Porter:
         self.log.append(f"{why} ({'removed' if n else 'not present'})")
 
     def grab(self, name: bytes, blob: bytes = None) -> bytes:
-        m = re.search(rb"const " + name + rb" = String\.raw`(.*?)`;",
-                      self.src if blob is None else blob, re.S)
+        r"""One grounding constant's body, from either declaration form.
+
+        TWO FORMS EXIST IN THIS PROJECT, and they are not always interchangeable.
+        The preflight-kit emits String.raw`...`, which processes no escapes. PHYS 110's five
+        artifacts were built outside the kit and use a plain template literal `...`, which DOES
+        process `\n`, `\u`, and `${...}` -- so the same bytes can mean two different things
+        depending on which keyword precedes them.
+
+        For content carrying neither escapes nor interpolation the two are byte-identical, and
+        all four PHYS 110 grounding blocks are of that kind (verified 2026-08-19: 0 and 0 across
+        all five artifacts). That is the ONLY case this accepts.
+
+        When a plain literal does carry either, the forms genuinely differ and copying the source
+        text into a build that treats it as raw would silently change the tutor's grounding. This
+        REFUSES there rather than warning, which is the rule the whole port is written to
+        (see the module header): everything the cohort rollup depends on is byte-identical to the
+        published build, or nothing is written at all.
+        """
+        src = self.src if blob is None else blob
+        m = re.search(rb"const " + name + rb" = String\.raw`(.*?)`;", src, re.S)
+        if m:
+            return m.group(1)
+
+        m = re.search(rb"const " + name + rb" = `(.*?)`;", src, re.S)
         if not m:
             raise SystemExit(f"could not locate {name.decode()}")
-        return m.group(1)
+        body = m.group(1)
+        if b"${" in body:
+            raise SystemExit(
+                f"{name.decode()} is a plain template literal containing ${{...}} interpolation. "
+                "Its text is computed at runtime, so it cannot be copied as raw grounding.")
+        if re.search(rb"\\[nrtu\\]", body):
+            raise SystemExit(
+                f"{name.decode()} is a plain template literal containing backslash escapes. "
+                "String.raw would not process them and this literal does, so the two forms are "
+                "not equivalent here -- porting it would change the grounding.")
+        return body
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -158,7 +190,13 @@ def port(src: bytes, slug: str, verbose: bool = False):
         raise SystemExit("no `export default function` - not a preflight artifact")
     component = m.group(1).decode()
 
-    m = re.search(rb'const INTERACTION_ID = "([^"]+)";', src)
+    # Whitespace-tolerant. This was the THIRD copy of this pattern in scripts/artifacts/ and the
+    # second one that required the value on the same line as the keyword -- so PHYS 110's builds,
+    # which wrap it, failed here claiming the slug did not match when it did. artifact_parse.RE_ID
+    # was always tolerant; check_artifact.py was fixed the same day. All three now agree, and any
+    # fourth copy must too: this string is the lesson's identity and a false negative on it stops
+    # a backup build that should exist.
+    m = re.search(rb'^const INTERACTION_ID\s*=\s*"([^"]+)"', src, re.M)
     if not m or m.group(1).decode() != slug:
         raise SystemExit(f"INTERACTION_ID does not match slug {slug}")
 

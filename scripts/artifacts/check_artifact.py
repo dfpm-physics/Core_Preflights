@@ -121,7 +121,21 @@ def main():
     # instead of the contract produces a suffix-less slug that looks correct.**
     # That is why this is checked mechanically rather than left to whoever reads
     # which file first.
-    m = re.search(r'const INTERACTION_ID = "([^"]*)";', src)
+    # Whitespace-tolerant, and it has to be. A declaration wrapped onto its own line --
+    #     const INTERACTION_ID =
+    #       "lesson-08-intro-to-newtons-laws-9667eba1";
+    # is how PHYS 110's builds write it, and the same-line-only pattern used here until
+    # 2026-08-19 matched NOTHING there and reported the slug as '' on five artifacts whose
+    # slugs were in fact correct and registered.
+    #
+    # A checker that reports the identity string as EMPTY when it is present is worse than one
+    # that does not check it at all: the defect this line exists to catch is a suffix-less slug,
+    # and a reader who has learned that this line cries wolf will not look at the next one.
+    #
+    # artifact_parse.RE_ID has always been the tolerant version, so the two disagreed about the
+    # single most load-bearing string in the file -- one of them silently. They now agree, and
+    # they must keep agreeing.
+    m = re.search(r'^const INTERACTION_ID\s*=\s*"([^"]*)"', src, re.M)
     slug = m.group(1) if m else ""
     check(bool(re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*-[0-9a-f]{8}", slug)),
           "INTERACTION_ID is <stem>-<8 hex> per contract §3.2 (%r)" % slug)

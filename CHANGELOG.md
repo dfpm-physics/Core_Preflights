@@ -10,6 +10,58 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-19 — Matthew Recker via Claude
 
+### PHYS 110's five artifacts are in the library; their Gemini backups are blocked on a second artifact dialect
+
+**The sources arrived and are uploaded.** All five `.jsx` were verified before anything moved:
+every `INTERACTION_ID` matches a registered `activities.slug` in the live database, no file is
+missing, no NUL bytes. Copied by bytes and sha256-compared in transit, then round-tripped out of
+Storage and compared again — **5 identical, 0 mismatched**. The library went from 47 sources to 52.
+
+`BUILD-LOG.md` was written from what could be **sourced**, not reconstructed. The five published
+URLs come from `activities.content.artifact_url`; the dates are `activities.created_at`, which is
+the REGISTRATION date and an upper bound on publication, and the file says so rather than
+presenting a guess as a record. Grounding sections, cross-checks and pacing are left absent,
+because nobody here observed those builds and a plausible reconstruction would read exactly like
+PHYS 215's real ones.
+
+**Three tools carried their own copy of the `INTERACTION_ID` regex and two of them were wrong.**
+These builds wrap the declaration onto a second line:
+
+    const INTERACTION_ID =
+      "lesson-08-intro-to-newtons-laws-9667eba1";
+
+`artifact_parse.RE_ID` was always whitespace-tolerant and read it correctly. `check_artifact.py`
+required the value on the same line and reported the slug as `''` on all five — **an artifact whose
+identity string is present and correct, reported as empty.** `to_gemini.py` required the same and
+refused the port claiming the slug did not match, when it did. Both now match `artifact_parse`'s
+pattern. A checker that cries wolf on the most load-bearing string in the file is worse than one
+that does not check it, because the defect it exists to catch — a suffix-less slug — is then in the
+same column a reader has learned to ignore.
+
+**`to_gemini.py` also learned the plain-template-literal form, with a guard rather than a
+loosening.** PHYS 215 and PHYS 310 emit `String.raw` for the four grounding blocks; PHYS 110 emits
+a plain `` ` `` literal. Those are equivalent **only** for content carrying no `${...}` and no
+backslash escapes — verified as 0 and 0 across all four blocks of all five artifacts before the
+change. Where a plain literal does carry either, `grab()` now **refuses**, because the two forms
+then mean different bytes and the port would silently alter the tutor's grounding.
+
+**The backups are still not built, and this is where it stops.** After those fixes the port reaches
+its first transform and fails: `MODEL_CANDIDATES` is followed by a blank line in PHYS 215 and is not
+in PHYS 110. That is not one more regex — `to_gemini.py` is **19 byte-exact transforms**, each
+asserting it matched exactly once, and each written against the preflight-kit's output. PHYS 110's
+artifacts were built outside the kit and are a different dialect throughout. Adapting all nineteen
+is a rewrite of the porter, and every one of them is a safety assertion on a page cadets will use —
+so it is a decision to take deliberately, not nineteen judgement calls made in a row while trying
+to finish. **Put to the course director rather than pressed through.**
+
+Regression checked before stopping: PHYS 215 lesson 8 and PHYS 310 radioactivity both still port
+**unchanged** — byte-identical to their existing builds — so the three fixes cost the working
+courses nothing.
+
+**Net effect for cadets today: nothing yet.** The five PHYS 110 lessons are reviewable and their
+sources are safe, but a throttled PHYS 110 cadet still has nowhere to go. `preflight-07` is due
+2026-08-24.
+
 ### A course could not join the artifact library without a developer, and PHYS 110 was stuck outside it
 
 **PHYS 110 has five published interactive lessons and no library shelf.** They were built outside
