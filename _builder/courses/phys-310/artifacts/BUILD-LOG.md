@@ -19,7 +19,7 @@ pointer from a lesson back to the exact build a cadet is running.
 
 ## ⚠ Read this before trusting anything below
 
-**Sixteen of the seventeen artifacts in this log were built against grounding that no human has
+**Fifteen of the seventeen artifacts in this log rest entirely on grounding that no human has
 reviewed.** That is not an oversight; it is an instruction:
 
 > *"Assume the grounding for 310 is correct and we can fix objectives and grounding later if we need
@@ -37,11 +37,20 @@ and scoped to PHYS 310 alone. Lifting the gate granted **permission to build on 
 It did not make the reconstruction right.** The status lines were deliberately left at `PENDING`, so
 the corpus still reports honestly which sections a human has read against the physical book: three.
 
-**So the review is still owed, and it is owed against these sixteen drafts.** Every row below carries
+**So the review is still owed, and it is owed against these fifteen drafts.** Every row below carries
 a `Grounding` line naming the exact corpus sections it rests on. When recker reviews a section and
 finds it wrong, the artifact built from it does **not** update itself — and correcting one after
 publication is a republish and a *new lesson row* under contract §3.2, not an edit. **The cheapest
 moment to catch a reconstruction error is before any of these is published.**
+
+> **Lesson 6 (Lab 1) is the exception, and it is worth reading as a demonstration rather than an
+> escape.** On 2026-08-18 recker put the cadet's actual lab write-up and analysis workbook into the
+> repository, and that lesson was rebuilt against them. It is the only artifact in this course whose
+> Tier-1 grounding is a primary document. **What the comparison showed is the argument for the other
+> fifteen reviews:** the corpus's §3.5 entry, which flagged itself as the weakest in chapters 2–5,
+> was thematically close and specifically wrong — two of three probe topics rested on material that
+> appears nowhere in the lab, and most of what the cadet is graded on was missing. **The corpus's
+> self-flagging worked. Nothing else caught it, and nothing else would have.**
 
 ---
 
@@ -49,7 +58,7 @@ moment to catch a reconstruction error is before any of these is published.**
 
 | | lessons |
 |---|---|
-| **Built** | **all seventeen.** 2 (published 2026-07-31), plus **3, 4, 6, 8, 9, 10, 13, 14, 15, 18, 19, 24, 25, 26, 31, 32 — all sixteen built 2026-08-05**, one subagent at a time |
+| **Built** | **all seventeen.** 2 (published 2026-07-31), plus **3, 4, 6, 8, 9, 10, 13, 14, 15, 18, 19, 24, 25, 26, 31, 32 — all sixteen built 2026-08-05**, one subagent at a time. **Lesson 6 (Lab 1) was REBUILT 2026-08-18** against the real lab documents |
 | **Queued** | **nothing. The queue is empty** — every PHYS 310 lesson that has a Murray reading now has an artifact |
 | **Blocked — no reading assigned** | **1** (Admin Overview — the reading is the syllabus), **16** (Lab 2), **20** (Lab 3). All three are `PF = Y` in the schedule, so none is a deliberate skip. Blocked on recker to say what they should cover, or to mark them `PF = N` |
 | **Not a preflight** | 5, 7, 11, 12, 17, 21, 22, 23, 27, 28, 29, 30, 33–41 — lectures, field trips, Graded Reviews, case-study days, the final |
@@ -262,74 +271,116 @@ a tutor note forbidding it from being presented as a claim about which decays ha
 
 ### Lesson 6 — Lab 1: Measurement of Half-Life
 
+> **REBUILT 2026-08-18, and it is the only artifact in this course grounded in a primary source.**
+> recker added the cadet's actual Lab 1 write-up and the analysis workbook to the repository that
+> day; both now live in [`../labs/lab-1/`](../labs/lab-1/) and are described in
+> [`../labs/README.md`](../labs/README.md). The 2026-08-05 build below the fold was grounded in
+> corpus §3.5 alone — **the entry the corpus flags as its own weakest in chapters 2–5** — and
+> against the real documents that section turned out to be *thematically close and specifically
+> wrong*. **This entry describes the rebuild.** The old build's slug was
+> `phys310-lab-1-measurement-of-half-life-1f096984`; it was never published and never registered, so
+> nothing points at it.
+
 | | |
 |---|---|
 | **File** | [`phys310_preflight_lab_1_measurement_of_half_life.jsx`](phys310_preflight_lab_1_measurement_of_half_life.jsx) |
-| **Registration slug** (`#i=` / `id=`) | `phys310-lab-1-measurement-of-half-life-1f096984` |
+| **Registration slug** (`#i=` / `id=`) | `phys310-lab-1-measurement-of-half-life-11c49dbc` |
 | **Published** | not published |
 | **Component** | `Phys310Lab1MeasurementOfHalfLifePreflight` |
-| **Built** | 2026-08-05 · 2115 lines |
-| **Grounding** | Murray corpus **§3.5** Measurement of Half-Life — `STATUS: PENDING`, and **the corpus flags it as its own weakest entry in chapters 2–5**. Decay law carried forward from §3.3/§3.4 as a tool, marked do-not-re-probe |
-| **Cross-check** | DOE NP-01 covers counting statistics and dead time in its detector material; not consulted directly |
-| **Cadets' reading** | Murray & Holbert 3.5 |
+| **Built** | 2026-08-05 · **rebuilt 2026-08-18** · 2327 lines |
+| **Grounding** | **PRIMARY:** `labs/lab-1/Lab1_Alt.pdf` (the graded write-up, 6 pp., 35 pts) and `labs/lab-1/Phys310 - Lab 1 - Analysis (2024).xlsx` (cell formulas read directly). **SECONDARY, tagged `[CORPUS]` in the reference:** §3.5 for σ=√N and background, §10.4 + §11.1 for ALARA, §3.3/§3.4 carried forward as the decay law |
+| **Cross-check** | none needed for the primary material — it *is* the source. DOE NP-01 covers counting statistics; not consulted |
+| **Cadets' reading** | their own Lab 1 write-up, plus Murray & Holbert 3.5 per the schedule |
 | **Probe topics** | 3 · ~3 active min each · ~10 min |
-| **Checks** | `check_artifact.py` 41 passed / 0 failed (37 base + 4 `--forbid` guards). Re-verified independently: 37/37, LF, 0 NUL |
+| **Checks** | `check_artifact.py` 37 passed / 0 failed. LF throughout, 0 NUL. Diff against the pre-rebuild file is confined to the header comment, `INTERACTION_ID`, `OBJECTIVE_KEYS`, and the three content blocks — the component logic was not touched |
 | **Status** | **DRAFT** — not reviewed, not published, not registered |
 
 | # | key | label |
 |---|---|---|
-| 1 | `semilog-slope-to-half-life` | Reads λ and t½ off a semi-log slope; knows when A/N is required |
-| 2 | `counting-statistics-precision` | Uses σ = √N and 1/√N to plan how long to count |
-| 3 | `bent-curve-background-deadtime` | Diagnoses a bent decay curve: background, dead time, or a contaminant |
+| 1 | `semilog-linearization-and-fit` | Linearizes the decay law; reads λ, t½ **and A₀** off a semi-log fit |
+| 2 | `counting-statistics-and-background` | σ=√N on raw data only, background subtraction, and what the fit quality means |
+| 3 | `alara-time-distance-shielding` | Applies ALARA — time, distance, shielding — to their own bench work |
 
-**Extension problems:** A how long must you count — 2500 counts in 60 s → 2.0 %, then reach 1 % and
-0.5 % (approachable) · B background and where it does its damage — 900 gross / 400 background, net
-uncertainty **in quadrature is 36, not 22**, so σ_net exceeds σ_gross (standard) · C half-life off two
-points checked without a calculator — 8000→1000 cpm in 20 min, the slope route and the
-three-halvings route agree exactly because the logs cancel (standard) · D a half-life nobody waited
-for — 1 g of Ra-226 at 3.7×10¹⁰ Bq, which *is* the curie's definition, → λ = A/N → ~1580 y
-(challenging) · E read a bent curve and diagnose it, given the source was against the detector and no
-background run was taken (challenging — **this is the problem the preflight exists for**).
+**Extension problems, all built on the cadet's own lab:** A the two-point estimate and its
+uncertainty **by bounding**, 2500 and 289 counts eight minutes apart → 2.57 min, range 2.48–2.67,
+consistent with the accepted 2.552 (approachable — this is literally steps 6 and 7 of their
+procedure) · B what background costs and *where*, 1700 ± 65 cts/min at t=0 against 100 ± 25 late,
+3.8 % → 25 % (standard) · C reading the trendline both ways: slope → t½ = 2.552 min, **intercept
+8.5172 → A₀ = 5000 cts/min**, and why the linear and exponential trendlines are one fit in two
+coordinate systems (approachable) · D tuning the fit without fooling yourself — reduced χ² of 3.4
+against 0.05, and why two-thirds of nine points is 6 (challenging) · E **ALARA at your own bench**,
+3.0 µSv at 10 cm against 0.33 µSv at 30 cm, and which control this lab cannot use (standard).
 
-> **⚠⚠ §3.5 MAY NOT BE A REAL MURRAY SECTION, and the corpus says so about itself.** Its Flags block
-> reads: *"whether Murray covers measurement technique here at all — this is the entry most likely to
-> be misfiled, since it is inferred largely from the lesson being **Lab 1**. Flagged as the weakest
-> entry in Chapters 2–5."* **That is a circularity**: the schedule assigns reading 3.5 to a lab, so
-> the reconstruction produced a §3.5 about labs. If Murray's real §3.5 is not about measurement
-> technique, this artifact is grounded in generic radiation-counting practice wearing a Murray
-> section number.
+> **⚠ WHAT THE REAL LAB DOCUMENTS OVERTURNED — the finding worth keeping from this rebuild.**
+> The corpus's §3.5 entry warned about itself in exactly the right way, and it was right to. Two of
+> the 2026-08-05 build's three probe topics rested on material that **appears nowhere in this lab**:
 >
-> **Nothing in the physics prose signals this.** The bullets are crisp, quantitative and
-> correct-sounding, so a reader who skips the Flags block reads the section as extracted rather than
-> inferred. **This is the section where the review gate mattered most and is least satisfied** — it is
-> the first one recker should open.
+> - **Dead time** was a full objective (`bent-curve-background-deadtime`), with an extension problem
+>   built on diagnosing a bent semi-log curve. The write-up and the workbook never mention it. It is
+>   a detector property and belongs to lesson 18/19.
+> - **The long-half-life ratio method, λ = A/N**, was half of topic 1, with a radium-226 extension
+>   problem behind it. This lab measures a **2.552-minute** half-life by watching it decay; the
+>   ratio method is the technique you use when you *cannot* do that.
+>
+> And it **omitted** most of what the cadet is actually graded on: reduced chi-square, error-bar
+> sizing, linear regression, R², the intercept's meaning, and the comparison of three independent
+> half-life estimates. **Sixteen of the thirty-five points are discussion questions**, and the old
+> build addressed roughly one of them.
+>
+> **What survived:** σ = √N, the 1/√N scaling, and background-must-be-measured-not-looked-up. That
+> half of §3.5 was correct, and it is retained tagged `[CORPUS]`.
 
-> **⚠ §3.5 contains no numbers at all** — no worked example, no typical dead-time magnitude, no
-> background rate, no example measurement. **Every number in this artifact's extension problems is
-> constructed from the corpus's *relations*** or carried forward from §3.3/§3.4. There is no corpus
-> arithmetic to check them against; the only verification is the build's own double-derivation.
+> **⚠ THE SPREADSHEET DOES NOT USE QUADRATURE, AND THE OLD BUILD TAUGHT THAT IT DID.** The workbook
+> computes each point's uncertainty as a **linear sum**:
+> `σ = √(raw counts)/interval + √(background counts)/background time`.
+> The write-up's own propagation step (7) is a **bounding** argument — σ on each of two raw counts,
+> then the largest and smallest half-lives the range allows. **Neither document uses quadrature
+> anywhere.** The 2026-08-05 build's extension problem B was built on it (*"in quadrature is 36, not
+> 22"*), which would have had a cadet arguing with the sheet in front of them. The rebuilt reference
+> states the linear form, forbids teaching quadrature as this lab's rule, and tells the tutor to
+> acknowledge quadrature as legitimate prior coursework if a cadet raises it — **without correcting
+> the lab to match the textbook**.
 
-**Two gaps in §3.5 were handled rather than papered over.** It names dead time as one of three causes
-of a bent semi-log line but **never says which direction it bends** — asserting the diagnostic while
-withholding the discriminator. The tutor is forbidden to assert a direction and must reason out loud
-from the two stated facts, *saying so to the cadet*. And it says background's "own counting error
-propagates" without ever giving the propagation rule, so quadrature is routed to `prerequisites` as
-Tier-2 prior coursework rather than invented into `TEXTBOOK_REFERENCE`.
+> **⚠ ALARA IS AHEAD OF THE READING, on instruction, and the artifact says so to the tutor.**
+> recker asked on 2026-08-18 for one objective to be ALARA basics. It maps cleanly onto discussion
+> question 6 (*the 3 main methods for decreasing exposure, and which we used in this lab*), and the
+> cadet is about to handle a source — but **radiation protection is lesson 14 and lesson 15
+> material, and this is lesson 6.** The corpus supplies the physics (§10.4 ALARA-below-the-limits,
+> §11.1 time/distance/shielding), so it is grounded rather than invented. What the build does about
+> the ordering is explicit in the scope note: **treat topic 3 as a build, not a recall check** — do
+> not ask what they read, do not imply it was assigned, and do not penalise a cadet in the report
+> for not knowing the term. Most can produce time/distance/shielding from intuition with one prompt.
+> Dose units, limits, biological effect and attenuation are fenced off.
+>
+> **The sharp half of that topic is not the list.** It is that this lab uses time and distance and
+> **cannot use shielding at all** — anything between the source and the tube attenuates exactly the
+> 662 keV gammas being counted, so shielding the source would destroy the measurement. A cadet who
+> reaches that has learned the three controls are not a checklist. Second reach: a 2.552-minute
+> half-life makes the source **its own time control**, which is also why the procedure says to start
+> counting immediately — the safety argument and the measurement argument point opposite ways on the
+> clock.
 
-**"Quadrupling the count time halves the error" carries an unstated condition** — constant count rate
-— which is **false during the very decay-curve run the same section describes**. Extension problem A
-makes the assumption explicit rather than propagating it silently.
+**The tutor may now refer to the cadet's documents by name, and that is a deliberate narrowing of a
+standing rule.** Everywhere else in this course the tutor never cites the grounding text, because a
+cadet told *"§3.5 says"* goes and looks it up instead of thinking. **That rule is unchanged for the
+textbook** and the reference repeats it. But the write-up and the spreadsheet are the cadet's own
+working documents for the period they are walking into, and a preflight that cannot say *"your
+write-up asks you to…"* is worse at its job for no gain. The distinction is stated in the reference
+so it cannot be read as drift.
 
-**A cross-reference the corpus should make and does not.** §3.3's *specific activity is inversely
-proportional to t½* is exactly *why* §3.5 needs two methods: short-lived means intensely active (easy
-slope, dead-time trouble), long-lived means feeble (no slope, background trouble). Adjacent sections,
-neither pointing at the other. It is built into `lateral_connections` as the idea that unifies all
-three topics.
+**Three numbers in the extension problems are constructed, and each says so in the file.** Problem
+A's counts, problem B's counts and problem E's 90 µSv/h at 10 cm are scenario values — the lab
+documents contain **no measured data at all**, since the tables are blanks a cadet fills in. Problem
+C's slope was chosen to land on 2.552 minutes exactly and the file tells the tutor to say so if it
+comes up, because real data will not. **Problem E's dose rate is the one to watch**: it is the only
+place in this artifact where a physically-typed value was invented, it is fenced with an explicit
+do-not-present-as-real instruction, and this course has no dose grounding until lesson 15.
 
-> **The topic string was extended and that is recker's to override.** The workbook says bare `Lab 1`,
-> which makes a useless artifact title for a cadet and an uninformative slug. The assigned reading's
-> subject was appended. **Overriding it after publication is a rebuild and a new lesson row**;
-> overriding it now is free.
+**One thing the write-up settles that the corpus could not.** The sample is Ba-137m separated
+chemically from its Cs-137 parent, so it is a **single** exponential — which is precisely why the
+semi-log plot is straight and why the separation is worth a lateral connection. The old build,
+lacking this, listed "a contaminant or a chain" as an abstract cause of curvature. It is now the
+concrete reason a step in the procedure exists.
 
 ### Lesson 8 — Nuclear Reactions
 

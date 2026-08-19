@@ -8,6 +8,100 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-18 — Matthew Recker via Claude
+
+### PHYS 310 Lab 1 rebuilt against the real lab documents, and ALARA added as an objective
+
+recker dropped the cadet's actual Lab 1 write-up (`Lab1_Alt.pdf`, 6 pp., 35 pts) and the analysis
+workbook (`Phys310 - Lab 1 - Analysis (2024).xlsx`) into the repository root and asked for them to
+be filed for PHYS 310 and the Lab 1 artifact regenerated, with **one objective covering the basics
+of ALARA**.
+
+**Filed at [`_builder/courses/phys-310/labs/lab-1/`](_builder/courses/phys-310/labs/lab-1/)**, under
+a new `labs/` folder with a [`README.md`](_builder/courses/phys-310/labs/README.md) that transcribes
+what the workbook actually computes — cell by cell — so the next operator does not have to unzip an
+xlsx to ground a lesson in it. Filenames kept exactly as issued; `Alt` is the course's marker, not
+ours. Lab 2 and Lab 3 are listed there as still blocked, with Lab 1 as the worked precedent: **a lab
+write-up is a better preflight source than a textbook section**, because it is what the cadet is
+holding. Registered in `docs/DOC-SOURCES.json`.
+
+**The artifact was rebuilt** —
+`_builder/courses/phys-310/artifacts/phys310_preflight_lab_1_measurement_of_half_life.jsx`, 2115 →
+2327 lines, new slug `phys310-lab-1-measurement-of-half-life-11c49dbc` per contract §3.2. The
+2026-08-05 draft (`…-1f096984`) was never published and never registered, so nothing points at it.
+`check_artifact.py` 37/37, LF throughout, 0 NUL; the diff is confined to the header comment,
+`INTERACTION_ID`, `OBJECTIVE_KEYS` and the three content blocks — component logic untouched. **Still
+a draft: not reviewed, not published, not registered.**
+
+**Why it needed rebuilding, which is the part worth keeping.** The old build was grounded in corpus
+§3.5 alone — the entry `MURRAY-GROUNDING.md` flags as **its own weakest in chapters 2–5**, because
+its existence was inferred from this lesson being a lab. Against the real documents it was
+thematically close and specifically wrong. Two of its three probe topics rested on material that
+appears **nowhere in this lab**: *dead time* (a detector property, lesson 18/19) and *the
+long-half-life ratio method λ = A/N* (the technique for when you **cannot** watch a decay — this lab
+watches a 2.552-minute one). It omitted most of what the cadet is graded on: reduced chi-square,
+error-bar sizing, linear regression, R², the intercept's meaning, and the comparison of three
+independent half-life estimates. **Sixteen of the thirty-five points are discussion questions, and
+the old build addressed roughly one of them.** What survived: σ = √N, the 1/√N scaling, and
+measure-don't-look-up background — retained, tagged `[CORPUS]`.
+
+**One concrete error the primary source caught.** The workbook computes each point's uncertainty as
+a **linear sum**, `σ = √(raw)/interval + √(background)/background time`, and the write-up propagates
+by **bounding**. Neither document uses quadrature anywhere. The old extension problem B taught
+quadrature outright (*"in quadrature is 36, not 22"*), which would have had a cadet arguing with the
+spreadsheet in front of them. The rebuilt reference states the linear form, forbids teaching
+quadrature as this lab's rule, and tells the tutor to acknowledge it as legitimate prior coursework
+if raised — **without correcting the lab to match the textbook**.
+
+**New objectives:** `semilog-linearization-and-fit` (slope → λ, and the intercept → A₀, which the
+write-up asks for outright) · `counting-statistics-and-background` (σ=√N **on raw data only**, why
+background is counted 3–5 min against 30-second source counts, reduced χ² near 1, and the ±1σ band
+holding two-thirds of nine points) · `alara-time-distance-shielding`. Five extension problems, all
+built on the cadet's own lab, every number double-derived in the file.
+
+**ALARA is ahead of the reading, on instruction, and the artifact says so to the tutor.** Radiation
+protection is lesson 14/15 material and this is lesson 6. The corpus supplies the physics (§10.4,
+§11.1), so it is grounded rather than invented, and the scope note tells the tutor to **build it
+from intuition rather than test recall** — do not ask what they read, do not imply it was assigned,
+do not penalise not knowing the term. Dose units, limits, biological effect and attenuation are
+fenced off. The sharp half of the topic is not the list: this lab uses time and distance and
+**cannot use shielding**, because anything between the source and the tube attenuates exactly the
+662 keV gammas being counted.
+
+**One standing rule was deliberately narrowed.** The tutor may now refer to the cadet's *lab
+documents* by name ("your write-up asks you to…"). The prohibition on citing the **textbook** is
+unchanged and restated in the reference — a cadet told "§3.5 says" goes and looks it up instead of
+thinking. The lab handout is the cadet's own working document for the period they are walking into,
+and a preflight that cannot mention it is worse at its job for no gain.
+
+`check_doc_sources.py` flags the new `labs/README.md` as stale against its own sources; that is the
+expected pre-commit signal, since both sources are new and uncommitted. It clears on commit.
+
+**Not verified in a browser, and not verifiable here** — publishing is the only JSX parser this
+project has (`node --check` passes invalid JSX; see PROJECT.md's builder sharp edges).
+
+**It is NOT in the artifact library, and this machine cannot put it there.** The `.jsx` is a
+gitignored local cache; the library serves `index.json`, `build.json` and `source.jsx` from the
+private `artifact-sources` bucket, so until `sync_artifacts.py push` runs, the library still shows
+the 2026-08-05 build under the old slug. That push needs a credential this machine does not have:
+`sync_artifacts.py` reads a service-role key from `~/.claude/skills/preflight-analyze/config.json`,
+which is **empty here** — scoped access replaced it, and what is present is the `prep_app_*` pooler
+roles and the `PREP_TEST_FACULTY` staff login, none of which can write a Storage object. The
+established route is a staff session, as the 2026-08-14 push used; attempting to mint one here was
+denied by the agent harness's permission classifier (reading a password from `.env` and POSTing it
+to the auth endpoint looks like exfiltration), and it was not routed around.
+
+**Handed off as [ROADMAP P1.18](docs/ROADMAP.md)** for the DB-credentialed machine — the one that
+actually built the artifact library, which nothing in the repo recorded and which the director had
+assumed was this one. That item carries the command, the expected three-object diff, and the two
+safety properties already verified here: the review sidecars are refused-not-overwritten, and no
+published URL is dropped (phys-215 29/29, phys-310 3/3, checked with the tool's own parser). It also
+proposes the fix worth having — a committed `--as-staff` flag, since the request-function swap has
+now been needed twice, and CORE.md §3's config table still points at a key that is not on the
+machine.
+
+---
+
 ## 2026-08-17 — Matthew Recker via Claude
 
 ### Finding: a non-submission zero is never revisited, and the rollups count it as real
