@@ -80,6 +80,8 @@ Every anchor is now whitespace- and comment-tolerant, and where the difference i
 
 > **A third dialect is likely, and the tell is the same.** When a transform reports `matched 0, expected 1`, compare the two files at that anchor before touching anything: the difference has so far always been layout (a blank line, an alignment space, a trailing comment, a wrapped argument list). Loosen the LAYOUT; never the tokens.
 
+> **The dialect also constrains what the injected code may NAME, and that is the half that got missed.** *(2026-08-19, the same day and the same port.)* The tool chose its anchor by dialect correctly — `REPORT_MARKER` where the kit declares it, `isReportMsg` where PHYS 110 does — and then injected a detector that read `m.content.includes(REPORT_MARKER)` in both. In the PHYS 110 dialect that is a free variable. All five builds shipped, because the reference sits inside a `useEffect` that returns early until a graded conversation is under way: they parsed, rendered, served, and passed every assertion, then threw `ReferenceError: REPORT_MARKER is not defined` on the first tutor turn, where the page's `window.onerror` handler replaced the whole lesson with *"This backup build did not load"*. **Injected code may only name what BOTH dialects declare** — prefer the source's own helper (`isReportMsg`) over a constant only one of them hoists. The tool now asserts this against the output and refuses; see the refusal table below.
+
 ---
 
 ## Step 2 — Dry-run, and read what it prints
@@ -149,6 +151,7 @@ It **refuses rather than warns** — every one of these is a `SystemExit` before
 | `API key reachable from the payload: <line>` | the cadet's key appeared on a line that builds the submit URL or the compressed payload | a real defect. Fix it; do not relax the assertion |
 | `mixed line endings (N CRLF of M LF)` | the cached source is already corrupted, almost certainly by a text-mode write | re-pull the source (Step 1) |
 | `module syntax remains` | `import`/`export default` survived into the page, which a Babel classic script cannot run | a bug in `wrap()` |
+| `injected code calls <NAME> but this build never declares it` | a transform emitted code naming something this dialect does not define — the `REPORT_MARKER` failure | fix the injected code to name what BOTH dialects declare. **Do not delete the entry to make it pass**: this refusal is the only thing standing between a free variable and a cadet, because such a build parses, renders and serves before it throws. Added 2026-08-19 |
 
 **The same slug is the load-bearing invariant.** Contract §3.2 mints a slug per **offering**, not per transport. A backup that submitted under a second slug would split one lesson's cohort into two and silently halve every rollup — the numbers would look plausible and nothing would report it. The tool asserts `INTERACTION_ID` is unchanged and refuses.
 

@@ -2130,7 +2130,7 @@ function Lesson07Preflight() {
     if (mode !== "graded" || reportPhaseRef.current) return;
     const m = messages[messages.length - 1];
     if (!m || m.role !== "assistant") return;
-    if (INTEGRITY_ASKED.test(m.content) || m.content.includes(REPORT_MARKER)) {
+    if (INTEGRITY_ASKED.test(m.content) || isReportMsg(m.content)) {
       reportPhaseRef.current = true;
     }
   }, [messages, mode]);

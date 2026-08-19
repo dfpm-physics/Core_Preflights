@@ -588,6 +588,19 @@ ${phase === "probe" || !phase
     # a constant and this hangs off it; PHYS 110's builds inline the same literal inside
     # isReportMsg and define no such constant. Anchor on whichever exists, and re-emit that
     # line unchanged so nothing is lost either way.
+    #
+    # The INJECTED code must then not name REPORT_MARKER either, and did until 2026-08-19:
+    # the detector below read `m.content.includes(REPORT_MARKER)`, which is a free variable in
+    # the PHYS 110 dialect. All five PHYS 110 builds shipped and threw
+    # `ReferenceError: REPORT_MARKER is not defined` on the first assistant turn, where the
+    # page's window.onerror handler replaced the whole lesson with 'This backup build did not
+    # load'. Nothing caught it because the reference is inside a useEffect that returns early
+    # until a graded conversation is under way -- so the build parses, renders, and passes
+    # every check this repo has, then dies in front of a cadet.
+    #
+    # It calls `isReportMsg(content)` instead. Every one of the 51 cached sources defines it as
+    # a top-level function declaration, so it is hoisted and dialect-independent, and it is the
+    # source's OWN answer to 'is this the report' rather than a second copy of that judgment.
     MARKER_CONST = b'const REPORT_MARKER = "# JiTT Conversation Report";'
     ISREPORT_FN = (b'function isReportMsg(content) '
                    b'{ return content.includes("# JiTT Conversation Report"); }')
@@ -668,7 +681,7 @@ const INTEGRITY_ASKED =
     if (mode !== "graded" || reportPhaseRef.current) return;
     const m = messages[messages.length - 1];
     if (!m || m.role !== "assistant") return;
-    if (INTEGRITY_ASKED.test(m.content) || m.content.includes(REPORT_MARKER)) {
+    if (INTEGRITY_ASKED.test(m.content) || isReportMsg(m.content)) {
       reportPhaseRef.current = true;
     }
   }, [messages, mode]);
@@ -801,6 +814,35 @@ const INTEGRITY_ASKED =
         raise SystemExit("Anthropic transport still present")
     if b"BACKUP_ENDPOINT" in p.src or b"backup-btn" in p.src:
         raise SystemExit("backup button survived into a backup build - it would loop")
+
+    # Every name the INJECTED code calls must be declared somewhere in the OUTPUT.
+    #
+    # REPORT_MARKER was not, in the PHYS 110 dialect, and all five builds shipped. The reference
+    # sat inside a useEffect that returns early until a graded conversation is under way, so the
+    # build parsed, rendered, and passed every assertion above before throwing
+    # `ReferenceError: REPORT_MARKER is not defined` in front of a cadet on the first tutor turn
+    # -- where the page's window.onerror handler replaces the whole lesson with "This backup
+    # build did not load". Reported by the course director, 2026-08-19.
+    #
+    # Reading the injected code could never have caught it: the injected code is correct against
+    # the dialect it was written for. Only the OUTPUT knows whether a name resolves. So the check
+    # is here, it is by declaration rather than by mention (a mention is what the bug WAS), and it
+    # refuses. Add a line whenever the injected code starts calling something new.
+    INJECTED_CALLS = {
+        "isReportMsg":            rb"function isReportMsg\s*\(",
+        "buildSystemPrompt":      rb"function buildSystemPrompt\s*\(",
+        "buildStudySystemPrompt": rb"function buildStudySystemPrompt\s*\(",
+        "activeSecRef":           rb"const activeSecRef\s*=",
+        "PROBE_TOPIC_COUNT":      rb"const PROBE_TOPIC_COUNT\s*=",
+        "PER_TOPIC_BUDGET_MIN":   rb"const PER_TOPIC_BUDGET_MIN\s*=",
+        "REPORT_FORMAT":          rb"const REPORT_FORMAT\s*=",
+        "EXTENSION_PROBLEMS":     rb"const EXTENSION_PROBLEMS\s*=",
+    }
+    for nm, decl in INJECTED_CALLS.items():
+        if not re.search(decl, p.src):
+            raise SystemExit(
+                f"injected code calls {nm} but this build never declares it - that is the "
+                "REPORT_MARKER failure: it parses, renders, and throws mid-lesson")
 
     if verbose:
         for line in p.log:

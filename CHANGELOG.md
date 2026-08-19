@@ -10,6 +10,51 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-19 — Matthew Recker via Claude
 
+### The five PHYS 110 backup builds threw on the first tutor turn, and the porter now cannot ship that again
+
+**Reported by the course director:** a PHYS 110 backup build replaced itself with *"This backup
+build did not load: Uncaught ReferenceError: REPORT_MARKER is not defined."*
+
+**The porter knew the two dialects differed and applied that knowledge in one place out of two.**
+`to_gemini.py` injects a phase detector, and it chooses where to anchor it by dialect: the kit names
+the report marker as `const REPORT_MARKER`, while PHYS 110's builds inline the same literal inside
+`isReportMsg` and declare no such constant. The anchor logic handled both, with a comment saying so.
+The INJECTED code then read `m.content.includes(REPORT_MARKER)` regardless — a free variable in the
+dialect that has no such name.
+
+**It shipped because it cannot fail early.** The reference sits inside a `useEffect` that returns
+before reaching it until a graded conversation is under way. So all five builds parsed, rendered,
+served, and passed every assertion the porter had — then threw on the first assistant turn, where
+the page's own `window.onerror` handler replaced the entire lesson with that message. A cadet lost
+the session; nothing was recorded anywhere.
+
+**Fix: the detector calls `isReportMsg(content)`** — the source's own answer to "is this the
+report", defined as a top-level (hoisted) function declaration in all 51 cached artifact sources, so
+it is dialect-independent and is not a second copy of that judgment.
+
+**Fix that matters more: the porter now refuses to write a build that names something it does not
+declare.** A new assertion checks every identifier the injected code CALLS against a declaration in
+the OUTPUT — by declaration, not by mention, since a mention is what the bug was. Reading the
+injected code could never have caught this; only the output knows whether a name resolves. It was
+proved to fire by adding a name no build declares, watching it refuse, and removing it again.
+
+**All 38 builds regenerated**, across all three courses, so the generated output matches the
+generator — the alternative is a tree where re-running the tool produces a diff nobody expects. The
+change is exactly one line in each of the 38 files and nothing else; `site/data/backup-builds.json`
+is unchanged. A second full run reports **38 already current**, so the tool is still idempotent.
+
+**Verified:** zero `REPORT_MARKER` references remain in the PHYS 110 builds; all five loaded in real
+Chrome with no page errors, no failed requests, and the `#boom` panel — the one the cadet saw —
+never shown. A full conversation was NOT driven, because that needs a cadet's own Gemini API key;
+what is proved is that the undefined name is gone and the page runs.
+
+**Still open, and it is a separate bug:** none of the five PHYS 110 Claude artifacts offers the
+backup button at all, so a cadet whose connection check fails is shown a red light and no way out.
+0 of 5 PHYS 110 sources carry `BACKUP_ENDPOINT`, against 29 of 29 for PHYS 215 and 17 of 17 for PHYS
+310. `add_backup_button.py --course phys-110` patches all five cleanly (dry run verified), but a
+patched source changes nothing until a human republishes each artifact on claude.ai and updates that
+lesson's `activities.artifact_url`. Not done here.
+
 ### The Assignments page now shows the Gemini backup, so an instructor can open what the cadet was offered
 
 **The backup existed and faculty had almost no way to reach it.** A cadet locked out of claude.ai by
