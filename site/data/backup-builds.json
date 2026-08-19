@@ -1,6 +1,12 @@
 {
   "schema": 1,
   "builds": {
+    "lesson-02-1-d-motion-position-velocity-and-acceleration-b17964f2": {
+      "course": "phys-110",
+      "lesson_no": 2,
+      "title": "1-D Motion / Position, Velocity, Acceleration",
+      "path": "gemini/phys-110/lesson-02-1-d-motion-position-velocity-and-acceleration-b17964f2.html"
+    },
     "lesson-02-electric-charge-coulombic-force-3a8e4e18": {
       "course": "phys-215",
       "lesson_no": 2,
@@ -31,11 +37,29 @@
       "title": "Charge Distributions, Electric Flux",
       "path": "gemini/phys-215/lesson-07-charge-distributions-electric-flux-32174e58.html"
     },
+    "lesson-07-lab-1-projectile-motion-7e1c4080": {
+      "course": "phys-110",
+      "lesson_no": 7,
+      "title": "LAB 1: Projectile Motion",
+      "path": "gemini/phys-110/lesson-07-lab-1-projectile-motion-7e1c4080.html"
+    },
     "lesson-08-gausss-law-and-its-applications-5f57cc30": {
       "course": "phys-215",
       "lesson_no": 8,
       "title": "Gauss's Law and Its Applications",
       "path": "gemini/phys-215/lesson-08-gausss-law-and-its-applications-5f57cc30.html"
+    },
+    "lesson-08-intro-to-newtons-laws-9667eba1": {
+      "course": "phys-110",
+      "lesson_no": 8,
+      "title": "Intro to Newton's Laws",
+      "path": "gemini/phys-110/lesson-08-intro-to-newtons-laws-9667eba1.html"
+    },
+    "lesson-09-application-of-newtons-laws-6a66195f": {
+      "course": "phys-110",
+      "lesson_no": 9,
+      "title": "Application of Newton's Laws / Friction",
+      "path": "gemini/phys-110/lesson-09-application-of-newtons-laws-6a66195f.html"
     },
     "lesson-09-electric-potential-difference-b3ba716f": {
       "course": "phys-215",
@@ -48,6 +72,12 @@
       "lesson_no": 10,
       "title": "Electric Potential, Potential Energy",
       "path": "gemini/phys-215/lesson-10-electric-potential-potential-energy-c627bfa9.html"
+    },
+    "lesson-11-circular-motion-centripetal-force-11e3a6a5": {
+      "course": "phys-110",
+      "lesson_no": 11,
+      "title": "Newton's Laws with Circular Motion",
+      "path": "gemini/phys-110/lesson-11-circular-motion-centripetal-force-11e3a6a5.html"
     },
     "lesson-13-capacitance-energy-and-dielectrics-7444aa79": {
       "course": "phys-215",

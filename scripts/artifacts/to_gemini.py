@@ -202,13 +202,19 @@ def port(src: bytes, slug: str, verbose: bool = False):
 
     # ── 1. Model constants -> Gemini, discovered at runtime ───────────────────
     p.sub1(
+        # Tolerant of both dialects. The kit puts a blank line after `];` and a `// CONSTANT`
+        # marker on each of the next two lines; PHYS 110's builds do neither. Those are the only
+        # differences, and both are cosmetic -- so the blank line is optional and the trailing
+        # text is `[^\r\n]*` rather than a required comment. `[^\r\n]*` survives adapt(),
+        # which rewrites the four-byte sequence \r\n and leaves the character class correct
+        # for an LF file.
         rb"const MODEL_CANDIDATES = \[\r\n"
         rb'  "claude-.*?\r\n'
         rb'  "claude-.*?\r\n'
         rb"\];\r\n"
-        rb"\r\n"
-        rb"const MAX_TOKENS = 4096;\s*// CONSTANT\r\n"
-        rb'const ENDPOINT = "https://api\.anthropic\.com/v1/messages";\s*// CONSTANT',
+        rb"(?:\r\n)?"
+        rb"const MAX_TOKENS = 4096;[^\r\n]*\r\n"
+        rb'const ENDPOINT = "https://api\.anthropic\.com/v1/messages";[^\r\n]*',
         b"""// GEMINI BACKUP BUILD. Model names are NOT hard-coded, deliberately.
 // The published Claude artifacts bake in a candidate list, and that has a known cost:
 // if every entry retires, the artifact dead-ends and the only fix is republishing it.
@@ -329,9 +335,15 @@ async function discoverModel(activeModelRef) {
 
     # ── 3. callTutor -> Gemini request/response shape ─────────────────────────
     p.sub1(
-        rb"  const res = await rawCall\(activeModelRef, \{ max_tokens: MAX_TOKENS, system: sys, messages: sendHistory \}\);\r\n"
+        # Whitespace-tolerant between tokens, because the two dialects wrap this block
+        # differently: the kit puts the rawCall arguments and the whole .filter/.map/.join/.trim
+        # chain each on ONE line, and PHYS 110's builds wrap both across several. `\s*` spans a
+        # newline plus its indent, so one pattern covers both without a second copy. The tokens
+        # themselves are still matched exactly -- this loosens the LAYOUT, never the CONTENT,
+        # and the grounding-block assertion after the transforms still has to pass.
+        rb"  const res = await rawCall\(activeModelRef, \{\s*max_tokens: MAX_TOKENS, system: sys, messages: sendHistory,?\s*\}\);\r\n"
         rb"  const data = await res\.json\(\);\r\n"
-        rb'  const text = \(data\.content \|\| \[\]\)\.filter\(\(b\) => b\.type === "text"\)\.map\(\(b\) => b\.text\)\.join\("\\n"\)\.trim\(\);\r\n'
+        rb'  const text = \(data\.content \|\| \[\]\)\s*\.filter\(\(b\) => b\.type === "text"\)\s*\.map\(\(b\) => b\.text\)\s*\.join\("\\n"\)\s*\.trim\(\);\r\n'
         rb"  if \(!text\) throw \{ kind: \"request\", status: 0 \};\r\n"
         rb"  return text;",
         b"""  // Gemini's shape: roles are user|model (not user|assistant), each turn's text nests
@@ -382,7 +394,10 @@ async function discoverModel(activeModelRef) {
     # of hundreds of third-party credentials. Cost: a new device means re-entering, and
     # Safari's ITP drops it after 7 days without a visit. "Forget" exists for shared machines.
     p.sub1(
-        rb'  const \[cadetId, setCadetId\] = useState\(""\);      // holds the last name; do NOT rename\r\n',
+        # Trailing comment optional: the kit writes "// holds the last name; do NOT rename"
+        # here and PHYS 110's builds write nothing. `[^\r\n]*` covers both without a second
+        # pattern, and the declaration itself is still matched exactly.
+        rb'  const \[cadetId, setCadetId\] = useState\(""\);[^\r\n]*\r\n',
         b"""  const [cadetId, setCadetId] = useState("");      // holds the last name; do NOT rename
 
   // Leaves this device only as an x-goog-api-key header to Google, and is remembered only
@@ -402,7 +417,8 @@ async function discoverModel(activeModelRef) {
         "apiKey state + localStorage")
 
     p.sub1(
-        rb"  const activeModelRef = useRef\(MODEL_CANDIDATES\[0\]\);       // persists a successful fallback",
+        # Same difference, same fix — see the note on the cadetId anchor above.
+        rb"  const activeModelRef = useRef\(MODEL_CANDIDATES\[0\]\);[^\r\n]*",
         b"""  const activeModelRef = useRef(MODEL_FALLBACKS[0]);        // replaced by discoverModel()
   const [modelName, setModelName] = useState("");          // shown on the start screen
   useEffect(() => { apiKeyRef.current = apiKey.trim(); }, [apiKey]);""",
@@ -410,18 +426,22 @@ async function discoverModel(activeModelRef) {
 
     # ── 6. checkConnection -> validate the key, then discover a model ─────────
     p.sub1(
+        # `\s*` at every argument boundary. The kit writes `rawCall(activeModelRef,` and closes
+        # with `{ retries: 0 });`; PHYS 110 puts activeModelRef on its own line and the closing
+        # paren on another. Layout only -- the arguments themselves are still matched exactly,
+        # so a build whose ping call differs in SUBSTANCE still fails here.
         rb"  async function checkConnection\(\) \{\r\n"
         rb'    setConnStatus\("checking"\); setConnMsg\(""\);\r\n'
         rb"    try \{\r\n"
-        rb"      await rawCall\(activeModelRef,\r\n"
-        rb'        \{ max_tokens: 1, messages: \[\{ role: "user", content: "ping" \}\] \},\r\n'
-        rb"        \{ retries: 0 \}\);\r\n"
+        rb"      await rawCall\(\s*activeModelRef,\s*"
+        rb'\{ max_tokens: 1, messages: \[\{ role: "user", content: "ping" \}\] \},\s*'
+        rb"\{ retries: 0 \}\s*\);\r\n"
         rb'      setConnStatus\("ok"\); setConnMsg\(""\);\r\n'
         rb"    \} catch \(err\) \{\r\n"
         rb'      setConnStatus\("unavailable"\); setConnMsg\(errorMessage\(err, \{ afterRetries: true \}\)\);\r\n'
         rb"    \}\r\n"
         rb"  \}\r\n"
-        rb"  useEffect\(\(\) => \{ checkConnection\(\); \}, \[\]\); // on mount, before the cadet invests effort",
+        rb"  useEffect\(\(\) => \{ checkConnection\(\); \}, \[\]\);[^\r\n]*",
         b"""  async function checkConnection() {
     if (!apiKey.trim()) {
       setConnStatus("unavailable"); setModelName("");
@@ -497,9 +517,9 @@ async function discoverModel(activeModelRef) {
 
     # ── 8. Connection light label (inside {} -> JS strings, \\u is correct) ────
     p.sub1(
-        rb'                \{connStatus === "checking" \? "Checking tutor access\xe2\x80\xa6"\r\n'
-        rb'                  : connStatus === "ok" \? "Tutor model reachable"\r\n'
-        rb'                  : "Tutor unavailable"\}',
+        rb' *\{connStatus === "checking" \? "Checking tutor access\xe2\x80\xa6"\r\n'
+        rb' *: connStatus === "ok" \? "Tutor model reachable"\r\n'
+        rb' *: "Tutor unavailable"\}',
         b"""                {connStatus === "checking" ? "Checking your key\\u2026"
                   : connStatus === "ok" ? ("Ready \\u2014 " + modelName)
                   : "Not connected"}""",
@@ -507,8 +527,8 @@ async function discoverModel(activeModelRef) {
 
     # A Forget control beside Re-check, shown only when a key is actually stored.
     p.sub1(
-        rb"                Re-check\r\n"
-        rb"              </button>\r\n",
+        rb" *Re-check\r\n"
+        rb" *</button>\r\n",
         b"""                Re-check
               </button>
               {keyRemembered && (
@@ -535,6 +555,15 @@ async function discoverModel(activeModelRef) {
 function buildSystemPrompt(cadetId, localTime, phase) {""",
         "buildSystemPrompt takes a phase")
 
+    # The kit precedes ${REPORT_FORMAT} with a label line; PHYS 110's builds go straight to it.
+    # That line is part of what the TUTOR reads, so it is carried through exactly as found --
+    # never added to a build that did not have it, and never dropped from one that did.
+    LABEL = b"OUTPUT_REPORT_FORMAT (produce exactly this structure):"
+    has_label = LABEL in p.src
+    label_pat = (rb"OUTPUT_REPORT_FORMAT \(produce exactly this structure\):\r\n"
+                 if has_label else rb"")
+    label_repl = (b'"\\nOUTPUT_REPORT_FORMAT (produce exactly this structure):\\n" + REPORT_FORMAT'
+                  if has_label else b'"\\n" + REPORT_FORMAT')
     p.sub1(
         rb"\$\{TEXTBOOK_REFERENCE\}\r\n"
         rb"\r\n"
@@ -542,7 +571,7 @@ function buildSystemPrompt(cadetId, localTime, phase) {""",
         rb"\r\n"
         rb"\$\{EXTENSION_PROBLEMS\}\r\n"
         rb"\r\n"
-        rb"OUTPUT_REPORT_FORMAT \(produce exactly this structure\):\r\n"
+        + label_pat +
         rb"\$\{REPORT_FORMAT\}`;\r\n"
         rb"\}",
         b"""${TEXTBOOK_REFERENCE}
@@ -551,13 +580,26 @@ ${LESSON_CONFIG}
 ${phase === "extension" ? "\\n" + EXTENSION_PROBLEMS + "\\n" : ""}\\
 ${phase === "probe" || !phase
     ? ""
-    : "\\nOUTPUT_REPORT_FORMAT (produce exactly this structure):\\n" + REPORT_FORMAT}`;
+    : """ + label_repl + b"""}`;
 }""",
         "tail blocks made conditional")
 
+    # WHERE to put INTEGRITY_ASKED depends on the dialect. The kit names the report marker as
+    # a constant and this hangs off it; PHYS 110's builds inline the same literal inside
+    # isReportMsg and define no such constant. Anchor on whichever exists, and re-emit that
+    # line unchanged so nothing is lost either way.
+    MARKER_CONST = b'const REPORT_MARKER = "# JiTT Conversation Report";'
+    ISREPORT_FN = (b'function isReportMsg(content) '
+                   b'{ return content.includes("# JiTT Conversation Report"); }')
+    if MARKER_CONST in p.src:
+        anchor, keep = re.escape(MARKER_CONST), MARKER_CONST
+    elif ISREPORT_FN in p.src:
+        anchor, keep = re.escape(ISREPORT_FN), ISREPORT_FN
+    else:
+        raise SystemExit("no report-marker anchor - cannot place INTEGRITY_ASKED")
     p.sub1(
-        rb'const REPORT_MARKER = "# JiTT Conversation Report";',
-        b"""const REPORT_MARKER = "# JiTT Conversation Report";
+        anchor,
+        keep + b"""
 
 // The close sequence is fixed by the tutor prompt: summary -> the integrity question, which
 // it must ask VERBATIM and then WAIT for -> the report. So seeing that question means the
@@ -569,7 +611,9 @@ const INTEGRITY_ASKED =
         "integrity-question fingerprint")
 
     p.sub1(
-        rb'  const sysRef = useRef\(""\);        // system prompt, built once at start\r\n',
+        # Alignment spaces and the trailing comment are both optional: the kit writes one
+        # space and a comment, PHYS 110 pads to a column and writes none.
+        rb'  const sysRef *= useRef\(""\);[^\r\n]*\r\n',
         b"""  const sysRef = useRef("");        // study mode's prompt, and the graded opener
   const sysArgsRef = useRef(null);  // { cadetId, localTime } -- graded only
   const reportPhaseRef = useRef(false);
@@ -742,7 +786,14 @@ const INTEGRITY_ASKED =
                                    b"JSON.stringify(structured", b"SUBMIT_ENDPOINT")):
             raise SystemExit(f"API key reachable from the payload: {line!r}")
 
-    if f'const INTERACTION_ID = "{slug}";'.encode() not in p.src:
+    # The fourth copy of this assumption in scripts/artifacts/, and the last. A substring test
+    # for `const INTERACTION_ID = "<slug>";` requires the declaration on one line; PHYS 110's
+    # builds wrap it, so this fired on five artifacts whose slug had not changed at all -- after
+    # every transform had run correctly. The check itself still matters and is unchanged in
+    # substance: the slug present in the OUTPUT must be the slug we were asked to port, because
+    # a build that submits under a different one splits a lesson's cohort silently.
+    if not re.search(rb'^const INTERACTION_ID\s*=\s*"' + re.escape(slug.encode()) + rb'"\s*;',
+                     p.src, re.M):
         raise SystemExit("INTERACTION_ID changed")
     if b"https://dfpm-physics.github.io/Core_Preflights/site/student/interaction-submit.html" not in p.src:
         raise SystemExit("SUBMIT_ENDPOINT changed")

@@ -10,6 +10,54 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-19 — Matthew Recker via Claude
 
+### All five PHYS 110 lessons have a Gemini backup, and the porter now speaks both artifact dialects
+
+**PHYS 110 cadets had no fallback anywhere.** Their artifacts carry no backup button either
+(`backup.html`: 0 occurrences, against 1 in every PHYS 215 build), so the in-artifact escape route
+did not exist for them and neither did the lesson-page one. Both now do.
+
+**The blocker was a second artifact dialect, not a bug.** PHYS 110's five artifacts were built
+outside this repository by an earlier revision of the same skill. Against the kit's output they
+declare the four grounding blocks with a plain template literal instead of `String.raw`, inline the
+report marker inside `isReportMsg` instead of hoisting it to `REPORT_MARKER`, omit the
+`OUTPUT_REPORT_FORMAT` label, pad declarations to a column, and wrap argument lists across several
+lines. `to_gemini.py` is 19 byte-exact transforms written against the kit's shape; **10 of 23
+anchors missed.**
+
+Every anchor is now tolerant of **layout** — optional blank lines, optional trailing comments,
+`\s*` at argument boundaries, ` *` for indentation — and of **nothing else**. The tokens are still
+matched exactly, and the four grounding blocks are still compared byte-for-byte before and after,
+so a build differing in substance still fails.
+
+**Where a difference was real rather than cosmetic, the tool preserves what it finds.** The kit
+precedes `${REPORT_FORMAT}` with an `OUTPUT_REPORT_FORMAT (produce exactly this structure):` line
+and PHYS 110 does not. Making that merely optional in the anchor would have let the fixed
+replacement **add** it to every PHYS 110 build — and that line is prompt text the cadet's tutor
+reads, not transport. It is now carried through exactly as present or absent. `INTEGRITY_ASKED`
+likewise anchors on whichever marker form the source actually uses.
+
+**A FOURTH copy of the `INTERACTION_ID` regex turned up**, in the post-transform assertion that the
+slug survived, and it was the same same-line-only pattern as the two fixed earlier today. It fired
+on five artifacts whose slug had not changed at all, *after* every transform had run correctly. All
+four copies now agree.
+
+**Verified, in this order:**
+- **Regression first.** All **29** PHYS 215 and **4** PHYS 310 builds still port **`unchanged`** —
+  byte-identical to what is already deployed. Eleven anchor generalizations cost the working
+  courses nothing.
+- **Written:** 5 builds under `site/gemini/phys-110/`, manifest 33 → **38**.
+- **In a real browser**, which is the only JSX parser a backup build ever gets: all five pass
+  **7/7** on `gemini-build.mjs` — Babel parses them, React mounts them, no console errors.
+- **The router resolves all five**: `backup.html?i=<slug>` → the right build, **5/5**.
+- The 2026-08-19 backup-link harness still passes **22/22**.
+
+**What is still unverified, and it is the same gap the harness names:** no build here has run a real
+tutor turn, which needs a live Gemini key. Parse and render are proven; a conversation is not.
+
+`.ai/skills/gemini-port/SKILL.md` gains the two-dialect section and a row in its refusal table for
+the new plain-literal guard, with the tell for the third dialect that will eventually turn up:
+`matched 0, expected 1` has so far always been layout, never tokens.
+
 ### Every whole-course page was reading the first 1000 rows and calling it the course
 
 **Reported as "these two cadets submitted preflight-05 and were not graded."** They were graded,
