@@ -10,6 +10,61 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-18 — Matthew Recker via Claude
 
+### PHYS 310 Lab 1: Gemini backup build, and a browser check for backup builds generally
+
+recker published the rebuilt Lab 1 artifact on claude.ai and recorded its URL through the
+Artifacts page's Register panel, which cleared `/gemini-port`'s one hard precondition — a backup
+needs a minted, published slug to submit under. Ported per
+[`.ai/skills/gemini-port/SKILL.md`](.ai/skills/gemini-port/SKILL.md):
+
+- `site/gemini/phys-310/phys310-lab-1-measurement-of-half-life-11c49dbc.html` — 155,884 B
+- one row in `site/data/backup-builds.json`, now **33 builds**
+
+All 22 transforms matched on the dry run, so no anchor drift against the rebuilt artifact — worth
+noting because that artifact's content blocks were rewritten this morning and the anchors are
+written against factory shape. The slug was **read from `index.json`, never typed** (PROJECT.md's
+sharp-edge table records a published phys-310 slug minted from a hand transcription of a word that
+was never in the source).
+
+**Verified in a real browser, not just by byte-grep.** New driver
+`tests/browser-harness/gemini-build.mjs` serves the repo on an ephemeral port, loads the build in
+headless Chrome via puppeteer-core, and asserts the two failures that are genuinely different from
+each other: **parse** (no `#boom` banner — Babel errors land on `window.onerror`, not in the page)
+and **render** (`#root` has children, because a page can parse cleanly and mount nothing). Plus the
+API-key field the port adds, the honor text it must not break, the no-scroll property that keeps
+the composer above the fold, and any non-favicon 404. **7 passed, 0 failed** on the new build, and
+the same on `phys310-radioactivity-77500fd7` as a regression check that the harness is not
+trivially passing.
+
+That driver exists because SKILL.md Step 4 says the Babel-in-browser page **is** this project's
+only JSX parser for a backup build — `node --check` returns exit 0 on invalid JSX — and it flagged
+the driver as "worth having". Two things it taught while being written, both now handled in it: a
+console `Failed to load resource` line does **not** name the URL, so a missing vendor script and a
+missing favicon read identically until the responses are recorded; and `new URL(...).pathname`
+leaves this repo's spaces percent-encoded, so every file resolved as missing until `fileURLToPath`
+replaced it.
+
+Shipped bytes re-checked directly: the slug, `interaction-submit.html` and
+`generativelanguage.googleapis.com` present; `api.anthropic.com`, `BACKUP_ENDPOINT` and
+`export default` absent. The `alara-time-distance-shielding` objective survives the port, which is
+the check that matters for this particular lesson.
+
+**Not verified: one real tutor turn.** SKILL.md Step 4 item 6 wants a live free-tier Gemini key,
+and this harness has none. Per CORE.md §2 a Node-only check is never the sole verification of a
+change, so it is recorded here as outstanding rather than implied.
+
+**One cosmetic defect found and deliberately not fixed.** Every Gemini build — all four phys-310
+ones, so it predates this port — carries an inherited comment from the Claude source reading
+*"NEVER add an API key field, a Bearer or x-api-key header"*, sitting directly above a page that
+now has an API-key field by design. It is a comment, so it is inert, but the page is public and a
+cadet reading source sees a line contradicting the code. The fix belongs in `to_gemini.py` (the
+skill forbids hand-editing generated HTML) and would mean regenerating all 33 builds, which is a
+separate unit of work rather than a rider on this one.
+
+---
+
+## 2026-08-18 — Matthew Recker via Claude
+
 ### PHYS 310 Lab 1 rebuilt against the real lab documents, and ALARA added as an objective
 
 recker dropped the cadet's actual Lab 1 write-up (`Lab1_Alt.pdf`, 6 pp., 35 pts) and the analysis
