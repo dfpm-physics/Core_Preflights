@@ -74,7 +74,40 @@ BUILDER = REPO / "_builder" / "courses"
 CONFIG_PATH = pathlib.Path(os.path.expanduser("~/.claude/skills/preflight-analyze/config.json"))
 BUCKET = "artifact-sources"
 MANIFEST = REPO / "_snapshots" / "artifact-sources-manifest.json"
-COURSES = ("phys-215", "phys-310")
+
+def local_courses(source_root=BUILDER):
+    """Every course directory under `_builder/courses/`, in a stable order.
+
+    WHY THIS IS DISCOVERED AND NOT DECLARED. It was the literal tuple
+    `("phys-215", "phys-310")` until 2026-08-19, which meant onboarding a course was a code
+    change to this file — and, worse, that a push for an unlisted course reported SUCCESS
+    while silently moving nothing. PHYS 110's artifact author would have hit exactly that.
+    A course is now whatever is on disk, so adding one is `mkdir` plus a profile.
+
+    A `_`-prefixed name is NOT a course: `_examples/` is PREP's own archived example, attached
+    separately in build_payload() precisely so it never appears in the library as one more
+    lesson. Excluding the prefix here is what keeps that true as directories come and go.
+
+    Ordering is sorted rather than insertion-order so a push plan reads the same on every
+    machine and a diff of two runs is about the artifacts, not the filesystem.
+    """
+    root = pathlib.Path(source_root)
+    if not root.is_dir():
+        return []
+    return sorted(d.name for d in root.iterdir()
+                  if d.is_dir() and not d.name.startswith((".", "_")))
+
+
+def remote_courses(remote):
+    """Every course that has a review sidecar in the bucket, from a Storage listing.
+
+    Deliberately NOT local_courses(). `pull-reviews` mirrors decisions made in a BROWSER back
+    into git, and the browser is the writer — so a course whose reviews exist remotely must be
+    pulled even on a clone that has never held its sources. Discovering that from the local
+    tree would make the mirror silently depend on what the operator happens to have on disk.
+    """
+    return sorted({path.split("/")[0] for path in remote
+                   if path.endswith("/review-notes.json")})
 
 EXIT_OK, EXIT_PROBLEM, EXIT_UNUSABLE = 0, 1, 2
 
@@ -327,7 +360,7 @@ def build_payload(source_root):
     """
     objects, report = [], []
 
-    for course in COURSES:
+    for course in local_courses(source_root):
         cdir = source_root / course
         art_dir = cdir / "artifacts"
         if not art_dir.is_dir():
@@ -457,7 +490,7 @@ def seed_reviews(source_root, objects):
     which is exactly the clobber the local tool's merge rule was written to prevent.
     """
     seeds = []
-    for course in COURSES:
+    for course in local_courses(source_root):
         # Beside BUILD-LOG.md, inside artifacts/ — the layout the builder repo uses and the
         # local review server still expects. Only the .jsx in that directory is gitignored.
         rn = source_root / course / "artifacts" / "REVIEW-NOTES.json"
@@ -605,7 +638,7 @@ def cmd_pull_reviews(args):
     require_bucket(key)
     remote = storage_list(key)
     changes = []
-    for course in COURSES:
+    for course in remote_courses(remote):
         rp = review_path(course)
         if rp not in remote:
             continue

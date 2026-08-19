@@ -222,6 +222,11 @@
     async function init() {
       initTheme();
       renderNav(ctx, { active: 'artifacts' });
+      // Which shelves exist is read from Storage, not compiled in (faculty-artifacts.js).
+      // Before `load()`, because `state.course` was seeded from the fallback list at module
+      // scope and the first render must not ask for a course this bucket does not have.
+      const courses = await AL.loadBuilderCourses();
+      if (!courses.includes(state.course)) state.course = courses[0];
       await load();
     }
 

@@ -10,7 +10,74 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-19 — Matthew Recker via Claude
 
-### The Gemini backup is reachable from the assignment page, not only from a failing artifact
+### A course could not join the artifact library without a developer, and PHYS 110 was stuck outside it
+
+**PHYS 110 has five published interactive lessons and no library shelf.** They were built outside
+this repository, so no `.jsx` reached the `artifact-sources` bucket — which means nobody can review
+their objectives, `to_gemini.py` has nothing to port, and a cadet throttled by Claude on one of them
+has nowhere to go. The course now has an artifact author of its own who will build every future
+PHYS 110 interaction, so handing files to the course director was not a workable arrangement.
+
+**The blocker was two hardcoded lists, and the failure mode was silence.** `COURSES` in
+`sync_artifacts.py` and `BUILDER_COURSES` in `faculty-artifacts.js` both named exactly two courses.
+A push for an unlisted course did not error — `build_payload` simply iterated a tuple that did not
+contain it and **reported success having moved nothing.**
+
+Both are now discovered:
+- `local_courses()` reads `_builder/courses/`, excluding `_`-prefixed names so `_examples/` stays
+  out of the library as it always has. `build_payload` and `seed_reviews` use it.
+- `remote_courses()` reads the **bucket** listing, and `pull-reviews` uses that instead —
+  deliberately not the local tree. The browser is the writer of review decisions, so a course whose
+  reviews exist remotely must be mirrored back even on a clone that never held its sources.
+- The Artifacts page lists the bucket root at load. Still not derived from `courses` — that was
+  always right, because asking Storage for a prefix nobody wrote is a 400, not an empty list — but
+  a prefix that IS in the listing exists by definition. The old pair survives as a fallback, so a
+  failed listing degrades to the library the page always showed rather than to no courses at all.
+
+**Adding a course is now `mkdir` plus a profile.** No code change, no developer.
+
+**PHYS 110 scaffolded**: `COURSE_PROFILE.md` and an empty `artifacts/BUILD-LOG.md`. Eight profile
+values are deliberately `UNSET` — grounding text and session shape — because those are teaching
+decisions belonging to that course, and copying PHYS 215's numbers would bake one course's pedagogy
+into another's artifacts while looking complete. **Uploading works with them unset; `localize.py`
+refuses to build until they are real**, which is the correct split.
+
+This reverses a recorded decision. `phys110_fall2026_schedule.md` stated in its own header that
+*"PHYS 110 IS NOT A BUILDER COURSE"* and that the absence of a profile was what made it true. That
+block now records what changed and why, rather than being left to contradict the tree beside it.
+
+**New runbook `docs/operations/ONBOARD-ARTIFACTS.md`** — the capability-scoped path for an artifact
+AUTHOR, as `ONBOARD-AGGREGATION.md` is for a close-out operator. It is the direction that did not
+exist: `PUBLISH-ARTIFACT.md` covers taking a finished `.jsx` live, and told a reader wanting one to
+pull it from the library, which is no help when the artifact was never in the library. Registered in
+`DOC-SOURCES.json` against the three modules its claims rest on.
+
+**Two findings worth keeping**, both verified rather than assumed:
+- **Objectives are parsed out of the `.jsx` itself** (`artifact_parse.py`, the `Reports under
+  objective key:` blocks), not out of `BUILD-LOG.md`. So accept/reject works on the **first push**,
+  with no build log authored — which is what makes the review loop available to a course joining
+  today.
+- **The course tab appears only after that push**, because the listing returns prefixes that exist.
+  That is the correct order, not a delay, and the runbook says so where a reader would otherwise
+  read it as a bug.
+
+Verified: `status --as-staff` reports `phys-110  0 artifact(s)` and plans exactly one new object
+(`phys-110/index.json`) with the other 95 unchanged; the profile parses to the four values the
+library needs with 8 `UNSET` remaining; `BUILD-LOG.md` is tracked while `artifacts/*.jsx` is
+ignored; the Artifacts page loads signed in with its course tabs and no error banner; the
+2026-08-19 backup-link harness still passes 22/22.
+
+**Line endings were handled per file, not per tree** — `COURSE_PROFILE.md` LF because `localize.py`
+matches ```` ```profile
+ ```` and a CRLF breaks it silently, `BUILD-LOG.md` CRLF to match its
+siblings. `_builder/**` is `-text` for exactly this reason and it has bitten twice.
+
+**Not done here:** the five PHYS 110 `.jsx` files still are not in the library. They exist only in
+their author's claude.ai account — the published artifact URL serves an app shell, not source, so
+they cannot be fetched. He now has a runbook and a course that accepts them.
+
+### The Gemini backup is reachable
+ from the assignment page, not only from a failing artifact
 
 **A cadet whose Claude session dies PARTWAY THROUGH was never offered the backup.** The artifact
 runs its connection check on the start screen, and only that screen offers a way out — so the

@@ -326,6 +326,20 @@
       "note": "Restates the prefill-link procedure as a runbook: the base URL, the parameter values, and the slug-match guard. The contract is frozen and authoritative -- if it moves, this page is wrong. BOTH profiles are sources because the two courses deliberately differ on the slug shape (phys-310 carries no lesson number, phys-215 requires one) and on course_id, and this page tells the operator to verify a slug against exactly that convention -- so a slug-rule change in EITHER profile makes this page actively harmful, not merely stale. Added phys-215 on 2026-08-04 when the second course landed. Re-checked 2026-08-14: both profiles gained a `backup_base` endpoint line for the Gemini backup router. That is an endpoint, not a slug rule -- the slug conventions this page depends on are untouched, so the page is still correct."
     },
     {
+      "doc": "docs/operations/ONBOARD-ARTIFACTS.md",
+      "kind": "operations",
+      "tier": "staff",
+      "reviewed": "2026-08-19",
+      "sources": [
+        "scripts/artifacts/sync_artifacts.py",
+        "scripts/artifacts/artifact_parse.py",
+        "site/js/faculty-artifacts.js",
+        "_builder/courses/phys-215/COURSE_PROFILE.md",
+        ".ai/instructions/CORE.md"
+      ],
+      "note": "The capability-scoped path for an artifact AUTHOR, as ONBOARD-AGGREGATION.md is for a close-out operator. Every command it gives is sync_artifacts.py, so that tool's flags and its course-discovery rule are load-bearing: the runbook tells a reader that an unlisted course means a missing COURSE_PROFILE.md, which is true only while discovery reads the local tree. artifact_parse.py is a source because the doc's central promise -- review works on the first push, with no build log written -- rests on objectives being parsed out of the .jsx. faculty-artifacts.js is a source because the doc says the course tab appears after the push, which is true only while the page discovers courses from Storage."
+    },
+    {
       "doc": "docs/operations/PUBLISH-ARTIFACT.md",
       "kind": "operations",
       "tier": null,

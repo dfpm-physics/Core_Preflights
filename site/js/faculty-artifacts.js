@@ -33,10 +33,49 @@ import { db } from './supabase.js';
 
 const BUCKET = 'artifact-sources';
 
-/** The courses that have a builder tree. Not derived from `courses` — a course can exist in PREP
- *  with no artifacts, and asking Storage for a prefix that was never written is a 400, not an
- *  empty list. */
-export const BUILDER_COURSES = ['phys-215', 'phys-310'];
+/** The courses that have a builder tree.
+ *
+ *  STILL NOT DERIVED FROM `courses`, for the reason this comment has always given: a course can
+ *  exist in PREP with no artifacts, and asking Storage for a prefix that was never written is a
+ *  400, not an empty list. Deriving it from STORAGE is the opposite case — a prefix is in the
+ *  listing precisely because something was written there, so the answer cannot name a shelf that
+ *  is not on the wall.
+ *
+ *  The value below is the FALLBACK, not the answer. It was the whole answer, hardcoded, until
+ *  2026-08-19, and that made onboarding a course a code change to this file — which is how
+ *  PHYS 110 came to have five published interactive lessons, no library shelf, and no way for its
+ *  author to review an objective. `loadBuilderCourses()` replaces it at page load.
+ *
+ *  Kept as a fallback rather than an empty array on purpose: a listing that fails must degrade to
+ *  the library this page has always shown, never to a page with no courses on it at all. */
+export let BUILDER_COURSES = ['phys-215', 'phys-310'];
+
+/**
+ * Every course prefix that actually exists in the bucket, newest listing wins.
+ *
+ * A `_`-prefixed entry is not a course — `_examples/` is PREP's own archived example, kept
+ * outside the course prefixes so it never appears in the library as one more lesson
+ * (sync_artifacts.py build_payload). The same exclusion lives on the Python side in
+ * `local_courses()`; the two must agree, and both say so.
+ *
+ * NEVER REJECTS. Same rule as `loadBackups()` below: this is how the page decides which shelves
+ * to draw, and a failed listing must leave the previous answer standing rather than empty the
+ * library. Returns the array it set, so a caller can use the result directly.
+ */
+export async function loadBuilderCourses() {
+  try {
+    const { data, error } = await db.storage.from(BUCKET).list('', { limit: 100 });
+    if (error) throw new Error(error.message);
+    const found = (data || [])
+      .filter((e) => e && e.id === null && !e.name.startsWith('_'))   // id === null marks a folder
+      .map((e) => e.name)
+      .sort();
+    if (found.length) BUILDER_COURSES = found;
+  } catch {
+    /* keep the fallback — see above */
+  }
+  return BUILDER_COURSES;
+}
 
 // ── raw Storage access ───────────────────────────────────────────────────────
 

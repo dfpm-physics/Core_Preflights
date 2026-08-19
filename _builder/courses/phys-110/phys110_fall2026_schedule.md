@@ -10,11 +10,20 @@ ones that are parsed, **by name**, off the header row.
 lessons are `Y`** — only lesson 1 and the three Graded Reviews (13, 24, 36) are not, which is
 exactly the 37 assignments phys-110 has in `app.assignments`.
 
-> **PHYS 110 IS NOT A BUILDER COURSE, and this file does not make it one.** It sits under
-> `_builder/courses/` only so that all three courses' schedules live in one place with one parser.
-> There is **no `COURSE_PROFILE.md` here**, so `tools/localize.py` cannot bake a kit for phys-110
-> and no artifact can be built for it — see `_builder/courses/phys-215/COURSE_PROFILE.md` for what
-> a real builder course carries. This is a **schedule source only**.
+> **PHYS 110 BECAME A BUILDER COURSE ON 2026-08-19.** This block said the opposite until that
+> date, and the reasoning it gave was sound at the time: there was no `COURSE_PROFILE.md` beside
+> this file, so `tools/localize.py` could bake no kit and no artifact could be built for phys-110.
+> The course was a **schedule source only**.
+>
+> What changed is that PHYS 110 now has an artifact author of its own, and five interactive lessons
+> already published from outside this repository — whose `.jsx` is therefore in no library, which
+> means no Gemini backup and nowhere for a throttled cadet to go. `COURSE_PROFILE.md` now exists
+> beside this file and carries the four values the library needs.
+>
+> **It is not yet buildable, and that is deliberate.** Eight profile values are still `UNSET` —
+> the grounding text and the session shape — because they are teaching decisions belonging to this
+> course, not values to copy from PHYS 215. Uploading an existing artifact to the library works
+> with them unset; `localize.py` will refuse until they are real. See that file's header.
 
 ## The Reading column — Cengage numbering, and it is SECTIONS, not pages
 
