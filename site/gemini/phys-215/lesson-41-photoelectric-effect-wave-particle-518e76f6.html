@@ -2833,14 +2833,22 @@ ${LESSON_CONFIG}
 ${EXTENSION_PROBLEMS}`;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// API PLUMBING — claude-in-claude auth
+// ===========================================================================
+// API PLUMBING -- Gemini, with the cadet's own key
 //
-// Every call carries ONLY "Content-Type: application/json". The platform
-// injects the logged-in cadet's own account credentials. NEVER add an API key
-// field, a Bearer or x-api-key header, or an anthropic-version header — any of
-// those breaks the claude-in-claude pattern outright.
-// ═══════════════════════════════════════════════════════════════════════════
+// THIS IS THE ONE RULE THE PORT REVERSES. The published Claude artifact carries the
+// opposite instruction, and it is correct there: claude.ai injects the signed-in
+// cadet's credentials, so adding any auth header breaks the claude-in-claude pattern
+// outright. Do not carry that rule back here, and do not carry this one over there.
+//
+// Here the cadet supplies their own free-tier Gemini key. It rides in an
+// x-goog-api-key HEADER, never the ?key= query string Google's quickstarts use --
+// a query string lands in browser history and in any Referer the page emits.
+//
+// The key lives in a module-scope ref and in localStorage, and PREP never receives
+// it: the generator asserts the key never appears on a line that builds the submit
+// URL or the compressed payload, and refuses rather than warns.
+// ===========================================================================
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 function backoffMs(attempt) { return Math.round(500 * Math.pow(2, attempt) + Math.random() * 300); }

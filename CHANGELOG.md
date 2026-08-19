@@ -10,6 +10,33 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-18 — Matthew Recker via Claude
 
+### The claude-in-claude auth warning inverts under the Gemini port, and now says so
+
+Every Gemini backup build carried an inherited comment from its Claude source — *"NEVER add an
+API key field, a Bearer or x-api-key header"* — sitting directly above a page that supplies the
+cadet's key by design.
+
+**The warning is correct where it comes from, and was left there.** On claude.ai the platform
+injects the signed-in cadet's credentials, so any auth header breaks the artifact outright, and
+`check_artifact.py` enforces it by failing a build containing `x-api-key`, `Bearer` or
+`anthropic-version`. Deleting it from the factory source would have removed a live rule to fix a
+ported copy. The port is what reverses it, so the port is what rewrites it: a new
+`strip_optional` transform in `to_gemini.py` replaces the block with the Gemini truth, including
+an explicit note not to carry either rule back to the other transport.
+
+Regenerated **all 33 builds** across both courses, since a fix in the tool reaches every build
+rather than one. Diff is ~22 lines per file — a comment swap, not a rewrite. Re-run is
+idempotent (`33 already current`). Rendered `phys310-lab-1-...-11c49dbc` and
+`lesson-02-electric-charge-...-3a8e4e18` in headless Chrome: **7 passed, 0 failed** each. One
+real tutor turn remains unverified, as before.
+
+**The pattern nearly failed silently, which is the part worth recording.** The comment's banner
+rules are box-drawing U+2550 and its title carries an em dash, so the ASCII `=+` pattern written
+first matched nothing — and `strip_optional` reports a miss as `not present`, which reads exactly
+like an artifact that legitimately lacks the block. Caught by checking the bytes rather than
+trusting the transform log. Any future anchor written against factory comment art has the same
+trap in it.
+
 ### PHYS 310 Lab 1: Gemini backup build, and a browser check for backup builds generally
 
 recker published the rebuilt Lab 1 artifact on claude.ai and recorded its URL through the

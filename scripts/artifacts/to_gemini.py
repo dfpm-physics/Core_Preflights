@@ -629,6 +629,46 @@ const INTEGRITY_ASKED =
         rb'  "https://dfpm-physics\.github\.io/Core_Preflights/site/student/backup\.html";',
         b"", "BACKUP_ENDPOINT stripped")
 
+    # ── 11b. The claude-in-claude auth warning INVERTS under this port ─────────
+    # In the Claude artifact this comment is correct and load-bearing: claude.ai injects the
+    # cadet's own credentials, so ANY auth header breaks the pattern outright, and
+    # check_artifact.py fails a build containing `x-api-key`, `Bearer` or `anthropic-version`.
+    # Ported to Gemini the rule reverses — this build supplies the cadet's key on purpose — so
+    # the inherited comment ends up sitting directly above a page that has the very API-key
+    # field it forbids. It is inert, being a comment, but the generated page is PUBLIC and a
+    # cadet reading source finds a line contradicting the code around it.
+    #
+    # strip_optional rather than sub1: this block is the Claude factory's wording, and an
+    # older or hand-patched artifact that does not carry it verbatim should not abort a run
+    # over a comment. A miss is logged as `not present` rather than passing silently.
+    # The banner rules are box-drawing U+2550 and the title carries an em dash, so an ASCII
+    # `=+` / `-` pattern matches nothing and strip_optional reports `not present` — a silent
+    # miss, which is the failure mode this whole tool is written to avoid. Match the bytes.
+    p.strip_optional(
+        rb"// (?:\xe2\x95\x90)+\r\n"
+        rb"// API PLUMBING[^\r\n]*\r\n"
+        rb"//\r\n"
+        rb"// Every call carries ONLY \"Content-Type: application/json\"\..*?"
+        rb"// those breaks the claude-in-claude pattern outright\.\r\n"
+        rb"// (?:\xe2\x95\x90)+",
+        b"""// ===========================================================================
+// API PLUMBING -- Gemini, with the cadet's own key
+//
+// THIS IS THE ONE RULE THE PORT REVERSES. The published Claude artifact carries the
+// opposite instruction, and it is correct there: claude.ai injects the signed-in
+// cadet's credentials, so adding any auth header breaks the claude-in-claude pattern
+// outright. Do not carry that rule back here, and do not carry this one over there.
+//
+// Here the cadet supplies their own free-tier Gemini key. It rides in an
+// x-goog-api-key HEADER, never the ?key= query string Google's quickstarts use --
+// a query string lands in browser history and in any Referer the page emits.
+//
+// The key lives in a module-scope ref and in localStorage, and PREP never receives
+// it: the generator asserts the key never appears on a line that builds the submit
+// URL or the compressed payload, and refuses rather than warns.
+// ===========================================================================""",
+        "claude-in-claude auth comment -> Gemini")
+
     # ── 12. Header banner (a comment -> ASCII only) ───────────────────────────
     p.sub1(
         rb'import React, \{ useState, useRef, useEffect \} from "react";\r\n',
