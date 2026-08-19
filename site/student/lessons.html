@@ -180,17 +180,19 @@
      *  Only warns when the interactive path is GRADED. If it is practice, submitting a report
      *  never commits and never touches the grade (student-data.js submitInteractionReport), so the
      *  "your written answers stop counting" warning would be simply false. */
+    function confirmInteractiveLaunch(l) {
+      if (!(l.interactiveGraded && l.writtenAnswerCount > 0 && !l.completion)) return true;
+      const n = l.writtenAnswerCount;
+      return confirm(
+        `Launch the interactive version?\n\n` +
+        `You have ${n} answer${n === 1 ? '' : 's'} saved on the written version. If you submit ` +
+        `an interactive report, those answers stop counting and the interactive version ` +
+        `becomes your grade for this assignment.\n\n` +
+        `You can still launch it to study without submitting anything.`);
+    }
+
     function launchInteraction(l) {
-      if (l.interactiveGraded && l.writtenAnswerCount > 0 && !l.completion) {
-        const n = l.writtenAnswerCount;
-        const ok = confirm(
-          `Launch the interactive version?\n\n` +
-          `You have ${n} answer${n === 1 ? '' : 's'} saved on the written version. If you submit ` +
-          `an interactive report, those answers stop counting and the interactive version ` +
-          `becomes your grade for this assignment.\n\n` +
-          `You can still launch it to study without submitting anything.`);
-        if (!ok) return;
-      }
+      if (!confirmInteractiveLaunch(l)) return;
       // Belt to interactiveAvailable's braces (student-lessons.js): every control that reaches
       // here is gated on a usable URL, and the fallback used to be `'#'` — which opens a second
       // copy of this page in a new tab and reads as the site malfunctioning.
@@ -200,6 +202,36 @@
         return;
       }
       window.open(url, '_blank', 'noopener');
+    }
+
+    /** The Gemini backup, through the SAME warning as the Claude link above — deliberately.
+     *  A backup submits under the same slug to the same receiver, so it commits the student to
+     *  the interactive path exactly the way the Claude version does. Routing it around the
+     *  confirm would let a cadet forfeit saved written answers without being told, purely
+     *  because their tutor was rate-limited. */
+    function launchBackup(l) {
+      if (!l.backupHref) return;
+      if (!confirmInteractiveLaunch(l)) return;
+      window.open(l.backupHref, '_blank', 'noopener');
+    }
+
+    /** The way out for a cadet Claude has locked out.
+     *
+     *  Rendered ONLY beside a LIVE Launch button and never beside a disabled one, so its
+     *  visibility IS the Claude link's visibility — structurally, rather than by a second rule
+     *  kept in step. `l.backupHref` is null unless that lesson has a build AND the interactive is
+     *  launchable (student-lessons.js), so this collapses to nothing on its own as well.
+     *
+     *  Quiet on purpose, and worded as a fallback rather than as a choice. The Claude version is
+     *  the intended path and the better lesson; a cadet who reaches for the backup first gets a
+     *  rougher experience for no reason — the same point `backup.html` makes to anyone who lands
+     *  there having been sent by the artifact itself. */
+    function backupLine(l, id) {
+      if (!l.backupHref) return '';
+      return `<div class="study-note">
+        Claude not loading, or did it stop partway through?
+        <button type="button" class="linkish" id="${id}">Use the backup version</button>
+      </div>`;
     }
 
     function gradeCard(l) {
@@ -259,6 +291,7 @@
           <button class="btn btn-secondary" id="study-btn">Launch ↗</button>
         </div>
         <div class="study-note">${note}</div>
+        ${backupLine(l, 'study-backup')}
       </div>`;
     }
 
@@ -359,7 +392,8 @@
         ? `<button class="btn btn-secondary" disabled title="Available after you submit">Launch ↗</button>
            <div class="study-note" style="margin-top:8px">Available after you submit your written responses.</div>`
         : l.interactiveAvailable
-          ? `<button class="btn btn-secondary" id="choice-launch">Launch ↗</button>`
+          ? `<button class="btn btn-secondary" id="choice-launch">Launch ↗</button>
+             ${backupLine(l, 'choice-backup')}`
           : `<button class="btn btn-secondary" disabled title="Not available yet">Launch ↗</button>
              <div class="study-note" style="margin-top:8px">Available ${esc(l.interactiveGateReason || 'later')}.</div>`;
 
@@ -420,6 +454,8 @@
       document.getElementById('back-btn')?.addEventListener('click', renderList);
       document.getElementById('study-btn')?.addEventListener('click', () => launchInteraction(l));
       document.getElementById('choice-launch')?.addEventListener('click', () => launchInteraction(l));
+      document.getElementById('study-backup')?.addEventListener('click', () => launchBackup(l));
+      document.getElementById('choice-backup')?.addEventListener('click', () => launchBackup(l));
     }
   </script>
 </body>

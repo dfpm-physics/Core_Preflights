@@ -76,6 +76,23 @@ A greyed card that says *Available once your instructor adds the lesson link* me
 itself is not ready yet — the assignment expects one, and nobody has published it. Nothing is
 missing on your side, and the written preflight is unaffected.
 
+## If the interactive lesson will not run
+
+Interactive lessons run on Claude, and a free Claude account can be turned away when Claude is
+busy. That can happen before you start or partway through a lesson you are already working on.
+
+Some lessons have a **backup version** that runs the same lesson somewhere else. When one exists,
+the assignment shows a **Use the backup version** link under the Launch button. It counts exactly
+the same: same lesson, same report, same grade — so you do not need to redo anything afterwards,
+and it is not a second assignment.
+
+**Try the Claude version first.** It is the intended one and it is the better lesson, and a busy
+Claude usually clears within a few minutes. Use the backup when Claude will not let you through.
+
+Not every lesson has a backup, so the link is not always there. If the Claude version will not run
+and there is no backup link, tell your instructor — they can grant an extension, and they would
+much rather hear from you early than late.
+
 ## Seeing your grade
 
 For a **written preflight**, the grade appears once your instructor has reviewed it — a score you can

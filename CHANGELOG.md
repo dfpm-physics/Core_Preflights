@@ -10,6 +10,51 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-19 — Matthew Recker via Claude
 
+### The Gemini backup is reachable from the assignment page, not only from a failing artifact
+
+**A cadet whose Claude session dies PARTWAY THROUGH was never offered the backup.** The artifact
+runs its connection check on the start screen, and only that screen offers a way out — so the
+route existed exactly for the cadets who had not started yet, and not for the ones who had been
+throttled mid-lesson. Reported by the course director from real cadet reports.
+
+The lesson page now carries the link too. Under a live **Launch ↗** it reads *"Claude not loading,
+or did it stop partway through? Use the backup version"*, and it opens the same
+`site/student/backup.html?i=<slug>` router the artifact points at — so which build a slug resolves
+to stays in one place, and no second copy of that mapping exists to drift.
+
+**Its visibility is the Claude link's visibility, structurally rather than by a matching rule.**
+`backupHref` is derived in `student-lessons.js` from `interactiveAvailable` — the *same boolean*
+the Claude launcher is gated on — and the renderers emit it only inside the branch that draws a
+LIVE Launch button, never beside a disabled one. Two independent gates would have been two things
+to keep in step; there is one.
+
+`launchBackup()` goes through the same confirm as `launchInteraction()`. That is not cosmetic: a
+backup submits under the same slug to the same receiver, so it commits a cadet to the interactive
+path exactly as the Claude version does, and skipping the warning would let one forfeit saved
+written answers because their tutor was rate-limited.
+
+**Coverage, checked against live data rather than assumed** (`prep_app_read`, not the test faculty
+account — CORE.md §3): 33 of 33 manifest builds map to a registered lesson, zero orphans. In the
+live Fall 2026 term that is 29 phys-215 lessons and 4 phys-310. **The five phys-110 interactive
+lessons have no Gemini build at all**, so they get no link — a build gap, not a code gap, and the
+one thing here worth acting on separately. The five old-style phys-215 slugs that also miss are in
+the TRAINING SANDBOX, where no cadet sees them.
+
+Verified in a real browser, signed in as the test cadet against live Supabase, on the Fall 2026
+phys-215 offering: 6 lessons with a live Claude launch, 6 with a backup link, **0 parity
+violations**; clicking it opens `backup.html?i=lesson-07-charge-distributions-electric-flux-32174e58`
+and the router resolves that to its build. New harness `tests/browser-harness/backup-link.mjs`
+(22 checks, all passing) drives the full `interactiveAvailable × backupHref` matrix against the
+real lifted renderers and asserts both halves of the parity claim, so a later edit that reintroduces
+a second gate fails rather than ships.
+
+`site/help/student-getting-started.md` gains a section for it, because cadets now see a control the
+page did not explain. Registered in `docs/DOC-SOURCES.json` against `backup-builds.json` and
+`backup.html`: an emptied manifest would make that paragraph describe a link nobody can see.
+
+**Still open, deliberately not fixed here:** the artifact itself does not offer the backup once a
+session is under way. This makes the route reachable; it does not put it where the failure happens.
+
 ### Two corrections to the entries above, made the same day
 
 **The date was wrong on all of it.** This session's work was stamped `2026-08-18`; it is

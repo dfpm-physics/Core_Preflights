@@ -39,6 +39,46 @@ function interactiveGate(activity) {
   return null;
 }
 
+/* ── The Gemini backup build ─────────────────────────────────────────────────────
+   A cadet on a free claude.ai account can be turned away with an HTTP 429. The Claude artifact
+   runs a connection check on its start screen and offers a way out when that check fails — but a
+   cadet whose session dies PARTWAY THROUGH is already past that screen, so the way out never
+   appears. That is the case this link exists for: the lesson page is the one surface such a cadet
+   can always get back to.
+
+   Same slug, same receiver, same activity row (`scripts/artifacts/to_gemini.py`), so a backup is
+   a transport swap and not a second assignment — it cannot split a cohort or double-count.
+
+   The link goes through `site/student/backup.html` rather than at a build path directly, for the
+   reason that router's own header gives: which build a slug resolves to is allowed to change, and
+   only the router is allowed to know it.
+
+   `loadBackupBuilds()` resolves to a plain object and NEVER rejects. A manifest that will not load
+   must degrade to "no backup offered" — which is exactly how this page behaved before the link
+   existed — and never to a lesson page that fails to render. */
+const BACKUP_MANIFEST = '../data/backup-builds.json';
+const BACKUP_ROUTER   = 'backup.html';
+
+let backupsOnce = null;
+
+function loadBackupBuilds() {
+  if (!backupsOnce) {
+    backupsOnce = (async () => {
+      try {
+        // Cache-busted exactly as backup.html does it: this file changes whenever a build is
+        // added or withdrawn, and a stale copy would offer a lesson that is no longer there.
+        const res = await fetch(`${BACKUP_MANIFEST}?_=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const doc = await res.json();
+        return (doc && typeof doc.builds === 'object' && doc.builds) ? doc.builds : {};
+      } catch {
+        return {};
+      }
+    })();
+  }
+  return backupsOnce;
+}
+
 /**
  * The states a lesson can be in for one student (STUDENT-LESSON-VIEW §4).
  * Computed once, here — never re-derived in a renderer, so the list and the dashboard
@@ -142,6 +182,7 @@ export function deriveCompletion(item, offering = item) {
  */
 export async function loadLessonStatuses(ctx) {
   const items = await loadAssignmentStatuses(ctx);
+  const backups = await loadBackupBuilds();
 
   const rows = items.map(item => {
     const written = item.written;
@@ -162,6 +203,18 @@ export async function loadLessonStatuses(ctx) {
       (isActivityAvailable(interactive, { submission: item.submission, isPast: item.isPast })
        || item.isPast);
     const interactiveGraded = interactive?.gradingRole === 'graded';
+
+    // WHERE THE BACKUP LINK POINTS, or null when there is nothing to point at. Gated on
+    // `interactiveAvailable` ITSELF rather than on a re-statement of it: the backup is the same
+    // lesson by another transport, so a cadet who may not launch one must not be handed the
+    // other, and reusing the one boolean is what makes that true by construction instead of by
+    // two rules staying in step.
+    //
+    // `null` is the ordinary answer, not a fault — a lesson never published on claude.ai has
+    // nothing to back up, and an unreadable manifest lands here as well (see loadBackupBuilds).
+    const backupHref = (interactiveAvailable && interactive?.slug && backups[interactive.slug])
+      ? `${BACKUP_ROUTER}?i=${encodeURIComponent(interactive.slug)}`
+      : null;
 
     // WHICH PATHS CARRY CREDIT — the question every renderer below actually needs, and the one
     // `interactiveGraded` alone cannot answer. "The interactive is graded" is true both when the
@@ -208,6 +261,7 @@ export async function loadLessonStatuses(ctx) {
       // it cannot be launched yet — the reason to show in its place. Computed here so the page
       // never re-derives the availability rule (STUDENT-LESSON-VIEW §4).
       interactiveAvailable,
+      backupHref,
       interactiveGraded,
       writtenGraded,
       policy,
