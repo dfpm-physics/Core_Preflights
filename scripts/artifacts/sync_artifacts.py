@@ -51,6 +51,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -84,16 +85,113 @@ class Unusable(Exception):
 
 # ── Storage REST ─────────────────────────────────────────────────────────────
 
+# A staff session, when --as-staff is in force: (url, publishable_key, access_token).
+# None means the documented service-role path.
+#
+# WHY THIS EXISTS. This tool read a service-role key from CONFIG_PATH and nothing else, and
+# that key is deliberately NOT on every operating machine any more — scoped access replaced
+# it. Two pushes have now needed the same workaround: the 2026-08-14 backup-button
+# republish and the 2026-08-18 PHYS 310 Lab 1 rebuild. Both swapped the request function for
+# one carrying a staff session and let every other line of this tool run unchanged. Two
+# incidents of one monkeypatch is the argument for a committed flag.
+#
+# A staff session is strictly LESS privileged than the service role: it obeys migration
+# 023's RLS instead of bypassing it, and `artifact-sources` admits a director of any
+# offering for writes. Per CORE.md §3 it is the right instrument for a WRITE and the wrong
+# one for an AUDIT, because RLS answers "what may you see" and never "what is there".
+# NOTHING IN THIS TOOL COUNTS ANYTHING — it compares local objects against the listing and
+# uploads the differences — so that hazard does not arise here. Do not reuse this session to
+# answer a "how many are there" question; use prep_app_read over the pooler.
+_SESSION = None
+
+
+def _site_config():
+    """The project URL and the PUBLISHABLE key, from the committed site config.
+
+    Both are public by that file's own declaration — the publishable key is protected by
+    RLS — which is why --as-staff needs no config file of its own.
+    """
+    s = (REPO / "site" / "js" / "config.js").read_text(encoding="utf-8")
+    url = re.search(r"https://[a-z0-9]+\.supabase\.co", s)
+    key = re.search(r"['\"](sb_publishable_[A-Za-z0-9_\-]+)['\"]", s)
+    if not url or not key:
+        raise Unusable("could not read the project URL and publishable key from site/js/config.js")
+    return url.group(0), key.group(1)
+
+
+def _read_env(path):
+    """A minimal KEY=VALUE parser, matching tests/browser-harness/env.mjs."""
+    out = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        s = line.strip()
+        if not s or s.startswith("#") or "=" not in s:
+            continue
+        i = s.index("=")
+        v = s[i + 1:].strip()
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+            v = v[1:-1]
+        out[s[:i].strip()] = v
+    return out
+
+
+def start_staff_session():
+    """Sign in as the PREP_TEST_FACULTY account from supabase/admin/.env.
+
+    Reads the same gitignored file as tests/browser-harness/env.mjs, so there is one source
+    of truth and no secret reaches a command line, a shell history, or a scratch file. The
+    token lives in memory for the life of the process and is written nowhere.
+    """
+    global _SESSION
+    env_file = REPO / "supabase" / "admin" / ".env"
+    if not env_file.exists():
+        raise Unusable(f"--as-staff needs {env_file}, which does not exist")
+
+    env = _read_env(env_file)
+    email = env.get("PREP_TEST_FACULTY_EMAIL")
+    password = env.get("PREP_TEST_FACULTY_PASSWORD")
+    if not email or not password:
+        raise Unusable(f"no PREP_TEST_FACULTY_* block in {env_file}")
+
+    url, publishable = _site_config()
+    body = json.dumps({"email": email, "password": password}).encode()
+    req = urllib.request.Request(
+        f"{url}/auth/v1/token?grant_type=password", data=body,
+        headers={"apikey": publishable, "Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            token = json.loads(resp.read())["access_token"]
+    except urllib.error.HTTPError as e:
+        raise Unusable(f"staff sign-in failed ({e.code}): "
+                       f"{e.read()[:200].decode('utf-8', 'replace')}")
+
+    _SESSION = (url, publishable, token)
+    print(f"staff session: {email} (token held in memory only, never written)")
+
+
 def _cfg():
+    if _SESSION is not None:
+        url, _publishable, token = _SESSION
+        return url, token
     if not CONFIG_PATH.exists():
-        raise Unusable(f"no config at {CONFIG_PATH} — run /setup-preflight (CORE.md section 3)")
+        raise Unusable(
+            f"no config at {CONFIG_PATH} — run /setup-preflight (CORE.md section 3),\n"
+            "  or pass --as-staff to run through the PREP_TEST_FACULTY session in\n"
+            "  supabase/admin/.env instead (less privileged — it obeys RLS)")
     c = json.loads(CONFIG_PATH.read_bytes().decode("utf-8"))
     return c["supabase_url"].rstrip("/"), c["supabase_service_key"]
 
 
 def _req(method, path, key, data=None, ctype=None, timeout=90, extra=None):
     url, _ = _cfg()
-    headers = {"apikey": key, "Authorization": f"Bearer {key}"}
+    # With a service-role key the same value is correct in both headers. With a SESSION it is
+    # not: the gateway validates `apikey` as a PROJECT key (sb_publishable_ / sb_secret_),
+    # while `Authorization` carries who you are. Putting the JWT in both is how this fails,
+    # and it fails as a 401 that reads like a permissions problem rather than a header one.
+    if _SESSION is not None:
+        _url, publishable, token = _SESSION
+        headers = {"apikey": publishable, "Authorization": f"Bearer {token}"}
+    else:
+        headers = {"apikey": key, "Authorization": f"Bearer {key}"}
     if ctype:
         headers["Content-Type"] = ctype
     if extra:
@@ -622,6 +720,10 @@ def main(argv=None):
         description="Sync artifact sources between the builder tree and Supabase Storage.")
     ap_.add_argument("--source", default=None,
                      help="courses/ directory to read (default: _builder/courses)")
+    ap_.add_argument("--as-staff", action="store_true",
+                     help="authenticate as the PREP_TEST_FACULTY staff session in "
+                          "supabase/admin/.env instead of the service-role key "
+                          "(less privileged: obeys RLS rather than bypassing it)")
     sub = ap_.add_subparsers(dest="cmd", required=True)
 
     for name, fn, helptext in (
@@ -631,18 +733,31 @@ def main(argv=None):
     ):
         p = sub.add_parser(name, help=helptext)
         p.add_argument("--commit", action="store_true", help="actually make the change")
+        # Also accepted AFTER the subcommand, because that is where a person naturally types
+        # it. SUPPRESS is load-bearing: with a normal store_true default of False, passing the
+        # flag BEFORE the subcommand and not after would have the subparser's default silently
+        # overwrite the True — the tool would report the service-role path while the operator
+        # believed they had asked for a session, which fails as a confusing 401.
+        p.add_argument("--as-staff", action="store_true", default=argparse.SUPPRESS,
+                       help="see the top-level --as-staff")
         p.set_defaults(func=fn)
 
     p = sub.add_parser("pull", help="download every object (round-trip proof / fresh-clone cache)")
     p.add_argument("--into", required=True, help="destination directory")
     p.add_argument("--commit", action="store_true", help="actually write files")
+    p.add_argument("--as-staff", action="store_true", default=argparse.SUPPRESS,
+                   help="see the top-level --as-staff")
     p.set_defaults(func=cmd_pull)
 
     p = sub.add_parser("status", help="compare local and remote, change nothing")
+    p.add_argument("--as-staff", action="store_true", default=argparse.SUPPRESS,
+                   help="see the top-level --as-staff")
     p.set_defaults(func=cmd_status)
 
     args = ap_.parse_args(argv)
     try:
+        if getattr(args, "as_staff", False):
+            start_staff_session()
         return args.func(args)
     except Unusable as exc:
         print(f"cannot proceed: {exc}", file=sys.stderr)
