@@ -10,6 +10,34 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-19 — Matthew Recker via Claude
 
+### Proposal: getting an artifact into the library without a clone
+
+`docs/decisions/ARTIFACT-UPLOAD.md`, **status PROPOSED — nothing built.** Written because the
+current path made sense for a fact that is no longer true: one person holding every `.jsx` on one
+machine. PHYS 110 now has its own artifact author, and the course director is not going to be a
+courier for somebody else's files.
+
+Recommends an **upload panel on the faculty Artifacts page** — the instructor is already signed in,
+and migration 023 already grants a director INSERT on this bucket, so the permission is unchanged
+and the page already writes there.
+
+**It records what was rejected, which is the point of writing it.** An edge function the *skill*
+posts to is the intuitive design and is rejected because the skill has no identity: it runs inside
+a Claude conversation, holds no PREP session, and every way of giving it one re-introduces the
+credential handoff the whole proposal exists to remove. The prefill-link idiom is rejected on size
+(120–250 KB will not fit in a URL). Committing the `.jsx` to git is rejected for the reason the
+bucket exists. **Doing nothing and keeping the CLI is kept as a live option** — if exactly one more
+instructor ever authors artifacts, a runbook is cheaper than a feature.
+
+**One prerequisite is called out as blocking:** `index.json` is derived from `BUILD-LOG.md` in git,
+so a browser upload would be silently erased by the next `push` from any clone. The fix is the
+ownership split this repository already uses for `review-notes.json` — the site writes, `push`
+merges rather than regenerates — and it must land *first* and separately, because it is
+independently correct and protects the existing CLI path too.
+
+**Also recorded as unfixed by any option:** nothing detects a published-but-unuploaded artifact,
+which was the actual PHYS 110 failure and stayed invisible for weeks.
+
 ### All five PHYS 110 lessons have a Gemini backup, and the porter now speaks both artifact dialects
 
 **PHYS 110 cadets had no fallback anywhere.** Their artifacts carry no backup button either
