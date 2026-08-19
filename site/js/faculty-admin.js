@@ -17,6 +17,7 @@
 import { db } from './supabase.js';
 import { lastFirst, splitName } from './util.js';
 import { gradeAssignmentList } from './faculty-grade.js';
+import { fetchAll } from './schema.js';
 
 /* ── Roles: TWO, as of 2026-07-27 ─────────────────────────────────────────────
  * `grader` is withdrawn. It was defined as "grades only, no authoring" and never meant anything:
@@ -376,10 +377,10 @@ export async function gradeMatrix(ctx, sectionIds) {
 
   // Finalized only. A student with no finalized grade exports BLANK, never zero — a zero posts
   // to Blackboard as a real score the instructor never gave.
-  const { data: grades } = await db.from('grades')
+  const { data: grades } = await fetchAll(() => db.from('grades')
     .select('enrollment_id, assignment_offering_id, points_earned, is_finalized')
     .in('enrollment_id', students.map(s => s.enrollmentId))
-    .eq('is_finalized', true);
+    .eq('is_finalized', true));
 
   const byKey = {};
   (grades || []).forEach(g => { byKey[`${g.enrollment_id}|${g.assignment_offering_id}`] = g.points_earned; });
@@ -435,10 +436,10 @@ export async function buildBackup(ctx, sectionIds) {
   const enrollmentIds = (enrollments || []).map(e => e.id);
   const [{ data: submissions }, { data: grades }] = await Promise.all([
     enrollmentIds.length
-      ? db.from('submissions').select('*').in('enrollment_id', enrollmentIds)
+      ? fetchAll(() => db.from('submissions').select('*').in('enrollment_id', enrollmentIds))
       : Promise.resolve({ data: [] }),
     enrollmentIds.length
-      ? db.from('grades').select('*').in('enrollment_id', enrollmentIds)
+      ? fetchAll(() => db.from('grades').select('*').in('enrollment_id', enrollmentIds))
       : Promise.resolve({ data: [] }),
   ]);
 

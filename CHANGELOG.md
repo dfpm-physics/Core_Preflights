@@ -10,6 +10,74 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-19 — Matthew Recker via Claude
 
+### Every whole-course page was reading the first 1000 rows and calling it the course
+
+**Reported as "these two cadets submitted preflight-05 and were not graded."** They were graded,
+2/2 each, `ai_suggested`, exactly like their section-mates. What was wrong was the lesson rollup,
+which listed them under **Did not submit**.
+
+**The cause is a cap nobody was told about.** PostgREST truncates a response at its `db-max-rows`
+and reports the cut only in a `Content-Range` header that supabase-js does not surface. There is no
+error and no flag — a truncated read is shaped exactly like a complete one. The cap was **1000**.
+
+`loadManager()` in `faculty-rollup.js` asks for every submission in the course, 300 enrollments per
+request. phys-215's first chunk matched **1189 rows**; 1000 came back. The rollup decides "did this
+cadet submit?" by looking for a `submission_activities` row, so each of the 189 rows that never
+arrived became a cadet who had not submitted. Measured against the database: **45 cadets** wrongly
+listed on preflight-05, and 46/47/48/9 on preflights 02/03/04/06. Confirmed live before any change —
+the API answered `Content-Range: 0-999/1179` to the exact request the page issues.
+
+**Chunking never protected against this and was mistaken for protection.** `chunked()` bounds the
+request URL. The cap bounds the response. A course big enough to need a second chunk is a course
+whose chunks overflow.
+
+**Why it was believed.** The Grade tab reads one offering at a time — about 364 rows — and never
+reached the cap, so grading was correct throughout. Two surfaces disagreed and the correct one
+looked like the exception.
+
+**It was never only the rollup.** Every reader that spans a whole course was wrong the same way:
+
+| Reader | Rows it should get | Rows it got |
+|---|---|---|
+| `faculty-rollup.js` rollup (phys-215) | 1445 submissions | 1250 |
+| `faculty-data.js` faculty dashboard | submissions + grades + extensions | capped, all three |
+| `faculty-gradebook.js` gradebook grid | 1448 grades (phys-215) | 1253 |
+| `faculty-grade.js` grading queue + queue box | across all published offerings | capped |
+| `faculty-admin.js` **Blackboard grade export** | all finalized grades | capped |
+| `faculty-admin.js` **course backup** | all submissions + grades | capped |
+
+phys-110 was losing 180 submissions and 200 grades on the same reads. The last two rows are the
+ones that would have hurt longest: an export or a backup that is silently short still opens, still
+looks like a file, and is wrong in a way the reader has no way to see.
+
+**Fix: `fetchAll()` in `schema.js`, and every one of those call sites now goes through it.** It
+pages with `.range()` until a request comes back empty. Two details are load-bearing and commented
+as such — it orders by a **unique** column, because without a total order the server may repeat one
+row across a page boundary and drop another; and it advances by what **arrived** and stops only on
+an **empty** page, because stopping on a short page re-creates the bug wherever the cap is below the
+page size, a value we neither control nor can read back.
+
+**The cap was also raised to 10000 in the Supabase dashboard**, which is why the pages read
+correctly from that moment. That is headroom, not a fix — 40 lessons across phys-110's 469 cadets is
+18,800 rows — and nothing would report hitting it again. Paging is what makes the number stop
+mattering.
+
+**No data was ever wrong.** Every grade, submission and diagnostic in the database was correct the
+whole time; only what the browser was handed was short. Nothing needs regrading and no aggregation
+needs re-running — `/lesson-aggregate` reads one offering at a time from Python and never hit the
+cap either.
+
+**Verified:** `tests/app-schema/test-paging.mjs` is new and registered in `run.mjs` — it reads
+phys-110 as the test faculty and asserts every row arrives with no duplicates, **including with
+`pageSize` forced to 250** so the multi-page path actually executes; at the shipped default the
+course now fits in one page and a test that cannot fail would have been worthless. Full suite: same
+542 passed / 10 failed as on unmodified `main` (all ten pre-existing — nav's Artifacts item, the
+test cadet's commit fixture, an RLS section-visibility check). `node --check` on all six changed
+modules; `test-imports.mjs` resolves all 396 named imports. Browser: `tests/browser-harness/pass.mjs`
+signed in as faculty, **11/11 pages clean**, no console errors or failed requests, dashboard and
+rollup and grade and admin among them. `test-rollup.mjs`'s query stub was taught `range` — its
+header says an unstubbed method must fail loudly, and the shipped code now calls one.
+
 ### PHYS 110's five artifacts are in the library; their Gemini backups are blocked on a second artifact dialect
 
 **The sources arrived and are uploaded.** All five `.jsx` were verified before anything moved:

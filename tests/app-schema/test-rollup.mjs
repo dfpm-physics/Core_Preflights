@@ -33,7 +33,7 @@ const chain = () => {
   // unstubbed method still fails loudly — a silent `undefined` here would make a query look
   // like it returned nothing instead of like it was never stubbed.
   for (const m of ['select', 'eq', 'in', 'is', 'not', 'neq', 'gt', 'lt', 'gte', 'lte',
-                   'order', 'limit', 'filter', 'or'])
+                   'order', 'limit', 'range', 'filter', 'or'])
     c[m] = () => c;
   // The row-terminators resolve to an empty result. That is enough for the entry-point checks at
   // the bottom of this file: an offering that resolves to null makes each read return its empty

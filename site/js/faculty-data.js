@@ -16,7 +16,7 @@ import { db } from './supabase.js';
 import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT,
   shapeOffering, shapeOfferings, withResolvedDue, offeringSections,
-  shapeSubmission, effectiveDue, deriveStatus, lessonNumber, chunked,
+  shapeSubmission, effectiveDue, deriveStatus, lessonNumber, chunked, fetchAll,
   effortSignal, writtenSignals,
 } from './schema.js';
 
@@ -241,12 +241,12 @@ export async function loadFacultyDashboard(ctx) {
   const submissions = [], grades = [], extensions = [];
   for (const ids of chunked(enrollmentIds)) {
     const [s, g, x] = await Promise.all([
-      db.from('submissions').select(SUBMISSION_SELECT).in('enrollment_id', ids),
-      db.from('grades').select(GRADE_SELECT).in('enrollment_id', ids),
+      fetchAll(() => db.from('submissions').select(SUBMISSION_SELECT).in('enrollment_id', ids)),
+      fetchAll(() => db.from('grades').select(GRADE_SELECT).in('enrollment_id', ids)),
       // A revoked extension is not an extension — the row survives revocation so the director's
       // report can still count it, so the filter is the caller's job. See effectiveDue().
-      db.from('extensions').select(DASH_EXTENSION_SELECT).in('enrollment_id', ids)
-        .is('revoked_at', null),
+      fetchAll(() => db.from('extensions').select(DASH_EXTENSION_SELECT).in('enrollment_id', ids)
+        .is('revoked_at', null)),
     ]);
     submissions.push(...(s.data || []).map(shapeSubmission));
     grades.push(...(g.data || []));

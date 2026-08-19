@@ -24,7 +24,7 @@ import {
   OFFERING_SELECT, GRADE_SELECT, SUBMISSION_SELECT, EXTENSION_SELECT,
   shapeOffering, withResolvedDue, offeringSections,
   shapeSubmission, questionsOf, effectiveDue, submissionLateness,
-  actionableSections,
+  actionableSections, fetchAll,
 } from './schema.js';
 
 /** Scheduled assignments for the current offering, for the picker. */
@@ -627,8 +627,8 @@ export async function courseExtensions(ctx, sectionIds) {
   if (!enrollmentIds.length) return [];
 
   const [exts, offerings, staff] = await Promise.all([
-    db.from('extensions').select(EXTENSION_SELECT)
-      .in('enrollment_id', enrollmentIds).order('created_at', { ascending: false }),
+    fetchAll(() => db.from('extensions').select(EXTENSION_SELECT)
+      .in('enrollment_id', enrollmentIds).order('created_at', { ascending: false })),
     db.from('assignment_offerings')
       .select('id, due_at, points_possible, assignments!inner(slug, title)')
       .eq('course_offering_id', ctx.currentOffering),
@@ -728,13 +728,13 @@ export async function pastDueUngraded(ctx, sectionIds, now = new Date()) {
   if (!offeringIds.length) return [];
 
   const [subs, grds, exts] = await Promise.all([
-    db.from('submissions').select('enrollment_id, assignment_offering_id, status, chosen_activity_id')
-      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds),
-    db.from('grades').select('enrollment_id, assignment_offering_id, is_finalized')
-      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds),
-    db.from('extensions').select('enrollment_id, assignment_offering_id, extended_due_at')
+    fetchAll(() => db.from('submissions').select('enrollment_id, assignment_offering_id, status, chosen_activity_id')
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds)),
+    fetchAll(() => db.from('grades').select('enrollment_id, assignment_offering_id, is_finalized')
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds)),
+    fetchAll(() => db.from('extensions').select('enrollment_id, assignment_offering_id, extended_due_at')
       .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds)
-      .is('revoked_at', null),
+      .is('revoked_at', null)),
   ]);
 
   const key = (e, o) => `${e}|${o}`;
@@ -930,14 +930,14 @@ export async function gradingQueue(ctx, sectionIds, now = new Date()) {
   if (!offeringIds.length) return [];
 
   const [subs, grds, exts] = await Promise.all([
-    db.from('submissions')
+    fetchAll(() => db.from('submissions')
       .select('enrollment_id, assignment_offering_id, chosen_activity_id, status, committed_at')
-      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds),
-    db.from('grades').select('enrollment_id, assignment_offering_id, is_finalized, source')
-      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds),
-    db.from('extensions').select('enrollment_id, assignment_offering_id, extended_due_at, reason')
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds)),
+    fetchAll(() => db.from('grades').select('enrollment_id, assignment_offering_id, is_finalized, source')
+      .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds)),
+    fetchAll(() => db.from('extensions').select('enrollment_id, assignment_offering_id, extended_due_at, reason')
       .in('assignment_offering_id', offeringIds).in('enrollment_id', enrollmentIds)
-      .is('revoked_at', null),
+      .is('revoked_at', null)),
   ]);
 
   return buildGradingQueue({

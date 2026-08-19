@@ -72,7 +72,7 @@ import { db } from './supabase.js';
 import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT,
   shapeOfferings, withResolvedDue, offeringSections,
-  shapeOffering, shapeSubmission, artifactUrlOf, chunked,
+  shapeOffering, shapeSubmission, artifactUrlOf, chunked, fetchAll,
   int05, writtenSignals, writtenReport, effortSignal, FREE_RESPONSE_KEY, FREE_RESPONSE_LABEL,
   minutes, median, READING_BUCKETS, reflectionQuestionId, freeResponseQuestion,
 } from './schema.js';
@@ -158,7 +158,8 @@ export async function loadManager(ctx) {
   // it slowed as the term filled up. Everything reaches through the offering now.
   const submissions = [];
   for (const ids of chunked(enrollments.map(e => e.id))) {
-    const { data, error } = await db.from('submissions').select(SUBMISSION_SELECT).in('enrollment_id', ids);
+    const { data, error } = await fetchAll(() =>
+      db.from('submissions').select(SUBMISSION_SELECT).in('enrollment_id', ids));
     // Same rule as above, and it matters more on a chunked read: a course large enough to need a
     // second chunk would drop that chunk's submissions silently, and every completion count on
     // the page would be understated by exactly the students in it — wrong, but plausible.

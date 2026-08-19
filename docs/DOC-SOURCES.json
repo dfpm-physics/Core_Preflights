@@ -55,7 +55,7 @@
       "doc": "site/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-19",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -154,7 +154,7 @@
       "doc": "site/help/director-course-structure.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-19",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/003_term_calendar.sql",
@@ -171,7 +171,7 @@
       "doc": "site/help/director-schema-reference.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-19",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/002_rls.sql",
@@ -203,7 +203,7 @@
       "doc": "site/help/instructor-accounts.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-19",
       "sources": [
         ".ai/instructions/PROJECT.md",
         "site/js/roster-import.js",

@@ -94,13 +94,17 @@ for (const s of OFFLINE) {
 //                 schema.js, but the half that matters imports student-data.js behind a RECORDING
 //                 stub — the assertions are about the queries and writes commitSubmission() and
 //                 submitInteractionReport() actually issue, including the ones a refusal must not
+//   test-paging  imports schema.js's fetchAll() and reads phys-110 as the test faculty. The
+//                 one suite here whose subject is a QUANTITY rather than a shape: that a
+//                 whole-course read returns the whole course, which is not what PostgREST
+//                 does by default and is not something a wrong answer announces
 for (const suite of ['test-imports.mjs', 'test-rollup.mjs', 'test-system-prefs.mjs',
                      'test-run-banner.mjs', 'test-help-status.mjs', 'test-prefs.mjs',
                      'test-tasks.mjs', 'test-gradebook.mjs', 'test-grade.mjs', 'test-ei.mjs',
                      'test-dashboard-rows.mjs', 'test-student-detail.mjs', 'test-feedback.mjs',
                      'test-feedback-admin.mjs', 'test-lesson-due.mjs',
                      'test-lesson-isolation.mjs', 'test-student-completion.mjs',
-                     'test-extension-reopen.mjs', 'test-grace.mjs']) {
+                     'test-extension-reopen.mjs', 'test-grace.mjs', 'test-paging.mjs']) {
   const r = spawnSync(process.execPath, [resolve(import.meta.dirname, suite)],
                       { encoding: 'utf8' });
   process.stdout.write(r.stdout || '');

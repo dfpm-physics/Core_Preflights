@@ -25,7 +25,7 @@
 
 import { db } from './supabase.js';
 import {
-  chunked, lessonNumber, effectiveDue, submissionLateness,
+  chunked, fetchAll, lessonNumber, effectiveDue, submissionLateness,
   withResolvedDue, offeringSections,
   effortSignal, writtenSignals, writtenReport, int05,
 } from './schema.js';
@@ -461,12 +461,12 @@ export async function loadGradebook(ctx, sectionIds) {
   const grades = [], submissions = [], extensions = [];
   for (const chunk of chunked(ids)) {
     const [g, s, x] = await Promise.all([
-      db.from('grades').select(GB_GRADE_SELECT).in('enrollment_id', chunk),
-      db.from('submissions').select(GB_SUBMISSION_SELECT).in('enrollment_id', chunk),
+      fetchAll(() => db.from('grades').select(GB_GRADE_SELECT).in('enrollment_id', chunk)),
+      fetchAll(() => db.from('submissions').select(GB_SUBMISSION_SELECT).in('enrollment_id', chunk)),
       // revoked_at IS NULL or a withdrawn extension still moves the deadline. Same contract the
       // EXTENSION_SELECT docs state and the same filter faculty-grade.js applies.
-      db.from('extensions').select(GB_EXTENSION_SELECT).in('enrollment_id', chunk)
-        .is('revoked_at', null),
+      fetchAll(() => db.from('extensions').select(GB_EXTENSION_SELECT).in('enrollment_id', chunk)
+        .is('revoked_at', null)),
     ]);
     if (g.error) return { error: g.error };
     if (s.error) return { error: s.error };

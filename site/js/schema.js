@@ -1036,6 +1036,53 @@ export function chunked(list, size = CHUNK) {
   return out;
 }
 
+/**
+ * Read EVERY row a query matches, instead of the first page of them.
+ *
+ * PostgREST caps a response at its `db-max-rows` and announces the cut only in a `Content-Range`
+ * header that supabase-js does not surface. So a truncated read is indistinguishable from a
+ * complete one: no error, and `data` that looks like an answer.
+ *
+ * That is not hypothetical. The cap was 1000 until 2026-08-19. On that day the faculty rollup
+ * asked for phys-215's submissions 300 enrollments at a time; the first chunk matched 1189 rows,
+ * 1000 came back, and the 189 that did not turned 45 cadets who HAD submitted preflight-05 - and
+ * been graded 2/2 for it - into a "Did not submit" list. Every whole-course reader was wrong the
+ * same way (phys-110 lost 180 submissions and 200 grades). The Grade tab was right throughout,
+ * because it reads one offering at a time and never reached the cap, which is why the two
+ * disagreed and why the rollup was believed.
+ *
+ * The cap was raised to 10000 the same day. That bought room, it did not remove the wall - a
+ * 40-lesson term times a 470-cadet course is 18800 rows - and nothing in this repo would report
+ * hitting it again. Paging is what makes the number stop mattering.
+ *
+ * Chunking the id list does NOT fix this and never did. Chunking bounds the request URL; the cap
+ * bounds the response. A course big enough to need two chunks is a course whose chunks return
+ * more rows than a chunk is allowed to.
+ *
+ * `build()` must return a FRESH query builder on every call - a supabase-js builder is a
+ * thenable and cannot be awaited twice.
+ *
+ * Two details are load-bearing:
+ *   - The `.order()` on a UNIQUE column. Without a total order the server may repeat one row
+ *     across two pages and omit another - the same silent loss in a new costume.
+ *   - Advancing by what ARRIVED and stopping only on an EMPTY page. Stopping on a short page
+ *     would re-introduce the bug wherever the server's cap is smaller than `pageSize`, which is
+ *     a value we do not control and cannot read back.
+ */
+export const PAGE = 1000;
+export async function fetchAll(build, { column = 'id', pageSize = PAGE, maxPages = 200 } = {}) {
+  const rows = [];
+  for (let page = 0; page < maxPages; page++) {
+    const { data, error } = await build()
+      .order(column, { ascending: true })
+      .range(rows.length, rows.length + pageSize - 1);
+    if (error) return { data: null, error };
+    if (!data || !data.length) return { data: rows, error: null };
+    rows.push(...data);
+  }
+  return { data: null, error: new Error(`Refusing to page past ${maxPages * pageSize} rows`) };
+}
+
 /** Pull a lesson number out of a slug ("preflight-08" / "lesson-08-charge") or a title. */
 export function lessonNumber(slug, title) {
   const m = String(slug || '').match(/(?:^|[^0-9])(\d{1,2})(?:[^0-9]|$)/)
