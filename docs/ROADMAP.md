@@ -194,8 +194,36 @@ assertions both sides of the boundary.
 
 ### P1.18 — Push the rebuilt PHYS 310 Lab 1 into the artifact library · **S** · *handoff opened 2026-08-18*
 
-**The work is done and sitting uncommitted in the OneDrive working tree. What is left is one
-upload, and this machine cannot do it.** The director asked for this to be picked up on the other
+**What is left is one upload, and it has a prerequisite that is easy to miss.**
+
+> ### ⚠ BLOCKING: the rebuilt `.jsx` does NOT travel with the commit
+>
+> `_builder/courses/*/artifacts/*.jsx` is **gitignored** — it is a cache whose transport is the
+> Storage bucket, not git. So a machine that pulls this commit gets the new `BUILD-LOG.md` entry
+> (slug `…-11c49dbc`) and its own **stale** Lab 1 `.jsx` (slug `…-1f096984`).
+>
+> **Running `push` in that state fails silently and looks fine.** `build_payload` globs the local
+> `.jsx` files and reads the slug out of each one, then looks that slug up in `BUILD-LOG.md`. The
+> stale artifact's slug is no longer in the log, so the lookup returns `{}` and the library gets an
+> index row with **no title, no grounding line, no published URL** — and the old build's content
+> under the old slug. Nothing errors.
+>
+> **And CORE.md §1's claim that the repo "sits inside OneDrive" is stale for at least one machine:**
+> the build machine's tree is NOT under %OneDrive% -- it sits directly off the C: root, outside
+> any synced folder. Do not assume the file syncs by itself. Verified 2026-08-18.
+>
+> **So before pushing, make sure the pushing machine has the rebuilt file.** Check it:
+> ```bash
+> grep -c 11c49dbc _builder/courses/phys-310/artifacts/phys310_preflight_lab_1_measurement_of_half_life.jsx
+> ```
+> `1` means you have the rebuild; `0` (or a `-1f096984` hit) means you have the stale one and must
+> copy the file across first.
+
+**The simpler fix is probably to move the credential, not the file.** The rebuilt artifact and the
+whole repo state already sit together on the build machine; what is missing there is one config
+file. Dropping the service key into `~/.claude/skills/preflight-analyze/config.json` there — or
+adding the `--as-staff` flag below — makes this a single command with nothing to transport and no
+chance of pushing a stale artifact. The director asked for this to be picked up on the other
 machine — the one that holds the DB credentials and did the original Storage import.
 
 **What is ready** (all uncommitted as of 2026-08-18, see that date's CHANGELOG entry):
