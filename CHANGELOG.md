@@ -8,6 +8,89 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-20 (second) — Matthew Recker via Claude
+
+### Every cadet was silently moved onto a 20-request-per-day model, and the backup gave up instead of stepping down
+
+**Reported by the course director:** cadets kept getting paused on the Gemini backup through a
+morning section, while his own key kept working.
+
+**It was not tokens, which is where we looked first.** The graded prompt is ~12,700 tokens resent
+every turn, so token cost was the standing explanation — `gemini-port/SKILL.md` said in as many
+words that this "exhausts a free-tier key in about two runs". The director's AI Studio dashboard
+settled it: **66.7k of a 250,000 token-per-minute ceiling used, and 21 requests against a cap of
+20.** The binding limit is requests per day. A prompt cut of any size would not have bought a cadet
+one more session, and that paragraph has been corrected rather than left to mislead the next reader.
+
+**Free-tier quota is per MODEL, not per key**, and the daily figures differ by more than an order of
+magnitude — 20/day on every plain Flash the account can see, **500/day on the Lite models**. One
+tutor session is 10–14 requests. So a 20/day model is one session per cadet per day, and the reset
+is midnight Pacific, i.e. **1:00 AM in Denver — after a 2359 deadline has already passed.**
+
+**Nobody chose that model.** `scoreModel` gave +25 to any name containing `latest`, so
+`gemini-flash-latest` outscored every pinned name 125 to 113 and won every time. Google hot-swaps
+that alias to whatever shipped most recently — their docs say it "can be a stable, preview or
+experimental release" — and it had moved to Gemini 3.7 Flash, at 20/day. The `MODEL_REJECT` regex
+screens names containing `preview` and never fired: **the alias does not say preview, it resolves
+to one.** A name-based screen cannot see through an alias, and nothing reported the switch.
+
+**Two ladders now, ordered by quota rather than capability.** `MODEL_CHAT` carries the ~12
+conversation turns and starts on the 500/day Lite models. `MODEL_REPORT` is the single request that
+writes the graded report the cohort rollup reads, so it starts on the strongest model the key has —
+one request fits inside a 20/day cap comfortably — and falls through into the chat pool rather than
+failing, because a report from a weaker model beats no report. `sysFor()` picks the pool from the
+same phase that picks the prompt, since they are one decision and the phase machinery already
+existed from the token work.
+
+**A 429 steps down the ladder instead of ending the session.** Gemini returns 429 for both the
+per-minute and the per-day limit and does not say which, so the transport retries with backoff
+first — a per-minute limit clears and the same model is still right — then marks that model spent
+and moves to the next rung, which carries its own independent allowance. Spent models stay spent
+for the session, so the extension phase cannot re-burn one already known exhausted. Only a fully
+walked ladder raises `quota`. **Previously a cadet was stranded at 20 requests while 500 sat unused
+one rung down**: the ladder machinery already existed and was wired only to 404, never to 429.
+
+**It still cannot dead-end on a retired name**, which is why runtime discovery was built in the
+first place. `discoverModel()` intersects both ladders with what `ListModels` says the key can
+actually reach, and falls back to scoring the listing when it can reach neither — a scorer that now
+prefers `lite` and **penalises** `latest`.
+
+### The backup's failure messages talked about Claude
+
+Reported by the course director in the same pass. Two user-facing strings in all 38 builds:
+
+- **The `capacity` message told a cadet to blame "a free Claude account" and go use a different
+  one.** Wrong twice over on a Gemini build — `capacity` is thrown only for 529/5xx, so it is
+  Google's server rather than any account, and there is no second account to move to because the
+  key is the cadet's own. It survived because step 4 of the port rewrote the `model` case beside it
+  and never touched this one. It is now its own transform, so a reworded source fails loudly.
+- **The boot handler told a cadet to "try the Claude version again in the meantime."** That is the
+  path they were already sent away from, so it is a loop. It now asks them to tell their instructor
+  and include the message.
+
+The **banner** still names Claude and is deliberately unchanged: it is not a failure mode, it is the
+header explaining that this is the backup and the Claude version is the intended path.
+
+**Verified.** All 38 builds regenerated across all three courses, and a second full run reports
+`38 already current`, so the tool is still idempotent and the tree matches its generator. Both bad
+strings are gone from 38 of 38; the new capacity text is present in 38 of 38; the only surviving
+`gemini-flash-latest` in a shipped build is inside the comment explaining the bug. Real Chrome via
+`tests/browser-harness/gemini-build.mjs` on one build from **each of the three dialects** (phys-215,
+phys-110, phys-310): 7/7 each — parse, mount, key field, no scroll, no 404s, no page errors. New
+`tests/browser-harness/gemini-model-ladder.mjs` lifts the model block out of a shipped build and
+exercises it: 11/11 on all three dialects, covering the `latest` regression itself, the quota
+ordering, the full 429 walk, the spent-model skip, the pool switch and the UI notification.
+
+**NOT verified, and both matter.** No live tutor turn was run — that needs a cadet's own free-tier
+Gemini key, so per `CORE.md` §2 this change is Node-and-browser verified only, and
+`gemini-port/SKILL.md` Step 4.6 is still owed. Separately, **the model names in both ladders were
+transcribed from the director's AI Studio dashboard, not read back from a live `ListModels`.** A
+wrong name does not break anything — `discoverModel()` filters it out and the scorer takes over,
+which is the graceful path — but it also says nothing, so a ladder rung could be silently unused.
+Worth one check against a real key.
+
+---
+
 ## 2026-08-20 — Casey Pellizzari via Claude
 
 ### A cadet's sign-in address can drift from their roster address, and the error blames the password

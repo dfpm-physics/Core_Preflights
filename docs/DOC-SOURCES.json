@@ -421,7 +421,7 @@
       "doc": ".ai/skills/gemini-port/SKILL.md",
       "kind": "skill",
       "tier": "internal",
-      "reviewed": "2026-08-19",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/CORE.md",
         "scripts/artifacts/to_gemini.py",

@@ -175,7 +175,7 @@ Check, in order:
 5. **The shipped bytes still carry the contract**: the slug, the `interaction-submit.html` endpoint, and `generativelanguage.googleapis.com` present; `api.anthropic.com` absent.
 6. **One real turn**, with a free-tier key, at least once per porting-tool change: the connection light resolves to `Ready — <model>`, the tutor answers, and the close sequence produces a report.
 
-This can be driven rather than clicked — `tests/browser-harness/` already runs puppeteer-core against real Chrome, and `tests/browser/` holds the checked-in test pages. A driver that asserts (1) and (2) plus the source strings in (5) is worth having. But Node is **optional** tooling that is guaranteed on no machine but the course director's, and per `CORE.md` §2 a Node-only check is never the sole verification of a change — **if it is all that ran, say so in the `CHANGELOG.md` entry** so the next operator knows what is still unproven.
+Two harnesses cover part of this: `tests/browser-harness/gemini-build.mjs` renders one build in real Chrome (parse, mount, key field, no-scroll, no 404s), and `tests/browser-harness/gemini-model-ladder.mjs` lifts the model block out of a shipped build and exercises the ladders, the scorer and the 429 walk without a key — the logic a browser cannot reach. Neither replaces item 6. This can be driven rather than clicked — `tests/browser-harness/` already runs puppeteer-core against real Chrome, and `tests/browser/` holds the checked-in test pages. A driver that asserts (1) and (2) plus the source strings in (5) is worth having. But Node is **optional** tooling that is guaranteed on no machine but the course director's, and per `CORE.md` §2 a Node-only check is never the sole verification of a change — **if it is all that ran, say so in the `CHANGELOG.md` entry** so the next operator knows what is still unproven.
 
 ---
 
@@ -199,13 +199,33 @@ Add a `CHANGELOG.md` entry per `CORE.md` §5 — newest first, `## YYYY-MM-DD �
 
 ## Why the prompt is deferred, and where the deferral stops
 
-The graded system prompt is ~63,000 characters and is **resent every turn** — 93–96% of all input tokens in a session, which is what exhausts a free-tier key in about two runs. Gemini's explicit context caching cannot help: it needs a paid account and a 32,768-token floor, and rate limits count cached tokens anyway. The only lever is sending less.
+The graded system prompt is ~63,000 characters and is **resent every turn** — 93–96% of all input tokens in a session. **This is not what exhausts a free-tier key**, though it was recorded here as the cause until 2026-08-20: measured on a real key, a session used 66.7k of a 250,000 token-per-minute ceiling and still stopped dead — on the daily REQUEST cap, which the next section covers. Sending fewer tokens per turn is still worth doing, and it is what makes the cheapest models reachable at all, but it does not buy a cadet a second session. Gemini's explicit context caching cannot help: it needs a paid account and a 32,768-token floor, and rate limits count cached tokens anyway. The only lever is sending less.
 
 So the port defers the two **tail** blocks — `EXTENSION_PROBLEMS` and `REPORT_FORMAT`, about 11,400 characters or ~18% of every turn — until the phase that needs them. They sit at the very end of the prompt, which is why they can be dropped without disturbing a line above.
 
 The trigger is the tutor's **verbatim integrity question**, which the prompt requires it to ask and then *wait* for. That mandated wait is the whole mechanism: it buys one turn of lead time, which is exactly enough to put `REPORT_FORMAT` back in context before the report is written. The backstop is elapsed active time past the whole planned budget, after which deferral stops regardless — a report emitted with no format in context is a broken submission, and the tokens saved are not worth that risk.
 
 **If you change the tutor prompt's close sequence, you have changed this.** The fingerprint (`INTEGRITY_ASKED`) matches the question's opener with one alternate; a reworded close silently disables the primary trigger and leaves only the time backstop.
+
+## Which model a turn uses, and why it is not the newest
+
+**Free-tier quota is per MODEL, not per key.** Every row in the AI Studio dashboard carries its own RPM/TPM/RPD counter, and the daily figures differ by more than an order of magnitude. Measured on a real cadet key, 2026-08-20:
+
+| Model | RPM | RPD |
+|---|---|---|
+| Gemini 3.7 / 3.6 / 3.5 / 3 Flash, 2.5 Flash, 2.5 Flash Lite | 5–10 | **20** |
+| Gemini 3.5 Flash Lite, 3.1 Flash Lite | 15 | **500** |
+
+One tutor session is 10–14 requests. So a 20/day model gives a cadet **one session** and then locks them out until the daily reset at midnight Pacific — which is 1:00 AM in Denver, i.e. *after* a 2359 deadline has already passed. A section hit exactly this on 2026-08-20, at 21 requests against a cap of 20.
+
+**The port used to pick the worst available model, and nothing could see it.** `scoreModel` awarded +25 to any name containing `latest`, so `gemini-flash-latest` outranked every pinned name. Google hot-swaps that alias to whatever shipped most recently — their own docs say it "can be a stable, preview or experimental release" — and a new Flash launches on the tight 20/day quota. So cadets were moved onto a 20/day model *by Google*, with nobody choosing it and nothing reporting it. The `MODEL_REJECT` regex screens names containing `preview`, and never fired: the alias does not **say** preview, it merely **resolves** to one. A name-based screen cannot see through an alias.
+
+**So both ladders are ordered by quota, not by capability.** `MODEL_CHAT` carries the ~12 conversation turns and starts on the 500/day lite models. `MODEL_REPORT` is used for the single request that produces the graded report — the artifact the cohort rollup reads — so it starts on the strongest model the key has, can afford a 20/day cap at one request per session, and falls through into the chat pool rather than failing. A report from a weaker model beats no report. `sysFor()` chooses the pool from the same phase that chooses the prompt, because they are one decision.
+
+**A 429 now moves down the ladder instead of ending the session.** Gemini returns 429 for both the per-minute and the per-day limit and does not say which. The transport retries with backoff first — a per-minute limit clears, and the same model is still the right one — then marks that model spent and steps to the next rung, which carries an independent quota. Spent models stay spent for the session, so the extension phase cannot re-burn one already known exhausted. Only a fully walked ladder raises `quota`. Before this, a cadet was stranded at 20 requests while 500 sat unused one rung down.
+
+**Neither ladder is hard-coded in effect.** `discoverModel()` intersects both with what `ListModels` says the key can actually reach, and if it can reach nothing on either, falls back to scoring the listing — which now prefers `lite` and penalises `latest`. That keeps the property runtime discovery existed for: **this build cannot dead-end on a retired name.** It also means a mistyped or renamed model degrades quietly instead of breaking, so **verify a ladder name against a real key rather than trusting it** — nothing will tell you it was never reached.
+
 
 ---
 

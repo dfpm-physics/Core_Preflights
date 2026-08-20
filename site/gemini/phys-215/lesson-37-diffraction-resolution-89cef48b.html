@@ -192,38 +192,104 @@ const { useState, useRef, useEffect } = React;
 // what the second entry exists to survive.
 // Cadets run this on their own claude.ai accounts, so tier availability, not
 // raw capability, picks the primary.
-// GEMINI BACKUP BUILD. Model names are NOT hard-coded, deliberately.
-// The published Claude artifacts bake in a candidate list, and that has a known cost:
-// if every entry retires, the artifact dead-ends and the only fix is republishing it.
-// Gemini's names churn faster than Claude's -- gemini-1.5-pro and gemini-1.5-flash were
-// the obvious choices a year ago and both 404 on a key issued today.
+// GEMINI BACKUP BUILD. Two things decide which model a turn uses, and they pull opposite ways.
 //
-// So instead: ask the cadet's own key what IT can reach (ListModels), score the answers,
-// take the best. That cannot dead-end on a retired name, and it adapts to whatever tier
-// the key actually has. MODEL_FALLBACKS is used only if the listing call itself fails.
-const MODEL_FALLBACKS = [
-  "gemini-flash-latest",
+//   1. Names churn. gemini-1.5-pro and gemini-1.5-flash were the obvious picks a year ago and
+//      both 404 on a key issued today, so a hard-coded list can dead-end the whole build.
+//   2. Free-tier QUOTA is per MODEL, not per key -- every row in AI Studio carries its own
+//      RPM/TPM/RPD counter -- and the quotas differ by more than an order of magnitude.
+//
+// Measured on a real cadet key, 2026-08-20:
+//
+//      Gemini 3.7 / 3.6 / 3.5 / 3 Flash, 2.5 Flash, 2.5 Flash Lite     5-10 RPM     20 RPD
+//      Gemini 3.5 Flash Lite, 3.1 Flash Lite                             15 RPM    500 RPD
+//
+// One tutor session is 10-14 requests. So a 20/day model gives a cadet ONE session and then
+// locks them out until midnight Pacific -- which is what happened to a section on 2026-08-20,
+// at 21 requests against a cap of 20.
+//
+// NEWER IS NOT BETTER HERE. A new Flash launches on the tight 20/day quota while the Lite
+// models carry 25x that, so these ladders are ordered by QUOTA, not by capability. The old
+// scorer added a bonus for any name containing "latest", which is how every cadet silently
+// ended up on a 20/day model without anyone choosing it: Google hot-swaps gemini-flash-latest
+// to whatever shipped most recently, and their own docs say it "can be a stable, preview or
+// experimental release". It is now penalised rather than preferred.
+//
+// Not const: discoverModel() intersects both ladders with what the cadet's key can actually
+// reach, and falls back to scoring the listing when it can reach none of them. That keeps the
+// property runtime discovery existed for -- this build cannot dead-end on a retired name.
+
+// Ordinary conversation turns: ~12 of the ~14 requests in a session. Quota is what matters.
+let MODEL_CHAT = [
+  "gemini-3.5-flash-lite",    // 15 RPM, 500 RPD
+  "gemini-3.1-flash-lite",    // 15 RPM, 500 RPD
+  "gemini-3.5-flash",         //  5 RPM,  20 RPD -- from here down, one session's worth
+  "gemini-3-flash",
   "gemini-2.5-flash",
 ];
+
+// The report is ONE request per session and it is the graded artifact the cohort rollup
+// reads, so it gets the strongest model the key has and can afford a 20/day cap. It falls
+// through into the chat ladder rather than failing: a session with no report is a lost
+// session, and a report from a weaker model beats no report at all.
+let MODEL_REPORT = [
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+].concat(MODEL_CHAT);
+
+// Used only if the ListModels call itself fails, so it never gets filtered against a listing.
+const MODEL_FALLBACKS = MODEL_CHAT;
 
 const MAX_TOKENS = 4096;                                    // CONSTANT
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
-// Prefer a current, generally-available Flash: fast, and the widest free-tier quota.
 // Reject anything that is not a text tutor (media/embedding/live/tts) and anything
 // preview/experimental, which carry separate and much tighter free-tier limits.
 const MODEL_REJECT = /embedding|aqa|imagen|veo|image|audio|tts|live|native|thinking|exp|preview/i;
+
+// Last resort only: ranks a listing when the key reaches nothing on either ladder above.
+// Ordered the same way the ladders are -- lite first, "latest" last.
 function scoreModel(name) {
   if (MODEL_REJECT.test(name)) return -1;
   let s = 0;
   if (/flash/i.test(name)) s += 100;          // free-tier workhorse
   else if (/pro/i.test(name)) s += 60;
   else return -1;
-  if (/latest/i.test(name)) s += 25;          // self-updating alias: best of all
+  if (/lite/i.test(name)) s += 30;            // 25x the daily quota; see the table above
+  if (/latest/i.test(name)) s -= 40;          // hot-swapped by Google -- never chosen on purpose
   const v = name.match(/gemini-(\d+)\.(\d+)/);
   if (v) s += Math.min(20, parseInt(v[1], 10) * 4 + parseInt(v[2], 10));
   if (/-\d{3,}$/.test(name)) s -= 10;          // dated snapshot: prefer the alias
   return s;
+}
+
+// Which pool a turn draws from, and where in it. Both live on the same ref the transport
+// already threads through rawCall, so none of this reaches the five call sites.
+//
+// A model that has spent its quota stays spent for the rest of the session. Without that the
+// extension phase would re-seat at the top of the chat ladder and burn a retry cycle on a
+// model already known to be exhausted, on every remaining turn.
+const spentModels = {};
+
+function seatLadder(ref, ladder) {
+  if (ref.ladder !== ladder) { ref.ladder = ladder; ref.i = 0; }
+  while (ref.i < ladder.length - 1 && spentModels[ladder[ref.i]]) ref.i++;
+  ref.current = ladder[ref.i];
+}
+
+// Set by the component so a mid-session switch reaches the connection light. Module scope
+// for the same reason apiKeyRef is: rawCall is not inside the component.
+const onModelSwitch = { fn: null };
+
+function nextModel(ref) {
+  const lad = ref.ladder || MODEL_FALLBACKS;
+  if (ref.i === undefined) ref.i = Math.max(0, lad.indexOf(ref.current));
+  if (ref.i >= lad.length - 1) return false;
+  ref.i++;
+  ref.current = lad[ref.i];
+  if (onModelSwitch.fn) { try { onModelSwitch.fn(ref.current); } catch (e) {} }
+  return true;
 }
 
 // Module-scope holder for the cadet's key. Threading it through rawCall/callTutor and
@@ -2633,20 +2699,27 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
     if (res.status === 400 || res.status === 401 || res.status === 403) {
       throw { kind: "auth", status: res.status };   // bad, missing, or unauthorized key
     }
-    if (res.status === 404) {                       // model unavailable -> next candidate
-      const i = MODEL_FALLBACKS.indexOf(activeModelRef.current);
-      if (i > -1 && i < MODEL_FALLBACKS.length - 1) {
-        activeModelRef.current = MODEL_FALLBACKS[i + 1];
-        continue;
-      }
+    if (res.status === 404) {                       // model unavailable -> next rung
+      if (nextModel(activeModelRef)) { attempt = 0; continue; }
       throw { kind: "model", status: 404 };
     }
-    // 429 is Gemini's rate-limit AND its daily-quota code, and a 429 on Claude is why
-    // this build exists at all. Retried with backoff like a 5xx: a per-minute limit
-    // clears, and a per-day one surfaces as "quota" after the retries, which is honest.
-    if (res.status === 429 || res.status === 529 || res.status >= 500) {
+    // 429 is Gemini's rate-limit AND its daily-quota code, and the response does not say
+    // which. Retry first: a per-MINUTE limit clears in about a minute and the same model is
+    // still the right one. If it survives the retries it is the per-DAY cap, which will not
+    // clear today -- so move DOWN THE LADDER instead of ending the cadet's session. Free-tier
+    // quota is per model, so the next rung is a fresh allowance; only an exhausted ladder is
+    // fatal. Before 2026-08-20 this retried the one model and then gave up, which stranded a
+    // cadet at 20 requests while 500 sat unused one rung down.
+    if (res.status === 429) {
       if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
-      throw { kind: res.status === 429 ? "quota" : "capacity", status: res.status };
+      spentModels[activeModelRef.current] = true;
+      if (nextModel(activeModelRef)) { attempt = 0; continue; }
+      throw { kind: "quota", status: 429 };
+    }
+    // Server capacity, not the cadet's quota. Nothing to switch to -- wait it out.
+    if (res.status === 529 || res.status >= 500) {
+      if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      throw { kind: "capacity", status: res.status };
     }
     throw { kind: "request", status: res.status };
   }
@@ -2666,15 +2739,30 @@ async function discoverModel(activeModelRef) {
   }
   if (!res.ok) throw { kind: "request", status: res.status };
   const data = await res.json();
-  const usable = (data.models || [])
+  const reachable = (data.models || [])
     .filter((m) => (m.supportedGenerationMethods || []).indexOf("generateContent") > -1)
-    .map((m) => String(m.name || "").replace(/^models\//, ""))
+    .map((m) => String(m.name || "").replace(/^models\//, ""));
+  const have = {};
+  reachable.forEach((n) => { have[n] = true; });
+
+  // Scored ordering of whatever this key CAN reach. Used only where a ladder comes back
+  // empty -- i.e. Google renamed everything we know about. Without it a wholesale rename
+  // dead-ends the build, which is the failure runtime discovery exists to prevent.
+  const scored = reachable
     .map((n) => ({ n: n, s: scoreModel(n) }))
     .filter((x) => x.s > 0)
-    .sort((a, b) => b.s - a.s);
-  if (!usable.length) throw { kind: "model", status: 404 };
-  activeModelRef.current = usable[0].n;
-  return usable[0].n;
+    .sort((a, b) => b.s - a.s)
+    .map((x) => x.n);
+
+  const chat = MODEL_CHAT.filter((n) => have[n]);
+  const report = MODEL_REPORT.filter((n) => have[n]);
+  if (!chat.length && !scored.length) throw { kind: "model", status: 404 };
+  MODEL_CHAT = chat.length ? chat : scored;
+  MODEL_REPORT = report.length ? report : MODEL_CHAT;
+
+  activeModelRef.ladder = null;             // force a re-seat onto the filtered list
+  seatLadder(activeModelRef, MODEL_CHAT);
+  return activeModelRef.current;
 }
 
 async function callTutor(activeModelRef, history, sys, note) {
@@ -2723,7 +2811,7 @@ function errorMessage(err, { afterRetries = false } = {}) {
   switch (err && err.kind) {
     case "capacity":
       return afterRetries
-        ? "The tutor service is at capacity right now and didn't free up after several tries. On a free Claude account this can be a usage/capacity limit that resets later — wait a bit and Retry, or use a different account."
+        ? "Google's tutor service is busy right now and didn't free up after several tries. That is Google's capacity, not your quota and not your key. Wait a few minutes and Retry."
         : "The tutor service is busy right now — retrying…";
     case "auth":
       return "That API key was rejected. Check you pasted the whole key from Google AI Studio (it starts with \u201CAIza\u201D), and that the Generative Language API is enabled for it.";
@@ -2848,7 +2936,7 @@ function Lesson37Preflight() {
 
   const [connStatus, setConnStatus] = useState("checking"); // checking | ok | unavailable
   const [connMsg, setConnMsg] = useState("");
-  const activeModelRef = useRef(MODEL_FALLBACKS[0]);        // replaced by discoverModel()
+  const activeModelRef = useRef(MODEL_CHAT[0]);        // replaced by discoverModel()
   const [modelName, setModelName] = useState("");          // shown on the start screen
   useEffect(() => { apiKeyRef.current = apiKey.trim(); }, [apiKey]);
 
@@ -2861,7 +2949,6 @@ function Lesson37Preflight() {
   // produces a report, so it keeps the prompt built in startSession.
   function sysFor() {
     const a = sysArgsRef.current;
-    if (!a) return sysRef.current;
     // Belt and braces on the primary trigger: once the report exists we are in the
     // extension, and once active time passes the whole planned budget the close can arrive
     // at any turn -- so stop deferring rather than risk a report with no format.
@@ -2870,6 +2957,13 @@ function Lesson37Preflight() {
     const phase = hasReport ? "extension"
       : (reportPhaseRef.current || overBudget) ? "report"
       : "probe";
+    // The phase picks the MODEL POOL as well as the prompt, because they are the same
+    // decision: the report is one request and gets the strongest model, while the ~12
+    // conversation turns get the high-quota pool. This is the one place every ongoing turn
+    // already passes through, so deciding both here is what stops them drifting apart.
+    // Study mode falls out below with no args, but is seated on the chat pool first.
+    seatLadder(activeModelRef, phase === "report" ? MODEL_REPORT : MODEL_CHAT);
+    if (!a) return sysRef.current;
     return buildSystemPrompt(a.cadetId, a.localTime, phase);
   }
   const extSentRef = useRef(false); // extension trigger fires once
@@ -2954,6 +3048,9 @@ function Lesson37Preflight() {
       apiKeyRef.current = apiKey.trim();
       const picked = await discoverModel(activeModelRef);
       setModelName(picked);
+      // A mid-session ladder move updates the light too, so a cadet who is asked
+      // what happened can read the model off the page instead of guessing.
+      onModelSwitch.fn = setModelName;
       setConnStatus("ok"); setConnMsg("");
       // Only a key that actually worked is remembered -- never a typo.
       try { localStorage.setItem(KEY_STORE, apiKey.trim()); setKeyRemembered(true); } catch (e) {}
@@ -3372,7 +3469,7 @@ root.render(React.createElement(Lesson37Preflight));
     var b = document.getElementById("boom");
     b.style.display = "block";
     b.textContent = "This backup build did not load:\n\n" + (e.message || e.error || e) +
-      "\n\nTell your instructor, and try the Claude version again in the meantime.";
+      "\n\nTell your instructor and include this message.";
   });
 </script>
 </body>
