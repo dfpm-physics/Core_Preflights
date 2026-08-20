@@ -2,9 +2,11 @@
 name: gemini-port
 description: >
   GEMINI BACKUP BUILD — ports exactly one published Claude preflight artifact to a
-  Gemini-API build hosted on our own site, for cadets whose free Claude account is
-  answering HTTP 429. Reads the artifact `.jsx` from the gitignored
-  `_builder/courses/<course>/artifacts/` cache (filled from the private
+  Gemini-API build hosted on our own site, for cadets whose free Claude account has no
+  usable model left. (An HTTP 429 no longer ends a Claude session by itself — since
+  2026-08-20 the artifact walks its own model ladder first — so this is where an
+  exhausted ladder ends, not where the first 429 does.) Reads the artifact `.jsx` from
+  the gitignored `_builder/courses/<course>/artifacts/` cache (filled from the private
   `artifact-sources` bucket) and that course's `index.json`; writes
   `site/gemini/<course>/<slug>.html`, a row in `site/data/backup-builds.json`, and a
   `CHANGELOG.md` entry. Use when cadets cannot reach the Claude tutor at all, when a
@@ -16,8 +18,10 @@ description: >
   registering a lesson so cadets can reach it, which is a director's job in
   `site/faculty/lessons.html` (see `docs/contracts/INTERACTION-PREFILL-LINK.md`). The
   artifact must already be PUBLISHED and its slug already minted — this skill never mints
-  one. Any agent may run it; requires the local source cache and a real browser to verify
-  in. Argument: a course plus one of `--slug`, `--lesson N`, `--from-lesson N`, `--all`.
+  one — and its source must already carry the 2026-08-20 fix set
+  (`scripts/artifacts/patch_artifacts.py`), which the porter now inherits rather than
+  performs. Any agent may run it; requires the local source cache and a real browser to
+  verify in. Argument: a course plus one of `--slug`, `--lesson N`, `--from-lesson N`, `--all`.
 ---
 
 # gemini-port — one published artifact, one hosted backup build
@@ -32,7 +36,20 @@ Where this skill and [`CORE.md`](../../instructions/CORE.md) disagree, `CORE.md`
 
 Cadets on free Claude accounts get HTTP 429 when demand is high, and a cadet who cannot reach the tutor cannot do the preflight at all. The backup build is the **same lesson** — same tutor prompt, same grounding, same report, same submit contract — with only the transport changed.
 
-**It is a fallback, not an alternative.** The published Claude artifact stays the intended path: its start screen offers the backup only after its own connection check has already failed, and both the router page and the build's own banner say so on their face. Nothing about a cadet's grade, submission, or rollup contribution changes either way — which is the point, and is what makes the "same slug" rule below non-negotiable.
+*Narrowed 2026-08-20.* A 429 no longer ends a Claude session on its own: the artifact now walks its own model ladder the way this port always has, and only a fully walked ladder gives up. So the backup is where an **exhausted** ladder ends, not where the first 429 does — a smaller door, and a cadet who reaches it is genuinely out of Claude.
+
+**It is a fallback, not an alternative.** The published Claude artifact stays the intended path, and both the router page and the build's own banner say so on their face. There are now **two doors** into the backup from the artifact, both cadet-clicked and neither automatic:
+
+- the **start screen**, once the artifact's own connection check has failed — the original door; and
+- the **mid-lesson error bar**, added 2026-08-20: a `Continue on Gemini →` anchor beside Retry, which hands over `backup.html?i=<slug>&go=1#h=<lz>` — the slug, the skip-the-explainer flag, and the transcript compressed into the **hash**, so the cadet resumes instead of restarting. It trims oldest-first under a 60,000-character cap and degrades to a plain link rather than a broken one.
+
+> **The handoff is a chain of three files, and a break in any one of them looks exactly like success.** The Claude source builds `backup.html?i=<slug>&go=1#h=<lz>` (`patch_artifacts.py`); the router carries the hash through untouched on its `location.replace` (`site/student/backup.html`); and the build decompresses it and restores the conversation (`to_gemini.py` step 12). Drop link 2 or link 3 and the cadet still lands in the right lesson — on turn one, with their work gone, and nothing anywhere reporting why.
+>
+> **All three links exist as of 2026-08-20**, and what the build does with the payload is worth knowing before you describe it to a cadet. It validates before it trusts: `v === 1`, an id equal to its own `INTERACTION_ID`, `mode === "graded"`, and a non-empty message array — anything else is **discarded rather than repaired**, because the hash is fully under the cadet's control and a half-restored transcript would be graded as though it were whole. **A study-mode handoff is deliberately not restored**: practice turns replayed into a graded session would become the graded conversation, so a study cadet arrives on a plain link and restarts something they were never assessed on. The start screen is **not** skipped — they still have to supply their own Gemini key — but the name is prefilled, a banner says how many messages are about to come back, and when the transcript ends on the tutor's turn the build hands control straight to the cadet rather than making the tutor speak twice.
+>
+> **Verify the chain; do not reason about it.** `tests/browser-harness/gemini-handoff.mjs` drives all three links in real Chrome and asserts the forwarding hop separately from the restore. It compresses the transcript with the build's own vendored lz-string rather than a Node copy, so what it proves is that the build reads what the artifact actually writes. Failing that, grep a shipped build for `decompressFromEncodedURIComponent` — checking the router for the forward tells you about link 2 and nothing else.
+
+Nothing about a cadet's grade, submission, or rollup contribution changes through either door — which is the point, and is what makes the "same slug" rule below non-negotiable.
 
 ## When NOT to run it
 
@@ -52,7 +69,7 @@ Confirm all of these. **If any fails, stop and report which one**, with the reme
 
 | check | how | if missing |
 |---|---|---|
-| the artifact is **published**, and its slug read rather than typed | its row in `_builder/courses/<course>/index.json` has a `published_url`. **Never type a slug** — PROJECT.md's sharp-edge table records `phys310-atoms-and-nuclei-83022f32`, minted from a hand transcription of a word that was never in the source, and `check_artifact.py` validates a slug's *shape*, never its *derivation* | the index carries drafts too (phys-310: 17 rows, 3 published). A row with no `published_url` is a draft — stop, and say which lesson it was |
+| the artifact is **published**, and its slug read rather than typed | its row in `_builder/courses/<course>/index.json` has a `published_url`. **Never type a slug** — PROJECT.md's sharp-edge table records `phys310-atoms-and-nuclei-83022f32`, minted from a hand transcription of a word that was never in the source, and `check_artifact.py` validates a slug's *shape*, never its *derivation* | the index carries drafts too (phys-310: 17 rows, 4 published as of 2026-08-20). A row with no `published_url` is a draft — stop, and say which lesson it was |
 | the local source cache exists | `ls _builder/courses/<course>/artifacts/*.jsx` | `python scripts/artifacts/sync_artifacts.py pull --into _builder/courses --commit` (Step 1) |
 | the vendored runtime is present | `ls site/vendor/{react.production.min.js,react-dom.production.min.js,babel.min.js,lz-string.min.js}` | stop — the page loads all four from our own origin and renders nothing without them. Do **not** substitute a CDN: same-origin is what stops a third party swapping the script that can read the cadet's key out of `localStorage` |
 | the working tree is clean enough to read a diff | `git status --porcelain` | not fatal, but you must be able to attribute every line of Step 5's diff. Uncommitted work belonging to a human stays uncommitted (`CORE.md` §0) |
@@ -78,7 +95,9 @@ That reads the service-role key from `~/.claude/skills/preflight-analyze/config.
 
 Every anchor is now whitespace- and comment-tolerant, and where the difference is real rather than cosmetic the tool **preserves what it finds** instead of imposing the kit's form — the `OUTPUT_REPORT_FORMAT` label is carried through exactly as present or absent, because that line is prompt text the cadet's tutor reads and adding it would be a change of substance, not transport. What is emphatically **not** loosened is content: the four grounding blocks are still compared byte-for-byte before and after.
 
-> **A third dialect is likely, and the tell is the same.** When a transform reports `matched 0, expected 1`, compare the two files at that anchor before touching anything: the difference has so far always been layout (a blank line, an alignment space, a trailing comment, a wrapped argument list). Loosen the LAYOUT; never the tokens.
+> **The third shape arrived on 2026-08-20, and it came from this repository.** It was predicted here as "likely"; the prediction is kept because the tell held. `scripts/artifacts/patch_artifacts.py` applied the resilience fix set to all 51 sources, so a **patched** artifact reads differently from an unpatched one — `buildSystemPrompt` takes a `phase`, `stepModel()` exists, the submit URL carries `&v=claude`, the error bar has a second control. Two things make it easier than a real third dialect: the patcher **normalises** the two build dialects rather than adding to them (PHYS 110's five artifacts got the `BACKUP_ENDPOINT`, backup CSS and button the kit dialect already had), and the axis it introduces is *patched vs. unpatched*, not per-course. The porter requires the patched shape and refuses the other outright (Step 0's refusal, in the table below).
+>
+> **The tell is unchanged.** When a transform reports `matched 0, expected 1`, compare the two files at that anchor before touching anything: the difference has so far always been layout (a blank line, an alignment space, a trailing comment, a wrapped argument list) — or, since 2026-08-20, a fix set one file carries and the other does not. Loosen the LAYOUT; never the tokens.
 
 > **The dialect also constrains what the injected code may NAME, and that is the half that got missed.** *(2026-08-19, the same day and the same port.)* The tool chose its anchor by dialect correctly — `REPORT_MARKER` where the kit declares it, `isReportMsg` where PHYS 110 does — and then injected a detector that read `m.content.includes(REPORT_MARKER)` in both. In the PHYS 110 dialect that is a free variable. All five builds shipped, because the reference sits inside a `useEffect` that returns early until a graded conversation is under way: they parsed, rendered, served, and passed every assertion, then threw `ReferenceError: REPORT_MARKER is not defined` on the first tutor turn, where the page's `window.onerror` handler replaced the whole lesson with *"This backup build did not load"*. **Injected code may only name what BOTH dialects declare** — prefer the source's own helper (`isReportMsg`) over a constant only one of them hoists. The tool now asserts this against the output and refuses; see the refusal table below.
 
@@ -134,7 +153,7 @@ Outputs, both committed:
 
 **A backup build is not a republish and mints no slug.** A factory rebuild of a Claude artifact means republishing on claude.ai: a new artifact URL, a new 8-hex slug, and a new lesson row (`PROJECT.md`, the builder's rules). Regenerating a backup is a file change on our own site. **That asymmetry is why the artifact links to a router** (`site/student/backup.html?i=<INTERACTION_ID>`) rather than to a build directly — the artifact knows only two things that never move, this page and its own slug, and everything mutable lives where it can be edited cheaply.
 
-**Building the backup does not put a door to it in the artifact.** The button that appears when the Claude connection check fails comes from the artifact's own source: new artifacts get it from the factory skill, and already-published ones get it from `scripts/artifacts/add_backup_button.py` — whose patch reaches cadets **only when a human republishes that artifact**, because claude.ai serves what was published, not what is in this repository. That republish keeps the slug (a hand patch is not a factory rebuild) but moves the claude.ai URL, so the lesson's `activities.artifact_url` must be updated with it. Until then the route to a backup is the router URL handed out directly. Read that script's header before planning around it; it is a separate unit of work from this skill.
+**Building the backup does not put a door to it in the artifact.** The button that appears when the Claude connection check fails comes from the artifact's own source: new artifacts get it from the factory skill, and already-published ones get it from `scripts/artifacts/patch_artifacts.py` (step 0 of the 2026-08-20 fix set, which added it to the five PHYS 110 sources that never had one) or from the older single-purpose `scripts/artifacts/add_backup_button.py` — whose patch reaches cadets **only when a human republishes that artifact**, because claude.ai serves what was published, not what is in this repository. That republish keeps the slug (a hand patch is not a factory rebuild) but moves the claude.ai URL, so the lesson's `activities.artifact_url` must be updated with it. Until then the route to a backup is the router URL handed out directly. Read that script's header before planning around it; it is a separate unit of work from this skill.
 
 ### What the tool refuses to do, and what each refusal means
 
@@ -152,6 +171,7 @@ It **refuses rather than warns** — every one of these is a `SystemExit` before
 | `mixed line endings (N CRLF of M LF)` | the cached source is already corrupted, almost certainly by a text-mode write | re-pull the source (Step 1) |
 | `module syntax remains` | `import`/`export default` survived into the page, which a Babel classic script cannot run | a bug in `wrap()` |
 | `injected code calls <NAME> but this build never declares it` | a transform emitted code naming something this dialect does not define — the `REPORT_MARKER` failure | fix the injected code to name what BOTH dialects declare. **Do not delete the entry to make it pass**: this refusal is the only thing standing between a free variable and a cadet, because such a build parses, renders and serves before it throws. Added 2026-08-19 |
+| `<slug>: source predates the 2026-08-20 fix set` | the cached `.jsx` still has `buildSystemPrompt(cadetId, localTime)` — the phase deferral and the 429 ladder walk now live in the Claude source, and this tool inherits rather than performs them | run `python scripts/artifacts/patch_artifacts.py --commit`, re-pulling from the `artifact-sources` bucket first if the cache is stale. **Do not port it anyway**: the build would carry no deferral, which is the exact token burn the deferral exists to prevent, and nothing downstream would say so. Added 2026-08-20 |
 
 **The same slug is the load-bearing invariant.** Contract §3.2 mints a slug per **offering**, not per transport. A backup that submitted under a second slug would split one lesson's cohort into two and silently halve every rollup — the numbers would look plausible and nothing would report it. The tool asserts `INTERACTION_ID` is unchanged and refuses.
 
@@ -175,7 +195,7 @@ Check, in order:
 5. **The shipped bytes still carry the contract**: the slug, the `interaction-submit.html` endpoint, and `generativelanguage.googleapis.com` present; `api.anthropic.com` absent.
 6. **One real turn**, with a free-tier key, at least once per porting-tool change: the connection light resolves to `Ready — <model>`, the tutor answers, and the close sequence produces a report.
 
-Two harnesses cover part of this: `tests/browser-harness/gemini-build.mjs` renders one build in real Chrome (parse, mount, key field, no-scroll, no 404s), and `tests/browser-harness/gemini-model-ladder.mjs` lifts the model block out of a shipped build and exercises the ladders, the scorer and the 429 walk without a key — the logic a browser cannot reach. Neither replaces item 6. This can be driven rather than clicked — `tests/browser-harness/` already runs puppeteer-core against real Chrome, and `tests/browser/` holds the checked-in test pages. A driver that asserts (1) and (2) plus the source strings in (5) is worth having. But Node is **optional** tooling that is guaranteed on no machine but the course director's, and per `CORE.md` §2 a Node-only check is never the sole verification of a change — **if it is all that ran, say so in the `CHANGELOG.md` entry** so the next operator knows what is still unproven.
+Three harnesses cover part of this: `tests/browser-harness/gemini-build.mjs` renders one build in real Chrome (parse, mount, key field, no-scroll, no 404s), `tests/browser-harness/gemini-model-ladder.mjs` lifts the model block out of a shipped build and exercises the ladders, the scorer and the 429 walk without a key — the logic a browser cannot reach — and `tests/browser-harness/gemini-handoff.mjs` drives the three-link handoff chain, asserting the router's forward separately from the build's restore. None of them replaces item 6. This can be driven rather than clicked — `tests/browser-harness/` already runs puppeteer-core against real Chrome, and `tests/browser/` holds the checked-in test pages. A driver that asserts (1) and (2) plus the source strings in (5) is worth having. But Node is **optional** tooling that is guaranteed on no machine but the course director's, and per `CORE.md` §2 a Node-only check is never the sole verification of a change — **if it is all that ran, say so in the `CHANGELOG.md` entry** so the next operator knows what is still unproven.
 
 ---
 
@@ -197,15 +217,24 @@ Add a `CHANGELOG.md` entry per `CORE.md` §5 — newest first, `## YYYY-MM-DD �
 
 **The cadet's API key never touches the payload.** It lives in a module-scope ref and in `localStorage` under `prep.gemini.apikey`, and it rides in an `x-goog-api-key` **header** — never the `?key=` query string Google's quickstarts use, because a query string lands in browser history and in any `Referer` the page emits. Same authentication, strictly less leakage. PREP never receives it, so **PREP never becomes the custodian of hundreds of third-party credentials**. The cost of that choice, stated plainly because cadets will hit it: a new device means entering the key again, and Safari's ITP drops `localStorage` after 7 days without a visit. A "Forget key" control exists for shared machines. The build asserts the key never appears on a line that constructs the submit URL or the compressed payload.
 
-## Why the prompt is deferred, and where the deferral stops
+## Why the prompt is deferred, and why this skill no longer performs the deferral
 
-The graded system prompt is ~63,000 characters and is **resent every turn** — 93–96% of all input tokens in a session. **This is not what exhausts a free-tier key**, though it was recorded here as the cause until 2026-08-20: measured on a real key, a session used 66.7k of a 250,000 token-per-minute ceiling and still stopped dead — on the daily REQUEST cap, which the next section covers. Sending fewer tokens per turn is still worth doing, and it is what makes the cheapest models reachable at all, but it does not buy a cadet a second session. Gemini's explicit context caching cannot help: it needs a paid account and a 32,768-token floor, and rate limits count cached tokens anyway. The only lever is sending less.
+**The deferral was invented here, and on 2026-08-20 it moved out.** The graded system prompt is ~63,000 characters and is **resent every turn** — 93–96% of all input tokens in a session — so this port dropped the two **tail** blocks, `EXTENSION_PROBLEMS` and `REPORT_FORMAT` (about 11,400 characters, ~18% of every turn), until the phase that needs them. They sit at the very end of the prompt, which is why they can be dropped without disturbing a line above. For a while only the Gemini builds needed that. Then the Claude artifacts wanted the same saving, so it went into the artifact **source** (`scripts/artifacts/patch_artifacts.py`) and `to_gemini.py` **stopped performing it**: the porter now inherits a source in which `buildSystemPrompt(cadetId, localTime, phase)` and `sysFor()` already exist, and adds only what is genuinely Gemini-specific — seating the model pool from the same phase, which is the next section.
 
-So the port defers the two **tail** blocks — `EXTENSION_PROBLEMS` and `REPORT_FORMAT`, about 11,400 characters or ~18% of every turn — until the phase that needs them. They sit at the very end of the prompt, which is why they can be dropped without disturbing a line above.
+**So an unpatched source no longer ports, deliberately.** Step 0 of the tool refuses it by name and prints the remedy:
 
-The trigger is the tutor's **verbatim integrity question**, which the prompt requires it to ask and then *wait* for. That mandated wait is the whole mechanism: it buys one turn of lead time, which is exactly enough to put `REPORT_FORMAT` back in context before the report is written. The backstop is elapsed active time past the whole planned budget, after which deferral stops regardless — a report emitted with no format in context is a broken submission, and the tokens saved are not worth that risk.
+```
+<slug>: source predates the 2026-08-20 fix set.
+  Run: python scripts/artifacts/patch_artifacts.py --commit
+```
 
-**If you change the tutor prompt's close sequence, you have changed this.** The fingerprint (`INTEGRITY_ASKED`) matches the question's opener with one alternate; a reworded close silently disables the primary trigger and leaves only the time backstop.
+Porting one silently would produce a build with no deferral at all — the exact token burn the deferral exists to prevent — and nothing downstream would report it.
+
+**This is not what exhausts a free-tier key**, though it was recorded here as the cause until 2026-08-20: measured on a real key, a session used 66.7k of a 250,000 token-per-minute ceiling and still stopped dead — on the daily REQUEST cap, which the next section covers. Sending fewer tokens per turn is still worth doing, and it is what makes the cheapest models reachable at all, but it does not buy a cadet a second session. Gemini's explicit context caching cannot help: it needs a paid account and a 32,768-token floor, and rate limits count cached tokens anyway. The only lever is sending less.
+
+**Where the deferral stops is unchanged — it just lives somewhere else now.** The trigger is the tutor's **verbatim integrity question**, which the prompt requires it to ask and then *wait* for. That mandated wait is the whole mechanism: it buys one turn of lead time, which is exactly enough to put `REPORT_FORMAT` back in context before the report is written. The backstop is elapsed active time past the whole planned budget, after which deferral stops regardless — a report emitted with no format in context is a broken submission, and the tokens saved are not worth that risk.
+
+**If you change the tutor prompt's close sequence, you have changed this — in BOTH transports now.** The fingerprint (`INTEGRITY_ASKED`) matches the question's opener with one alternate; a reworded close silently disables the primary trigger and leaves only the time backstop. It is declared in the Claude source by `patch_artifacts.py`, so a fix to it reaches the published artifact and every backup build together — which is the upside of the move, and the reason to make the fix there rather than here.
 
 ## Which model a turn uses, and why it is not the newest
 
@@ -224,23 +253,43 @@ One tutor session is 10–14 requests. So a 20/day model gives a cadet **one ses
 
 **A 429 now moves down the ladder instead of ending the session.** Gemini returns 429 for both the per-minute and the per-day limit and does not say which. The transport retries with backoff first — a per-minute limit clears, and the same model is still the right one — then marks that model spent and steps to the next rung, which carries an independent quota. Spent models stay spent for the session, so the extension phase cannot re-burn one already known exhausted. Only a fully walked ladder raises `quota`. Before this, a cadet was stranded at 20 requests while 500 sat unused one rung down.
 
+**The Claude source now has the same shape, and that is not a coincidence.** *(2026-08-20, `patch_artifacts.py`.)* It gained a `stepModel()` helper, a 429 branch in `rawCall` that backs off first and then steps DOWN `MODEL_CANDIDATES`, the same typed `{ kind: "quota" }` raised only by an exhausted ladder, and its own `errorMessage()` case for it. Until then a 429 fell through to the generic `request` message — *"wait a moment and Retry"* — which for a usage cap is advice that never comes true. **Write a transport fix once and put it where both builds can have it.**
+
+**What is still Gemini-only is the two-pool structure**, because Claude has one ladder and this build has two: `MODEL_CHAT` for the ~12 conversation turns, `MODEL_REPORT` for the single request that writes the graded report. So the port **removes** the inherited helper rather than keeping it (step 9b of the tool): `stepModel` names `MODEL_CANDIDATES`, which no ported build declares, and a free variable inside a function that only runs mid-session is the `REPORT_MARKER` failure exactly — parses, renders, serves, then throws on a cadet. `seatLadder()` and `nextModel()` already cover that ground here.
+
 **Neither ladder is hard-coded in effect.** `discoverModel()` intersects both with what `ListModels` says the key can actually reach, and if it can reach nothing on either, falls back to scoring the listing — which now prefers `lite` and penalises `latest`. That keeps the property runtime discovery existed for: **this build cannot dead-end on a retired name.** It also means a mistyped or renamed model degrades quietly instead of breaking, so **verify a ladder name against a real key rather than trusting it** — nothing will tell you it was never reached.
 
-## The transport marker, and why the lesson page skips the explainer
+## The transport marker, the model fields, and why the lesson page skips the explainer
 
-*(Both added 2026-08-20.)*
+*(All added 2026-08-20.)*
 
 **Every build stamps `&v=gemini` into its submit hash.** The receiver sanitises it and stores it as
 `submission_activities.content.transport`, so a backup submission can be told apart afterwards.
 This is additive under contract §8: the four frozen keys (`t`/`i`/`r`/`d`) are untouched, and a
 consumer that has never heard of `v` ignores it.
 
-**The absence is what carries the meaning, and it only works because we own both ends.** A
-published claude.ai artifact sends no `v` and cannot be made to — republishing one mints a new slug
-and a new lesson row (§3.2). So "no marker" means "not a build this repository generated", which is
-today the same set as "Claude". Note what that does *not* license: the receiver deliberately does
-**not** write `transport: 'claude'` into the empty case, because that would also stamp every row
-written before this existed and any future transport that forgot the key. Read absence as absence.
+**The Claude side now stamps `&v=claude`, and that changed what absence means, the same day.**
+This section read, until 2026-08-20: *"the absence is what carries the meaning… A published
+claude.ai artifact sends no `v` and cannot be made to — republishing one mints a new slug and a new
+lesson row (§3.2). So 'no marker' means 'not a build this repository generated', which is today the
+same set as 'Claude'."* **Two claims in that failed, and the second one is why the first did.** A
+Claude artifact *can* be made to send `v` — `patch_artifacts.py` added `&v=claude` to all 51 sources
+the same day. And the reason given for why it could not — that republishing mints a new slug and a
+new lesson row — is a misreading of §3.2, which requires a fresh suffix for a new **offering**. A
+hand-patched republish into the same term is not that, and **keeps its slug**. With both gone, so is
+the conclusion that a missing marker means Claude.
+
+**What a missing `v` means now is a mixture, and it must be read as one:** a Claude artifact
+published before 2026-08-20 and not yet republished (claude.ai serves what was published, not what
+is in this repository, so this clears lesson by lesson as humans republish), *or* a row written
+before the key existed at all, *or* a future producer that forgot it. Contract §3.3 is the
+authority and carries the three-population table.
+
+**The rule that did NOT change is the important one: never synthesise `transport: 'claude'` for an
+absent marker.** The receiver leaves it null deliberately, and the reason is stronger now than when
+it was written — defaulting would stamp a positive, wrong claim onto every historical row *and*
+onto every artifact still waiting for its republish, with nothing downstream able to tell the
+invented values from the observed ones. Read absence as absence.
 
 **It is stored inside `content`, not in a column of its own.** DDL on `app` is sealed (`CORE.md`
 §0) and `content` is already `jsonb`. It is merged over the `d` object and **never in place of a
@@ -248,6 +297,16 @@ null** — a null `content` is exactly what the auto-grade trigger and the cohor
 structured data", so inventing an object to carry one string would change behaviour for every
 consumer. A report that arrives with no `d` therefore records no transport, which is acceptable
 because such a submission already earns no grade (§3.1) and gets opened by hand anyway.
+
+**`d` also records which model wrote the report** — `model` and `model_downgraded`, contract §5.9,
+both added 2026-08-20. The two builds must compute the second one differently. The Claude source
+tests `model !== MODEL_CANDIDATES[0]`, which is exact *there* because its one ladder never climbs
+back; it is **not** a stable test here, because `discoverModel()` rewrites both ladders to what the
+cadet's key can actually reach, so the first entry after discovery may never have been the first
+entry before it. The port rewrites it to `Object.keys(spentModels).length > 0` — a model lands in
+`spentModels` only after it has 429'd out and the walk has moved past it. Same field, same meaning
+(*this session did not stay on its first choice*), computed from the state each build actually has.
+It is diagnostic: nothing grades on it, and no student page renders it.
 
 **The lesson page's Gemini button goes to `backup.html?i=<slug>&go=1`**, and `go=1` makes the router
 resolve the slug and redirect instead of rendering its explainer. The explainer still exists and is
@@ -281,7 +340,7 @@ exactly one answer on this site to "where does this slug go".
 
 8. **Regenerate, never hand-edit.** The output carries a DO-NOT-EDIT banner and the next run overwrites it. Every fix belongs in `to_gemini.py`, where it reaches every build instead of one (Step 3).
 
-9. **An anchor failure is shape drift, not a bad artifact.** When a transform reports `matched 0, expected 1`, fix the anchor — never edit the artifact to fit the tool, because the artifact is the published record and editing the cache desynchronizes it from Storage (Step 3).
+9. **An anchor failure is shape drift, not a bad artifact.** When a transform reports `matched 0, expected 1`, fix the anchor — never edit the artifact to fit the tool, because the artifact is the published record and editing the cache desynchronizes it from Storage (Step 3). Since 2026-08-20 there is a second cause to rule out first: a fix set the *other* tool has applied to the source (`patch_artifacts.py`), which is a real change of shape rather than drift and is fixed by making the two tools agree about which of them performs what — not by loosening an anchor until it matches both (Step 1, the third shape).
 
 10. **The manifest only grows unless a human shrinks it.** Withdrawing a backup is a hand edit to `site/data/backup-builds.json`; the tool will not do it, and the router's fallback ("No backup for this lesson yet") is the correct visible outcome (Step 3).
 
@@ -291,4 +350,4 @@ exactly one answer on this site to "where does this slug go".
 
 ---
 
-**References:** [`scripts/artifacts/to_gemini.py`](../../../scripts/artifacts/to_gemini.py) — the tool this skill drives, whose module docstring is the authority on what it asserts; [`site/student/backup.html`](../../../site/student/backup.html) — the router, and why the indirection exists; [`docs/contracts/INTERACTION-DATA-CONTRACT.md`](../../../docs/contracts/INTERACTION-DATA-CONTRACT.md) §3 — the frozen submit contract and the per-offering slug rule; [`.ai/instructions/PROJECT.md`](../../instructions/PROJECT.md) § "Sharp edges the builder already paid for" — the line-ending, `node --check`, and transcription failures this skill guards against.
+**References:** [`scripts/artifacts/to_gemini.py`](../../../scripts/artifacts/to_gemini.py) — the tool this skill drives, whose module docstring is the authority on what it asserts; [`scripts/artifacts/patch_artifacts.py`](../../../scripts/artifacts/patch_artifacts.py) — the 2026-08-20 fix set applied to the Claude sources, which this tool now requires and inherits from, and the authority on what the patched shape is; [`site/student/backup.html`](../../../site/student/backup.html) — the router, and why the indirection exists; [`docs/contracts/INTERACTION-DATA-CONTRACT.md`](../../../docs/contracts/INTERACTION-DATA-CONTRACT.md) §3 — the frozen submit contract and the per-offering slug rule; [`.ai/instructions/PROJECT.md`](../../instructions/PROJECT.md) § "Sharp edges the builder already paid for" — the line-ending, `node --check`, and transcription failures this skill guards against.

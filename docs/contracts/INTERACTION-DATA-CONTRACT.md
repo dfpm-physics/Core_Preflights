@@ -18,6 +18,12 @@ that is **no longer true**. Endpoint, hash keys, codec, and every `schema: 1` fi
 `schema` stays `1`. **Nothing in a deployed artifact breaks** — the receiver still accepts a `d`-less
 report, it just cannot grade it.*
 
+*v1 clarification — 2026-08-20 (Matthew Recker via Claude): **two additive, optional additions; still
+`schema: 1`.** The hash key `v` (§3) now has **two** values rather than one — `v=gemini` from a backup
+build and `v=claude` from a patched Claude source — and `d` gains `model` / `model_downgraded` (§5.9).
+Nothing is renamed, retyped, or removed, and the four frozen hash keys are untouched. **The trap is what
+`v`'s ABSENCE means**, which is the thing that changed on this date: §3.3.*
+
 This is the contract between a **claude.ai lesson artifact** (the producer) and this
 repository's **static receiver** (the consumer). A Claude artifact runs a Just-in-Time
 Teaching (JiTT) conversation with a student, then hands the result back to the site by
@@ -97,7 +103,7 @@ site/student/interaction-submit.html#t=interaction&i=<slug>&r=<lz>&d=<lz>
 | `i` | **yes** | The interaction **slug** — must equal an existing `activities.slug`. **Generated fresh per offering; see §3.2.** The one manual coordination point with the director (see `INTERACTION-PREFILL-LINK.md`). |
 | `r` | **yes** | The **full report**, Markdown, compressed (see codec). Always sent — the human-readable transcript is never dropped. |
 | `d` | **yes** | The **structured data** (§5), `JSON.stringify`'d then compressed. See below — this was "recommended" until 2026-07-28. |
-| `v` | no | **Transport marker.** Added 2026-08-20; additive under §8, so this is still v1. Names the build that produced the report, for artifacts this repository generates and can therefore update — today only `v=gemini`, written by `scripts/artifacts/to_gemini.py`. A published claude.ai artifact sends nothing, and **that absence is the point**: it is what makes a backup submission separable afterwards without touching the four frozen keys or the artifacts already deployed. The receiver sanitises it to a short slug (the hash is student-controllable) and stores it as `submission_activities.content.transport`, merged over the `d` object and never in place of a null. |
+| `v` | no | **Transport marker.** Added 2026-08-20; additive under §8, so this is still v1. Names the build that produced the report. **Two values, both from that date:** `v=gemini`, written by every backup build `scripts/artifacts/to_gemini.py` emits, and `v=claude`, written by every Claude artifact source `scripts/artifacts/patch_artifacts.py` patched — the second of which reaches a cadet only as each artifact is **republished**. A missing `v` is therefore **"unknown", never "Claude"** — read §3.3 before consuming this key. The receiver sanitises it to a short slug (the hash is student-controllable) and stores it as `submission_activities.content.transport`, merged over the `d` object and never in place of a null. |
 
 ### 3.1 Send both. `r` alone is not a submission that works.
 
@@ -166,6 +172,41 @@ that produced it to re-issue with a fresh suffix.
 **The written modality needs nothing here.** Its `activities.slug` is minted by the site
 (`mintWrittenSlug()`), is never typed by a human, and nothing external references it — so it took
 the same random suffix on 2026-07-28 with no coordination and no contract implications.
+
+---
+
+### 3.3 `v` gained a second value the same day it was written down (added 2026-08-20)
+
+**What the row above said when it was first written, earlier the same day:** *"today only `v=gemini` … a published claude.ai
+artifact sends nothing, and **that absence is the point**."* That held only while this repository
+generated exactly one kind of build. `scripts/artifacts/patch_artifacts.py` then added `&v=claude` to all
+51 Claude artifact sources, and it stopped holding — in one direction merely wrongly, in the other
+dangerously.
+
+**A Claude artifact can now say what it is — but only once it has been republished.** claude.ai serves
+what was *published*, not what is in this repository, so a patched source reaches cadets lesson by lesson,
+as a human republishes each one. (That republish **keeps the slug**: a hand patch is not a factory rebuild,
+and §3.2's fresh suffix is required for a new **offering**, which this is not. It does move the claude.ai
+URL, so the lesson's `activities.artifact_url` has to be updated with it.)
+
+**So a consumer meets three populations at once, and must keep them apart:**
+
+| what arrives | what it means |
+|---|---|
+| `v=gemini` | a hosted backup build. A positive, reliable fact. |
+| `v=claude` | a republished Claude artifact carrying the 2026-08-20 patch. A positive, reliable fact. |
+| no `v` | **unknown.** A Claude artifact published before 2026-08-20 and not yet republished — *or* a row written before the key existed at all — *or* some future producer that forgot to send it. |
+
+**Never fold the third row into the second.** The site does not, deliberately: the receiver leaves
+`transport` null rather than defaulting it, and the reasoning is written beside the code in
+`site/js/student-data.js`. Stamping `claude` on the empty case reads better and would be wrong to trust —
+it asserts a transport for every row written before the key existed, and for every producer that merely
+omitted it, with nothing downstream able to tell the invented values from the observed ones. Read absence
+as absence. That is the general rule §8 states for every additive field; this is the field that makes the
+cost of ignoring it concrete.
+
+*This is a transition state, and it has an end: when every live artifact has been republished, a missing
+`v` will mean "pre-2026-08-20" and nothing else. It will still not mean "Claude".*
 
 ## 4. `r` — the full report (kept, unchanged)
 
@@ -326,6 +367,8 @@ Short model-written prose for quick instructor scanning and the trend passes.
 |---|---|---|---|
 | `schema` | int | **yes** | Contract version. `1` for this document. |
 | `producer` | string | no | Artifact id + version (e.g. `lesson-02-charge@2026-06`) — invaluable for debugging a cohort-wide anomaly later. |
+| `model` | string \| null | no | *Added 2026-08-20.* The model that produced the **report**, not the one the session opened on. A producer that walks a model ladder sends the rung it ended on; `null` when it does not know. Diagnostic only — it touches no grade, and no student page renders it. |
+| `model_downgraded` | bool | no | *Added 2026-08-20.* Did this session fail to stay on the producer's first choice? **Exact, not heuristic** — every producer computes it from state that only ever moves one way, never from a guess: a Claude artifact tests its ladder reference against the top candidate (that reference steps down and never climbs back), and a Gemini backup build tests whether any model has been marked spent (a model is marked only after it has 429'd out and the walk has moved past it, and it cannot be *"not the first entry"* there because runtime discovery rewrites the ladders). Worth having because a downgraded session is the first thing to check when a cohort's reports come back thinner than usual. |
 
 ---
 
@@ -432,10 +475,16 @@ it from the Grade tab if a report looks tampered.
 
 - **Frozen forever:** the endpoint URL, the hash keys (`t`/`i`/`r`/`d`), the lz-string codec,
   and the meaning of every `schema: 1` field.
-- **Allowed within v1 (additive only):** new *optional* fields. Consumers ignore unknown
-  fields, so a newer artifact and an older receiver (or vice-versa) coexist. Note an additive
-  field only reaches reports from artifacts built *after* it's added — you cannot backfill
-  deployed artifacts.
+- **Allowed within v1 (additive only):** new *optional* fields, and new *optional* hash keys
+  alongside the four frozen ones (`v`, added 2026-08-20, is the first and so far the only).
+  Consumers ignore unknown fields, so a newer artifact and an older receiver (or vice-versa)
+  coexist. Note an additive field only reaches reports from artifacts built *after* it's added —
+  you cannot backfill deployed artifacts.
+  - **Therefore the absence of an additive key never carries a value.** It means "this producer
+    predates the key, or omitted it" — which is not a fact about anything else. A consumer that
+    reads absence as a positive answer has invented data for every report written before the key
+    existed. *(Added 2026-08-20; §3.3 is the worked example, and it went from a
+    theoretical caution to a live one inside a single day.)*
 - **Breaking changes** (renaming a field, changing a field's meaning or type, removing one,
   or repurposing the grade rule) require `schema: 2` and a new revision of this document. The
   receiver keeps a `schema: 1` path so old artifacts never break.

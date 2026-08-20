@@ -1,3 +1,63 @@
+/* =============================================================================
+   ARCHIVED EXAMPLE -- PRESERVED, NOT MAINTAINED.
+   Header added 2026-08-20. Read it before copying any pattern out of this file.
+
+   This is the pilot's pre-repository copy of Physics 215 Lesson 02. It is the
+   worked reference cited by docs/contracts/INTERACTION-DATA-CONTRACT.md, and
+   sync_artifacts.py uploads it as `_examples/` precisely so it is never mistaken
+   for a 52nd lesson. It is a THIRD dialect, older than both dialects now in
+   service, and it is left exactly as it was on purpose.
+
+   WHAT IS STILL CURRENT: the submit contract. The `#t=`/`#i=`/`#r=`/`#d=` hash,
+   splitStructured(), the LAST-fenced-block rule, the schema-1 payload. That is
+   what this file is cited for and none of it has changed.
+
+   WHAT IS SUPERSEDED: everything about resilience. The authoritative spec for
+   what a live artifact does is scripts/artifacts/patch_artifacts.py, whose
+   docstring lists the 2026-08-20 fix set change by change. In this file:
+
+     rawCall()             steps down MODEL_CANDIDATES on 404 ONLY. A 429 falls
+                           through to `request`, which tells the cadet to "wait a
+                           moment and Retry" -- advice that never comes true for a
+                           usage cap. Live artifacts step down on 429 as well,
+                           through a stepModel() helper that never climbs back.
+     errorMessage()        has four cases and no `quota` case, so there is no
+                           message for "both Claude models are capped" and no
+                           pointer to the backup.
+     buildSystemPrompt()   takes (cadetId, localTime) and appends
+                           EXTENSION_PROBLEMS and REPORT_FORMAT unconditionally.
+                           Live artifacts take a third `phase` argument and defer
+                           both tail blocks to the phase that needs them -- about
+                           18% off every graded turn. The blocks stay complete;
+                           only WHEN they are sent is conditional.
+     .conn-row/.conn-msg   have no width cap. The kit dialect centres these in a
+                           flex column, where an uncapped sibling sizes to its own
+                           max-content and runs out past every card on screen.
+     the backup route      is absent entirely. No BACKUP_ENDPOINT, no "Open the
+                           backup version" button on the start screen, no
+                           "Continue on Gemini" button in the error bar, and no
+                           mid-lesson handoff carrying the transcript to the
+                           Gemini build. A cadet whose tutor died here had
+                           nowhere to go, which is the defect the fix set closed.
+     the submit URL        carries no `&v=claude` transport marker, and the
+                           payload records neither the model that wrote the
+                           report nor whether the session was downgraded.
+
+   WHY IT WAS NOT PATCHED. patch_artifacts.py globs
+   _builder/courses/<id>/artifacts/ only, and must NOT be widened to reach here.
+   Run against this file (tried 2026-08-20) it refuses at its first step, and
+   most of what follows has no anchor either: there is no SUBMIT_ENDPOINT
+   constant, no finalizePayload(), no REPORT_MARKER or isReportMsg(), no backup
+   CSS, and only two of the three callTutor() sites it expects. Hand-applying the
+   rest would mean inventing structure into 1,300 lines of JSX that nothing in
+   this repository can parse -- publishing is the only JSX parser this project
+   has, and this file is never published. A half-modernised example teaching a
+   shape no live artifact has is worse than an old one that says so.
+
+   Nothing in docs/DOC-SOURCES.json watches this file. This header is the only
+   thing that will tell the next reader.
+   ============================================================================= */
+
 import React, { useState, useRef, useEffect } from "react";
 
 /* =============================================================================

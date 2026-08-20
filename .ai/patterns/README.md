@@ -57,9 +57,15 @@ file, because "not yet automated" and "not enforceable" are different problems w
 ## Project-specific values
 
 A pattern file ships with `{{SLOTS}}` for the facts only the adopting project knows — the pinned
-language version, the build and test commands, the formatter, the dependency policy.
-[`project-bootstrap`](../skills/project-bootstrap/SKILL.md) fills them, and
-`python scripts/bootstrap/check_slots.py` reports any left behind.
+language version, the build and test commands, the formatter, the dependency policy. In this
+repository they were filled by hand at bootstrap; `python.md` carries no slot today.
+
+*(Corrected 2026-08-20. This named a `project-bootstrap` skill that fills them and a
+`scripts/bootstrap/check_slots.py` that reports the leftovers. **Neither exists here** — the
+skill is not in `.ai/skills/` or in `CORE.md` §4's index, and there is no `scripts/bootstrap/`.
+So the mechanism this section promised is `grep -n '{{[A-Z_]*}}'` and nothing else, which is
+exactly the "rule with no mechanism" the section above warns about — said plainly rather than
+implied by a dead command.)*
 
 **Namespace every language-scoped slot with the language: `{{CPP_TEST_COMMAND}}`, not
 `{{TEST_COMMAND}}`.** Slot substitution is global text replacement, so a bare `{{TEST_COMMAND}}` in

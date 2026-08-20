@@ -184,7 +184,7 @@ Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
   paths) without moving `_archive/` and `_builder/` first.** Doing so would publish every
   `BUILD-LOG.md`, the 132 KB tutor system prompt, the misconception taxonomies and the worked
   extension problems, instantly and with nothing reporting it.
-- **Artifact `.jsx` source does not live in the repo.** The 46 built artifacts (~8 MB) live in the
+- **Artifact `.jsx` source does not live in the repo.** The 51 built artifacts (~8.5 MB) live in the
   private Supabase Storage bucket `artifact-sources`; `_builder/courses/*/artifacts/*.jsx` is a
   **gitignored local cache** populated by `python scripts/artifacts/sync_artifacts.py pull`. The
   source is not secret — claude.ai shows an artifact's formatted code behind a Code button — so
@@ -429,7 +429,7 @@ The canonical domain procedures are agent-neutral Markdown runbooks under `.ai/s
 | `setup-preflight` | First-time machine setup — writes the config file above. |
 | `docs-author` | Decide whether a concept warrants documentation and which kind, then write it — in-app help docs (`site/help/`) or design docs (`docs/`). Read before adding any `.md` to either. |
 | `safe-change` | **The gated procedure for any change that is hard to undo** — deletes, bulk updates, migrations, publishes, credential rotation, history rewrites. Arrived with the builder 2026-08-07; PREP's equivalent was prose in §0 with no runbook behind it. Read it before the operation, not after. |
-| `gemini-port` | Port one **published** Claude artifact to its Gemini-API backup build under `site/gemini/`, for cadets whose free Claude account is answering 429. Transport only — same slug, same grounding, same submit contract; `scripts/artifacts/to_gemini.py` refuses rather than warns. Verified in a real browser, because that page is the only JSX parser a backup build gets. |
+| `gemini-port` | Port one **published** Claude artifact to its Gemini-API backup build under `site/gemini/`, for a cadet whose free Claude account has run out of usable model. *(A 429 no longer ends the session by itself: since 2026-08-20 the artifact walks its own model ladder first, and the backup is where a cadet goes when that ladder is exhausted — offered mid-lesson now, not only at the start screen.)* Transport only — same slug, same grounding, same submit contract; `scripts/artifacts/to_gemini.py` refuses rather than warns, including on a source that predates the 2026-08-20 fix set. Verified in a real browser, because that page is the only JSX parser a backup build gets. |
 | `skill-author` | Decide whether a procedure warrants a skill, then write or revise it. Read before adding any `SKILL.md`. |
 | `integration-package` | Build, verify, archive or resume a package for an external AI surface that calls into this system — i.e. `.ai/integrations/custom-gpt/`. |
 

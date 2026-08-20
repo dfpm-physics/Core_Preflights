@@ -452,10 +452,15 @@ schedule for that lesson's topic → emits a preview for approval → emits a `.
 publishes it from a Claude session → a director registers it via the prefill link → cadets take
 the session → the artifact submits `r` and `d` as a URL hash.
 
-**Current holdings: 46 artifacts, 30 published, 0 registered.** phys-215 has 29 (all published);
-phys-310 has 17 (one published). *Published is not registered, and the gap is silent* — until a
-lesson row exists with the matching slug, the artifact is a live URL no cadet can reach through
-the course site.
+**Current holdings: 51 artifacts, 38 of them published.** phys-110 has 5 (all published),
+phys-215 has 29 (all published), phys-310 has 17 (4 published). *Counted 2026-08-20* — the 51 from
+the gitignored `.jsx` cache, the 38 from the committed `index.json` of each course, where a row
+carrying a `published_url` is a published artifact and a row without one is a draft. **How many are
+REGISTERED is not recorded in this repo and needs a live check**: count the `app.activities` rows
+whose slug matches, read over `prep_app_read` and not through a staff session, because RLS answers
+*what may you see* and never says so (CORE.md §3). *Published is not registered, and the gap is
+silent* — until a lesson row exists with the matching slug, the artifact is a live URL no cadet can
+reach through the course site.
 
 **Where things are:**
 - `.jsx` source → the private `artifact-sources` Storage bucket (CORE.md §3). Not in git.
@@ -467,10 +472,29 @@ the course site.
 - **The kit is never edited per course.** A per-course edit forks it for every course at once.
   All variation goes in a profile. The one exception already taken: `tools/` is authored rather
   than hash-locked, so a genuine bug fix there is legitimate and gets a CHANGELOG entry.
-- **Publishing is the irreversible step.** Slug, objective keys, submit URL and model candidates
-  are baked in at publish time. A rebuild mints a **new 8-hex slug** (contract §3.2) and therefore
-  registers as a **new lesson row** — applying a review note to a published artifact is a
-  republish and a re-registration, never an in-place edit.
+- **Publishing is the irreversible step — but it does NOT always mint a new slug.** Objective
+  keys, the submit URL and the model candidates are baked in at publish time, and claude.ai serves
+  what was *published*, not what is in this repository. So any change to a published artifact —
+  a review note, a bug fix, a whole rebuild — reaches cadets only when a human republishes it,
+  never as an in-place edit, and that republish moves the claude.ai URL (the lesson's
+  `activities.artifact_url` has to be updated with it). What differs between the two cases is the
+  slug, and only the slug:
+  - **A rebuild FOR A NEW OFFERING mints a new 8-hex slug** and therefore registers as a **new
+    lesson row.** That is what contract §3.2 requires, in exactly those words: *never reuse a slug
+    from a previous term — a lesson rebuilt for a new offering gets a new suffix.*
+  - **A patched republish INTO THE SAME OFFERING KEEPS ITS SLUG, and must.** `activities.slug` is
+    globally `UNIQUE` and every student report hangs off that one row, so minting a new one
+    mid-term would orphan the work of every cadet who has already finished the lesson — a silent
+    loss, because the new row looks perfectly healthy and the old one is simply never read again.
+    `scripts/artifacts/patch_artifacts.py` asserts byte-equality of the slug line before it writes,
+    so the rule cannot be broken by accident; `to_gemini.py` asserts the same thing for the same
+    reason (a second slug splits one cohort in two and halves every rollup).
+  - *This bullet said until 2026-08-20 that "a rebuild mints a new 8-hex slug (contract §3.2) and
+    therefore registers as a new lesson row", flatly and for every case. That **overstates §3.2 and
+    cites it for something it does not say** — §3.2 is a rule about offerings, not about edits. The
+    misreading cost real time on the 2026-08-20 fix set, where read literally it made a fix to 51
+    published artifacts look like 51 rebuilds and 51 new lesson rows — when the correct action was
+    to patch 51 sources and republish each under its unchanged slug.*
 - **Effort is the grade, not correctness.** A cadet who works through the whole conversation and
   understands nothing earns full marks. Everything diagnostic stays diagnostic.
 
@@ -485,6 +509,8 @@ the course site.
 | **Twelve published artifacts disagree with their own pacing constant** | Each artifact states its per-topic budget in **six** places that must agree; in twelve of them one disagrees. The runtime effect is small; **the build risk is not** — a new artifact rebased off one of the twelve inherits the wrong string with nothing detecting it | **Rebase off lessons 21+ or 2/3, never off 4–20.** Do not fix the twelve without asking: all are published, so twelve fixes are twelve new lesson rows |
 | **`git add -A` commits the human's edits under the agent's message** | A deletion made in the IDE while an agent was mid-task got staged and committed under a message asserting the file was still present | **Read `git status` before staging and account for every line.** Stage explicit paths |
 | **A confidence flag on the phys-310 corpus can mean five different things** | Across sixteen builds: invisible, a flag on the *subject*, packaging only, a genuine content caveat, and one that *raises* confidence | **Read the Flags block, never the confidence word.** A zero cross-check is not the same as unsupported — check for internal corroboration first |
+| **Injected code may only name what survives into the target build** | A transform that emits `MODEL_CANDIDATES[0]` is correct in a Claude artifact and a `ReferenceError` in its Gemini port, which rewrites that ladder away — and the reference sits inside a function that only runs deep in a cadet's session, so the build parses, renders, serves and passes every check first. Exactly the shape of the `REPORT_MARKER` failure that shipped five PHYS 110 backups. `to_gemini.py` now strips the Claude helper (step 9b) and asserts every injected name against the output | **Before injecting a name, ask what the OTHER pipeline does to it.** Prefer a helper both shapes declare. A green check on a build whose failure is one `useEffect` guard away is not evidence |
+| **One fix, two tools, and the second one's anchors are written against the first one's input** | `to_gemini.py` matches the artifact source by exact byte anchors, so the 2026-08-20 source patch broke every anchor it touched. It refuses rather than corrupts — but the refusal surfaces in the *next* port, days later, in a file the patch author never opened, and the two tools now have to agree about what they each perform (`patch_artifacts.py` does the phase deferral and the 429 walk; the porter inherits both and refuses a source that lacks them) | **After changing an artifact source, run the porter over all three dialects before committing** — `patch_artifacts.py`'s own header says so. Shared machinery is imported, not copied (the porter's `detect_nl`/`adapt`), so the two cannot drift on what a line ending is |
 
 ---
 

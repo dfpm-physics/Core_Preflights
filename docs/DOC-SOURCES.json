@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-08-19",
+  "updated": "2026-08-20",
   "_comment": [
     "Dependency index for documents that MUST STAY CURRENT. Each entry names the authoritative",
     "sources a document was derived from, and the date it was last checked against them.",
@@ -41,7 +41,7 @@
       "doc": "site/help/ai-and-your-work.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -55,7 +55,7 @@
       "doc": "site/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-08-19",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -88,7 +88,7 @@
       "doc": "site/help/admin-system-operations.md",
       "kind": "help",
       "tier": "admin",
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -111,7 +111,7 @@
       "doc": "docs/operations/SYSTEM_GUIDE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -127,7 +127,7 @@
       "doc": "docs/operations/PREP-V2-CUTOVER.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-20",
       "sources": [
         "supabase/admin/app_schema_bootstrap.sql",
         "scripts/app_migration/migrate_public_to_app.py",
@@ -141,7 +141,7 @@
       "doc": ".ai/skills/docs-author/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-20",
       "sources": [
         "site/help/README.md",
         "site/js/help.js",
@@ -154,7 +154,7 @@
       "doc": "site/help/director-course-structure.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-19",
+      "reviewed": "2026-08-20",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/003_term_calendar.sql",
@@ -203,7 +203,7 @@
       "doc": "site/help/instructor-accounts.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-08-19",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/PROJECT.md",
         "site/js/roster-import.js",
@@ -222,7 +222,7 @@
       "doc": ".ai/patterns/README.md",
       "kind": "reference",
       "tier": null,
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/README.md"
@@ -233,7 +233,7 @@
       "doc": ".ai/patterns/python.md",
       "kind": "reference",
       "tier": null,
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -245,7 +245,7 @@
       "doc": ".ai/skills/integration-package/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/CORE.md"
       ],
@@ -255,7 +255,7 @@
       "doc": ".ai/skills/safe-change/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/CORE.md"
       ],
@@ -265,7 +265,7 @@
       "doc": ".ai/skills/skill-author/SKILL.md",
       "kind": "skill",
       "tier": null,
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/README.md"
@@ -329,27 +329,30 @@
       "doc": "docs/operations/ONBOARD-ARTIFACTS.md",
       "kind": "operations",
       "tier": "staff",
-      "reviewed": "2026-08-19",
+      "reviewed": "2026-08-20",
       "sources": [
         "scripts/artifacts/sync_artifacts.py",
         "scripts/artifacts/artifact_parse.py",
         "site/js/faculty-artifacts.js",
         "_builder/courses/phys-215/COURSE_PROFILE.md",
-        ".ai/instructions/CORE.md"
+        ".ai/instructions/CORE.md",
+        "scripts/artifacts/patch_artifacts.py",
+        "scripts/artifacts/to_gemini.py"
       ],
-      "note": "The capability-scoped path for an artifact AUTHOR, as ONBOARD-AGGREGATION.md is for a close-out operator. Every command it gives is sync_artifacts.py, so that tool's flags and its course-discovery rule are load-bearing: the runbook tells a reader that an unlisted course means a missing COURSE_PROFILE.md, which is true only while discovery reads the local tree. artifact_parse.py is a source because the doc's central promise -- review works on the first push, with no build log written -- rests on objectives being parsed out of the .jsx. faculty-artifacts.js is a source because the doc says the course tab appears after the push, which is true only while the page discovers courses from Storage."
+      "note": "The capability-scoped path for an artifact AUTHOR, as ONBOARD-AGGREGATION.md is for a close-out operator. Every command it gives is sync_artifacts.py, so that tool's flags and its course-discovery rule are load-bearing: the runbook tells a reader that an unlisted course means a missing COURSE_PROFILE.md, which is true only while discovery reads the local tree. artifact_parse.py is a source because the doc's central promise -- review works on the first push, with no build log written -- rests on objectives being parsed out of the .jsx. faculty-artifacts.js is a source because the doc says the course tab appears after the push, which is true only while the page discovers courses from Storage. patch_artifacts.py and to_gemini.py became sources on 2026-08-20: section 7 now gives the patch-then-port order as four literal commands and states that the porter REFUSES an unpatched source rather than warning about one, and section 1 tells a reader that grep -c BACKUP_ENDPOINT should report 3. Every one of those is a property of a script rather than of this runbook — a reordered step, a relaxed assertion, or a differently named injected constant makes the page wrong with nothing else to catch it."
     },
     {
       "doc": "docs/operations/PUBLISH-ARTIFACT.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-19",
+      "reviewed": "2026-08-20",
       "sources": [
         "_builder/preflight-kit/contracts/INTERACTION-DATA-CONTRACT.md",
         "_builder/preflight-kit/skill/preflight-factory-v2/SKILL.md",
-        "scripts/artifacts/check_artifact.py"
+        "scripts/artifacts/check_artifact.py",
+        "scripts/artifacts/patch_artifacts.py"
       ],
-      "note": "The publish runbook and the verbatim-reproduction prompt it hands to the publishing session. The prompt enumerates what must not be edited, so it goes wrong the moment the contract's slug rule (section 3.2), endpoint, or codec changes, or the skill's artifact structure does. It also tells the operator to run check_artifact.py and compare a line count -- if that script's invocation or output changes, step 1 and step 3 stop matching what the operator sees."
+      "note": "The publish runbook and the verbatim-reproduction prompt it hands to the publishing session. The prompt enumerates what must not be edited, so it goes wrong the moment the contract's slug rule (section 3.2), endpoint, or codec changes, or the skill's artifact structure does. It also tells the operator to run check_artifact.py and compare a line count -- if that script's invocation or output changes, step 1 and step 3 stop matching what the operator sees. patch_artifacts.py became a source on 2026-08-20, when section 5 (republishing a patched artifact) was written around it and steps 3 and 4 began describing what it injects — the two backup doors, grep -c BACKUP_ENDPOINT reporting 3, the 429 ladder walk, the phase-deferred prompt tail, and the &v=claude marker. It is also the script that asserts byte-equality of the slug line, which is the whole basis of section 5's keep-the-slug rule."
     },
     {
       "doc": "_builder/preflight-kit/contracts/INTERACTION-DATA-CONTRACT.md",
@@ -359,7 +362,7 @@
       "sources": [
         "docs/contracts/INTERACTION-DATA-CONTRACT.md"
       ],
-      "note": "A FROZEN SNAPSHOT of PREP's own contract, taken 2026-07-30 when preflight-kit was extracted from this project, and hash-locked by _builder/preflight-kit/MANIFEST.sha256. It is deliberately a second copy: the kit is portable and self-contained, and tools/localize.py and tools/verify.py both operate on these files. Registering it here is the mechanism that stops the duplication being silent — a flag means PREP's authoritative copy moved, and the decision is whether that is a schema:2 event under _builder/preflight-kit/PROVENANCE.md. As of the import the two ALREADY differ (data contract by 1 line, prefill link by 35); PREP's is newer, and re-syncing the kit is deliberately not part of the import. Re-checked 2026-08-20: PREP's copy gained an OPTIONAL `v` transport key (section 8 additive, still schema 1), so the kit copy is one key further behind and is still CORRECT for what it describes -- an artifact built from the kit does not send `v`, and the receiver reads that absence exactly as intended. Not a schema:2 event, so still not a re-sync trigger. Do not 'fix' by editing the kit copy alone — that breaks MANIFEST.sha256."
+      "note": "A FROZEN SNAPSHOT of PREP's own contract, taken 2026-07-30 when preflight-kit was extracted from this project, and hash-locked by _builder/preflight-kit/MANIFEST.sha256. It is deliberately a second copy: the kit is portable and self-contained, and tools/localize.py and tools/verify.py both operate on these files. Registering it here is the mechanism that stops the duplication being silent — a flag means PREP's authoritative copy moved, and the decision is what the kit owes in return. As of the import the two ALREADY differ (data contract by 1 line, prefill link by 35); PREP's is newer, and re-syncing the kit was deliberately not part of the import. RE-CHECKED 2026-08-20, AND THE ANSWER FLIPPED THE SAME DAY IT WAS WRITTEN. This note said earlier on 2026-08-20 that the kit copy was still correct because `an artifact built from the kit does not send v`. That held for hours. The kit's own skill/preflight-factory-v2/SKILL.md is now at rev 5 and teaches emitting `&v=claude` outright, plus `model` and `model_downgraded` inside `d` — so an artifact built from the kit DOES send `v`, and it sends a key the frozen contract sitting beside it in the same seal does not document at all. A downstream port that reads only these contracts would meet that key as output from an unspecified producer. THAT IS NOW A RE-SYNC TRIGGER, and it is PROVENANCE.md's FIRST kind — `a skill or source revision` — not its second. It is NOT a schema:2 event: nothing is renamed, retyped or removed, the four frozen hash keys (t/i/r/d) are untouched, and the payload is still schema 1, so it does not carry the every-deployed-artifact-everywhere weight PROVENANCE reserves for a contract revision. What makes it a trigger is narrower and sufficient: the hash-locked seal now holds two files that contradict each other. SKILL.md was re-synced to rev 5 and the manifest re-sealed around it; the contract beside it was left at the pre-`v` text. The remedy is PROVENANCE's copy-then-regenerate procedure, run as one unit — copy docs/contracts/INTERACTION-DATA-CONTRACT.md over the kit copy, regenerate the MANIFEST.sha256 tail keeping its comment header, then run tools/verify.py — and it needs the course director, because the manifest is the seal and re-sealing is theirs. Until that runs, read the kit copy as one revision behind its own skill, not as a description of what a kit-built artifact sends. Do not 'fix' it by editing the kit copy alone — that breaks MANIFEST.sha256."
     },
     {
       "doc": "_builder/preflight-kit/contracts/INTERACTION-PREFILL-LINK.md",
@@ -375,7 +378,7 @@
       "doc": "docs/operations/ONBOARD-AGGREGATION.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/skills/lesson-cycle/SKILL.md",
@@ -392,7 +395,7 @@
       "doc": "docs/operations/MACHINE-SETUP.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -407,7 +410,7 @@
       "doc": "docs/operations/SCHEDULED-LESSON-CYCLE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/skills/lesson-cycle/SKILL.md",

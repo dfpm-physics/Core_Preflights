@@ -4,10 +4,10 @@
 # A mismatch means the file changed in transit or someone edited a frozen contract.
 #
 # Snapshot taken 2026-07-30 from /mnt/project and the installed preflight-factory-v2 skill.
-704622df0ae1d73325eb19901bc4da4803011d643b4329a0281c681c64db6c7e  skill/preflight-factory-v2/SKILL.md
+a1f803eaeee30ddd23f759f8cc4adfadcd422907e21868f6f57b839d1fe523d7  skill/preflight-factory-v2/SKILL.md
 758e55e57924aa48854faa3854140a6a34649d456c1becb8b0a3076db729fc6b  contracts/INTERACTION-DATA-CONTRACT.md
 7d0d4c00bbb49f3bb4506fb2364e3b644c18f69a2b318a07388fabb318af0094  contracts/INTERACTION-PREFILL-LINK.md
 d7b8bc2fd74c51018e45e351697672d25ed537488c3e8906f29cb0708cb4c008  sources/02_TUTOR_SYSTEM_PROMPT.md
 c8ca5622d53cad74b7e5c1a5e15d3491fc840f81bad4d682a51430a7a8a8eba7  sources/03_LESSON_CONFIG_SPEC.md
 deb02cbf8d57a96a8a632e77be307da42207191db7858f520cafc917bd6f4467  sources/04_OUTPUT_REPORT_SPEC.md
-f5491dd8f7f5b5287073038a0e48533cb6392e99e047fa8373f844b6f9e40de4  sources/THEME_REFERENCE.md
+9ccb112e02f9882434614d7e3c0a6c713cf685d97b2b99e51026041f8413a42a  sources/THEME_REFERENCE.md

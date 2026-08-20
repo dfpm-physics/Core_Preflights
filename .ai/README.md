@@ -54,10 +54,16 @@ that govern that output live there.
 ## Two things called "artifact"
 
 `artifacts/examples/` holds **format examples** from the instruction kit. The project's actual
-interactive deliverables — the 46 built Claude artifacts — live in the private `artifact-sources`
+interactive deliverables — the 51 built Claude artifacts — live in the private `artifact-sources`
 Storage bucket, with their build records under [`_builder/`](../_builder/). **Read the path, not
 the word.** An agent asked to "work on the artifacts" that edits `.ai/artifacts/` has edited the
 wrong thing.
+
+The one file in there, `lesson02_artifact.jsx`, is **archived rather than maintained**: its submit
+contract is current and is what the data contract cites it for, while its error handling and its
+(absent) backup route are superseded. **Its own header comment lists which patterns are stale** and
+points at `scripts/artifacts/patch_artifacts.py` for what a live artifact does. Read that header
+before copying anything out of it — nothing in `docs/DOC-SOURCES.json` watches the file.
 
 ## Agent entry files
 

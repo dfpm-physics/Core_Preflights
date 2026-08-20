@@ -18,10 +18,10 @@ see.
 > that lesson's `artifact_url`.
 >
 > Getting this wrong the safe-looking way is what costs: believing every republish needs a new
-> lesson row turns a 46-file patch into 46 unnecessary registrations and splits each lesson's
+> lesson row turns a 51-file patch into 51 unnecessary registrations and splits each lesson's
 > cohort in two. Getting it wrong the other way — hand-copying a suffix forward onto a genuine
 > rebuild — is the failure §4 warns about. **Check whether `INTERACTION_ID` changed; do not infer
-> it from the fact that you republished.**
+> it from the fact that you republished.** The patched-republish path is §5.
 
 **Sequence:** this runbook, then [`PREFILL-LINK.md`](PREFILL-LINK.md). Publishing produces the
 public URL; the prefill link registers it. **Until the prefill link is saved, a published artifact
@@ -86,6 +86,15 @@ Specifically, do NOT:
   sees success, and the work reaches nothing.
 - change MODEL_CANDIDATES, or "update" them to a newer model. They are
   deliberately non-dated with a fallback.
+- remove BACKUP_ENDPOINT, the "Open the backup version" button on the start
+  screen, or the "Continue on Gemini" button in the error bar. Two of them is
+  not a duplicate: one is offered before the cadet starts, the other after
+  their tutor has already died mid-lesson.
+- make the tail of buildSystemPrompt unconditional again. EXTENSION_PROBLEMS
+  and REPORT_FORMAT are attached by phase on purpose. The blocks themselves
+  are complete and must stay complete; only WHEN they are sent is conditional.
+- drop the "&v=claude" marker from the submit URL, or the model fields the
+  report payload records.
 - add an API key field, or any x-api-key / Bearer / anthropic-version header.
   Auth is injected by the platform; adding one breaks it.
 - convert to HTML. Raw-HTML artifacts cannot open the submit link.
@@ -126,13 +135,32 @@ do not ask the session to patch what it produced, because you cannot see what el
 Then open the published URL and **run one turn** — enter a last name, start, and answer the opening
 question. This is the only real syntax check the file gets. Confirm on the start screen: last-name
 field, `Start Preflight →`, the Study Mode button, the boxed Honor Code, and the connection dot.
+**Nothing on that screen should be wider than the cards it sits in.** The connection row, its red
+message and the backup button are all capped at the card width; a control running out past the cards
+is the cap having failed to apply, and it is visible on any publish.
 
-**If the source carries `BACKUP_ENDPOINT`** (every artifact has since 2026-08-14), the backup
-button renders only when the connection check *fails*, so a healthy publish will not show it and
-its absence proves nothing. Check the source instead — `grep -c BACKUP_ENDPOINT` — and confirm the
-lesson has a build in [`site/data/backup-builds.json`](../../site/data/backup-builds.json). A
-button whose slug has no entry sends the cadet to a page that correctly says "no backup for this
-lesson yet", which is honest but useless to someone whose tutor just died.
+**There are now TWO backup doors, and a one-turn check will not produce either of them.**
+
+- **`Open the backup version →`, on the start screen.** It renders only when the connection check
+  *fails*, so a healthy publish will not show it. If the dot *does* come up red — common on a capped
+  account, which is exactly when a cadet meets it — take the free look: **solid navy fill**, full
+  width, no wider than the cards above it. It was a white outline until 2026-08-20, and the fill is
+  the point: a cadet whose account is capped needs it to read as an action, not as a footnote under
+  the thing that just failed.
+- **`Continue on Gemini →`, beside Retry in the error bar.** Added 2026-08-20. It appears only after
+  a request has actually failed mid-lesson, and it carries the conversation so far across to the
+  backup build so the cadet resumes instead of restarting.
+
+Neither absence proves anything. Check the source instead — `grep -c BACKUP_ENDPOINT` reports **3**
+on a patched artifact, one for the constant and one for each door — and confirm the lesson has a
+build in [`site/data/backup-builds.json`](../../site/data/backup-builds.json). A button whose slug
+has no entry sends the cadet to a page that correctly says "no backup for this lesson yet", which is
+honest but useless to someone whose tutor just died.
+
+*(Every artifact has carried `BACKUP_ENDPOINT` since 2026-08-20. The kit dialect has had it since
+2026-08-14; PHYS 110's five were built outside the kit and had no backup door at all until
+`patch_artifacts.py` gave them one — their Gemini builds existed on the server the whole time with
+nothing in the lesson pointing at them.)*
 
 ---
 
@@ -144,10 +172,15 @@ lesson yet", which is honest but useless to someone whose tutor just died.
   lesson row* rather than updating this one. That is intended — it is what keeps one term's reports
   out of another term's delete. Never hand-copy a suffix forward to avoid it.
   **A hand patch is the other case:** it does not touch `INTERACTION_ID`, so republishing it keeps
-  the slug and needs only an `artifact_url` update. See the callout at the top.
-- **The model list is baked in.** If every entry in `MODEL_CANDIDATES` is retired, the artifact
-  dead-ends politely and the only fix is republishing. Keeping two live model *families* is what
-  makes that unlikely.
+  the slug and needs only an `artifact_url` update. That is §5, and it is the common case now.
+- **The model list is baked in**, and since 2026-08-20 the ladder walks on a *usage* limit as well
+  as a missing model. A 404 steps to the next candidate as it always did; a 429 now does too, once
+  its retries are spent — so a capped cadet drops to the lighter model instead of being told to
+  "wait a moment and Retry", which is advice that never comes true for a usage cap. The ladder never
+  climbs back up, which is what makes the model recorded on the report an exact answer to *was this
+  session downgraded*. When **every** entry is capped the artifact no longer dead-ends: it says so
+  and points at the Gemini button. Every entry being *retired* is the case that still dead-ends, and
+  republishing is still the only fix — keeping two live model *families* is what makes it unlikely.
 - **The submit endpoint is baked in**, and a wrong one fails with no error anywhere — the cadet
   completes the session, sees a success page, and the work reaches nothing. There is no
   acknowledgement hop.
@@ -155,7 +188,45 @@ lesson yet", which is honest but useless to someone whose tutor just died.
 
 ---
 
-## 5. Push the source to Storage
+## 5. Republishing a patched artifact
+
+This is now the common case: the `.jsx` was changed **in this repository** — by
+[`patch_artifacts.py`](../../scripts/artifacts/patch_artifacts.py) or a hand fix — and the same
+lesson has to go live again. It is **not** a rebuild, and that difference is the whole section.
+
+**The slug does not change, and keeping it is REQUIRED, not preferred.** `app.activities.slug` is
+`NOT NULL UNIQUE` — globally unique, not per course — and every student report hangs off the row it
+names. A new slug is therefore a new row, and every cadet who already finished that lesson is
+orphaned: their submission still exists, attached to a lesson nobody is looking at any more, with
+nothing reporting the split. A patch leaves `INTERACTION_ID` alone for exactly that reason, and
+`patch_artifacts.py` asserts byte-equality of the slug line before it writes so the rule cannot be
+broken by accident.
+
+So the database change is at most one field:
+
+| | what happens |
+|---|---|
+| the lesson row | **not** re-registered. No prefill link, no second row |
+| `INTERACTION_ID` | unchanged — and step 3 is what proves it |
+| `activities.content.artifact_url` | update it **only if** claude.ai issued a new share URL |
+| submissions and grades already collected | untouched, and still attached |
+
+**Publishing a patch is still publishing.** Run steps 1–3 exactly as written, on every file, every
+time. Two things move that trip people up:
+
+- **The line count changed**, because a patch adds lines. Take a fresh `wc -l` in step 1 and compare
+  step 3's confirmation against *that*, not against a number you wrote down before the patch.
+- **The published URL may change.** claude.ai does not guarantee the same share URL on a republish.
+  If you get a new one, open that lesson in `site/faculty/lessons.html` and edit the link. Do **not**
+  reach for the prefill link: it *creates*, and the row already exists.
+
+Then write the new URL into that course's `BUILD-LOG.md` before the next `sync_artifacts.py push`,
+or the regenerated `index.json` drops it silently — see
+[`ONBOARD-ARTIFACTS.md`](ONBOARD-ARTIFACTS.md) §6.
+
+---
+
+## 6. Push the source to Storage
 
 **Do this every time you publish, before you close the session.** The `.jsx` is gitignored — it is a
 local cache, so a build that only ever exists in your working copy is a build nobody else can read.
@@ -185,7 +256,7 @@ Storage already holds.
 
 ---
 
-## 6. Next
+## 7. Next
 
 Go to [`PREFILL-LINK.md`](PREFILL-LINK.md) with the public URL. Nothing is graded until the lesson
 row exists and the `id` on it equals this artifact's `INTERACTION_ID`.

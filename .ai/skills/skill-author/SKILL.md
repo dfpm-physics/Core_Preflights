@@ -11,12 +11,12 @@ description: >
   skill at all. Triggers: "write a skill for", "turn this into a skill",
   "should this be a skill?", "the X skill isn't working", "add a step to the X
   skill", /skill-author. NOT for prose documentation — a guide, a reference
-  page, or an explanation routes to `docs-author`; NOT for installing this kit
-  into a project — that is `project-bootstrap`. Run `project-bootstrap` first
-  if `.ai/instructions/CORE.md` does not exist, because a skill with no
-  authority chain to cite is unanchored. Any agent may run this; the only
-  precondition is a writable `.ai/skills/` tree. Argument: the kebab-case skill
-  name, or a description of the procedure to be evaluated.
+  page, or an explanation routes to `docs-author`; NOT for the operating contract
+  itself, which is a human's edit to `.ai/instructions/CORE.md`. A skill with no
+  authority chain to cite is unanchored, so `CORE.md` must exist first. Any
+  agent may run this; the only precondition is a writable `.ai/skills/` tree.
+  Argument: the kebab-case skill name, or a description of the procedure to
+  be evaluated.
 ---
 
 # skill-author — write and revise the skills other agents execute
@@ -52,7 +52,7 @@ Check the alternatives before you conclude "skill". Most candidates belong somew
 
 If it does not clear the gate, **stop and say so.** Name which of the three tests it failed and where the content should go instead — "this is a fact, not a procedure; add it to `PROJECT.md` under Deployment" is a useful refusal. "No" alone is not.
 
-If it clears the gate, check the roster before you create anything. The current skills are `skill-author`, `docs-author`, `project-bootstrap`, `safe-change`, and `integration-package`. **If an existing skill already owns this unit of work, amend that skill instead of adding a sibling** — two skills competing for the same trigger phrase is a routing coin-flip, and the model will not always pick yours.
+If it clears the gate, check the roster before you create anything. **`CORE.md` §4 is the roster** and the directory listing of `.ai/skills/` is the check on it; as of 2026-08-20 they hold ten: `lesson-cycle`, `preflight-analyze`, `lesson-aggregate`, `interaction-backfill`, `setup-preflight`, `docs-author`, `safe-change`, `gemini-port`, `skill-author`, and `integration-package`. Read the index rather than this sentence — it is a snapshot and the index is not. **If an existing skill already owns this unit of work, amend that skill instead of adding a sibling** — two skills competing for the same trigger phrase is a routing coin-flip, and the model will not always pick yours.
 
 ---
 
@@ -233,25 +233,24 @@ This addendum adapts tools only. Where it and `SKILL.md` or `CORE.md` disagree, 
 
 A skill you have only read is unverified. Verification here is the same two-part shape the skill itself must contain: a machine check and a human spot-check, and **neither one alone is sufficient** — the machine cannot tell you the steps are unfollowable, and a human read cannot reliably catch a `name` typo.
 
-**Machine checks** (all must pass):
+**Machine checks** (all must pass). *(Corrected 2026-08-20: this block used to call `scripts/skills/sync_claude_skills.py` and `scripts/bootstrap/check_slots.py`. **Neither script exists in this repository**, and the first of them generated `.claude/skills/` stubs, which `CORE.md` §4 forbids — every agent reads the one agent-neutral tree at `.ai/skills/`, and there is no slash-command mirror to keep in step. Until a real checker is written, these are shell one-liners and the burden is on you.)*
 
 ```bash
-# name equals directory name, AND the .claude/ slash-command stub matches.
-# Exits 2 on a name/directory mismatch and names the offender; exits 1 if a stub is
-# missing or stale, which is what happens when you add a skill and forget --write.
-python scripts/skills/sync_claude_skills.py --check
+d=.ai/skills/<name>
 
-# no unfilled placeholders left in prose (code blocks and templates are excluded by design)
-python scripts/bootstrap/check_slots.py
+# name equals directory name -- a mismatch is a skill that exists on disk and cannot be reached
+grep -m1 '^name:' "$d/SKILL.md"
+
+# no unfilled {{SLOT}} left in the skill body (references/*TEMPLATE.md keep theirs by design)
+grep -n '{{[A-Z_]*}}' "$d/SKILL.md"
 
 # every referenced file exists
-d=.ai/skills/<name>
 grep -on 'references/[A-Za-z0-9._-]*' "$d/SKILL.md"
 ```
 
-**After adding a skill, run `python scripts/skills/sync_claude_skills.py --write` and commit the
-generated stub in the same commit.** A skill with no stub has no slash command, and a stub with no
-skill routes an agent to a dead file — which is worse than having no command at all.
+**Do not create a `.claude/skills/` or `.agents/skills/` mirror** (`CORE.md` §4). A vendor
+addendum beside the canonical `SKILL.md` is the supported way to say something agent-specific
+(Step 6); a second copy of the tree is a fork that drifts.
 
 **Human spot-check — the cold run.** Hand the skill to a fresh agent (a subagent with no context from this session) and have it execute the skill against a real case, not a hypothetical. Then read the transcript for one thing: **where did it improvise?** Every improvisation is a gap in the skill — a decision the agent had to make that you did not write down. It does not matter that it improvised correctly; the next run has different odds. Close each gap and run cold again.
 

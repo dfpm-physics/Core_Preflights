@@ -26,7 +26,7 @@ If the instructor wants the look changed, change it HERE, once. Every future art
 | Honor box | `#f8fafc` fill / 2px `--navy` border | Start-screen Honor Code callout |
 | Study button | `--white` fill / 1.5px `--navy` border | Study Mode secondary button |
 | Connection dot | `#16a34a` ok · `#f59e0b` checking · `#dc2626` unavailable | Start-screen model-reachability light |
-| Backup button | `--white` fill / 1.5px `--navy` border — **no reserved color** | Backup-version route, shown only under a red connection light |
+| Backup button | `--navy` fill / `--white` text — **no reserved color** | Backup-version route: the start-screen button under a red connection light, and the error bar's `Continue on Gemini` |
 | Readiness callouts | green `#f0fdf4`/`#86efac`, amber `#fefce8`/`#fde047`, red `#fef2f2`/`#fecaca` | Flag tint matches flag |
 | Text | `#0f172a` primary / `#64748b` soft / `#94a3b8` muted | |
 | Geometry | 760px max column · **fixed 680px shell height** (never viewport-relative) · radius 12px / 6px · bubble tail radius 3px | App shell |
@@ -42,15 +42,25 @@ outside those reservations. It is a 10px status dot, not a bubble or callout, an
 convention is what makes it readable at a glance — an instructor-approved exception scoped to that
 one element. Do not let it spread: nothing else outside the rules above gets these colors.
 
-**The backup button is where that rule was tested, and held.** `.backup-btn` appears only when the
-connection check has failed — a degraded-mode action, which naturally wants amber — and it does not
-get amber. It is a full-width action button, exactly the kind of element the reservation exists to
-protect, and the red `.conn-msg` immediately above it is already carrying the alarm; a second
-warning color under it would compete rather than clarify. So it takes navy outline on white,
-matching `.study-btn` down to the `#f1f5f9` hover, because the two are the same kind of thing: the
-secondary way to take the lesson. **It is deliberately un-tinted — if a future artifact reaches for
+**The backup button is where that rule was tested, and held.** `.backup-btn` appears when the
+connection check has failed, and `.error-transfer` when a turn has failed mid-lesson — degraded-mode
+actions, which naturally want amber — and neither gets amber. Both are action buttons, exactly the
+kind of element the reservation exists to protect, and the red text immediately beside them is
+already carrying the alarm; a second warning color would compete rather than clarify. So they take
+**navy fill**, which is the theme's own primary-action treatment (`.start-btn`, `.submit-btn`) and
+therefore borrows nothing. **They are deliberately un-tinted — if a future artifact reaches for
 `#fefce8`/`#fde047` here, that is the drift this paragraph exists to catch.** The `.conn-dot`
 exception covers `.conn-dot`, and stops there.
+
+*Changed 2026-08-20.* `.backup-btn` was navy **outline** on white until then, matching `.study-btn`
+down to the `#f1f5f9` hover, and the argument was that the two are the same kind of thing: the
+secondary way to take the lesson. That held while the backup was a last resort. It stopped holding
+when rate limits made the Gemini path the route a capped cadet actually has to take — an escape
+hatch someone is being *sent* to has to read as an action, not as a footnote under the thing that
+just failed — so it moved to `.start-btn`'s fill, padding and hover. **Only the outline-vs-fill
+question moved; the amber reservation above is untouched, and promoting a button to a fill the theme
+already uses everywhere spreads no exception.** `.study-btn` keeps the outline treatment: it is
+still genuinely the secondary option, and the two buttons are no longer the same kind of thing.
 
 ---
 
@@ -140,8 +150,16 @@ const STYLE = `
   .study-btn:hover { background: #f1f5f9; }
   .study-hint { font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.5; }
 
-  /* Connection light — see the documented color exception in section 1. */
-  .conn-row { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; }
+  /* Connection light — see the documented color exception in section 1.
+     The width cap on .conn-row / .conn-msg / .backup-row is NOT cosmetic. `.start` is a
+     centering flex column (align-items: center), which overrides the default stretch — so a
+     child with no max-width sizes to its own MAX-CONTENT. For .backup-row that is the whole
+     .backup-hint sentence on one unwrapped line, which drags the button out past every card
+     on screen. The .start-cards escape it only by carrying max-width: 480px themselves;
+     these three siblings did not. All three are capped, not just the visible offender, so the
+     next paragraph added to this block cannot quietly reintroduce it. */
+  .conn-row { width: 100%; max-width: 480px; box-sizing: border-box;
+              display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; }
   .conn-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
   .conn-ok { background: #16a34a; }
   .conn-checking { background: #f59e0b; }
@@ -151,18 +169,23 @@ const STYLE = `
                   color: var(--navy); border: 1px solid #cbd5e1; border-radius: var(--radius-sm);
                   cursor: pointer; }
   .conn-recheck:disabled { opacity: .5; cursor: default; }
-  .conn-msg { font-size: 11px; color: #dc2626; margin-top: 4px; line-height: 1.5; }
+  .conn-msg { width: 100%; max-width: 480px; box-sizing: border-box;
+              font-size: 11px; color: #dc2626; margin-top: 4px; line-height: 1.5; }
 
-  /* Backup version — shown only under a red connection light. NO reserved color: navy
-     outline, matching .study-btn, per the second exception note in section 1. It is an
-     anchor rather than a button (a real click is the only way out of the sandbox), so it
-     needs display/text-align/box-sizing/text-decoration that .study-btn gets for free. */
-  .backup-row { margin-top: 10px; }
+  /* Backup version — shown under a red connection light. NO reserved color: navy FILL,
+     matching .start-btn and .submit-btn, per the second exception note in section 1. It is
+     an anchor rather than a button (a real click is the only way out of the sandbox), so it
+     needs display/text-align/box-sizing/text-decoration that .start-btn gets for free.
+     It was a navy OUTLINE matching .study-btn until 2026-08-20, when the Gemini path stopped
+     being a last resort: a cadet whose Claude account is capped needs the escape hatch to
+     read as an action, not as a footnote under the thing that just failed. */
+  .backup-row { width: 100%; max-width: 480px; margin-top: 10px; }
   .backup-btn { display: block; box-sizing: border-box; width: 100%; text-align: center;
-                padding: 9px 10px; background: var(--white); color: var(--navy);
+                padding: 11px 10px; background: var(--navy); color: var(--white);
                 border: 1.5px solid var(--navy); border-radius: var(--radius-sm);
-                font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer; }
-  .backup-btn:hover { background: #f1f5f9; }
+                font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer;
+                transition: background .15s; }
+  .backup-btn:hover { background: var(--navy-light); }
   .backup-hint { font-size: 11px; color: var(--text-muted); margin-top: 6px; line-height: 1.5; }
 
   /* ── Messages ── */
@@ -239,6 +262,13 @@ const STYLE = `
   .error-retry { margin-left: 10px; padding: 2px 10px; font-size: 12px; font-weight: 600;
                  background: var(--white); color: #dc2626; border: 1px solid #fecaca;
                  border-radius: var(--radius-sm); cursor: pointer; }
+  /* Retry stays the quiet one and this stays filled: by the time both are on screen,
+     Retry has usually already failed. Navy, not amber -- see .backup-btn for why. */
+  .error-transfer { margin-left: 8px; padding: 3px 10px; font-size: 12px; font-weight: 600;
+                    background: var(--navy); color: var(--white); border: 1px solid var(--navy);
+                    border-radius: var(--radius-sm); cursor: pointer; text-decoration: none;
+                    display: inline-block; }
+  .error-transfer:hover { background: var(--navy-light); }
 
   /* ── Composer ── */
   .composer { border-top: 1px solid #e2e8f0; padding: 12px 16px;
@@ -295,6 +325,10 @@ Every artifact contains exactly these elements, in this order. Nothing added, no
    holding the `.backup-btn` route to the backup version and its `.backup-hint`. Both are gated on
    the same condition, so they appear and vanish together and a cadet with a green light never sees
    either. The order is the argument: the failure is explained before the way around it is offered.
+   **All three of `.conn-row`, `.conn-msg` and `.backup-row` are width-capped to the 480px the
+   `.start-card`s use** — `.start` centers rather than stretches its children, so an uncapped one
+   sizes to its own max-content and overhangs the cards (see the comment in §2). Anything added to
+   this block inherits the cap or repeats the bug.
    **There is no class-section input** — section is handled outside the artifact, so do not collect,
    validate, or store it.
 3. **Message area** (`.messages`) — four bubble variants: `.bubble.assistant` (tutor, blue-light,
@@ -303,9 +337,17 @@ Every artifact contains exactly these elements, in this order. Nothing added, no
    renders through `RichText`.
 4. **Typing indicator** (`.typing`) — three animated dots, styled as a tutor bubble.
 5. **Error bar** (`.error-bar`) — shown on API failure, carrying a **typed** message plus an
-   `.error-retry` button that re-runs the failed turn. The wording must match the failure: a 529 is
-   server-side *capacity*, not a connection problem. The session is recoverable, never crashed —
+   `.error-retry` button that re-runs the failed turn and, beside it, an `.error-transfer` anchor
+   (`Continue on Gemini →`) that hands the session to the backup build. The wording must match the
+   failure: a 529 is server-side *capacity*, not a connection problem, and a 429 is this account's
+   usage limit, which is neither. The session is recoverable, never crashed —
    reloading the page in this context can reset the account session, so Retry is the way back.
+   **Retry is the quiet control and the transfer is the filled one**, because by the time both are
+   on screen Retry has usually already failed once; equal weight would present two options that look
+   equally promising when only one of them is. Both are conditional — Retry on the error carrying a
+   retry callback, the anchor on the handoff URL being available — so an error with neither renders
+   as bare text, which is correct. *(Added 2026-08-20. Before that this bar held Retry alone, and
+   cadet-facing copy therefore had to point at the start screen rather than say "below".)*
 6. **Composer** (`.composer`) — auto-growing textarea (Enter sends, Shift+Enter newline) + Send.
 7. **Footer** (`.footer`) — before the report: `Enter to send · Shift+Enter for new line`;
    after: `Timed portion complete — submit your report. The first report you submit is the one your
@@ -373,6 +415,11 @@ Every artifact contains exactly these elements, in this order. Nothing added, no
       <div className="error-bar">
         ⚠ {error.text}
         {error.retry && <button className="error-retry" onClick={error.retry}>Retry</button>}
+        {handoffUrl && (
+          <a className="error-transfer" href={handoffUrl} rel="noopener noreferrer">
+            Continue on Gemini &rarr;
+          </a>
+        )}
       </div>
     )}
 
@@ -641,7 +688,10 @@ render-side rules that belong here:
 structured assessment), both compressed with `window.LZString.compressToEncodedURIComponent(...)`
 and carried in the hash. `r` alone reaches the database and earns the cadet nothing — no grade, no
 contribution to the cohort rollup — so an artifact that sends only `r` is broken even though every
-visible part of it appears to work.
+visible part of it appears to work. It also carries `&v=claude` immediately after `#t=interaction`,
+naming the transport that produced it; that key is optional and additive, and nothing branches on
+it. *(Added 2026-08-20, alongside `d.model` / `d.model_downgraded`, so a term's submissions can be
+counted by runtime and by whether the session was downgraded mid-way.)*
 
 **Never serialize rendered DOM.** Both payloads are built from the raw assistant message text, never
 from the DOM. The instructor's system receives clean markdown with `$...$` LaTeX intact, which
@@ -653,12 +703,27 @@ report bubble, the API history, and `r` all carry the same clean markdown. `Rich
 bubble verbatim — anything left in the message *will* be shown to the cadet, which is both ugly and
 an invitation to edit the effort score before submitting.
 
-**Copy and Download are gone.** A single Submit anchor is the only exit. It must be a real
+**Copy and Download are gone.** Submit is the only exit **for the cadet's work**. It must be a real
 user-clicked `<a href={submitUrl}>` inside a `.jsx` artifact — never a scripted redirect and never
 raw HTML — and stays disabled until LZ-String has loaded *and* the payload attempt has settled.
 
+**Two other anchors leave the artifact, and both are built the same way.** `.backup-btn` on the
+start screen and `.error-transfer` in the error bar are also user-clicked `<a href>` elements with
+`rel="noopener noreferrer"` and **no** `target` — the same construction as Submit, because a real
+click routing through the external-link handler is the *only* way out of the sandbox and
+`window.open` silently does nothing. Neither carries the cadet's report: the start-screen button
+carries only the lesson slug, and the handoff carries the transcript so the backup can resume, both
+in the URL rather than through any other channel. *(This paragraph read "a single Submit anchor is
+the only exit" until 2026-08-20; that had been untrue since the backup button shipped, and the
+error-bar handoff made it a second time untrue.)*
+
 **Study Mode has none of this.** No `submitUrl`, no LZ-String path, no payload extraction, no Submit
-anchor in the render tree. Nothing can leave the artifact in that mode.
+anchor in the render tree. No report or assessment can leave the artifact in that mode.
+The two escape anchors are a separate matter and are **not** mode-gated: the error bar is shared
+across both modes, so a study-mode failure offers the same handoff. That carries a transcript to a
+backup build and no graded material, so it does not weaken the guarantee above — but it is the one
+place where "study mode is wired to nothing" is loose language rather than literal truth, and it is
+worth knowing before someone reads the guarantee as broader than it is.
 
 ---
 
@@ -672,9 +737,9 @@ Only these strings change between lessons. Everything else above is frozen.
 | `.title` | `Lesson [N] — [Topic]` |
 | Component name | `Lesson[NN]Preflight` |
 | `LESSON_NUMBER` | `"[N]"` (drives the download filename) |
-| `INTERACTION_ID` | `"[lesson slug]"` — the `#i=` value in the submit URL; must equal the lesson's `activities.slug` exactly |
+| `INTERACTION_ID` | `"[lesson slug]"` — the `#i=` value in the submit URL **and** the `?i=` the backup button and the error-bar handoff send to the router; must equal the lesson's `activities.slug` exactly |
 | `OBJECTIVE_KEYS` | one `{ key, label }` per probe topic, in priority order — the fixed set the tutor reports understanding against in `d` |
-| `PROBE_TOPIC_COUNT` | `3`–`5`, matching `OBJECTIVE_KEYS.length` |
+| `PROBE_TOPIC_COUNT` | `3`–`5`, matching `OBJECTIVE_KEYS.length`. Feeds the pacing note **and** the `overBudget` fallback that puts `REPORT_FORMAT` back into the system prompt near the end of a session |
 | `ARTIFACT_VERSION` | build year-month, stamped into `d.producer` |
 | The four content constants | `TEXTBOOK_REFERENCE`, `LESSON_CONFIG`, `EXTENSION_PROBLEMS` (the fourth, `REPORT_FORMAT`, is itself constant) |
 

@@ -1,7 +1,7 @@
 # Core Preflights — System Guide
 
 **Live site**: https://dfpm-physics.github.io/Core_Preflights/site/
-**Admin panel**: https://dfpm-physics.github.io/Core_Preflights/site/admin.html
+**Faculty app**: https://dfpm-physics.github.io/Core_Preflights/site/faculty/dashboard.html (Course Admin: `…/site/faculty/admin.html`)
 **Supabase dashboard**: https://supabase.com/dashboard/project/shzvpmlnqfmzfmuxkowi
 **GitHub repo**: https://github.com/dfpm-physics/Core_Preflights
 
@@ -185,6 +185,14 @@ students work through. When they finish, the artifact sends a report back to the
 saved to each student's record. This is separate from the assignments system.
 
 ### Adding / managing interactions (Course Directors & Admins)
+
+> **⚠ SUPERSEDED — `interactions-admin.html` was deleted at the 2026-07-28 promotion**, along with
+> `admin.html`, `interactions.html` and `review.html` (CORE.md §0). **The live equivalent is
+> `site/faculty/lessons.html`**, where an interactive activity is attached to an assignment rather
+> than managed as a separate list — that page is a frozen contract URL and is also what an
+> AI-generated prefill link targets. Student reports are read on `site/faculty/student.html`, from
+> the cadet's own assignment row, not from a submissions column. The slug rule below is unchanged
+> and is still the one manual coordination point. The retired procedure follows.
 
 Use the **Manage Interactions** page: `…/interactions-admin.html`
 

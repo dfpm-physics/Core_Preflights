@@ -81,22 +81,36 @@ missing on your side, and the written preflight is unaffected.
 Interactive lessons run on Claude, and a free Claude account can be turned away when Claude is
 busy. That can happen before you start, or partway through a lesson you are already working on.
 
-Some lessons have a **backup version** that runs the same lesson on Google Gemini. When one exists,
-the assignment shows **two launch buttons** — **Claude** and **Gemini** — side by side. The backup
-counts exactly the same: same lesson, same report, same grade, so you do not need to redo anything
-afterwards, and it is not a second assignment.
+**Most of the time you will never notice.** When the usual tutor is turned away, the lesson quietly
+switches to a lighter version of Claude and keeps going. Same lesson, same questions, same grade,
+and nothing for you to do.
 
-**Start with Claude.** It is marked *Recommended* because it is the smoother lesson, and a busy
-Claude usually frees up within a few minutes. Use Gemini when Claude will not let you through.
+For when that is not enough, some lessons have a **backup version** that runs the same lesson on
+Google Gemini. It counts exactly the same: same lesson, same report, same grade. It is not a second
+assignment, and you never submit twice.
+
+**If the lesson will not start.** When a backup exists, the assignment shows **two launch buttons**
+— **Claude** and **Gemini** — side by side. Start with Claude: it is marked *Recommended* because it
+is the smoother lesson, and a busy Claude usually frees up within a few minutes. The Claude lesson
+also checks its own connection before you begin, and if that check fails an **Open the backup
+version →** button appears on the start screen. Try **Re-check** first — the button is there for when
+re-checking does not help.
+
+**If the lesson stops partway through.** A red bar appears across the lesson with **Retry**, and,
+when a backup exists, **Continue on Gemini →** beside it. Try Retry first; most interruptions are
+brief. If Retry does not help, **Continue on Gemini →** takes your conversation with you. The backup
+opens with your name already filled in, tells you how many messages it is bringing across, and picks
+up from the tutor's last question. **You do not lose your place and you do not redo anything.**
 
 **Gemini needs a free key from you, once per device.** The lesson asks for a Google AI Studio key
 and walks you through getting one; it takes about a minute, and you should not turn on billing. The
 key is sent only to Google and stays in your own browser — PREP never receives it, and it is never
-part of your report.
+part of your report. You are asked for it even when you are carrying a conversation across, so there
+is one short screen before the lesson resumes.
 
-Not every lesson has a backup, so the second button is not always there. If the Claude version will
-not run and there is no Gemini button, tell your instructor — they can grant an extension, and they
-would much rather hear from you early than late.
+Not every lesson has a backup, so neither button is always there. If the Claude version will not run
+and there is no Gemini option, tell your instructor — they can grant an extension, and they would
+much rather hear from you early than late.
 
 ## Seeing your grade
 

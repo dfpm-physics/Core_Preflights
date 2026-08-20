@@ -22,12 +22,17 @@ published tree. The two frozen contract paths — `site/student/interaction-subm
 byte-identical URLs**, verified by hash before and after.
 
 **Still stale below, and worth knowing before you follow Phases 1–3:** the chain in step 2 now runs
-past `003` to `015`, and step 11 ("seal the owner") has been done and undone several times since —
+past `003` to `019` (`019_effort_partial_credit_flat.sql` is the highest-numbered file, and CORE.md
+§6 records it as the live effort curve), and step 11 ("seal the owner") has been done and undone
+several times since —
 `prep_app_owner` is unsealed whenever a migration is applied and must be re-sealed after. Roadmap
 **P0.2** is the standing item to seal it for good; it is **deliberately unsealed as of 2026-07-28**
 while the course director is still making schema tweaks. **Confirmed against `pg_roles` on
-2026-08-07: `prep_app_owner` has `rolcanlogin = true`.** This paragraph is the accurate one; CORE.md
-§0 still describes the sealed design as though it were the current state.
+2026-08-07: `prep_app_owner` has `rolcanlogin = true`.** CORE.md §0 said the opposite until that
+same day and now says this; the two agree, and CORE.md is the authoritative copy. What still holds
+there, and is not weakened by the open seal: **no agent runs DDL on its own** — a schema change
+goes to the course director as migration SQL and is applied as a coordination event. An open seal
+is not permission.
 
 *Authored 2026-07-20 by Casey (via Claude). Operational companion to
 [`../decisions/PREP-V2-SCHEMA.md`](../decisions/PREP-V2-SCHEMA.md) (why a parallel schema),
@@ -71,7 +76,7 @@ See [`../../CHANGELOG.md`](../../CHANGELOG.md).*
    requires `SET ROLE` membership on `prep_app_owner` for the two statements the script flags.
 2. **Apply the migration chain** as `prep_app_owner`, in order, from `001_core_model.sql` through
    the highest-numbered file in `supabase/migrations/app/` — `001` → `002` → `003` was the chain
-   when this was written; it now runs to `015`, and `016` is filed unapplied. This chain is numbered
+   when this was written; it now runs to `019`. This chain is numbered
    independently of `supabase/migrations/*.sql` (the `public` chain); the numbers do not correspond.
 3. **Add the `auth.users` foreign keys** (bootstrap §6) as `postgres`. `students.auth_user_id` and
    `instructors.id` are declared as plain `uuid` columns because `postgres` cannot delegate

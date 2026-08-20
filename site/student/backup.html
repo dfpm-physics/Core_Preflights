@@ -112,8 +112,16 @@
       //
       // `replace`, not `assign`: Back should return to the lesson page, not to this router,
       // which would resolve and forward again and trap the student in a loop.
+      // The hash is carried through untouched. A Claude artifact that dies mid-lesson sends the
+      // conversation so far as `#h=<lz>` so the backup can resume instead of restarting, and this
+      // router is the only thing standing between the two. Dropping the hash here would look
+      // exactly like a working handoff -- the cadet lands in the right lesson, on turn one, with
+      // their work gone and nothing reporting why.
+      //
+      // A hash never reaches a server, which is the same reason the submit contract uses one:
+      // the transcript stays out of every access log on the way.
       if (new URLSearchParams(location.search).get('go') === '1') {
-        location.replace('../' + build.path);
+        location.replace('../' + build.path + location.hash);
         return;
       }
 

@@ -408,7 +408,7 @@ Run this against the diff.
 Every item is checkable by looking or by running something — none of it requires judgement about taste.
 
 - [ ] Every language and standard-library feature used is available in Python 3.14.0.
-- [ ] **No new dependency.** This project is standard-library-only and has no manifest to declare one in; adding either is a decision for recker, recorded in `docs/decisions/`.
+- [ ] **No new dependency.** `scripts/` is standard-library-only, with the three `scripts/fall2026/` term builders as the only named exceptions; adding a fourth is a decision for recker, recorded in `docs/decisions/` **and** pinned in the root `requirements.txt` in the same change. *(This line said the project "has no manifest to declare one in" until 2026-08-20 — `requirements.txt` has been the manifest since `psycopg2`, and the settings table above has always said so.)*
 - [ ] Type hints on every public signature. No type checker is installed, so this one is on you — no new `Any` and no unexplained `# type: ignore`.
 - [ ] No bare `except:` and no `except Exception:` outside a top-level handler that logs and re-raises.
 - [ ] No exception handler that silently passes; every deliberate silence carries a comment saying why.

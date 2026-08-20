@@ -42,7 +42,7 @@ Gated changes. Each of these mutates something you cannot restore by editing a f
 | changing a public URL, wire format, or API contract | gated — callers you do not control are already bound to the old shape, and their breakage surfaces on their schedule |
 | deleting files outside the working tree | gated — outside the tree there is no `git checkout` to undo you |
 | changing permissions or access rules | gated — a widened permission may have been used before you narrow it again, so the undo restores the rule and not the consequence |
-| anything touching `{{SHARED_STATE}}` | gated — by definition someone else is reading it, and their read of your half-finished write is not recoverable by you |
+| anything touching **the live Supabase database (`shzvpmlnqfmzfmuxkowi`, schema `app`) or the GitHub Pages site served from `main`** | gated — by definition someone else is reading it, and their read of your half-finished write is not recoverable by you |
 
 Ungated changes. **Running this procedure against one of these is itself a failure mode:**
 
@@ -91,11 +91,19 @@ Then confirm the four preconditions from `CORE.md` §0 and §5:
 | the branch is not diverged from `origin/main` | stop — report the divergence; reconciling it *during* a destructive run is how two half-changes merge |
 | the working tree is clean | stop — report the dirty paths; uncommitted work is state with no snapshot |
 
-> **This project has one operator and no shared state**, so `CORE.md` §0's designate-an-operator
-> step was pruned at bootstrap. The first row above is what survives of it, and it is not a
-> formality: **the guard was never "which of several people owns this" — it was "is a human
-> attending this run at all".** That question has teeth in a solo project exactly as it does in a
-> crowded one.
+> **This project HAS shared state, and the designate-an-operator step is not optional here.**
+> *(Corrected 2026-08-20.)* This skill arrived with `_builder/` on 2026-08-07 from a repository
+> whose own contract opened *"This project has no shared state — no production database, no live
+> site"*, and it carried that sentence in as though it were still true. **It is not, and `CORE.md`
+> §0 repudiates it by name:** there is one production Supabase database and one live website,
+> several agents write to both, and every mutation is visible to everyone else immediately.
+> **Run `CORE.md` §0's gate in full** — designate one operator for the change, confirm no competing
+> agent is mid-run, `git fetch` and check for divergence, never force-push, and never run two
+> agents in one working tree.
+>
+> The first row of the table above is a *second* guard, not a substitute for that one, and it is
+> not a formality either: **it asks "is a human attending this run at all"**, which has teeth
+> however many operators there are.
 
 ---
 
@@ -108,7 +116,7 @@ Take the strongest available option. Do not settle downward silently — if you 
 **Preference 2 — a snapshot.** Three requirements, and all three are load-bearing:
 
 - **Take it before the change.** Obvious, routinely skipped under time pressure, and unrecoverable when skipped.
-- **Write it outside the thing being changed.** A snapshot in the same table, the same bucket prefix, or the same branch you are about to rewrite shares a failure mode with its subject. Use `{{SNAPSHOT_COMMAND}}`, landing in `{{SNAPSHOT_DIR}}`.
+- **Write it outside the thing being changed.** A snapshot in the same table, the same bucket prefix, or the same branch you are about to rewrite shares a failure mode with its subject. The reference pattern is `scripts/fall2026/export_poc_snapshot.py` → `clean_poc.py` (`CORE.md` §0), which writes JSON per table into `scripts/fall2026/poc-archive/`; `_snapshots/` at the repo root is the general-purpose landing place for a one-off. Both are outside the database being changed, which is the requirement.
 - **Verify it against live counts.** Re-read the snapshot and compare its row or file count, and its scope, to the Step 0 count. **An unverified snapshot is not a backup — it is a file.**
 
 > **The failure story.** The snapshot that was empty, or covered the wrong scope, or captured a filtered subset because the export inherited a `LIMIT`, is discovered at exactly one moment: the moment it is needed. There is no earlier signal. That is why verification is a step and not a virtue — nothing else in the process will ever test it.
@@ -162,7 +170,7 @@ If none of these is available, the change must **refuse to run twice** rather th
 
 **Do not fan out parallel workers against shared mutable state.** Parallelism buys wall-clock time, which a careful change does not need, and it charges for that time in a currency you cannot afford: **it turns one recoverable failure into several interleaved ones.** Serial failure leaves a prefix — everything before position N succeeded, everything after did not, and the resume point is a single number. Parallel failure leaves a set you must reconstruct by inspection, at the exact moment you are least equipped to inspect anything.
 
-**Record the run.** Open a record in `{{RUN_LOG}}` with status `running` **before** the first write; close it with a final status and the counts after the last one. The ordering is the whole point — a record written after success only ever describes successes.
+**Record the run.** Open a record with status `running` **before** the first write; close it with a final status and the counts after the last one. For a routine grading or aggregation run that record is a row in `app.analysis_runs`, which the skills write themselves; for anything else — a schema change, a bulk correction, a one-off repair — it is a `CHANGELOG.md` entry (`CORE.md` §0, and Step 6). The ordering is the whole point — a record written after success only ever describes successes.
 
 **A run that dies without closing its record leaves `running`, and that is correct.** That is not a bug to be cleaned up. It is how an abandoned run becomes visible, and it is the only signal that distinguishes "this finished" from "this stopped somewhere in the middle and nobody noticed". **Do not tidy up a stale `running` record on a later run.** Report it. A later run that sweeps stale records is a later run that erases the evidence of the earlier failure, and it will do so at machine speed across every incident you have.
 

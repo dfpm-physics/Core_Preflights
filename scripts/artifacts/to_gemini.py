@@ -200,6 +200,22 @@ def port(src: bytes, slug: str, verbose: bool = False):
     if not m or m.group(1).decode() != slug:
         raise SystemExit(f"INTERACTION_ID does not match slug {slug}")
 
+    # ── 0. The source must already carry the 2026-08-20 fix set ───────────────
+    # Phase-deferred prompts and the 429 ladder walk were invented HERE, because for a while only
+    # the Gemini builds needed them. On 2026-08-20 they moved into the Claude source itself
+    # (scripts/artifacts/patch_artifacts.py) and this tool stopped performing them -- it now
+    # INHERITS them and adds only what is genuinely Gemini-specific.
+    #
+    # So an unpatched source no longer ports. That is deliberate. Silently porting one would
+    # produce a build with no phase deferral -- the exact token burn the deferral exists to
+    # prevent -- and nothing downstream would report it. Failing here, with the remedy named, is
+    # worth more than a build that looks fine and exhausts a cadet's key in two runs.
+    if b"function buildSystemPrompt(cadetId, localTime, phase)" not in src:
+        raise SystemExit(
+            f"{slug}: source predates the 2026-08-20 fix set.\n"
+            f"  Run: python scripts/artifacts/patch_artifacts.py --commit\n"
+            f"  (re-pull from the artifact-sources bucket first if this cache is stale)")
+
     # ── 1. Model constants -> Gemini, discovered at runtime ───────────────────
     p.sub1(
         # Tolerant of both dialects. The kit puts a blank line after `];` and a `// CONSTANT`
@@ -464,8 +480,15 @@ async function discoverModel(activeModelRef) {
 
     # ── 4. Error messages (real JS string literals: \\u escapes are correct) ───
     p.sub1(
+        # REPLACES the source's own quota+model cases -- it does not insert beside them.
+        # patch_artifacts.py gives the Claude artifact a `quota` case of its own, and a second
+        # `case "quota"` here would be legal JS in which the FIRST wins: every Gemini build
+        # would answer a Gemini quota failure with Claude's wording, telling the cadet their
+        # "Claude account" is capped and to continue on Gemini -- the page they are already on.
+        rb'    case "quota":\r\n'
+        rb'      return "This Claude account has reached its usage limit.*?\r\n'
         rb'    case "model":\r\n'
-        rb'      return "The tutor model isn\'t available to this account\. Try a different Claude account, or tell your instructor the preflight may need an updated model\.";',
+        rb'      return "No tutor model is available to this account.*?" model\.";',
         b"""    case "auth":
       return "That API key was rejected. Check you pasted the whole key from Google AI Studio (it starts with \\u201CAIza\\u201D), and that the Generative Language API is enabled for it.";
     case "quota":
@@ -484,8 +507,13 @@ async function discoverModel(activeModelRef) {
     # account to move to -- the key is theirs. Its own sub1, so a reworded source fails
     # loudly here instead of quietly shipping the old text again.
     p.sub1(
-        rb"        \? \"The tutor service is at capacity right now and didn't free up after several tries\. On a free Claude account this can be a usage/capacity limit that resets later \xe2\x80\x94 wait a bit and Retry, or use a different account\.\"",
-        b'        ? "Google\'s tutor service is busy right now and didn\'t free up after several tries. That is Google\'s capacity, not your quota and not your key. Wait a few minutes and Retry."',
+        rb"        \? \"The tutor service is at capacity right now and didn't free up after several\"\r\n"
+        rb"          \+ \" tries\. On a free Claude account this can be a usage or capacity limit that\"\r\n"
+        rb"          \+ \" resets later\. Retry in a few minutes, or continue on Gemini below \" \+ \"\xe2\x80\x94\" \+ \" it\"\r\n"
+        rb"          \+ \" runs the same lesson and keeps what you have done so far\.\"\r\n",
+        b'        ? "Google\'s tutor service is busy right now and didn\'t free up after several'
+        b' tries. That is Google\'s capacity, not your quota and not your key. Wait a few'
+        b' minutes and Retry."\n',
         "capacity message -> Gemini")
 
     # -- 4c. Mark the transport, so a submission can be told apart afterwards --
@@ -660,162 +688,80 @@ async function discoverModel(activeModelRef) {
 """,
         "Forget key control")
 
-    # ── 9. Defer the two tail blocks until the phase that needs them ──────────
-    # The graded system prompt is ~63,000 chars resent EVERY turn -- 93-96% of all input
-    # tokens in a session, which is what exhausts a free-tier key after two runs. Gemini
-    # caching cannot help (explicit caching needs a paid account and a 32,768-token floor,
-    # and rate limits count cached tokens either way), so the only lever is sending less.
+    # ── 9. Seat the model pool from the phase the source already computes ─────
+    # This step used to DO the phase deferral. It does not any more.
     #
-    # EXTENSION_PROBLEMS and REPORT_FORMAT are ~11,400 chars -- about 18% of every turn --
-    # and neither is needed while the tutor is still probing topics. Both sit at the very
-    # TAIL of the prompt, which is why they can be dropped without disturbing a line above.
-    p.sub1(
-        rb"function buildSystemPrompt\(cadetId, localTime\) \{",
-        b"""// phase: "probe" (default) | "report" | "extension" -- see sysFor() in the component.
-function buildSystemPrompt(cadetId, localTime, phase) {""",
-        "buildSystemPrompt takes a phase")
-
-    # The kit precedes ${REPORT_FORMAT} with a label line; PHYS 110's builds go straight to it.
-    # That line is part of what the TUTOR reads, so it is carried through exactly as found --
-    # never added to a build that did not have it, and never dropped from one that did.
-    LABEL = b"OUTPUT_REPORT_FORMAT (produce exactly this structure):"
-    has_label = LABEL in p.src
-    label_pat = (rb"OUTPUT_REPORT_FORMAT \(produce exactly this structure\):\r\n"
-                 if has_label else rb"")
-    label_repl = (b'"\\nOUTPUT_REPORT_FORMAT (produce exactly this structure):\\n" + REPORT_FORMAT'
-                  if has_label else b'"\\n" + REPORT_FORMAT')
-    p.sub1(
-        rb"\$\{TEXTBOOK_REFERENCE\}\r\n"
-        rb"\r\n"
-        rb"\$\{LESSON_CONFIG\}\r\n"
-        rb"\r\n"
-        rb"\$\{EXTENSION_PROBLEMS\}\r\n"
-        rb"\r\n"
-        + label_pat +
-        rb"\$\{REPORT_FORMAT\}`;\r\n"
-        rb"\}",
-        b"""${TEXTBOOK_REFERENCE}
-
-${LESSON_CONFIG}
-${phase === "extension" ? "\\n" + EXTENSION_PROBLEMS + "\\n" : ""}\\
-${phase === "probe" || !phase
-    ? ""
-    : """ + label_repl + b"""}`;
-}""",
-        "tail blocks made conditional")
-
-    # WHERE to put INTEGRITY_ASKED depends on the dialect. The kit names the report marker as
-    # a constant and this hangs off it; PHYS 110's builds inline the same literal inside
-    # isReportMsg and define no such constant. Anchor on whichever exists, and re-emit that
-    # line unchanged so nothing is lost either way.
+    # The deferral was invented here, when only the Gemini builds needed it: the graded system
+    # prompt is ~63,000 chars resent EVERY turn -- 93-96% of all input tokens in a session, which
+    # is what exhausts a free-tier key after two runs. On 2026-08-20 the Claude artifacts wanted
+    # the same saving, so it moved into the source itself (scripts/artifacts/patch_artifacts.py)
+    # and step 0 above now REFUSES a source that lacks it. EXTENSION_PROBLEMS and REPORT_FORMAT
+    # are already conditional by the time this tool sees the file.
     #
-    # The INJECTED code must then not name REPORT_MARKER either, and did until 2026-08-19:
-    # the detector below read `m.content.includes(REPORT_MARKER)`, which is a free variable in
-    # the PHYS 110 dialect. All five PHYS 110 builds shipped and threw
-    # `ReferenceError: REPORT_MARKER is not defined` on the first assistant turn, where the
-    # page's window.onerror handler replaced the whole lesson with 'This backup build did not
-    # load'. Nothing caught it because the reference is inside a useEffect that returns early
-    # until a graded conversation is under way -- so the build parses, renders, and passes
-    # every check this repo has, then dies in front of a cadet.
-    #
-    # It calls `isReportMsg(content)` instead. Every one of the 51 cached sources defines it as
-    # a top-level function declaration, so it is hoisted and dialect-independent, and it is the
-    # source's OWN answer to 'is this the report' rather than a second copy of that judgment.
-    MARKER_CONST = b'const REPORT_MARKER = "# JiTT Conversation Report";'
-    ISREPORT_FN = (b'function isReportMsg(content) '
-                   b'{ return content.includes("# JiTT Conversation Report"); }')
-    if MARKER_CONST in p.src:
-        anchor, keep = re.escape(MARKER_CONST), MARKER_CONST
-    elif ISREPORT_FN in p.src:
-        anchor, keep = re.escape(ISREPORT_FN), ISREPORT_FN
-    else:
-        raise SystemExit("no report-marker anchor - cannot place INTEGRITY_ASKED")
+    # What is still Gemini-only is the MODEL POOL, because Claude has one ladder and Gemini has
+    # two: the report is a single request and earns the strongest model, while the ~12
+    # conversation turns want the high-quota pool. sysFor() is the one place every ongoing turn
+    # already passes through, so deciding prompt and pool in the same breath is what stops them
+    # drifting apart.
     p.sub1(
-        anchor,
-        keep + b"""
-
-// The close sequence is fixed by the tutor prompt: summary -> the integrity question, which
-// it must ask VERBATIM and then WAIT for -> the report. So seeing that question means the
-// report is at most one turn away, and the mandated wait is what guarantees the lead time
-// needed to put REPORT_FORMAT back in context before it is used. Two alternates, because a
-// model that lightly rewords the opener still says the rest.
-const INTEGRITY_ASKED =
-  /one last thing before I put together your report|did you receive any outside help during this conversation/i;""",
-        "integrity-question fingerprint")
-
-    p.sub1(
-        # Alignment spaces and the trailing comment are both optional: the kit writes one
-        # space and a comment, PHYS 110 pads to a column and writes none.
-        rb'  const sysRef *= useRef\(""\);[^\r\n]*\r\n',
-        b"""  const sysRef = useRef("");        // study mode's prompt, and the graded opener
-  const sysArgsRef = useRef(null);  // { cadetId, localTime } -- graded only
-  const reportPhaseRef = useRef(false);
-
-  // Compose the system prompt for the CURRENT phase instead of reusing one built at start.
-  // Study mode is untouched: it needs its practice problems from turn one and never
-  // produces a report, so it keeps the prompt built in startSession.
-  function sysFor() {
-    const a = sysArgsRef.current;
-    // Belt and braces on the primary trigger: once the report exists we are in the
-    // extension, and once active time passes the whole planned budget the close can arrive
-    // at any turn -- so stop deferring rather than risk a report with no format.
-    const overBudget =
-      activeSecRef.current >= PROBE_TOPIC_COUNT * PER_TOPIC_BUDGET_MIN * 60;
-    const phase = hasReport ? "extension"
-      : (reportPhaseRef.current || overBudget) ? "report"
-      : "probe";
-    // The phase picks the MODEL POOL as well as the prompt, because they are the same
-    // decision: the report is one request and gets the strongest model, while the ~12
-    // conversation turns get the high-quota pool. This is the one place every ongoing turn
-    // already passes through, so deciding both here is what stops them drifting apart.
+        rb"      : \"probe\";\r\n"
+        rb"    if \(!a\) return sysRef\.current;\r\n",
+        b"""      : "probe";
     // Study mode falls out below with no args, but is seated on the chat pool first.
     seatLadder(activeModelRef, phase === "report" ? MODEL_REPORT : MODEL_CHAT);
     if (!a) return sysRef.current;
-    return buildSystemPrompt(a.cadetId, a.localTime, phase);
-  }
 """,
-        "sysFor() phase composer")
+        "sysFor() seats the model pool")
 
+    # ── 9b. Drop the Claude-only ladder helper this build cannot use ──────────
+    # patch_artifacts.py adds stepModel() to the Claude source, where MODEL_CANDIDATES is the one
+    # ladder. This build has TWO, both rewritten at runtime by discoverModel, and no
+    # MODEL_CANDIDATES at all -- so the helper is not merely redundant, it is a ReferenceError
+    # sitting inside a function that only runs once a cadet is deep in a conversation. That is the
+    # same shape as the REPORT_MARKER bug that shipped five PHYS 110 builds. seatLadder() and
+    # nextModel() already cover this ground for Gemini.
     p.sub1(
-        rb"    const sys = selectedMode === \"graded\"\r\n"
-        rb"      \? buildSystemPrompt\(cadetId\.trim\(\), new Date\(\)\.toLocaleString\(\)\)\r\n"
-        rb"      : buildStudySystemPrompt\(\);\r\n"
-        rb"    sysRef\.current = sys;\r\n",
-        b"""    const localTime = new Date().toLocaleString();
-    const sys = selectedMode === "graded"
-      ? buildSystemPrompt(cadetId.trim(), localTime, "probe")
-      : buildStudySystemPrompt();
-    sysRef.current = sys;
-    sysArgsRef.current = selectedMode === "graded"
-      ? { cadetId: cadetId.trim(), localTime: localTime }
-      : null;
-    reportPhaseRef.current = false;
-""",
-        "startSession records the prompt args")
+        rb"// Advance one rung down the ladder\. Returns false at the bottom\.\r\n"
+        rb"// The ref NEVER climbs back, which is what makes `current !== MODEL_CANDIDATES\[0\]` at\r\n"
+        rb"// report time an exact answer to \"was this session downgraded\", with no extra state to\r\n"
+        rb"// keep in sync\. finalizePayload relies on that\.\r\n"
+        rb"function stepModel\(activeModelRef\) \{\r\n"
+        rb"  const i = MODEL_CANDIDATES\.indexOf\(activeModelRef\.current\);\r\n"
+        rb"  if \(i > -1 && i < MODEL_CANDIDATES\.length - 1\) \{\r\n"
+        rb"    activeModelRef\.current = MODEL_CANDIDATES\[i \+ 1\];\r\n"
+        rb"    return true;\r\n"
+        rb"  \}\r\n"
+        rb"  return false;\r\n"
+        rb"\}\r\n"
+        rb"\r\n",
+        b"",
+        "Claude stepModel removed")
 
-    # Every ongoing turn composes for its phase. (The opener deliberately still uses `sys`.)
-    p.sub1(rb"callTutor\(activeModelRef, history, sysRef\.current,",
-           b"callTutor(activeModelRef, history, sysFor(),",
-           "3 callTutor sites use sysFor()", count=3)
-
+    # The same question, asked the way this build can answer it. "Not the first ladder entry" is
+    # not a stable test here, because discoverModel REWRITES both ladders to whatever the cadet's
+    # key can actually reach -- so the first entry after discovery may never have been the first
+    # entry before it. spentModels is stable: a model lands in it only after it has 429'd out and
+    # the walk has already moved past it.
     p.sub1(
-        rb"  useEffect\(\(\) => \{\r\n"
-        rb"    if \(mode !== \"graded\" \|\| hasReport\) return;\r\n",
-        b"""  // Phase trigger. Runs before the report-detection effect below and on the same
-  // messages, so the format is restored one turn ahead of the report that needs it.
-  useEffect(() => {
-    if (mode !== "graded" || reportPhaseRef.current) return;
-    const m = messages[messages.length - 1];
-    if (!m || m.role !== "assistant") return;
-    if (INTEGRITY_ASKED.test(m.content) || isReportMsg(m.content)) {
-      reportPhaseRef.current = true;
-    }
-  }, [messages, mode]);
+        rb"  d\.model_downgraded = !!\(model && model !== MODEL_CANDIDATES\[0\]\);\r\n",
+        b"  d.model_downgraded = Object.keys(spentModels).length > 0;\n",
+        "model_downgraded -> spentModels")
 
-  useEffect(() => {
-    if (mode !== "graded" || hasReport) return;
-""",
-        "integrity-question detector")
+    # And the comment that explains it, which names the constant this build does not have. The
+    # final check is a SUBSTRING test and so catches comments as well as code -- correctly: this
+    # page is public, and a comment describing machinery that is not here misleads whoever reads
+    # the source next, which on a backup build is a cadet or the next porter.
+    p.sub1(
+        rb"// `model` is the model that produced the REPORT, not the one the session opened on\.\r\n"
+        rb"// stepModel never climbs back, so a value other than MODEL_CANDIDATES\[0\] is proof the\r\n"
+        rb"// session was downgraded at some point -- which is the question worth answering when a\r\n"
+        rb"// cohort's reports come back thinner than usual\.\r\n",
+        b"// `model` is the model that produced the REPORT, not the one the session opened on. On a\n"
+        b"// free key those differ often, because the report is the one request that reaches for the\n"
+        b"// strong pool. model_downgraded below answers the related question -- did this session\n"
+        b"// burn through a model's quota on the way -- which is worth knowing when a cohort's\n"
+        b"// reports come back thinner than usual.\n",
+        "finalizePayload comment -> Gemini")
 
     # ── 10. lz-string from our own origin, same pinned 1.5.0 ──────────────────
     p.sub1(
@@ -823,30 +769,56 @@ const INTEGRITY_ASKED =
         b'const LZSTRING_JS = "' + VENDOR_LZ.encode() + b'";   // vendored 1.5.0, byte-identical',
         "lz-string served from our origin")
 
-    # ── 11. Strip the backup button, if the source carries one ────────────────
-    # A Claude artifact offers this button when ITS connection check fails. In a backup
-    # build the same button would point the cadet at the router that sent them here, and
-    # the router would send them straight back -- a loop offered to someone already stuck.
-    # When Gemini fails here it is the cadet's own key or quota, and errorMessage already
-    # says which and what to do about it.
+    # ── 11. Strip every route BACK to the backup, because this IS the backup ──
+    # A Claude artifact offers these when its own tutor fails. In a backup build the same
+    # controls would point the cadet at the router that sent them here, and the router would send
+    # them straight back -- a loop offered to someone already stuck. When Gemini fails here it is
+    # the cadet's own key or quota, and errorMessage already says which and what to do about it.
     #
-    # Optional rather than required, so this tool does not care whether it runs before or
-    # after add_backup_button.py. Artifacts built by the factory from now on arrive with
-    # the button already in them, which makes "after" the normal case.
+    # There are now FOUR pieces, not one: the start-screen button, its CSS, the mid-lesson
+    # "Continue on Gemini" anchor added 2026-08-20, and the handoffUrl memo behind it. Missing any
+    # one leaves either a dead control or a ReferenceError on BACKUP_ENDPOINT after it is stripped
+    # below -- so BACKUP_ENDPOINT goes LAST, after everything that names it is gone.
+    #
+    # strip_optional throughout, so this tool does not care whether it runs before or after the
+    # source acquired these. A miss is logged as `not present` rather than passing silently.
+    #
+    # Indentation is ` +` rather than a fixed run: the kit dialect renders this block as a direct
+    # child of .start (12 spaces) and PHYS 110 renders it inside a .start-card (14). Matching the
+    # LAYOUT loosely here is safe -- the tag names and class names are still exact.
     p.strip_optional(
-        rb'            \{connStatus === "unavailable" && \(\r\n'
-        rb'              <div className="backup-row">.*?\r\n'
-        rb"            \)\}\r\n",
+        rb' +\{handoffUrl && \(\r\n'
+        rb' +<a className="error-transfer".*?\r\n'
+        rb" +\)\}\r\n",
+        b"", "mid-lesson handoff anchor stripped")
+    # The dependency list is matched loosely on purpose. It gained `mode` the same afternoon it was
+    # written, and this pattern still named the old four -- so the strip silently reported
+    # `not present`, BACKUP_ENDPOINT survived into the build, and only the hard check at the end of
+    # this function caught it. Keep that check: a strip_optional that misses says nothing.
+    p.strip_optional(
+        rb"\r\n"
+        rb"  // Mid-lesson handoff to the Gemini backup\..*?\r\n"
+        rb"  \}, \[error, messages, lzReady, cadetId[^\]]*\]\);\r\n",
+        b"", "handoffUrl memo stripped")
+    p.strip_optional(
+        rb' +\{connStatus === "unavailable" && \(\r\n'
+        rb' +<div className="backup-row">.*?\r\n'
+        rb" +\)\}\r\n",
         b"", "backup button stripped")
     p.strip_optional(
         rb"\r\n"
-        rb"  /\* Backup-version button\. Navy outline.*?\r\n"
+        rb"  /\* Backup-version button\. Navy FILL.*?\r\n"
         rb"  \.backup-hint \{[^\r\n]*\}",
         b"", "backup CSS stripped")
     p.strip_optional(
         rb"\r\n"
+        rb"  /\* Retry stays the quiet one.*?\r\n"
+        rb"  \.error-transfer:hover \{[^\r\n]*\}",
+        b"", "error-transfer CSS stripped")
+    p.strip_optional(
         rb"\r\n"
-        rb"// Backup transport, offered only when the connection check fails\..*?\r\n"
+        rb"\r\n"
+        rb"// Backup transport, offered when the connection check fails.*?\r\n"
         rb'  "https://dfpm-physics\.github\.io/Core_Preflights/site/student/backup\.html";',
         b"", "BACKUP_ENDPOINT stripped")
 
@@ -924,6 +896,164 @@ const INTEGRITY_ASKED =
         if any(t in line for t in (b"compressToEncodedURIComponent", b"submitUrl",
                                    b"JSON.stringify(structured", b"SUBMIT_ENDPOINT")):
             raise SystemExit(f"API key reachable from the payload: {line!r}")
+
+    # ── 12. Resume a conversation handed over from a failing Claude artifact ──
+    # A cadet whose Claude tutor dies mid-lesson clicks "Continue on Gemini" and arrives here with
+    # the conversation so far in the URL hash (`#h=<lz>`, written by patch_artifacts.py, forwarded
+    # untouched by site/student/backup.html). Without this step that payload is simply ignored and
+    # the cadet restarts from turn one -- which looks like a working handoff right up until they
+    # notice their work is gone.
+    #
+    # The start screen is NOT skipped. They still have to supply their own Gemini key, so there is
+    # a screen either way; what changes is that the name is already filled in and the screen says
+    # what is about to be restored. Confirming beats teleporting when the previous tab just died.
+    p.sub1(
+        rb'  const \[cadetId, setCadetId\] = useState\(""\);[^\r\n]*\r\n',
+        b"""  const [cadetId, setCadetId] = useState("");      // holds the last name; do NOT rename
+  const [handoff, setHandoff] = useState(null);    // a conversation carried over from Claude
+""",
+        "handoff state")
+
+    # The READER goes after `const lzReady = useLzString()`, not beside the state above.
+    # `lzReady` is a const declared further down the component, so an effect placed up there
+    # references it inside its own temporal dead zone: React evaluates the whole body on the first
+    # render and throws `Cannot access 'lzReady' before initialization` before anything mounts.
+    # That took every build to the "did not load" banner -- caught by gemini-build.mjs, which is
+    # the only JSX parser these pages get.
+    p.sub1(
+        rb"    return buildSystemPrompt\(a\.cadetId, a\.localTime, phase\);\r\n"
+        rb"  \}\r\n",
+        b"""    return buildSystemPrompt(a.cadetId, a.localTime, phase);
+  }
+
+  // Read once, after lz-string is up. Anything malformed is DISCARDED rather than repaired: the
+  // hash is fully under the cadet's control, and a half-restored conversation would be graded as
+  // if it were whole. Starting clean is a visible loss; a silently truncated transcript is not.
+  useEffect(() => {
+    if (!lzReady || !window.LZString || handoff) return;
+    const m = /[#&]h=([^&]+)/.exec(window.location.hash || "");
+    if (!m) return;
+    try {
+      const raw = window.LZString.decompressFromEncodedURIComponent(m[1]);
+      const d = raw ? JSON.parse(raw) : null;
+      // GRADED ONLY, and this is not a formality. Study mode is untimed, ungraded practice; its
+      // transcript restored into a graded session would become the cadet's graded conversation,
+      // and the report written from it would describe work that was never graded work. A study
+      // handoff therefore arrives as a plain link and the cadet simply restarts study mode, which
+      // costs them nothing they were being assessed on.
+      if (!d || d.v !== 1 || d.id !== INTERACTION_ID || d.mode !== "graded"
+          || !Array.isArray(d.msgs) || !d.msgs.length) return;
+      const msgs = d.msgs
+        .filter((x) => x && (x.r === "user" || x.r === "assistant") && typeof x.c === "string")
+        .map((x) => ({ role: x.r, content: x.c, hidden: !!x.h }));
+      if (!msgs.length) return;
+      setHandoff({ msgs: msgs, name: typeof d.name === "string" ? d.name : "" });
+      if (typeof d.name === "string" && d.name.trim()) setCadetId(d.name.trim());
+    } catch (e) { /* malformed hash -- start clean */ }
+  }, [lzReady, handoff]);
+""",
+        "handoff hash reader")
+
+    # Tell the cadet what is about to happen, above the button that does it.
+    p.sub1(
+        # Anchored on the button as step 7 leaves it, not as the source has it: that step
+        # already rewrote this line to require a key as well as a name.
+        rb'              <button className="start-btn" onClick=\{begin\}\r\n'
+        rb'                      disabled=\{!cadetId\.trim\(\) \|\| connStatus !== "ok"\}>\r\n',
+        b"""              {handoff && (
+                <div className="honor-box" style={{ fontWeight: 600 }}>
+                  Picking up where Claude left off &mdash; your conversation so far
+                  ({handoff.msgs.filter((m) => !m.hidden).length} messages) will be restored.
+                  Nothing has been lost, and you do not need to start again.
+                </div>
+              )}
+              <button className="start-btn" onClick={begin}
+                      disabled={!cadetId.trim() || connStatus !== "ok"}>
+""",
+        "handoff banner on the start screen")
+
+    # Seed the restored turns instead of the hidden opener.
+    #
+    # WHOSE TURN IT IS decides whether the tutor is called at all, and getting that backwards is
+    # the whole risk here. If the transcript ends with the TUTOR speaking, its question is already
+    # on screen and the cadet simply answers it -- calling the tutor there would make it talk
+    # twice in a row and re-ask what it just asked. If it ends with the CADET, their message never
+    # got an answer, and that unanswered turn is precisely why they are here.
+    # Layout-tolerant, content-exact. The kit writes the ternary on one line and comments the
+    # callTutor call; PHYS 110 wraps the ternary across three lines and comments nothing. Both are
+    # re-emitted in the kit's single-line form, which normalises the dialects rather than carrying
+    # a second copy of this pattern forever.
+    p.sub1(
+        rb"    const seed = \{\r\n"
+        rb'      role: "user", hidden: true,\r\n'
+        rb'      content: selectedMode === "graded".*?\r\n'
+        rb"    \};\r\n"
+        rb"    setMessages\(\[seed\]\);\r\n"
+        rb"    setLoading\(true\); setError\(null\);\r\n"
+        rb"    try \{\r\n"
+        rb"      const reply = await callTutor\(activeModelRef, \[seed\], sys, null\);[^\r\n]*\r\n"
+        rb"      setMessages\(\(prev\) => \[\.\.\.prev, \{ role: \"assistant\", content: reply \}\]\);\r\n",
+        b"""    const resume = selectedMode === "graded" && handoff ? handoff.msgs : null;
+    const seed = resume ? null : {
+      role: "user", hidden: true,
+      content: selectedMode === "graded" ? "Begin the session now." : "I'd like to study this lesson.",
+    };
+    setMessages(resume || [seed]);
+    setError(null);
+
+    // The tutor's last word is already on screen. Hand control straight to the cadet.
+    if (resume && resume[resume.length - 1].role !== "user") {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const history = resume || [seed];
+      const reply = await callTutor(activeModelRef, history, sys, null); // no pacing note on the opener
+      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+""",
+        "startSession resumes a handoff")
+
+    # The retry path has to carry the same history, or a cadet who resumes and then hits one bad
+    # turn is silently restarted by their own Retry click. Note this rewrites only the call site
+    # inside startSession -- startRetry's own recursive retry already passes its `seed` through.
+    p.sub1(
+        rb"        retry: \(\) => startRetry\(selectedMode, sys, seed\),\r\n"
+        rb"      \}\);\r\n"
+        rb"    \} finally \{ setLoading\(false\); \}\r\n"
+        rb"  \}\r\n"
+        rb"  function begin\(\)",
+        b"""        retry: () => startRetry(selectedMode, sys, resume || seed),
+      });
+    } finally { setLoading(false); }
+  }
+  function begin()""",
+        "retry preserves the resumed history")
+
+    # startRetry rebuilt the message list by DISCARDING every visible assistant turn -- correct
+    # when the list is one hidden opener plus a failed reply, and destructive on a resume, where
+    # those turns are the conversation the cadet came here to keep. Rebuilding from the history it
+    # was handed is equivalent in the fresh case and correct in both.
+    p.sub1(
+        rb"  async function startRetry\(selectedMode, sys, seed\) \{\r\n"
+        rb"    setLoading\(true\); setError\(null\);\r\n"
+        rb"    try \{\r\n"
+        rb"      const reply = await callTutor\(activeModelRef, \[seed\], sys, null\);\r\n"
+        rb"      setMessages\(\(prev\) => \[\r\n"
+        rb"        \.\.\.prev\.filter\(\(m\) => m\.role !== \"assistant\" \|\| m\.hidden\),\r\n"
+        rb"        \{ role: \"assistant\", content: reply \},\r\n"
+        rb"      \]\);\r\n",
+        b"""  async function startRetry(selectedMode, sys, seed) {
+    setLoading(true); setError(null);
+    try {
+      // `seed` is one hidden opener on a fresh start and the whole restored transcript on a
+      // resumed one.
+      const history = Array.isArray(seed) ? seed : [seed];
+      const reply = await callTutor(activeModelRef, history, sys, null);
+      setMessages([...history, { role: "assistant", content: reply }]);
+""",
+        "startRetry rebuilds from the history it was given")
 
     # The fourth copy of this assumption in scripts/artifacts/, and the last. A substring test
     # for `const INTERACTION_ID = "<slug>";` requires the declaration on one line; PHYS 110's

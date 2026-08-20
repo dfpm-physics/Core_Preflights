@@ -387,7 +387,8 @@ const STYLE = `
   .study-hint { font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.5; }
 
   /* Connection light — see the documented color exception in THEME_REFERENCE §1. */
-  .conn-row { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; }
+  .conn-row { width: 100%; max-width: 480px; box-sizing: border-box;
+              display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; }
   .conn-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
   .conn-ok { background: #16a34a; }
   .conn-checking { background: #f59e0b; }
@@ -397,7 +398,8 @@ const STYLE = `
                   color: var(--navy); border: 1px solid #cbd5e1; border-radius: var(--radius-sm);
                   cursor: pointer; }
   .conn-recheck:disabled { opacity: .5; cursor: default; }
-  .conn-msg { font-size: 11px; color: #dc2626; margin-top: 4px; line-height: 1.5; }
+  .conn-msg { width: 100%; max-width: 480px; box-sizing: border-box;
+              font-size: 11px; color: #dc2626; margin-top: 4px; line-height: 1.5; }
 
   /* ── Messages ── */
   /* min-height: 0 is REQUIRED — without it this flex item expands the shell
@@ -2642,7 +2644,12 @@ function extractPayload(raw) {
   return { markdown, data };
 }
 
-function finalizePayload(raw, activeSec, msgs) {
+// `model` is the model that produced the REPORT, not the one the session opened on. On a
+// free key those differ often, because the report is the one request that reaches for the
+// strong pool. model_downgraded below answers the related question -- did this session
+// burn through a model's quota on the way -- which is worth knowing when a cohort's
+// reports come back thinner than usual.
+function finalizePayload(raw, activeSec, msgs, model) {
   if (!raw || typeof raw !== "object") return null;
   const d = { ...raw };
   d.schema = 1;
@@ -2650,6 +2657,8 @@ function finalizePayload(raw, activeSec, msgs) {
   d.duration_min = Math.max(1, Math.round(activeSec / 60));
   d.message_count = msgs.filter((m) => m.role === "user" && !m.hidden).length;
   d.completed = true;
+  d.model = model || null;
+  d.model_downgraded = Object.keys(spentModels).length > 0;
   // Contract §5.2 reflection cap, enforced here as well as in the prompt — this is what catches a
   // tutor that forgot it. The server re-applies it a third time.
   const meaningful = d.reading_reflection && d.reading_reflection.meaningful;
@@ -2660,11 +2669,11 @@ function finalizePayload(raw, activeSec, msgs) {
 // ── Bubble classification ────────────────────────────────────────────────────
 const REPORT_MARKER = "# JiTT Conversation Report";
 
-// The close sequence is fixed by the tutor prompt: summary -> the integrity question, which
-// it must ask VERBATIM and then WAIT for -> the report. So seeing that question means the
-// report is at most one turn away, and the mandated wait is what guarantees the lead time
-// needed to put REPORT_FORMAT back in context before it is used. Two alternates, because a
-// model that lightly rewords the opener still says the rest.
+// The close sequence is fixed by the tutor prompt: summary -> the integrity question, which it
+// must ask VERBATIM and then WAIT for -> the report. So seeing that question means the report is
+// at most one turn away, and the mandated wait is what guarantees the lead time needed to put
+// REPORT_FORMAT back in context before it is used. Two alternates, because a model that lightly
+// rewords the opener still says the rest.
 const INTEGRITY_ASKED =
   /one last thing before I put together your report|did you receive any outside help during this conversation/i;
 const EXT_TRIGGER = "[The report above is complete and has been shown to the cadet. Now deliver the "
@@ -2694,6 +2703,7 @@ function Lesson10Preflight() {
   const [mode, setMode] = useState(null);          // "graded" | "study" — set once, never reassigned
   const [started, setStarted] = useState(false);
   const [cadetId, setCadetId] = useState("");      // holds the last name; do NOT rename
+  const [handoff, setHandoff] = useState(null);    // a conversation carried over from Claude
 
   // Leaves this device only as an x-goog-api-key header to Google, and is remembered only
   // in this browser's localStorage. Never sent to PREP, never written to the database,
@@ -2733,6 +2743,13 @@ function Lesson10Preflight() {
   const sysRef = useRef("");        // study mode's prompt, and the graded opener
   const sysArgsRef = useRef(null);  // { cadetId, localTime } -- graded only
   const reportPhaseRef = useRef(false);
+  const extSentRef = useRef(false); // extension trigger fires once
+
+  const [appHeight, setAppHeight] = useState(null);
+  const inputRef = useRef(null);
+  const messagesRef = useRef(null);
+
+  const lzReady = useLzString();
 
   // Compose the system prompt for the CURRENT phase instead of reusing one built at start.
   // Study mode is untouched: it needs its practice problems from turn one and never
@@ -2741,28 +2758,43 @@ function Lesson10Preflight() {
     const a = sysArgsRef.current;
     // Belt and braces on the primary trigger: once the report exists we are in the
     // extension, and once active time passes the whole planned budget the close can arrive
-    // at any turn -- so stop deferring rather than risk a report with no format.
+    // on any turn -- so stop deferring rather than risk a report with no format to use.
     const overBudget =
       activeSecRef.current >= PROBE_TOPIC_COUNT * PER_TOPIC_BUDGET_MIN * 60;
     const phase = hasReport ? "extension"
       : (reportPhaseRef.current || overBudget) ? "report"
       : "probe";
-    // The phase picks the MODEL POOL as well as the prompt, because they are the same
-    // decision: the report is one request and gets the strongest model, while the ~12
-    // conversation turns get the high-quota pool. This is the one place every ongoing turn
-    // already passes through, so deciding both here is what stops them drifting apart.
     // Study mode falls out below with no args, but is seated on the chat pool first.
     seatLadder(activeModelRef, phase === "report" ? MODEL_REPORT : MODEL_CHAT);
     if (!a) return sysRef.current;
     return buildSystemPrompt(a.cadetId, a.localTime, phase);
   }
-  const extSentRef = useRef(false); // extension trigger fires once
 
-  const [appHeight, setAppHeight] = useState(null);
-  const inputRef = useRef(null);
-  const messagesRef = useRef(null);
-
-  const lzReady = useLzString();
+  // Read once, after lz-string is up. Anything malformed is DISCARDED rather than repaired: the
+  // hash is fully under the cadet's control, and a half-restored conversation would be graded as
+  // if it were whole. Starting clean is a visible loss; a silently truncated transcript is not.
+  useEffect(() => {
+    if (!lzReady || !window.LZString || handoff) return;
+    const m = /[#&]h=([^&]+)/.exec(window.location.hash || "");
+    if (!m) return;
+    try {
+      const raw = window.LZString.decompressFromEncodedURIComponent(m[1]);
+      const d = raw ? JSON.parse(raw) : null;
+      // GRADED ONLY, and this is not a formality. Study mode is untimed, ungraded practice; its
+      // transcript restored into a graded session would become the cadet's graded conversation,
+      // and the report written from it would describe work that was never graded work. A study
+      // handoff therefore arrives as a plain link and the cadet simply restarts study mode, which
+      // costs them nothing they were being assessed on.
+      if (!d || d.v !== 1 || d.id !== INTERACTION_ID || d.mode !== "graded"
+          || !Array.isArray(d.msgs) || !d.msgs.length) return;
+      const msgs = d.msgs
+        .filter((x) => x && (x.r === "user" || x.r === "assistant") && typeof x.c === "string")
+        .map((x) => ({ role: x.r, content: x.c, hidden: !!x.h }));
+      if (!msgs.length) return;
+      setHandoff({ msgs: msgs, name: typeof d.name === "string" ? d.name : "" });
+      if (typeof d.name === "string" && d.name.trim()) setCadetId(d.name.trim());
+    } catch (e) { /* malformed hash -- start clean */ }
+  }, [lzReady, handoff]);
   const visibleMessages = messages.filter((m) => !m.hidden);
   const shownSec = (hasReport && reportSecRef.current != null) ? reportSecRef.current : activeSec;
   const timerStr = String(Math.floor(shownSec / 60)).padStart(2, "0") + ":" +
@@ -2881,20 +2913,30 @@ function Lesson10Preflight() {
 
     // The Messages API requires the first turn to be role:user. A hidden seed lets the tutor
     // produce its own opening (Honor Code reminder for graded; topic menu for study).
-    const seed = {
+    const resume = selectedMode === "graded" && handoff ? handoff.msgs : null;
+    const seed = resume ? null : {
       role: "user", hidden: true,
       content: selectedMode === "graded" ? "Begin the session now." : "I'd like to study this lesson.",
     };
-    setMessages([seed]);
-    setLoading(true); setError(null);
+    setMessages(resume || [seed]);
+    setError(null);
+
+    // The tutor's last word is already on screen. Hand control straight to the cadet.
+    if (resume && resume[resume.length - 1].role !== "user") {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
     try {
-      const reply = await callTutor(activeModelRef, [seed], sys, null); // no pacing note on the opener
+      const history = resume || [seed];
+      const reply = await callTutor(activeModelRef, history, sys, null); // no pacing note on the opener
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch (err) {
       setError({
         kind: err.kind,
         text: errorMessage(err, { afterRetries: true }),
-        retry: () => startRetry(selectedMode, sys, seed),
+        retry: () => startRetry(selectedMode, sys, resume || seed),
       });
     } finally { setLoading(false); }
   }
@@ -2904,11 +2946,11 @@ function Lesson10Preflight() {
   async function startRetry(selectedMode, sys, seed) {
     setLoading(true); setError(null);
     try {
-      const reply = await callTutor(activeModelRef, [seed], sys, null);
-      setMessages((prev) => [
-        ...prev.filter((m) => m.role !== "assistant" || m.hidden),
-        { role: "assistant", content: reply },
-      ]);
+      // `seed` is one hidden opener on a fresh start and the whole restored transcript on a
+      // resumed one.
+      const history = Array.isArray(seed) ? seed : [seed];
+      const reply = await callTutor(activeModelRef, history, sys, null);
+      setMessages([...history, { role: "assistant", content: reply }]);
     } catch (err) {
       setError({
         kind: err.kind,
@@ -2952,7 +2994,7 @@ function Lesson10Preflight() {
   // the bubble, the API history, and `r` can never carry the block — one operation, no chance of
   // one of the three keeping it.
   // Phase trigger. Runs before the report-detection effect below and on the same
-  // messages, so the format is restored one turn ahead of the report that needs it.
+  // messages, so the format is restored one turn AHEAD of the report that needs it.
   useEffect(() => {
     if (mode !== "graded" || reportPhaseRef.current) return;
     const m = messages[messages.length - 1];
@@ -2976,7 +3018,7 @@ function Lesson10Preflight() {
     reportSecRef.current = activeSecRef.current;   // freeze the timer
 
     if (data) {
-      setStructured(finalizePayload(data, activeSecRef.current, messages));
+      setStructured(finalizePayload(data, activeSecRef.current, messages, activeModelRef.current));
       setPayloadState("ready");
     } else {
       setPayloadState("pending");                  // the repair effect takes it from here
@@ -3000,7 +3042,7 @@ function Lesson10Preflight() {
         setMessages((prev) => [...prev, { role: "assistant", hidden: true, content: reply }]);
         const { data } = extractPayload(reply);
         if (data) {
-          setStructured(finalizePayload(data, activeSecRef.current, history));
+          setStructured(finalizePayload(data, activeSecRef.current, history, activeModelRef.current));
           setPayloadState("ready");
         } else {
           setPayloadState("failed");               // submit proceeds with r only
@@ -3044,6 +3086,7 @@ function Lesson10Preflight() {
     ? SUBMIT_ENDPOINT
         + "#t=interaction"
         + "&v=gemini"          // transport marker -- optional, additive, contract section 8
+        + "&v=claude"          // transport marker -- optional, additive, contract section 8
         + "&i=" + INTERACTION_ID
         + "&r=" + window.LZString.compressToEncodedURIComponent(reportMarkdown)
         + (structured
@@ -3139,6 +3182,13 @@ function Lesson10Preflight() {
                 this browser. PREP never receives it, and it is never part of your report or your
                 submit link.
               </p>
+              {handoff && (
+                <div className="honor-box" style={{ fontWeight: 600 }}>
+                  Picking up where Claude left off &mdash; your conversation so far
+                  ({handoff.msgs.filter((m) => !m.hidden).length} messages) will be restored.
+                  Nothing has been lost, and you do not need to start again.
+                </div>
+              )}
               <button className="start-btn" onClick={begin}
                       disabled={!cadetId.trim() || connStatus !== "ok"}>
                 Start Preflight &rarr;

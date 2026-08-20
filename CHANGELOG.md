@@ -8,6 +8,148 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-20 (fourth) — Matthew Recker via Claude
+
+### The Claude artifact stops dead-ending: it steps down a model, sends less, and can hand a cadet to Gemini mid-lesson without losing their conversation
+
+**Asked for by the course director**, who had watched the Gemini backup absorb three fixes the
+Claude artifacts never got — a model ladder that steps on a usage limit, a prompt that stops
+resending what the current phase does not need, and an escape hatch that is visible when it is
+needed. The ask was to bring all three back the other way, plus a start-screen button that had been
+rendering wider than the column it sits in.
+
+**All 51 artifact sources changed, applied by `scripts/artifacts/patch_artifacts.py` (new).** Byte
+reads and writes, anchored substitution, refuses rather than warns — the same contract
+`to_gemini.py` runs under, for the reason PROJECT.md's sharp-edge table already records. All 38
+published artifacts have had their Gemini builds regenerated.
+
+**The slug did not change, and that was the whole argument.** The first plan here assumed a
+republish mints a new slug, because PROJECT.md said so and cited contract §3.2 for it. §3.2 does
+not say that — it says *"never reuse a slug from a previous term — a lesson rebuilt for a new
+offering gets a new suffix."* Republishing a fix into the **same** offering is not that. The
+director caught it, and the correction matters twice over: a new slug would have meant 30-odd new
+lesson rows to register, and — because `app.activities.slug` is globally UNIQUE and every report
+hangs off that row — it would have orphaned the work of every cadet who had already finished.
+`patch_artifacts.py` asserts slug byte-equality before it writes. PROJECT.md is corrected.
+
+**A 429 now steps down the ladder instead of ending the session.** `MODEL_CANDIDATES` has listed
+`claude-sonnet-5` then `claude-haiku-4-5` since the artifacts were built, but only a **404** ever
+advanced it. A 429 — the actual failure a capped free account gets — fell through to the generic
+`request` case, whose message tells the cadet to *"wait a moment and Retry"*. For a per-minute rate
+limit that is true; for a daily or account cap it is advice that never comes true, and the cadet
+retries into the same wall until they give up. It now backs off first, then steps, then raises a
+new typed `quota` error only when the whole ladder is spent. This is the identical defect the
+Gemini builds carried, fixed there on 2026-08-19 and never carried back.
+
+**~18% off every graded turn.** `EXTENSION_PROBLEMS` and `REPORT_FORMAT` are about 11,400
+characters of a ~63,000-character system prompt that is resent in full on every turn, and neither
+is needed while the tutor is still probing. Both sit at the tail, so both are now interpolated only
+in the phase that wants them, with `INTEGRITY_ASKED` restoring the report format one turn ahead of
+the report that needs it. This logic was written inside `to_gemini.py`; it now lives in the Claude
+source and the porter inherits it.
+
+**Two doors to the backup, where there was one.** The start screen has offered a button since
+2026-08-14, but only after its own connection check failed — a cadet whose tutor died on turn nine
+was past that screen and had no route at all. The error bar now carries `Continue on Gemini →`
+beside Retry.
+
+**And the handoff takes the conversation with it.** The artifact already sends the whole transcript
+on every turn, so it is sitting there when the tutor dies; it now rides to the backup LZ-compressed
+in the URL **hash**, for the same reason the submit contract uses one — a hash never reaches a
+server, so the conversation stays out of every access log on the way. `site/student/backup.html`
+forwards the hash across its redirect; the Gemini build reads it, prefills the name, says how many
+messages it is restoring, and resumes at the tutor's last question. It is trimmed oldest-first
+under a 60,000-character cap and degrades to a **plain link** rather than a broken one: a cadet who
+arrives with no history has lost their place, but a cadet who arrives on a truncated URL has lost
+the lesson.
+
+**Graded only, and that is not a formality.** A study-mode transcript restored into a graded session
+would become the cadet's graded conversation, and the report written from it would describe work
+nobody was assessing. The payload carries its mode and the build refuses a mismatch.
+
+**The overflow was real and is now measured.** `.start` centres its children, which overrides the
+default stretch, so a child with no `max-width` sizes to its own max-content — for `.backup-row`
+that was the entire hint sentence unwrapped. The cards escaped it only by carrying
+`max-width: 480px`; three siblings did not. Measured in a browser before the fix: the button
+rendered **712px wide inside a 480px column**. `.conn-row`, `.conn-msg` and `.backup-row` are all
+capped now, not just the one that showed.
+
+**The button is navy-filled, matching Submit.** It was navy-outline, matching `.study-btn`, and the
+factory skill and `THEME_REFERENCE.md` both argued for that at length — correctly, while the backup
+was a last resort. It stopped being one. A cadet whose account is capped needs the escape hatch to
+read as an action, not as a footnote under the thing that just failed. Both arguments are preserved
+in place rather than overwritten; the amber reservation is untouched, and `.study-btn` keeps the
+outline.
+
+**PHYS 110's five artifacts had no backup button at all.** Built outside the kit, before the router
+existed, they carried no `BACKUP_ENDPOINT` — so their Gemini builds sat on the server with nothing
+in the lesson pointing at them, and the library looked complete. They have it now.
+
+**Submissions record which path produced them.** The submit hash carries `&v=claude`, and the `d`
+payload gains `model` and `model_downgraded`. `model_downgraded` is exact rather than heuristic
+because the ladder never climbs back. **Absence of `v` still means "unknown", never "Claude"** —
+already-published artifacts keep sending nothing until they are republished, and contract §3.3 now
+says so explicitly, because the old wording asserted the opposite and was cited elsewhere.
+
+### This repository had no JSX parser. It has one now.
+
+`tests/browser-harness/claude-artifact.mjs` + `scripts/artifacts/preview_artifact.py` wrap an
+unported `.jsx` in the same Babel-in-browser page `to_gemini.py` builds, and drive it in Chrome.
+Until now the first thing that ever parsed an artifact was claude.ai, by hand, during publishing —
+`node --check` returns exit 0 on invalid JSX and `check_artifact.py` is explicitly not a syntax
+check. `gemini-build.mjs` could not cover this, because the porter strips exactly the code that
+changed.
+
+**It earned its keep the first time it ran**, catching a temporal-dead-zone bug — an effect placed
+above the `const` it read, which took every build to the "did not load" banner — and, on a second
+pass, `.error-transfer` CSS that had been dropped from the patcher during a rewrite, leaving the
+new button unstyled.
+
+The overflow assertion compares the row against the **cards**, not against a hard 480, so it tests
+the rule rather than restating the CSS. Confirmed against the pre-fix source: it fails there and
+passes here.
+
+### Verification
+
+- **51/51** artifacts parse and render in Chrome (`preview_artifact.py --all-courses --all`)
+- **7/7** on one build from each of the three dialects (`gemini-build.mjs`)
+- **12/12** on the full handoff chain — Claude → router → build, including malformed, wrong-slug,
+  wrong-version, empty and study-mode payloads (`gemini-handoff.mjs`, new)
+- **11/11** model ladder (`gemini-model-ladder.mjs`), **25/25** launch buttons (`backup-link.mjs`)
+- **5/5** live student pages (`pass.mjs --student`), **22/22** kit hash-lock (`verify.py`)
+- Line endings audited per file; no mixed files, no whole-file rewrites
+
+**No tutor turn has been run on either transport.** That needs a live Claude session and a cadet's
+Gemini key, so the model ladder, `sysFor()`'s phase switching and a real restored conversation are
+covered by construction and by static assertion, not by observation. CORE.md §2: a Node-only check
+is never the sole verification. **Publishing remains the only full check, and nothing here reaches
+a cadet until the 51 artifacts are republished** — which keeps their slugs and needs no
+re-registration.
+
+### Documentation
+
+The build kit teaches the new shape, so artifacts built from here are born with it:
+`preflight-factory-v2/SKILL.md` is at **rev 5** and `THEME_REFERENCE.md` is updated, both
+hash-locked and both re-sealed in `MANIFEST.sha256`. Contract §3.3 and §5.9, `PROJECT.md`,
+`CORE.md`, `gemini-port/SKILL.md`, `PUBLISH-ARTIFACT.md` (new §5 on republishing a patched
+artifact), `ONBOARD-ARTIFACTS.md` and `student-getting-started.md` all follow.
+`.ai/artifacts/examples/lesson02_artifact.jsx` is a **third, older dialect** that the patcher
+cannot reach; it carries a header saying which of its patterns are superseded rather than a
+half-applied fix.
+
+### Known, not fixed
+
+- **`PUBLISH-ARTIFACT.md` §1 and CORE.md §2 both name a command that cannot do what they say.**
+  `sync_artifacts.py pull` requires `--into` and writes the bucket's own layout, never
+  `_builder/courses/<id>/artifacts/` where the tooling looks. Pre-existing; fixing it needs a
+  decision on what the right refresh command is.
+- **`scripts/artifacts/add_backup_button.py` now overlaps `patch_artifacts.py` step 0.** Both can
+  add the backup button. Nobody has decided whether the older one retires.
+- **Registered-artifact count is unverified.** It needs a `prep_app_read` read of `app.activities`;
+  a staff session would answer a different question (CORE.md §3).
+
+---
+
 ## 2026-08-20 (third) — Matthew Recker via Claude
 
 ### The Gemini backup is now a launch button beside Claude, not a line of prose asking a cadet to diagnose a failure
