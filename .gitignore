@@ -75,3 +75,10 @@ _builder/courses/*/index.json
 _builder/courses/*/build/
 _builder/preflight-kit/build/
 break_in_case_of_emergency/gpt_instruction.md
+
+# Flattened copy of the artifact .jsx sources, for bulk-uploading to claude.ai when republishing.
+# Ignored for exactly the reason the originals are (see above): they are ~8.5 MB of derived .jsx
+# whose home is the private artifact-sources bucket, and committing a copy would put that in every
+# clone's history permanently. Regenerate with `python scripts/artifacts/stage_for_upload.py`;
+# delete the directory when the republish is done.
+_upload/

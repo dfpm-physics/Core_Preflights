@@ -350,9 +350,10 @@
         "_builder/preflight-kit/contracts/INTERACTION-DATA-CONTRACT.md",
         "_builder/preflight-kit/skill/preflight-factory-v2/SKILL.md",
         "scripts/artifacts/check_artifact.py",
-        "scripts/artifacts/patch_artifacts.py"
+        "scripts/artifacts/patch_artifacts.py",
+      "scripts/artifacts/stage_for_upload.py"
       ],
-      "note": "The publish runbook and the verbatim-reproduction prompt it hands to the publishing session. The prompt enumerates what must not be edited, so it goes wrong the moment the contract's slug rule (section 3.2), endpoint, or codec changes, or the skill's artifact structure does. It also tells the operator to run check_artifact.py and compare a line count -- if that script's invocation or output changes, step 1 and step 3 stop matching what the operator sees. patch_artifacts.py became a source on 2026-08-20, when section 5 (republishing a patched artifact) was written around it and steps 3 and 4 began describing what it injects — the two backup doors, grep -c BACKUP_ENDPOINT reporting 3, the 429 ladder walk, the phase-deferred prompt tail, and the &v=claude marker. It is also the script that asserts byte-equality of the slug line, which is the whole basis of section 5's keep-the-slug rule."
+      "note": "The publish runbook and the verbatim-reproduction prompt it hands to the publishing session. The prompt enumerates what must not be edited, so it goes wrong the moment the contract's slug rule (section 3.2), endpoint, or codec changes, or the skill's artifact structure does. It also tells the operator to run check_artifact.py and compare a line count -- if that script's invocation or output changes, step 1 and step 3 stop matching what the operator sees. patch_artifacts.py became a source on 2026-08-20, when section 5 (republishing a patched artifact) was written around it and steps 3 and 4 began describing what it injects — the two backup doors, grep -c BACKUP_ENDPOINT reporting 3, the 429 ladder walk, the phase-deferred prompt tail, and the &v=claude marker. It is also the script that asserts byte-equality of the slug line, which is the whole basis of section 5's keep-the-slug rule. stage_for_upload.py joined the same day: section 5 names its output directory, its filename shape and its INDEX.md checklist, so a change to any of those makes the batch-staging paragraph describe something the operator will not find."
     },
     {
       "doc": "_builder/preflight-kit/contracts/INTERACTION-DATA-CONTRACT.md",

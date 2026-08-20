@@ -194,6 +194,13 @@ This is now the common case: the `.jsx` was changed **in this repository** — b
 [`patch_artifacts.py`](../../scripts/artifacts/patch_artifacts.py) or a hand fix — and the same
 lesson has to go live again. It is **not** a rebuild, and that difference is the whole section.
 
+**Staging a batch:** `python scripts/artifacts/stage_for_upload.py` flattens every cached `.jsx`
+into a gitignored `_upload/`, names each file `<course>_L<NN>_<slug>.jsx`, and writes an
+`INDEX.md` checklist carrying each artifact's title and the claude.ai URL it is currently published
+at — so a fifty-file republish is a list to work down rather than fifty lookups. `--published`
+restricts it to artifacts that are already live, which is the set this section applies to; the rest
+are first publishes and follow §3 instead. Delete `_upload/` when you are done.
+
 **The slug does not change, and keeping it is REQUIRED, not preferred.** `app.activities.slug` is
 `NOT NULL UNIQUE` — globally unique, not per course — and every student report hangs off the row it
 names. A new slug is therefore a new row, and every cadet who already finished that lesson is
