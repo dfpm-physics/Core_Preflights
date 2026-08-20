@@ -40,8 +40,11 @@ Usage:
   python scripts/checks/auth_email_mismatch.py --fix 3000127797 --commit
 
 PRIVACY: this prints cadet names and email addresses to the CONSOLE so an operator can act on
-them. Console output is not a committed file and must not become one — no name, cadet ID or
-address from this script may be pasted into CHANGELOG.md or anything under docs/ (CORE.md §3).
+them. Console output is not a committed file and must not become one. Under the 2026-08-17
+classification (CORE.md §3, docs/decisions/STUDENT-DATA-CLASSIFICATION.md) a cadet ID may be
+committed and a NAME may not — and an email address is an identifier the determination does not
+cover, so treat it as a name. Anything committed about a case found here refers to the cadet by
+ID, or by nothing at all. `scripts/checks/name_scan.py` enforces the name half.
 """
 
 import argparse
