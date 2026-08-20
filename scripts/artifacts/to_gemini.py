@@ -488,6 +488,23 @@ async function discoverModel(activeModelRef) {
         b'        ? "Google\'s tutor service is busy right now and didn\'t free up after several tries. That is Google\'s capacity, not your quota and not your key. Wait a few minutes and Retry."',
         "capacity message -> Gemini")
 
+    # -- 4c. Mark the transport, so a submission can be told apart afterwards --
+    # The receiver stores this as `submission_activities.content.transport`. A published
+    # Claude artifact sends no `v` at all, and the receiver reads that absence as "claude" --
+    # sound HERE and only here, because the only builds that send the key are the ones this
+    # script writes, and it writes it into every one of them.
+    #
+    # Contract section 8 permits new OPTIONAL keys within v1 and requires consumers to ignore
+    # unknown ones, so this is additive in both directions: an older receiver drops it, and a
+    # newer receiver reads its absence correctly from an older artifact. The four frozen keys
+    # (t/i/r/d) are untouched.
+    p.sub1(
+        rb'        \+ "#t=interaction"\r\n',
+        b"""        + "#t=interaction"
+        + "&v=gemini"          // transport marker -- optional, additive, contract section 8
+""",
+        "submit URL carries the transport marker")
+
     # ── 5. Component state: the key, remembered on this device only ───────────
     # Asked for directly ("so they only have to enter it once"). localStorage keeps it on
     # the cadet's machine: the site never receives it, so PREP never becomes the custodian

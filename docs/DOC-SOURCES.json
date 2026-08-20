@@ -20,7 +20,7 @@
       "doc": "site/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-08-19",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -73,7 +73,7 @@
       "doc": "site/help/director-ai-rules.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-17",
+      "reviewed": "2026-08-20",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -355,11 +355,11 @@
       "doc": "_builder/preflight-kit/contracts/INTERACTION-DATA-CONTRACT.md",
       "kind": "reference",
       "tier": null,
-      "reviewed": "2026-08-07",
+      "reviewed": "2026-08-20",
       "sources": [
         "docs/contracts/INTERACTION-DATA-CONTRACT.md"
       ],
-      "note": "A FROZEN SNAPSHOT of PREP's own contract, taken 2026-07-30 when preflight-kit was extracted from this project, and hash-locked by _builder/preflight-kit/MANIFEST.sha256. It is deliberately a second copy: the kit is portable and self-contained, and tools/localize.py and tools/verify.py both operate on these files. Registering it here is the mechanism that stops the duplication being silent — a flag means PREP's authoritative copy moved, and the decision is whether that is a schema:2 event under _builder/preflight-kit/PROVENANCE.md. As of the import the two ALREADY differ (data contract by 1 line, prefill link by 35); PREP's is newer, and re-syncing the kit is deliberately not part of the import. Do not 'fix' by editing the kit copy alone — that breaks MANIFEST.sha256."
+      "note": "A FROZEN SNAPSHOT of PREP's own contract, taken 2026-07-30 when preflight-kit was extracted from this project, and hash-locked by _builder/preflight-kit/MANIFEST.sha256. It is deliberately a second copy: the kit is portable and self-contained, and tools/localize.py and tools/verify.py both operate on these files. Registering it here is the mechanism that stops the duplication being silent — a flag means PREP's authoritative copy moved, and the decision is whether that is a schema:2 event under _builder/preflight-kit/PROVENANCE.md. As of the import the two ALREADY differ (data contract by 1 line, prefill link by 35); PREP's is newer, and re-syncing the kit is deliberately not part of the import. Re-checked 2026-08-20: PREP's copy gained an OPTIONAL `v` transport key (section 8 additive, still schema 1), so the kit copy is one key further behind and is still CORRECT for what it describes -- an artifact built from the kit does not send `v`, and the receiver reads that absence exactly as intended. Not a schema:2 event, so still not a re-sync trigger. Do not 'fix' by editing the kit copy alone — that breaks MANIFEST.sha256."
     },
     {
       "doc": "_builder/preflight-kit/contracts/INTERACTION-PREFILL-LINK.md",

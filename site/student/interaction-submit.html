@@ -87,6 +87,12 @@
         markdown,
         data,
         effort: readEffort(data),
+        // OPTIONAL transport marker (#v=), contract §8 additive. Only the Gemini backup builds
+        // this repo generates send it; a published Claude artifact sends nothing, and that
+        // absence is meaningful, so it is deliberately NOT defaulted here — see the note in
+        // student-data.js. Sanitised because the hash is entirely student-controllable and this
+        // value is written to the database: reduced to a short slug rather than trusted.
+        transport: (p.get('v') || '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24) || null,
       };
     }
 
@@ -281,6 +287,7 @@
         offering: resolved.offering,
         markdown: payload.markdown,
         data: payload.data,
+        transport: payload.transport,
       });
 
       status.style.display = '';

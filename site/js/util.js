@@ -302,3 +302,46 @@ export const COURSE_TITLE_FALLBACK = {
 export function courseTitle(id, fromDb) {
   return fromDb || COURSE_TITLE_FALLBACK[id] || id || '—';
 }
+
+/* ── Tutor brand marks ───────────────────────────────────────────────────────────
+ * Inline SVG, not `iconHTML()`, and the difference is deliberate. These sit on the two
+ * launch buttons a student chooses between, so they must (a) render before any network
+ * round trip, since a cadet reaching for the backup is usually one whose network or
+ * quota already failed them, and (b) carry the brand's own colour rather than the theme's
+ * — the colour is most of what makes a logo scannable at 20px, and `iconHTML()`'s PNGs
+ * are monochrome and can 404 into an emoji.
+ *
+ * Drawn from each vendor's public mark and used NOMINATIVELY: they label a button that
+ * launches that vendor's product and claim nothing else. `aria-hidden` throughout — the
+ * button's own text names the tutor, so a screen reader that also read the mark would say
+ * it twice.
+ *
+ * `currentColor` is deliberately NOT used. Both buttons sit on the card surface in both
+ * themes, and both brand colours clear contrast against it either way.
+ */
+const BRAND_MARKS = {
+  // Anthropic's radiating burst, in Claude's coral. Eleven spokes at 360/11 degrees, which
+  // is what gives the mark its off-axis look — an 8- or 12-spoke version reads as a plain
+  // asterisk and stops looking like anything.
+  claude: `<svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <g stroke="#D97757" stroke-width="2.3" stroke-linecap="round">${
+        Array.from({ length: 11 }, (_, i) =>
+          `<line x1="12" y1="12" x2="12" y2="2.6" transform="rotate(${(i * 360 / 11).toFixed(2)} 12 12)"/>`
+        ).join('')}</g>
+    </svg>`,
+
+  // Gemini's four-pointed spark: four quadratic arcs pulled in to the centre, so the sides
+  // are concave. A straight-sided diamond is a different shape and reads as a generic star.
+  gemini: `<svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path fill="#4285F4" d="M12 1.6c0 5.6 4.8 10.4 10.4 10.4C16.8 12 12 16.8 12 22.4
+        c0-5.6-4.8-10.4-10.4-10.4C7.2 12 12 7.2 12 1.6z"/>
+    </svg>`,
+};
+
+/**
+ * Inline SVG for one tutor's mark. Unknown name → empty string, never a broken glyph:
+ * a launch button with no logo is still a launch button.
+ */
+export function brandMark(name) {
+  return BRAND_MARKS[String(name || '').toLowerCase()] || '';
+}

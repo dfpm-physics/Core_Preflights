@@ -97,6 +97,7 @@ site/student/interaction-submit.html#t=interaction&i=<slug>&r=<lz>&d=<lz>
 | `i` | **yes** | The interaction **slug** — must equal an existing `activities.slug`. **Generated fresh per offering; see §3.2.** The one manual coordination point with the director (see `INTERACTION-PREFILL-LINK.md`). |
 | `r` | **yes** | The **full report**, Markdown, compressed (see codec). Always sent — the human-readable transcript is never dropped. |
 | `d` | **yes** | The **structured data** (§5), `JSON.stringify`'d then compressed. See below — this was "recommended" until 2026-07-28. |
+| `v` | no | **Transport marker.** Added 2026-08-20; additive under §8, so this is still v1. Names the build that produced the report, for artifacts this repository generates and can therefore update — today only `v=gemini`, written by `scripts/artifacts/to_gemini.py`. A published claude.ai artifact sends nothing, and **that absence is the point**: it is what makes a backup submission separable afterwards without touching the four frozen keys or the artifacts already deployed. The receiver sanitises it to a short slug (the hash is student-controllable) and stores it as `submission_activities.content.transport`, merged over the `d` object and never in place of a null. |
 
 ### 3.1 Send both. `r` alone is not a submission that works.
 

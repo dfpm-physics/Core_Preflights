@@ -226,6 +226,40 @@ One tutor session is 10–14 requests. So a 20/day model gives a cadet **one ses
 
 **Neither ladder is hard-coded in effect.** `discoverModel()` intersects both with what `ListModels` says the key can actually reach, and if it can reach nothing on either, falls back to scoring the listing — which now prefers `lite` and penalises `latest`. That keeps the property runtime discovery existed for: **this build cannot dead-end on a retired name.** It also means a mistyped or renamed model degrades quietly instead of breaking, so **verify a ladder name against a real key rather than trusting it** — nothing will tell you it was never reached.
 
+## The transport marker, and why the lesson page skips the explainer
+
+*(Both added 2026-08-20.)*
+
+**Every build stamps `&v=gemini` into its submit hash.** The receiver sanitises it and stores it as
+`submission_activities.content.transport`, so a backup submission can be told apart afterwards.
+This is additive under contract §8: the four frozen keys (`t`/`i`/`r`/`d`) are untouched, and a
+consumer that has never heard of `v` ignores it.
+
+**The absence is what carries the meaning, and it only works because we own both ends.** A
+published claude.ai artifact sends no `v` and cannot be made to — republishing one mints a new slug
+and a new lesson row (§3.2). So "no marker" means "not a build this repository generated", which is
+today the same set as "Claude". Note what that does *not* license: the receiver deliberately does
+**not** write `transport: 'claude'` into the empty case, because that would also stamp every row
+written before this existed and any future transport that forgot the key. Read absence as absence.
+
+**It is stored inside `content`, not in a column of its own.** DDL on `app` is sealed (`CORE.md`
+§0) and `content` is already `jsonb`. It is merged over the `d` object and **never in place of a
+null** — a null `content` is exactly what the auto-grade trigger and the cohort rollup read as "no
+structured data", so inventing an object to carry one string would change behaviour for every
+consumer. A report that arrives with no `d` therefore records no transport, which is acceptable
+because such a submission already earns no grade (§3.1) and gets opened by hand anyway.
+
+**The lesson page's Gemini button goes to `backup.html?i=<slug>&go=1`**, and `go=1` makes the router
+resolve the slug and redirect instead of rendering its explainer. The explainer still exists and is
+still the default, because the *other* caller — a cadet the Claude artifact bounced here
+mid-session — arrives with no context at all. A cadet clicking the button on the lesson page has
+just read that context beside the button, so showing it again is a toll rather than a warning.
+
+**The route still goes through the router.** It would be one line shorter to link at the build path
+directly, since `student-lessons.js` has already read the manifest to decide whether to show the
+button at all. Do not: which build a slug resolves to is allowed to change, and there is meant to be
+exactly one answer on this site to "where does this slug go".
+
 
 ---
 

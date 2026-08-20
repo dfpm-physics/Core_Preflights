@@ -79,19 +79,24 @@ missing on your side, and the written preflight is unaffected.
 ## If the interactive lesson will not run
 
 Interactive lessons run on Claude, and a free Claude account can be turned away when Claude is
-busy. That can happen before you start or partway through a lesson you are already working on.
+busy. That can happen before you start, or partway through a lesson you are already working on.
 
-Some lessons have a **backup version** that runs the same lesson somewhere else. When one exists,
-the assignment shows a **Use the backup version** link under the Launch button. It counts exactly
-the same: same lesson, same report, same grade — so you do not need to redo anything afterwards,
-and it is not a second assignment.
+Some lessons have a **backup version** that runs the same lesson on Google Gemini. When one exists,
+the assignment shows **two launch buttons** — **Claude** and **Gemini** — side by side. The backup
+counts exactly the same: same lesson, same report, same grade, so you do not need to redo anything
+afterwards, and it is not a second assignment.
 
-**Try the Claude version first.** It is the intended one and it is the better lesson, and a busy
-Claude usually clears within a few minutes. Use the backup when Claude will not let you through.
+**Start with Claude.** It is marked *Recommended* because it is the smoother lesson, and a busy
+Claude usually frees up within a few minutes. Use Gemini when Claude will not let you through.
 
-Not every lesson has a backup, so the link is not always there. If the Claude version will not run
-and there is no backup link, tell your instructor — they can grant an extension, and they would
-much rather hear from you early than late.
+**Gemini needs a free key from you, once per device.** The lesson asks for a Google AI Studio key
+and walks you through getting one; it takes about a minute, and you should not turn on billing. The
+key is sent only to Google and stays in your own browser — PREP never receives it, and it is never
+part of your report.
+
+Not every lesson has a backup, so the second button is not always there. If the Claude version will
+not run and there is no Gemini button, tell your instructor — they can grant an extension, and they
+would much rather hear from you early than late.
 
 ## Seeing your grade
 

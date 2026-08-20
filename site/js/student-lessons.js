@@ -212,8 +212,15 @@ export async function loadLessonStatuses(ctx) {
     //
     // `null` is the ordinary answer, not a fault — a lesson never published on claude.ai has
     // nothing to back up, and an unreadable manifest lands here as well (see loadBackupBuilds).
+    //
+    // `go=1` tells the router to resolve the slug and go, skipping its explainer page. That page
+    // exists for a cadet arriving from a FAILED Claude artifact, who has been given no context at
+    // all; a cadet clicking the Gemini button on the lesson page has just read that context beside
+    // the button, so making them read it again and click a second time is a toll, not a warning.
+    // The route still goes THROUGH the router: which build a slug resolves to is allowed to
+    // change, and only the router is allowed to know it (see the header above).
     const backupHref = (interactiveAvailable && interactive?.slug && backups[interactive.slug])
-      ? `${BACKUP_ROUTER}?i=${encodeURIComponent(interactive.slug)}`
+      ? `${BACKUP_ROUTER}?i=${encodeURIComponent(interactive.slug)}&go=1`
       : null;
 
     // WHICH PATHS CARRY CREDIT — the question every renderer below actually needs, and the one

@@ -543,7 +543,7 @@ export async function resolveActivityBySlug(ctx, slug) {
  * that is the revealed-preference signal — but the choice is left alone, because a practice
  * activity can never carry credit and the DB would reject it anyway.
  */
-export async function submitInteractionReport(ctx, { activity, offering, markdown, data }) {
+export async function submitInteractionReport(ctx, { activity, offering, markdown, data, transport }) {
   if (!offering) return { error: new Error('This assignment is not scheduled for you this term.') };
 
   // Data-layer backstop for "already graded": an interactive grade is auto-final, so the first
@@ -583,10 +583,30 @@ export async function submitInteractionReport(ctx, { activity, offering, markdow
   const { data: submission, error } = await ensureSubmission(ctx, offering.offeringId);
   if (error || !submission) return { error: error || new Error('Could not open a submission.') };
 
+  // WHICH TUTOR THIS CAME THROUGH. Recorded only when the artifact actually declared one
+  // (`#v=`), which today means one of the Gemini backup builds `scripts/artifacts/to_gemini.py`
+  // writes. A published Claude artifact sends no `v`, so absence means "not one of ours" — which
+  // is not the same claim as "Claude", and is why nothing is defaulted here. Stamping 'claude' on
+  // the empty case would read better and be wrong to trust: it would also stamp every row written
+  // before 2026-08-20 and any future transport that forgot the key.
+  //
+  // It rides INSIDE `content` because that column is jsonb and needs no migration — DDL on `app`
+  // is sealed (CORE.md §0) — and because contract §8 requires consumers to ignore unknown fields,
+  // so nothing downstream has to learn about it first.
+  //
+  // Merged only OVER AN OBJECT, never in place of a null. A null `content` is precisely what the
+  // auto-grade trigger and the cohort rollup both read as "no structured data", and inventing an
+  // object to carry one string would change that for every consumer. A report that arrived with no
+  // `d` therefore records no transport — acceptable, because such a submission already earns no
+  // grade (contract §3.1) and is going to be opened by hand regardless.
+  const content = (transport && data && typeof data === 'object' && !Array.isArray(data))
+    ? { ...data, transport }
+    : (data ?? null);
+
   const { error: workErr } = await db.from('submission_activities').upsert({
     submission_id: submission.id,
     activity_id: activity.id,
-    content: data ?? null,
+    content,
     report_markdown: markdown,
     payload_bytes: markdown ? markdown.length : null,
     is_final: true,

@@ -116,7 +116,13 @@ const matrix = await page.evaluate(`(() => {
   const STATE = { DRAFT: 'draft', NOT_STARTED: 'not-started' };
   const writtenHref = () => 'assignments.html?a=stub';
 
-  ${lift('backupLine')}
+  // brandMark() is imported from util.js, so it is stubbed rather than lifted. The stub records
+  // WHICH mark each button asked for, which is the part this test can meaningfully assert; the
+  // SVG itself is util.js's business.
+  const brandMark = (n) => '<svg class="brand-mark" data-brand="' + n + '"></svg>';
+
+  ${lift('launchRow')}
+  ${lift('launchNote')}
   ${lift('studyBlock')}
   ${lift('choiceBlock')}
 
@@ -141,9 +147,17 @@ const matrix = await page.evaluate(`(() => {
     // appear beside a control the student cannot use.
     return {
       liveLaunch: !!launch && !launch.disabled,
-      anyLaunch: !!host.querySelector('button.btn-secondary'),
+      anyLaunch: !!host.querySelector('button.launch-btn'),
       backup: !!backup,
-      backupHref: backup ? backup.getAttribute('data-href') : null,
+      // Both controls are now buttons of the same class, so the parity claim gains a second
+      // half: whatever is true of one must be true of the other. A Gemini button that rendered
+      // live beside a disabled Claude button would pass the old visibility check and still be
+      // the exact bug that check exists to prevent.
+      backupLive: !!backup && !backup.disabled,
+      sameClass: !!launch && !!backup
+        && launch.classList.contains('launch-btn') && backup.classList.contains('launch-btn'),
+      claudePreferred: !!launch && launch.classList.contains('is-preferred'),
+      geminiPreferred: !!backup && backup.classList.contains('is-preferred'),
       backupIsButton: !!backup && backup.tagName === 'BUTTON',
     };
   }
@@ -153,9 +167,9 @@ const matrix = await page.evaluate(`(() => {
     for (const href of [HREF, null]) {
       const l = Object.assign({}, base, { interactiveAvailable: available, backupHref: href });
       out.push({ block: 'studyBlock', available, hasBuild: !!href,
-                 ...probe(studyBlock(l), 'study-btn', 'study-backup') });
+                 ...probe(studyBlock(l), 'study-claude', 'study-gemini') });
       out.push({ block: 'choiceBlock', available, hasBuild: !!href,
-                 ...probe(choiceBlock(l), 'choice-launch', 'choice-backup') });
+                 ...probe(choiceBlock(l), 'choice-claude', 'choice-gemini') });
     }
   }
 
@@ -166,18 +180,32 @@ const matrix = await page.evaluate(`(() => {
     policy: 'preflight', interactiveAvailable: true, backupHref: HREF,
   });
   out.push({ block: 'choiceBlock/non-choice', available: false, hasBuild: true,
-             ...probe(choiceBlock(gated), 'choice-launch', 'choice-backup') });
+             ...probe(choiceBlock(gated), 'choice-claude', 'choice-gemini') });
 
   // And the gated studyBlock, whose disabled card is a separate early return.
   const gatedStudy = Object.assign({}, base, { interactiveAvailable: false, backupHref: HREF });
   out.push({ block: 'studyBlock/gated', available: false, hasBuild: true,
-             ...probe(studyBlock(gatedStudy), 'study-btn', 'study-backup') });
+             ...probe(studyBlock(gatedStudy), 'study-claude', 'study-gemini') });
 
   return out;
 })()`);
 
+// WHAT PARITY MEANS CHANGED ON 2026-08-20, and the expectation below changed with it. The
+// director's claim has always been that the backup "should still follow the same rules for whether
+// or not it is visible as the claude artifact link". When the backup was a text LINK, the only way
+// to honour that beside a greyed-out Launch was to hide it — a link has no disabled state. Now both
+// are buttons, so the Claude button and the Gemini button do the literal same thing: both render,
+// and both grey out together. That is closer to the stated rule, not further from it.
+//
+// The property that actually protects a student is unchanged and is asserted separately below: the
+// backup must never be LAUNCHABLE where Claude is not. Presence was only ever a proxy for that.
+//
+// Note the disabled-with-a-build cell cannot occur in production at all: student-lessons.js gates
+// `backupHref` on `interactiveAvailable`, so an unavailable lesson has no href to render from. The
+// matrix forces it anyway, because a defensive branch that is never exercised is exactly the one
+// that rots.
 for (const r of matrix) {
-  const expected = r.liveLaunch && r.hasBuild;
+  const expected = r.hasBuild;
   check(
     `${r.block}: available=${r.available} build=${r.hasBuild} → launch=${r.liveLaunch} backup=${r.backup}`,
     r.backup === expected,
@@ -185,14 +213,25 @@ for (const r of matrix) {
   );
 }
 
-// The two claims the matrix is really making, stated once so a failure names the rule.
-check('backup NEVER renders without a live Claude launch beside it',
-  matrix.every(r => !r.backup || r.liveLaunch));
+// The claims the matrix is really making, stated once so a failure names the rule.
+check('backup is NEVER launchable without a live Claude launch beside it',
+  matrix.every(r => !r.backupLive || r.liveLaunch));
 check('backup ALWAYS renders when a live launch and a build are both present',
   matrix.every(r => !(r.liveLaunch && r.hasBuild) || r.backup));
 
+// The claims the two-button layout adds. Enabled-state parity is the one that matters most: the
+// buttons now look alike, so a disabled Claude beside a live Gemini would read as a deliberate
+// offer rather than as the bug it is.
+check('the two buttons are always enabled or disabled together',
+  matrix.every(r => !r.backup || r.backupLive === r.liveLaunch));
+check('both buttons carry the same sizing class',
+  matrix.every(r => !r.backup || r.sameClass));
+check('Claude is the marked preference, and Gemini never is',
+  matrix.every(r => (!r.backup || !r.geminiPreferred))
+  && matrix.some(r => r.claudePreferred));
+
 /* ── the ids the renderers emit are the ids wire() binds ──────────────────────────────── */
-for (const id of ['study-backup', 'choice-backup']) {
+for (const id of ['study-gemini', 'choice-gemini']) {
   check(`wire() binds #${id}`, WIRE.includes(`'${id}'`),
     'the control renders but nothing listens to it');
 }

@@ -105,6 +105,18 @@
         return;
       }
 
+      // ?go=1 -- sent by the Gemini button on the lesson page, which has already shown the
+      // student what this is and what it needs. Resolve and go. Everything below is the
+      // explainer for the OTHER caller: a cadet the Claude artifact bounced here mid-session,
+      // who arrived with no context and does need it.
+      //
+      // `replace`, not `assign`: Back should return to the lesson page, not to this router,
+      // which would resolve and forward again and trap the student in a loop.
+      if (new URLSearchParams(location.search).get('go') === '1') {
+        location.replace('../' + build.path);
+        return;
+      }
+
       const course = COURSE_LABEL[build.course] || build.course || '';
       const lesson = build.lesson_no ? `Lesson ${build.lesson_no}` : '';
       const title = build.title || slug;
@@ -114,12 +126,11 @@
           <p class="backup-course">${esc(course)}${lesson ? ' &middot; ' + esc(lesson) : ''}</p>
           <h1 class="backup-lesson">${esc(title)} &mdash; backup version</h1>
 
-          <div class="alert alert-warn" style="margin-top:14px">
-            <strong>Use this only if the Claude version will not load.</strong>
-            The Claude version is the intended way to do this preflight and it is the better
-            experience. This backup runs the same lesson on Google Gemini using
-            <strong>your own free API key</strong>, and it is rougher: slower to start, and the
-            tutor may be less consistent.
+          <div class="alert alert-info" style="margin-top:14px">
+            <strong>This is the backup version, and it counts exactly the same.</strong>
+            It runs the same lesson on Google Gemini using <strong>your own free API key</strong>.
+            Claude is still the smoother lesson, so go back to it when you can &mdash; but if it
+            will not load, this one will get you through.
           </div>
 
           <p style="font-size:13.5px;line-height:1.65;margin-top:14px">
@@ -145,7 +156,7 @@
             Open the backup lesson &rarr;
           </a>
           <p class="muted" style="font-size:12px;text-align:center">
-            Try the Claude version again first if you have not in the last few minutes.
+            Claude usually frees up within a few minutes, if you would rather wait for it.
           </p>
         </div>`);
     })();

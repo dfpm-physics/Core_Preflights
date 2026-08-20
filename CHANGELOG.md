@@ -8,6 +8,104 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-20 (third) — Matthew Recker via Claude
+
+### The Gemini backup is now a launch button beside Claude, not a line of prose asking a cadet to diagnose a failure
+
+**Asked for by the course director**, whose reason was that Gemini "seems to be working way better
+than the free claude account version" — so the backup needed to be as easy to reach as the thing it
+backs up, and to look the same in all three places a lesson can be launched from.
+
+**One control, three views, one size.** `launchRow()` replaces `backupLine()` and renders the two
+tutors as buttons of identical size — measured, not asserted: 260×59 in both themes, in both the
+single-card view and the side-by-side choice view. A lesson with no backup renders the same button
+at the same width, so the control does not change shape depending on whether a backup exists.
+
+**Claude is still the preference, and now says so instead of implying it.** It carries the accent
+border and the word *Recommended*; Gemini is labelled *Backup*. The line it replaced read *"Claude
+not loading, or did it stop partway through? Use the backup version"* — which asks a cadet to
+diagnose a failure before it will offer them a way out, and buries the way out in prose until they
+do. A cadet whose tutor just died mid-session is the worst possible reader for a conditional
+sentence.
+
+**Each tutor now carries its own mark**, as inline SVG in `util.js` rather than through
+`iconHTML()`: these render before any network round trip, which matters because a cadet reaching
+for the backup is usually one whose network or quota has already failed them, and they carry the
+brand's own colour, which is most of what makes a logo scannable at 22px.
+
+**Clicking Gemini goes straight to the lesson.** `backup.html?i=<slug>&go=1` makes the router
+resolve the slug and redirect rather than render its explainer. That explainer still exists and is
+still the default, because the other caller — a cadet the Claude artifact bounced there
+mid-session — arrives with no context at all. The one thing it said that the lesson page did not,
+that Gemini needs a free Google AI Studio key, is now said beside the button.
+
+**The route still goes through the router**, one line longer than linking at the build path
+directly. `student-lessons.js` has already read the manifest by then and could shortcut it; it
+deliberately does not, because which build a slug resolves to is allowed to change and there is
+meant to be exactly one answer on this site to "where does this slug go".
+
+**Softer where it was loud.** `backup.html`'s opening panel was an `alert-warn` headed *"Use this
+only if the Claude version will not load"*; it is now an `alert-info` headed *"This is the backup
+version, and it counts exactly the same"*, and still says Claude is the smoother lesson.
+
+### A submission now records which tutor produced it
+
+Every backup build stamps `&v=gemini` into its submit hash; the receiver sanitises it — the hash is
+student-controllable and this value is written to the database — and stores it as
+`submission_activities.content.transport`. To count them:
+
+```sql
+SELECT content->>'transport' AS via, count(*)
+  FROM app.submission_activities WHERE content ? 'transport' GROUP BY 1;
+```
+
+**Additive under contract §8, which is what makes it safe.** The four frozen hash keys
+(`t`/`i`/`r`/`d`) are untouched, and §8 requires consumers to ignore unknown fields — so an older
+receiver drops it and a newer receiver reads an older artifact correctly.
+
+**The absence is what carries the meaning, and it works only because we own both ends.** A
+published claude.ai artifact sends no `v` and cannot be made to: republishing one mints a new slug
+and a new lesson row (§3.2). So "no marker" means "not a build this repository generated". The
+receiver deliberately does **not** write `transport: 'claude'` into the empty case — that would read
+better and be wrong to trust, because it would also stamp every row written before today and any
+future transport that forgot the key.
+
+**It rides inside `content` because DDL on `app` is sealed** (`CORE.md` §0) and that column is
+already `jsonb`. It is merged over the `d` object and **never in place of a null**: a null `content`
+is exactly what the auto-grade trigger and the cohort rollup read as "no structured data", so
+inventing an object to carry one string would change behaviour for every consumer. A report that
+arrives with no `d` therefore records no transport — acceptable, because such a submission already
+earns no grade (§3.1) and gets opened by hand anyway.
+
+**Verified.** All 38 builds regenerated, one insertion each, and a second run reports `38 already
+current`. `tests/browser-harness/backup-link.mjs` **25/25** after being updated for the new
+structure — it lifts the real renderers out of `lessons.html` by name, so the rename broke it on
+purpose and it now also asserts that the two buttons are enabled or disabled together, share a
+sizing class, and that only Claude is ever marked preferred. `pass.mjs --student` 5/5 pages clean
+against the live project. `gemini-build.mjs` 7/7 and `gemini-model-ladder.mjs` 11/11.
+`tests/app-schema/run.mjs` **542 passed / 10 failed — byte-identical to the same suite run on a
+stashed-clean tree**, so all ten are pre-existing and none is from this change.
+
+**One expectation in the parity harness changed deliberately, and it is worth naming.** It asserted
+that the backup NEVER renders without a live Claude launch beside it. That encoded the old
+implementation rather than the rule: a text link has no disabled state, so hiding it was the only
+way to honour "the same rules for whether or not it is visible as the claude artifact link". Two
+buttons can grey out together, which is closer to that rule. The property that actually protects a
+student — the backup must never be *launchable* where Claude is not — is unchanged and is now
+asserted directly. In production that cell cannot occur at all: `backupHref` is gated on
+`interactiveAvailable`, so an unavailable lesson has no href to render from.
+
+**NOT verified:** no live tutor turn, and no real submission through the new `v` marker — both need
+a cadet's own Gemini key and a student account. What is proved is that the marker is in all 38
+builds, that the receiver parses and forwards it, and that the write path compiles and passes the
+schema suite.
+
+**Also unchanged on purpose:** the switch-to-interactive confirm. Launching Gemini still warns a
+cadet with saved written answers that submitting an interactive report ends the written path — that
+is a real consequence, not scare text, and the harness asserts `launchBackup` still goes through it.
+
+---
+
 ## 2026-08-20 (second) — Matthew Recker via Claude
 
 ### Every cadet was silently moved onto a 20-request-per-day model, and the backup gave up instead of stepping down

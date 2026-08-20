@@ -30,6 +30,29 @@
     .choice-card .btn { margin-top: 4px; }
     .lesson-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
     .study-note { font-size: 0.85em; color: var(--muted); line-height: 1.5; margin-top: 10px; }
+
+    /* THE TWO TUTOR BUTTONS. Same size, always — `flex: 1 1 190px` with a max-width means one
+       button and two buttons are the same width, so the control does not change shape between
+       a lesson that has a backup and one that does not.
+
+       This is NOT the equal-weight rule the .choice-card comment above describes. That rule is
+       about written vs interactive, where a styled default would bias the preference the design
+       exists to measure. Claude vs Gemini is the opposite case: Claude IS the intended path and
+       the better lesson, so it carries the accent border and the "recommended" note, and Gemini
+       is offered plainly beside it rather than hidden behind a link a blocked cadet has to find. */
+    .launch-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+    .launch-btn { flex: 1 1 190px; max-width: 260px; min-width: 0;
+      display: flex; align-items: center; gap: 10px; text-align: left;
+      padding: 11px 13px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+      background: var(--card); color: var(--text); font: inherit; cursor: pointer;
+      transition: border-color .15s, box-shadow .15s; }
+    .launch-btn:hover:not(:disabled) { border-color: var(--blue-lt); box-shadow: var(--shadow-md); }
+    .launch-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .launch-btn.is-preferred { border-color: var(--blue); }
+    .brand-mark { width: 22px; height: 22px; flex: none; display: block; }
+    .launch-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+    .launch-name { font-size: 0.95em; font-weight: 700; line-height: 1.25; }
+    .launch-sub { font-size: 0.73em; color: var(--muted); font-weight: 600; line-height: 1.25; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../js/config.js"></script>
@@ -46,7 +69,7 @@
     import { initTheme } from '../js/theme.js';
     import { loadLessonStatuses, STATE } from '../js/student-lessons.js';
     import { releaseNote } from '../js/schema.js';
-    import { esc, deadlineClass, relativeDue, fmtDateTime, iconHTML, runPage } from '../js/util.js';
+    import { esc, deadlineClass, relativeDue, fmtDateTime, iconHTML, runPage, brandMark } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
     runPage(ctx, init);
@@ -215,23 +238,51 @@
       window.open(l.backupHref, '_blank', 'noopener');
     }
 
-    /** The way out for a cadet Claude has locked out.
+    /** The two ways into the interactive lesson, as two buttons of the SAME size.
      *
-     *  Rendered ONLY beside a LIVE Launch button and never beside a disabled one, so its
-     *  visibility IS the Claude link's visibility — structurally, rather than by a second rule
-     *  kept in step. `l.backupHref` is null unless that lesson has a build AND the interactive is
-     *  launchable (student-lessons.js), so this collapses to nothing on its own as well.
+     *  Claude first and marked recommended: it is the intended path and the better lesson, and
+     *  that preference is carried by an accent border and one word rather than by hiding the
+     *  alternative. Gemini sits beside it as an equal-sized button.
      *
-     *  Quiet on purpose, and worded as a fallback rather than as a choice. The Claude version is
-     *  the intended path and the better lesson; a cadet who reaches for the backup first gets a
-     *  rougher experience for no reason — the same point `backup.html` makes to anyone who lands
-     *  there having been sent by the artifact itself. */
-    function backupLine(l, id) {
-      if (!l.backupHref) return '';
-      return `<div class="study-note">
-        Claude not loading, or did it stop partway through?
-        <button type="button" class="linkish" id="${id}">Use the backup version</button>
+     *  This replaced a line reading "Claude not loading, or did it stop partway through? Use the
+     *  backup version", which asked a cadet to diagnose a failure before it would offer them a
+     *  way out — and buried the way out in prose until they did. A cadet whose tutor just died
+     *  mid-session is the worst possible reader for a conditional sentence.
+     *
+     *  The Gemini button renders only when `l.backupHref` is set, which is null unless the lesson
+     *  has a build AND the interactive is launchable (student-lessons.js) — the SAME boolean the
+     *  Claude button is gated on, so the two cannot drift apart, and the row collapses to a single
+     *  button on its own. `flex: 1 1 190px; max-width: 260px` is what keeps that single button the
+     *  same width as each of the two.
+     *
+     *  `disabled` greys BOTH rather than hiding them, so a student can see the path exists before
+     *  it opens. */
+    function launchRow(l, prefix, { disabled = false, title = '' } = {}) {
+      const off = disabled ? ` disabled title="${esc(title)}"` : '';
+      const btn = (id, brand, name, sub, cls) =>
+        `<button type="button" class="launch-btn${cls}" id="${id}"${off}>
+           ${brandMark(brand)}
+           <span class="launch-txt">
+             <span class="launch-name">${name}</span>
+             <span class="launch-sub">${sub}</span>
+           </span>
+         </button>`;
+      return `<div class="launch-grid">
+        ${btn(`${prefix}-claude`, 'claude', 'Claude', 'Recommended', ' is-preferred')}
+        ${l.backupHref ? btn(`${prefix}-gemini`, 'gemini', 'Gemini', 'Backup', '') : ''}
       </div>`;
+    }
+
+    /** The note under the buttons. States the preference plainly instead of implying a fault, and
+     *  names the one real prerequisite the Gemini path has — which until now lived only on the
+     *  interstitial that clicking Gemini no longer opens. Nothing else on this page would tell a
+     *  cadet they need a key, and finding that out only after launching is the whole reason the
+     *  sentence is here. */
+    function launchNote(l) {
+      if (!l.backupHref) return '';
+      return `<div class="study-note">Start with Claude — it is the smoother lesson. If it will
+        not load, or stops partway, Gemini runs the same lesson and counts exactly the same. Gemini
+        asks for a free Google AI Studio key the first time you use it on a device.</div>`;
     }
 
     function gradeCard(l) {
@@ -268,9 +319,7 @@
         // did not count.
         return `<div class="card" aria-disabled="true" style="opacity:0.55">
           <div class="card-title">Interactive lesson${graded ? '' : ' <span class="tag">practice</span>'}</div>
-          <div class="lesson-actions" style="margin-top:10px">
-            <button class="btn btn-secondary" disabled title="Not available yet">Launch ↗</button>
-          </div>
+          ${launchRow(l, 'study', { disabled: true, title: 'Not available yet' })}
           <div class="study-note">Available ${esc(when)}.</div>
         </div>`;
       }
@@ -287,11 +336,9 @@
              times as you like; only your first submitted report counts toward your grade.`;
       return `<div class="card">
         <div class="card-title">Interactive lesson${graded ? '' : ' <span class="tag">practice</span>'}</div>
-        <div class="lesson-actions" style="margin-top:10px">
-          <button class="btn btn-secondary" id="study-btn">Launch ↗</button>
-        </div>
+        ${launchRow(l, 'study')}
         <div class="study-note">${note}</div>
-        ${backupLine(l, 'study-backup')}
+        ${launchNote(l)}
       </div>`;
     }
 
@@ -389,12 +436,11 @@
       // Three states, not two: a graded choice whose interaction is not launchable yet (no link
       // added, or a schedule gate) must say so rather than offer a button that goes nowhere.
       const interactiveAction = !isChoice
-        ? `<button class="btn btn-secondary" disabled title="Available after you submit">Launch ↗</button>
+        ? `${launchRow(l, 'choice', { disabled: true, title: 'Available after you submit' })}
            <div class="study-note" style="margin-top:8px">Available after you submit your written responses.</div>`
         : l.interactiveAvailable
-          ? `<button class="btn btn-secondary" id="choice-launch">Launch ↗</button>
-             ${backupLine(l, 'choice-backup')}`
-          : `<button class="btn btn-secondary" disabled title="Not available yet">Launch ↗</button>
+          ? `${launchRow(l, 'choice')}${launchNote(l)}`
+          : `${launchRow(l, 'choice', { disabled: true, title: 'Not available yet' })}
              <div class="study-note" style="margin-top:8px">Available ${esc(l.interactiveGateReason || 'later')}.</div>`;
 
       const switchNote = isChoice
@@ -452,10 +498,10 @@
 
     function wire(l) {
       document.getElementById('back-btn')?.addEventListener('click', renderList);
-      document.getElementById('study-btn')?.addEventListener('click', () => launchInteraction(l));
-      document.getElementById('choice-launch')?.addEventListener('click', () => launchInteraction(l));
-      document.getElementById('study-backup')?.addEventListener('click', () => launchBackup(l));
-      document.getElementById('choice-backup')?.addEventListener('click', () => launchBackup(l));
+      document.getElementById('study-claude')?.addEventListener('click', () => launchInteraction(l));
+      document.getElementById('choice-claude')?.addEventListener('click', () => launchInteraction(l));
+      document.getElementById('study-gemini')?.addEventListener('click', () => launchBackup(l));
+      document.getElementById('choice-gemini')?.addEventListener('click', () => launchBackup(l));
     }
   </script>
 </body>

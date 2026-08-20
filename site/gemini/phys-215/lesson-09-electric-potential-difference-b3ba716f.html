@@ -2867,6 +2867,7 @@ function Lesson09Preflight() {
   const submitUrl = (mode === "graded" && submitReady)
     ? SUBMIT_ENDPOINT
         + "#t=interaction"
+        + "&v=gemini"          // transport marker -- optional, additive, contract section 8
         + "&i=" + INTERACTION_ID
         + "&r=" + window.LZString.compressToEncodedURIComponent(reportMarkdown)
         + (structured
