@@ -452,21 +452,43 @@ schedule for that lesson's topic → emits a preview for approval → emits a `.
 publishes it from a Claude session → a director registers it via the prefill link → cadets take
 the session → the artifact submits `r` and `d` as a URL hash.
 
-**Current holdings: 51 artifacts, 38 of them published.** phys-110 has 5 (all published),
-phys-215 has 29 (all published), phys-310 has 17 (4 published). *Counted 2026-08-20* — the 51 from
-the gitignored `.jsx` cache, the 38 from the committed `index.json` of each course, where a row
-carrying a `published_url` is a published artifact and a row without one is a draft. **How many are
-REGISTERED is not recorded in this repo and needs a live check**: count the `app.activities` rows
-whose slug matches, read over `prep_app_read` and not through a staff session, because RLS answers
-*what may you see* and never says so (CORE.md §3). *Published is not registered, and the gap is
-silent* — until a lesson row exists with the matching slug, the artifact is a live URL no cadet can
-reach through the course site.
+**Current holdings: 51 artifacts, and all 51 are published.** phys-110 has 5, phys-215 has 29,
+phys-310 has 17. *Counted 2026-08-21* from the committed `index.json` of each course, where a row
+carrying a `published_url` is published; the 51 also matches the gitignored `.jsx` cache. **38 have
+a Gemini build** under `site/gemini/`, which is the better proxy for what a cadet can reach,
+because a build is only ported for a lesson that is registered.
+
+*This said "38 of them published … phys-310 has 17 (4 published)" until 2026-08-21, and it was
+true for part of one day: the 2026-08-20 republish first-published phys-310's remaining 13 drafts,
+and 38 stopped being the count of PUBLISHED artifacts and became the count of REGISTERED ones. That
+is exactly the distinction the rest of this paragraph is about, which is why it was worth correcting
+rather than restating.*
+
+**How many are REGISTERED is still not recorded in this repo and needs a live check**: count the
+`app.activities` rows whose slug matches, read over `prep_app_read` and not through a staff session,
+because RLS answers *what may you see* and never says so (CORE.md §3). *Published is not registered,
+and the gap is silent* — until a lesson row exists with the matching slug, the artifact is a live
+URL no cadet can reach through the course site. The 13 phys-310 first-publishes were left
+unregistered deliberately (CHANGELOG 2026-08-20, sixth).
 
 **Where things are:**
 - `.jsx` source → the private `artifact-sources` Storage bucket (CORE.md §3). Not in git.
 - `BUILD-LOG.md`, `REVIEW-NOTES.json`, profiles, schedules, `MURRAY-GROUNDING.md` → in git, under
   `_builder/`, which Pages does not serve.
 - `_builder/CHANGELOG.md` → the builder's own history, 2026-07-30 to 2026-08-06.
+
+**What the kit does NOT yet carry.** *(2026-08-21.)* The kit was updated with the 2026-08-20
+resilience fix set and its manifest re-hashed, which is the process working. **None of the nine
+changes made on 2026-08-21 reached it** -- probed for eleven markers, every count zero, and the only
+date it names is `2026-08-20`. So an artifact built today is born without a request deadline,
+without a ladder step on a 5xx or an empty response, and with the small footer Submit link the
+director asked to be replaced. Which of those belong in the kit and which are Gemini-transport-only
+is the judgment that cannot be reconstructed from the CHANGELOG, and it is written down once in
+[`docs/operations/TUTOR-BEHAVIOR-PARITY.md`](../../docs/operations/TUTOR-BEHAVIOR-PARITY.md) --
+a three-surface table (kit / published sources / Gemini builds), the planned model ladder that
+lives in `tests/browser/`, and a carry-forward backlog. **Read it before changing any tutor
+behaviour**, so the change is assigned to a surface deliberately rather than landing wherever it
+was written.
 
 **Three rules that govern writes here:**
 - **The kit is never edited per course.** A per-course edit forks it for every course at once.

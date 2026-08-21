@@ -194,6 +194,30 @@ assertions both sides of the boundary.
 
 ---
 
+### P1.18 — Carry the 2026-08-21 tutor fixes into the artifact builder · **M** · *raised 2026-08-21*
+
+Nine changes landed on the Gemini builds on 2026-08-21 and **none reached
+`_builder/preflight-kit/`**, so every artifact built from now on is born without them. The full
+three-surface table, the reasoning for each row, and what is deliberately Gemini-only are in
+[`docs/operations/TUTOR-BEHAVIOR-PARITY.md`](operations/TUTOR-BEHAVIOR-PARITY.md).
+
+Three of the rows are one defect and are filed separately as
+[`docs/findings/2026-08-21-claude-artifact-unwalked-failure-paths.md`](findings/2026-08-21-claude-artifact-unwalked-failure-paths.md):
+no request deadline, and no ladder step on a 5xx or an empty response. **Verify that finding
+first** — its own falsification section lists three conditions that would narrow it, one of which
+(claude.ai imposing its own deadline on an artifact's `fetch`) is likely true and undocumented.
+
+Sizing is **M** and almost none of it is the code. The kit is hash-locked, so a change means
+re-hashing `MANIFEST.sha256` and re-verifying in a fresh clone (`core.autocrlf` has corrupted that
+payload twice). The 51 published sources need a `patch_artifacts.py` step and then a **human
+republishing each artifact by hand** on claude.ai, keeping every slug byte-identical. That cost is
+why this is P1 rather than P0: cadets are on the Gemini path, which already has the fixes.
+
+**Do it as one batch, not per-fix.** The republish is the expensive step and it is per-artifact,
+so a second pass costs the same as the first.
+
+---
+
 ## 3. P2 — Before end of term
 
 ### P2.1 — Blackboard grade export · **L**

@@ -8,6 +8,107 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-21 (tenth) — Matthew Recker via Claude
+
+### Nine fixes shipped to the Gemini builds and none of them reached the artifact builder
+
+The director asked that the day's work be **logged and documented fully, along with the planned
+model ladder in the test bed, with enough information to update the artifact builder in future AI
+work**. The logging was already done — seventeen `CHANGELOG.md` entries across three days. What was
+missing is the thing those entries cannot supply: **which of the fixes belong to the transport and
+which belong to the lesson.**
+
+**One lesson is now three programs** — the kit that emits a new artifact, the 51 published sources,
+and the 38 Gemini builds — and they have drifted apart. The cost of changing them is wildly
+uneven: regenerating a Gemini build is free, patching a published source costs a human republishing
+it by hand on claude.ai, and the kit is hash-locked. So every fix lands on the cheap surface, which
+is correct — it is where cadets are — and the failure is silent: the fix is real, it works, and the
+kit quietly keeps producing artifacts without it.
+
+**`docs/operations/TUTOR-BEHAVIOR-PARITY.md`** is the one table of what each surface carries.
+Fourteen rows for 2026-08-21, seven for the 2026-08-20 fix set, each marked **ADOPT** / **DECIDE** /
+**CONSIDER** / **do not adopt** with the reasoning, plus the exact anchors a fix would go on and
+what fixing it costs. It is in `docs/operations/` and **registered in `DOC-SOURCES.json`**, not in
+`docs/decisions/`, because a backlog that silently goes stale is worse than none: the reader cannot
+tell which rows still hold.
+
+**The planned ladder is section 4, and it is quoted from the tool rather than remembered.** It is
+not a branch or an uncommitted edit — it is `to_gemini.py --policy teaching` instead of
+`--policy legacy`, checked in as `tests/browser/test-gemini-new-ladder.html` and emitted from the
+same script on the same day as the live set, which is what makes drift between sandbox and live
+structurally impossible. Both ladders are set out side by side with the quota figures, the cadet
+report that prompted the reorder (*"it would try to tutor me and then give me the answer instead of
+walking me through it"*), the three constraints that are easy to break, and what shipping it means
+— including deleting `legacy` and that section with it.
+
+### The Claude artifact still carries three of the four report-stage hang bugs
+
+Found while writing the table, verified by reading the cached sources rather than inferred:
+
+- **`rawCall` never steps the model on a 5xx.** Three retries against the same model, then a typed
+  throw the cadet sees as a Retry that starts over on the model that just failed. The 429 branch
+  immediately above it *does* step — added 2026-08-20, when only 429 was understood to need it.
+- **`callTutor` treats an empty response as a generic request failure.** `if (!text) throw` sits
+  **above** `rawCall`, so it bypasses the ladder entirely — which is exactly why it survived a day
+  of debugging on the Gemini side after the other paths were fixed.
+- **There is no `AbortController` in any of the 51 sources.** A request that never returns never
+  returns.
+
+This is the same defect class that held an instructor in a report loop on Gemini while their
+account sat far below every quota. **What is verified is the code, not the frequency**: the Gemini
+evidence — HTTP 200 with real input tokens and zero output tokens, and a 503 that was per-model
+rather than per-project — is evidence about Google's infrastructure and does not transfer to
+Anthropic's by argument.
+
+Filed as **`docs/findings/2026-08-21-claude-artifact-unwalked-failure-paths.md`**, with the
+verification commands, what was observed kept separate from what was inferred, and three
+falsification conditions. One of those — that claude.ai may impose its own deadline on an
+artifact's `fetch` — is likely true and undocumented, and would narrow the finding to two paths.
+**Check it before building anything.**
+
+Raised as **`ROADMAP.md` P1.18**, sized **M** with almost none of that being the code: the kit
+needs a `MANIFEST.sha256` re-hash re-verified in a fresh clone, and the 51 sources need a hand
+republish each, every slug byte-identical. P1 rather than P0 because cadets are on the Gemini path,
+which already has the fixes. **Do it as one batch** — the republish is per-artifact and a second
+pass costs the same as the first.
+
+### Pointers, because a document nothing links to is a document nobody reads
+
+`MACHINE-SETUP.md` was reachable from nothing at all until 2026-08-07, which is why setup kept
+being re-derived. So the parity doc is linked from the four places a builder reader is already
+looking: **`PROJECT.md`**'s builder section (which now also states plainly that the kit stops at
+2026-08-20 — eleven markers probed, every count zero), the **`gemini-port` skill header** (a warning
+that a fix written in the porter does not reach the artifact, which has now gone wrong nine times in
+one day), **`_builder/preflight-kit/docs/OPEN_ISSUES.md`** as issue 8 — that file travels with the
+kit to every future deployment, and this defect is *in* the kit, so every port inherits it — and
+**`ROADMAP.md`**.
+
+### Verification
+
+`check_doc_sources.py` clean at **31 of 31**; `DOC-STATUS.json` refreshed and no help topic
+flagged. The ten documents flagged by one additive paragraph in `PROJECT.md` were re-read, not
+waved through: none of them mentions `_builder`, `preflight-kit` or the artifact builder at all,
+and the only one that mentions Gemini describes the cadet's launch path, which this edit does not
+touch. Dates bumped, text untouched.
+
+**No code changed and nothing was rebuilt.** Every claim in the new documents was read out of the
+files it describes — the ladders out of `to_gemini.py`, the parity columns out of the kit skill and
+the cached `.jsx` sources, the constants out of a shipped build. **The cached sources are
+gitignored**, so section 3's claim cannot be re-checked by this repository's own tooling; the
+finding carries the commands to re-verify it against a fresh `sync_artifacts.py pull`.
+
+### Also corrected: the artifact holdings count in PROJECT.md
+
+Found while checking my own counts against the files rather than restating them. It read
+**"51 artifacts, 38 of them published … phys-310 has 17 (4 published)"**; counted from the
+committed `index.json` of each course, **all 51 carry a `published_url`**. The 2026-08-20 republish
+first-published phys-310's remaining 13 drafts, so 38 stopped being the count of *published*
+artifacts that day and became the count of *registered* ones — which is precisely the distinction
+the rest of that paragraph exists to make. It now says so, and points at the 38 Gemini builds as the
+better proxy for what a cadet can actually reach.
+
+---
+
 ## 2026-08-21 (ninth) — Matthew Recker via Claude
 
 ### Submitting stops burning the bridge, the greeting comes back, and faculty stops calling it a backup

@@ -84,6 +84,32 @@ real collision. See `docs/BACKEND_OPTIONS.md` Option A.
 
 ---
 
+## 8. Three request failures never step the model, and there is no request deadline
+
+*Added 2026-08-21. This one is inherited by every port because it is in the kit itself.*
+
+`rawCall` steps the model on 404 and on 429. It does **not** step on a 5xx -- three retries against
+the same model, then a typed throw the student sees as a Retry button that starts over on the model
+that just failed. And `callTutor` treats an empty response (`if (!text) throw ...`) as a generic
+request failure; that check sits **above** `rawCall`, so it bypasses the ladder entirely. There is
+no `AbortController` anywhere, so a request that never returns never returns.
+
+**This was observed as a real hang**, on the Gemini backup builds that PREP ports these artifacts
+into: an instructor was held in a loop that never produced a report while well below every quota.
+The evidence was a usage dashboard showing HTTP 200 with real input tokens and **zero output
+tokens**, and a 503 that was per-model rather than per-project. Both failures returned to the same
+rung because neither recorded the model as spent.
+
+**For a port:** the fix is small and costs nothing when it never fires -- a deadline on the fetch,
+and a ladder step on 5xx and on empty. Distinguish a safety refusal (a real answer -- do not step)
+from an empty candidate (a broken response -- step). Do it **before** publishing, because a
+published artifact is frozen (issue 7) and the fix then costs a hand republish per lesson.
+
+In the PREP repository: `docs/findings/2026-08-21-claude-artifact-unwalked-failure-paths.md` for the
+evidence and `docs/operations/TUTOR-BEHAVIOR-PARITY.md` for the full three-surface table.
+
+---
+
 ## 7. A published artifact is frozen
 
 Not a bug, but the constraint most likely to surprise. The slug, objective keys, submit URL, and

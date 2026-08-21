@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-08-20",
+  "updated": "2026-08-21",
   "_comment": [
     "Dependency index for documents that MUST STAY CURRENT. Each entry names the authoritative",
     "sources a document was derived from, and the date it was last checked against them.",
@@ -41,7 +41,7 @@
       "doc": "site/help/ai-and-your-work.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-08-20",
+      "reviewed": "2026-08-21",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -73,7 +73,7 @@
       "doc": "site/help/director-ai-rules.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-20",
+      "reviewed": "2026-08-21",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -88,7 +88,7 @@
       "doc": "site/help/admin-system-operations.md",
       "kind": "help",
       "tier": "admin",
-      "reviewed": "2026-08-20",
+      "reviewed": "2026-08-21",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -111,7 +111,7 @@
       "doc": "docs/operations/SYSTEM_GUIDE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-20",
+      "reviewed": "2026-08-21",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -154,7 +154,7 @@
       "doc": "site/help/director-course-structure.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-20",
+      "reviewed": "2026-08-21",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/003_term_calendar.sql",
@@ -203,7 +203,7 @@
       "doc": "site/help/instructor-accounts.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-08-20",
+      "reviewed": "2026-08-21",
       "sources": [
         ".ai/instructions/PROJECT.md",
         "site/js/roster-import.js",
@@ -233,7 +233,7 @@
       "doc": ".ai/patterns/python.md",
       "kind": "reference",
       "tier": null,
-      "reviewed": "2026-08-20",
+      "reviewed": "2026-08-21",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -342,6 +342,23 @@
       "note": "The capability-scoped path for an artifact AUTHOR, as ONBOARD-AGGREGATION.md is for a close-out operator. Every command it gives is sync_artifacts.py, so that tool's flags and its course-discovery rule are load-bearing: the runbook tells a reader that an unlisted course means a missing COURSE_PROFILE.md, which is true only while discovery reads the local tree. artifact_parse.py is a source because the doc's central promise -- review works on the first push, with no build log written -- rests on objectives being parsed out of the .jsx. faculty-artifacts.js is a source because the doc says the course tab appears after the push, which is true only while the page discovers courses from Storage. patch_artifacts.py and to_gemini.py became sources on 2026-08-20: section 7 now gives the patch-then-port order as four literal commands and states that the porter REFUSES an unpatched source rather than warning about one, and section 1 tells a reader that grep -c BACKUP_ENDPOINT should report 3. Every one of those is a property of a script rather than of this runbook — a reordered step, a relaxed assertion, or a differently named injected constant makes the page wrong with nothing else to catch it."
     },
     {
+      "doc": "docs/operations/TUTOR-BEHAVIOR-PARITY.md",
+      "kind": "operations",
+      "tier": "staff",
+      "reviewed": "2026-08-21",
+      "sources": [
+        "scripts/artifacts/to_gemini.py",
+        "scripts/artifacts/patch_artifacts.py",
+        ".ai/skills/gemini-port/SKILL.md",
+        "_builder/preflight-kit/skill/preflight-factory-v2/SKILL.md",
+        "_builder/preflight-kit/MANIFEST.sha256",
+        "docs/contracts/INTERACTION-DATA-CONTRACT.md",
+        ".ai/instructions/CORE.md",
+        ".ai/instructions/PROJECT.md"
+      ],
+      "note": "The one table of what each of the three tutor builds carries -- the kit that emits a new artifact, the 51 published sources, and the 38 Gemini builds -- and the carry-forward backlog for the artifact builder. Written 2026-08-21 after nine changes landed on the Gemini builds in one day and none reached the kit. Every source here is load-bearing in a different way. to_gemini.py owns section 4 verbatim: the two ladders quoted there ARE its LADDER_TEACHING and LADDER_LEGACY constants, so a model name added, dropped or reordered makes that section wrong immediately, and --policy is documented as short-lived so its deletion must delete section 4.4 with it. patch_artifacts.py owns the 2026-08-20 fix-set rows in section 2.1 and the keep-the-slug rule in section 5. The kit SKILL.md and MANIFEST.sha256 are what section 2.2's central claim was measured against -- eleven markers probed, all zero -- so any kit update invalidates that column and is exactly the event this doc exists to be re-read on. The gemini-port skill owns how a build is produced and verified. The data contract owns the submit wire format all three share, and its 3.2 slug rule is what section 5 warns is a rule about a new OFFERING and not about a patch. CORE.md and PROJECT.md carry the no-Node-on-the-deploy-path rule and the sharp-edges table that section 7 restates. Section 3's claim -- that three report-stage hang bugs are still live in the Claude artifact -- was read out of the cached .jsx sources, which are gitignored and cannot be listed as a source here; re-verify it against _builder/courses/*/artifacts/*.jsx rather than trusting this file."
+    },
+    {
       "doc": "docs/operations/PUBLISH-ARTIFACT.md",
       "kind": "operations",
       "tier": null,
@@ -398,7 +415,7 @@
       "doc": "docs/operations/MACHINE-SETUP.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-20",
+      "reviewed": "2026-08-21",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",

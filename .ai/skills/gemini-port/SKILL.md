@@ -30,6 +30,15 @@ description: >
 
 Where this skill and [`CORE.md`](../../instructions/CORE.md) disagree, `CORE.md` wins.
 
+> **A fix written here does not reach the Claude artifact, and that has gone wrong nine times in
+> one day.** This tool is the cheapest of the three surfaces to change -- regenerate, commit, push
+> -- so it is where a tutor fix naturally lands, and the artifact builder then quietly keeps
+> producing artifacts without it. Before adding a behaviour to the porter, decide whether it
+> belongs to the transport or to the lesson, and record the answer in
+> [`docs/operations/TUTOR-BEHAVIOR-PARITY.md`](../../../docs/operations/TUTOR-BEHAVIOR-PARITY.md)
+> -- the three-surface table, the planned ladder in `tests/browser/`, and the carry-forward
+> backlog for `_builder/preflight-kit/`.
+
 ---
 
 ## Why this exists, and what it is not
