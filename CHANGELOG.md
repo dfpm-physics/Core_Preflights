@@ -8,6 +8,88 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-20 (fifth) — Matthew Recker via Claude
+
+### All 51 artifacts republished with the fix set, and 38 lesson rows repointed at them
+
+**The course director republished every artifact** carrying the 2026-08-20 fix set (see the fourth
+entry for what changed), then handed back a file mapping each staged filename to its new claude.ai
+URL and the URL it replaced. This entry records the reconciliation.
+
+**Nothing about the fix set reached a cadet until this ran.** A patched `.jsx` in the repository is
+inert; the lesson row points at a claude.ai artifact, and until that row is repointed, cadets keep
+getting the old build. The gap between the previous entry and this one is exactly that window.
+
+**Verified before anything was written**, because the failure mode here is silent — a mis-pasted
+row sends a cohort at the wrong lesson and nothing reports it:
+
+- 51 rows, 38 `replace` + 13 `first-publish`, covering **exactly** the 51 staged files — no extras,
+  none missing.
+- Every URL well-formed and **unique**; no row where the new URL equalled the old one.
+- Every filename parsed back to a slug that exists in the course index, with a matching title and
+  lesson number, and **that slug was confirmed present inside the `.jsx` itself** rather than
+  trusted from the filename.
+- **All 38 `old_url` values matched what the repository already recorded**, and separately matched
+  what was actually stored in `app.activities` — 38 of 38, zero discrepancies. That agreement
+  across three independent sources is what made the update safe to run unattended.
+- Three new URLs sampled live: HTTP 200.
+
+**38 rows updated**, by `scripts/artifacts/update_artifact_urls.py` (new). It reads the file,
+checks every row against what is stored **before** writing anything, and refuses the whole run on a
+single surprise — a partial update is worse than none, because afterwards it is indistinguishable
+from a complete one. Each `UPDATE` is additionally guarded on the old value, so a row that moved
+between the read and the write is left alone rather than overwritten. A rollback snapshot is
+written first and `--rollback` replays it.
+
+Read back independently afterwards: **38 of 38 exact**, activity count unchanged at 44, and
+`submissions` / `submission_activities` / `grades` untouched at 3888 / 3889 / 3960. Confirmed
+end-to-end through the real faculty lesson editor as well — all five phys-110 lessons serve the new
+URLs and **no old URL survives anywhere in that page**.
+
+**The slug did not move on any of them**, which is the whole reason this was a one-field update
+rather than 38 new lesson rows and 38 orphaned cohorts.
+
+### The 13 first-publish artifacts were NOT registered, deliberately
+
+Thirteen phys-310 lessons were published to claude.ai for the first time. They have **no
+`app.activities` row, and no `app.assignments` row either** — that course has five assignments in
+the database (lessons 01, 02, 03, 04, 06) against seventeen built artifacts.
+
+So registering them is not a URL update. It is creating an assignment, an offering, a due date, a
+release window and a publish decision for each — course scheduling, which belongs to the course
+director in `site/faculty/lessons.html`. CORE.md §2 records what happens when an offering is
+created any other way: an empty `due_by_day` is a documented default meaning *"`due_at` applies to
+everyone"*, so every section silently inherits the M-day deadline. It did that to 285 cadets on
+2026-08-09, and it is invisible to a spot check because `due_at` reads correctly.
+
+`update_artifact_urls.py` reports these rows and skips them. Their URLs **are** recorded in each
+course's `index.json`, so the artifacts are not lost track of — they are simply not yet lessons.
+
+### Also noted
+
+**`_builder/courses/*/index.json` is gitignored**, so the republish is recorded there for this
+machine only. The durable copy lives in the private `artifact-sources` bucket and needs a
+`sync_artifacts.py push`, **which has not been run** — the patched `.jsx` and the restamped index
+exist locally and in nobody else's clone. A fresh clone that pulls from the bucket gets the
+pre-patch sources, and `to_gemini.py` will refuse them by name rather than build something wrong.
+
+**Six interactive activities were left alone**, correctly: five phys-215 rows carrying pre-2026-07-28
+slugs with no random suffix, and one phys-310 `lesson-01` whose `artifact_url` was already NULL.
+None appears in the republish file and none is part of this term's set.
+
+**`supabase/admin/app_invariant_test.py` crashes on its last effort case** — `effort=NULL` returns a
+NULL `points_earned` and the test does `float(None)`. Pre-existing (unmodified since the v2
+cutover), unrelated to anything here, and harmless to the database: it runs with `autocommit = False`
+and builds its own fixture, so the crash discards the transaction. Counts were checked afterwards
+and nothing leaked.
+
+**Verification that ran:** `tests/app-schema/run.mjs` 542/10 — byte-identical to the pre-change
+baseline; `pass.mjs --student` 5/5 live pages; the faculty lesson-editor check above. **No cadet has
+yet taken a republished lesson**, so the artifacts are proven to parse, render and be reachable, but
+not to have been worked end to end by a student.
+
+---
+
 ## 2026-08-20 (fourth) — Matthew Recker via Claude
 
 ### The Claude artifact stops dead-ending: it steps down a model, sends less, and can hand a cadet to Gemini mid-lesson without losing their conversation

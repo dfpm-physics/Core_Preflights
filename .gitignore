@@ -82,3 +82,8 @@ break_in_case_of_emergency/gpt_instruction.md
 # clone's history permanently. Regenerate with `python scripts/artifacts/stage_for_upload.py`;
 # delete the directory when the republish is done.
 _upload/
+
+# Rollback snapshots from scripts/artifacts/update_artifact_urls.py. Operational state, not source
+# -- the durable record of a republish is the CHANGELOG entry and each course's index.json. Keep
+# the file locally until the republish is confirmed good, then delete it.
+artifact-url-rollback*.json
