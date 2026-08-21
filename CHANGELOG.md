@@ -8,6 +8,79 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-21 (ninth) — Matthew Recker via Claude
+
+### Submitting stops burning the bridge, the greeting comes back, and faculty stops calling it a backup
+
+Four things, on the director's word. **All 38 live builds rebuilt** under `--policy legacy`; the
+`tests/browser/` sandbox restaged under `--policy teaching` so it now carries **everything below
+plus the ladder reorder**, which remains the only difference between them.
+
+**Submitting no longer destroys the only way back.** `clearSession()` fired on the Submit *click*,
+before the receiver had validated anything — and the receiver rejects for several reasons, one of
+which prints *"Re-open the interactive lesson and submit again from the finish screen."* That
+remedy was impossible: the transcript, the report and the submit link had all just been erased.
+`stampSubmitted()` writes `submitted: true` into the snapshot instead, synchronously in the click
+handler because the navigation leaves no further render. The start screen reads it and says
+**"already submitted"** rather than offering finished work back as unfinished — which is the one
+thing clearing it ever bought.
+
+**The scripted opening greets again.** The prompt says *"OPENING. Greet the cadet briefly and set
+expectations. Then ask, as your very first content question, VERBATIM: …"* — and the app-delivered
+turn had been sending only the second half since it took the turn over from the model. A cadet met
+a bare question with nothing saying which lesson they were in. `OPENING_WELCOME` is a **separate**
+constant, appended **before** `OPENING_QUESTION`, which stays exactly the verbatim string
+`openerStage` matches on, so stage detection is untouched. The lesson name is **extracted from the
+artifact's own header** and the port **refuses** rather than guessing: a build that greets a cadet
+into the wrong lesson is worse than one that does not greet them at all. *(Teaching policy only —
+live builds still have the model write its own opening.)*
+
+**The faculty assignment list launches the Gemini build.** `site/faculty/lessons.html` carried
+Launch (claude.ai) with a separate **Backup ↗** beside it. Launch now opens the Gemini build
+through the router, the second button is retired — two controls opening the same URL is what this
+replaces — and Claude remains the fallback where no build exists, for the same reason as on the
+student page: hiding it there would leave an instructor no way to open the lesson a cadet is
+asking about. The manifest can also be **unknown**, and unknown renders as a disabled button
+rather than silently reverting every card to Claude.
+
+**And faculty copy stops contradicting what cadets see.** `artifacts.html` and
+`faculty-artifacts.js` said *"a fallback, not an alternative"* and *"offered only when claude.ai
+turns them away"* in four places. A director reading that would answer a cadet's question wrongly.
+
+#### Verification
+
+`gemini-finish-bar.mjs` gained two passes:
+
+- **Submit stamps.** Navigation is blocked with a capture-phase `preventDefault` so React's own
+  `onClick` still runs, then localStorage is inspected: the snapshot **survives**, carries the
+  whole transcript, and is stamped — and a reload then reads *already submitted*, not *unfinished*.
+- **The greeting**, skipped on a build where the model still writes the opening. A fresh session,
+  both scripted turns driven, asserting the second one greets, **names the lesson read from the
+  build's own header**, and still ends on the verbatim question — with no error bar, since neither
+  turn costs a request.
+
+`lesson-editor.mjs` had two failures that were **the harness, not the page**: "launchable" meant an
+`http(s)` href, which was right while Launch was always claude.ai and read five healthy phys-110
+cards as green-but-broken now that it is a relative router path; and the whole Backup-link section
+tested a button that is gone. The invariant that section protected — never a build path, always the
+router, always a slug the manifest carries — is now asserted on Launch instead.
+
+`gemini-finish-bar` **26/26** on all three courses (**31/31** on a teaching build, which adds the
+greeting pass), `gemini-build` **7/7**, `gemini-model-ladder` **17/17** legacy and **28/28**
+teaching, `gemini-handoff` **12/12**, `lesson-editor` **26/26**, `pass.mjs` **9/9**.
+
+**Three harness bugs of my own, all found by the tests failing rather than by inspection**: the
+seeder re-ran on every navigation and overwrote the stamp it was meant to check; it installed its
+`fetch` stub *after* an early return, so any page with an existing session hit the real Google
+endpoint and never enabled Start; and it waited for Start to be enabled *before* typing the name it
+is enabled by. Each looked exactly like a broken build.
+
+**Still Node-only — no real tutor turn.** Two known defects remain open, both recorded in the
+seventh entry: a report wrapped in code fences blanks itself, and `isReportMsg` is a bare substring
+test that a tutor merely *mentioning* the heading can latch.
+
+---
+
 ## 2026-08-21 (eighth) — Matthew Recker via Claude
 
 ### lz-string gave up after ten seconds and told nobody

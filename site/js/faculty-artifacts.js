@@ -288,8 +288,10 @@ export async function registeredSlugs(slugs) {
 //   · A backup submits under the SAME slug as the Claude artifact, so its report lands in the
 //     same activity row and rolls up identically. It is not a second assignment and cannot
 //     split a cohort.
-//   · It is a FALLBACK, not an alternative. The Claude artifact is the intended path; the backup
-//     is rougher and exists for the cadet that path has locked out.
+//   · It is the DEFAULT path as of 2026-08-21, not a fallback. Free-tier Claude was timing
+//     cadets out mid-lesson, so both lesson pages launch the Gemini build where one exists and
+//     fall back to the Claude artifact only where one does not. Do not restore the old wording
+//     without changing those two pages back with it.
 //   · Backups are REGENERATED, never hand-edited — `scripts/artifacts/to_gemini.py` writes them
 //     and the generated HTML carries a DO-NOT-EDIT banner.
 //   · An artifact with NO backup is normal, not broken: one that was never published on

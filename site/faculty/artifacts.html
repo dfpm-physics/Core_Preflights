@@ -346,11 +346,13 @@
           Sources are read from the private <code>artifact-sources</code> bucket; the
           <b>registered</b> lamp is a live read of <code>activities</code>. Nothing on this page
           writes to the gradebook.
-          <br><b>Backup</b> is the Gemini build a cadet is offered when claude.ai turns them away
-          — the same lesson, submitted under the same slug, so its report lands in this
-          artifact's activity row and rolls up identically. It is a fallback, not an
-          alternative, and an artifact never published on claude.ai has none by design. Builds
-          are regenerated with <code>scripts/artifacts/to_gemini.py</code>, never hand-edited.
+          <br><b>Gemini build</b> is the page cadets actually get. Since 2026-08-21 it is the
+          DEFAULT path, not a fallback — free-tier Claude was timing cadets out mid-lesson, so
+          the lesson pages launch this and the Claude artifact is offered only where no Gemini
+          build exists yet. It submits under the same slug, so its report lands in this
+          artifact's activity row and rolls up identically. An artifact never published on
+          claude.ai has none by design. Builds are regenerated with
+          <code>scripts/artifacts/to_gemini.py</code>, never hand-edited.
           ${state.backups.error ? `<br><b>The backup list could not be read</b>
             (${esc(state.backups.error)}), so the Backup column says <code>?</code> rather than
             guessing.` : ''}</p>`;
@@ -385,9 +387,9 @@
       }
       const b = AL.backupFor(state.backups, a.slug);
       return b
-        ? `<span class="tag blue" title="Gemini fallback build · ${esc(b.path)}">Gemini</span>`
-        : '<span class="tag" title="No backup build. An artifact that was never published on'
-          + ' claude.ai has nothing to back up.">—</span>';
+        ? `<span class="tag blue" title="Gemini build — what cadets are launched into · ${esc(b.path)}">Gemini</span>`
+        : '<span class="tag" title="No Gemini build, so this lesson still launches the Claude'
+          + ' artifact. An artifact that was never published on claude.ai has none by design.">—</span>';
     }
 
     function rowHTML(a) {
@@ -582,9 +584,9 @@
         </dl>
         <div class="al-cardbody">
           <span class="muted">The same lesson on Google Gemini, run with the cadet's own free API
-            key and offered only when claude.ai turns them away — a fallback, not an alternative.
-            It submits under <b>this same slug</b>, so its reports land in this artifact's
-            activity row and roll up identically. Regenerated, never hand-edited.</span>
+            key. Since 2026-08-21 this is the page cadets are launched into by default, not a
+            fallback. It submits under <b>this same slug</b>, so its reports land in this
+            artifact's activity row and roll up identically. Regenerated, never hand-edited.</span>
           <div class="al-bklinks">
             <a class="btn btn-sm" href="${esc(b.url)}" target="_blank" rel="noopener">Open the backup</a>
             <a class="al-bkrouter" href="${esc(b.router)}" target="_blank" rel="noopener">What a cadet sees →</a>

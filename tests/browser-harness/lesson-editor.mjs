@@ -102,8 +102,15 @@ const badgeAgreement = await page.$$eval('.card', (els) => els.map((c) => {
   const green = badge.classList.contains('full');
   const amber = badge.classList.contains('partial');
   const grey  = badge.classList.contains('pending');
-  const launchable = !!launch && launch.tagName === 'A' && /^https?:/i.test(launch.getAttribute('href') || '');
-  return { green, amber, grey, hasLaunch: !!launch, launchable,
+  // TWO shapes are launchable since 2026-08-21. Launch opens the Gemini build through the
+  // relative router path where one exists, and falls back to the absolute claude.ai artifact
+  // where it does not. Testing only for http(s) read five healthy phys-110 cards as
+  // green-but-broken -- the harness being out of date, not the page.
+  const href = launch ? (launch.getAttribute('href') || '') : '';
+  const viaRouter = /^\.\.\/student\/backup\.html\?i=/.test(href);
+  const launchable = !!launch && launch.tagName === 'A'
+    && (viaRouter || /^https?:/i.test(href));
+  return { green, amber, grey, hasLaunch: !!launch, launchable, viaRouter, href,
            title: (c.querySelector('.card-title')?.textContent || '').trim() };
 }).filter(Boolean));
 
@@ -121,45 +128,39 @@ check('a lesson with no interaction offers no Launch button at all', greyWithLau
 console.log(`         badges: ${badgeAgreement.filter(b => b.green).length} green, `
   + `${badgeAgreement.filter(b => b.amber).length} amber, ${badgeAgreement.filter(b => b.grey).length} none`);
 
-/* -- The Gemini backup link ------------------------------------------------ */
-section('the Backup link agrees with the manifest');
+/* -- Launch opens the Gemini build, through the router --------------------- */
+section('Launch agrees with the backup manifest');
 
-// The card offers a Backup button beside Launch so an instructor can open the same page a cadet
-// is sent to when claude.ai answers 429. Three assertions, and the middle one is the point: the
-// button must go through the ROUTER, because which build a slug resolves to is allowed to change
-// and only `student/backup.html` is allowed to know it. A card linking straight at
-// `gemini/<course>/<slug>.html` would keep working right up until a build was renamed.
+// Until 2026-08-21 this card carried Launch (claude.ai) with a separate "Backup ↗" beside it.
+// That is now one control: free-tier Claude was timing cadets out, so Launch opens the Gemini
+// build wherever one exists -- the same page the cadet gets -- and the second button is gone.
+//
+// The invariant the old section protected survives and is asserted here instead: the link must
+// go through the ROUTER, because which build a slug resolves to is allowed to change and only
+// `student/backup.html` may know it. A card pointing straight at `gemini/<course>/<slug>.html`
+// would keep working right up until a build was renamed.
 const manifest = await (await fetch(`${BASE}/site/data/backup-builds.json`)).json()
   .catch(() => ({ builds: {} }));
 const known = new Set(Object.keys(manifest.builds || {}));
 
-const backupCards = await page.$$eval('.card', els => els.map((c) => {
-  const all = [...c.querySelectorAll('a,button')];
-  const bk = all.find(b => /^Backup/.test((b.textContent || '').trim()));
-  return {
-    title: (c.querySelector('.card-title')?.textContent || '').trim(),
-    hasLaunch: all.some(b => /^Launch interaction/.test((b.textContent || '').trim())),
-    href: bk ? bk.getAttribute('href') : null,
-    disabled: bk ? bk.disabled === true : false,
-    present: !!bk,
-  };
-}));
-
-const offered = backupCards.filter(b => b.present && !b.disabled);
-check(`at least one lesson offers a backup (${offered.length} of ${backupCards.length} cards)`,
-      offered.length > 0, 'no Backup link rendered - is site/data/backup-builds.json reachable?');
-check('every Backup link goes through the router, never at a build path',
-      offered.every(b => /^\.\.\/student\/backup\.html\?i=/.test(b.href || '')),
-      offered.map(b => b.href).filter(h => !/backup\.html/.test(h || '')).join('; '));
-// A link to a slug the manifest does not carry is a 'no build for this lesson' page dressed up as
-// a working one - the exact confident-wrong claim loadBackups()'s error channel exists to prevent.
-const unknown = offered.filter(b => !known.has(decodeURIComponent((b.href || '').split('?i=')[1] || '')));
-check('every Backup link names a slug the manifest actually carries',
+const routed = badgeAgreement.filter(b => b.viaRouter);
+check(`at least one lesson launches its Gemini build (${routed.length} of ${badgeAgreement.length} cards)`,
+      routed.length > 0,
+      'no card launches through the router - is site/data/backup-builds.json reachable?');
+check('every routed Launch goes through student/backup.html, never at a build path',
+      routed.every(b => !/gemini\//.test(b.href)),
+      routed.map(b => b.href).filter(h => /gemini\//.test(h)).join('; '));
+// A link to a slug the manifest does not carry is a "no build for this lesson" page dressed up
+// as a working one - the confident-wrong claim loadBackups()'s error channel exists to prevent.
+const unknown = routed.filter(b => !known.has(decodeURIComponent((b.href || '').split('?i=')[1] || '')));
+check('every routed Launch names a slug the manifest actually carries',
       unknown.length === 0, unknown.map(b => b.title).join('; '));
-// A lesson with no interaction has no artifact, so it cannot have a backup of one.
-const orphan = backupCards.filter(b => !b.hasLaunch && b.present);
-check('no lesson without an AI Interaction offers a Backup', orphan.length === 0,
-      orphan.map(b => b.title).join('; '));
+// The retired button must stay retired: two controls opening the same URL is what this replaced.
+const stillBackup = await page.$$eval('.card', els =>
+  els.filter(c => [...c.querySelectorAll('a,button')]
+    .some(b => /^Backup/.test((b.textContent || '').trim()))).length);
+check('the separate Backup button is gone — Launch opens that page now', stillBackup === 0,
+      `${stillBackup} cards still render one`);
 
 /* ── A NEW assignment ─────────────────────────────────────────────────────── */
 section('a new assignment starts written-only');

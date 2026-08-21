@@ -100,20 +100,11 @@ page.on('response', r => { if (r.status() === 404) notFound.push(new URL(r.url()
 // would read a real cadet's. The fetch stub answers only the model listing — the one call the
 // start screen makes, which doubles as the key check. generateContent is deliberately NOT
 // stubbed: nothing here should reach it, and a stub would hide it if something did.
-await page.evaluateOnNewDocument((slug, name, report) => {
-  localStorage.setItem('prep.gemini.apikey', 'AIzaSyTESTKEYNOTREALDONOTUSE0000000000000');
-  localStorage.setItem('prep.gemini.session.' + slug, JSON.stringify({
-    v: 1, id: slug, mode: 'graded', cadetId: name, ts: Date.now(),
-    msgs: [
-      { role: 'user', hidden: true, content: 'Begin the session now.' },
-      { role: 'assistant', content: 'Ready to start?' },
-      { role: 'user', content: 'Yes.' },
-      { role: 'assistant', content: report },      // ends on the TUTOR, so no request is made
-    ],
-    activeSec: 600, reportSec: 600, reportPhase: true, extSent: true, payloadTried: true,
-    hasReport: true, reportText: report, payloadState: 'ready',
-    structured: { schema: 1, effort: 4, overall_understanding: 3 },
-  }));
+function seed(slug, name, report) {
+  // The fetch stub goes FIRST and is installed unconditionally. It used to sit after the
+  // seed-once guard, so any page that already had a session skipped it, hit the real Google
+  // endpoint, never reached connStatus === "ok", and left Start disabled -- which read as the
+  // build failing to restore rather than as the harness failing to stub.
   const real = window.fetch;
   window.fetch = (input, init) => {
     const u = String((input && input.url) || input || '');
@@ -126,18 +117,36 @@ await page.evaluateOnNewDocument((slug, name, report) => {
     }
     return real(input, init);   // same-origin assets only; a tutor call would fail loudly
   };
-}, SLUG, NAME, REPORT);
+  localStorage.setItem('prep.gemini.apikey', 'AIzaSyTESTKEYNOTREALDONOTUSE0000000000000');
+  // evaluateOnNewDocument runs on EVERY navigation, so a reload re-ran this and overwrote the
+  // session the page had just stamped. Seed only when there is nothing there, which is also
+  // what a real first visit looks like.
+  if (localStorage.getItem('prep.gemini.session.' + slug)) return;
+  localStorage.setItem('prep.gemini.session.' + slug, JSON.stringify({
+    v: 1, id: slug, mode: 'graded', cadetId: name, ts: Date.now(),
+    msgs: [
+      { role: 'user', hidden: true, content: 'Begin the session now.' },
+      { role: 'assistant', content: 'Ready to start?' },
+      { role: 'user', content: 'Yes.' },
+      { role: 'assistant', content: report },      // ends on the TUTOR, so no request is made
+    ],
+    activeSec: 600, reportSec: 600, reportPhase: true, extSent: true, payloadTried: true,
+    hasReport: true, reportText: report, payloadState: 'ready',
+    structured: { schema: 1, effort: 4, overall_understanding: 3 },
+  }));
+}
+await page.evaluateOnNewDocument(seed, SLUG, NAME, REPORT);
 
 console.log(`\n=== finish bar — ${target} ===`);
 await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
 await page.waitForFunction(() => document.querySelector('#root')?.childElementCount > 0,
                            { timeout: 30000 }).catch(() => {});
 
+await page.type('#cadet-id', NAME);
 await page.waitForFunction(() => {
   const b = [...document.querySelectorAll('button')].find(x => /Start Preflight/i.test(x.textContent));
-  return b && !b.disabled;
+  return b && !b.disabled;                       // needs the name AND connStatus === 'ok'
 }, { timeout: 20000 }).catch(() => {});
-await page.type('#cadet-id', NAME);
 
 // Checked AFTER the name, deliberately: loadSession refuses a graded snapshot whose cadetId
 // does not match, so the notice cannot appear on an empty box. That is the design -- one cadet
@@ -226,7 +235,65 @@ const real = pageErrors.filter(e =>
   !/favicon/i.test(e) && !(missing.length === 0 && /Failed to load resource/i.test(e)));
 ok('no page/console errors', real.length === 0, real.slice(0, 2).join(' | '));
 
-// ── Second pass: lz-string never arrives ───────────────────────────────────
+// ── Second pass: submitting must not destroy the way back ───────────────────
+// clearSession() used to fire on the click, BEFORE the receiver validated anything -- and the
+// receiver's own rejection copy says "Re-open the interactive lesson and submit again from the
+// finish screen", which that erasure made impossible.
+console.log('\n--- submit stamps the session instead of erasing it ---');
+breakLz = false;
+const p3 = await browser.newPage();
+await p3.evaluateOnNewDocument(seed, SLUG, NAME, REPORT);
+await p3.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
+await p3.type('#cadet-id', NAME);
+await p3.waitForFunction(() => {
+  const b = [...document.querySelectorAll('button')].find(x => /Start Preflight/i.test(x.textContent));
+  return b && !b.disabled;                       // needs the name AND connStatus === 'ok'
+}, { timeout: 30000 }).catch(() => {});
+await p3.evaluate(() =>
+  [...document.querySelectorAll('button')].find(x => /Start Preflight/i.test(x.textContent)).click());
+await p3.waitForFunction(() => !!document.querySelector('.finish-submit'), { timeout: 20000 })
+  .catch(() => {});
+
+// Capture-phase preventDefault stops the navigation; React's onClick is delegated at the root
+// and still runs, which is exactly the handler under test.
+const p3state = await p3.evaluate(() => ({
+  bar: !!document.querySelector('.finish-bar'),
+  submit: !!document.querySelector('.finish-submit'),
+  wait: !!document.querySelector('.finish-wait'),
+  started: !!document.querySelector('.composer'),
+  saved: !!localStorage.getItem(Object.keys(localStorage).find(k => k.indexOf('session') > -1) || ''),
+  text: document.body.innerText.slice(0, 300),
+}));
+ok('the restored session reaches the finish bar with a live submit link', p3state.submit,
+   JSON.stringify(p3state));
+if (p3state.submit) await p3.evaluate(() => {
+  document.addEventListener('click', (e) => e.preventDefault(), true);
+  document.querySelector('.finish-submit').click();
+});
+const stamped = await p3.evaluate(s => {
+  const raw = localStorage.getItem('prep.gemini.session.' + s);
+  return { present: !!raw, submitted: raw ? !!JSON.parse(raw).submitted : false,
+           msgs: raw ? (JSON.parse(raw).msgs || []).length : 0 };
+}, SLUG);
+ok('the session SURVIVES the submit click — the receiver can still send them back',
+   stamped.present, 'erased');
+ok('and it carries the whole transcript, not a stub', stamped.msgs >= 2, `${stamped.msgs} messages`);
+ok('the snapshot is stamped submitted', stamped.submitted);
+
+// Reloading is what a cadet does when the receiver turns them away. The old behaviour offered
+// finished work back as "unfinished"; that is the one thing clearing it bought, and the flag
+// has to buy it instead or this trade is not worth making.
+await p3.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
+await p3.waitForFunction(() => document.querySelector('#root')?.childElementCount > 0,
+                         { timeout: 30000 }).catch(() => {});
+await p3.type('#cadet-id', NAME);
+await p3.waitForFunction(() => /already submitted/i.test(document.body.innerText), { timeout: 15000 })
+  .catch(() => {});
+const back = await p3.evaluate(() => document.body.innerText);
+ok('coming back says "already submitted", not "unfinished session"',
+   /already submitted/i.test(back) && !/unfinished session/i.test(back));
+
+// ── Fourth pass: lz-string never arrives ───────────────────────────────────
 // Without it there is no submit URL at all, because the URL *is* the report compressed into a
 // hash. The old loader gave up after 10s and recorded nothing, so the cadet got a finished
 // report beside a dead "Preparing submit" with no error and nothing to do. What is asserted
@@ -260,11 +327,11 @@ await p2.evaluateOnNewDocument((slug, name, report) => {
 await p2.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
 await p2.waitForFunction(() => document.querySelector('#root')?.childElementCount > 0,
                          { timeout: 30000 }).catch(() => {});
+await p2.type('#cadet-id', NAME);
 await p2.waitForFunction(() => {
   const b = [...document.querySelectorAll('button')].find(x => /Start Preflight/i.test(x.textContent));
-  return b && !b.disabled;
+  return b && !b.disabled;                       // needs the name AND connStatus === 'ok'
 }, { timeout: 20000 }).catch(() => {});
-await p2.type('#cadet-id', NAME);
 await p2.evaluate(() =>
   [...document.querySelectorAll('button')].find(x => /Start Preflight/i.test(x.textContent)).click());
 await p2.waitForFunction(
@@ -286,6 +353,50 @@ ok('it says the report is safe and names the remedy',
 // 40s-per-attempt timer, the elapsed time is what shows it.
 ok('the three attempts settle fast, on onerror rather than on the timeout',
    elapsed < 40000, `${Math.round(elapsed / 1000)}s`);
+
+// ── Third pass: the scripted opening greets before it asks ────────────────
+// Only where the app delivers the opening at all. A legacy build has the model write it, so
+// there is nothing here to check and the pass is skipped rather than failed.
+if (src.includes('const APP_OPENING = true')) {
+  console.log('\n--- the scripted opening (APP_OPENING build) ---');
+  // Explicit: this pass runs after the one that withholds lz-string, and the scripted turns
+  // do not need lz at all. Passing with it still broken would be luck, not a result.
+  breakLz = false;
+  const p4 = await browser.newPage();
+  await p4.evaluateOnNewDocument(seed, SLUG, NAME, REPORT);
+  // A FRESH graded session: clear the seeded one so the opening actually runs.
+  await p4.evaluateOnNewDocument(s => localStorage.removeItem('prep.gemini.session.' + s), SLUG);
+  await p4.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
+  await p4.type('#cadet-id', NAME);
+  await p4.waitForFunction(() => {
+    const b = [...document.querySelectorAll('button')].find(x => /Start Preflight/i.test(x.textContent));
+    return b && !b.disabled;                       // needs the name AND connStatus === 'ok'
+  }, { timeout: 30000 }).catch(() => {});
+  await p4.evaluate(() =>
+    [...document.querySelectorAll('button')].find(x => /Start Preflight/i.test(x.textContent)).click());
+  await p4.waitForFunction(() => /Honor Code/i.test(document.body.innerText), { timeout: 20000 })
+    .catch(() => {});
+  ok('turn one is the Honor Code reminder', /Honor Code/i.test(await p4.evaluate(() => document.body.innerText)));
+
+  await p4.type('.composer textarea', 'ready');
+  await p4.evaluate(() =>
+    [...document.querySelectorAll('button')].find(x => x.textContent.trim() === 'Send').click());
+  await p4.waitForFunction(() => /interesting or difficult/i.test(document.body.innerText),
+                           { timeout: 20000 }).catch(() => {});
+  const open2 = await p4.evaluate(() => document.body.innerText);
+  // The lesson name is read from the build, so read it the same way here rather than typing it.
+  const tm = /<div className="title">([^<]*)<\/div>/.exec(src);
+  const lesson = tm ? tm[1].replace(/&mdash;|&amp;/g, '').trim() : '';
+  const word = (lesson.match(/[A-Za-z]{4,}/g) || ['Lesson']).slice(-1)[0];
+  ok('turn two GREETS — it says welcome, which the bare question did not',
+     /welcome to/i.test(open2));
+  ok(`turn two names the lesson (looked for "${word}" from the build's own header)`,
+     open2.indexOf(word) > -1);
+  ok('turn two still asks the verbatim question, last',
+     /interesting or difficult in the reading/i.test(open2));
+  ok('both scripted turns cost no tutor request — no error bar appeared',
+     !/did not answer|rejected that request|empty answer/i.test(open2));
+}
 
 await browser.close();
 server.close();

@@ -113,8 +113,15 @@ if (policy === 'teaching') {
   // Both call sites, because the helper existing proves nothing about its being used.
   ok(src.includes('await sleep(scriptedDelay(OPENING_HONOR))'),
      'teaching: the Honor Code turn is paced');
-  ok(src.includes('scriptedDelay(OPENING_QUESTION)'),
-     'teaching: the opening question is paced');
+  ok(src.includes('scriptedDelay(OPENING_WELCOME + OPENING_QUESTION)'),
+     'teaching: the greeting-plus-question turn is paced as one');
+  // The prompt's instruction is "Greet the cadet briefly and set expectations. Then ask ...
+  // VERBATIM". The scripted turn delivered only the second half until 2026-08-21, so a cadet met
+  // a bare question with nothing saying which lesson they were in.
+  ok(src.includes('const OPENING_WELCOME ='),
+     'teaching: the scripted opening greets before it asks');
+  ok(/content: OPENING_WELCOME \+[^\n]*\+ OPENING_QUESTION/.test(src),
+     'teaching: the verbatim question is appended LAST, so openerStage still matches on it');
   ok(isLite(S.MODEL_CHAT[S.MODEL_CHAT.length - 1]),
      'chat still ENDS on the high-quota floor - lite is where it stops, not where it starts');
 

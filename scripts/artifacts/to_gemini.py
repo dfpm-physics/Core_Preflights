@@ -285,6 +285,12 @@ RE_HONOR = re.compile(
     rb'Begin the conversation by reminding the cadet:\s*\n\s*"(.*?)"\s*\n', re.S)
 RE_OPENING_Q = re.compile(rb'VERBATIM:\s*\n\s*"(.*?)"\s*\n', re.S)
 
+# The lesson name for the scripted greeting. Read out of the artifact's own header rather
+# than passed in from the index: a greeting that names the wrong lesson is worse than none,
+# and the header is the string the cadet is already looking at. Present twice in all 51
+# sources (start screen and chat header); the first is taken and both are asserted equal.
+RE_LESSON_TITLE = re.compile(rb'<div className="title">([^<]*)</div>')
+
 
 def unwrap(b: bytes) -> str:
     """Collapse a hard-wrapped, indented prompt quote into one line of prose."""
@@ -308,6 +314,16 @@ def port(src: bytes, slug: str, verbose: bool = False, ladder: str = "teaching")
             "  hard-code the new wording here.")
     opening_honor = unwrap(mh.group(1))
     opening_question = unwrap(mq.group(1))
+
+    titles = [unwrap(t) for t in RE_LESSON_TITLE.findall(flat)]
+    if not titles:
+        raise SystemExit(
+            "  FAILED [lesson title]: no <div className=\"title\"> in this artifact.\n"
+            "  The scripted greeting names the lesson and must read it from the build.\n"
+            "  Fix RE_LESSON_TITLE against the source -- do NOT hard-code a title here.")
+    if len(set(titles)) != 1:
+        raise SystemExit(f"  FAILED [lesson title]: header titles disagree: {set(titles)}")
+    lesson_title = titles[0]
 
     p = Porter(src, slug)
     GROUNDING = (b"TEXTBOOK_REFERENCE", b"LESSON_CONFIG", b"EXTENSION_PROBLEMS", b"REPORT_FORMAT")
@@ -504,6 +520,23 @@ function saveSession(snap) {
 function clearSession() {
   try { localStorage.removeItem(sessionStore()); } catch (e) {}
 }
+
+// Submitting used to CLEAR the session, on the click, before the receiver had validated
+// anything. It rejects for several reasons -- an unreadable report, a faculty login, an auth
+// redirect that loses the fragment -- and for one of them it prints "Re-open the interactive
+// lesson and submit again from the finish screen." That remedy was impossible: the
+// transcript, the report and the link had all just been erased.
+//
+// Stamped instead. Synchronous read-modify-write, because the click navigates away and the
+// snapshot effect will not get another render. The one thing clearing bought -- not offering
+// finished work back as "unfinished" -- is bought by the flag instead, and the start screen
+// reads it.
+function stampSubmitted() {
+  try {
+    const s = JSON.parse(localStorage.getItem(sessionStore()) || "null");
+    if (s) { s.submitted = true; localStorage.setItem(sessionStore(), JSON.stringify(s)); }
+  } catch (e) {}
+}
 // Returns a snapshot only when it is unambiguously THIS cadet resuming THIS lesson in THIS
 // mode. Anything else is discarded rather than repaired -- a partly-restored graded session
 // would be submitted as though it were whole.
@@ -543,6 +576,23 @@ function loadSession(mode, cadetId) {
          f'const OPENING_HONOR = {json.dumps(opening_honor)};\n'
          f'const OPENING_QUESTION = {json.dumps(opening_question)};\n'
          '\n'
+         '// The prompt says: "OPENING. Greet the cadet briefly and set expectations. Then\n'
+         '// ask, as your very first content question, VERBATIM: ...". The scripted turn used\n'
+         '// to deliver only the second half, so a cadet met a bare question with nothing\n'
+         '// saying which lesson they were in -- the greeting a model used to write went away\n'
+         '// with the model. This is that first half. The lesson name is read from this\n'
+         '// artifact\'s own header at port time.\n'
+         '//\n'
+         '// Deliberately a SEPARATE constant. OPENING_QUESTION stays exactly the string the\n'
+         '// prompt marks VERBATIM, and openerStage matches on it, so the greeting can be\n'
+         '// reworded without touching stage detection.\n'
+         f'const OPENING_WELCOME =\n'
+         f'  "Welcome to " + {json.dumps(lesson_title)} + ".\\n\\n"\n'
+         '  + "We are going to talk through today\\u2019s reading together. I will ask"\n'
+         '  + " questions rather than hand you answers, and the goal is to see how you are"\n'
+         '  + " thinking \\u2014 not to catch you out. At the end I will write a short report"\n'
+         '  + " for you to submit.";\n'
+         '\n'
          '// A scripted turn costs no request, so without this it lands INSTANTLY --\n'
          '// which reads as broken rather than as fast. The reply is on screen before the\n'
          '// cadet has finished sending, and the first REAL turn then pauses, which by\n'
@@ -570,8 +620,8 @@ function loadSession(mode, cadetId) {
          '// Sent once, on the first REAL turn. Without it the tutor follows its instruction to\n'
          '// open with that question and asks it a second time, having just been answered.\n'
          'const OPENING_NOTE =\n'
-         '  "[app] The Honor Code reminder and the opening question above were delivered by the "\n'
-         '  + "app, quoting your prompt verbatim, and the cadet has just answered the opening "\n'
+         '  "[app] The Honor Code reminder, the greeting and the opening question above were "\n'
+         '  + "delivered by the app, and the cadet has just answered the opening question. "\n'
          '  + "question. Do NOT greet again and do NOT ask that question again. Treat their "\n'
          '  + "message as the reading reflection, judge it as you normally would, and continue "\n'
          '  + "the session from there.";\n'
@@ -1077,9 +1127,10 @@ async function discoverModel(activeModelRef) {
     if (APP_OPENING && mode === "graded" && openerStage(history) === 1) {
       setLoading(true);
       setTimeout(() => {
-        setMessages([...history, { role: "assistant", content: OPENING_QUESTION }]);
+        setMessages([...history, { role: "assistant",
+          content: OPENING_WELCOME + "\\n\\n" + OPENING_QUESTION }]);
         setLoading(false);
-      }, scriptedDelay(OPENING_QUESTION));
+      }, scriptedDelay(OPENING_WELCOME + OPENING_QUESTION));
       return;
     }
 
@@ -1374,7 +1425,7 @@ function useLzString() {
             <div className="finish-actions">
               {submitUrl
                 ? <a className="finish-submit" href={submitUrl} rel="noopener noreferrer"
-                     onClick={() => { submittedRef.current = true; clearSession(); }}>
+                     onClick={() => { submittedRef.current = true; stampSubmitted(); }}>
                     Submit report &rarr;
                   </a>
                 : lzState === "failed"
@@ -1551,7 +1602,7 @@ function useLzString() {
       reportPhase: reportPhaseRef.current,
       extSent: extSentRef.current,
       payloadTried: payloadTriedRef.current,
-      hasReport: hasReport, reportText: reportText,
+      hasReport: hasReport, reportText: reportText, submitted: submittedRef.current,
       structured: structured, payloadState: payloadState,
     });
   }, [mode, loading, messages, cadetId, hasReport, reportText, structured, payloadState]);
@@ -1617,9 +1668,14 @@ function useLzString() {
               )}
               {resumable && (
                 <div className="honor-box" style={{ fontWeight: 600 }}>
-                  You have an unfinished session for this lesson in this browser
-                  ({resumable.msgs.filter((m) => !m.hidden).length} messages). Enter the same
-                  name and it will be restored &mdash; you do not need to start again.
+                  {resumable.submitted
+                    ? "You have already submitted this lesson from this browser. Entering the "
+                      + "same name brings your conversation and report back, if you need to "
+                      + "submit again."
+                    : "You have an unfinished session for this lesson in this browser ("
+                      + resumable.msgs.filter((m) => !m.hidden).length
+                      + " messages). Enter the same name and it will be restored \\u2014 you do "
+                      + "not need to start again."}
                 </div>
               )}
               {!resumable && handoff && (
@@ -1666,6 +1722,7 @@ function useLzString() {
       // report with "Preparing submit..." beside it in every reload for six hours -- after
       // following this page's own advice to reload. Let it have one more attempt instead.
       payloadTriedRef.current = !!saved.payloadTried && saved.payloadState !== "pending";
+      submittedRef.current = !!saved.submitted;
       if (typeof saved.activeSec === "number") activeSecRef.current = saved.activeSec;
       reportSecRef.current = (saved.reportSec == null) ? null : saved.reportSec;
       if (saved.hasReport) { setHasReport(true); setReportText(saved.reportText || ""); }
