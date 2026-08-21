@@ -180,7 +180,92 @@ class Porter:
 # The transform
 # ══════════════════════════════════════════════════════════════════════════════
 
-def port(src: bytes, slug: str, verbose: bool = False):
+# ── the two conversation-ladder policies ─────────────────────────────────────
+# TEACHING is the policy as of 2026-08-21 and the default. LEGACY reproduces the ordering the
+# 38 live builds shipped with.
+#
+# This flag exists to DECOUPLE TWO CHANGES THAT LANDED IN ONE FILE, and it is meant to be
+# short-lived. The freeze fix (request deadline + session restore) is a confirmed bug that has
+# already cost a cadet real work, so it belongs on the live builds today. The ladder reorder is
+# an improvement nobody is waiting on and is still out for faculty trial. Rebuilding the live
+# set would otherwise ship both, because both are transforms in this one tool.
+#
+# The alternative -- hand-editing this file, porting, then putting it back -- would leave 38
+# live builds matching NO committed state, which is precisely the provenance failure the rest
+# of this repository is built to avoid. An explicit flag is reproducible; a temporary edit is
+# not.
+#
+# DELETE `legacy` once the ladder ships to the live set. A flag kept past its occasion becomes
+# a second supported configuration nobody is testing.
+LADDER_TEACHING = b"""// Ordinary conversation turns: ~12 of the ~14 requests in a session. THIS IS THE TEACHING, and
+// it now gets the strongest models the key can reach.
+//
+// It used to start on flash-lite to conserve quota, and on 2026-08-21 a cadet reported the
+// result: "it would try to tutor me and then give me the answer instead of walking me through
+// it." A lite model can open Socratically -- the prompt tells it to -- and then collapses into
+// stating the answer, because holding that stance across ~12 turns under a ~70,000-char
+// instruction is the reasoning-heavy part. The prompt was never the problem: every Socratic
+// line survives the port at identical counts.
+//
+// The quota it was conserving was not under pressure. Peak use across the whole course was 22
+// of flash-lite's 500 requests/day, while 3.7-flash sat at 23 of 20 -- over its cap -- because
+// the REPORT was the only thing allowed to use it.
+//
+// A session is ~14 requests, so it fits inside ONE of these 20/day caps.
+let MODEL_CHAT = [
+  "gemini-3.7-flash",         //  5 RPM,  20 RPD -- a whole session fits inside one day's cap
+  "gemini-3.6-flash",         //  5 RPM,  20 RPD
+  "gemini-3.5-flash",         //  5 RPM,  20 RPD
+].concat(MODEL_LITE);
+
+// Study mode is UNGRADED practice a cadet may run as often as they like, and it produces no
+// report and no grade. It must never spend the graded session's strong-model allowance, so it
+// is pinned to the floor -- where 478 of 500 requests/day are going unused anyway.
+let MODEL_STUDY = MODEL_LITE.slice();
+
+// The report is ONE request per session and it is the graded artifact the cohort rollup reads,
+// so it gets the strongest model the key has and can afford a 20/day cap. It falls through to
+// the floor rather than failing: a report from a weaker model beats no report. Kept as its own
+// array even though it now matches MODEL_CHAT -- seatLadder switches on array IDENTITY, and
+// sharing one object would silently stop the report from re-seating.
+let MODEL_REPORT = [
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+].concat(MODEL_LITE);"""
+
+# Byte-for-byte the ordering the live builds shipped with -- written out in full rather than
+# composed from MODEL_LITE, because MODEL_LITE ends on 2.5-flash and this list ends on it too:
+# `MODEL_LITE.concat([...])` would put 2.5-flash THIRD and quietly reorder a live ladder while
+# looking like a faithful reproduction.
+LADDER_LEGACY = b"""// LEGACY ORDERING -- what the live builds shipped with, ordered by quota rather than by
+// capability. Reproduced exactly so a rebuild carries the freeze fix and NOTHING else.
+let MODEL_CHAT = [
+  "gemini-3.5-flash-lite",    // 15 RPM, 500 RPD
+  "gemini-3.1-flash-lite",    // 15 RPM, 500 RPD
+  "gemini-3.5-flash",         //  5 RPM,  20 RPD -- from here down, one session's worth
+  "gemini-3-flash",
+  "gemini-2.5-flash",
+];
+
+// LEGACY: study shares the conversation pool, which is what the live builds do. Deliberately
+// the SAME ARRAY, not a copy -- seatLadder switches on identity, so sharing the object is what
+// makes a mode change a no-op, exactly as it behaved before MODEL_STUDY existed.
+let MODEL_STUDY = MODEL_CHAT;
+
+// The report is ONE request per session and it is the graded artifact the cohort rollup reads,
+// so it gets the strongest model the key has and can afford a 20/day cap. It falls through
+// into the chat pool rather than failing: a report from a weaker model beats no report.
+let MODEL_REPORT = [
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+].concat(MODEL_CHAT);"""
+
+
+def port(src: bytes, slug: str, verbose: bool = False, ladder: str = "teaching"):
+    if ladder not in ("teaching", "legacy"):
+        raise SystemExit(f"unknown ladder policy: {ladder}")
     p = Porter(src, slug)
     GROUNDING = (b"TEXTBOOK_REFERENCE", b"LESSON_CONFIG", b"EXTENSION_PROBLEMS", b"REPORT_FORMAT")
     before = {n: p.grab(n) for n in GROUNDING}
@@ -266,46 +351,7 @@ const MODEL_LITE = [
   "gemini-2.5-flash",
 ];
 
-// Ordinary conversation turns: ~12 of the ~14 requests in a session. THIS IS THE TEACHING, and
-// it now gets the strongest models the key can reach.
-//
-// It used to start on flash-lite to conserve quota, and on 2026-08-21 a cadet reported the
-// result: "it would try to tutor me and then give me the answer instead of walking me through
-// it." A lite model can open Socratically -- the prompt tells it to -- and then collapses into
-// stating the answer, because holding that stance across ~12 turns under a ~70,000-char
-// instruction is the reasoning-heavy part. The prompt was never the problem: every Socratic
-// line survives the port at identical counts.
-//
-// The quota it was conserving was not under pressure. Peak use across the whole course was 22
-// of flash-lite's 500 requests/day, while 3.7-flash sat at 23 of 20 -- over its cap -- because
-// the REPORT was the only thing allowed to use it. We were spending the best model on the
-// summary an instructor reads and the worst on the conversation a cadet learns from.
-//
-// A session is ~14 requests, so it fits inside ONE of these 20/day caps. A cadet doing one
-// lesson a day therefore runs the whole thing on 3.7; a second lesson lands on 3.6, a third on
-// 3.5, and only a fourth reaches the floor.
-let MODEL_CHAT = [
-  "gemini-3.7-flash",         //  5 RPM,  20 RPD -- a whole session fits inside one day's cap
-  "gemini-3.6-flash",         //  5 RPM,  20 RPD
-  "gemini-3.5-flash",         //  5 RPM,  20 RPD
-].concat(MODEL_LITE);
-
-// Study mode is UNGRADED practice a cadet may run as often as they like, and it produces no
-// report and no grade. It must never spend the graded session's strong-model allowance, so it
-// is pinned to the floor -- where 478 of 500 requests/day are going unused anyway.
-let MODEL_STUDY = MODEL_LITE.slice();
-
-// The report is ONE request per session and it is the graded artifact the cohort rollup
-// reads, so it gets the strongest model the key has and can afford a 20/day cap. It falls
-// through into the floor rather than failing: a session with no report is a lost session, and
-// a report from a weaker model beats no report at all. Kept as its own array even though it
-// now matches MODEL_CHAT: seatLadder switches on array IDENTITY, and sharing one object would
-// silently stop the report from re-seating.
-let MODEL_REPORT = [
-  "gemini-3.7-flash",
-  "gemini-3.6-flash",
-  "gemini-3.5-flash",
-].concat(MODEL_LITE);
+__LADDER_BLOCK__
 
 // Used only if the ListModels call itself fails, so it never gets filtered against a listing.
 const MODEL_FALLBACKS = MODEL_CHAT;
@@ -423,6 +469,12 @@ function loadSession(mode, cadetId) {
   } catch (e) { return null; }
 }""",
         "constants -> Gemini + runtime discovery")
+
+    # Substituted AFTER the constants block lands, so both policies go through exactly the
+    # same emission path and cannot drift in anything but the ladders themselves.
+    p.sub1(rb"__LADDER_BLOCK__",
+           LADDER_TEACHING if ladder == "teaching" else LADDER_LEGACY,
+           f"ladder policy: {ladder}")
 
     # ── 2. rawCall -> Gemini transport ────────────────────────────────────────
     p.sub1(
@@ -1487,6 +1539,12 @@ def main():
                          "public-exposure argument for these pages is that they carry no more "
                          "than the published Claude artifact already does -- which is not true "
                          "of an artifact nobody published. Needs a human's decision.")
+    ap.add_argument("--ladder", choices=("teaching", "legacy"), default="teaching",
+                    help="conversation-model policy. `teaching` (default) runs chat on the "
+                         "strongest models the key can reach. `legacy` reproduces the "
+                         "ordering the live builds shipped with, so a rebuild can carry the "
+                         "freeze fix and NOTHING else while the reorder is still out for "
+                         "faculty trial. TEMPORARY -- delete once the reorder ships.")
     ap.add_argument("--commit", action="store_true", help="write; otherwise dry run")
     ap.add_argument("-v", "--verbose", action="store_true")
     a = ap.parse_args()
@@ -1537,7 +1595,7 @@ def main():
             lesson_label = f"Lesson {lesson_no}" if lesson_no else title
 
             src = src_path.read_bytes()
-            jsx, component, nl = port(src, slug, verbose=a.verbose)
+            jsx, component, nl = port(src, slug, verbose=a.verbose, ladder=a.ladder)
             html = wrap(jsx, component, title, COURSE_LABELS.get(course, course), lesson_label)
 
             out = OUT_ROOT / course / f"{slug}.html"

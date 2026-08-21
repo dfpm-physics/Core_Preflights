@@ -59,35 +59,48 @@ ok(S.scoreModel('gemini-flash-latest') < S.scoreModel('gemini-2.5-flash'),
 ok(S.scoreModel('gemini-3.5-flash-lite') > S.scoreModel('gemini-3.7-flash'),
    'lite (500/day) outranks a newer plain Flash (20/day) — quota beats recency');
 
-// --- the ladders are shaped the way TEACHING requires ----------------------------------
-// Inverted on 2026-08-21. This used to assert `MODEL_CHAT[0].includes('lite')` -- the
-// conversation opening on the cheapest model -- and that shipped the behaviour a cadet
-// reported: "it would try to tutor me and then give me the answer instead of walking me
-// through it." A lite model opens Socratically and then collapses into answering. The quota
-// it protected was never under pressure: 22 of flash-lite's 500 requests/day were used across
-// the whole course, while 3.7-flash sat at 23 of 20 because only the report could touch it.
-// The conversation is the teaching, and it now gets the strongest pool.
-ok(!isLite(S.MODEL_CHAT[0]),
-   'chat ladder does NOT start on a lite model - the conversation is the teaching');
-ok(S.MODEL_CHAT[0] === 'gemini-3.7-flash',
-   'chat ladder starts on the strongest model - a ~14-request session fits inside its 20/day');
-ok(isLite(S.MODEL_CHAT[S.MODEL_CHAT.length - 1]),
-   'chat ladder still ENDS on the high-quota floor - lite is where it stops, not where it starts');
-ok(S.MODEL_REPORT[0] === 'gemini-3.7-flash',
-   'report ladder starts on the strongest model - it is one request and it is the graded artifact');
-ok(isLite(S.MODEL_REPORT[S.MODEL_REPORT.length - 1]),
-   'report ladder falls through to the floor rather than failing - a weak report beats none');
+// --- the ladders are shaped the way the build's POLICY requires ------------------------
+// TWO policies ship at once, on purpose and temporarily. `teaching` runs the conversation on
+// the strongest models the key can reach; `legacy` reproduces the ordering the live builds
+// shipped with, so those can be rebuilt to carry the 2026-08-21 freeze fix and NOTHING else
+// while the reorder is still out for faculty trial (to_gemini.py --ladder).
+//
+// This file therefore asserts the invariants of whichever policy the build in front of it
+// carries. It does NOT accept both shapes for the same build: that would make it a test of
+// nothing. Delete the legacy branch when the reorder ships and --ladder goes.
+const policy = isLite(S.MODEL_CHAT[0]) ? 'legacy' : 'teaching';
+console.log(`  ladder policy: ${policy}`);
 
-// --- study mode must not spend the graded session's allowance --------------------------
-// Study is ungraded practice with no cap on how often a cadet runs it. Before 2026-08-21 it
-// shared MODEL_CHAT, so practice quietly drew down the same 20/day the graded run needed.
-ok(Array.isArray(S.MODEL_STUDY) && S.MODEL_STUDY.length > 0,
-   'a separate study pool exists');
-ok(S.MODEL_STUDY.every(isLite),
-   'study pool is lite-only - practice never touches the graded allowance');
-ok(S.MODEL_STUDY !== S.MODEL_CHAT,
-   'study and chat are distinct arrays - seatLadder switches on identity, so sharing one '
-   + 'object would stop a mode change from re-seating');
+if (policy === 'teaching') {
+  // Inverted on 2026-08-21. This used to assert `MODEL_CHAT[0].includes('lite')` -- the
+  // conversation opening on the cheapest model -- and that shipped the behaviour a cadet
+  // reported: "it would try to tutor me and then give me the answer instead of walking me
+  // through it." A lite model opens Socratically and then collapses into answering.
+  ok(S.MODEL_CHAT[0] === 'gemini-3.7-flash',
+     'chat starts on the strongest model - a ~14-request session fits inside its 20/day');
+  ok(isLite(S.MODEL_CHAT[S.MODEL_CHAT.length - 1]),
+     'chat still ENDS on the high-quota floor - lite is where it stops, not where it starts');
+
+  // Study is ungraded practice with no cap on how often a cadet runs it. Before 2026-08-21 it
+  // shared MODEL_CHAT, so practice quietly drew down the same 20/day the graded run needed.
+  ok(S.MODEL_STUDY.length > 0 && S.MODEL_STUDY.every(isLite),
+     'study pool is lite-only - practice never touches the graded allowance');
+  ok(S.MODEL_STUDY !== S.MODEL_CHAT,
+     'study and chat are distinct arrays - seatLadder switches on identity, so sharing one '
+     + 'object would stop a mode change from re-seating');
+} else {
+  ok(isLite(S.MODEL_CHAT[0]),
+     'legacy: chat starts on the high-quota floor - the ordering the live builds shipped with');
+  ok(S.MODEL_STUDY === S.MODEL_CHAT,
+     'legacy: study IS the chat pool, the same array - sharing the object is what makes a mode '
+     + 'change a no-op, exactly as it behaved before MODEL_STUDY existed');
+}
+
+// True under both policies: the report is one request and it is the graded artifact.
+ok(S.MODEL_REPORT[0] === 'gemini-3.7-flash',
+   'report starts on the strongest model - one request, and it is the graded artifact');
+ok(isLite(S.MODEL_REPORT[S.MODEL_REPORT.length - 1]),
+   'report falls through to the floor rather than failing - a weak report beats none');
 
 // --- the 429 walk: every rung is tried before a cadet is told the quota is gone ---------
 const ref = {};
@@ -105,17 +118,26 @@ const ref2 = {};
 S.seatLadder(ref2, S.MODEL_CHAT);
 ok(ref2.current === S.MODEL_CHAT[1], 'a spent model is skipped when re-seating');
 
-// --- the cost of chat and report now sharing a top model -------------------------------
-// Before 2026-08-21 the two pools started on different models, so a chat session could never
-// spend the report's. They now share 3.7-flash, and a ~14-request conversation uses most of
-// its 20/day -- so the report that follows usually runs one rung down. That is the trade this
-// change accepts: summarising is far easier than tutoring, so the strong model is worth more
-// to the conversation. Asserted rather than left implicit, because it is the consequence
-// somebody will otherwise rediscover from a report that looks weaker than it used to.
+// --- does a chat session spend the report's model? -------------------------------------
+// The two policies differ here, and it is the difference worth writing down. Under `legacy`
+// the pools start on different models (chat on lite, report on 3.7), so a conversation can
+// never touch the report's allowance. Under `teaching` they share 3.7-flash, and a
+// ~14-request conversation uses most of its 20/day -- so the report that follows usually runs
+// one rung down. That is the trade `teaching` accepts: summarising is far easier than
+// tutoring, so the strong model is worth more to the conversation. Asserted either way,
+// because it is the consequence somebody would otherwise rediscover from a report that looks
+// weaker than it used to.
 const refR = {};
 S.seatLadder(refR, S.MODEL_REPORT);
-ok(refR.current === S.MODEL_REPORT[1],
-   'with the chat pool\'s top model spent, the report seats one rung down rather than retrying it');
+if (policy === 'legacy') {
+  ok(refR.current === S.MODEL_REPORT[0],
+     'legacy: spending the chat pool’s top model leaves the report untouched - the pools '
+     + 'do not overlap at the top');
+} else {
+  ok(refR.current === S.MODEL_REPORT[1],
+     'teaching: with the chat pool\'s top model spent, the report seats one rung down rather '
+     + 'than retrying it');
+}
 
 // --- switching pools mid-session re-seats rather than carrying a stale index -----------
 // spentModels is cleared first: it is module state shared by every check in this file, and

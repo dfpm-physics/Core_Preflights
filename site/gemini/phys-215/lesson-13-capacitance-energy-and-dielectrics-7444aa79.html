@@ -160,7 +160,16 @@ const { useState, useRef, useEffect } = React;
 // reach, and falls back to scoring the listing when it can reach none of them. That keeps the
 // property runtime discovery existed for -- this build cannot dead-end on a retired name.
 
-// Ordinary conversation turns: ~12 of the ~14 requests in a session. Quota is what matters.
+// The high-quota floor. Nothing here is a good tutor; it is where a ladder ENDS, and until
+// 2026-08-21 it was where the conversation ladder began.
+const MODEL_LITE = [
+  "gemini-3.5-flash-lite",    // 15 RPM, 500 RPD
+  "gemini-3.1-flash-lite",    // 15 RPM, 500 RPD
+  "gemini-2.5-flash",
+];
+
+// LEGACY ORDERING -- what the live builds shipped with, ordered by quota rather than by
+// capability. Reproduced exactly so a rebuild carries the freeze fix and NOTHING else.
 let MODEL_CHAT = [
   "gemini-3.5-flash-lite",    // 15 RPM, 500 RPD
   "gemini-3.1-flash-lite",    // 15 RPM, 500 RPD
@@ -169,10 +178,14 @@ let MODEL_CHAT = [
   "gemini-2.5-flash",
 ];
 
-// The report is ONE request per session and it is the graded artifact the cohort rollup
-// reads, so it gets the strongest model the key has and can afford a 20/day cap. It falls
-// through into the chat ladder rather than failing: a session with no report is a lost
-// session, and a report from a weaker model beats no report at all.
+// LEGACY: study shares the conversation pool, which is what the live builds do. Deliberately
+// the SAME ARRAY, not a copy -- seatLadder switches on identity, so sharing the object is what
+// makes a mode change a no-op, exactly as it behaved before MODEL_STUDY existed.
+let MODEL_STUDY = MODEL_CHAT;
+
+// The report is ONE request per session and it is the graded artifact the cohort rollup reads,
+// so it gets the strongest model the key has and can afford a 20/day cap. It falls through
+// into the chat pool rather than failing: a report from a weaker model beats no report.
 let MODEL_REPORT = [
   "gemini-3.7-flash",
   "gemini-3.6-flash",
@@ -213,6 +226,11 @@ function scoreModel(name) {
 // model already known to be exhausted, on every remaining turn.
 const spentModels = {};
 
+// One honoured retry-delay per model per session. Without the cap, a model whose per-minute
+// window keeps closing would stall the cadet on a silent spinner over and over instead of
+// dropping to a rung that has room.
+const waitedFor = {};
+
 function seatLadder(ref, ladder) {
   if (ref.ladder !== ladder) { ref.ladder = ladder; ref.i = 0; }
   while (ref.i < ladder.length - 1 && spentModels[ladder[ref.i]]) ref.i++;
@@ -241,6 +259,54 @@ const apiKeyRef = { current: "" };
 
 // localStorage key, namespaced like the site's other client-side state.
 const KEY_STORE = "prep.gemini.apikey";
+
+// Every request gets a deadline. Until 2026-08-21 none of them did, and a cadet hit exactly
+// the failure that implies: the tutor sat on "Tutor is typing..." at the report stage and
+// never came back. `fetch` has no default timeout, so a connection Google accepts and never
+// answers leaves the promise pending forever -- the `finally` that clears the spinner never
+// runs, and the composer and Send button are both disabled while it is set. There was no way
+// out but a reload, which erased the session.
+//
+// Two minutes, deliberately generous: a long report on a strong model genuinely can take a
+// minute, and aborting a request that was about to succeed is worse than waiting. Not
+// auto-retried either -- a silent second two-minute wait reads as the same freeze. It raises
+// `timeout`, which the cadet sees with a Retry button and a transcript still intact.
+const REQUEST_TIMEOUT_MS = 120000;
+
+// Session persistence. The transcript used to live only in React state, so a reload -- the
+// ONLY escape from the freeze above -- threw away the cadet's whole conversation, including
+// one handed over from Claude. This keeps it in the same browser as the API key and nowhere
+// else: never sent to PREP, never in the report, never in the submit URL.
+// A FUNCTION, not a const. This block is emitted above `const INTERACTION_ID`, so building the
+// key at module scope is a temporal dead zone -- "Cannot access 'INTERACTION_ID' before
+// initialization", thrown before React mounts, which blanks the whole page. A function body
+// runs after initialization, so the reference is only evaluated when a session is saved.
+function sessionStore() { return "prep.gemini.session." + INTERACTION_ID; }
+
+// Old enough to be a different sitting rather than a recovery. A cadet coming back the next
+// day wants a fresh run, not yesterday's half-finished one silently resurrected.
+const SESSION_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+function saveSession(snap) {
+  try { localStorage.setItem(sessionStore(), JSON.stringify(snap)); } catch (e) {}
+}
+function clearSession() {
+  try { localStorage.removeItem(sessionStore()); } catch (e) {}
+}
+// Returns a snapshot only when it is unambiguously THIS cadet resuming THIS lesson in THIS
+// mode. Anything else is discarded rather than repaired -- a partly-restored graded session
+// would be submitted as though it were whole.
+function loadSession(mode, cadetId) {
+  try {
+    const s = JSON.parse(localStorage.getItem(sessionStore()) || "null");
+    if (!s || s.v !== 1 || s.id !== INTERACTION_ID) return null;
+    if (s.mode !== mode) return null;
+    if (mode === "graded" && String(s.cadetId || "") !== String(cadetId || "")) return null;
+    if (!Array.isArray(s.msgs) || !s.msgs.length) return null;
+    if (!s.ts || (Date.now() - s.ts) > SESSION_MAX_AGE_MS) { clearSession(); return null; }
+    return s;
+  } catch (e) { return null; }
+}
 
 // Submission endpoint — INTERACTION-DATA-CONTRACT.md §2, frozen. Copied, not
 // retyped. A wrong URL fails SILENTLY: the cadet does the whole session, clicks
@@ -2727,35 +2793,77 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
       // The key rides in a HEADER, not the "?key=" query parameter Google's quickstarts
       // use. A query string lands in browser history and in any Referer the page emits;
       // a header does neither. Same authentication, strictly less leakage.
-      res = await fetch(
-        GEMINI_BASE + "/models/" + activeModelRef.current + ":generateContent", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": apiKeyRef.current,
-          },
-          body: JSON.stringify(body),
-        });
+      const ctl = new AbortController();
+      const deadline = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
+      try {
+        res = await fetch(
+          GEMINI_BASE + "/models/" + activeModelRef.current + ":generateContent", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKeyRef.current,
+            },
+            body: JSON.stringify(body),
+            signal: ctl.signal,
+          });
+      } finally { clearTimeout(deadline); }
     } catch (e) {
+      // An abort is the deadline, not a flaky network. Raised straight away rather than
+      // retried: the cadet has already waited two minutes and a silent second wait reads as
+      // the same freeze they are trying to escape.
+      if (e && e.name === "AbortError") throw { kind: "timeout", status: 0 };
       if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
       throw { kind: "network", status: 0 };
     }
     if (res.ok) return res;
-    if (res.status === 400 || res.status === 401 || res.status === 403) {
-      throw { kind: "auth", status: res.status };   // bad, missing, or unauthorized key
+    if (res.status === 401 || res.status === 403) {
+      throw { kind: "auth", status: res.status };   // missing or unauthorized key
+    }
+    // 400 is AMBIGUOUS on generateContent and used to be lumped in with the two above, so a
+    // request that was merely too large told the cadet their API key was invalid -- sending
+    // them off to regenerate a key that was fine. It is a bad key only when Google says so;
+    // otherwise it is this request, and the likeliest cause is length, which a conversation
+    // carried over from Claude reaches sooner than a fresh one.
+    if (res.status === 400) {
+      let msg = "";
+      try { msg = String((((await res.json()) || {}).error || {}).message || ""); } catch (e) {}
+      throw /api[\s_-]?key|credential|unregistered/i.test(msg)
+        ? { kind: "auth", status: 400 }
+        : { kind: "badrequest", status: 400, detail: msg.slice(0, 300) };
     }
     if (res.status === 404) {                       // model unavailable -> next rung
       if (nextModel(activeModelRef)) { attempt = 0; continue; }
       throw { kind: "model", status: 404 };
     }
-    // 429 is Gemini's rate-limit AND its daily-quota code, and the response does not say
-    // which. Retry first: a per-MINUTE limit clears in about a minute and the same model is
-    // still the right one. If it survives the retries it is the per-DAY cap, which will not
-    // clear today -- so move DOWN THE LADDER instead of ending the cadet's session. Free-tier
-    // quota is per model, so the next rung is a fresh allowance; only an exhausted ladder is
-    // fatal. Before 2026-08-20 this retried the one model and then gave up, which stranded a
-    // cadet at 20 requests while 500 sat unused one rung down.
+    // 429 is Gemini's rate-limit AND its daily-quota code. The BODY says which: a per-minute
+    // burst comes back with a RetryInfo naming a few seconds, and the per-day cap names a long
+    // delay or none at all. Honour a short one and keep the model we are on; a rung on this
+    // ladder is worth far more than the wait, and burning 3.7-flash after 3.5 seconds throws
+    // away 19 of its 20 daily requests over a window that would have cleared on its own.
+    //
+    // Bounded at 15s and taken once per model per session, because the cadet is staring at a
+    // spinner with no explanation for the whole wait. A longer delay is treated as the daily
+    // cap: move DOWN THE LADDER rather than ending the session, since free-tier quota is per
+    // model and the next rung is a fresh allowance. Only an exhausted ladder is fatal.
+    //
+    // (This comment previously said the response "does not say which". It does.)
     if (res.status === 429) {
+      if (!waitedFor[activeModelRef.current]) {
+        let waitMs = 0;
+        try {
+          const j = await res.json();
+          const info = (((j.error || {}).details) || []).find(
+            (d) => String(d["@type"] || "").indexOf("RetryInfo") > -1);
+          const m = info && /^([0-9.]+)s$/.exec(String(info.retryDelay || ""));
+          if (m) waitMs = Math.round(parseFloat(m[1]) * 1000);
+        } catch (e) { /* no body, or not JSON -- fall through to the ladder */ }
+        if (waitMs > 0 && waitMs <= 15000) {
+          waitedFor[activeModelRef.current] = true;
+          await sleep(waitMs + 500);
+          attempt = 0;
+          continue;
+        }
+      }
       if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
       spentModels[activeModelRef.current] = true;
       if (nextModel(activeModelRef)) { attempt = 0; continue; }
@@ -2801,9 +2909,15 @@ async function discoverModel(activeModelRef) {
 
   const chat = MODEL_CHAT.filter((n) => have[n]);
   const report = MODEL_REPORT.filter((n) => have[n]);
+  const study = MODEL_STUDY.filter((n) => have[n]);
   if (!chat.length && !scored.length) throw { kind: "model", status: 404 };
   MODEL_CHAT = chat.length ? chat : scored;
   MODEL_REPORT = report.length ? report : MODEL_CHAT;
+  // Study falls back to the CHAT ladder, not to `scored`: if this key cannot reach any lite
+  // model, practice has to run somewhere, and the alternative is a study session that cannot
+  // start at all. It still costs graded quota in that case -- which is why it is the fallback
+  // and not the default.
+  MODEL_STUDY = study.length ? study : MODEL_CHAT;
 
   activeModelRef.ladder = null;             // force a re-seat onto the filtered list
   seatLadder(activeModelRef, MODEL_CHAT);
@@ -2866,6 +2980,10 @@ function errorMessage(err, { afterRetries = false } = {}) {
       return "Gemini declined to answer that turn. Rephrase and try again \u2014 and tell your instructor if it keeps happening.";
     case "model":
       return "No usable Gemini model was found for this key. Tell your instructor \u2014 the model list may have moved again.";
+    case "timeout":
+      return "Google did not answer within two minutes. Your conversation is saved \u2014 press Retry. If it happens twice, reload the page: the session is restored from this browser and you will not lose your work.";
+    case "badrequest":
+      return "Google rejected that request \u2014 most likely the conversation has grown too long, which happens sooner when it was carried over from Claude. Your key is fine. Press Retry, and tell your instructor if it keeps happening.";
     case "network":
       return "Couldn't reach the tutor — check your connection and Retry.";
     default:
@@ -2957,6 +3075,11 @@ function Lesson13Preflight() {
   const [started, setStarted] = useState(false);
   const [cadetId, setCadetId] = useState("");      // holds the last name; do NOT rename
   const [handoff, setHandoff] = useState(null);    // a conversation carried over from Claude
+  const [resumable, setResumable] = useState(null); // an unfinished session in this browser
+  useEffect(() => {
+    if (mode) return;                               // only on the start screen
+    setResumable(loadSession("graded", cadetId.trim()));
+  }, [mode, cadetId]);
 
   // Leaves this device only as an x-goog-api-key header to Google, and is remembered only
   // in this browser's localStorage. Never sent to PREP, never written to the database,
@@ -3017,9 +3140,11 @@ function Lesson13Preflight() {
     const phase = hasReport ? "extension"
       : (reportPhaseRef.current || overBudget) ? "report"
       : "probe";
-    // Study mode falls out below with no args, but is seated on the chat pool first.
+    // Study mode falls out here with no args. It is ungraded practice with no cap on how often
+    // a cadet runs it, so it is pinned to the lite floor and must NOT be seated on the graded
+    // ladder -- otherwise practice quietly spends the 20/day that the graded session needs.
+    if (!a) { seatLadder(activeModelRef, MODEL_STUDY); return sysRef.current; }
     seatLadder(activeModelRef, phase === "report" ? MODEL_REPORT : MODEL_CHAT);
-    if (!a) return sysRef.current;
     return buildSystemPrompt(a.cadetId, a.localTime, phase);
   }
 
@@ -3048,6 +3173,23 @@ function Lesson13Preflight() {
       if (typeof d.name === "string" && d.name.trim()) setCadetId(d.name.trim());
     } catch (e) { /* malformed hash -- start clean */ }
   }, [lzReady, handoff]);
+
+  // Snapshot the session. Skipped while `loading`, so a half-finished turn is never the
+  // thing restored: the last SETTLED state is always what comes back.
+  useEffect(() => {
+    if (!mode || loading || !messages.length) return;
+    saveSession({
+      v: 1, id: INTERACTION_ID, mode: mode, cadetId: cadetId.trim(),
+      msgs: messages, ts: Date.now(),
+      activeSec: activeSecRef.current,
+      reportSec: reportSecRef.current,
+      reportPhase: reportPhaseRef.current,
+      extSent: extSentRef.current,
+      payloadTried: payloadTriedRef.current,
+      hasReport: hasReport, reportText: reportText,
+      structured: structured, payloadState: payloadState,
+    });
+  }, [mode, loading, messages, cadetId, hasReport, reportText, structured, payloadState]);
   const visibleMessages = messages.filter((m) => !m.hidden);
   const shownSec = (hasReport && reportSecRef.current != null) ? reportSecRef.current : activeSec;
   const timerStr = String(Math.floor(shownSec / 60)).padStart(2, "0") + ":" +
@@ -3160,13 +3302,35 @@ function Lesson13Preflight() {
       ? { cadetId: cadetId.trim(), localTime: localTime }
       : null;
     reportPhaseRef.current = false;
+    // The opener does not pass through sysFor(), so seat its pool here or study mode borrows
+    // the graded ladder for exactly one request per session.
+    seatLadder(activeModelRef, selectedMode === "graded" ? MODEL_CHAT : MODEL_STUDY);
     setMode(selectedMode);
     setStarted(true);
     bumpActivity();
 
     // The Messages API requires the first turn to be role:user. A hidden seed lets the tutor
     // produce its own opening (Honor Code reminder for graded; topic menu for study).
-    const resume = selectedMode === "graded" && handoff ? handoff.msgs : null;
+    // A session saved in THIS browser wins over a `#h=` handoff, and must: the saved
+    // copy already contains the handoff's messages plus everything since, so preferring the
+    // hash would silently roll the cadet back to the moment they arrived from Claude.
+    const saved = loadSession(selectedMode, cadetId.trim());
+    if (saved) {
+      // Restored explicitly rather than re-derived. The effect that sets reportPhaseRef reads
+      // only the LAST message, so a session that froze on the cadet's own reply to the
+      // integrity question -- which is exactly when this failed -- would come back believing
+      // it was still probing, and rebuild the prompt without REPORT_FORMAT.
+      reportPhaseRef.current = !!saved.reportPhase;
+      extSentRef.current = !!saved.extSent;
+      payloadTriedRef.current = !!saved.payloadTried;
+      if (typeof saved.activeSec === "number") activeSecRef.current = saved.activeSec;
+      reportSecRef.current = (saved.reportSec == null) ? null : saved.reportSec;
+      if (saved.hasReport) { setHasReport(true); setReportText(saved.reportText || ""); }
+      if (saved.structured) setStructured(saved.structured);
+      if (saved.payloadState) setPayloadState(saved.payloadState);
+    }
+    const resume = saved ? saved.msgs
+                 : (selectedMode === "graded" && handoff ? handoff.msgs : null);
     const seed = resume ? null : {
       role: "user", hidden: true,
       content: selectedMode === "graded" ? "Begin the session now." : "I'd like to study this lesson.",
@@ -3435,7 +3599,14 @@ function Lesson13Preflight() {
                 this browser. PREP never receives it, and it is never part of your report or your
                 submit link.
               </p>
-              {handoff && (
+              {resumable && (
+                <div className="honor-box" style={{ fontWeight: 600 }}>
+                  You have an unfinished session for this lesson in this browser
+                  ({resumable.msgs.filter((m) => !m.hidden).length} messages). Enter the same
+                  name and it will be restored &mdash; you do not need to start again.
+                </div>
+              )}
+              {!resumable && handoff && (
                 <div className="honor-box" style={{ fontWeight: 600 }}>
                   Picking up where Claude left off &mdash; your conversation so far
                   ({handoff.msgs.filter((m) => !m.hidden).length} messages) will be restored.
@@ -3541,7 +3712,8 @@ function Lesson13Preflight() {
           {mode === "graded" && hasReport && (
             <span className="report-actions">
               {submitUrl
-                ? <a className="submit-btn" href={submitUrl} rel="noopener noreferrer">Submit report →</a>
+                ? <a className="submit-btn" href={submitUrl} rel="noopener noreferrer"
+                     onClick={() => clearSession()}>Submit report →</a>
                 : <span className="submit-hint">Preparing submit…</span>}
             </span>
           )}

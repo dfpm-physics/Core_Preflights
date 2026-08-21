@@ -8,6 +8,67 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-21 (fourth) — Matthew Recker via Claude
+
+### The freeze fix reaches cadets: all 38 live backups rebuilt, carrying that and nothing else
+
+The previous entry fixed the freeze in the porter and staged it for faculty. **A patched porter
+changes nothing a cadet touches** — the fix reaches them only when the builds are rebuilt, and
+until this ran every live backup could still hang at the report and lose the session on reload.
+
+**The obstacle was that two changes live in one tool.** Rebuilding would have shipped the model
+ladder reorder as well, which is still out for faculty trial and which nobody is waiting on. The
+freeze is a confirmed bug that has already cost a cadet real work. **They deserve different
+clocks.**
+
+**`to_gemini.py --ladder {teaching,legacy}`** decouples them. `teaching` is the default and the
+new policy; `legacy` reproduces the ordering the live builds shipped with. The alternative — hand
+editing the tool, porting, then putting it back — would have left 38 live builds matching **no
+committed state**, which is the provenance failure the rest of this repository exists to avoid. A
+flag is reproducible; a temporary edit is not. **It is meant to be deleted** once the reorder
+ships, along with the matching branch of the harness.
+
+`gemini-model-ladder.mjs` now **detects** which policy a build carries and asserts that policy's
+invariants. It does not accept both shapes for one build, which would make it a test of nothing.
+The teaching-only assertion that a spent chat model pushes the report one rung down became
+policy-aware: under `legacy` the pools do not overlap at the top, so the correct assertion is the
+opposite one, and both are written down.
+
+**Verified across all 38, each against the copy in `git HEAD` — i.e. against what cadets actually
+have, not another working-tree file:**
+
+| | |
+|---|---|
+| `MODEL_CHAT` and `MODEL_REPORT` identical to live | **38 / 38** |
+| all nine freeze-fix markers present | **38 / 38** |
+| slug unchanged | **38 / 38** |
+| `TEXTBOOK_REFERENCE`, `LESSON_CONFIG`, `EXTENSION_PROBLEMS`, `REPORT_FORMAT` byte-identical | **38 / 38** |
+| teaching-ladder names leaked in | **0** |
+
+Harnesses: `gemini-model-ladder.mjs` **38/38 builds pass**; `gemini-build.mjs` **7/7** on one build
+per dialect including `lesson-07`, the lesson the cadet actually froze on; `gemini-handoff.mjs`
+**12/12**, which matters because a saved snapshot now outranks a `#h=` handoff and that chain had
+to keep working.
+
+**Two mistakes worth recording, both caught before anything shipped:**
+
+- **`--all` now yields 51, not 38.** The 13 phys-310 artifacts became "published" when their
+  `BUILD-LOG.md` entries were restamped on 2026-08-20, so a full rebuild would have **created 13
+  new backup builds** — not a freeze fix, and useless besides, since none of those lessons has an
+  `app.activities` row a cadet could reach. The rebuild was driven from the 38 slugs already in
+  `site/data/backup-builds.json` instead. **`--all` is no longer a synonym for "the live set."**
+- A slug-comparison check reported `SLUG CHANGED` on all five phys-110 builds. **False positive:**
+  phys-110 wraps the declaration across lines and the check required `= "` on one line — the same
+  too-strict pattern PROJECT.md already records for `check_artifact.py`. Re-checked with the
+  tolerant form: all five unchanged. A fifth copy of that pattern would have been a fifth bug.
+
+`site/data/backup-builds.json` still lists **38**; no build was added or removed.
+
+**Still true:** no automated check exercises the timeout or the restore, and no cadet has yet run a
+session on a rebuilt backup. The Claude artifacts still share the missing timeout.
+
+---
+
 ## 2026-08-21 (third) — Matthew Recker via Claude
 
 ### A cadet's backup session froze at the report and there was no way out but losing it
