@@ -37,9 +37,11 @@
 
        This is NOT the equal-weight rule the .choice-card comment above describes. That rule is
        about written vs interactive, where a styled default would bias the preference the design
-       exists to measure. Claude vs Gemini is the opposite case: Claude IS the intended path and
-       the better lesson, so it carries the accent border and the "recommended" note, and Gemini
-       is offered plainly beside it rather than hidden behind a link a blocked cadet has to find. */
+       exists to measure. Claude vs Gemini is not a preference to measure at all: as of
+       2026-08-21 there is ONE launch button, and where a Gemini build exists it is the Gemini
+       one. Claude free tier was timing cadets out mid-lesson, so it stopped being the path
+       worth defaulting to. The accent border now marks the only button rather than the
+       preferred one. */
     .launch-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
     .launch-btn { flex: 1 1 190px; max-width: 260px; min-width: 0;
       display: flex; align-items: center; gap: 10px; text-align: left;
@@ -238,22 +240,21 @@
       window.open(l.backupHref, '_blank', 'noopener');
     }
 
-    /** The two ways into the interactive lesson, as two buttons of the SAME size.
+    /** The way into the interactive lesson: ONE button.
      *
-     *  Claude first and marked recommended: it is the intended path and the better lesson, and
-     *  that preference is carried by an accent border and one word rather than by hiding the
-     *  alternative. Gemini sits beside it as an equal-sized button.
+     *  Until 2026-08-21 this offered Claude marked "Recommended" with Gemini beside it as the
+     *  "Backup". Claude free tier was timing cadets out mid-lesson, so the course director
+     *  reversed it: Gemini is the lesson now, and Claude is not offered where a Gemini build
+     *  exists.
      *
-     *  This replaced a line reading "Claude not loading, or did it stop partway through? Use the
-     *  backup version", which asked a cadet to diagnose a failure before it would offer them a
-     *  way out — and buried the way out in prose until they did. A cadet whose tutor just died
-     *  mid-session is the worst possible reader for a conditional sentence.
+     *  It falls back to Claude when `l.backupHref` is null — a registered lesson whose artifact
+     *  has no Gemini build yet. Hiding Claude there too would leave the cadet with NO way in,
+     *  which is a worse failure than the one this change fixes. So the fallback is not a
+     *  leftover; it is the whole reason this is a conditional rather than a deletion.
      *
-     *  The Gemini button renders only when `l.backupHref` is set, which is null unless the lesson
-     *  has a build AND the interactive is launchable (student-lessons.js) — the SAME boolean the
-     *  Claude button is gated on, so the two cannot drift apart, and the row collapses to a single
-     *  button on its own. `flex: 1 1 190px; max-width: 260px` is what keeps that single button the
-     *  same width as each of the two.
+     *  `backupHref` is null unless the lesson has a build AND the interactive is launchable
+     *  (student-lessons.js), so a build that exists but is not yet open to the cadet correctly
+     *  takes the Claude branch rather than showing a button that would not work.
      *
      *  `disabled` greys BOTH rather than hiding them, so a student can see the path exists before
      *  it opens. */
@@ -268,21 +269,24 @@
            </span>
          </button>`;
       return `<div class="launch-grid">
-        ${btn(`${prefix}-claude`, 'claude', 'Claude', 'Recommended', ' is-preferred')}
-        ${l.backupHref ? btn(`${prefix}-gemini`, 'gemini', 'Gemini', 'Backup', '') : ''}
+        ${l.backupHref
+          ? btn(`${prefix}-gemini`, 'gemini', 'Gemini', 'Start here', ' is-preferred')
+          : btn(`${prefix}-claude`, 'claude', 'Claude', 'Start here', ' is-preferred')}
       </div>`;
     }
 
-    /** The note under the buttons. States the preference plainly instead of implying a fault, and
-     *  names the one real prerequisite the Gemini path has — which until now lived only on the
-     *  interstitial that clicking Gemini no longer opens. Nothing else on this page would tell a
-     *  cadet they need a key, and finding that out only after launching is the whole reason the
-     *  sentence is here. */
+    /** The note under the button. It names the one real prerequisite the Gemini path has —
+     *  which lives only on the interstitial that `&go=1` skips. Nothing else on this page would
+     *  tell a cadet they need a key, and finding that out only after launching is the whole
+     *  reason the sentence is here.
+     *
+     *  It no longer ranks the two tutors: as of 2026-08-21 only one button is rendered, so a
+     *  sentence about choosing between them would describe a choice the cadet is not offered. */
     function launchNote(l) {
       if (!l.backupHref) return '';
-      return `<div class="study-note">Start with Claude — it is the smoother lesson. If it will
-        not load, or stops partway, Gemini runs the same lesson and counts exactly the same. Gemini
-        asks for a free Google AI Studio key the first time you use it on a device.</div>`;
+      return `<div class="study-note">This lesson runs on Google Gemini. It asks for a free
+        Google AI Studio key the first time you use it on a device — about a minute to create,
+        and it stays in your browser. PREP never receives it.</div>`;
     }
 
     function gradeCard(l) {

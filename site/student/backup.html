@@ -68,9 +68,10 @@
           <h1 class="backup-lesson">${esc(title)}</h1>
           <div class="alert alert-warn" style="margin-top:12px">${detail}</div>
           <p class="muted" style="font-size:13px;margin-top:14px">
-            Keep trying the Claude version &mdash; a busy-server error usually clears within a few
-            minutes. If it does not clear before your deadline, tell your instructor: they can grant
-            an extension, and they would rather hear from you early than late.
+            Open the lesson from your PREP lesson page instead &mdash; that is where every
+            interactive lesson now starts. If you cannot get in before your deadline, tell your
+            instructor: they can grant an extension, and they would rather hear from you early
+            than late.
           </p>
         </div>`);
     }
@@ -132,20 +133,13 @@
       shell(`
         <div class="card">
           <p class="backup-course">${esc(course)}${lesson ? ' &middot; ' + esc(lesson) : ''}</p>
-          <h1 class="backup-lesson">${esc(title)} &mdash; backup version</h1>
+          <h1 class="backup-lesson">${esc(title)}</h1>
 
           <div class="alert alert-info" style="margin-top:14px">
-            <strong>This is the backup version, and it counts exactly the same.</strong>
-            It runs the same lesson on Google Gemini using <strong>your own free API key</strong>.
-            Claude is still the smoother lesson, so go back to it when you can &mdash; but if it
-            will not load, this one will get you through.
+            <strong>This is the lesson, and it counts exactly the same.</strong>
+            It runs on Google Gemini using <strong>your own free API key</strong>. It asks the
+            same questions, produces the same report, and submits to PREP through the same page.
           </div>
-
-          <p style="font-size:13.5px;line-height:1.65;margin-top:14px">
-            <strong>Your work counts exactly the same.</strong> The backup asks the same questions,
-            produces the same report, and submits to PREP through the same page. Your instructor
-            cannot tell which one you used, and neither can the gradebook.
-          </p>
 
           <p style="font-size:13.5px;line-height:1.65;margin-top:12px">You will need a free Google
             AI Studio key &mdash; it takes about a minute:</p>
@@ -161,11 +155,8 @@
           </p>
 
           <a class="btn btn-primary backup-open" href="../${esc(build.path)}">
-            Open the backup lesson &rarr;
+            Open the lesson &rarr;
           </a>
-          <p class="muted" style="font-size:12px;text-align:center">
-            Claude usually frees up within a few minutes, if you would rather wait for it.
-          </p>
         </div>`);
     })();
   </script>

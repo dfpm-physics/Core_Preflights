@@ -7,8 +7,10 @@ WHY THIS EXISTS
     same tutor prompt, same grounding, same report, same submit contract -- running against
     Google's Generative Language API with the CADET'S OWN free-tier key.
 
-    It is a fallback, not an alternative. The Claude artifact stays the desired path; the
-    backup is reached only from a failed connection check, and it says so on its face.
+    Since 2026-08-21 this is the DEFAULT path for cadets, not a fallback. Claude free tier was
+    timing them out, so the site offers this build first and the Claude launch is hidden where
+    a build exists. The page no longer describes itself as a backup -- the banner that said so
+    was removed the same day. The name of this file and the bucket did not change.
 
 WHAT IS AND IS NOT ALLOWED TO CHANGE
     Everything the cohort rollup depends on is byte-identical to the published build:
@@ -261,10 +263,15 @@ let MODEL_CHAT = [
 let MODEL_STUDY = MODEL_CHAT;
 
 // The report is ONE request per session and it is the graded artifact the cohort rollup reads,
-// so it gets the strongest model the key has and can afford a 20/day cap. It falls through
-// into the chat pool rather than failing: a report from a weaker model beats no report.
+// so it gets a strong model and can afford a 20/day cap. It falls through into the chat pool
+// rather than failing: a report from a weaker model beats no report.
+//
+// 3.7-flash headed this pool until 2026-08-21 and is GONE from it. Instructors were held in a
+// loop that never produced a summary: the report is the largest generation of the session, on
+// the slowest model, and it routinely missed the two-minute deadline. See the AbortError
+// handler in rawCall for the other half of that bug -- the ladder head alone would only have
+// moved the loop down one rung.
 let MODEL_REPORT = [
-  "gemini-3.7-flash",
   "gemini-3.6-flash",
   "gemini-3.5-flash",
 ].concat(MODEL_CHAT);"""
@@ -392,7 +399,14 @@ __LADDER_BLOCK__
 // Used only if the ListModels call itself fails, so it never gets filtered against a listing.
 const MODEL_FALLBACKS = MODEL_CHAT;
 
-const MAX_TOKENS = 4096;                                    // CONSTANT
+// Doubled from the Claude build 4096-token cap on 2026-08-21. Every conversational turn is a few
+// hundred tokens, but the REPORT is one generation carrying a filled 3,404-char skeleton
+// plus the required jitt-data object -- ~2,000-3,300 tokens -- and on a thinking-enabled
+// model the reasoning shares the same ceiling. Truncation there is SILENT: the text is
+// non-empty, so the empty-candidate guard in callTutor never runs and a report that stops
+// mid-table is accepted as a whole one, with its jitt-data fence cut off. These models
+// allow far more than this; nothing else in the session comes near it.
+const MAX_TOKENS = 8192;
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 // Reject anything that is not a text tutor (media/embedding/live/tts) and anything
@@ -596,10 +610,20 @@ function loadSession(mode, cadetId) {
           });
       } finally { clearTimeout(deadline); }
     } catch (e) {
-      // An abort is the deadline, not a flaky network. Raised straight away rather than
-      // retried: the cadet has already waited two minutes and a silent second wait reads as
-      // the same freeze they are trying to escape.
-      if (e && e.name === "AbortError") throw { kind: "timeout", status: 0 };
+      // An abort is the deadline, not a flaky network. Still not retried SILENTLY -- the cadet
+      // has already waited two minutes and a second silent wait reads as the same freeze they
+      // are trying to escape. But the model that failed to answer is marked SPENT and the
+      // ladder advances, so the Retry they choose to press lands on a DIFFERENT rung.
+      //
+      // Without this the throw left the model seated, seatLadder put the next attempt straight
+      // back on it, and the cadet looped on the same two-minute wait with no way past it. That
+      // is the report-stage loop instructors hit: press Retry, wait two minutes, repeat.
+      // Marking it spent is the half that ENDS the loop; dropping 3.7 from the report pool
+      // only made it rarer.
+      if (e && e.name === "AbortError") {
+        spentModels[activeModelRef.current] = true;
+        throw { kind: "timeout", status: 0, moved: nextModel(activeModelRef) };
+      }
       if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
       throw { kind: "network", status: 0 };
     }
@@ -657,9 +681,22 @@ function loadSession(mode, cadetId) {
       if (nextModel(activeModelRef)) { attempt = 0; continue; }
       throw { kind: "quota", status: 429 };
     }
-    // Server capacity, not the cadet's quota. Nothing to switch to -- wait it out.
+    // Server capacity, not the cadet's quota -- but it is per MODEL, not per project, and
+    // treating it as "nothing to switch to" is what hung the report stage on 2026-08-21.
+    //
+    // An instructor's usage dashboard, taken while stuck and far below every limit, showed
+    // one 503 ServiceUnavailable, requests to gemini-3.7-flash at exactly the report stage,
+    // and ZERO output tokens from it -- while gemini-3.5-flash-lite served the whole
+    // conversation normally in the same minutes. The model was unavailable for that key;
+    // the project was fine. This branch retried the same model, gave up, and told the cadet
+    // to wait -- so every Retry re-seated the same dead rung and never produced a summary.
+    //
+    // Now it walks, exactly as the 429 path does. `capacity` is reported only when the
+    // whole ladder is refusing, which is the case that message was actually written for.
     if (res.status === 529 || res.status >= 500) {
       if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      spentModels[activeModelRef.current] = true;
+      if (nextModel(activeModelRef)) { attempt = 0; continue; }
       throw { kind: "capacity", status: res.status };
     }
     throw { kind: "request", status: res.status };
@@ -744,14 +781,24 @@ async function discoverModel(activeModelRef) {
   const text = ((cand && cand.content && cand.content.parts) || [])
     .map((p) => p.text || "").join("").trim();
   if (!text) {
-    // A blocked prompt or a MAX_TOKENS stop returns 200 with no usable text. Surface it
-    // rather than showing the cadet an empty tutor turn.
+    // HTTP 200 with a candidate carrying no text. SAFETY is about the content and is the
+    // cadet's to act on; everything else is the MODEL failing -- MAX_TOKENS spent on
+    // thinking, RECITATION on a report that quotes the cadet back, or a model simply
+    // returning nothing.
+    //
+    // That last one is not hypothetical. An instructor stuck at the report stage on
+    // 2026-08-21, far below every free-tier limit, had a usage dashboard showing
+    // gemini-3.7-flash with real INPUT tokens and ZERO output tokens. This throw sits in
+    // callTutor, ABOVE rawCall, so it used to skip spentModels entirely: the ladder never
+    // moved and every Retry re-sent a byte-identical request to the model that had just
+    // returned nothing. Now it walks, like the 5xx and the timeout paths.
     const why = (cand && cand.finishReason)
       || (data.promptFeedback && data.promptFeedback.blockReason);
-    throw {
-      kind: (why === "SAFETY" || why === "PROHIBITED_CONTENT") ? "blocked" : "request",
-      status: 0,
-    };
+    if (why === "SAFETY" || why === "PROHIBITED_CONTENT") {
+      throw { kind: "blocked", status: 0 };
+    }
+    spentModels[activeModelRef.current] = true;
+    throw { kind: "empty", status: 0, moved: nextModel(activeModelRef), why: why || "" };
   }
   return text;""",
         "callTutor -> Gemini shape")
@@ -776,7 +823,9 @@ async function discoverModel(activeModelRef) {
     case "model":
       return "No usable Gemini model was found for this key. Tell your instructor \\u2014 the model list may have moved again.";
     case "timeout":
-      return "Google did not answer within two minutes. Your conversation is saved \\u2014 press Retry. If it happens twice, reload the page: the session is restored from this browser and you will not lose your work.";
+      return "That model did not answer within two minutes. Your conversation is saved, and Retry will use a different one \\u2014 so it is not the same wait again. If it keeps happening, reload the page: the session is restored from this browser and you will not lose your work.";
+    case "empty":
+      return "That model returned an empty answer. It happens when the summary runs long or the model is overloaded. Retry will use a different one.";
     case "badrequest":
       return "Google rejected that request \\u2014 most likely the conversation has grown too long, which happens sooner when it was carried over from Claude. Your key is fine. Press Retry, and tell your instructor if it keeps happening.";""",
         "error messages -> Gemini")
@@ -808,10 +857,13 @@ async function discoverModel(activeModelRef) {
     # unknown ones, so this is additive in both directions: an older receiver drops it, and a
     # newer receiver reads its absence correctly from an older artifact. The four frozen keys
     # (t/i/r/d) are untouched.
+    # REPLACES the source's marker rather than inserting beside it. Inserting left the URL
+    # carrying `&v=gemini&v=claude`, which only reads correctly because URLSearchParams.get
+    # returns the FIRST match -- reorder those two lines and every backup submission is
+    # recorded as Claude, with nothing reporting it.
     p.sub1(
-        rb'        \+ "#t=interaction"\r\n',
-        b"""        + "#t=interaction"
-        + "&v=gemini"          // transport marker -- optional, additive, contract section 8
+        rb'        \+ "&v=claude"[^\r\n]*\r\n',
+        b"""        + "&v=gemini"          // transport marker -- optional, additive, contract section 8
 """,
         "submit URL carries the transport marker")
 
@@ -1207,6 +1259,106 @@ async function discoverModel(activeModelRef) {
 // ===========================================================================""",
         "claude-in-claude auth comment -> Gemini")
 
+    # -- 12a. Finish bar: refs and the one-way switch to ungraded practice -----
+    # Anchored on `function send()`, which is byte-identical in all 51 sources. The refs
+    # declaration two lines above it is NOT -- five phys-110 artifacts wrap it differently.
+    p.sub1(
+        rb"  function send\(\) \{\r\n",
+        b"""  const submittedRef = useRef(false);       // Submit has been clicked at least once
+  const studyFromGradedRef = useRef(false); // a graded run carried on as practice
+
+  // "Keep talking" after the report. Switches this session to ungraded study mode: the
+  // finish bar is gated on mode === "graded" so it disappears, sysFor() falls to the study
+  // prompt and the study ladder, and every report effect stops. Deliberately ONE-WAY --
+  // study work is not graded work, and letting it flow back would make practice turns part
+  // of the graded conversation.
+  //
+  // Confirmed when nothing has been submitted, because the button that would have sent the
+  // report is the button this removes. The report is not lost either way: the snapshot
+  // effect stops writing once this is set, so the GRADED snapshot survives and a reload
+  // brings the report and the Submit button back.
+  function continueInStudy() {
+    if (!submittedRef.current && !window.confirm(
+      "Your report has not been submitted yet.\\n\\n"
+      + "Keep talking is ungraded practice and submits nothing. Your report stays saved in "
+      + "this browser: reload this page, choose the graded preflight and enter the same "
+      + "name, and the Submit button comes back.\\n\\nCarry on without submitting?")) return;
+    studyFromGradedRef.current = true;
+    sysArgsRef.current = null;                 // sysFor() -> study prompt + study ladder
+    sysRef.current = buildStudySystemPrompt();
+    setError(null);
+    setMode("study");
+  }
+
+  function send() {
+""",
+        "finish-bar refs and continueInStudy")
+
+    # -- 12b. The finish bar itself, ABOVE the composer ------------------------
+    # Submit was a 12px link in the footer strip, beside "Enter to send". It is the one
+    # thing a cadet has to do at that point, so it gets a panel and a large button, and the
+    # footer goes back to being only the compose hint.
+    p.sub1(
+        rb'        <div className="composer">\r\n',
+        b"""        {mode === "graded" && hasReport && (
+          <div className="finish-bar">
+            <div className="finish-note">
+              Timed portion complete. The first report you submit is the one your instructor
+              grades.
+            </div>
+            <div className="finish-actions">
+              {submitUrl
+                ? <a className="finish-submit" href={submitUrl} rel="noopener noreferrer"
+                     onClick={() => { submittedRef.current = true; clearSession(); }}>
+                    Submit report &rarr;
+                  </a>
+                : <span className="finish-wait">Preparing your submit link&hellip;</span>}
+              <button className="finish-continue" onClick={continueInStudy}>
+                Keep talking &mdash; not graded
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="composer">
+""",
+        "finish bar above the composer")
+
+    # The footer keeps only the compose hint. Its report branch moved into the bar above,
+    # and the old .report-actions / .submit-btn / .submit-hint markup goes with it.
+    p.sub1(
+        rb'        <div className="footer">\r\n.*?\r\n        </div>\r\n',
+        b"""        <div className="footer">
+          <span className="footer-note">Enter to send &middot; Shift+Enter for new line</span>
+        </div>
+""",
+        "footer reduced to the compose hint")
+
+    # -- 12c. Finish-bar styling ------------------------------------------------
+    p.sub1(
+        rb"  \.report-actions \{.*?\.submit-hint[^\r\n]*\r\n",
+        b"""  /* The finish bar. Full width above the composer, because submitting is the only
+     thing left to do and it used to be a 12px link in the footer strip. */
+  .finish-bar { flex-shrink: 0; border-top: 2px solid var(--navy); background: #f1f5f9;
+                padding: 16px; text-align: center; }
+  .finish-note { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+  .finish-actions { display: flex; gap: 12px; justify-content: center; align-items: center;
+                    flex-wrap: wrap; }
+  .finish-submit { display: inline-block; padding: 14px 36px; background: var(--navy);
+                   color: var(--white); border: none; border-radius: var(--radius-sm);
+                   font-size: 16px; font-weight: 700; text-decoration: none; cursor: pointer;
+                   transition: background .15s; }
+  .finish-submit:hover { background: var(--navy-light); }
+  .finish-continue { padding: 13px 22px; background: var(--white); color: var(--navy);
+                     border: 2px solid var(--navy); border-radius: var(--radius-sm);
+                     font-size: 14px; font-weight: 600; cursor: pointer;
+                     transition: background .15s; }
+  .finish-continue:hover { background: #e2e8f0; }
+  .finish-wait { font-size: 13px; color: var(--text-muted); }
+""",
+        "finish-bar styling")
+
+
     # ── 12. Header banner (a comment -> ASCII only) ───────────────────────────
     p.sub1(
         rb'import React, \{ useState, useRef, useEffect \} from "react";\r\n',
@@ -1315,6 +1467,10 @@ async function discoverModel(activeModelRef) {
   // thing restored: the last SETTLED state is always what comes back.
   useEffect(() => {
     if (!mode || loading || !messages.length) return;
+    // A graded run carried on as practice must NOT overwrite the graded snapshot: there is
+    // one key per lesson, and that snapshot is the only way back to a report the cadet has
+    // not submitted. Losing the practice continuation on reload costs nothing.
+    if (studyFromGradedRef.current) return;
     saveSession({
       v: 1, id: INTERACTION_ID, mode: mode, cadetId: cadetId.trim(),
       msgs: messages, ts: Date.now(),
@@ -1346,18 +1502,11 @@ async function discoverModel(activeModelRef) {
 
     # Submitting ends the session, so the snapshot must not outlive it -- otherwise a cadet who
     # comes back to the lesson inside the six-hour window is offered their finished work as
-    # "unfinished". Cleared on the click rather than on arrival at the receiver, because this
-    # page never learns whether that navigation succeeded. Worst case the cadet abandons the
-    # submit page and loses a restore they no longer need: the report is already in the URL
-    # they just followed, and re-submitting a graded report is refused anyway once the grade
-    # is finalized.
-    p.sub1(
-        rb'                \? <a className="submit-btn" href=\{submitUrl\} '
-        rb'rel="noopener noreferrer">Submit report \xe2\x86\x92</a>\r\n',
-        b"""                ? <a className="submit-btn" href={submitUrl} rel="noopener noreferrer"
-                     onClick={() => clearSession()}>Submit report \xe2\x86\x92</a>
-""",
-        "clear the snapshot on submit")
+    # "unfinished". That clearSession() now rides in the FINISH BAR markup emitted by step 12b,
+    # together with submittedRef, rather than being patched onto the old footer link afterwards.
+    # Two steps writing the same anchor is how the previous arrangement broke: 12b replaced the
+    # markup this one was written against, and the porter refused rather than silently skipping.
+
 
     # Tell the cadet what is about to happen, above the button that does it.
     p.sub1(
@@ -1429,7 +1578,14 @@ async function discoverModel(activeModelRef) {
       // it was still probing, and rebuild the prompt without REPORT_FORMAT.
       reportPhaseRef.current = !!saved.reportPhase;
       extSentRef.current = !!saved.extSent;
-      payloadTriedRef.current = !!saved.payloadTried;
+      // NOT restored when the payload is still "pending". That pair means the snapshot was
+      // taken WHILE the repair request was in flight -- the repair latches this ref before
+      // it calls, and never sets `loading`, so the snapshot effect is not skipped. Restoring
+      // both would make the latch permanent: the repair can never re-run, submitReady
+      // requires payloadState !== "pending", and the cadet is left looking at a finished
+      // report with "Preparing submit..." beside it in every reload for six hours -- after
+      // following this page's own advice to reload. Let it have one more attempt instead.
+      payloadTriedRef.current = !!saved.payloadTried && saved.payloadState !== "pending";
       if (typeof saved.activeSec === "number") activeSecRef.current = saved.activeSec;
       reportSecRef.current = (saved.reportSec == null) ? null : saved.reportSec;
       if (saved.hasReport) { setHasReport(true); setReportText(saved.reportText || ""); }
@@ -1639,7 +1795,7 @@ root.render(React.createElement(__COMPONENT__));
   window.addEventListener("error", function (e) {
     var b = document.getElementById("boom");
     b.style.display = "block";
-    b.textContent = "This backup build did not load:\\n\\n" + (e.message || e.error || e) +
+    b.textContent = "This lesson did not load:\\n\\n" + (e.message || e.error || e) +
       "\\n\\nTell your instructor and include this message.";
   });
 </script>

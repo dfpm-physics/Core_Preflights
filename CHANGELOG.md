@@ -8,6 +8,116 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-21 (seventh) — Matthew Recker via Claude
+
+### Gemini becomes the default path, and the report stage stops hanging
+
+Course director's call, on two reports from the field: cadets timing out on free-tier Claude, and
+instructors stuck at the final summary. **All 38 live backup builds were rebuilt** under
+`--policy legacy` — the tutoring ladder is unchanged and the app-delivered opening is still off,
+because the reorder on trial in `tests/browser/` is explicitly **not** adopted yet.
+
+#### The report hang was FOUR bugs, and the model was the smallest of them
+
+The question asked was "is it really just 3.7?" It is not. An instructor's own Gemini usage
+dashboard, taken while stuck and **far below every free-tier limit**, settled it: one
+**503 ServiceUnavailable**, requests to `gemini-3.7-flash` at exactly the report stage, and
+**zero output tokens** from it against real input tokens — while `gemini-3.5-flash-lite` served
+the same conversation normally in the same minutes. Not quota. Not the key.
+
+**Three failure paths threw without marking the model spent**, so `seatLadder` put every Retry
+back on the rung that had just failed. That is the hang: press Retry, fail the same way, forever.
+
+- **A 5xx.** The branch read *"Server capacity, not the cadet's quota. Nothing to switch to — wait
+  it out."* The premise was wrong: a 503 from this API is per **model**, not per project, which is
+  what the dashboard shows. It now walks, and reports `capacity` only when the whole ladder
+  refuses. *(Independently reached by another AI the director consulted — same conclusion.)*
+- **A timeout.** An `AbortError` was raised without marking the model, so the next Retry re-ran the
+  same two-minute wait. Still not retried *silently* — the cadet has already waited — but the
+  ladder advances so their Retry lands somewhere else.
+- **An empty candidate.** HTTP 200 with no text — `MAX_TOKENS` burned on thinking, `RECITATION`, or
+  a model simply returning nothing, which is precisely what the dashboard caught 3.7-flash doing.
+  This threw from `callTutor`, **above** `rawCall`, so it skipped `spentModels` entirely and
+  reported *"The tutor request failed (HTTP ?)"*. It now walks and has its own message.
+
+Only then does the ladder matter: **3.7-flash is out of the report pool**, which now heads on 3.6.
+
+**A fifth bug could not be retried out of.** The payload-repair effect latches its "tried" ref
+*before* its request and never sets `loading`, so the snapshot effect keeps running and writes
+`{payloadState: "pending", payloadTried: true}`. A reload — which this page's own timeout copy
+tells the cadet to do — restored both, the repair could never run again, and `submitReady`
+requires `payloadState !== "pending"`. Finished report on screen, **"Preparing submit…" beside it
+in every reload for six hours**, no Submit control and no extension. The ref is no longer restored
+while the payload is still pending.
+
+**`MAX_TOKENS` 4096 → 8192.** The report is the one generation that can plausibly hit the cap — a
+filled 3,404-char skeleton plus the required `jitt-data` object, ~2,000–3,300 tokens, sharing the
+ceiling with any thinking tokens. Truncation there is **silent**: the text is non-empty, so the
+empty-candidate guard never runs and a report that stops mid-table is accepted as a whole one.
+
+#### The submit control
+
+Submit was a 12px link in the footer strip, beside "Enter to send". It is now a **panel above the
+composer**: a large Submit, and beside it **Keep talking**, which carries the conversation on as
+ungraded practice and removes the Submit button.
+
+- **Keep talking confirms first when nothing has been submitted**, because it removes the button
+  that would have submitted. And the graded snapshot **survives** it — the snapshot effect stops
+  writing once the switch happens — so a reload with the same name brings the report and the
+  Submit button back. That is a real recovery path, asserted in the harness, not a warning.
+- **The submit URL carried two transport markers.** The source writes `&v=claude` and the porter
+  *inserted* `&v=gemini` beside it, so every backup submission sent `v=gemini&v=claude`. It read
+  correctly only because `URLSearchParams.get` returns the first match — reorder those two lines
+  and every Gemini submission is recorded as Claude, silently. Replaced, not inserted.
+
+#### Gemini is the default, and nothing calls it a backup
+
+- **The "BACKUP VERSION" banner is gone** from all 38 builds, along with "backup" in the tab title.
+- **`site/student/lessons.html` renders ONE launch button**, and where a Gemini build exists it is
+  the Gemini one. It **falls back to Claude when there is no build** — hiding it there too would
+  leave the cadet no way in, which is worse than the problem being fixed.
+- `site/student/backup.html` no longer tells cadets to keep trying Claude or that Claude is
+  smoother; `site/help/student-getting-started.md` was rewritten to match, including the key
+  instructions and what the finish bar now offers.
+
+#### Verification
+
+New harness: **`tests/browser-harness/gemini-finish-bar.mjs`**, which drives a build to the END of
+a graded session in a real browser — reachable with no key, by seeding a finished session into
+localStorage and stubbing only the model listing. Nothing could see the finish bar before this:
+`gemini-build.mjs` stops at the start screen.
+
+All 38 rebuilt with per-build assertions: slug unchanged, all three failure paths walk, finish bar
+present, opening not scripted, and banner / `v=claude` / 3.7-flash / the 4096 cap all absent.
+One build per course through every harness — phys-110, phys-215, phys-310: `gemini-build` **7/7**,
+`gemini-finish-bar` **16/16**, `gemini-model-ladder` **17/17**, `gemini-handoff` **12/12**;
+`pass.mjs` **9/9**; the teaching sandbox **26/26**.
+
+**Three false alarms in my own checks, all the same root cause** — a pattern written against
+phys-215 and run against phys-110, which wraps `const INTERACTION_ID` and has **no
+`REPORT_MARKER` constant at all**. Each reported a healthy build as broken, or skipped it silently.
+PROJECT.md already records this trap for `check_artifact.py`; it is not specific to that tool.
+
+**Still Node-only — no real tutor turn, and no real report generated.** The finish-bar harness
+starts from a seeded report, so it proves what the cadet is offered at the end, not that the tutor
+can get there.
+
+#### Known and NOT fixed (found while investigating, needs a decision)
+
+- **lz-string gives up after 10s with no failure state.** If it loses the race with the 2.87 MB
+  Babel fetch, `lzReady` stays false for the page's life: no Submit control, no error, and the
+  Claude `#h=` handoff is silently discarded. A resource 404 is not caught by the `#boom` handler.
+- **A report wrapped in code fences blanks itself.** `extractPayload` pairs fences left-to-right,
+  so a leading ` ```markdown ` makes the report empty, which then 400s every later turn.
+- **`isReportMsg` is a bare substring test**, so a tutor that merely *mentions* the heading latches
+  `hasReport` early and the real report is never detected.
+- **`clearSession()` still fires on the Submit click**, before the receiver validates anything —
+  and the receiver's own remedy is "re-open the lesson and submit again".
+- Faculty copy (`artifacts.html`, `faculty-artifacts.js`) still reads *"a fallback, not an
+  alternative"*, which now contradicts the student experience.
+
+---
+
 ## 2026-08-21 (sixth) — Matthew Recker via Claude
 
 ### The scripted opening is paced, and the "BACKUP VERSION" banner is gone

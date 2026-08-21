@@ -135,14 +135,30 @@ if (policy === 'teaching') {
      'legacy: the model still writes its own opening - what the live builds do');
 }
 
-// The report HEAD now differs by policy: legacy still sends that one request to 3.7-flash,
-// which is what the live builds do and what `legacy` exists to reproduce. Teaching drops it
-// there too -- the report is the largest generation in the session, so the slowest model is
-// the worst place for it, and it is the stage the cadet who hung was at.
-ok(S.MODEL_REPORT[0] === (policy === 'legacy' ? 'gemini-3.7-flash' : 'gemini-3.6-flash'),
-   `report starts on ${policy === 'legacy' ? '3.7' : '3.6'} - one request, and it is the graded artifact`);
+// The report head is now the same under BOTH policies, and 3.7 is absent from both. It was the
+// legacy head until 2026-08-21, when instructors were found stuck at the report stage: one
+// instructor's usage dashboard, taken while hung and far under every limit, showed a 503 from
+// gemini-3.7-flash and ZERO output tokens from it, while 3.5-flash-lite served the same session
+// normally. It was called, billed for input, and produced nothing. Asserted as an ABSENCE,
+// because that is the decision -- a pool that quietly regains it is the regression.
+ok(!S.MODEL_REPORT.includes('gemini-3.7-flash'),
+   'report pool does NOT contain 3.7-flash - it returned 503s and no output tokens');
+ok(S.MODEL_REPORT[0] === 'gemini-3.6-flash',
+   'report starts on 3.6 - one request, and it is the graded artifact');
 ok(isLite(S.MODEL_REPORT[S.MODEL_REPORT.length - 1]),
    'report falls through to the floor rather than failing - a weak report beats none');
+
+// The ladder head was never the whole bug. TWO failure paths threw without marking the model
+// spent, so seatLadder put every Retry back on the rung that had just failed and the cadet
+// looped on it forever. Checked against the raw source: both sit in rawCall, outside the model
+// block this file evaluates. These are the assertions that keep the report stage un-hung; the
+// ladder ordering only makes a hang less likely.
+ok(/AbortError[\s\S]{0,400}spentModels\[activeModelRef\.current\] = true/.test(src),
+   'a TIMED-OUT model is marked spent - otherwise Retry repeats the same two-minute wait');
+ok(/res\.status >= 500[\s\S]{0,600}spentModels\[activeModelRef\.current\] = true[\s\S]{0,200}nextModel\(activeModelRef\)/
+     .test(src),
+   'a 5xx WALKS the ladder - a 503 is per-model, not per-project, so there is something to '
+   + 'switch to');
 
 // --- the 429 walk: every rung is tried before a cadet is told the quota is gone ---------
 const ref = {};

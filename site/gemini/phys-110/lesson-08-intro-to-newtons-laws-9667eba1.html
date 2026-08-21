@@ -7,7 +7,7 @@
 <!-- Not a security control. The exposure here is the same one the published Claude artifact
      already carries; this only keeps worked extension problems out of a search index. -->
 <meta name="robots" content="noindex, nofollow">
-<title>Intro to Newton's Laws &mdash; backup &mdash; PREP</title>
+<title>PHYS 110 Lesson 8 &mdash; Intro to Newton's Laws &mdash; PREP</title>
 
 <!-- React + in-browser JSX, served from OUR OWN ORIGIN rather than a CDN.
      Two reasons, and the second is the load-bearing one:
@@ -23,19 +23,18 @@
 <style>
   /* The artifact sizes .app to the full window.innerHeight inline, because on claude.ai it
      renders inside an auto-sizing embed where anything viewport-relative creates a
-     measure->grow loop. Re-hosted on a normal page that assumption is wrong: a banner above
-     it makes the document innerHeight + banner tall, so the PAGE scrolls and the app scrolls
-     inside it, with the composer pushed below the fold.
+     measure->grow loop. Re-hosted on a normal page that assumption is wrong: anything
+     ABOVE it makes the document innerHeight + that tall, so the PAGE scrolls and the app
+     scrolls inside it, with the composer pushed below the fold.
      Fixed here, in the wrapper, without touching a line of the artifact: the page is a
      non-scrolling flex column and .app is forced to fill exactly what is left. The
-     !important is what neutralises the artifact's inline height, which is the intent. */
+     !important is what neutralises the artifact's inline height, which is the intent.
+     STILL LOAD-BEARING with the backup banner gone (2026-08-21): #boom is a sibling in
+     the same column and appears on any Babel parse error, which is precisely when a
+     readable page matters most. */
   html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#eef1f5;
     font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
   #page{display:flex;flex-direction:column;height:100vh;height:100dvh}
-  #banner{flex:0 0 auto;background:#7c2d12;color:#fff;padding:7px 14px;
-    font-size:12px;line-height:1.5}
-  #banner strong{color:#fed7aa}
-  #banner a{color:#fed7aa}
   #root{flex:1 1 auto;min-height:0;overflow:hidden}
   #root .app{height:100% !important;max-height:100% !important}
   #boot{padding:28px 20px;text-align:center;color:#64748b;font-size:13px}
@@ -46,13 +45,6 @@
 </head>
 <body>
 <div id="page">
-  <div id="banner">
-    <strong>BACKUP VERSION</strong> &mdash; PHYS 110 Lesson 8. Use this only when the
-    Claude version is unavailable; <strong>the Claude version is still the intended path</strong> and
-    this one is less polished. It runs on <strong>your own free Google AI Studio key</strong>, sent
-    only to Google and remembered only in this browser. Your work submits to PREP exactly as normal
-    and counts the same.
-  </div>
   <div id="boom"></div>
   <div id="root"><div id="boot">Loading the lesson&hellip;</div></div>
 </div>
@@ -147,10 +139,15 @@ let MODEL_CHAT = [
 let MODEL_STUDY = MODEL_CHAT;
 
 // The report is ONE request per session and it is the graded artifact the cohort rollup reads,
-// so it gets the strongest model the key has and can afford a 20/day cap. It falls through
-// into the chat pool rather than failing: a report from a weaker model beats no report.
+// so it gets a strong model and can afford a 20/day cap. It falls through into the chat pool
+// rather than failing: a report from a weaker model beats no report.
+//
+// 3.7-flash headed this pool until 2026-08-21 and is GONE from it. Instructors were held in a
+// loop that never produced a summary: the report is the largest generation of the session, on
+// the slowest model, and it routinely missed the two-minute deadline. See the AbortError
+// handler in rawCall for the other half of that bug -- the ladder head alone would only have
+// moved the loop down one rung.
 let MODEL_REPORT = [
-  "gemini-3.7-flash",
   "gemini-3.6-flash",
   "gemini-3.5-flash",
 ].concat(MODEL_CHAT);
@@ -158,7 +155,14 @@ let MODEL_REPORT = [
 // Used only if the ListModels call itself fails, so it never gets filtered against a listing.
 const MODEL_FALLBACKS = MODEL_CHAT;
 
-const MAX_TOKENS = 4096;                                    // CONSTANT
+// Doubled from the Claude build 4096-token cap on 2026-08-21. Every conversational turn is a few
+// hundred tokens, but the REPORT is one generation carrying a filled 3,404-char skeleton
+// plus the required jitt-data object -- ~2,000-3,300 tokens -- and on a thinking-enabled
+// model the reasoning shares the same ceiling. Truncation there is SILENT: the text is
+// non-empty, so the empty-candidate guard in callTutor never runs and a report that stops
+// mid-table is accepted as a whole one, with its jitt-data fence cut off. These models
+// allow far more than this; nothing else in the session comes near it.
+const MAX_TOKENS = 8192;
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 // Reject anything that is not a text tutor (media/embedding/live/tts) and anything
@@ -222,6 +226,55 @@ const apiKeyRef = { current: "" };
 
 // localStorage key, namespaced like the site's other client-side state.
 const KEY_STORE = "prep.gemini.apikey";
+
+// THE OPENING, DELIVERED BY THE APP RATHER THAN BY THE MODEL.
+//
+// The prompt dictates both of these turns -- the Honor Code reminder is quoted in it
+// verbatim, and the opening question is marked VERBATIM. Generating them cost two API
+// calls per session out of ~14, and they are the two the cadet waits on before
+// anything has happened. Nothing is lost: there is no cadet answer to react to yet,
+// so there is nothing for the model to be better at.
+//
+// EXTRACTED AT BUILD TIME from this artifact's own prompt. Do not edit them here --
+// edit the prompt and re-port, or the app will say one thing and the tutor believe
+// another.
+const APP_OPENING = false;  // see --policy
+const OPENING_HONOR = "This conversation is governed by the USAFA Honor Code. Please do this on your own \u2014 don't have someone else's responses fed in, and don't paste from solution manuals. The conversation is short and the goal is your understanding, not a perfect performance. Ready to start?";
+const OPENING_QUESTION = "What did you find interesting or difficult in the reading?";
+
+// A scripted turn costs no request, so without this it lands INSTANTLY --
+// which reads as broken rather than as fast. The reply is on screen before the
+// cadet has finished sending, and the first REAL turn then pauses, which by
+// comparison looks like a fault. Paced like a generated turn instead: the typing
+// indicator the build already has, for about as long as reading the line takes.
+// Floored so the short turn is not instant either; capped so it never becomes a tax.
+const SCRIPTED_MS_PER_CHAR = 6;
+const SCRIPTED_MIN_MS = 900;
+const SCRIPTED_MAX_MS = 2600;
+function scriptedDelay(text) {
+  return Math.min(SCRIPTED_MAX_MS, Math.max(SCRIPTED_MIN_MS,
+    Math.round(String(text).length * SCRIPTED_MS_PER_CHAR)));
+}
+
+// How far the scripted opening has got, DERIVED from the transcript rather than held
+// in a ref -- so a restored session resumes at the right stage for free instead of
+// re-delivering an opening the cadet has already answered.
+function openerStage(msgs) {
+  const a = msgs.filter((m) => m.role === "assistant" && !m.hidden);
+  if (a.some((m) => m.content.indexOf(OPENING_QUESTION) > -1)) return 2;
+  if (a.some((m) => m.content.indexOf(OPENING_HONOR) > -1)) return 1;
+  return 0;
+}
+
+// Sent once, on the first REAL turn. Without it the tutor follows its instruction to
+// open with that question and asks it a second time, having just been answered.
+const OPENING_NOTE =
+  "[app] The Honor Code reminder and the opening question above were delivered by the "
+  + "app, quoting your prompt verbatim, and the cadet has just answered the opening "
+  + "question. Do NOT greet again and do NOT ask that question again. Treat their "
+  + "message as the reading reflection, judge it as you normally would, and continue "
+  + "the session from there.";
+
 
 // Every request gets a deadline. Until 2026-08-21 none of them did, and a cadet hit exactly
 // the failure that implies: the tutor sat on "Tutor is typing..." at the report stage and
@@ -1345,10 +1398,20 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
           });
       } finally { clearTimeout(deadline); }
     } catch (e) {
-      // An abort is the deadline, not a flaky network. Raised straight away rather than
-      // retried: the cadet has already waited two minutes and a silent second wait reads as
-      // the same freeze they are trying to escape.
-      if (e && e.name === "AbortError") throw { kind: "timeout", status: 0 };
+      // An abort is the deadline, not a flaky network. Still not retried SILENTLY -- the cadet
+      // has already waited two minutes and a second silent wait reads as the same freeze they
+      // are trying to escape. But the model that failed to answer is marked SPENT and the
+      // ladder advances, so the Retry they choose to press lands on a DIFFERENT rung.
+      //
+      // Without this the throw left the model seated, seatLadder put the next attempt straight
+      // back on it, and the cadet looped on the same two-minute wait with no way past it. That
+      // is the report-stage loop instructors hit: press Retry, wait two minutes, repeat.
+      // Marking it spent is the half that ENDS the loop; dropping 3.7 from the report pool
+      // only made it rarer.
+      if (e && e.name === "AbortError") {
+        spentModels[activeModelRef.current] = true;
+        throw { kind: "timeout", status: 0, moved: nextModel(activeModelRef) };
+      }
       if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
       throw { kind: "network", status: 0 };
     }
@@ -1406,9 +1469,22 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
       if (nextModel(activeModelRef)) { attempt = 0; continue; }
       throw { kind: "quota", status: 429 };
     }
-    // Server capacity, not the cadet's quota. Nothing to switch to -- wait it out.
+    // Server capacity, not the cadet's quota -- but it is per MODEL, not per project, and
+    // treating it as "nothing to switch to" is what hung the report stage on 2026-08-21.
+    //
+    // An instructor's usage dashboard, taken while stuck and far below every limit, showed
+    // one 503 ServiceUnavailable, requests to gemini-3.7-flash at exactly the report stage,
+    // and ZERO output tokens from it -- while gemini-3.5-flash-lite served the whole
+    // conversation normally in the same minutes. The model was unavailable for that key;
+    // the project was fine. This branch retried the same model, gave up, and told the cadet
+    // to wait -- so every Retry re-seated the same dead rung and never produced a summary.
+    //
+    // Now it walks, exactly as the 429 path does. `capacity` is reported only when the
+    // whole ladder is refusing, which is the case that message was actually written for.
     if (res.status === 529 || res.status >= 500) {
       if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      spentModels[activeModelRef.current] = true;
+      if (nextModel(activeModelRef)) { attempt = 0; continue; }
       throw { kind: "capacity", status: res.status };
     }
     throw { kind: "request", status: res.status };
@@ -1447,6 +1523,7 @@ async function discoverModel(activeModelRef) {
   const chat = MODEL_CHAT.filter((n) => have[n]);
   const report = MODEL_REPORT.filter((n) => have[n]);
   const study = MODEL_STUDY.filter((n) => have[n]);
+
   if (!chat.length && !scored.length) throw { kind: "model", status: 404 };
   MODEL_CHAT = chat.length ? chat : scored;
   MODEL_REPORT = report.length ? report : MODEL_CHAT;
@@ -1487,14 +1564,24 @@ async function callTutor(activeModelRef, history, sys, note) {
   const text = ((cand && cand.content && cand.content.parts) || [])
     .map((p) => p.text || "").join("").trim();
   if (!text) {
-    // A blocked prompt or a MAX_TOKENS stop returns 200 with no usable text. Surface it
-    // rather than showing the cadet an empty tutor turn.
+    // HTTP 200 with a candidate carrying no text. SAFETY is about the content and is the
+    // cadet's to act on; everything else is the MODEL failing -- MAX_TOKENS spent on
+    // thinking, RECITATION on a report that quotes the cadet back, or a model simply
+    // returning nothing.
+    //
+    // That last one is not hypothetical. An instructor stuck at the report stage on
+    // 2026-08-21, far below every free-tier limit, had a usage dashboard showing
+    // gemini-3.7-flash with real INPUT tokens and ZERO output tokens. This throw sits in
+    // callTutor, ABOVE rawCall, so it used to skip spentModels entirely: the ladder never
+    // moved and every Retry re-sent a byte-identical request to the model that had just
+    // returned nothing. Now it walks, like the 5xx and the timeout paths.
     const why = (cand && cand.finishReason)
       || (data.promptFeedback && data.promptFeedback.blockReason);
-    throw {
-      kind: (why === "SAFETY" || why === "PROHIBITED_CONTENT") ? "blocked" : "request",
-      status: 0,
-    };
+    if (why === "SAFETY" || why === "PROHIBITED_CONTENT") {
+      throw { kind: "blocked", status: 0 };
+    }
+    spentModels[activeModelRef.current] = true;
+    throw { kind: "empty", status: 0, moved: nextModel(activeModelRef), why: why || "" };
   }
   return text;
 }
@@ -1514,7 +1601,9 @@ function errorMessage(err, { afterRetries = false } = {}) {
     case "model":
       return "No usable Gemini model was found for this key. Tell your instructor \u2014 the model list may have moved again.";
     case "timeout":
-      return "Google did not answer within two minutes. Your conversation is saved \u2014 press Retry. If it happens twice, reload the page: the session is restored from this browser and you will not lose your work.";
+      return "That model did not answer within two minutes. Your conversation is saved, and Retry will use a different one \u2014 so it is not the same wait again. If it keeps happening, reload the page: the session is restored from this browser and you will not lose your work.";
+    case "empty":
+      return "That model returned an empty answer. It happens when the summary runs long or the model is overloaded. Retry will use a different one.";
     case "badrequest":
       return "Google rejected that request \u2014 most likely the conversation has grown too long, which happens sooner when it was carried over from Claude. Your key is fine. Press Retry, and tell your instructor if it keeps happening.";
     case "network":
@@ -1796,13 +1885,24 @@ const STYLE = `
             align-items: center; justify-content: space-between; flex-shrink: 0;
             background: var(--white); }
   .footer-note { font-size: 11px; color: var(--text-muted); }
-  .report-actions { display: flex; gap: 6px; flex-shrink: 0; }
-  .submit-btn { display: inline-block; padding: 6px 16px; background: var(--navy);
-                color: var(--white); border: none; border-radius: var(--radius-sm);
-                font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer;
-                transition: background .15s; }
-  .submit-btn:hover { background: var(--navy-light); }
-  .submit-hint { font-size: 11px; color: var(--text-muted); align-self: center; }
+  /* The finish bar. Full width above the composer, because submitting is the only
+     thing left to do and it used to be a 12px link in the footer strip. */
+  .finish-bar { flex-shrink: 0; border-top: 2px solid var(--navy); background: #f1f5f9;
+                padding: 16px; text-align: center; }
+  .finish-note { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+  .finish-actions { display: flex; gap: 12px; justify-content: center; align-items: center;
+                    flex-wrap: wrap; }
+  .finish-submit { display: inline-block; padding: 14px 36px; background: var(--navy);
+                   color: var(--white); border: none; border-radius: var(--radius-sm);
+                   font-size: 16px; font-weight: 700; text-decoration: none; cursor: pointer;
+                   transition: background .15s; }
+  .finish-submit:hover { background: var(--navy-light); }
+  .finish-continue { padding: 13px 22px; background: var(--white); color: var(--navy);
+                     border: 2px solid var(--navy); border-radius: var(--radius-sm);
+                     font-size: 14px; font-weight: 600; cursor: pointer;
+                     transition: background .15s; }
+  .finish-continue:hover { background: #e2e8f0; }
+  .finish-wait { font-size: 13px; color: var(--text-muted); }
 `;
 
 /* ============================================================================
@@ -2127,6 +2227,10 @@ function Lesson08Preflight() {
   // thing restored: the last SETTLED state is always what comes back.
   useEffect(() => {
     if (!mode || loading || !messages.length) return;
+    // A graded run carried on as practice must NOT overwrite the graded snapshot: there is
+    // one key per lesson, and that snapshot is the only way back to a report the cadet has
+    // not submitted. Losing the practice continuation on reload costs nothing.
+    if (studyFromGradedRef.current) return;
     saveSession({
       v: 1, id: INTERACTION_ID, mode: mode, cadetId: cadetId.trim(),
       msgs: messages, ts: Date.now(),
@@ -2240,9 +2344,6 @@ function Lesson08Preflight() {
       ? { cadetId: cadetId.trim(), localTime: localTime }
       : null;
     reportPhaseRef.current = false;
-    // The opener does not pass through sysFor(), so seat its pool here or study mode borrows
-    // the graded ladder for exactly one request per session.
-    seatLadder(activeModelRef, selectedMode === "graded" ? MODEL_CHAT : MODEL_STUDY);
     setMode(selectedMode);
     setStarted(true);
     bumpActivity();
@@ -2258,7 +2359,14 @@ function Lesson08Preflight() {
       // it was still probing, and rebuild the prompt without REPORT_FORMAT.
       reportPhaseRef.current = !!saved.reportPhase;
       extSentRef.current = !!saved.extSent;
-      payloadTriedRef.current = !!saved.payloadTried;
+      // NOT restored when the payload is still "pending". That pair means the snapshot was
+      // taken WHILE the repair request was in flight -- the repair latches this ref before
+      // it calls, and never sets `loading`, so the snapshot effect is not skipped. Restoring
+      // both would make the latch permanent: the repair can never re-run, submitReady
+      // requires payloadState !== "pending", and the cadet is left looking at a finished
+      // report with "Preparing submit..." beside it in every reload for six hours -- after
+      // following this page's own advice to reload. Let it have one more attempt instead.
+      payloadTriedRef.current = !!saved.payloadTried && saved.payloadState !== "pending";
       if (typeof saved.activeSec === "number") activeSecRef.current = saved.activeSec;
       reportSecRef.current = (saved.reportSec == null) ? null : saved.reportSec;
       if (saved.hasReport) { setHasReport(true); setReportText(saved.reportText || ""); }
@@ -2279,6 +2387,27 @@ function Lesson08Preflight() {
       setLoading(false);
       return;
     }
+
+    // A FRESH graded session opens with the scripted Honor Code turn and NO request at
+    // all. The ~14-request budget keeps a turn it would otherwise have spent saying
+    // something the prompt already wrote. PACED rather than instant -- startSession is
+    // async, so this is a plain await, and nothing here can be re-entered: `started` is
+    // already true and the composer is disabled while `loading`.
+    if (APP_OPENING && selectedMode === "graded" && !resume) {
+      setLoading(true);
+      await sleep(scriptedDelay(OPENING_HONOR));
+      setMessages([seed, { role: "assistant", content: OPENING_HONOR }]);
+      setLoading(false);
+      return;
+    }
+
+    // Seat the pool for THIS request, now that we know what it is.
+    //   study    -> the lite floor; practice never spends the graded allowance.
+    //   resume   -> a real tutoring turn, the answer the cadet never got. Chat pool.
+    //   opener   -> greeting plus the opening probe, both dictated by the prompt. Nothing for a
+    //               stronger model to be better at, and the cadet is watching an empty screen.
+    seatLadder(activeModelRef,
+      selectedMode !== "graded" ? MODEL_STUDY : MODEL_CHAT);
 
     setLoading(true);
     try {
@@ -2314,7 +2443,13 @@ function Lesson08Preflight() {
   }
 
   async function runTurn(history) {
-    const note = mode === "graded" ? pacingNote(activeSecRef.current, PROBE_TOPIC_COUNT) : null;
+    const pacing = mode === "graded" ? pacingNote(activeSecRef.current, PROBE_TOPIC_COUNT) : null;
+    // Exactly two visible assistant turns means both are the scripted ones and this is the
+    // first request of the session.
+    const firstReal = APP_OPENING && mode === "graded"
+      && history.filter((m) => m.role === "assistant" && !m.hidden).length === 2
+      && openerStage(history) === 2;
+    const note = firstReal ? [OPENING_NOTE, pacing].filter(Boolean).join("\n\n") : pacing;
     setLoading(true); setError(null);
     try {
       const reply = await callTutor(activeModelRef, history, sysFor(), note);
@@ -2328,6 +2463,32 @@ function Lesson08Preflight() {
     } finally { setLoading(false); }
   }
 
+  const submittedRef = useRef(false);       // Submit has been clicked at least once
+  const studyFromGradedRef = useRef(false); // a graded run carried on as practice
+
+  // "Keep talking" after the report. Switches this session to ungraded study mode: the
+  // finish bar is gated on mode === "graded" so it disappears, sysFor() falls to the study
+  // prompt and the study ladder, and every report effect stops. Deliberately ONE-WAY --
+  // study work is not graded work, and letting it flow back would make practice turns part
+  // of the graded conversation.
+  //
+  // Confirmed when nothing has been submitted, because the button that would have sent the
+  // report is the button this removes. The report is not lost either way: the snapshot
+  // effect stops writing once this is set, so the GRADED snapshot survives and a reload
+  // brings the report and the Submit button back.
+  function continueInStudy() {
+    if (!submittedRef.current && !window.confirm(
+      "Your report has not been submitted yet.\n\n"
+      + "Keep talking is ungraded practice and submits nothing. Your report stays saved in "
+      + "this browser: reload this page, choose the graded preflight and enter the same "
+      + "name, and the Submit button comes back.\n\nCarry on without submitting?")) return;
+    studyFromGradedRef.current = true;
+    sysArgsRef.current = null;                 // sysFor() -> study prompt + study ladder
+    sysRef.current = buildStudySystemPrompt();
+    setError(null);
+    setMode("study");
+  }
+
   function send() {
     const text = input.trim();
     if (!text || loading) return;
@@ -2335,6 +2496,23 @@ function Lesson08Preflight() {
     const history = [...messages, { role: "user", content: text }];
     setMessages(history);
     setInput("");
+
+    // The one message the app answers itself: acknowledging the Honor Code turn. The reply
+    // is the opening question verbatim, so asking a model for it would buy nothing and cost
+    // a request and a wait. Paced, for the same reason as the turn before it.
+    //
+    // setTimeout rather than await: send() is not async. Nothing can race the append --
+    // `history` is captured, setLoading(true) disables the composer, and send() returns
+    // early while `loading`.
+    if (APP_OPENING && mode === "graded" && openerStage(history) === 1) {
+      setLoading(true);
+      setTimeout(() => {
+        setMessages([...history, { role: "assistant", content: OPENING_QUESTION }]);
+        setLoading(false);
+      }, scriptedDelay(OPENING_QUESTION));
+      return;
+    }
+
     runTurn(history);
   }
 
@@ -2461,7 +2639,6 @@ function Lesson08Preflight() {
     ? SUBMIT_ENDPOINT
         + "#t=interaction"
         + "&v=gemini"          // transport marker -- optional, additive, contract section 8
-        + "&v=claude"          // transport marker -- optional, additive, contract section 8
         + "&i=" + INTERACTION_ID
         + "&r=" + window.LZString.compressToEncodedURIComponent(reportMarkdown)
         + (structured
@@ -2647,6 +2824,26 @@ function Lesson08Preflight() {
           </div>
         )}
 
+        {mode === "graded" && hasReport && (
+          <div className="finish-bar">
+            <div className="finish-note">
+              Timed portion complete. The first report you submit is the one your instructor
+              grades.
+            </div>
+            <div className="finish-actions">
+              {submitUrl
+                ? <a className="finish-submit" href={submitUrl} rel="noopener noreferrer"
+                     onClick={() => { submittedRef.current = true; clearSession(); }}>
+                    Submit report &rarr;
+                  </a>
+                : <span className="finish-wait">Preparing your submit link&hellip;</span>}
+              <button className="finish-continue" onClick={continueInStudy}>
+                Keep talking &mdash; not graded
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="composer">
           <textarea
             ref={inputRef}
@@ -2668,19 +2865,7 @@ function Lesson08Preflight() {
         </div>
 
         <div className="footer">
-          <span className="footer-note">
-            {mode === "graded" && hasReport
-              ? "Timed portion complete — submit your report. The first report you submit is the one your instructor grades."
-              : "Enter to send · Shift+Enter for new line"}
-          </span>
-          {mode === "graded" && hasReport && (
-            <span className="report-actions">
-              {submitUrl
-                ? <a className="submit-btn" href={submitUrl} rel="noopener noreferrer"
-                     onClick={() => clearSession()}>Submit report →</a>
-                : <span className="submit-hint">Preparing submit…</span>}
-            </span>
-          )}
+          <span className="footer-note">Enter to send &middot; Shift+Enter for new line</span>
         </div>
       </div>
     </>
@@ -2698,7 +2883,7 @@ root.render(React.createElement(Lesson08Preflight));
   window.addEventListener("error", function (e) {
     var b = document.getElementById("boom");
     b.style.display = "block";
-    b.textContent = "This backup build did not load:\n\n" + (e.message || e.error || e) +
+    b.textContent = "This lesson did not load:\n\n" + (e.message || e.error || e) +
       "\n\nTell your instructor and include this message.";
   });
 </script>

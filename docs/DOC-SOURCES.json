@@ -20,7 +20,7 @@
       "doc": "site/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-08-20",
+      "reviewed": "2026-08-21",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
