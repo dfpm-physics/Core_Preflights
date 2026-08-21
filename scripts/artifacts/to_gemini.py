@@ -1166,6 +1166,71 @@ async function discoverModel(activeModelRef) {
         b'const LZSTRING_JS = "' + VENDOR_LZ.encode() + b'";   // vendored 1.5.0, byte-identical',
         "lz-string served from our origin")
 
+
+    # -- 10b. lz-string: retried, and its failure is visible -----------------
+    # The source hook polls for 10s and then clears the interval, recording nothing. lz-string
+    # is not optional here -- the submit URL IS the report compressed into a hash -- so that
+    # silent give-up renders a finished report the cadet cannot submit, with no error, and
+    # discards any `#h=` handoff for the same reason. A resource 404 does not bubble, so the
+    # wrapper's window.onerror trap never sees it either.
+    p.sub1(
+        rb"function useLzString\(\) \{.*?\r\n\}\r\n",
+        b"""// Per attempt, not in total. The old hook allowed 10s for everything; this page also
+// pulls ~2.9 MB of Babel from the same origin at load, and a 4.8 KB async script losing that
+// race on a poor link is ordinary rather than exotic.
+const LZ_ATTEMPT_MS = 40000;
+const LZ_ATTEMPTS = 3;
+
+// Returns "loading" | "ready" | "failed" -- a STATE, not a boolean, because the difference
+// between "not yet" and "never" is the whole point. Each attempt injects a fresh tag with a
+// cache-busting query, so a fetch that actually failed is retried rather than waited on again,
+// and the tag's own onerror settles a 404 immediately instead of after the timeout.
+function useLzString() {
+  const [state, setState] = useState(
+    typeof window !== "undefined" && window.LZString ? "ready" : "loading");
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (window.LZString) { setState("ready"); return; }
+    let settled = false;
+    let poll = 0, giveUp = 0;
+    const stop = () => { settled = true; clearInterval(poll); clearTimeout(giveUp); };
+    const fail = () => {
+      if (settled) return;
+      stop();
+      if (attempt + 1 < LZ_ATTEMPTS) setAttempt(attempt + 1);
+      else setState("failed");
+    };
+    const old = document.getElementById("lz-js");
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    const s = document.createElement("script");
+    s.id = "lz-js";
+    s.async = true;
+    s.onerror = fail;
+    s.src = LZSTRING_JS + (attempt ? "?r=" + attempt : "");
+    document.head.appendChild(s);
+    poll = setInterval(() => {
+      if (!window.LZString) return;
+      stop();
+      setState("ready");
+    }, 200);
+    giveUp = setTimeout(fail, LZ_ATTEMPT_MS);
+    return stop;
+  }, [attempt]);
+  return state;
+}
+""",
+        "lz-string loader retries and reports failure")
+
+    # `lzReady` stays a BOOLEAN at every one of its call sites -- submitReady, the handoff
+    # reader, the handoffUrl memo. Only the new `lzState` carries the third value, so nothing
+    # downstream can accidentally treat a truthy state string as "ready".
+    p.sub1(
+        rb"  const lzReady = useLzString\(\);\r\n",
+        b"""  const lzState = useLzString();          // "loading" | "ready" | "failed"
+  const lzReady = lzState === "ready";
+""",
+        "lzReady derived from the three-state loader")
+
     # ── 11. Strip every route BACK to the backup, because this IS the backup ──
     # A Claude artifact offers these when its own tutor fails. In a backup build the same
     # controls would point the cadet at the router that sent them here, and the router would send
@@ -1312,7 +1377,14 @@ async function discoverModel(activeModelRef) {
                      onClick={() => { submittedRef.current = true; clearSession(); }}>
                     Submit report &rarr;
                   </a>
-                : <span className="finish-wait">Preparing your submit link&hellip;</span>}
+                : lzState === "failed"
+                  ? <span className="finish-wait">
+                      <strong>Your report is safe.</strong> This page could not load the
+                      small file that builds your submit link. <strong>Reload the page and
+                      enter the same name</strong> &mdash; your conversation comes back, and
+                      the button should appear. Tell your instructor if it happens twice.
+                    </span>
+                  : <span className="finish-wait">Preparing your submit link&hellip;</span>}
               <button className="finish-continue" onClick={continueInStudy}>
                 Keep talking &mdash; not graded
               </button>
@@ -1535,7 +1607,15 @@ async function discoverModel(activeModelRef) {
     # contains the handoff's messages plus everything since.
     p.sub1(
         rb"              \{handoff && \(\r\n",
-        b"""              {resumable && (
+        b"""              {lzState === "failed" && /[#&]h=/.test(window.location.hash || "") && (
+                <div className="honor-box" style={{ fontWeight: 600 }}>
+                  You arrived with a conversation to carry over, but this page could not load
+                  the file that unpacks it, so it cannot be restored. Reload the page to try
+                  again. If it still fails, you can start this lesson fresh &mdash; tell your
+                  instructor, who can give you the time back.
+                </div>
+              )}
+              {resumable && (
                 <div className="honor-box" style={{ fontWeight: 600 }}>
                   You have an unfinished session for this lesson in this browser
                   ({resumable.msgs.filter((m) => !m.hidden).length} messages). Enter the same

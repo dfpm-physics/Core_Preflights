@@ -60,8 +60,13 @@ const [, SLUG] = idm, [, MARKER] = mkm;
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json',
                 '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
+let breakLz = false;              // flipped for the second pass, below
 const server = createServer((req, res) => {
   const rel = normalize(decodeURIComponent(req.url.split('?')[0])).replace(/^[/\\]+/, '');
+  // The realistic lz-string failure is the file not arriving at all -- a school proxy, an
+  // extension, a bad deploy. Reproduced exactly, rather than by stubbing the loader, so the
+  // page's own retry-and-report path is what runs.
+  if (breakLz && /lz-string/i.test(rel)) { res.writeHead(404); res.end('blocked'); return; }
   const file = join(ROOT, rel);
   if (!file.startsWith(ROOT) || !existsSync(file) || !statSync(file).isFile()) {
     res.writeHead(404); res.end('not found'); return;
@@ -220,6 +225,67 @@ ok('no missing resources (404)', missing.length === 0, missing.join(', '));
 const real = pageErrors.filter(e =>
   !/favicon/i.test(e) && !(missing.length === 0 && /Failed to load resource/i.test(e)));
 ok('no page/console errors', real.length === 0, real.slice(0, 2).join(' | '));
+
+// ── Second pass: lz-string never arrives ───────────────────────────────────
+// Without it there is no submit URL at all, because the URL *is* the report compressed into a
+// hash. The old loader gave up after 10s and recorded nothing, so the cadet got a finished
+// report beside a dead "Preparing submit" with no error and nothing to do. What is asserted
+// here is that the page now SAYS so.
+console.log('\n--- lz-string withheld (404) ---');
+breakLz = true;
+const p2 = await browser.newPage();
+const t0 = Date.now();
+await p2.evaluateOnNewDocument((slug, name, report) => {
+  localStorage.setItem('prep.gemini.apikey', 'AIzaSyTESTKEYNOTREALDONOTUSE0000000000000');
+  localStorage.setItem('prep.gemini.session.' + slug, JSON.stringify({
+    v: 1, id: slug, mode: 'graded', cadetId: name, ts: Date.now(),
+    msgs: [{ role: 'user', hidden: true, content: 'Begin.' },
+           { role: 'assistant', content: report }],
+    activeSec: 600, reportSec: 600, reportPhase: true, extSent: true, payloadTried: true,
+    hasReport: true, reportText: report, payloadState: 'ready',
+    structured: { schema: 1, effort: 4 },
+  }));
+  const real = window.fetch;
+  window.fetch = (input, init) => {
+    const u = String((input && input.url) || input || '');
+    if (u.indexOf('/models') > -1 && u.indexOf(':generateContent') === -1) {
+      return Promise.resolve(new Response(JSON.stringify({ models: [
+        'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite',
+      ].map(n => ({ name: 'models/' + n, supportedGenerationMethods: ['generateContent'] })) }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    }
+    return real(input, init);
+  };
+}, SLUG, NAME, REPORT);
+await p2.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
+await p2.waitForFunction(() => document.querySelector('#root')?.childElementCount > 0,
+                         { timeout: 30000 }).catch(() => {});
+await p2.waitForFunction(() => {
+  const b = [...document.querySelectorAll('button')].find(x => /Start Preflight/i.test(x.textContent));
+  return b && !b.disabled;
+}, { timeout: 20000 }).catch(() => {});
+await p2.type('#cadet-id', NAME);
+await p2.evaluate(() =>
+  [...document.querySelectorAll('button')].find(x => /Start Preflight/i.test(x.textContent)).click());
+await p2.waitForFunction(
+  () => /could not load the small file/i.test(document.body.innerText), { timeout: 45000 })
+  .catch(() => {});
+const broke = await p2.evaluate(() => ({
+  text: document.body.innerText,
+  submit: !!document.querySelector('.finish-submit'),
+  bar: !!document.querySelector('.finish-bar'),
+}));
+const elapsed = Date.now() - t0;
+ok('the finish bar still appears — the report is not hidden by a transport failure', broke.bar);
+ok('no submit link is offered, because none can be built', !broke.submit);
+ok('the cadet is TOLD, instead of watching a dead control',
+   /could not load the small file/i.test(broke.text));
+ok('it says the report is safe and names the remedy',
+   /report is safe/i.test(broke.text) && /reload the page/i.test(broke.text));
+// Three attempts settle on the tag's own onerror. If this ever regresses to waiting on the
+// 40s-per-attempt timer, the elapsed time is what shows it.
+ok('the three attempts settle fast, on onerror rather than on the timeout',
+   elapsed < 40000, `${Math.round(elapsed / 1000)}s`);
 
 await browser.close();
 server.close();

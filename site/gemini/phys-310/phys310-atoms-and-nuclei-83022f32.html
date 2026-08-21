@@ -789,22 +789,48 @@ function RichText({ text }) {
 // ── LZ-String loader (contract pins the codec to lz-string 1.5.0, §3) ────────
 const LZSTRING_JS = "../../vendor/lz-string.min.js";   // vendored 1.5.0, byte-identical
 
+// Per attempt, not in total. The old hook allowed 10s for everything; this page also
+// pulls ~2.9 MB of Babel from the same origin at load, and a 4.8 KB async script losing that
+// race on a poor link is ordinary rather than exotic.
+const LZ_ATTEMPT_MS = 40000;
+const LZ_ATTEMPTS = 3;
+
+// Returns "loading" | "ready" | "failed" -- a STATE, not a boolean, because the difference
+// between "not yet" and "never" is the whole point. Each attempt injects a fresh tag with a
+// cache-busting query, so a fetch that actually failed is retried rather than waited on again,
+// and the tag's own onerror settles a 404 immediately instead of after the timeout.
 function useLzString() {
-  const [ready, setReady] = useState(typeof window !== "undefined" && !!window.LZString);
+  const [state, setState] = useState(
+    typeof window !== "undefined" && window.LZString ? "ready" : "loading");
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (window.LZString) { setReady(true); return; }
-    if (!document.getElementById("lz-js")) {
-      const s = document.createElement("script");
-      s.id = "lz-js"; s.src = LZSTRING_JS; s.async = true;
-      document.head.appendChild(s);
-    }
-    const poll = setInterval(() => {
-      if (window.LZString) { setReady(true); clearInterval(poll); }
+    if (window.LZString) { setState("ready"); return; }
+    let settled = false;
+    let poll = 0, giveUp = 0;
+    const stop = () => { settled = true; clearInterval(poll); clearTimeout(giveUp); };
+    const fail = () => {
+      if (settled) return;
+      stop();
+      if (attempt + 1 < LZ_ATTEMPTS) setAttempt(attempt + 1);
+      else setState("failed");
+    };
+    const old = document.getElementById("lz-js");
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    const s = document.createElement("script");
+    s.id = "lz-js";
+    s.async = true;
+    s.onerror = fail;
+    s.src = LZSTRING_JS + (attempt ? "?r=" + attempt : "");
+    document.head.appendChild(s);
+    poll = setInterval(() => {
+      if (!window.LZString) return;
+      stop();
+      setState("ready");
     }, 200);
-    const giveUp = setTimeout(() => clearInterval(poll), 10000);
-    return () => { clearInterval(poll); clearTimeout(giveUp); };
-  }, []);
-  return ready;
+    giveUp = setTimeout(fail, LZ_ATTEMPT_MS);
+    return stop;
+  }, [attempt]);
+  return state;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2133,7 +2159,8 @@ function Phys310AtomsAndNucleiPreflight() {
   const inputRef = useRef(null);
   const messagesRef = useRef(null);
 
-  const lzReady = useLzString();
+  const lzState = useLzString();          // "loading" | "ready" | "failed"
+  const lzReady = lzState === "ready";
 
   // Compose the system prompt for the CURRENT phase instead of reusing one built at start.
   // Study mode is untouched: it needs its practice problems from turn one and never
@@ -2684,6 +2711,14 @@ function Phys310AtomsAndNucleiPreflight() {
                 this browser. PREP never receives it, and it is never part of your report or your
                 submit link.
               </p>
+              {lzState === "failed" && /[#&]h=/.test(window.location.hash || "") && (
+                <div className="honor-box" style={{ fontWeight: 600 }}>
+                  You arrived with a conversation to carry over, but this page could not load
+                  the file that unpacks it, so it cannot be restored. Reload the page to try
+                  again. If it still fails, you can start this lesson fresh &mdash; tell your
+                  instructor, who can give you the time back.
+                </div>
+              )}
               {resumable && (
                 <div className="honor-box" style={{ fontWeight: 600 }}>
                   You have an unfinished session for this lesson in this browser
@@ -2782,7 +2817,14 @@ function Phys310AtomsAndNucleiPreflight() {
                      onClick={() => { submittedRef.current = true; clearSession(); }}>
                     Submit report &rarr;
                   </a>
-                : <span className="finish-wait">Preparing your submit link&hellip;</span>}
+                : lzState === "failed"
+                  ? <span className="finish-wait">
+                      <strong>Your report is safe.</strong> This page could not load the
+                      small file that builds your submit link. <strong>Reload the page and
+                      enter the same name</strong> &mdash; your conversation comes back, and
+                      the button should appear. Tell your instructor if it happens twice.
+                    </span>
+                  : <span className="finish-wait">Preparing your submit link&hellip;</span>}
               <button className="finish-continue" onClick={continueInStudy}>
                 Keep talking &mdash; not graded
               </button>

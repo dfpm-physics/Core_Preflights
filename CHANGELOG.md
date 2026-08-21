@@ -8,6 +8,69 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-21 (eighth) — Matthew Recker via Claude
+
+### lz-string gave up after ten seconds and told nobody
+
+The first of the five defects recorded as *known and not fixed* in the previous entry, taken on
+the director's word. **All 38 live builds rebuilt** under `--policy legacy`; nothing else in this
+entry changes the tutoring.
+
+**lz-string is not optional.** The submit URL *is* the report compressed into a URL hash, so a
+page without it renders a perfect report the cadet cannot submit. The old loader polled for ten
+seconds, cleared the interval, and **recorded nothing** — no failure state, no message, no retry,
+and `lzReady` false for the life of the page. The cadet saw a finished report with a dead
+"Preparing submit…" beside it and nothing to act on. A `#h=` handoff from a dying Claude session
+was discarded just as quietly, because that reader is gated on the same flag.
+
+**It is likely rather than theoretical, and it is invisible three ways over.** The page pulls
+~2.9 MB of Babel from the same origin at load, so a 4.8 KB async script losing that race on a
+poor link is ordinary. A school proxy or an extension blocking one vendored file does it
+outright. And a resource 404 **does not bubble**, so the wrapper's `window.onerror` trap — the
+thing that catches every other load failure on these pages — never sees it.
+
+Four changes, all in `useLzString`:
+
+- **The script tag's own `onerror` is honoured**, so a 404 settles immediately instead of after
+  ten seconds of waiting for something that is never coming.
+- **Three attempts**, each re-injecting a fresh tag with a cache-busting query, so a failed fetch
+  is genuinely *retried* rather than waited on again.
+- **40 s per attempt** rather than 10 s in total, for the slow-link case.
+- **A real `"failed"` state.** The hook returns `"loading" | "ready" | "failed"` — the difference
+  between *not yet* and *never* is the entire point. `lzReady` stays a **boolean** at all three of
+  its call sites, so nothing downstream can mistake a truthy state string for readiness.
+
+**The cadet is now told.** The finish bar distinguishes the two states: *"Your report is safe.
+This page could not load the small file that builds your submit link. Reload the page and enter
+the same name — your conversation comes back."* That remedy is real and already covered by the
+session-restore harness. The start screen says the equivalent when a handoff arrives and cannot be
+unpacked, instead of silently dropping it.
+
+**Verification.** `gemini-finish-bar.mjs` gained a second pass that **withholds lz-string** — the
+harness owns its server, so it 404s that one path, which is the realistic failure and exercises
+the page's own retry-and-report path rather than a stub. Run against the **pre-fix build** it
+fails exactly as it should: no message at all, and **66 s** of dead waiting. Against the new one
+it passes in under 40 s, because `onerror` settles all three attempts in three fast round trips —
+the elapsed time is asserted, so a regression back to waiting on the timer shows up as a
+two-minute test.
+
+All 38 rebuilt with per-build assertions (slug unchanged, hook replaced, the 10 s give-up gone
+**from `useLzString` specifically**). One build per course through the harnesses — phys-110,
+phys-215, phys-310: `gemini-finish-bar` **21/21**, `gemini-build` **7/7**, `gemini-model-ladder`
+**17/17**, `gemini-handoff` **12/12**; `pass.mjs` **9/9**; teaching sandbox **26/26**.
+
+**A false alarm in my own check, worth recording.** The first assertion looked for the 10-second
+give-up anywhere in the build and found one — in the **KaTeX** loader, which carries the identical
+pattern and was never in scope. That one is left alone deliberately: KaTeX failing renders maths
+as raw LaTeX, which is ugly and readable, not a lost submission. The assertion now matches inside
+`useLzString` only.
+
+**Still Node-only — no real tutor turn.** Four of the five known defects from the previous entry
+remain open: the fenced-report blanking, the substring `isReportMsg` latch, `clearSession()` on
+the submit click, and the faculty copy that still calls Gemini a fallback.
+
+---
+
 ## 2026-08-21 (seventh) — Matthew Recker via Claude
 
 ### Gemini becomes the default path, and the report stage stops hanging
