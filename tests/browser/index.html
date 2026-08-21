@@ -59,6 +59,14 @@
         model after 3.5&nbsp;seconds. <b>What we need:</b> push back with a wrong answer and see
         whether it corrects you with a <i>question</i> or with a <i>statement</i> — and whether it
         holds that to the end, because the failure we are chasing starts well and degrades.
+        <b>Also carries the freeze fix.</b> On 2026-08-21 a cadet reached the report stage and the
+        page sat on "Tutor is typing…" forever — no request in the live builds has any timeout, so
+        a connection Google never answers hangs the page with the composer and Send both disabled.
+        The only escape was a reload, which erased the whole conversation. Now: every request has a
+        two-minute deadline and fails to a <b>Retry</b>, the session is saved in your browser so a
+        reload <i>restores</i> instead of erasing, and a <code>400</code> no longer tells you your
+        API key is bad when the real cause is a conversation that got too long.
+        <b>Worth trying:</b> reload the page halfway through and check your conversation comes back.
         <b>Not synthetic:</b> real PHYS 215 Lesson 2, real slug, and it wants your own free Gemini
         API key. Use <b>Study mode</b> — a graded run you actually submit writes a real submission.
         The 38 live backups are untouched.</span>

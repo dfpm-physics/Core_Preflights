@@ -373,7 +373,55 @@ function nextModel(ref) {
 const apiKeyRef = { current: "" };
 
 // localStorage key, namespaced like the site's other client-side state.
-const KEY_STORE = "prep.gemini.apikey";""",
+const KEY_STORE = "prep.gemini.apikey";
+
+// Every request gets a deadline. Until 2026-08-21 none of them did, and a cadet hit exactly
+// the failure that implies: the tutor sat on "Tutor is typing..." at the report stage and
+// never came back. `fetch` has no default timeout, so a connection Google accepts and never
+// answers leaves the promise pending forever -- the `finally` that clears the spinner never
+// runs, and the composer and Send button are both disabled while it is set. There was no way
+// out but a reload, which erased the session.
+//
+// Two minutes, deliberately generous: a long report on a strong model genuinely can take a
+// minute, and aborting a request that was about to succeed is worse than waiting. Not
+// auto-retried either -- a silent second two-minute wait reads as the same freeze. It raises
+// `timeout`, which the cadet sees with a Retry button and a transcript still intact.
+const REQUEST_TIMEOUT_MS = 120000;
+
+// Session persistence. The transcript used to live only in React state, so a reload -- the
+// ONLY escape from the freeze above -- threw away the cadet's whole conversation, including
+// one handed over from Claude. This keeps it in the same browser as the API key and nowhere
+// else: never sent to PREP, never in the report, never in the submit URL.
+// A FUNCTION, not a const. This block is emitted above `const INTERACTION_ID`, so building the
+// key at module scope is a temporal dead zone -- "Cannot access 'INTERACTION_ID' before
+// initialization", thrown before React mounts, which blanks the whole page. A function body
+// runs after initialization, so the reference is only evaluated when a session is saved.
+function sessionStore() { return "prep.gemini.session." + INTERACTION_ID; }
+
+// Old enough to be a different sitting rather than a recovery. A cadet coming back the next
+// day wants a fresh run, not yesterday's half-finished one silently resurrected.
+const SESSION_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+function saveSession(snap) {
+  try { localStorage.setItem(sessionStore(), JSON.stringify(snap)); } catch (e) {}
+}
+function clearSession() {
+  try { localStorage.removeItem(sessionStore()); } catch (e) {}
+}
+// Returns a snapshot only when it is unambiguously THIS cadet resuming THIS lesson in THIS
+// mode. Anything else is discarded rather than repaired -- a partly-restored graded session
+// would be submitted as though it were whole.
+function loadSession(mode, cadetId) {
+  try {
+    const s = JSON.parse(localStorage.getItem(sessionStore()) || "null");
+    if (!s || s.v !== 1 || s.id !== INTERACTION_ID) return null;
+    if (s.mode !== mode) return null;
+    if (mode === "graded" && String(s.cadetId || "") !== String(cadetId || "")) return null;
+    if (!Array.isArray(s.msgs) || !s.msgs.length) return null;
+    if (!s.ts || (Date.now() - s.ts) > SESSION_MAX_AGE_MS) { clearSession(); return null; }
+    return s;
+  } catch (e) { return null; }
+}""",
         "constants -> Gemini + runtime discovery")
 
     # ── 2. rawCall -> Gemini transport ────────────────────────────────────────
@@ -387,22 +435,43 @@ const KEY_STORE = "prep.gemini.apikey";""",
       // The key rides in a HEADER, not the "?key=" query parameter Google's quickstarts
       // use. A query string lands in browser history and in any Referer the page emits;
       // a header does neither. Same authentication, strictly less leakage.
-      res = await fetch(
-        GEMINI_BASE + "/models/" + activeModelRef.current + ":generateContent", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": apiKeyRef.current,
-          },
-          body: JSON.stringify(body),
-        });
+      const ctl = new AbortController();
+      const deadline = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
+      try {
+        res = await fetch(
+          GEMINI_BASE + "/models/" + activeModelRef.current + ":generateContent", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKeyRef.current,
+            },
+            body: JSON.stringify(body),
+            signal: ctl.signal,
+          });
+      } finally { clearTimeout(deadline); }
     } catch (e) {
+      // An abort is the deadline, not a flaky network. Raised straight away rather than
+      // retried: the cadet has already waited two minutes and a silent second wait reads as
+      // the same freeze they are trying to escape.
+      if (e && e.name === "AbortError") throw { kind: "timeout", status: 0 };
       if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
       throw { kind: "network", status: 0 };
     }
     if (res.ok) return res;
-    if (res.status === 400 || res.status === 401 || res.status === 403) {
-      throw { kind: "auth", status: res.status };   // bad, missing, or unauthorized key
+    if (res.status === 401 || res.status === 403) {
+      throw { kind: "auth", status: res.status };   // missing or unauthorized key
+    }
+    // 400 is AMBIGUOUS on generateContent and used to be lumped in with the two above, so a
+    // request that was merely too large told the cadet their API key was invalid -- sending
+    // them off to regenerate a key that was fine. It is a bad key only when Google says so;
+    // otherwise it is this request, and the likeliest cause is length, which a conversation
+    // carried over from Claude reaches sooner than a fresh one.
+    if (res.status === 400) {
+      let msg = "";
+      try { msg = String((((await res.json()) || {}).error || {}).message || ""); } catch (e) {}
+      throw /api[\\s_-]?key|credential|unregistered/i.test(msg)
+        ? { kind: "auth", status: 400 }
+        : { kind: "badrequest", status: 400, detail: msg.slice(0, 300) };
     }
     if (res.status === 404) {                       // model unavailable -> next rung
       if (nextModel(activeModelRef)) { attempt = 0; continue; }
@@ -558,7 +627,11 @@ async function discoverModel(activeModelRef) {
     case "blocked":
       return "Gemini declined to answer that turn. Rephrase and try again \\u2014 and tell your instructor if it keeps happening.";
     case "model":
-      return "No usable Gemini model was found for this key. Tell your instructor \\u2014 the model list may have moved again.";""",
+      return "No usable Gemini model was found for this key. Tell your instructor \\u2014 the model list may have moved again.";
+    case "timeout":
+      return "Google did not answer within two minutes. Your conversation is saved \\u2014 press Retry. If it happens twice, reload the page: the session is restored from this browser and you will not lose your work.";
+    case "badrequest":
+      return "Google rejected that request \\u2014 most likely the conversation has grown too long, which happens sooner when it was carried over from Claude. Your key is fine. Press Retry, and tell your instructor if it keeps happening.";""",
         "error messages -> Gemini")
 
     # -- 4b. The capacity message still named Claude --------------------------
@@ -1034,6 +1107,66 @@ async function discoverModel(activeModelRef) {
 """,
         "handoff hash reader")
 
+    # ── 12b. Persist the session, so a reload is a recovery and not a loss ────
+    # The escape from a hung request is a reload, and until 2026-08-21 that threw away the
+    # whole conversation -- including one carried over from Claude, whose Claude half no
+    # longer exists anywhere the cadet can reach. The freeze was survivable; that was not.
+    #
+    # Saved on every settled turn rather than on unload: `beforeunload` does not fire
+    # reliably on mobile, and this page's own failure mode is a tab a cadet force-closes.
+    # Nothing here leaves the browser -- same store as the API key, never sent to PREP.
+    p.sub1(
+        rb"  \}, \[lzReady, handoff\]\);\r\n",
+        b"""  }, [lzReady, handoff]);
+
+  // Snapshot the session. Skipped while `loading`, so a half-finished turn is never the
+  // thing restored: the last SETTLED state is always what comes back.
+  useEffect(() => {
+    if (!mode || loading || !messages.length) return;
+    saveSession({
+      v: 1, id: INTERACTION_ID, mode: mode, cadetId: cadetId.trim(),
+      msgs: messages, ts: Date.now(),
+      activeSec: activeSecRef.current,
+      reportSec: reportSecRef.current,
+      reportPhase: reportPhaseRef.current,
+      extSent: extSentRef.current,
+      payloadTried: payloadTriedRef.current,
+      hasReport: hasReport, reportText: reportText,
+      structured: structured, payloadState: payloadState,
+    });
+  }, [mode, loading, messages, cadetId, hasReport, reportText, structured, payloadState]);
+""",
+        "session snapshot")
+
+    # The notice needs to know a snapshot exists BEFORE a mode is chosen, which loadSession
+    # cannot answer -- it is keyed on the mode the cadet has not picked yet. Read once on
+    # mount, graded only: study mode is practice and restoring it unasked is noise.
+    p.sub1(
+        rb"  const \[handoff, setHandoff\] = useState\(null\);[^\r\n]*\r\n",
+        b"""  const [handoff, setHandoff] = useState(null);    // a conversation carried over from Claude
+  const [resumable, setResumable] = useState(null); // an unfinished session in this browser
+  useEffect(() => {
+    if (mode) return;                               // only on the start screen
+    setResumable(loadSession("graded", cadetId.trim()));
+  }, [mode, cadetId]);
+""",
+        "resumable probe")
+
+    # Submitting ends the session, so the snapshot must not outlive it -- otherwise a cadet who
+    # comes back to the lesson inside the six-hour window is offered their finished work as
+    # "unfinished". Cleared on the click rather than on arrival at the receiver, because this
+    # page never learns whether that navigation succeeded. Worst case the cadet abandons the
+    # submit page and loses a restore they no longer need: the report is already in the URL
+    # they just followed, and re-submitting a graded report is refused anyway once the grade
+    # is finalized.
+    p.sub1(
+        rb'                \? <a className="submit-btn" href=\{submitUrl\} '
+        rb'rel="noopener noreferrer">Submit report \xe2\x86\x92</a>\r\n',
+        b"""                ? <a className="submit-btn" href={submitUrl} rel="noopener noreferrer"
+                     onClick={() => clearSession()}>Submit report \xe2\x86\x92</a>
+""",
+        "clear the snapshot on submit")
+
     # Tell the cadet what is about to happen, above the button that does it.
     p.sub1(
         # Anchored on the button as step 7 leaves it, not as the source has it: that step
@@ -1051,6 +1184,26 @@ async function discoverModel(activeModelRef) {
                       disabled={!cadetId.trim() || connStatus !== "ok"}>
 """,
         "handoff banner on the start screen")
+
+    # A cadet returning to the start screen after a reload has to be told their work is still
+    # here, or they assume it is gone and start again -- which is the loss this whole step
+    # exists to prevent, arrived at voluntarily. Runs AFTER the banner step because it anchors
+    # on what that step emits. The two answer the same question and must not both claim the
+    # conversation, so the saved session is checked first and the handoff falls to `!resumable`
+    # -- the same precedence startSession applies, for the same reason: the snapshot already
+    # contains the handoff's messages plus everything since.
+    p.sub1(
+        rb"              \{handoff && \(\r\n",
+        b"""              {resumable && (
+                <div className="honor-box" style={{ fontWeight: 600 }}>
+                  You have an unfinished session for this lesson in this browser
+                  ({resumable.msgs.filter((m) => !m.hidden).length} messages). Enter the same
+                  name and it will be restored &mdash; you do not need to start again.
+                </div>
+              )}
+              {!resumable && handoff && (
+""",
+        "resume notice on the start screen")
 
     # Seed the restored turns instead of the hidden opener.
     #
@@ -1073,7 +1226,26 @@ async function discoverModel(activeModelRef) {
         rb"    try \{\r\n"
         rb"      const reply = await callTutor\(activeModelRef, \[seed\], sys, null\);[^\r\n]*\r\n"
         rb"      setMessages\(\(prev\) => \[\.\.\.prev, \{ role: \"assistant\", content: reply \}\]\);\r\n",
-        b"""    const resume = selectedMode === "graded" && handoff ? handoff.msgs : null;
+        b"""    // A session saved in THIS browser wins over a `#h=` handoff, and must: the saved
+    // copy already contains the handoff's messages plus everything since, so preferring the
+    // hash would silently roll the cadet back to the moment they arrived from Claude.
+    const saved = loadSession(selectedMode, cadetId.trim());
+    if (saved) {
+      // Restored explicitly rather than re-derived. The effect that sets reportPhaseRef reads
+      // only the LAST message, so a session that froze on the cadet's own reply to the
+      // integrity question -- which is exactly when this failed -- would come back believing
+      // it was still probing, and rebuild the prompt without REPORT_FORMAT.
+      reportPhaseRef.current = !!saved.reportPhase;
+      extSentRef.current = !!saved.extSent;
+      payloadTriedRef.current = !!saved.payloadTried;
+      if (typeof saved.activeSec === "number") activeSecRef.current = saved.activeSec;
+      reportSecRef.current = (saved.reportSec == null) ? null : saved.reportSec;
+      if (saved.hasReport) { setHasReport(true); setReportText(saved.reportText || ""); }
+      if (saved.structured) setStructured(saved.structured);
+      if (saved.payloadState) setPayloadState(saved.payloadState);
+    }
+    const resume = saved ? saved.msgs
+                 : (selectedMode === "graded" && handoff ? handoff.msgs : null);
     const seed = resume ? null : {
       role: "user", hidden: true,
       content: selectedMode === "graded" ? "Begin the session now." : "I'd like to study this lesson.",

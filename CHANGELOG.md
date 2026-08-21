@@ -8,6 +8,77 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-21 (third) — Matthew Recker via Claude
+
+### A cadet's backup session froze at the report and there was no way out but losing it
+
+**Reported from a live session** (phys-215 lesson 7, reached by `#h=` handoff from Claude): the
+cadet answered the integrity question, the page showed *"Tutor is typing…"*, and it never came
+back. Staged in the same `tests/browser/` sandbox as the ladder change; **no live build rebuilt.**
+
+**The reported theory — report-tier quota exhausted — is not what happened, and checking mattered.**
+The shipped report ladder is `3.7 → 3.6 → 3.5` and then falls **through into the chat ladder**,
+which starts on lite. Running out at the top does not freeze anything; it steps down and still
+writes a report. That path works.
+
+**No request in this transport has ever had a timeout.** No `AbortController`, no deadline,
+nothing — confirmed by search across the shipped build. `fetch` has no default timeout, so a
+connection Google accepts and never answers leaves the promise pending forever. The `finally` that
+clears the spinner never runs. **And the cadet is sealed in:** the composer and Send are both
+`disabled={loading}`, and there is no cancel.
+
+**The only escape was a reload, and a reload erased everything.** Only the API key was persisted;
+the transcript lived in React state alone. For a cadet who arrived by handoff that is worse than it
+sounds — the Claude half of their conversation no longer exists anywhere they can reach.
+
+**Fixed, in `to_gemini.py`:**
+
+- **Every request gets a 120s deadline** via `AbortController`, raising a new `timeout` kind.
+  Deliberately generous (a long report on a strong model genuinely takes ~a minute; aborting a
+  request about to succeed is worse than waiting) and deliberately **not** auto-retried — a silent
+  second two-minute wait reads as the same freeze.
+- **The session is snapshotted to `localStorage`** on every *settled* turn (never mid-turn, so a
+  half-finished request is never what comes back), and restored when the same cadet re-enters the
+  same lesson in the same mode within 6 hours. The start screen says so before they retype a name.
+  Nothing leaves the browser — same store as the API key.
+- **A saved session outranks a `#h=` handoff**, and must: the snapshot already contains the
+  handoff's messages *plus* everything since, so preferring the hash would silently roll the cadet
+  back to the moment they arrived from Claude.
+- **`reportPhase` is persisted rather than re-derived.** The effect that sets it reads only the
+  **last** message, so a session frozen on the cadet's own reply to the integrity question — which
+  is exactly this case — would resume believing it was still probing and rebuild the prompt
+  *without* `REPORT_FORMAT`.
+- **`400` is no longer reported as an auth failure.** It was lumped in with 401/403, so a request
+  that was merely too long told the cadet their **API key was invalid** — sending them to
+  regenerate a key that was fine. It is now auth only when Google's message says so; otherwise a
+  new `badrequest` kind that names length as the likely cause and keeps the Retry.
+- The snapshot is cleared when Submit is clicked, so finished work is never offered back as
+  unfinished.
+
+**Two bugs the harnesses caught before a cadet could:**
+
+- **A temporal dead zone.** `SESSION_STORE` was a `const` built from `INTERACTION_ID`, and this
+  block is emitted **above** that declaration — *"Cannot access 'INTERACTION_ID' before
+  initialization"*, thrown before React mounts, blanking the page. Now a function, evaluated on
+  first save. **This is the second TDZ in this file from the same cause**; anything emitted into
+  the constants block must not read a value declared with the artifact's own identity.
+- **A step-ordering error**: the resume notice anchored on markup a *later* step injects, so it
+  matched zero and the porter refused. Moved after the banner step rather than relaxed.
+
+**Verification.** `gemini-model-ladder.mjs` **17/17**, `gemini-build.mjs` **7/7**. The render check
+runs against a temporarily un-gated copy, and a build-marker assertion now checks all eight new
+names survive the port — a silently skipped transform would otherwise ship a page that looks fine
+and still freezes. **Node-only; no real tutor turn, and the timeout and restore paths are
+unexercised by any automated check** — reloading mid-session is the one thing a faculty tester
+should deliberately try.
+
+**Not fixed, and it applies to the Claude artifacts too:** they share this transport shape and
+almost certainly share the missing timeout. A fix there means re-patching and republishing 51
+artifacts by hand, so it is recorded rather than done. Claude's own page keeps the conversation, so
+the *lost-work* half does not apply there — only the hang.
+
+---
+
 ## 2026-08-21 (second) — Matthew Recker via Claude
 
 ### The Gemini backup taught on the cheapest model we had, and a cadet noticed
