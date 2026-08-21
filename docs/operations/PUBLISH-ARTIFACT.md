@@ -231,6 +231,25 @@ Then write the new URL into that course's `BUILD-LOG.md` before the next `sync_a
 or the regenerated `index.json` drops it silently — see
 [`ONBOARD-ARTIFACTS.md`](ONBOARD-ARTIFACTS.md) §6.
 
+> **`BUILD-LOG.md` is the record. `index.json` is not** — the push rebuilds it from the log every
+> run, so a URL written into `index.json` is discarded by the next push, and that file is gitignored
+> besides. For a bulk republish there is a tool; it matches by slug, refuses on any row whose
+> current value is not what the CSV expects, and preserves each log's own line endings (phys-110
+> and phys-215 are CRLF, phys-310 is LF):
+>
+> ```
+> python scripts/artifacts/restamp_build_log.py --csv <csv> --published-on YYYY-MM-DD
+> python scripts/artifacts/sync_artifacts.py push --as-staff --commit
+> ```
+>
+> **`sync_artifacts.py status` cannot verify this.** It compares the *rebuilt* catalogue against the
+> stored one, so a stale `BUILD-LOG.md` produces a stale catalogue that matches its own stale upload
+> and reports `identical` — the check and the bug share an input. Confirm a republish by reading
+> `published_url` back out of the bucket, or by reading the log. *(This is not hypothetical: on
+> 2026-08-20 all 51 artifacts were republished, the URLs were stamped into `index.json` instead, and
+> the push that followed served faculty the superseded builds while every source uploaded
+> byte-perfect. Found and fixed the same day.)*
+
 ---
 
 ## 6. Push the source to Storage

@@ -106,53 +106,36 @@ def main():
                                        "(default: artifact-url-rollback.json in the repo root)")
     ap.add_argument("--commit", action="store_true", help="write (default: dry run)")
     ap.add_argument("--index", action="store_true",
-                    help="instead of touching the database, record the republish in each course's "
-                         "_builder/courses/<id>/index.json (published_url, published_on)")
-    ap.add_argument("--published-on", default="",
-                    help="date to stamp with --index (YYYY-MM-DD); required with --index")
+                    help="RETIRED and refused - see restamp_build_log.py")
+    ap.add_argument("--published-on", default="", help=argparse.SUPPRESS)
     args = ap.parse_args()
     if bool(args.csv) == bool(args.rollback):
         sys.exit("give exactly one of --csv or --rollback")
 
-    # ── index bookkeeping ────────────────────────────────────────────────────
-    # The repo's own record of what is live, and the only record covering a FIRST publish -- which
-    # has a claude.ai URL but no activity row yet, so the database cannot hold it. Kept in the same
-    # tool as the URL update because they are one event: skipping this leaves index.json naming
-    # artifacts that no longer exist, and stage_for_upload.py builds its checklist from it.
+    # ── index bookkeeping: RETIRED 2026-08-20, and refused rather than deleted ───────────────
+    # This flag wrote `published_url` into `_builder/courses/<id>/index.json`, which is NOT the
+    # record. That file is DERIVED: `sync_artifacts.py push` rebuilds it from `BUILD-LOG.md` on
+    # every run and uploads the rebuilt copy, so anything written here is discarded by the next
+    # push. It is gitignored too, so it could never carry the fact to another clone.
+    #
+    # It did exactly that on 2026-08-20: all 51 artifacts were republished, the new URLs were
+    # stamped here, and the push that followed rebuilt the catalogue from a stale BUILD-LOG and
+    # served the superseded builds to faculty -- while all 51 .jsx sources in the same push
+    # uploaded byte-perfect, which is why it was quiet. PUBLISH-ARTIFACT.md section 5 had said to
+    # write BUILD-LOG.md first, in those words, the whole time.
+    #
+    # Kept as a refusal because the flag is in this session's shell history and in the CHANGELOG;
+    # somebody will reach for it again, and a hard stop naming the replacement is worth more than
+    # an unrecognized-argument error.
     if args.index:
-        if not args.csv:
-            sys.exit("--index needs --csv")
-        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", args.published_on or ""):
-            sys.exit("--index needs --published-on YYYY-MM-DD")
-        by_slug = {}
-        with open(args.csv, encoding="utf-8", newline="") as fh:
-            for r in csv.DictReader(fh):
-                m = SLUG_FROM_FILE.match(r.get("file", ""))
-                if m:
-                    by_slug[m.group(1)] = r["new_url"].strip()
-        touched = 0
-        for course in ("phys-110", "phys-215", "phys-310"):
-            path = ROOT / "_builder" / "courses" / course / "index.json"
-            if not path.is_file():
-                continue
-            doc = json.loads(path.read_text(encoding="utf-8"))
-            changed = 0
-            for a in doc.get("artifacts", []):
-                url = by_slug.get(a.get("slug"))
-                if url and (a.get("published_url") != url
-                            or a.get("published_on") != args.published_on):
-                    a["published_url"] = url
-                    a["published_on"] = args.published_on
-                    changed += 1
-            print(f"  {course}: {changed} artifact(s) restamped")
-            touched += changed
-            if args.commit and changed:
-                path.write_text(json.dumps(doc, indent=1, ensure_ascii=False) + "\n",
-                                encoding="utf-8")
-        print(f"\n{touched} entr(ies) updated.")
-        if not args.commit:
-            print("dry run - nothing written. Re-run with --commit.")
-        return
+        sys.exit(
+            "--index is RETIRED and does nothing.\n"
+            "  It wrote _builder/courses/<id>/index.json, which `sync_artifacts.py push`\n"
+            "  REBUILDS from BUILD-LOG.md and overwrites. The stamp never survived a push.\n"
+            "  Use instead:\n"
+            "    python scripts/artifacts/restamp_build_log.py --csv <csv> --published-on YYYY-MM-DD\n"
+            "    python scripts/artifacts/sync_artifacts.py push --as-staff --commit"
+        )
 
     env = load_env()
 

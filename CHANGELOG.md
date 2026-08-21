@@ -8,6 +8,61 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-20 (sixth) — Matthew Recker via Claude
+
+### The artifact library was serving 51 superseded builds, and the check that should have caught it structurally could not
+
+**The sources went up clean and the catalogue did not.** `sync_artifacts.py push` uploaded all 51
+patched `.jsx` byte-perfect — verified by downloading each one back and confirming every fix-set
+marker — and in the same run rebuilt `index.json` from a `BUILD-LOG.md` that still named the URLs
+published *before* the republish. The faculty **Artifacts** page reads that catalogue, so it went on
+offering the superseded builds. **Cadets were never affected**: their links come from
+`app.activities`, and those 38 rows were repointed and read back exact in the fifth entry.
+
+**The cause was a tool this project added, contradicting a runbook it already had.**
+`update_artifact_urls.py --index` wrote `published_url` into `_builder/courses/<id>/index.json`.
+That file is **derived** — `build_payload()` rebuilds it from `BUILD-LOG.md` on every push and
+uploads the rebuilt copy — and it is gitignored, so the stamp could not survive a push *or* reach
+another clone. [`PUBLISH-ARTIFACT.md`](docs/operations/PUBLISH-ARTIFACT.md) §5 had said *"write the
+new URL into that course's `BUILD-LOG.md` before the next `sync_artifacts.py push`, or the
+regenerated `index.json` drops it silently"* — in those words, the whole time.
+
+**`status` cannot detect this, and that is worth naming precisely.** It compares the *rebuilt*
+payload against the stored copy, so a stale log yields a stale catalogue that matches its own stale
+upload and reports `identical`. **The check and the bug share an input.** A green `status` is
+evidence that the upload was faithful, never that the catalogue is right. Verify a republish by
+reading `published_url` back out of the bucket, or by reading the log.
+
+**Fixed:**
+
+- **`scripts/artifacts/restamp_build_log.py` (new)** rewrites the one `| **Published** |` row per
+  artifact. Sectioning and slug identification are **imported** from `artifact_parse.parse_build_log`
+  — the same parser the push uses — so the fixer cannot disagree with the thing it fixes. It refuses
+  the whole run on any row whose current value is not what the CSV expects (`replace` must carry the
+  old URL; `first-publish` must read `not published`), and it **preserves each file's own line
+  endings**: phys-110 and phys-215 are CRLF, phys-310 is LF, and a text-mode read would have rewritten
+  all three (PROJECT.md, "Sharp edges"). The diff was **51 insertions, 51 deletions** — one line per
+  artifact, which is the number that proves no line-ending rewrite happened.
+- **`--index` is retired and now refuses**, naming the replacement rather than being deleted — it is
+  in this session's history and in the fifth entry, so somebody will reach for it again.
+- **51 of 51 restamped, pushed, and read back from Storage**: every stored `published_url` matches
+  the republish file, every entry stamped `2026-08-20`, and all 51 sources still byte-identical. The
+  push moved exactly `51 build.json + 3 index.json`, with the 52 sources reported unchanged — the
+  signature of a metadata-only change. *(It needed two runs: the first died mid-upload on a
+  transient `SSLV3_ALERT_BAD_RECORD_MAC` after 32 of 54 objects. The tool compares by hash, so
+  re-running finished the remaining 22 and cost nothing.)*
+- **`PUBLISH-ARTIFACT.md` §5** now carries the reason, the bulk command, and the `status` blind spot.
+  `restamp_build_log.py` and `sync_artifacts.py` are registered as its sources in
+  [`DOC-SOURCES.json`](docs/DOC-SOURCES.json), because *"the push reads `published_url` out of the
+  log"* and *"`status` compares the rebuild"* are properties of that script, not of the page.
+
+**Read through the `PREP_TEST_FACULTY` staff session, and that is sound here** — unlike a count over
+`app`. The `artifact-sources` policy is `app.is_staff()`, whole-bucket rather than per-offering, and
+the read returned 51 of 51 slugs with none missing and none extra. CORE.md §3's warning is about RLS
+silently *filtering*; nothing was filtered.
+
+---
+
 ## 2026-08-20 (fifth) — Matthew Recker via Claude
 
 ### All 51 artifacts republished with the fix set, and 38 lesson rows repointed at them

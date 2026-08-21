@@ -175,7 +175,7 @@ four topics.
 |---|---|
 | **File** | [`lesson_02_preflight_electric_charge_coulombic_force.jsx`](lesson_02_preflight_electric_charge_coulombic_force.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-02-electric-charge-coulombic-force-3a8e4e18` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/992aee9c-a4d5-4433-8563-df28ad36fdbb |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/5a76f8d1-becb-4011-b5da-e860d5014862 |
 | **Component** | `Lesson02Preflight` |
 | **Built** | 2026-08-05 |
 | **Grounding** | OpenStax Vol. 2 §5.1 Electric Charge (pp. 170–175) + §5.2 Conductors, Insulators, and Charging by Induction (pp. 175–179) + §5.3 Coulomb's Law (pp. 179–183) |
@@ -295,7 +295,7 @@ proves the ratio is separation-independent). All four independently re-derived t
 |---|---|
 | **File** | [`lesson_03_preflight_coulombs_law_and_superposition.jsx`](lesson_03_preflight_coulombs_law_and_superposition.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-03-coulombs-law-and-superposition-485f9923` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/35ab4b76-4939-4901-8eb1-aef27e1d7240 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/a0cd3ca8-6ab5-4e24-8939-37f130c77b91 |
 | **Component** | `Lesson03Preflight` |
 | **Built** | 2026-08-05 |
 | **Grounding** | OpenStax Vol. 2, §5.3 "Coulomb's Law", printed pp. 179–183. Five pages, contiguous. Vector form and superposition only — the two-charge case is lesson 2's and is carried as ASSUMED |
@@ -465,7 +465,7 @@ publishing is the parser.
 |---|---|
 | **File** | [`lesson_04_preflight_electric_fields_and_superposition.jsx`](lesson_04_preflight_electric_fields_and_superposition.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-04-electric-fields-and-superposition-479afcad` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/4c2cad60-1863-4d8e-bc3e-a7c83686ae87 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/7515bb77-7d66-42b5-a176-39f5b4f5b80c |
 | **Component** | `Lesson04Preflight` |
 | **Built** | 2026-08-04 |
 | **Grounding** | OpenStax University Physics Vol. 2, §5.4 (pp. 184–189) + §5.6 (pp. 198–201), plus the §5.5 fragment on p. 198 |
@@ -506,7 +506,7 @@ re-derived twice; B, C and D verified by back-substitution to zero residual.
 |---|---|
 | **File** | [`lesson_05_preflight_charged_particles_in_uniform_elec_fields.jsx`](lesson_05_preflight_charged_particles_in_uniform_elec_fields.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-05-charged-particles-in-uniform-elec-fields-1c5bc31d` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/ac19e554-925d-438c-80e9-472a6fbb78c7 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/5e35138a-52e8-41e0-8534-6055f5d60382 |
 | **Component** | `Lesson05Preflight` |
 | **Built** | 2026-08-04 |
 | **Grounding** | OpenStax Vol. 2 — §5.5 closing results (pp. 196–198, incl. Example 5.9) + §5.6's last figure (p. 202) + §5.7 Electric Dipoles in full (pp. 202–204) |
@@ -578,7 +578,7 @@ re-derived twice; C's numbers were computed and re-checked for this revision.
 |---|---|
 | **File** | [`lesson_07_preflight_charge_distributions_electric_flux.jsx`](lesson_07_preflight_charge_distributions_electric_flux.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-07-charge-distributions-electric-flux-32174e58` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/f560eee4-baaf-44e6-8d98-1d8f520d08c3 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/eb71baf5-dfc9-4d1f-8764-0497b5116289 |
 | **Component** | `Lesson07Preflight` |
 | **Built** | 2026-08-04 |
 | **Grounding** | OpenStax Vol. 2 §5.5 (pp. 190–197) + §6.1 Electric Flux (pp. 220–227) — both contiguous, no page gaps |
@@ -612,7 +612,7 @@ is instructed not to work it.
 |---|---|
 | **File** | [`lesson_08_preflight_gausss_law_and_its_applications.jsx`](lesson_08_preflight_gausss_law_and_its_applications.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-08-gausss-law-and-its-applications-5f57cc30` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/536008af-6c52-4427-85c4-4ada34ff7a5e |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/715caae7-2a21-4ec6-bc72-a0c4dd13d81a |
 | **Component** | `Lesson08Preflight` |
 | **Built** | 2026-08-04 |
 | **Grounding** | OpenStax Vol. 2 §6.2 "Explaining Gauss's Law" (pp. 228–234) + §6.3 "Applying Gauss's Law" (pp. 234–245) — contiguous, but **truncated at the end**; see the note below |
@@ -666,7 +666,7 @@ mapping is inherited from the schedule and cannot be checked mechanically.
 |---|---|
 | **File** | [`lesson_09_preflight_electric_potential_difference.jsx`](lesson_09_preflight_electric_potential_difference.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-09-electric-potential-difference-b3ba716f` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/9b2d1daa-04d3-41c7-8a40-2cf54c15f42d |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/040e622e-9e7e-46e2-a7b1-9115b61a4a41 |
 | **Component** | `Lesson09Preflight` |
 | **Built** | 2026-08-04 |
 | **Grounding** | OpenStax Vol. 2 §7.1 "Electric Potential Energy" (pp. 268–274) + §7.2 "Electric Potential and Potential Difference" (pp. 274–284) — contiguous |
@@ -731,7 +731,7 @@ ungrounded. One look at the Cengage table of contents would settle it.
 |---|---|
 | **File** | [`lesson_10_preflight_electric_potential_potential_energy.jsx`](lesson_10_preflight_electric_potential_potential_energy.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-10-electric-potential-potential-energy-c627bfa9` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/fc3e1049-e897-49ba-8896-e71f8bc0fb5a |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/4f605848-bad1-4cc7-a636-c719d8e59466 |
 | **Component** | `Lesson10Preflight` |
 | **Built** | 2026-08-04 |
 | **Grounding** | OpenStax Vol. 2 §7.3 "Calculations of Electric Potential" (pp. 285–295) + §7.4 "Determining Field from Potential" (pp. 296–299) + §7.5 "Equipotential Surfaces and Conductors" (pp. 299–306, truncated) |
@@ -809,7 +809,7 @@ a signed difference and a magnitude, the same trap lesson 9 recorded.
 |---|---|
 | **File** | [`lesson_13_preflight_capacitance_energy_and_dielectrics.jsx`](lesson_13_preflight_capacitance_energy_and_dielectrics.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-13-capacitance-energy-and-dielectrics-7444aa79` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/741beb96-92a5-4874-827e-c23ddc65798f |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/4f66931f-c343-4ad6-bd13-fba3120c2ea4 |
 | **Component** | `Lesson13Preflight` |
 | **Built** | 2026-08-04 |
 | **Grounding** | OpenStax Vol. 2 ch. 8 "Capacitance" — §8.1 (pp. 323–332), §8.3 (339–342), §8.4 (342–345), §8.5 (345–351). **§8.2 is absent; see below** |
@@ -886,7 +886,7 @@ Stated in the reference explicitly so nobody goes looking for a cut that is not 
 |---|---|
 | **File** | [`lesson_14_preflight_current_resistance_and_electrical_power.jsx`](lesson_14_preflight_current_resistance_and_electrical_power.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-14-current-resistance-and-electrical-power-06497f19` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/244746bb-c15c-4c15-8268-068eedd4e96f |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/423ffb2f-525e-4068-b5ef-3176af35e6cc |
 | **Component** | `Lesson14Preflight` |
 | **Built** | 2026-08-04 |
 | **Grounding** | OpenStax Vol. 2 ch. 9 — §9.1 (pp. 362–365), §9.3 (371–380), §9.4 (380–384), §9.5 (384–389). **§9.2 is absent; see below** |
@@ -966,7 +966,7 @@ anything.
 |---|---|
 | **File** | [`lesson_15_preflight_dc_circuit_analysis_kirchhoffs_rules.jsx`](lesson_15_preflight_dc_circuit_analysis_kirchhoffs_rules.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-15-dc-circuit-analysis-kirchhoffs-rules-d9d8a7a3` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/ef685189-deef-4145-bbe1-1775cea23cbb |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/09083901-32ba-4456-af0d-df998b74bebc |
 | **Component** | `Lesson15Preflight` |
 | **Built** | 2026-08-04 |
 | **Grounding** | OpenStax Vol. 2 ch. 10 — §10.1 Electromotive Force (pp. 406–413), §10.2 Resistors in Series and Parallel (413–425), §10.3 Kirchhoff's Rules (425–436, cut mid-sentence) |
@@ -1052,7 +1052,7 @@ and added in the other — because cadets will flag it and it deserves resolving
 |---|---|
 | **File** | [`lesson_18_preflight_moving_charged_particle_in_a_magnetic_field.jsx`](lesson_18_preflight_moving_charged_particle_in_a_magnetic_field.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-18-moving-charged-particle-in-a-magnetic-field-cd95f8b3` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/b3052c50-e365-4431-a715-bed043868064 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/db569753-97b2-42ed-acac-8826348c0ba2 |
 | **Component** | `Lesson18Preflight` |
 | **Built** | 2026-08-04 |
 | **Grounding** | OpenStax Vol. 2 ch. 11 — §11.2 "Magnetic Fields and Lines" + §11.3 "Motion of a Charged Particle in a Magnetic Field", printed pp. 466–473, contiguous |
@@ -1140,7 +1140,7 @@ with only four slots it lost to period-independence.
 |---|---|
 | **File** | [`lesson_19_preflight_magnetic_force_on_current_carrying_wires.jsx`](lesson_19_preflight_magnetic_force_on_current_carrying_wires.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-19-magnetic-force-on-current-carrying-wires-4a147cca` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/248af5d4-91ae-44bb-b44a-46471b456416 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/a7cbc6d0-c9dc-4e79-bced-7b10c4430b3d |
 | **Component** | `Lesson19Preflight` |
 | **Built** | 2026-08-04 |
 | **Grounding** | OpenStax Vol. 2 §11.4 "Magnetic Force on a Current-Carrying Conductor", printed pp. 474–478, contiguous, cut mid-sentence at the far end |
@@ -1209,7 +1209,7 @@ lesson does.** If you read that allowance more narrowly, those problem parts are
 |---|---|
 | **File** | [`lesson_20_preflight_magnetic_dipoles_and_torque.jsx`](lesson_20_preflight_magnetic_dipoles_and_torque.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-20-magnetic-dipoles-and-torque-3190fefe` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/1cccbe1e-2da9-4b85-957d-efec9697906b |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/cd5cd38c-4679-41d5-a1cc-d666872fe6d6 |
 | **Component** | `Lesson20Preflight` |
 | **Built** | 2026-08-04 |
 | **Grounding** | OpenStax Vol. 2 **§11.5** "Force and Torque on a Current Loop", printed pp. 479–480 — **two pages, cut mid-sentence at both ends** |
@@ -1294,7 +1294,7 @@ overlap and no gap between lessons 18, 19 and 20.
 |---|---|
 | **File** | [`lesson_21_preflight_sources_of_magnetic_fields.jsx`](lesson_21_preflight_sources_of_magnetic_fields.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-21-sources-of-magnetic-fields-85e63bf8` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/abacd883-9190-45a7-9194-bcac4ce864b0 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/88ae2ceb-2994-4166-9d2b-23bc04bb9cd2 |
 | **Component** | `Lesson21Preflight` |
 | **Built** | 2026-08-04 |
 | **Grounding** | OpenStax Vol. 2 **ch. 12** "Sources of Magnetic Fields" — §12.1 Biot-Savart Law (printed pp. 502–504), §12.2 Thin Straight Wire (505–508), §12.3 Force between Two Parallel Currents (509–510), §12.4 Magnetic Field of a Current Loop (511–513). Twelve pages, contiguous |
@@ -1434,7 +1434,7 @@ is still not a look at a Cengage table of contents.
 |---|---|
 | **File** | [`lesson_22_preflight_amperes_law_gausss_law_in_magnetism.jsx`](lesson_22_preflight_amperes_law_gausss_law_in_magnetism.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-22-amperes-law-gausss-law-in-magnetism-bd81d7d5` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/0c5be0dd-da8c-4be7-b8b6-fa78c9fc7fc2 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/1556c421-7da7-4818-b870-3233db7ad04a |
 | **Component** | `Lesson22Preflight` |
 | **Built** | 2026-08-04 |
 | **Grounding** | OpenStax Vol. 2 **ch. 12** — the closing half of §12.4 (printed p. 514), §12.5 Ampère's Law (514–520), §12.6 Solenoids and Toroids (520–524). Eleven pages, contiguous, **cut at both ends** |
@@ -1604,7 +1604,7 @@ of contents.
 |---|---|
 | **File** | [`lesson_24_preflight_faradays_law_of_induction_motional_emf.jsx`](lesson_24_preflight_faradays_law_of_induction_motional_emf.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-24-faradays-law-of-induction-motional-emf-8cbe647d` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/c7ba116d-45dc-460f-a642-c7cc3936e9e5 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/400a0fca-2d54-493e-94eb-31f8a3bde9a8 |
 | **Component** | `Lesson24Preflight` |
 | **Built** | 2026-08-05 |
 | **Grounding** | OpenStax Vol. 2 **ch. 13** "Electromagnetic Induction" — §13.1 "Faraday's Law" (printed pp. 546–549), the closing lines of one worked example on printed p. 554, and §13.3 "Motional Emf" (printed pp. 554–561). Twelve pages, **with a four-page hole in the middle** |
@@ -1781,7 +1781,7 @@ of contents.
 |---|---|
 | **File** | [`lesson_25_preflight_lenzs_law_induced_electric_field.jsx`](lesson_25_preflight_lenzs_law_induced_electric_field.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-25-lenzs-law-induced-electric-field-1a98a6d0` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/a873f8d3-3d8c-4815-bdea-7f91b2a86476 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/f3829e4d-07a4-4637-b882-74b51c94392d |
 | **Component** | `Lesson25Preflight` |
 | **Built** | 2026-08-05 |
 | **Grounding** | OpenStax Vol. 2 **ch. 13** "Electromagnetic Induction" — §13.2 "Lenz's Law" (printed pp. 550–553) and §13.4 "Induced Electric Fields" (printed pp. 562–565). Eight pages in **two disjoint four-page blocks**; the eight pages between them are lesson 24's, not a hole |
@@ -1957,7 +1957,7 @@ It is still not a look at a Cengage table of contents.
 |---|---|
 | **File** | [`lesson_26_preflight_generators_and_motors_ac_transformers.jsx`](lesson_26_preflight_generators_and_motors_ac_transformers.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-26-generators-and-motors-ac-transformers-1bbf05b9` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/4e7aeb21-e2a5-4811-84b7-e7a6cb2b792e |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/28595b75-5e49-40b8-978a-7029de6d4a37 |
 | **Component** | `Lesson26Preflight` |
 | **Built** | 2026-08-05 |
 | **Grounding** | OpenStax University Physics Vol. 2 — **§13.6** "Electric Generators and Back Emf" (printed pp. 570–575), **§15.1** "AC Sources" + **§15.2** "Simple AC Circuits" (printed pp. 624–630), and **§15.6** "Transformers" (printed pp. 645–648). Seventeen pages in **three disjoint blocks** across **two chapters** |
@@ -2149,7 +2149,7 @@ a Cengage table of contents.
 |---|---|
 | **File** | [`lesson_28_preflight_displacement_current.jsx`](lesson_28_preflight_displacement_current.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-28-displacement-current-dc9f8b07` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/5095073f-1d0c-4829-8e37-6221840d528c |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/e23aa803-20cd-4ed4-a6d7-423e458b45f9 |
 | **Component** | `Lesson28Preflight` |
 | **Built** | 2026-08-05 |
 | **Grounding** | OpenStax University Physics Vol. 2 — **§16.1** "Maxwell's Equations and Electromagnetic Waves", printed pp. 658–663. Six pages, **one contiguous block, no interior hole, clean at both edges** |
@@ -2327,7 +2327,7 @@ split in two. It is still not a look at a Cengage table of contents.
 |---|---|
 | **File** | [`lesson_29_preflight_maxwells_equations.jsx`](lesson_29_preflight_maxwells_equations.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-29-maxwells-equations-7a27dd4c` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/22957bba-3501-48d7-a1bb-3c895232d5c1 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/85142f9a-6758-4e4e-85e9-229f64b1aa33 |
 | **Component** | `Lesson29Preflight` |
 | **Built** | 2026-08-05 |
 | **Grounding** | OpenStax University Physics Vol. 2 — **§16.1** "Maxwell's Equations and Electromagnetic Waves", printed pp. 658–663; **this lesson's half is pp. 661–663**. Six pages, one contiguous block, no interior hole, clean at both edges |
@@ -2516,7 +2516,7 @@ OpenStax section split in two. It is still not a look at a Cengage table of cont
 |---|---|
 | **File** | [`lesson_30_preflight_electromagnetic_waves_em_spectrum.jsx`](lesson_30_preflight_electromagnetic_waves_em_spectrum.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-30-electromagnetic-waves-em-spectrum-40677a45` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/b7d8e367-333f-4128-9a94-618dc522d253 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/9e45267a-600e-4656-bd53-1ab0741f7768 |
 | **Component** | `Lesson30Preflight` |
 | **Built** | 2026-08-05 |
 | **Grounding** | OpenStax University Physics Vol. 2 — **§16.2** "Plane Electromagnetic Waves" (printed pp. 664–670), **§16.3** "Energy Carried by Electromagnetic Waves" (pp. 671–674), a **one-page surviving fragment of §16.4** "Momentum and Radiation Pressure" (p. 680 only), and **§16.5** "The Electromagnetic Spectrum" (pp. 680–686). Eighteen PDF pages spanning printed folios **664–686 with pp. 675–679 missing out of the middle** |
@@ -2737,7 +2737,7 @@ this build does not answer it.**
 |---|---|
 | **File** | [`lesson_31_preflight_light_reflection_refraction.jsx`](lesson_31_preflight_light_reflection_refraction.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-31-light-reflection-refraction-ec714375` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/75c196dd-4cd9-44c0-b3a0-fae52d3b028c |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/2936b63e-0673-4a49-bdb8-2236f54c3552 |
 | **Component** | `Lesson31Preflight` |
 | **Built** | 2026-08-05 |
 | **Grounding** | OpenStax University Physics **VOLUME 3** — **§1.1** "The Propagation of Light", **§1.2** "The Law of Reflection", **§1.3** "Refraction" and **§1.4** "Total Internal Reflection" (printed pp. 6–21). Sixteen pages, **one contiguous block**, one chapter |
@@ -2931,7 +2931,7 @@ usual because it is being used to explain a *gap* rather than a run.
 |---|---|
 | **File** | [`lesson_32_preflight_image_formation_from_mirrors.jsx`](lesson_32_preflight_image_formation_from_mirrors.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-32-image-formation-from-mirrors-fbd3ac8d` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/8986e14f-f2d4-49fd-ad09-ea52d8956e1f |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/e1ce8e8e-0545-4d5c-ae19-93c2c54f8b1f |
 | **Component** | `Lesson32Preflight` |
 | **Built** | 2026-08-05 |
 | **Grounding** | OpenStax University Physics **Vol. 3** — Ch. 2 *Geometric Optics and Image Formation*: chapter intro + §2.1 *Images Formed by Plane Mirrors* + §2.2 *Spherical Mirrors* (printed pp. 49–61). Thirteen pages, one contiguous run |
@@ -3101,7 +3101,7 @@ defect 3's last figure.
 |---|---|
 | **File** | [`lesson_33_preflight_image_formation_from_lenses.jsx`](lesson_33_preflight_image_formation_from_lenses.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-33-image-formation-from-lenses-d3ec7a43` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/8d06baad-9c4c-4834-9abe-887fd4ac9676 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/f7bdf694-f314-4b8d-abda-a7100ec17348 |
 | **Component** | `Lesson33Preflight` |
 | **Built** | 2026-08-05 |
 | **Grounding** | OpenStax University Physics **Vol. 3** — **§2.3** "Images Formed by Refraction" (printed pp. 62–65) and **§2.4** "Thin Lenses" (printed pp. 65–75). Fourteen pages in **one unbroken run** |
@@ -3328,7 +3328,7 @@ cadets' book. Nothing in the grounding can settle it.
 |---|---|
 | **File** | [`lesson_36_preflight_double_slit_interference.jsx`](lesson_36_preflight_double_slit_interference.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-36-double-slit-interference-8b6dbbb7` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/89b10b6d-1f3f-4001-8026-60fb64da6e26 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/8d8efef1-5ece-497e-8f64-66de58d31814 |
 | **Component** | `Lesson36Preflight` |
 | **Built** | 2026-08-05 |
 | **Grounding** | OpenStax University Physics **Vol. 3** — Chapter 3 "Interference": the chapter opener/introduction, **§3.1** "Young's Double-Slit Interference" and **§3.2** "Mathematics of Interference", printed **pp. 109–114**. Six pages, one contiguous block, no interior hole. **Clean at the start, TRUNCATED at the end** — see the callout below |
@@ -3462,7 +3462,7 @@ extension problem A(c) both exist to catch.
 |---|---|
 | **File** | [`lesson_37_preflight_diffraction_resolution.jsx`](lesson_37_preflight_diffraction_resolution.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-37-diffraction-resolution-89cef48b` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/382da299-2d42-466b-82e5-e058460b3b60 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/e3d582f6-efde-4265-9fd1-d467c364d159 |
 | **Component** | `Lesson37Preflight` |
 | **Built** | 2026-08-05 |
 | **Grounding** | OpenStax University Physics **Vol. 3** — **§4.1** "Single-Slit Diffraction" (printed pp. 136–140), **§4.2** "Intensity in Single-Slit Diffraction" (printed pp. 140–144), and **§4.5** "Circular Apertures and Resolution" (printed pp. 152–157). Fifteen pages in **two blocks** with a **seven-page hole** between them |
@@ -3657,7 +3657,7 @@ book either. That is worth one look if anything about this lesson's scope turns 
 |---|---|
 | **File** | [`lesson_39_preflight_intro_to_nuclear.jsx`](lesson_39_preflight_intro_to_nuclear.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-39-intro-to-nuclear-4084143d` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/1c130bc7-3229-434c-ad49-1b2f0d068411 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/1d7a3dc2-95f3-4adc-8ad0-7b15facc4a92 |
 | **Component** | `Lesson39Preflight` |
 | **Built** | 2026-08-05 |
 | **Grounding** | OpenStax University Physics **Vol. 3** — chapter 10 "Nuclear Physics": **§10.1** "Properties of Nuclei" (printed pp. 432–436), a **fragment of §10.2** "Nuclear Binding Energy" (printed p. 440 only), **§10.3** "Radioactive Decay" (printed pp. 440–444), **§10.5** "Fission" (printed pp. 454–460), **§10.6** "Nuclear Fusion" (printed pp. 460–464). **21 pages spanning printed pp. 432–464, with 12 pages missing in TWO holes** |
@@ -3925,7 +3925,7 @@ a number — the two books number differently and cannot be mapped mechanically.
 |---|---|
 | **File** | [`lesson_41_preflight_photoelectric_effect_wave_particle.jsx`](lesson_41_preflight_photoelectric_effect_wave_particle.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-41-photoelectric-effect-wave-particle-518e76f6` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/988654e5-c2c3-43eb-916c-174ccaa6fb92 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/f918bb18-1a38-423c-9d31-8621f3a053d1 |
 | **Component** | `Lesson41Preflight` |
 | **Built** | 2026-08-05 |
 | **Grounding** | OpenStax University Physics **Vol. 3** — **§6.1** "Blackbody Radiation" + **§6.2** "Photoelectric Effect" (printed pp. 232–245); **§6.5** "De Broglie's Matter Waves" + **§6.6** "Wave-Particle Duality" (printed pp. 259–271); and **§7.2** "The Heisenberg Uncertainty Principle" (printed pp. 297–300). Thirty-one pages in **three blocks** across **two PDFs** and **two chapters** |

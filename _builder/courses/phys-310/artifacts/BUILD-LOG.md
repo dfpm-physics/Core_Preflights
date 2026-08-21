@@ -121,7 +121,7 @@ row (contract §3.2), leaving two live artifacts for one lesson unless the old o
 |---|---|
 | **File** | [`phys310_preflight_atoms_and_nuclei.jsx`](phys310_preflight_atoms_and_nuclei.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-atoms-and-nuclei-83022f32` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/e4bd61c0-49ef-40a3-a734-646a82ec33bc |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/8fad66d7-7dc6-4da1-a045-01faf9849042 |
 | **Component** | `Phys310AtomsAndNucleiPreflight` |
 | **Built** | 2026-07-31 |
 | **Grounding** | Murray corpus **§2.1** Atomic Theory, **§2.5** Nuclear Structure, **§2.6** Sizes and Masses of Nuclei — **the only three sections in the corpus that are `STATUS: REVIEWED`**, attested by recker on 2026-07-31 against the physical book |
@@ -142,7 +142,7 @@ row (contract §3.2), leaving two live artifacts for one lesson unless the old o
 |---|---|
 | **File** | [`phys310_preflight_binding_energy_and_stability.jsx`](phys310_preflight_binding_energy_and_stability.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-binding-energy-and-stability-e0ceabee` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/4267efcd-50cd-4b7a-9f64-0745601706ec |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/75919001-7f8e-4734-8d1f-bf6edef4b1ab |
 | **Component** | `Phys310BindingEnergyAndStabilityPreflight` |
 | **Built** | 2026-08-05 · 2097 lines |
 | **Grounding** | Murray corpus **§2.7** Binding Energy, **§3.1** Nuclear Stability — **both `STATUS: PENDING`**. Mass constants carried from §2.6 (reviewed) and tagged as carried |
@@ -204,7 +204,7 @@ by assuming both fragments land exactly on the peak.
 |---|---|
 | **File** | [`phys310_preflight_radioactivity.jsx`](phys310_preflight_radioactivity.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-radioactivity-77500fd7` |
-| **Published** | 2026-08-14 — https://claude.ai/public/artifacts/d6a51ba6-6c76-4abd-be65-498d4818a124 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/fed3e1c7-fa03-4e50-ad96-c5e0885c5678 |
 | **Component** | `Phys310RadioactivityPreflight` |
 | **Built** | 2026-08-05 · 2136 lines |
 | **Grounding** | Murray corpus **§3.2** Modes of Radioactive Decay, **§3.3** The Radioactive Decay Law, **§3.4** Decay Chains and Natural Radioactivity — **all three `STATUS: PENDING`**. Plus a labelled carry-forward block from §3.1 and §2.5 (see below) |
@@ -285,7 +285,7 @@ a tutor note forbidding it from being presented as a claim about which decays ha
 |---|---|
 | **File** | [`phys310_preflight_lab_1_measurement_of_half_life.jsx`](phys310_preflight_lab_1_measurement_of_half_life.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-lab-1-measurement-of-half-life-11c49dbc` |
-| **Published** | 2026-08-19 — https://claude.ai/public/artifacts/986bfbc8-3b7c-48d9-92db-19c4370064d6 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/5f54b81d-31ec-4e78-9014-cb68e1f2d940 |
 | **Component** | `Phys310Lab1MeasurementOfHalfLifePreflight` |
 | **Built** | 2026-08-05 · **rebuilt 2026-08-19** · 2327 lines |
 | **Grounding** | **PRIMARY:** `labs/lab-1/Lab1_Alt.pdf` (the graded write-up, 6 pp., 35 pts) and `labs/lab-1/Phys310 - Lab 1 - Analysis (2024).xlsx` (cell formulas read directly). **SECONDARY, tagged `[CORPUS]` in the reference:** §3.5 for σ=√N and background, §10.4 + §11.1 for ALARA, §3.3/§3.4 carried forward as the decay law |
@@ -389,7 +389,7 @@ concrete reason a step in the procedure exists.
 |---|---|
 | **File** | [`phys310_preflight_nuclear_reactions.jsx`](phys310_preflight_nuclear_reactions.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-nuclear-reactions-d02377ad` |
-| **Published** | not published |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/7b158bd2-0f69-49fb-b2d6-643f61a0b240 |
 | **Component** | `Phys310NuclearReactionsPreflight` |
 | **Built** | 2026-08-05 · 2170 lines |
 | **Grounding** | Murray corpus **§4.1** Q-Value, **§4.2** Elastic Scattering and Slowing-Down, **§4.3** Capture and Absorption, **§4.4** Charged-Particle and Photon-Induced — **all four `STATUS: PENDING`**. Six nuclide masses carried from §2.6/§2.7 and labelled as carried |
@@ -474,7 +474,7 @@ than content.
 |---|---|
 | **File** | [`phys310_preflight_cross_sections.jsx`](phys310_preflight_cross_sections.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-cross-sections-9308e38c` |
-| **Published** | not published |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/1dd0221d-2f8b-4088-bbea-ca5fd55044c6 |
 | **Component** | `Phys310CrossSectionsPreflight` |
 | **Built** | 2026-08-05 · 2179 lines |
 | **Grounding** | Murray corpus **§4.5** Cross Sections, **§4.6** Energy Dependence — **both `STATUS: PENDING`**. Six values carried forward from earlier sections, each tagged `[carried forward]` |
@@ -542,7 +542,7 @@ per §4.6's Flags — grounded in full, engage-if-raised, walled off from reacti
 |---|---|
 | **File** | [`phys310_preflight_neutron_transport.jsx`](phys310_preflight_neutron_transport.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-neutron-transport-4ecf35e0` |
-| **Published** | not published |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/3959b60d-3f58-4e81-b146-4a81ed495694 |
 | **Component** | `Phys310NeutronTransportPreflight` |
 | **Built** | 2026-08-05 · 2170 lines |
 | **Grounding** | Murray corpus **§4.7** Neutron Flux, Current, and Transport — `STATUS: PENDING`. **λ = 1/Σ carried forward from §4.5**, plus Σ = Nσ, atom density (§2.1), five thermal σ magnitudes (§4.6) and the 0.025 eV / 2200 m/s reference (§4.2) — every one tagged as carried |
@@ -616,7 +616,7 @@ Recorded so it stays visible rather than becoming folklore.
 |---|---|
 | **File** | [`phys310_preflight_radiation_interactions_with_materials.jsx`](phys310_preflight_radiation_interactions_with_materials.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-radiation-interactions-with-materials-1dd51596` |
-| **Published** | not published |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/cefd54d7-e429-4972-85ac-4646eab622c9 |
 | **Component** | `Phys310RadiationInteractionsWithMaterialsPreflight` |
 | **Built** | 2026-08-05 · 2265 lines — **the longest artifact in this course** |
 | **Grounding** | Murray corpus **§5.1–§5.5** — **all five `STATUS: PENDING`**. Two values tagged as carried: the 0.511 MeV electron rest energy and the 0.025 eV / 2200 m/s thermal reference |
@@ -691,7 +691,7 @@ and **the corpus never mentions it.** It is drawn in the artifact from the prere
 |---|---|
 | **File** | [`phys310_preflight_bioeffects_and_safety.jsx`](phys310_preflight_bioeffects_and_safety.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-bioeffects-and-safety-a111da9b` |
-| **Published** | not published |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/a2fb5ebc-af78-490d-8726-861095c9122a |
 | **Component** | `Phys310BioeffectsAndSafetyPreflight` |
 | **Built** | 2026-08-05 · 2255 lines |
 | **Grounding** | Murray corpus **§5.6**, **§10.1**, **§10.2**, **§10.4** — **all four `STATUS: PENDING`**. §10.3 is not assigned and is not in the reference |
@@ -779,7 +779,7 @@ number is the thing the corpus does not have.**
 |---|---|
 | **File** | [`phys310_preflight_dose_and_shielding.jsx`](phys310_preflight_dose_and_shielding.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-dose-and-shielding-43f26ac6` |
-| **Published** | not published |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/520b7329-83bd-448a-8092-05aa616b345a |
 | **Component** | `Phys310DoseAndShieldingPreflight` |
 | **Built** | 2026-08-05 · 2206 lines |
 | **Grounding** | Murray corpus **§11.1** Time, Distance, and Shielding, **§11.2** Dose-Rate Calculations, **§11.3** Shielding Calculations and Buildup — **all three `STATUS: PENDING`** |
@@ -856,7 +856,7 @@ first?"*
 |---|---|
 | **File** | [`phys310_preflight_detection_methods_gas_filled_detectors.jsx`](phys310_preflight_detection_methods_gas_filled_detectors.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-detection-methods-gas-filled-detectors-edc3bbb5` |
-| **Published** | not published |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/c38f7901-169c-4aaa-8481-b97ea100307e |
 | **Component** | `Phys310DetectionMethodsGasFilledDetectorsPreflight` |
 | **Built** | 2026-08-05 · 2120 lines |
 | **Grounding** | Murray corpus **§12.1** Principles of Gas-Filled Detectors, **§12.2** Ionization Chambers and Proportional Counters, **§12.3** Geiger–Müller Counters — **all three `STATUS: PENDING`** |
@@ -934,7 +934,7 @@ confidence label rather than a grounded one.
 |---|---|
 | **File** | [`phys310_preflight_detection_methods_scintillation_semiconductor_and_dosimetry.jsx`](phys310_preflight_detection_methods_scintillation_semiconductor_and_dosimetry.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-detection-methods-scintillation-semiconductor-and-dosimetry-f5e95d35` |
-| **Published** | not published |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/26f8a389-0509-4dc0-9c09-b7a4c7801895 |
 | **Component** | `Phys310DetectionMethodsScintillationSemiconductorAndDosimetryPreflight` |
 | **Built** | 2026-08-05 · 2206 lines |
 | **Grounding** | Murray corpus **§12.4** Scintillation, **§12.5** Semiconductor, **§12.6** Neutron Detection, **§12.8** Personnel Dosimetry — **all four `STATUS: PENDING`**. §12.7 is not assigned and is not in the reference |
@@ -1017,7 +1017,7 @@ collisions.**
 |---|---|
 | **File** | [`phys310_preflight_fission_neutron_multiplication.jsx`](phys310_preflight_fission_neutron_multiplication.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-fission-neutron-multiplication-2a606ef1` |
-| **Published** | not published |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/6747e8d1-1ba9-4dd8-946d-d52fd1c3d48d |
 | **Component** | `Phys310FissionNeutronMultiplicationPreflight` |
 | **Built** | 2026-08-05 · 2277 lines — **the longest artifact in this course** |
 | **Grounding** | Murray corpus **§6.1–§6.5** — **all five `STATUS: PENDING`**. Plus a labelled `CARRIED IN FROM EARLIER LESSONS` block of six items, every one traced to corpus sections earlier lessons already own |
@@ -1128,7 +1128,7 @@ corpus, and §6.4's delayed-neutron paragraph is the best-written passage in it.
 |---|---|
 | **File** | [`phys310_preflight_fission_criticality.jsx`](phys310_preflight_fission_criticality.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-fission-criticality-b2dbd1a4` |
-| **Published** | not published |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/32a402ad-97f3-471a-90e1-6882ea31ebd0 |
 | **Component** | `Phys310FissionCriticalityPreflight` |
 | **Built** | 2026-08-05 · 2401 lines — **the longest artifact in this course** |
 | **Grounding** | Murray corpus **§16.1–§16.5** — **all five `STATUS: PENDING`** |
@@ -1203,7 +1203,7 @@ this corpus — named absorbers, the reason a BWR cannot use chemical shim, and 
 |---|---|
 | **File** | [`phys310_preflight_fusion.jsx`](phys310_preflight_fusion.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-fusion-6bfea3e2` |
-| **Published** | not published |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/816445d2-f838-460d-98f8-7ef18a48041d |
 | **Component** | `Phys310FusionPreflight` |
 | **Built** | 2026-08-05 · 2155 lines |
 | **Grounding** | Murray corpus **§7.1** Fusion Reactions, **§7.2** Conditions for Fusion and Confinement — **both `STATUS: PENDING`** |
@@ -1295,7 +1295,7 @@ aneutronic D+³He are grounded and routed to lateral connections.
 |---|---|
 | **File** | [`phys310_preflight_nuclear_reactors_basics_components_types_accidents.jsx`](phys310_preflight_nuclear_reactors_basics_components_types_accidents.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-nuclear-reactors-basics-components-types-accidents-be837c38` |
-| **Published** | not published |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/1d90b211-8b8e-4acc-93fd-c994b0491d37 |
 | **Component** | `Phys310NuclearReactorsBasicsComponentsTypesAccidentsPreflight` |
 | **Built** | 2026-08-05 · 2295 lines |
 | **Grounding** | Murray corpus **§18.1, §18.2, §18.4, §18.5, §21.1, §21.2** — **all six `STATUS: PENDING`**. §18.3 is not assigned and nothing from it is present |
@@ -1398,7 +1398,7 @@ one would be tempting.
 |---|---|
 | **File** | [`phys310_preflight_fuel_cycle_isotope_separation_waste.jsx`](phys310_preflight_fuel_cycle_isotope_separation_waste.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-fuel-cycle-isotope-separation-waste-9277e5a0` |
-| **Published** | not published |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/c2f853e9-b4a4-4811-b130-6f0fec6345ad |
 | **Component** | `Phys310FuelCycleIsotopeSeparationWastePreflight` |
 | **Built** | 2026-08-05 · 2386 lines |
 | **Grounding** | Murray corpus **§15.1–§15.4, §23.1, §23.5** — **all six `STATUS: PENDING`**. §23.2–23.4 are not assigned and nothing from them is present |

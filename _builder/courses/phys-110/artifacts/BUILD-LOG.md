@@ -48,7 +48,7 @@ pointer from a lesson back to the exact build a cadet is running.
 |---|---|
 | **File** | [`lesson_02_preflight_1d_motion.jsx`](lesson_02_preflight_1d_motion.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-02-1-d-motion-position-velocity-and-acceleration-b17964f2` |
-| **Published** | 2026-08-03 — https://claude.ai/public/artifacts/a12df688-c59a-4377-ac24-e57915ac010d |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/a894f7d4-d4ec-4142-9e6f-efa138a12998 |
 | **Built** | unknown — built outside this repository |
 | **Grounding** | not recorded; see the callout above |
 | **Probe topics** | 4 objectives, prose not bound to keys (see callout) |
@@ -61,7 +61,7 @@ pointer from a lesson back to the exact build a cadet is running.
 |---|---|
 | **File** | [`lesson_07_preflight_lab1_projectile.jsx`](lesson_07_preflight_lab1_projectile.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-07-lab-1-projectile-motion-7e1c4080` |
-| **Published** | 2026-08-16 — https://claude.ai/public/artifacts/559abd2c-56f9-4926-8dc5-c07a59297412 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/effc3685-afa0-4518-b009-67afab91ac3a |
 | **Built** | unknown — built outside this repository |
 | **Grounding** | not recorded; see the callout above |
 | **Probe topics** | 4 objectives, prose not bound to keys (see callout) |
@@ -74,7 +74,7 @@ pointer from a lesson back to the exact build a cadet is running.
 |---|---|
 | **File** | [`lesson_08_preflight_newtons_laws.jsx`](lesson_08_preflight_newtons_laws.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-08-intro-to-newtons-laws-9667eba1` |
-| **Published** | 2026-08-16 — https://claude.ai/public/artifacts/eac9b4cf-2f4e-4422-9b9a-f23fda42e735 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/fff82ba5-622d-4a9b-b574-8bc8b6b6d22d |
 | **Built** | unknown — built outside this repository |
 | **Grounding** | not recorded; see the callout above |
 | **Probe topics** | 4 objectives, prose not bound to keys (see callout) |
@@ -87,7 +87,7 @@ pointer from a lesson back to the exact build a cadet is running.
 |---|---|
 | **File** | [`lesson_09_preflight_applications_newtons_laws.jsx`](lesson_09_preflight_applications_newtons_laws.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-09-application-of-newtons-laws-6a66195f` |
-| **Published** | 2026-08-16 — https://claude.ai/public/artifacts/98586ddb-5e97-4a99-abb9-824925884696 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/43b0c10b-ab00-4faf-8ea9-f56b1f01de03 |
 | **Built** | unknown — built outside this repository |
 | **Grounding** | not recorded; see the callout above |
 | **Probe topics** | 4 objectives, prose not bound to keys (see callout) |
@@ -100,7 +100,7 @@ pointer from a lesson back to the exact build a cadet is running.
 |---|---|
 | **File** | [`lesson_11_preflight_circular_motion.jsx`](lesson_11_preflight_circular_motion.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `lesson-11-circular-motion-centripetal-force-11e3a6a5` |
-| **Published** | 2026-08-17 — https://claude.ai/public/artifacts/73b0f68c-6a1c-41b5-a5f3-0c6de388e50d |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/6ffa9e0b-f862-4c62-835b-68741fd68762 |
 | **Built** | unknown — built outside this repository |
 | **Grounding** | not recorded; see the callout above |
 | **Probe topics** | 4 objectives, prose not bound to keys (see callout) |
