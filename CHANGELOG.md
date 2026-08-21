@@ -8,6 +8,61 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-21 (eleventh) — Bryan Egner via Claude
+
+### PHYS 110 lesson 10 gets an interactive preflight, and PHYS 110 becomes a course that can build one
+
+**`COURSE_PROFILE.md`'s eight `UNSET` values are now decided**, by the course director, which is
+what the file said had to happen before a build. Grounding is OpenStax University Physics Vol. 1,
+with the cadets' Cengage text named as what they read and the tutor citing neither. Session shape
+matches PHYS 215 — 10 minutes, 4 probe topics, cap 5, ~2 active minutes each. `grade_weight_note`
+is PHYS 215's wording.
+
+**The six lab lessons are a documented exception to that grounding**, recorded in the profile rather
+than left to each build: lessons 7, 10, 19, 23, 32 and 38 read `Lab Handout` in the syllabus, not a
+book section, so a lab preflight grounds on that lesson's handout plus the lab manual with OpenStax
+as support. Grounding a lab preflight on OpenStax alone would probe a reading nobody was assigned.
+
+**Lesson 10 — LAB 2: Newton's Laws** (`lesson-10-lab-2-newtons-laws-b9d4356a`), published and
+registered on the existing `preflight-10` lesson as its second activity beside
+`phys-110-preflight-10-written`, `policy=choice`. Its Gemini build is in `site/gemini/phys-110/`
+and the router manifest goes 38 → 39.
+
+Architecture is inherited byte-for-byte from `lesson-07-lab-1-projectile-motion-7e1c4080`, the
+sibling lab preflight; only the header, `INTERACTION_ID`, `OBJECTIVE_KEYS`, the four grounding
+blocks, one wrong-claim example and two UI titles differ. **It is CONCEPTUAL, following LAB 1's
+recorded scope decision** — the tutor never asks a cadet to type out or manipulate a derivation,
+because that derivation is worth 3.5 points in the written report. Uncertainty is the standard
+deviation of the mean, which is what the supplied Excel template computes; a cadet who reaches for
+maximum deviation is not confused, since the lab manual teaches it and says PHYS 110 often uses it.
+
+**The Gemini build is at code parity with the ones regenerated the same day** — `AbortController`,
+the 5xx/empty-response ladder step and the request deadlines are all present, matching lesson 09
+marker for marker. That is the porter's doing, not the kit's: per the entry below, none of the
+2026-08-21 fixes reached the kit, and this artifact was built from a patched published source
+rather than from the kit.
+
+### `name_scan.py` was flagging its own docstring, and exited 1 on every run
+
+Its `ALLOW` table is keyed on `(path, student_id)`, and it carried entries for `SYSTEM_GUIDE.md`
+and `test-roster-import.mjs` — but not for the checker's own source, which quotes the same
+placeholder in the sentence explaining why those two are allow-listed. So it flagged itself,
+exited non-zero forever, and the `/lesson-cycle` runbook treats a non-zero `name_scan` as a reason
+not to push. Three lines below the offending passage the docstring warns that *"a check that cries
+wolf is a check nobody runs."* Fixed with a third `ALLOW` entry; the scan now passes at 486 tracked
+files.
+
+### Two tooling defects found and NOT fixed here
+
+- **`.gitignore:64` does not match where `sync_artifacts.py pull` writes.** The rule is
+  `_builder/courses/*/artifacts/*.jsx`; the tool writes `_builder/courses/<id>/<slug>/source.jsx`.
+  Following the README's own pull command leaves 53 untracked directories, which dirties the tree
+  and refuses the nightly `/lesson-cycle` at its clean-tree gate. Worked around locally in
+  `.git/info/exclude`; the rule itself wants widening.
+- **`localize.py` does not refuse on `UNSET`, though `COURSE_PROFILE.md` and the schedule header
+  both say it will.** It validates that keys are *present*, not that they are set, so it would
+  bake the literal string `UNSET` into an artifact.
+
 ## 2026-08-21 (tenth) — Matthew Recker via Claude
 
 ### Nine fixes shipped to the Gemini builds and none of them reached the artifact builder

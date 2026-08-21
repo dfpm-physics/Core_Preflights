@@ -106,6 +106,10 @@ ALLOW = {
         "the CSV-format example's placeholder row -- the finding lists it so nobody 'fixes' it",
     ("tests/app-schema/test-roster-import.mjs", 3000138988):
         "the invented registrar CSV fixture (a 'Smith, John' advisor column)",
+    ("scripts/checks/name_scan.py", 3000138988):
+        "this checker's own docstring, in the sentence explaining the two entries above -- "
+        "it quotes the placeholder in order to document why the placeholder is allow-listed, "
+        "so the scanner flagged itself and exited 1 on every run",
 }
 
 SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v", "vi", "vii", "viii"}

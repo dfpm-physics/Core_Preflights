@@ -10,7 +10,11 @@ the artifact's public URL. Copy them from here rather than retyping, and regener
 lives nowhere else in this repository**, it is not derivable from the source, and it is the only
 pointer from a lesson back to the exact build a cadet is running.
 
-> **EVERY ROW HERE IS A BACKFILL, written 2026-08-19.** These five artifacts were built outside
+> **EVERY ROW HERE EXCEPT LESSON 10 IS A BACKFILL, written 2026-08-19.** Lesson 10 was
+> built from the kit in this repository on 2026-08-21 and is the first that was; its row
+> carries the grounding, checks and decisions the rows below could not.
+>
+> **(Original note, still true of the other five.)** These five artifacts were built outside
 > this repository and published straight to claude.ai; their `.jsx` reached the library on
 > 2026-08-19 and this log was written from them at the same time. There is no build history to
 > record, and none is invented below — what each row carries is what could be **sourced**.
@@ -93,6 +97,23 @@ pointer from a lesson back to the exact build a cadet is running.
 | **Probe topics** | 4 objectives, prose not bound to keys (see callout) |
 | **Checks** | `check_artifact.py` 31 passed / 1 failed — the failure is the `[]` false positive described above |
 | **Status** | **PUBLISHED and REGISTERED**, carrying credit as `graded` in Fall 2026. Source added to the library 2026-08-19; the date above is the registration date, an upper bound on publication |
+
+### Lesson 10 — LAB 2: Newton's Laws
+
+| | |
+|---|---|
+| **File** | [`lesson_10_preflight_lab2_newtons_laws.jsx`](lesson_10_preflight_lab2_newtons_laws.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-10-lab-2-newtons-laws-b9d4356a` |
+| **Published** | 2026-08-21 — https://claude.ai/public/artifacts/c5ec5c2c-2242-4adf-b632-26df838e8de8 — published by the course director from a Claude session, URL pasted back rather than derived |
+| **Built** | 2026-08-21, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Architecture inherited byte-for-byte from `lesson-07-lab-1-projectile-motion-7e1c4080`; only the header, `INTERACTION_ID`, `OBJECTIVE_KEYS`, `TEXTBOOK_REFERENCE`, `LESSON_CONFIG`, `EXTENSION_PROBLEMS`, one wrong-claim example and two UI titles differ. Spliced in **bytes**, LF preserved (2274 lines) |
+| **Grounding** | PHYS 110 Fall 2026 Lab 2 Instructions, *Determining the Coefficient of Friction*, 01 Aug 2026, all 3 pp. incl. rubric; USAFA Core Physics Laboratory Manual Fall 2026, §§II–VI and the §IX worked propagation example (read pp. 1–11); OpenStax Univ. Physics Vol. 1 friction treatment as supporting material. Historical value for the experiment: µk = 0.46 ± 0.02 |
+| **Probe topics** | 4 — `isolating-friction`, `constant-accel-model`, `linearization-slope`, `uncertainty-meaning`. Prose bound to keys (unlike the five backfilled rows) |
+| **Extensions** | 4 (A–D), each arithmetic pass verified twice in-source. A/B/C share one apparatus (m₁ = 0.250 kg, 30.0°, m₂ = 0.500 kg) and converge on µk ≈ 0.46 by two independent routes — timing and graph slope |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed**. The failure is the known `[]` false positive from `EXT_TRIGGER_MARK`; verified identical (delta = +1) on the untouched template, so nothing was introduced. `localize.py` leftover scan clean; `verify.py` 22/22 on the kit |
+| **Scope decisions** | CONCEPTUAL, carried forward from LAB 1: the tutor never asks a cadet to type out or manipulate a derivation — that is worth 3.5 rubric points in the written report. Uncertainty is the **standard deviation of the mean** (what the supplied Excel template computes); a cadet raising maximum deviation is *not* confused, since the manual teaches it and says PHYS 110 often uses it. Static-friction bonus is engage-only. Cadets take this **before** the experiment, so probe preparation, never results |
+| **Deviation from the approved preview** | Probe topics 1–2 were approved in a derivation-framed form and were **rewritten conceptually** to match LAB 1's recorded instructor decision. Flagged to the director at hand-off; reverting to the derivation framing is a rebuild |
+| **Status** | **PUBLISHED 2026-08-21.** Registered on the existing `preflight-10` lesson as its second activity via prefill (`id=preflight-10`, `iid=lesson-10-lab-2-newtons-laws-b9d4356a`), alongside `phys-110-preflight-10-written`, `policy=choice`. Lesson 10 had no interactive activity before this build, so the slug is fresh |
 
 ### Lesson 11 — Newton's Laws with Circular Motion
 

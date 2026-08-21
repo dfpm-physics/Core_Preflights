@@ -58,10 +58,22 @@ discipline_adjective:   physical
 # NEVER surfaced to a cadet: the tutor cites no chapter or page numbers from it.
 # The schedule's Reading column is Cengage SECTION numbering, not pages — see
 # phys110_fall2026_schedule.md. Which book grounds the TUTOR is a separate
-# decision from which book the cadets read, and it has not been made.
-grounding_text:         UNSET
-grounding_text_short:   UNSET
-student_text:           UNSET
+# decision from which book the cadets read.
+#
+# DECIDED 2026-08-21 by the course director. OpenStax Vol. 1 is the course-wide
+# default and matches the 28 grounding PDFs already staged in
+# textbook-pdfs/phys-110/.
+#
+# THE SIX LAB LESSONS (7, 10, 19, 23, 32, 38) ARE DIFFERENT. Their syllabus
+# Reading is "Lab Handout", not a book section, so a lab preflight grounds on
+# that lesson's lab handout PLUS the lab manual, with any relevant OpenStax
+# section as supporting material. There is no per-lesson grounding field in this
+# profile, so that is supplied per build — attach the handout and manual, and say
+# so in the build log. Grounding a lab preflight on OpenStax alone would probe a
+# reading the cadets were never assigned.
+grounding_text:         OpenStax University Physics Volume 1
+grounding_text_short:   OpenStax
+student_text:           Cengage (cadets read this; the tutor never cites either book)
 
 # ── Academic integrity ────────────────────────────────────────────────────────
 integrity_code_name:    USAFA Honor Code
@@ -79,12 +91,12 @@ schedule_file:          phys110_fall2026_schedule.md
 # This course's own decision. PHYS 215 runs 4 objectives at ~2 active minutes each
 # for ~10 minutes total; copying those numbers here would be assuming rather than
 # deciding, and they are baked into every artifact built from this profile.
-session_minutes:        UNSET
-probe_topics_default:   UNSET
-probe_topics_max:       UNSET
-per_topic_minutes:      UNSET
+session_minutes:        10
+probe_topics_default:   4
+probe_topics_max:       5
+per_topic_minutes:      2
 artifact_version:       2026-08
-grade_weight_note:      UNSET
+grade_weight_note:      under 80 of 1000 course points
 
 # ── Artifact naming ───────────────────────────────────────────────────────────
 # Matches the slugs the five existing PHYS 110 artifacts already carry, e.g.
