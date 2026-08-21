@@ -331,5 +331,13 @@ handful of cards in front of you, so reach for **Show all** first if you want th
 Switching to Show all, or shuffling the sample, starts the selection over — turning names on does
 not, so you can select first and decide about attribution afterwards.
 
-It appears once the assignment has been graded *and* aggregated, which happens after the deadline for
-that section — so a section whose deadline has not passed yet will still show placeholders.
+**Both panels fill as soon as students submit** — you do not have to wait for grading to read what
+the class wrote. What grading adds is the AI's reading of it: the **AI pick** quotes at the top of
+the reflections panel, and the flags and ratings elsewhere on this page. One consequence worth
+knowing — a reflection the AI later judges was not a real attempt drops out of the panel, so the
+count can fall slightly once grading lands. That is the filter doing its job, not responses going
+missing.
+
+The AI panels above them — the readiness summary, the recommendation and the misconception bars —
+appear once the assignment has been graded *and* aggregated, which happens after the deadline for
+that section, so a section whose deadline has not passed yet will still show placeholders.

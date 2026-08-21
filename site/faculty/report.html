@@ -818,10 +818,27 @@
     function buildResponses(rows, roster, analysis) {
       const who = whoOf(roster);
       const byId = Object.fromEntries(rows.map(r => [String(r.student_id), r]));
+      // TWO SOURCES, IN THIS ORDER, and the second is what lets this panel fill before grading.
+      // `report_data.reading_reflection.text` exists only once /preflight-analyze has written a
+      // schema:1 assessment. `row.reflection_response` is the raw submitted answer and exists the
+      // moment the student submits. Reading only the first left this panel absent until grading
+      // ran, while the Free Responses panel below it — reading its answer off the submission —
+      // was already full for the same cohort. Both now fill on submission; what grading adds is
+      // the AI's reading of the reflection and the showcase picks, not the reflection itself.
+      //
+      // `meaningful === false` still excludes a student, and only ever where that judgment has
+      // actually been made. Before grading nothing has judged anyone, so nobody is filtered —
+      // which means the pool can shrink slightly once grading lands. That is the filter working,
+      // not the panel losing responses.
       const reflOf = id => {
-        const d = (byId[id]?.report_data && typeof byId[id].report_data === 'object') ? byId[id].report_data : null;
-        const rr = d && d.reading_reflection;
-        return (rr && typeof rr === 'object' && rr.text && rr.meaningful !== false) ? String(rr.text) : null;
+        const row = byId[id];
+        if (!row) return null;
+        const d = (row.report_data && typeof row.report_data === 'object') ? row.report_data : null;
+        const rr = (d && d.reading_reflection && typeof d.reading_reflection === 'object') ? d.reading_reflection : null;
+        if (rr && rr.meaningful === false) return null;
+        const text = (rr && rr.text) ? String(rr.text)
+                   : (typeof row.reflection_response === 'string' ? row.reflection_response : '');
+        return text.trim() ? text.trim() : null;
       };
 
       // AI-picked showcase quotes — the aggregator stores only {student_id, section_id}; resolve the

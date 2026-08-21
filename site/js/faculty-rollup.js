@@ -385,6 +385,16 @@ export async function loadInteractionData(ctx, offeringId, studentIds) {
     // Without this the schema:1 emission would be written and never read, which is the same
     // failure the by_question breakdown had. Writing to the database is not the same as it
     // being used.
+
+    // The student's verbatim reading-reflection answer, lifted off the SUBMISSION and before any
+    // grade is consulted. Two consumers, and that ordering is the whole point of hoisting it: the
+    // schema:1 graft below can only run once /preflight-analyze has emitted an assessment, while
+    // `reflection_response` on the row below needs the text the moment the student submits.
+    const reflectionAnswer = (reflectionQid
+      && typeof writtenWork?.content?.[reflectionQid] === 'string'
+      && writtenWork.content[reflectionQid].trim())
+      ? writtenWork.content[reflectionQid].trim() : null;
+
     const written = writtenReport(grade);
     let reportData = interactiveWork?.content || written || null;
 
@@ -400,14 +410,11 @@ export async function loadInteractionData(ctx, offeringId, studentIds) {
     //
     // Lifting the answer here restores the "one shape, two producers" contract at the point the
     // shapes are already being unified, so nothing downstream has to know where the text lived.
-    if (written && !interactiveWork?.content && reflectionQid) {
-      const answer = writtenWork?.content?.[reflectionQid];
-      if (typeof answer === 'string' && answer.trim()) {
-        reportData = {
-          ...written,
-          reading_reflection: { ...(written.reading_reflection || {}), text: answer.trim() },
-        };
-      }
+    if (written && !interactiveWork?.content && reflectionAnswer) {
+      reportData = {
+        ...written,
+        reading_reflection: { ...(written.reading_reflection || {}), text: reflectionAnswer },
+      };
     }
 
     const { effort, source } = effortSignal(grade, reportData);
@@ -443,6 +450,23 @@ export async function loadInteractionData(ctx, offeringId, studentIds) {
         && typeof writtenWork.content?.[freeQ.id] === 'string'
         && writtenWork.content[freeQ.id].trim())
         ? writtenWork.content[freeQ.id].trim() : null,
+      // The student's verbatim answer to the READING-REFLECTION question (Q2), on exactly the
+      // same terms as `free_response` above and for the same reason: a top-level row field,
+      // because report_data is the frozen schema:1 shape and this is not one of its fields.
+      //
+      // IT IS NOT A DUPLICATE of `report_data.reading_reflection.text`. The difference is WHEN
+      // each one exists. That one is grafted above out of `written`, i.e. out of
+      // /preflight-analyze's output — so on an ungraded written lesson there is no report_data at
+      // all, the rollup's Reading Reflections panel resolved every student to null, and the panel
+      // did not render. Meanwhile the Free Responses panel beside it was already full, because it
+      // reads its answer straight off the submission. Same cohort, same page, same deadline: one
+      // question's writing visible and the other's invisible until a grader ran.
+      //
+      // So the reflection is read the same way, and the panel falls back to it. What still waits
+      // for grading is the AI's JUDGMENT of the reflection — `meaningful`, `engagement`, and the
+      // aggregator's showcase picks — which is the part that genuinely requires an AI to have
+      // looked. (Director's request, 2026-08-21.)
+      reflection_response: reflectionAnswer,
       // Flags an instructor has judged inapplicable, neutralized in `report_data` so every
       // consumer — the header pills, summarizeReports' counts, the per-student panel — sees the
       // corrected view without each one re-implementing the rule. See applyFlagOverrides().

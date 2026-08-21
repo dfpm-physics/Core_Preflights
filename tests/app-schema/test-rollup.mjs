@@ -1096,4 +1096,29 @@ check('…and an undo for a decision already made', /data-ov-restore=/.test(repo
 check('…and explains itself instead of offering a button with nowhere to write',
       /grade_id[\s\S]{0,200}?Grade this student before clearing/.test(reportSrc));
 
+/* ── Both response panels fill on SUBMISSION, not on grading (2026-08-21) ────────────────────
+ *
+ * The Free Responses panel always did: `free_response` is lifted straight off the submission.
+ * The Reading Reflections panel did not — it resolved only through
+ * `report_data.reading_reflection.text`, which is grafted out of /preflight-analyze's schema:1
+ * assessment and therefore does not exist until a lesson has been graded. So an instructor
+ * looking at an ungraded lesson saw one question's writing and not the other's, from the same
+ * cohort, on the same page.
+ *
+ * Asserted against the source because the fix spans a data field and a resolver that lives
+ * inline in report.html, and neither is reachable from a pure import. */
+const rollupSrc = readFileSync(
+  new URL('../../site/js/faculty-rollup.js', import.meta.url), 'utf8');
+check('loadInteractionData lifts the reflection answer off the submission',
+      /reflection_response:\s*reflectionAnswer/.test(rollupSrc));
+// Hoisted ABOVE `const written =` on purpose: the schema:1 graft consumes the same value, and a
+// lookup that ran only inside the graft is exactly what tied the text to grading in the first place.
+check('…before any grade is consulted',
+      rollupSrc.indexOf('const reflectionAnswer') < rollupSrc.indexOf('const written = writtenReport(grade)'));
+check('report.html falls back to it when there is no schema:1 assessment yet',
+      /reflOf[\s\S]{0,700}?row\.reflection_response/.test(reportSrc));
+// The quality filter survives the fallback, and only ever applies where a judgment was made.
+check('…and still drops a reflection the AI judged not meaningful',
+      /reflOf[\s\S]{0,700}?meaningful === false[\s\S]{0,60}?return null/.test(reportSrc));
+
 process.exitCode = summary() ? 0 : 1;

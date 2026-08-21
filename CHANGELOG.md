@@ -8,6 +8,46 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-21 — Matthew Recker via Claude
+
+### The rollup showed one question's writing before grading and hid the other's
+
+**Both response panels now fill the moment students submit.** *Student Free Responses* (Q3) always
+did — `loadInteractionData` lifts that answer straight off `submission_activities.content`, so an
+instructor could read what the class made of the lesson's physics question before anything had been
+graded. Instructors came to rely on it. *Student Reading Reflections* (Q2) could not do the same,
+because it resolved only through `report_data.reading_reflection.text`, and that field is **grafted
+out of `/preflight-analyze`'s schema:1 assessment** — so on an ungraded lesson there was no
+`report_data` at all, every student resolved to null, and the panel did not render. Same cohort,
+same page, same deadline: one question's writing visible and the other's invisible until a grader
+had run. Requested by the course director, who wanted the reflections on the same terms.
+
+**The fix reads the reflection the way the free response is already read.**
+`loadInteractionData` (`site/js/faculty-rollup.js`) hoists the verbatim answer to the pinned
+reading-reflection question into `reflectionAnswer` **before the grade is consulted**, and surfaces
+it as a top-level row field `reflection_response` — beside `free_response`, and top-level for the
+same reason: `report_data` is the frozen schema:1 shape (INTERACTION-DATA-CONTRACT) and neither
+answer is a field that contract defines. The existing schema:1 graft now consumes the same hoisted
+value instead of doing its own lookup, so there is one read of that answer rather than two.
+`reflOf` in `site/faculty/report.html` prefers the assessment's text and falls back to the raw
+submission.
+
+**What still waits for grading is the AI's reading of the reflection, not the reflection** — the
+**AI pick** showcase quotes (`/lesson-aggregate`), plus `meaningful` and `engagement`. One
+consequence, stated because it looks like a bug and is not: `meaningful === false` still excludes a
+student, and before grading nothing has judged anyone, so the pool can **shrink slightly** once
+grading lands. That is the quality filter starting to apply, not responses going missing.
+
+Nothing about grading, points, finalization or the aggregator changed, and no new key was added to
+`grades.diagnostic` — this is a read-side change only. `site/help/instructor-grading.md` said the
+panels appear "once the assignment has been graded *and* aggregated"; that sentence was true of the
+AI panels and is now wrong about the response panels, so it was split into the two claims and both
+`reviewed` dates were bumped in `docs/DOC-SOURCES.json`. Four regression checks added to
+`tests/app-schema/test-rollup.mjs` (257 pass), asserted against source because the resolver lives
+inline in report.html; `node --check` clean on both files.
+
+---
+
 ## 2026-08-20 (sixth) — Matthew Recker via Claude
 
 ### The artifact library was serving 51 superseded builds, and the check that should have caught it structurally could not
