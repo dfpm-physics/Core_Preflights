@@ -258,24 +258,54 @@ def port(src: bytes, slug: str, verbose: bool = False):
 // reach, and falls back to scoring the listing when it can reach none of them. That keeps the
 // property runtime discovery existed for -- this build cannot dead-end on a retired name.
 
-// Ordinary conversation turns: ~12 of the ~14 requests in a session. Quota is what matters.
-let MODEL_CHAT = [
+// The high-quota floor. Nothing here is a good tutor; it is where a ladder ENDS, and until
+// 2026-08-21 it was where the conversation ladder began.
+const MODEL_LITE = [
   "gemini-3.5-flash-lite",    // 15 RPM, 500 RPD
   "gemini-3.1-flash-lite",    // 15 RPM, 500 RPD
-  "gemini-3.5-flash",         //  5 RPM,  20 RPD -- from here down, one session's worth
-  "gemini-3-flash",
   "gemini-2.5-flash",
 ];
 
+// Ordinary conversation turns: ~12 of the ~14 requests in a session. THIS IS THE TEACHING, and
+// it now gets the strongest models the key can reach.
+//
+// It used to start on flash-lite to conserve quota, and on 2026-08-21 a cadet reported the
+// result: "it would try to tutor me and then give me the answer instead of walking me through
+// it." A lite model can open Socratically -- the prompt tells it to -- and then collapses into
+// stating the answer, because holding that stance across ~12 turns under a ~70,000-char
+// instruction is the reasoning-heavy part. The prompt was never the problem: every Socratic
+// line survives the port at identical counts.
+//
+// The quota it was conserving was not under pressure. Peak use across the whole course was 22
+// of flash-lite's 500 requests/day, while 3.7-flash sat at 23 of 20 -- over its cap -- because
+// the REPORT was the only thing allowed to use it. We were spending the best model on the
+// summary an instructor reads and the worst on the conversation a cadet learns from.
+//
+// A session is ~14 requests, so it fits inside ONE of these 20/day caps. A cadet doing one
+// lesson a day therefore runs the whole thing on 3.7; a second lesson lands on 3.6, a third on
+// 3.5, and only a fourth reaches the floor.
+let MODEL_CHAT = [
+  "gemini-3.7-flash",         //  5 RPM,  20 RPD -- a whole session fits inside one day's cap
+  "gemini-3.6-flash",         //  5 RPM,  20 RPD
+  "gemini-3.5-flash",         //  5 RPM,  20 RPD
+].concat(MODEL_LITE);
+
+// Study mode is UNGRADED practice a cadet may run as often as they like, and it produces no
+// report and no grade. It must never spend the graded session's strong-model allowance, so it
+// is pinned to the floor -- where 478 of 500 requests/day are going unused anyway.
+let MODEL_STUDY = MODEL_LITE.slice();
+
 // The report is ONE request per session and it is the graded artifact the cohort rollup
 // reads, so it gets the strongest model the key has and can afford a 20/day cap. It falls
-// through into the chat ladder rather than failing: a session with no report is a lost
-// session, and a report from a weaker model beats no report at all.
+// through into the floor rather than failing: a session with no report is a lost session, and
+// a report from a weaker model beats no report at all. Kept as its own array even though it
+// now matches MODEL_CHAT: seatLadder switches on array IDENTITY, and sharing one object would
+// silently stop the report from re-seating.
 let MODEL_REPORT = [
   "gemini-3.7-flash",
   "gemini-3.6-flash",
   "gemini-3.5-flash",
-].concat(MODEL_CHAT);
+].concat(MODEL_LITE);
 
 // Used only if the ListModels call itself fails, so it never gets filtered against a listing.
 const MODEL_FALLBACKS = MODEL_CHAT;
@@ -310,6 +340,11 @@ function scoreModel(name) {
 // extension phase would re-seat at the top of the chat ladder and burn a retry cycle on a
 // model already known to be exhausted, on every remaining turn.
 const spentModels = {};
+
+// One honoured retry-delay per model per session. Without the cap, a model whose per-minute
+// window keeps closing would stall the cadet on a silent spinner over and over instead of
+// dropping to a rung that has room.
+const waitedFor = {};
 
 function seatLadder(ref, ladder) {
   if (ref.ladder !== ladder) { ref.ladder = ladder; ref.i = 0; }
@@ -373,14 +408,35 @@ const KEY_STORE = "prep.gemini.apikey";""",
       if (nextModel(activeModelRef)) { attempt = 0; continue; }
       throw { kind: "model", status: 404 };
     }
-    // 429 is Gemini's rate-limit AND its daily-quota code, and the response does not say
-    // which. Retry first: a per-MINUTE limit clears in about a minute and the same model is
-    // still the right one. If it survives the retries it is the per-DAY cap, which will not
-    // clear today -- so move DOWN THE LADDER instead of ending the cadet's session. Free-tier
-    // quota is per model, so the next rung is a fresh allowance; only an exhausted ladder is
-    // fatal. Before 2026-08-20 this retried the one model and then gave up, which stranded a
-    // cadet at 20 requests while 500 sat unused one rung down.
+    // 429 is Gemini's rate-limit AND its daily-quota code. The BODY says which: a per-minute
+    // burst comes back with a RetryInfo naming a few seconds, and the per-day cap names a long
+    // delay or none at all. Honour a short one and keep the model we are on; a rung on this
+    // ladder is worth far more than the wait, and burning 3.7-flash after 3.5 seconds throws
+    // away 19 of its 20 daily requests over a window that would have cleared on its own.
+    //
+    // Bounded at 15s and taken once per model per session, because the cadet is staring at a
+    // spinner with no explanation for the whole wait. A longer delay is treated as the daily
+    // cap: move DOWN THE LADDER rather than ending the session, since free-tier quota is per
+    // model and the next rung is a fresh allowance. Only an exhausted ladder is fatal.
+    //
+    // (This comment previously said the response "does not say which". It does.)
     if (res.status === 429) {
+      if (!waitedFor[activeModelRef.current]) {
+        let waitMs = 0;
+        try {
+          const j = await res.json();
+          const info = (((j.error || {}).details) || []).find(
+            (d) => String(d["@type"] || "").indexOf("RetryInfo") > -1);
+          const m = info && /^([0-9.]+)s$/.exec(String(info.retryDelay || ""));
+          if (m) waitMs = Math.round(parseFloat(m[1]) * 1000);
+        } catch (e) { /* no body, or not JSON -- fall through to the ladder */ }
+        if (waitMs > 0 && waitMs <= 15000) {
+          waitedFor[activeModelRef.current] = true;
+          await sleep(waitMs + 500);
+          attempt = 0;
+          continue;
+        }
+      }
       if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
       spentModels[activeModelRef.current] = true;
       if (nextModel(activeModelRef)) { attempt = 0; continue; }
@@ -426,9 +482,15 @@ async function discoverModel(activeModelRef) {
 
   const chat = MODEL_CHAT.filter((n) => have[n]);
   const report = MODEL_REPORT.filter((n) => have[n]);
+  const study = MODEL_STUDY.filter((n) => have[n]);
   if (!chat.length && !scored.length) throw { kind: "model", status: 404 };
   MODEL_CHAT = chat.length ? chat : scored;
   MODEL_REPORT = report.length ? report : MODEL_CHAT;
+  // Study falls back to the CHAT ladder, not to `scored`: if this key cannot reach any lite
+  // model, practice has to run somewhere, and the alternative is a study session that cannot
+  // start at all. It still costs graded quota in that case -- which is why it is the fallback
+  // and not the default.
+  MODEL_STUDY = study.length ? study : MODEL_CHAT;
 
   activeModelRef.ladder = null;             // force a re-seat onto the filtered list
   seatLadder(activeModelRef, MODEL_CHAT);
@@ -707,11 +769,29 @@ async function discoverModel(activeModelRef) {
         rb"      : \"probe\";\r\n"
         rb"    if \(!a\) return sysRef\.current;\r\n",
         b"""      : "probe";
-    // Study mode falls out below with no args, but is seated on the chat pool first.
+    // Study mode falls out here with no args. It is ungraded practice with no cap on how often
+    // a cadet runs it, so it is pinned to the lite floor and must NOT be seated on the graded
+    // ladder -- otherwise practice quietly spends the 20/day that the graded session needs.
+    if (!a) { seatLadder(activeModelRef, MODEL_STUDY); return sysRef.current; }
     seatLadder(activeModelRef, phase === "report" ? MODEL_REPORT : MODEL_CHAT);
-    if (!a) return sysRef.current;
 """,
         "sysFor() seats the model pool")
+
+    # ── 9a. Seat the OPENING turn by mode too ────────────────────────────────
+    # startSession calls callTutor directly rather than through sysFor(), so without this the
+    # first turn of every session runs on whatever discoverModel happened to seat -- which is
+    # MODEL_CHAT[0], the strongest model on the key. For a graded session that is right and
+    # already what happens. For STUDY it is a silent leak: every practice run would spend one
+    # of the 20 daily requests the graded session is being kept for, and a cadet practising
+    # five times would arrive at their real lesson with a quarter of it gone.
+    p.sub1(
+        rb"    reportPhaseRef\.current = false;\r\n",
+        b"""    reportPhaseRef.current = false;
+    // The opener does not pass through sysFor(), so seat its pool here or study mode borrows
+    // the graded ladder for exactly one request per session.
+    seatLadder(activeModelRef, selectedMode === "graded" ? MODEL_CHAT : MODEL_STUDY);
+""",
+        "opening turn seats by mode")
 
     # ── 9b. Drop the Claude-only ladder helper this build cannot use ──────────
     # patch_artifacts.py adds stepModel() to the Claude source, where MODEL_CANDIDATES is the one

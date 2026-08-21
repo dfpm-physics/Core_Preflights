@@ -8,6 +8,98 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-21 (second) — Matthew Recker via Claude
+
+### The Gemini backup taught on the cheapest model we had, and a cadet noticed
+
+**A cadet reported:** *"It would try to tutor me and then give me the answer instead of walking me
+through it."* This is the diagnosis and a candidate fix, **staged for faculty trial, not shipped** —
+see the test area below. The 38 live builds are unchanged.
+
+**It was not the prompt, and that was worth establishing before touching anything.** The
+context reduction shipped on 2026-08-20 was the obvious suspect and is not the cause:
+
+- The **full chat history** goes up every turn — no truncation anywhere in the port.
+- The **full system prompt** goes up every turn, as Gemini's `systemInstruction`.
+- Every Socratic phrase survives the port at **identical counts** to the Claude source
+  (`ASK ONE QUESTION AT A TIME` ×2, `Socratic` ×7, `do not lecture` ×1).
+- The deferral drops only `EXTENSION_PROBLEMS` and `REPORT_FORMAT`, both at the tail, neither of
+  which teaches probing. Measured: probe turns send ~70,553 chars, ~14,249 fewer than before.
+  **Deferring `EXTENSION_PROBLEMS` makes answer-leaking less likely**, because it carries worked
+  solutions that used to sit in context from turn one.
+
+**It was the model.** `MODEL_CHAT` started on `gemini-3.5-flash-lite` and every conversation turn
+ran there, while `gemini-3.7-flash` was reserved for the single report request. A lite model opens
+Socratically — the prompt tells it to — and then collapses into answering, because holding that
+stance across ~12 turns under a ~70,000-char instruction is the reasoning-heavy part. **We were
+spending the best model on the summary an instructor reads and the worst on the conversation a
+cadet learns from.**
+
+**The quota that ordering protected was never under pressure.** From the course director's
+dashboard: **22 of flash-lite's 500 requests/day** used across the whole course, while
+**3.7-flash sat at 23 against a cap of 20**, because only the report could touch it.
+
+**Candidate build** — `tests/browser/test-gemini-new-ladder.html`, one lesson, phys-215 lesson 2,
+listed first on the `tests/browser/` sandbox index. It sits in the **existing** design-sandbox
+directory rather than a new one under `site/`: those pages already carry `guard.js` (global admin
+or director of any offering; an ordinary instructor is denied), and `tests/` is publicly readable
+on Pages, so a faculty trial needs no new location and no new gate. Re-hosting it took exactly two
+changes — the four `../../vendor/` references became `../../site/vendor/`, the **same files**, and
+the gate was injected after `</title>`. Deliberately **not** the CDN the other sandboxes use: this
+page holds a real Google API key in `localStorage`, and a third party able to swap a script must
+not be in that position. No banner was added either, because the artifact sizes `.app` to
+`window.innerHeight` and anything stacked above it makes the page scroll behind the app.
+
+What changed in the build itself:
+
+- `MODEL_CHAT` → `3.7 → 3.6 → 3.5`, then the new `MODEL_LITE` floor. A session is 10–14 requests,
+  so **one whole session fits inside a single 20/day cap**; a second lesson lands on 3.6, a third
+  on 3.5, and only a fourth reaches lite.
+- **`MODEL_STUDY`, new and lite-only.** Study mode is uncapped practice and used to share
+  `MODEL_CHAT`, so it drew down the allowance the graded run needed. Seated in **two** places —
+  `sysFor()` and `startSession`, because the opener does not pass through `sysFor()` and seating
+  only one would still leak a strong request per practice run.
+- **A 429 now reads the body before burning a model.** Gemini says which limit was hit; the
+  transport honours a short `RetryInfo` delay (≤15s, once per model) and keeps the model, treating
+  anything longer as the daily cap. The old code waited ~3.5s and then dropped the model for the
+  session — survivable at lite's 15 RPM, not at the top of the ladder where the cap is 5 RPM.
+  *The skill and the code both asserted Gemini "does not say which". It does.*
+
+**A trade this accepts, asserted rather than left to be found:** chat and report now share a top
+model, so a conversation that spends 3.7 pushes its own report one rung down. Summarising is far
+easier than tutoring, so the strong model is worth more to the conversation.
+
+**Verification.** `gemini-model-ladder.mjs` **17/17** and `gemini-build.mjs` **7/7** (parses,
+renders, no console errors) against the candidate. The ladder harness itself was rewritten: it
+asserted `MODEL_CHAT[0].includes('lite')` — the old policy — and its pool-switch check was
+silently passing on shared `spentModels` state. **Both harnesses are Node-only and neither runs a
+real tutor turn**; per CORE.md §2 that is recorded here as still unproven, which is exactly what
+the faculty trial is for.
+
+The render check has to be run against a **temporarily un-gated copy**, because `guard.js`
+redirects an unauthenticated browser to the login page — where `gemini-build.mjs` reports
+`childElementCount=-1` and, worth knowing, **passes its "API-key field present" assertion on the
+login form's password box**. That un-gated pass is what caught the fourth vendor reference:
+`LZSTRING_JS` is assigned as a string constant rather than written as a `<script src>`, so a
+rewrite that counts script tags misses it and the page 404s on the codec — which is not cosmetic,
+since without lz-string `lzReady` never turns true and the cadet cannot submit at all.
+
+**`tests/browser/test-gemini-lesson04.html` is not listed on that index** and was not added to it
+here — it dates from 2026-08-14 and whether it still represents anything current is not something
+this change established.
+
+**Also found, not fixed:** every Gemini build appends **both** `&v=gemini` and `&v=claude` to the
+submit URL — `to_gemini.py` adds its marker without stripping the one `patch_artifacts.py`
+injected. It reads correctly only because `gemini` happens to come first. Separately,
+`interaction-submit.html`'s comment still says a Claude artifact "sends nothing"; all 51 have sent
+`&v=claude` since 2026-08-20.
+
+**Telemetry cannot answer this question yet.** `d.model` is read at *report* time, so it always
+records the report pool's model regardless of what did the tutoring — all three rows say
+`gemini-3.7-flash`. There were 8 interactive submissions since the republish, 4 of them Gemini.
+
+---
+
 ## 2026-08-21 — Matthew Recker via Claude
 
 ### The rollup showed one question's writing before grading and hid the other's
