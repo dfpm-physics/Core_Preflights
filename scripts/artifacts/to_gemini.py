@@ -529,6 +529,20 @@ function loadSession(mode, cadetId) {
          f'const OPENING_HONOR = {json.dumps(opening_honor)};\n'
          f'const OPENING_QUESTION = {json.dumps(opening_question)};\n'
          '\n'
+         '// A scripted turn costs no request, so without this it lands INSTANTLY --\n'
+         '// which reads as broken rather than as fast. The reply is on screen before the\n'
+         '// cadet has finished sending, and the first REAL turn then pauses, which by\n'
+         '// comparison looks like a fault. Paced like a generated turn instead: the typing\n'
+         '// indicator the build already has, for about as long as reading the line takes.\n'
+         '// Floored so the short turn is not instant either; capped so it never becomes a tax.\n'
+         'const SCRIPTED_MS_PER_CHAR = 6;\n'
+         'const SCRIPTED_MIN_MS = 900;\n'
+         'const SCRIPTED_MAX_MS = 2600;\n'
+         'function scriptedDelay(text) {\n'
+         '  return Math.min(SCRIPTED_MAX_MS, Math.max(SCRIPTED_MIN_MS,\n'
+         '    Math.round(String(text).length * SCRIPTED_MS_PER_CHAR)));\n'
+         '}\n'
+         '\n'
          '// How far the scripted opening has got, DERIVED from the transcript rather than held\n'
          '// in a ref -- so a restored session resumes at the right stage for free instead of\n'
          '// re-delivering an opening the cadet has already answered.\n'
@@ -1003,9 +1017,17 @@ async function discoverModel(activeModelRef) {
 
     // The one message the app answers itself: acknowledging the Honor Code turn. The reply
     // is the opening question verbatim, so asking a model for it would buy nothing and cost
-    // a request and a wait.
+    // a request and a wait. Paced, for the same reason as the turn before it.
+    //
+    // setTimeout rather than await: send() is not async. Nothing can race the append --
+    // `history` is captured, setLoading(true) disables the composer, and send() returns
+    // early while `loading`.
     if (APP_OPENING && mode === "graded" && openerStage(history) === 1) {
-      setMessages([...history, { role: "assistant", content: OPENING_QUESTION }]);
+      setLoading(true);
+      setTimeout(() => {
+        setMessages([...history, { role: "assistant", content: OPENING_QUESTION }]);
+        setLoading(false);
+      }, scriptedDelay(OPENING_QUESTION));
       return;
     }
 
@@ -1430,9 +1452,13 @@ async function discoverModel(activeModelRef) {
     }
 
     // A FRESH graded session opens with the scripted Honor Code turn and NO request at
-    // all. The cadet sees it instantly, and the ~14-request budget keeps a turn it would
-    // otherwise have spent saying something the prompt already wrote.
+    // all. The ~14-request budget keeps a turn it would otherwise have spent saying
+    // something the prompt already wrote. PACED rather than instant -- startSession is
+    // async, so this is a plain await, and nothing here can be re-entered: `started` is
+    // already true and the composer is disabled while `loading`.
     if (APP_OPENING && selectedMode === "graded" && !resume) {
+      setLoading(true);
+      await sleep(scriptedDelay(OPENING_HONOR));
       setMessages([seed, { role: "assistant", content: OPENING_HONOR }]);
       setLoading(false);
       return;
@@ -1558,7 +1584,7 @@ PAGE = """<!DOCTYPE html>
 <!-- Not a security control. The exposure here is the same one the published Claude artifact
      already carries; this only keeps worked extension problems out of a search index. -->
 <meta name="robots" content="noindex, nofollow">
-<title>__TITLE__ &mdash; backup &mdash; PREP</title>
+<title>__COURSE_LABEL__ __LESSON_LABEL__ &mdash; __TITLE__ &mdash; PREP</title>
 
 <!-- React + in-browser JSX, served from OUR OWN ORIGIN rather than a CDN.
      Two reasons, and the second is the load-bearing one:
@@ -1574,19 +1600,18 @@ PAGE = """<!DOCTYPE html>
 <style>
   /* The artifact sizes .app to the full window.innerHeight inline, because on claude.ai it
      renders inside an auto-sizing embed where anything viewport-relative creates a
-     measure->grow loop. Re-hosted on a normal page that assumption is wrong: a banner above
-     it makes the document innerHeight + banner tall, so the PAGE scrolls and the app scrolls
-     inside it, with the composer pushed below the fold.
+     measure->grow loop. Re-hosted on a normal page that assumption is wrong: anything
+     ABOVE it makes the document innerHeight + that tall, so the PAGE scrolls and the app
+     scrolls inside it, with the composer pushed below the fold.
      Fixed here, in the wrapper, without touching a line of the artifact: the page is a
      non-scrolling flex column and .app is forced to fill exactly what is left. The
-     !important is what neutralises the artifact's inline height, which is the intent. */
+     !important is what neutralises the artifact's inline height, which is the intent.
+     STILL LOAD-BEARING with the backup banner gone (2026-08-21): #boom is a sibling in
+     the same column and appears on any Babel parse error, which is precisely when a
+     readable page matters most. */
   html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#eef1f5;
     font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
   #page{display:flex;flex-direction:column;height:100vh;height:100dvh}
-  #banner{flex:0 0 auto;background:#7c2d12;color:#fff;padding:7px 14px;
-    font-size:12px;line-height:1.5}
-  #banner strong{color:#fed7aa}
-  #banner a{color:#fed7aa}
   #root{flex:1 1 auto;min-height:0;overflow:hidden}
   #root .app{height:100% !important;max-height:100% !important}
   #boot{padding:28px 20px;text-align:center;color:#64748b;font-size:13px}
@@ -1597,13 +1622,6 @@ PAGE = """<!DOCTYPE html>
 </head>
 <body>
 <div id="page">
-  <div id="banner">
-    <strong>BACKUP VERSION</strong> &mdash; __COURSE_LABEL__ __LESSON_LABEL__. Use this only when the
-    Claude version is unavailable; <strong>the Claude version is still the intended path</strong> and
-    this one is less polished. It runs on <strong>your own free Google AI Studio key</strong>, sent
-    only to Google and remembered only in this browser. Your work submits to PREP exactly as normal
-    and counts the same.
-  </div>
   <div id="boom"></div>
   <div id="root"><div id="boot">Loading the lesson&hellip;</div></div>
 </div>

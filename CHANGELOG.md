@@ -8,6 +8,66 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-21 (sixth) — Matthew Recker via Claude
+
+### The scripted opening is paced, and the "BACKUP VERSION" banner is gone
+
+Both from the course director trying the candidate build. **Staged only** — the 38 live backups
+are untouched.
+
+**The two app-delivered opening turns now show the typing indicator first.** Shipped instant
+yesterday, and instant reads as *broken*, not as fast: the reply beats the cadet's own message
+onto the screen, and the first real turn then pauses and looks like a fault by comparison. Paced
+like a generated turn instead — roughly reading time for the line, floored at 900 ms so the
+one-line question is not instant either, capped at 2.6 s so it never becomes a tax. The indicator
+is the one the build already had; nothing new is drawn.
+
+- `startSession` awaits (it is async); `send()` uses `setTimeout` (it is not). Neither can be
+  raced: `history` is captured, `setLoading(true)` disables the composer, and `send()` returns
+  early while `loading`.
+- **`scriptedDelay` is emitted under both policies and gated the same way as everything else in
+  that block** — only `APP_OPENING` decides whether it runs. One emission path for both policies
+  is what stops them drifting in anything but the ladders.
+- The ladder harness **runs** `scriptedDelay` rather than string-matching it. A change that left
+  the function in place and returned `0` would satisfy a substring check and ship the glitch.
+
+**The "BACKUP VERSION" banner is removed from every generated page.** Its whole content was
+second-class framing — *use this only when the Claude version is unavailable, the Claude version
+is still the intended path, this one is less polished.* The Claude path is the one timing out on
+cadets, so this build is becoming the primary one and that framing is now wrong. "Counts the
+same" goes with it: it only needed saying because the banner had just called the page a fallback,
+and the start screen already covers the key.
+
+- `__COURSE_LABEL__` / `__LESSON_LABEL__` would have been left unused — and `wrap()` substitutes
+  with a plain `str.replace`, so an unused placeholder is a **silent no-op**, not an error. Moved
+  into the `<title>`, which also takes "backup" out of the browser tab for the same reason the
+  banner went. Asserted: each placeholder is still consumed exactly once by the template.
+- The CSS height override survives and its comment no longer cites the banner as the reason.
+  It is **still load-bearing**: `#boom` is a sibling in the same flex column and appears on any
+  Babel parse error, which is precisely when a readable page matters most.
+
+**A `--policy legacy` rebuild is no longer byte-identical-plus-freeze-fix, and that is worth
+recording.** Every one of the 38 live builds was re-ported under `legacy` and every changed line
+was categorised. Three groups, no fourth: the banner/title block above; the opening machinery
+from yesterday, **dead** under `legacy` (`const APP_OPENING = false` and three call sites guarded
+by it); and two expression rewrites that are the same expression — `note` split into
+`pacing` + a `firstReal` branch that is always false when `APP_OPENING` is false, and a
+`seatLadder` ternary inverted. **Behaviourally identical, textually not.** `legacy`'s promise
+holds at the level that matters; it no longer holds at the byte level, and a future operator
+diffing a rebuild should expect that.
+
+**Verification:** ladder harness **23/23** on the candidate (six of them new) and **14/14** on a
+live build; `gemini-build.mjs` **7/7**; `gemini-handoff.mjs` **12/12**; `pass.mjs` **9/9**.
+
+- `gemini-build.mjs` was run against an **ungated copy** staged outside `site/gemini/`. Run
+  against the sandbox page itself it reports `childElementCount=-1`, which is `guard.js`
+  redirecting a browser with no director session — the gate working, not the build failing.
+  Worth knowing before someone reads that as a broken build.
+- **Still Node-only — no real tutor turn.** The pacing in particular is a *feel* change and
+  nothing automated can tell you whether it feels right; that is what the sandbox is for.
+
+---
+
 ## 2026-08-21 (fifth) — Matthew Recker via Claude
 
 ### 3.7-flash dropped, and the app now delivers the opening instead of paying a model to write it

@@ -91,6 +91,30 @@ if (policy === 'teaching') {
   // model block this file evaluates.
   ok(src.includes('const APP_OPENING = true'),
      'teaching: the app delivers the two scripted opening turns, costing no request');
+
+  // A scripted turn costs no request, so it lands instantly unless something paces it --
+  // and instant reads as broken, not as fast: the reply beats the cadet's own message onto
+  // the screen, and the first REAL turn then pauses and looks like a fault. Extracted and
+  // RUN rather than string-matched, because a change that leaves the function in place and
+  // returns 0 would satisfy a substring check and ship the glitch.
+  const dm = /const SCRIPTED_MS_PER_CHAR[\s\S]*?\nfunction scriptedDelay\(text\) \{[\s\S]*?\n\}/
+    .exec(src);
+  ok(!!dm, 'teaching: the scripted turns are paced - scriptedDelay is in the build');
+  if (dm) {
+    const delay = new Function(dm[0] + '\nreturn scriptedDelay;')();
+    ok(delay('hi') >= 700,
+       `teaching: even the SHORT scripted turn waits (floor ${delay('hi')}ms) - the opening `
+       + 'question is one line and would otherwise appear before the cadet let go of Enter');
+    ok(delay('x'.repeat(50000)) <= 3500,
+       `teaching: the wait is capped (${delay('x'.repeat(50000))}ms) - pacing must not become a tax`);
+    ok(delay('x'.repeat(400)) > delay('hi'),
+       'teaching: a longer scripted line waits longer - it is reading time, not a fixed stall');
+  }
+  // Both call sites, because the helper existing proves nothing about its being used.
+  ok(src.includes('await sleep(scriptedDelay(OPENING_HONOR))'),
+     'teaching: the Honor Code turn is paced');
+  ok(src.includes('scriptedDelay(OPENING_QUESTION)'),
+     'teaching: the opening question is paced');
   ok(isLite(S.MODEL_CHAT[S.MODEL_CHAT.length - 1]),
      'chat still ENDS on the high-quota floor - lite is where it stops, not where it starts');
 

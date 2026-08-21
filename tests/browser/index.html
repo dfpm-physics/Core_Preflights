@@ -54,11 +54,21 @@
         answer instead of walking me through it."</i> The prompt was not the cause — it survives the
         port line for line. <b>The model was:</b> every conversation turn ran on the cheapest model
         we had, while the strongest was held back for the report an instructor reads. This candidate
-        flips that — chat now runs <b>3.7 → 3.6 → 3.5</b> before the lite floor, study mode is pinned
-        to lite so practice stops spending the graded allowance, and a rate limit no longer burns a
-        model after 3.5&nbsp;seconds. <b>What we need:</b> push back with a wrong answer and see
-        whether it corrects you with a <i>question</i> or with a <i>statement</i> — and whether it
-        holds that to the end, because the failure we are chasing starts well and degrades.
+        flips that — chat now starts on <b>3.6</b> and falls to 3.5 then the lite floor, study mode
+        is pinned to lite so practice stops spending the graded allowance, and a rate limit no longer
+        burns a model after 3.5&nbsp;seconds. <b>3.7 is deliberately gone</b>, from chat and from the
+        report: it was the top rung for a few hours on 2026-08-21 and its first reply took long
+        enough that the page read as broken, on every turn, for a quality difference nobody could
+        point to. <b>What we need:</b> push back with a wrong answer and see whether it corrects you
+        with a <i>question</i> or with a <i>statement</i> — and whether it holds that to the end,
+        because the failure we are chasing starts well and degrades.
+        <b>The opening is no longer generated.</b> The Honor Code reminder and "what did you find
+        interesting or difficult in the reading?" are both dictated by the prompt word for word, so
+        the page now says them itself — two of about fourteen requests saved, and they were the two
+        the cadet waited on before anything had happened. They are <i>paced</i> rather than instant,
+        because a reply that beats your own message onto the screen reads as broken rather than as
+        fast. <b>Check:</b> the tutor should react to your reading answer, not ask for it a second
+        time. If it repeats the question, that is the thing that broke.
         <b>Also carries the freeze fix.</b> On 2026-08-21 a cadet reached the report stage and the
         page sat on "Tutor is typing…" forever — no request in the live builds has any timeout, so
         a connection Google never answers hangs the page with the composer and Send both disabled.
@@ -67,6 +77,8 @@
         reload <i>restores</i> instead of erasing, and a <code>400</code> no longer tells you your
         API key is bad when the real cause is a conversation that got too long.
         <b>Worth trying:</b> reload the page halfway through and check your conversation comes back.
+        <b>The "BACKUP VERSION" banner is gone</b> — it told cadets to use the Claude version
+        instead, and the Claude version is the one timing out on them.
         <b>Not synthetic:</b> real PHYS 215 Lesson 2, real slug, and it wants your own free Gemini
         API key. Use <b>Study mode</b> — a graded run you actually submit writes a real submission.
         The 38 live backups are untouched.</span>
