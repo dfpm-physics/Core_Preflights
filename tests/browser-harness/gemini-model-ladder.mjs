@@ -76,8 +76,21 @@ if (policy === 'teaching') {
   // conversation opening on the cheapest model -- and that shipped the behaviour a cadet
   // reported: "it would try to tutor me and then give me the answer instead of walking me
   // through it." A lite model opens Socratically and then collapses into answering.
-  ok(S.MODEL_CHAT[0] === 'gemini-3.7-flash',
-     'chat starts on the strongest model - a ~14-request session fits inside its 20/day');
+  // 3.7-flash was the top rung for a few hours on 2026-08-21 and was dropped the same day:
+  // its first reply took long enough that the page reads as broken, on every turn, for a
+  // quality difference over 3.6 nobody could point to. Asserted as an ABSENCE, because that is
+  // the decision -- a ladder that quietly regains it is the regression.
+  ok(!S.MODEL_CHAT.includes('gemini-3.7-flash'),
+     'teaching: 3.7-flash is absent from chat - too slow to wait on, every single turn');
+  ok(S.MODEL_CHAT[0] === 'gemini-3.6-flash',
+     'teaching: chat starts on 3.6 - the strongest model worth waiting for');
+
+  // The first two tutor turns are dictated by the prompt -- an Honor Code reminder quoted in
+  // it verbatim, then a question marked VERBATIM -- so the build delivers them itself and
+  // spends no request on either. Checked against the raw source: the flag sits outside the
+  // model block this file evaluates.
+  ok(src.includes('const APP_OPENING = true'),
+     'teaching: the app delivers the two scripted opening turns, costing no request');
   ok(isLite(S.MODEL_CHAT[S.MODEL_CHAT.length - 1]),
      'chat still ENDS on the high-quota floor - lite is where it stops, not where it starts');
 
@@ -94,11 +107,16 @@ if (policy === 'teaching') {
   ok(S.MODEL_STUDY === S.MODEL_CHAT,
      'legacy: study IS the chat pool, the same array - sharing the object is what makes a mode '
      + 'change a no-op, exactly as it behaved before MODEL_STUDY existed');
+  ok(!src.includes('const APP_OPENING = true'),
+     'legacy: the model still writes its own opening - what the live builds do');
 }
 
-// True under both policies: the report is one request and it is the graded artifact.
-ok(S.MODEL_REPORT[0] === 'gemini-3.7-flash',
-   'report starts on the strongest model - one request, and it is the graded artifact');
+// The report HEAD now differs by policy: legacy still sends that one request to 3.7-flash,
+// which is what the live builds do and what `legacy` exists to reproduce. Teaching drops it
+// there too -- the report is the largest generation in the session, so the slowest model is
+// the worst place for it, and it is the stage the cadet who hung was at.
+ok(S.MODEL_REPORT[0] === (policy === 'legacy' ? 'gemini-3.7-flash' : 'gemini-3.6-flash'),
+   `report starts on ${policy === 'legacy' ? '3.7' : '3.6'} - one request, and it is the graded artifact`);
 ok(isLite(S.MODEL_REPORT[S.MODEL_REPORT.length - 1]),
    'report falls through to the floor rather than failing - a weak report beats none');
 

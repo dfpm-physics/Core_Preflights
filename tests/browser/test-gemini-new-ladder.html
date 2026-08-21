@@ -199,14 +199,19 @@ const MODEL_LITE = [
 //
 // The quota it was conserving was not under pressure. Peak use across the whole course was 22
 // of flash-lite's 500 requests/day, while 3.7-flash sat at 23 of 20 -- over its cap -- because
-// the REPORT was the only thing allowed to use it. We were spending the best model on the
-// summary an instructor reads and the worst on the conversation a cadet learns from.
+// the REPORT was the only thing allowed to use it.
 //
-// A session is ~14 requests, so it fits inside ONE of these 20/day caps. A cadet doing one
-// lesson a day therefore runs the whole thing on 3.7; a second lesson lands on 3.6, a third on
-// 3.5, and only a fourth reaches the floor.
+// A session is ~14 requests, so it fits inside ONE of these 20/day caps.
+//
+// 3.7-flash IS DELIBERATELY ABSENT. It was the top rung for a few hours on 2026-08-21 and the
+// course director's verdict on trying it was immediate: the first reply took long enough that
+// the page reads as broken. That cost is paid on EVERY turn, against a quality difference over
+// 3.6 nobody could point to. A tutor a cadet gives up waiting on teaches nothing.
+//
+// It is also the likeliest explanation of the freeze that prompted all of this: the cadet who
+// hung was at the REPORT stage, which is the one request the live builds have always sent to
+// 3.7 -- a slow model, a large generation, and until that day no timeout at all.
 let MODEL_CHAT = [
-  "gemini-3.7-flash",         //  5 RPM,  20 RPD -- a whole session fits inside one day's cap
   "gemini-3.6-flash",         //  5 RPM,  20 RPD
   "gemini-3.5-flash",         //  5 RPM,  20 RPD
 ].concat(MODEL_LITE);
@@ -216,14 +221,12 @@ let MODEL_CHAT = [
 // is pinned to the floor -- where 478 of 500 requests/day are going unused anyway.
 let MODEL_STUDY = MODEL_LITE.slice();
 
-// The report is ONE request per session and it is the graded artifact the cohort rollup
-// reads, so it gets the strongest model the key has and can afford a 20/day cap. It falls
-// through into the floor rather than failing: a session with no report is a lost session, and
-// a report from a weaker model beats no report at all. Kept as its own array even though it
-// now matches MODEL_CHAT: seatLadder switches on array IDENTITY, and sharing one object would
-// silently stop the report from re-seating.
+// The report is ONE request per session and it is the graded artifact the cohort rollup reads,
+// so it gets the strongest model still on the ladder and can afford a 20/day cap. It falls
+// through to the floor rather than failing: a report from a weaker model beats no report. Kept
+// as its own array even though it now matches MODEL_CHAT -- seatLadder switches on array
+// IDENTITY, and sharing one object would silently stop the report from re-seating.
 let MODEL_REPORT = [
-  "gemini-3.7-flash",
   "gemini-3.6-flash",
   "gemini-3.5-flash",
 ].concat(MODEL_LITE);
@@ -295,6 +298,41 @@ const apiKeyRef = { current: "" };
 
 // localStorage key, namespaced like the site's other client-side state.
 const KEY_STORE = "prep.gemini.apikey";
+
+// THE OPENING, DELIVERED BY THE APP RATHER THAN BY THE MODEL.
+//
+// The prompt dictates both of these turns -- the Honor Code reminder is quoted in it
+// verbatim, and the opening question is marked VERBATIM. Generating them cost two API
+// calls per session out of ~14, and they are the two the cadet waits on before
+// anything has happened. Nothing is lost: there is no cadet answer to react to yet,
+// so there is nothing for the model to be better at.
+//
+// EXTRACTED AT BUILD TIME from this artifact's own prompt. Do not edit them here --
+// edit the prompt and re-port, or the app will say one thing and the tutor believe
+// another.
+const APP_OPENING = true;  // see --policy
+const OPENING_HONOR = "This conversation is governed by the USAFA Honor Code. Please do this on your own \u2014 don't have someone else's responses fed in, and don't paste from solution manuals. The conversation is short and the goal is your understanding, not a perfect performance. Ready to start?";
+const OPENING_QUESTION = "What did you find interesting or difficult in the reading?";
+
+// How far the scripted opening has got, DERIVED from the transcript rather than held
+// in a ref -- so a restored session resumes at the right stage for free instead of
+// re-delivering an opening the cadet has already answered.
+function openerStage(msgs) {
+  const a = msgs.filter((m) => m.role === "assistant" && !m.hidden);
+  if (a.some((m) => m.content.indexOf(OPENING_QUESTION) > -1)) return 2;
+  if (a.some((m) => m.content.indexOf(OPENING_HONOR) > -1)) return 1;
+  return 0;
+}
+
+// Sent once, on the first REAL turn. Without it the tutor follows its instruction to
+// open with that question and asks it a second time, having just been answered.
+const OPENING_NOTE =
+  "[app] The Honor Code reminder and the opening question above were delivered by the "
+  + "app, quoting your prompt verbatim, and the cadet has just answered the opening "
+  + "question. Do NOT greet again and do NOT ask that question again. Treat their "
+  + "message as the reading reflection, judge it as you normally would, and continue "
+  + "the session from there.";
+
 
 // Every request gets a deadline. Until 2026-08-21 none of them did, and a cadet hit exactly
 // the failure that implies: the tutor sat on "Tutor is typing..." at the report stage and
@@ -2247,6 +2285,7 @@ async function discoverModel(activeModelRef) {
   const chat = MODEL_CHAT.filter((n) => have[n]);
   const report = MODEL_REPORT.filter((n) => have[n]);
   const study = MODEL_STUDY.filter((n) => have[n]);
+
   if (!chat.length && !scored.length) throw { kind: "model", status: 404 };
   MODEL_CHAT = chat.length ? chat : scored;
   MODEL_REPORT = report.length ? report : MODEL_CHAT;
@@ -2639,9 +2678,6 @@ function Lesson02Preflight() {
       ? { cadetId: cadetId.trim(), localTime: localTime }
       : null;
     reportPhaseRef.current = false;
-    // The opener does not pass through sysFor(), so seat its pool here or study mode borrows
-    // the graded ladder for exactly one request per session.
-    seatLadder(activeModelRef, selectedMode === "graded" ? MODEL_CHAT : MODEL_STUDY);
     setMode(selectedMode);
     setStarted(true);
     bumpActivity();
@@ -2681,6 +2717,23 @@ function Lesson02Preflight() {
       return;
     }
 
+    // A FRESH graded session opens with the scripted Honor Code turn and NO request at
+    // all. The cadet sees it instantly, and the ~14-request budget keeps a turn it would
+    // otherwise have spent saying something the prompt already wrote.
+    if (APP_OPENING && selectedMode === "graded" && !resume) {
+      setMessages([seed, { role: "assistant", content: OPENING_HONOR }]);
+      setLoading(false);
+      return;
+    }
+
+    // Seat the pool for THIS request, now that we know what it is.
+    //   study    -> the lite floor; practice never spends the graded allowance.
+    //   resume   -> a real tutoring turn, the answer the cadet never got. Chat pool.
+    //   opener   -> greeting plus the opening probe, both dictated by the prompt. Nothing for a
+    //               stronger model to be better at, and the cadet is watching an empty screen.
+    seatLadder(activeModelRef,
+      selectedMode !== "graded" ? MODEL_STUDY : MODEL_CHAT);
+
     setLoading(true);
     try {
       const history = resume || [seed];
@@ -2715,7 +2768,13 @@ function Lesson02Preflight() {
   }
 
   async function runTurn(history) {
-    const note = mode === "graded" ? pacingNote(activeSecRef.current, PROBE_TOPIC_COUNT) : null;
+    const pacing = mode === "graded" ? pacingNote(activeSecRef.current, PROBE_TOPIC_COUNT) : null;
+    // Exactly two visible assistant turns means both are the scripted ones and this is the
+    // first request of the session.
+    const firstReal = APP_OPENING && mode === "graded"
+      && history.filter((m) => m.role === "assistant" && !m.hidden).length === 2
+      && openerStage(history) === 2;
+    const note = firstReal ? [OPENING_NOTE, pacing].filter(Boolean).join("\n\n") : pacing;
     setLoading(true); setError(null);
     try {
       const reply = await callTutor(activeModelRef, history, sysFor(), note);
@@ -2736,6 +2795,15 @@ function Lesson02Preflight() {
     const history = [...messages, { role: "user", content: text }];
     setMessages(history);
     setInput("");
+
+    // The one message the app answers itself: acknowledging the Honor Code turn. The reply
+    // is the opening question verbatim, so asking a model for it would buy nothing and cost
+    // a request and a wait.
+    if (APP_OPENING && mode === "graded" && openerStage(history) === 1) {
+      setMessages([...history, { role: "assistant", content: OPENING_QUESTION }]);
+      return;
+    }
+
     runTurn(history);
   }
 

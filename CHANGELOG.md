@@ -8,6 +8,70 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-21 (fifth) — Matthew Recker via Claude
+
+### 3.7-flash dropped, and the app now delivers the opening instead of paying a model to write it
+
+Both from the course director trying the candidate build. **Staged only** — the 38 live backups
+are untouched and still carry the transport fixes and nothing else.
+
+**3.7-flash is out of the teaching policy, chat and report.** The verdict on trying it was
+immediate: the first reply takes long enough that the page reads as broken, and that cost is paid
+on **every turn**, against a quality difference over 3.6 nobody could point to. A tutor a cadet
+gives up waiting on teaches nothing. Chat and report now both head on **3.6-flash**.
+
+**It is also the likeliest explanation of the freeze that started this.** The cadet who hung was
+at the **report** stage — the one request the live builds have always sent to 3.7, the largest
+generation in the session, and until yesterday with no timeout at all. That is not proof, but it
+fits better than anything else on the table.
+
+**The first two tutor turns are no longer generated.** The prompt dictates both: the Honor Code
+reminder is quoted in it verbatim, and the opening question is marked VERBATIM. Generating them
+cost **two of a session's ~14 requests** to produce text that was already written — and they were
+the two the cadet waited on before anything had happened. The app now delivers both instantly and
+the first request happens once the cadet has answered the reading question.
+
+- **Both strings are extracted from the artifact's own prompt at port time**, never restated in
+  the tool. Verified to extract cleanly and **identically from all 51 artifacts across all three
+  courses**. The porter **refuses** rather than falling back if it cannot find them: a build whose
+  scripted opening disagreed with its own prompt would have the tutor deny saying what the cadet
+  just read. *(There is no Gemini `.jsx` to extract from instead — `site/gemini/` holds only
+  generated `.html`, so the Claude artifact is the only place the prompt exists.)*
+- **The tutor is told once, on the first real turn, that the app delivered the opening.** Without
+  it, it obeys its own instruction to lead with that question and asks it again immediately after
+  being answered.
+- **The reading reflection is still judged**, because the cadet's answer is in the history on that
+  first call — so the effort cap still applies.
+- **How far the opening got is derived from the transcript**, not held in a ref, so a restored
+  session resumes at the right stage with nothing extra to persist and no way for the two to
+  disagree.
+
+**Two things I introduced and then had to correct before pushing:**
+
+- **`MODEL_OPENER` became dead code.** It was added minutes earlier to run the opening turn on a
+  cheap model; once the opening stopped being generated at all, the only branch that selected it
+  was unreachable. Removed rather than left for someone to "fix" by wiring it back up.
+- **The scripted opening was not gated on the policy.** `legacy` promises *what the live builds
+  do, plus the transport fixes and nothing else* — and would have carried an untested change to
+  the opening onto the live set at the next rebuild. Now gated on an emitted `APP_OPENING` flag,
+  so the constants are always present and only their **use** changes.
+
+**`--ladder` is renamed `--policy`**, because it no longer selects only the ladder. A flag called
+`--ladder` that also decides who writes the opening is exactly the quiet mismatch this project
+keeps paying for. *(The previous entry names it `--ladder`; that was true when written.)*
+
+`gemini-model-ladder.mjs` asserts **3.7's absence** — a ladder that quietly regains it is the
+regression — and asserts `APP_OPENING` per policy against the raw source, since the flag sits
+outside the model block the harness evaluates.
+
+**Verification:** ladder harness **17/17** on the candidate and **14/14** on a live build;
+`gemini-build.mjs` **7/7**; `gemini-handoff.mjs` **12/12**. Both policies built and compared
+side by side: teaching `APP_OPENING=true` / chat head `3.6`, legacy `APP_OPENING=false` / chat
+head `3.5-flash-lite`. **Still Node-only — no real tutor turn**, and the scripted opening in
+particular has no automated coverage of what the cadet actually sees.
+
+---
+
 ## 2026-08-21 (fourth) — Matthew Recker via Claude
 
 ### The freeze fix reaches cadets: all 38 live backups rebuilt, carrying that and nothing else

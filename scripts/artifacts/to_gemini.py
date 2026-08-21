@@ -212,8 +212,16 @@ LADDER_TEACHING = b"""// Ordinary conversation turns: ~12 of the ~14 requests in
 // the REPORT was the only thing allowed to use it.
 //
 // A session is ~14 requests, so it fits inside ONE of these 20/day caps.
+//
+// 3.7-flash IS DELIBERATELY ABSENT. It was the top rung for a few hours on 2026-08-21 and the
+// course director's verdict on trying it was immediate: the first reply took long enough that
+// the page reads as broken. That cost is paid on EVERY turn, against a quality difference over
+// 3.6 nobody could point to. A tutor a cadet gives up waiting on teaches nothing.
+//
+// It is also the likeliest explanation of the freeze that prompted all of this: the cadet who
+// hung was at the REPORT stage, which is the one request the live builds have always sent to
+// 3.7 -- a slow model, a large generation, and until that day no timeout at all.
 let MODEL_CHAT = [
-  "gemini-3.7-flash",         //  5 RPM,  20 RPD -- a whole session fits inside one day's cap
   "gemini-3.6-flash",         //  5 RPM,  20 RPD
   "gemini-3.5-flash",         //  5 RPM,  20 RPD
 ].concat(MODEL_LITE);
@@ -224,12 +232,11 @@ let MODEL_CHAT = [
 let MODEL_STUDY = MODEL_LITE.slice();
 
 // The report is ONE request per session and it is the graded artifact the cohort rollup reads,
-// so it gets the strongest model the key has and can afford a 20/day cap. It falls through to
-// the floor rather than failing: a report from a weaker model beats no report. Kept as its own
-// array even though it now matches MODEL_CHAT -- seatLadder switches on array IDENTITY, and
-// sharing one object would silently stop the report from re-seating.
+// so it gets the strongest model still on the ladder and can afford a 20/day cap. It falls
+// through to the floor rather than failing: a report from a weaker model beats no report. Kept
+// as its own array even though it now matches MODEL_CHAT -- seatLadder switches on array
+// IDENTITY, and sharing one object would silently stop the report from re-seating.
 let MODEL_REPORT = [
-  "gemini-3.7-flash",
   "gemini-3.6-flash",
   "gemini-3.5-flash",
 ].concat(MODEL_LITE);"""
@@ -263,9 +270,38 @@ let MODEL_REPORT = [
 ].concat(MODEL_CHAT);"""
 
 
+# The two opening turns the prompt dictates. Extracted rather than restated here: the
+# wording lives in the artifact, and a second copy in this tool is a second thing to keep
+# in step. Both refuse rather than warn -- a build whose scripted opening does not match
+# its own prompt would have the tutor deny saying what the cadet just read.
+RE_HONOR = re.compile(
+    rb'Begin the conversation by reminding the cadet:\s*\n\s*"(.*?)"\s*\n', re.S)
+RE_OPENING_Q = re.compile(rb'VERBATIM:\s*\n\s*"(.*?)"\s*\n', re.S)
+
+
+def unwrap(b: bytes) -> str:
+    """Collapse a hard-wrapped, indented prompt quote into one line of prose."""
+    return " ".join(b.decode("utf-8").split())
+
+
 def port(src: bytes, slug: str, verbose: bool = False, ladder: str = "teaching"):
     if ladder not in ("teaching", "legacy"):
         raise SystemExit(f"unknown ladder policy: {ladder}")
+
+    # Normalised to LF first: the source may be CRLF and these patterns span lines.
+    flat = src.replace(b"\r\n", b"\n")
+    mh, mq = RE_HONOR.search(flat), RE_OPENING_Q.search(flat)
+    if not mh or not mq:
+        raise SystemExit(
+            f"  FAILED [{slug}]: cannot find the opening text in the prompt "
+            f"(honor={bool(mh)}, question={bool(mq)}).\n"
+            "  The Gemini build delivers those two turns itself instead of paying an API\n"
+            "  call for each, and it quotes the prompt VERBATIM to do it. If the prompt\n"
+            "  has been reworded, update RE_HONOR / RE_OPENING_Q to match -- do not\n"
+            "  hard-code the new wording here.")
+    opening_honor = unwrap(mh.group(1))
+    opening_question = unwrap(mq.group(1))
+
     p = Porter(src, slug)
     GROUNDING = (b"TEXTBOOK_REFERENCE", b"LESSON_CONFIG", b"EXTENSION_PROBLEMS", b"REPORT_FORMAT")
     before = {n: p.grab(n) for n in GROUNDING}
@@ -470,6 +506,50 @@ function loadSession(mode, cadetId) {
 }""",
         "constants -> Gemini + runtime discovery")
 
+    # -- The app-delivered opening --------------------------------------------
+    # Both strings come out of THIS artifact's prompt (see RE_HONOR / RE_OPENING_Q), so the
+    # scripted turns and the tutor cannot disagree about what was said. json.dumps does the
+    # escaping: the honor text contains an em dash and apostrophes.
+    p.sub1(
+        rb'const KEY_STORE = "prep\.gemini\.apikey";',
+        ('const KEY_STORE = "prep.gemini.apikey";\n'
+         '\n'
+         '// THE OPENING, DELIVERED BY THE APP RATHER THAN BY THE MODEL.\n'
+         '//\n'
+         '// The prompt dictates both of these turns -- the Honor Code reminder is quoted in it\n'
+         '// verbatim, and the opening question is marked VERBATIM. Generating them cost two API\n'
+         '// calls per session out of ~14, and they are the two the cadet waits on before\n'
+         '// anything has happened. Nothing is lost: there is no cadet answer to react to yet,\n'
+         '// so there is nothing for the model to be better at.\n'
+         '//\n'
+         '// EXTRACTED AT BUILD TIME from this artifact\'s own prompt. Do not edit them here --\n'
+         '// edit the prompt and re-port, or the app will say one thing and the tutor believe\n'
+         '// another.\n'
+         f'const APP_OPENING = {"true" if ladder == "teaching" else "false"};  // see --policy\n'
+         f'const OPENING_HONOR = {json.dumps(opening_honor)};\n'
+         f'const OPENING_QUESTION = {json.dumps(opening_question)};\n'
+         '\n'
+         '// How far the scripted opening has got, DERIVED from the transcript rather than held\n'
+         '// in a ref -- so a restored session resumes at the right stage for free instead of\n'
+         '// re-delivering an opening the cadet has already answered.\n'
+         'function openerStage(msgs) {\n'
+         '  const a = msgs.filter((m) => m.role === "assistant" && !m.hidden);\n'
+         '  if (a.some((m) => m.content.indexOf(OPENING_QUESTION) > -1)) return 2;\n'
+         '  if (a.some((m) => m.content.indexOf(OPENING_HONOR) > -1)) return 1;\n'
+         '  return 0;\n'
+         '}\n'
+         '\n'
+         '// Sent once, on the first REAL turn. Without it the tutor follows its instruction to\n'
+         '// open with that question and asks it a second time, having just been answered.\n'
+         'const OPENING_NOTE =\n'
+         '  "[app] The Honor Code reminder and the opening question above were delivered by the "\n'
+         '  + "app, quoting your prompt verbatim, and the cadet has just answered the opening "\n'
+         '  + "question. Do NOT greet again and do NOT ask that question again. Treat their "\n'
+         '  + "message as the reading reflection, judge it as you normally would, and continue "\n'
+         '  + "the session from there.";\n'
+         ).encode("utf-8"),
+        "opening constants (extracted)")
+
     # Substituted AFTER the constants block lands, so both policies go through exactly the
     # same emission path and cannot drift in anything but the ladders themselves.
     p.sub1(rb"__LADDER_BLOCK__",
@@ -604,6 +684,7 @@ async function discoverModel(activeModelRef) {
   const chat = MODEL_CHAT.filter((n) => have[n]);
   const report = MODEL_REPORT.filter((n) => have[n]);
   const study = MODEL_STUDY.filter((n) => have[n]);
+
   if (!chat.length && !scored.length) throw { kind: "model", status: 404 };
   MODEL_CHAT = chat.length ? chat : scored;
   MODEL_REPORT = report.length ? report : MODEL_CHAT;
@@ -902,21 +983,58 @@ async function discoverModel(activeModelRef) {
 """,
         "sysFor() seats the model pool")
 
-    # ── 9a. Seat the OPENING turn by mode too ────────────────────────────────
-    # startSession calls callTutor directly rather than through sysFor(), so without this the
-    # first turn of every session runs on whatever discoverModel happened to seat -- which is
-    # MODEL_CHAT[0], the strongest model on the key. For a graded session that is right and
-    # already what happens. For STUDY it is a silent leak: every practice run would spend one
-    # of the 20 daily requests the graded session is being kept for, and a cadet practising
-    # five times would arrive at their real lesson with a quarter of it gone.
+
+    # -- 12c. The app delivers the opening; the model is not asked to ---------
+    # send() intercepts exactly one message: the cadet's acknowledgement of the Honor Code
+    # turn. The reply to that is the opening question, which the prompt marks VERBATIM, so
+    # there is nothing to generate -- it is appended directly and no request is made.
+    #
+    # The stage is DERIVED from the transcript (openerStage), not tracked in a ref, so a
+    # restored session lands in the right place with no extra state to persist and no way
+    # for the two to disagree.
     p.sub1(
-        rb"    reportPhaseRef\.current = false;\r\n",
-        b"""    reportPhaseRef.current = false;
-    // The opener does not pass through sysFor(), so seat its pool here or study mode borrows
-    // the graded ladder for exactly one request per session.
-    seatLadder(activeModelRef, selectedMode === "graded" ? MODEL_CHAT : MODEL_STUDY);
+        rb"    const history = \[\.\.\.messages, \{ role: \"user\", content: text \}\];\r\n"
+        rb"    setMessages\(history\);\r\n"
+        rb"    setInput\(\"\"\);\r\n"
+        rb"    runTurn\(history\);\r\n",
+        b"""    const history = [...messages, { role: "user", content: text }];
+    setMessages(history);
+    setInput("");
+
+    // The one message the app answers itself: acknowledging the Honor Code turn. The reply
+    // is the opening question verbatim, so asking a model for it would buy nothing and cost
+    // a request and a wait.
+    if (APP_OPENING && mode === "graded" && openerStage(history) === 1) {
+      setMessages([...history, { role: "assistant", content: OPENING_QUESTION }]);
+      return;
+    }
+
+    runTurn(history);
 """,
-        "opening turn seats by mode")
+        "send() delivers the scripted opening question")
+
+    # The tutor is told, ONCE, that the opening already happened. Without this it follows
+    # its own instruction to open with that question and asks it again, immediately after
+    # the cadet answered it. Only on the first real turn: the note is ~60 tokens and every
+    # later turn already has the answer in its history.
+    p.sub1(
+        rb"    const note = mode === \"graded\" \? pacingNote\(activeSecRef\.current, PROBE_TOPIC_COUNT\) : null;\r\n",
+        b"""    const pacing = mode === "graded" ? pacingNote(activeSecRef.current, PROBE_TOPIC_COUNT) : null;
+    // Exactly two visible assistant turns means both are the scripted ones and this is the
+    // first request of the session.
+    const firstReal = APP_OPENING && mode === "graded"
+      && history.filter((m) => m.role === "assistant" && !m.hidden).length === 2
+      && openerStage(history) === 2;
+    const note = firstReal ? [OPENING_NOTE, pacing].filter(Boolean).join("\\n\\n") : pacing;
+""",
+        "the tutor is told the opening was app-delivered")
+
+    # ── 9a. (removed) ────────────────────────────────────────────────────────
+    # This used to seat the opening turn here, beside `reportPhaseRef.current = false`. It has
+    # moved into step 12, where `resume` is in scope: a RESUMED session's first request is not
+    # an opener at all -- it is the answer the cadet never got -- so it must not be seated on
+    # the opener pool. Seating it here could not tell the two apart, because `resume` is
+    # computed further down the same function.
 
     # ── 9b. Drop the Claude-only ladder helper this build cannot use ──────────
     # patch_artifacts.py adds stepModel() to the Claude source, where MODEL_CANDIDATES is the one
@@ -1311,6 +1429,23 @@ async function discoverModel(activeModelRef) {
       return;
     }
 
+    // A FRESH graded session opens with the scripted Honor Code turn and NO request at
+    // all. The cadet sees it instantly, and the ~14-request budget keeps a turn it would
+    // otherwise have spent saying something the prompt already wrote.
+    if (APP_OPENING && selectedMode === "graded" && !resume) {
+      setMessages([seed, { role: "assistant", content: OPENING_HONOR }]);
+      setLoading(false);
+      return;
+    }
+
+    // Seat the pool for THIS request, now that we know what it is.
+    //   study    -> the lite floor; practice never spends the graded allowance.
+    //   resume   -> a real tutoring turn, the answer the cadet never got. Chat pool.
+    //   opener   -> greeting plus the opening probe, both dictated by the prompt. Nothing for a
+    //               stronger model to be better at, and the cadet is watching an empty screen.
+    seatLadder(activeModelRef,
+      selectedMode !== "graded" ? MODEL_STUDY : MODEL_CHAT);
+
     setLoading(true);
     try {
       const history = resume || [seed];
@@ -1539,12 +1674,12 @@ def main():
                          "public-exposure argument for these pages is that they carry no more "
                          "than the published Claude artifact already does -- which is not true "
                          "of an artifact nobody published. Needs a human's decision.")
-    ap.add_argument("--ladder", choices=("teaching", "legacy"), default="teaching",
-                    help="conversation-model policy. `teaching` (default) runs chat on the "
-                         "strongest models the key can reach. `legacy` reproduces the "
-                         "ordering the live builds shipped with, so a rebuild can carry the "
-                         "freeze fix and NOTHING else while the reorder is still out for "
-                         "faculty trial. TEMPORARY -- delete once the reorder ships.")
+    ap.add_argument("--policy", choices=("teaching", "legacy"), default="teaching",
+                    help="the 2026-08-21 tutoring change set. `teaching` (default) runs chat "
+                         "on the strongest models the key can reach AND lets the app deliver "
+                         "the two scripted opening turns. `legacy` reproduces what the live "
+                         "builds do, so a rebuild carries the transport fixes and NOTHING "
+                         "else while this is out for faculty trial. TEMPORARY.")
     ap.add_argument("--commit", action="store_true", help="write; otherwise dry run")
     ap.add_argument("-v", "--verbose", action="store_true")
     a = ap.parse_args()
@@ -1595,7 +1730,7 @@ def main():
             lesson_label = f"Lesson {lesson_no}" if lesson_no else title
 
             src = src_path.read_bytes()
-            jsx, component, nl = port(src, slug, verbose=a.verbose, ladder=a.ladder)
+            jsx, component, nl = port(src, slug, verbose=a.verbose, ladder=a.policy)
             html = wrap(jsx, component, title, COURSE_LABELS.get(course, course), lesson_label)
 
             out = OUT_ROOT / course / f"{slug}.html"
