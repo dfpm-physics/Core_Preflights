@@ -8,6 +8,61 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-22 (fourth) — Bryan Egner via Claude
+
+### Four more PHYS 110 interactive preflights: lessons 14, 15, 16 and 17
+
+All four are built, published, ported to Gemini and registered. Slugs, in lesson order:
+`lesson-14-energy-of-a-system-work-23ff79ca`,
+`lesson-15-varying-forces-kinetic-energy-2e4badd6`,
+`lesson-16-potential-energy-nonconservative-forces-52c7ef64`,
+`lesson-17-conservation-of-energy-0fb9fc37`. Each is registered as the second activity on its
+existing `preflight-NN` lesson beside the written half, `policy=choice`. The router manifest goes
+39 → 43.
+
+**Grounding was read as page images, not extracted as text**, because PROJECT.md's sharp-edge table
+is right about these files: OpenStax equations are vector paths and every text extractor drops them
+silently, returning complete-*looking* prose with the mathematics simply absent. 42 pages across
+four sections. Lesson 14's PDF also carries §2.4 (products of vectors) ahead of §7.1, because the
+definition of work is built from the dot product — that prerequisite is in its grounding block.
+
+**All four inherit lesson 10's architecture byte-for-byte** and follow this course's CONCEPTUAL
+scope decision: the tutor never asks a cadet to type out or manipulate a derivation. Only the
+header, `INTERACTION_ID`, `OBJECTIVE_KEYS`, the three authored blocks, one wrong-claim example and
+two UI titles differ. Spliced in bytes; `check_artifact.py` reports 31/1 on each, and the one
+failure is the known `EXT_TRIGGER_MARK` bracket false positive — verified by bracket delta being
++1 on all four, identical to the template.
+
+**The four published URLs were VERIFIED by rendering each page and reading its title**, not by
+trusting the order they were pasted in. claude.ai serves an identical 94,560-byte app shell for
+every artifact, so a URL cannot be identified by fetching it; the artifact only names itself once
+the page has run. Mapping a URL to the wrong lesson would point cadets at the wrong preflight and
+nothing downstream would notice.
+
+**Gemini parity confirmed against lesson 09**, which was regenerated the previous day: all four
+carry `AbortController`, the 5xx/empty-response model ladder (`spentModels`, 8 occurrences) and the
+request deadlines. That is the porter's doing, not the kit's — per the 2026-08-21 entry below, none
+of that day's nine fixes reached the kit, and these were built from a patched published source.
+
+**The manifest change is purely additive**: four entries added, none changed, none removed, and no
+phys-215 or phys-310 row touched. Verified structurally, not by eyeballing the diff.
+
+### A build guard that cried wolf, and was narrowed
+
+The generalized build script asserts that no string unique to the template survives into a derived
+artifact. It initially listed `mu_k`, and rejected lesson 14 — which legitimately names kinetic
+friction as a prerequisite. That is the guard being wrong, not the artifact. Narrowed to strings
+genuinely unique to lesson 10's apparatus (`photogate`, `Atwood`, `lab handout`). Same failure mode
+`name_scan.py` had the day before: a check that fires on correct input stops being read.
+
+### Reusable procedure, written down
+
+`PREP-ARTIFACT-CHECKLIST.md` (outside the repo, beside `PREP-WINDOWS-SETUP.md`) records the
+three-phase build — build in Claude Code, publish by hand on claude.ai, ship in Claude Code — and
+why the middle phase cannot be automated: the Gemini porter needs a `published_url` that does not
+exist until a human publishes. It carries the traps table and the remaining-lessons tally.
+
+
 ## 2026-08-22 (third) — Casey Pellizzari via Claude
 
 ### The nightly lesson-cycle no longer runs on Saturday or Sunday
@@ -166,6 +221,7 @@ projection) or an offline test against a recording client. The sandbox write wal
 was **not** run.
 
 ---
+
 
 ## 2026-08-21 (eleventh) — Bryan Egner via Claude
 

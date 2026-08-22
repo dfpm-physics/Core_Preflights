@@ -127,3 +127,67 @@ pointer from a lesson back to the exact build a cadet is running.
 | **Probe topics** | 4 objectives, prose not bound to keys (see callout) |
 | **Checks** | `check_artifact.py` 31 passed / 1 failed — the failure is the `[]` false positive described above |
 | **Status** | **PUBLISHED and REGISTERED**, carrying credit as `graded` in Fall 2026. Source added to the library 2026-08-19; the date above is the registration date, an upper bound on publication |
+
+### Lesson 14 — Energy of a System / Work
+
+| | |
+|---|---|
+| **File** | [`lesson_14_preflight_energy_of_a_system_work.jsx`](lesson_14_preflight_energy_of_a_system_work.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-14-energy-of-a-system-work-23ff79ca` |
+| **Published** | 2026-08-22 — https://claude.ai/public/artifacts/95c0678e-bf20-4511-a833-9f8ff37288be — published by the course director; URL pasted back and then VERIFIED by rendering the page and reading its title, rather than trusting list order |
+| **Built** | 2026-08-22, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Architecture inherited byte-for-byte from `lesson-10-lab-2-newtons-laws-b9d4356a`; only the header, `INTERACTION_ID`, `OBJECTIVE_KEYS`, the three authored blocks, one wrong-claim example and two UI titles differ. Spliced in **bytes**, LF preserved (2225 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §7.1 (Work), pp. 312–319, with §2.4 (Products of Vectors), pp. 72–81, as the dot-product prerequisite. Read as page images: §7.1's equations are vector paths that every text extractor drops silently |
+| **Probe topics** | 4 — `work-as-dot-product`, `work-sign`, `path-dependence`, `spring-work-quadratic`. Prose bound to keys |
+| **Extensions** | 4 (A–D). A and D are single-substitution; B and C are the deliberate contrast — the same round trip costs 4.3 kJ against friction and exactly nothing against gravity. Every arithmetic pass verified twice in-source |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`; bracket delta is +1, identical to the template, so nothing was introduced |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision: the tutor never asks a cadet to type out or manipulate a derivation. Cadets take this **before** the lesson, so probe preparation, never results |
+| **Status** | **PUBLISHED 2026-08-22.** Registered on the existing `preflight-14` lesson as its second activity beside `phys-110-preflight-14-written`, `policy=choice` |
+
+### Lesson 15 — Varying Forces / Kinetic Energy
+
+| | |
+|---|---|
+| **File** | [`lesson_15_preflight_varying_forces_kinetic_energy.jsx`](lesson_15_preflight_varying_forces_kinetic_energy.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-15-varying-forces-kinetic-energy-2e4badd6` |
+| **Published** | 2026-08-22 — https://claude.ai/public/artifacts/ce277175-f460-4a3d-9dbc-42a05aa63b5f — published by the course director; URL pasted back and then VERIFIED by rendering the page and reading its title, rather than trusting list order |
+| **Built** | 2026-08-22, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Architecture inherited byte-for-byte from `lesson-10-lab-2-newtons-laws-b9d4356a`; only the header, `INTERACTION_ID`, `OBJECTIVE_KEYS`, the three authored blocks, one wrong-claim example and two UI titles differ. Spliced in **bytes**, LF preserved (2196 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §§7.2–7.3, pp. 320–327 |
+| **Probe topics** | 4 — `kinetic-energy-scaling`, `net-work-delta-k`, `normal-force-no-work`, `frame-dependence`. Prose bound to keys |
+| **Extensions** | 4 (A–D). B asks for the general loop condition 5R/2 and then a specific case, so the cadet can check 37.5 cm < 45 cm against getting a real positive speed. Every arithmetic pass verified twice in-source |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`; bracket delta is +1, identical to the template, so nothing was introduced |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision: the tutor never asks a cadet to type out or manipulate a derivation. Cadets take this **before** the lesson, so probe preparation, never results |
+| **Status** | **PUBLISHED 2026-08-22.** Registered on the existing `preflight-15` lesson as its second activity beside `phys-110-preflight-15-written`, `policy=choice` |
+
+### Lesson 16 — Potential Energy / Nonconservative Forces
+
+| | |
+|---|---|
+| **File** | [`lesson_16_preflight_potential_energy_nonconservative.jsx`](lesson_16_preflight_potential_energy_nonconservative.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-16-potential-energy-nonconservative-forces-52c7ef64` |
+| **Published** | 2026-08-22 — https://claude.ai/public/artifacts/95d34901-0ea1-4da5-b01f-eda551cf4b32 — published by the course director; URL pasted back and then VERIFIED by rendering the page and reading its title, rather than trusting list order |
+| **Built** | 2026-08-22, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Architecture inherited byte-for-byte from `lesson-10-lab-2-newtons-laws-b9d4356a`; only the header, `INTERACTION_ID`, `OBJECTIVE_KEYS`, the three authored blocks, one wrong-claim example and two UI titles differ. Spliced in **bytes**, LF preserved (2251 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §§8.1, 8.2 and 8.4, pp. 341–362 |
+| **Probe topics** | 4 — `reference-point-arbitrary`, `system-not-object`, `conservative-test`, `reading-u-curve`. Prose bound to keys |
+| **Extensions** | 4 (A–D). B asks for a prediction first because nearly everyone answers mg/k when the released-from-rest maximum stretch is 2mg/k. Every arithmetic pass verified twice in-source |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`; bracket delta is +1, identical to the template, so nothing was introduced |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision: the tutor never asks a cadet to type out or manipulate a derivation. Cadets take this **before** the lesson, so probe preparation, never results |
+| **Status** | **PUBLISHED 2026-08-22.** Registered on the existing `preflight-16` lesson as its second activity beside `phys-110-preflight-16-written`, `policy=choice` |
+
+### Lesson 17 — Conservation of Energy
+
+| | |
+|---|---|
+| **File** | [`lesson_17_preflight_conservation_of_energy.jsx`](lesson_17_preflight_conservation_of_energy.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-17-conservation-of-energy-0fb9fc37` |
+| **Published** | 2026-08-22 — https://claude.ai/public/artifacts/92136677-242d-4d59-ac58-9b9ca312ba03 — published by the course director; URL pasted back and then VERIFIED by rendering the page and reading its title, rather than trusting list order |
+| **Built** | 2026-08-22, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Architecture inherited byte-for-byte from `lesson-10-lab-2-newtons-laws-b9d4356a`; only the header, `INTERACTION_ID`, `OBJECTIVE_KEYS`, the three authored blocks, one wrong-claim example and two UI titles differ. Spliced in **bytes**, LF preserved (2167 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §8.3, pp. 353–358 |
+| **Probe topics** | 4 — `when-energy-conserved`, `system-and-reference`, `why-energy-method`, `energy-accounting`. Prose bound to keys |
+| **Extensions** | 4 (A–D). B is the payoff: half the pendulum's speed is exactly a quarter of the height, which makes the v² dependence visible rather than asserted. Every arithmetic pass verified twice in-source |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`; bracket delta is +1, identical to the template, so nothing was introduced |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision: the tutor never asks a cadet to type out or manipulate a derivation. Cadets take this **before** the lesson, so probe preparation, never results |
+| **Status** | **PUBLISHED 2026-08-22.** Registered on the existing `preflight-17` lesson as its second activity beside `phys-110-preflight-17-written`, `policy=choice` |
