@@ -174,6 +174,28 @@ eq('at full credit', fresh.points_earned, 2);
 check('with effort still null — she has no measured effort to record', fresh.effort === null);
 eq('and a diagnostic holding only the note', Object.keys(fresh.diagnostic), ['instructor_note']);
 
+/* The same card with the note left EMPTY — which is the ordinary case, and the one that shipped
+ * broken. `diagnostic` is `jsonb NOT NULL DEFAULT '{}'` (app/001_core_model.sql), so the empty
+ * merge result has to go out as `{}`; sending null earns
+ *   null value in column "diagnostic" of relation "grades" violates not-null constraint
+ * and the whole save fails. Every assertion above happens to supply either a prior diagnostic or
+ * a note, so all of them left `base` non-empty and none of them reached this branch. */
+section('a fresh card with NO note still sends a legal diagnostic');
+
+CALLS = [];
+const edBare = freshEffort();
+edBare[1004].points = 2;
+edBare[1004].modified = true;                       // note deliberately untouched
+await G.saveScores(ctx, OFFERING, STUDENTS, {}, GRADE_MAP, edBare);
+const bare = lastGradeUpserts()[0].payload.find(r => r.enrollment_id === 'enr-1004');
+check('diagnostic is not null', bare.diagnostic !== null);
+check('…and the key is present, so the upsert column list still includes it',
+      'diagnostic' in bare);
+// Guarded: on a regression the assertion above fails and this one would otherwise THROW on
+// Object.keys(null), aborting the suite before it prints a summary — turning one clear failure
+// into a stack trace with no counts and every later section unrun.
+eq('…it is an empty object', Object.keys(bare.diagnostic || {}).length, 0);
+
 section('the two row kinds go in SEPARATE upserts, never one array');
 
 CALLS = [];

@@ -365,7 +365,11 @@ function effortRows(ctx, offering, students, effortData, isFinalized, gradeMap =
       question_scores: {},
       points_earned: ed.points == null ? null : Math.min(Math.max(Number(ed.points), 0), possible),
       points_possible: possible,
-      diagnostic: Object.keys(base).length ? base : null,
+      // `{}`, never null — the column is `jsonb NOT NULL DEFAULT '{}'` (001_core_model.sql).
+      // A null here is rejected outright, and the case that produces one is the commonest of
+      // all: a placeholder with no prior grade and no note typed, i.e. awarding credit to a
+      // cadet who submitted nothing.
+      diagnostic: base,
       source: 'instructor',
       is_finalized: isFinalized,
       graded_by: ctx.user.id,

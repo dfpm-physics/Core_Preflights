@@ -8,6 +8,44 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-22 (second) — Casey Pellizzari via Claude
+
+### Saving a score on the new iPREP card failed outright: `diagnostic` is NOT NULL
+
+The cards shipped earlier today rendered correctly, but **the first attempt to actually save one
+failed**:
+
+```
+Save failed: null value in column "diagnostic" of relation "grades" violates not-null constraint
+```
+
+`effortRows()` merges the instructor's optional note into whatever `diagnostic` payload the grade
+already carries, and sent the result as `null` when that merge came out empty. The column is
+`jsonb NOT NULL DEFAULT '{}'::jsonb` (`app/001_core_model.sql`), so Postgres rejected the whole
+upsert — nothing was written, and the failure was total rather than partial. Fixed by sending `{}`.
+
+**The empty merge is the ordinary case, not an edge one.** It happens whenever there is no prior
+diagnostic *and* no note typed — i.e. awarding credit to a cadet who submitted nothing, which is
+precisely what the no-submission placeholder exists for.
+
+**Why the tests passed.** `test-grade-effort-write.mjs` covered a fresh card *with* a note and a
+prior-grade card *without* one; both leave the merge result non-empty, so no assertion ever reached
+the `null` branch. The suite asserted the shape of `diagnostic` in five places and the constraint on
+it in none — it was written against the code's own model of the column rather than against the
+column. Added a case pinning `{}` for a fresh card with no note, and confirmed it fails on the old
+line before restoring the fix.
+
+That new assertion is deliberately ordered so the null check runs *before* the `Object.keys()` one:
+on a regression the latter throws, which aborts the suite mid-run and prints a stack trace instead
+of a summary — one clear failure turned into no counts at all and every later section unrun.
+
+**Verified:** 41/41 in that suite; the full run is 584 passed / 10 failed, the same 10 that fail on
+unmodified `main` (4 nav-dropdown, 6 live-data). **Still not verified by a live save** — that needs
+a faculty sign-in, which no agent enters. The reporter's next Save on the Grade page is the real
+test, and it is the same click that produced the error above.
+
+---
+
 ## 2026-08-22 — Casey Pellizzari via Claude
 
 ### The Grade page marked 157 cadets "No credit" on questions that carry no credit for them
