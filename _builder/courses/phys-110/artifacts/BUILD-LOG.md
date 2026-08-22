@@ -128,6 +128,22 @@ pointer from a lesson back to the exact build a cadet is running.
 | **Checks** | `check_artifact.py` 31 passed / 1 failed — the failure is the `[]` false positive described above |
 | **Status** | **PUBLISHED and REGISTERED**, carrying credit as `graded` in Fall 2026. Source added to the library 2026-08-19; the date above is the registration date, an upper bound on publication |
 
+### Lesson 12 — Application of Newton's Laws
+
+| | |
+|---|---|
+| **File** | [`lesson_12_preflight_application_of_newtons_laws.jsx`](lesson_12_preflight_application_of_newtons_laws.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-12-application-of-newtons-laws-a97b17f8` |
+| **Published** | 2026-08-22 — https://claude.ai/public/artifacts/9d71953d-0b91-4791-8cce-03cacff940a0 — URL verified by rendering the page and reading its title |
+| **Built** | 2026-08-22, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Architecture inherited byte-for-byte from `lesson-10-lab-2-newtons-laws-b9d4356a` (2301 lines, spliced in bytes, LF preserved) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 ch. 5 §§5.1–5.7 (pp. 194–241, incl. the chapter review summary) and ch. 6 §§6.1–6.3 (pp. 253–277). Read as page images across four targeted passes of the 90-page extract — the largest grounding read of any phys-110 artifact so far |
+| **Probe topics** | 4 — `free-body-diagrams`, `net-force-vectors`, `multiple-objects`, `circular-acceleration`. **Mapped to the SYLLABUS learning objectives**, not invented: Obj 1-5, Obj 1-6, Obj 1-9, and Obj 1-7/1-8 respectively. Obj 1-1 (problem-solving strategy) runs through all four rather than being probed alone |
+| **Extensions** | 4 (A–D), shaped like GR 1 questions. A is deliberately arithmetic-free (what belongs on a book's free-body diagram, third-law partners, and why the pair does not cancel). C and D reproduce the textbook's own worked values — 39.2 N and 1125 N / µ = 0.128. Every arithmetic pass verified twice in-source |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`; bracket delta +1, identical to the template |
+| **Scope decisions** | CONSOLIDATION lesson, and written as one: it is the last lesson of the Newton's Laws block and sits immediately before **Graded Review 1**, which assesses syllabus Block 1. Nothing in it is new material; the tutor probes whether a cadet can still ASSEMBLE the block — pick a system, draw the diagram, write the equations — rather than whether they have met the ideas. The scope note steers away from energy, which begins next lesson. CONCEPTUAL per this course's standing decision |
+| **Status** | **PUBLISHED 2026-08-22.** Registered on the existing `preflight-12` lesson as its second activity beside `phys-110-preflight-12-written`, `policy=choice` |
+
 ### Lesson 14 — Energy of a System / Work
 
 | | |

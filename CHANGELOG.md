@@ -8,6 +8,59 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-22 (fifth) — Bryan Egner via Claude
+
+### PHYS 110 lesson 12, and the first artifact written against the syllabus objectives
+
+`lesson-12-application-of-newtons-laws-a97b17f8` is built, published, ported to Gemini and
+registered on the existing `preflight-12` lesson beside its written half, `policy=choice`. The
+router manifest goes 43 → 44.
+
+**This one is a CONSOLIDATION lesson and is written as one.** Lesson 12 is the last lesson of the
+Newton's Laws block, its syllabus reading is the whole block re-read (Cengage 5.1–6.3), its homework
+column is a cumulative set, and Graded Review 1 follows three days later. Nothing in it is new
+material. The tutor therefore probes whether a cadet can still ASSEMBLE the block — choose a system,
+draw the diagram, write the equations — rather than whether they have met the ideas. The scope note
+steers away from energy, which starts the next lesson.
+
+**Its probe topics are mapped to the syllabus learning objectives rather than invented**, which is
+new for this course:
+
+| probe topic | objective |
+|---|---|
+| what belongs on a free-body diagram | Obj 1-5 |
+| net force as a vector sum | Obj 1-6 |
+| systems, connected bodies, shared acceleration | Obj 1-9 |
+| why circular motion is acceleration | Obj 1-7 / 1-8 |
+
+Obj 1-1 (problem-solving strategy) runs through all four rather than being probed alone.
+
+**Those objectives were in the repository the whole time and nothing had used them.** The syllabus
+at `_builder/courses/phys-110/Physics_110_Fall_2026_Syllabus (4Aug2026)_8639.pdf` carries a full
+§XI (pp. 7–9): four content blocks (Obj 1-1…1-9, 2-1…2-8, 3-1…3-9, 4-1…4-4), six lab objectives, and
+four USAFA outcome objectives. **The blocks map onto the Graded Reviews**, which is what makes
+"the objective for a review lesson" a well-defined question. Worth knowing for every future build.
+
+**Related, and NOT fixed here:** `app.assignments.objectives` is empty for every phys-110 lesson —
+`preflight-09` and `preflight-10` included, so this is not a gap this work introduced. The syllabus
+is an authoritative source for populating it, which would give the cohort rollup real objective
+labels instead of bare keys. Left as a separate, low-risk change.
+
+**Grounding was the largest read of any phys-110 artifact so far** — OpenStax ch. 5 §§5.1–5.7 and
+ch. 6 §§6.1–6.3, a 90-page extract spanning two chapters, read as page images across four targeted
+passes. Text extraction remains unusable on these files.
+
+**Verified beyond rendering**, since the ask was that the Gemini build actually work: contract slug
+and submit endpoint byte-identical to the Claude build; `v=gemini` present and `v=claude` absent;
+`AbortController`, the 5xx/empty-response ladder (`spentModels`, 8) and the request deadlines at
+parity with lessons 09/10/14–17; all four objective keys present in the built page; and a live
+interaction test — typing into the last-name field and confirming React held the value, which proves
+the app is running rather than merely painted. The single surviving `lesson-10` string is the header
+provenance comment on line 81, which is deliberate.
+
+The manifest change is purely additive: one entry added, none changed, none removed, no phys-215 or
+phys-310 row touched.
+
 ## 2026-08-22 (fourth) — Bryan Egner via Claude
 
 ### Four more PHYS 110 interactive preflights: lessons 14, 15, 16 and 17
