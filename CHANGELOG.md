@@ -8,6 +8,85 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-22 — Casey Pellizzari via Claude
+
+### The Grade page marked 157 cadets "No credit" on questions that carry no credit for them
+
+Opening **Grade → preflight-07** showed every cadet a written-preflight card with Q2 and Q3 both
+stamped red **✗ No credit**. Nobody had been graded 0 and nobody was late — `preflight-07` is the
+first **interaction-required** lesson of the term (interactive `graded`, written demoted to
+`practice`) and its deadline is 2026-08-24.
+
+**The cause was a predicate that answered a narrower question than the page was asking.**
+`grade.html` excluded interactive takers with `isEffortGraded()` — *"has this cadet committed to
+something other than the written activity"*. That is false for a cadet who has committed to
+**nothing**, which on an interaction-required lesson is most of the roster right up to the
+deadline. They fell through to the written card, and `buildGradeData` defaults every unanswered
+question to `zero`. About **157 of 169** cards, resolving one at a time as cadets submitted.
+
+The exclusion was also the wrong shape when it *did* fire: it hid the student rather than grading
+them, and pointed the reader at the student page to "adjust one" — where Save and Finalize were
+disabled for exactly those students. **There was no way to change an interactive grade anywhere in
+the UI**, only to reopen it. (That exclusion dates from 2026-07-27, which correctly identified that
+a card you cannot mark does not belong on a marking screen, and removed the student instead of
+fixing the card.)
+
+**Card kind is now a per-student decision**, `cardKindFor()` in `schema.js`, beside `policyOf()` and
+`writtenPathCounts()` so there is one derivation both screens read. A committed choice outranks the
+policy; with nothing committed, a free-response lesson still shows the written card, an
+interaction-required one never does, and a choice lesson shows it only if the cadet has actually
+typed something. Three cards result — **written** (unchanged), **interactive**, and **no
+submission** — and both `faculty/grade.html` and the per-student modal on `faculty/student.html`
+render them from the same module.
+
+**The two non-written cards carry a 0 / 1 / full-credit toggle and a note.** `full` is the
+offering's `points_possible`, so it is 3 on Physics 310, and the partial step collapses where a
+flat 1 would already be full credit — the same `LEAST(1, points_possible)` clamp as the trigger.
+Awarding credit on a **no-submission** card is the case the course director asked for: a cadet whose
+upload failed can be given full marks without inventing a written submission for them.
+
+**Overriding the points clears `grades.effort`, and that is load-bearing rather than incidental.**
+`app.grades_points_from_effort()` (migration 019) is a `BEFORE INSERT OR UPDATE` trigger that
+recomputes `points_earned` from `effort` on every write where effort is set — so an override that
+left it populated would appear to save and then not be there. **No measurement is lost:** all 110
+live effort grades were checked and 110/110 carry `diagnostic.schema == 1` with `diagnostic.effort`
+identical to `grades.effort`, so `effortSignal()` falls through to the same number and the dashboard
+tiles, the effort histogram, the gradebook and the rollup are unchanged. What moves is its
+provenance, from `grade` to `report` — which is accurate: it is the lesson's measurement again, not
+the grade. A grading judgement must not silently move a measurement.
+
+**An untouched card writes nothing.** Effort rows are sent **only when edited** — the inverse of
+`gradeRows()` rule 1, and for the inverse reason: re-sending an untouched interactive row would
+clear `grades.effort` on every derived grade in the section the first time anyone clicked Save on
+somebody else's card. Written rows and effort rows go in **two sequential upserts**, because a
+PostgREST bulk upsert takes its column list from the union of the payload keys and one array would
+send `diagnostic` for every written student (racing `/preflight-analyze`) and `question_scores` for
+every interactive one.
+
+**The note is the only feedback these cards can carry**, since an interactive grade has no
+`question_scores` — migration 014's `grades_one_grading_mechanism` CHECK forbids it. It merges into
+`grades.diagnostic` as `instructor_note` rather than replacing the column, which holds the
+artifact's frozen schema:1 payload. **The cadet can read it:** `GRADE_SELECT_STUDENT` projects that
+one jsonb key by name, so the 2026-08-10 privacy fix stands — the assessment around it (honor
+status and its free text, follow-up flags, per-objective understanding, misconceptions) still never
+leaves the server. It renders with the score on the student lesson page.
+
+Verified with **80 new assertions** across two suites — `test-grade-cards.mjs` for the card
+derivation and the points cycle, and `test-grade-effort-write.mjs`, which asserts the actual upsert
+payload behind a recording client because all three rules above are invisible from outside and
+destructive when wrong. Two assertions in `test-grade.mjs` were rewritten: they pinned the *old*,
+weaker guarantee that the exclusion depended on the caller passing `submissionMap`, and it no longer
+does. Full suite: 584 passed, 10 failed — the same 10 failing on unmodified `main` before this work,
+none of them in this area.
+
+**Not verified in a live browser session, and not written to the live database.** The Grade page
+requires a faculty sign-in and no credential was entered. Every assertion here is either a live
+read-only REST query (the 110-row diagnostic check, the offering configurations, the jsonb
+projection) or an offline test against a recording client. The sandbox write walkthrough in the plan
+was **not** run.
+
+---
+
 ## 2026-08-21 (eleventh) — Bryan Egner via Claude
 
 ### PHYS 110 lesson 10 gets an interactive preflight, and PHYS 110 becomes a course that can build one

@@ -100,11 +100,22 @@ check('the interactive taker is EXCLUDED — this is the safety rule',
       gd[1002] === undefined);
 eq('the written taker keeps both questions', Object.keys(gd[1001]).sort(), ['q2', 'q3']);
 
-// Back-compat: called WITHOUT submissionMap, nobody is excluded (the old signature still works,
-// it just cannot protect an effort taker — every caller in the app now passes it).
+/* THE EXCLUSION NO LONGER DEPENDS ON THE CALLER (2026-08-21).
+ *
+ * This used to assert the opposite — that calling without submissionMap excluded nobody, the old
+ * signature being "safe" only in the sense that it did not throw. It was a real hole: the one
+ * argument that protected an effort grade was optional, and forgetting it produced a model that
+ * renders identically to a correct one and zeroes somebody on Save.
+ *
+ * buildGradeData now asks cardKindFor(), which falls back to the OFFERING'S POLICY when it has no
+ * submission to go on. On a choice offering a cadet with no commitment and no typed answers is
+ * 'nosubmission', so Ivan is excluded either way. The guarantee got stronger, and the assertion
+ * has to say so rather than keep describing the weaker one. */
 const gdNoSub = G.buildGradeData(OFFERING, STUDENTS, RESPONSE_MAP, GRADE_MAP);
-check('without submissionMap, no student is excluded (old signature safe)',
-      !!gdNoSub[1002]);
+check('the interactive taker is excluded even without submissionMap',
+      gdNoSub[1002] === undefined);
+check('...and the written taker is still included, so it is not excluding everyone',
+      !!gdNoSub[1001]);
 
 /* ── `original` — the load-time baseline (2026-07-30) ────────────────────────
  * Two things in grade.html read it and neither works off `status`: the status-lamp filter (so
@@ -151,20 +162,64 @@ const ctx = { user: { id: 'instr-1' } };
 check('an unedited Save writes nothing at all',
       G.writableCount(ctx, OFFERING, STUDENTS, gd, GRADE_MAP) === 0);
 
-// The counterfactual that proves the bug is real. Build the model the PRE-FIX way (no
-// submissionMap, so Ivan is NOT excluded) and edit his q3 to zero — the exact effect of the
-// written toggle defaulting his blank answer to `zero`. He has a prior row, so rule 2 does not
-// skip him: writableCount rises, and a Save would overwrite his effort grade with 0.
+/* The counterfactual that proves the bug is real. It can no longer be produced by dropping
+ * submissionMap — see above — so it is built by HAND: the model buildGradeData would have to
+ * return for Ivan in order for the zeroing to happen, with his blank answers defaulted to `zero`
+ * exactly as the written toggle would. He has a prior row, so rule 2 does not skip him.
+ *
+ * Constructing it by hand is the point. It asserts what the CONSEQUENCE would be if the exclusion
+ * ever regressed, independently of the mechanism currently doing the excluding — so a future
+ * refactor of cardKindFor() that quietly lets an effort taker back in still fails here. */
 section('counterfactual: what the exclusion prevents');
-const gdUnsafe = G.buildGradeData(OFFERING, STUDENTS, RESPONSE_MAP, GRADE_MAP); // no submissionMap
-check('WITHOUT the fix, the interactive taker gets an editable model', !!gdUnsafe[1002]);
-gdUnsafe[1002].q3.status = 'zero';
-gdUnsafe[1002].q3.score = 0;
-gdUnsafe[1002].q3.modified = true;
-check('...so a Save WOULD write a row that zeroes their 1-pt effort grade',
+const gdUnsafe = {
+  ...gd,
+  1002: {
+    q2: { score: 0, feedback: '', status: 'zero', original: 'zero', modified: false },
+    q3: { score: 0, feedback: '', status: 'zero', original: 'zero', modified: true },
+  },
+};
+check('a model that DID include the interactive taker would write a row for him',
       G.writableCount(ctx, OFFERING, STUDENTS, gdUnsafe, GRADE_MAP) === 1);
-check('...whereas WITH the fix that student is not in the model to be touched',
+check('...and that row would zero the 1-pt effort grade he already holds',
+      G.writableCount(ctx, OFFERING, STUDENTS, gdUnsafe, GRADE_MAP) >
+      G.writableCount(ctx, OFFERING, STUDENTS, gd, GRADE_MAP));
+check('...whereas the real model never contains him to be touched',
       gd[1002] === undefined);
+
+/* ── buildEffortData — the other half of the split (2026-08-21) ──────────────
+ * The two models must be EXACT COMPLEMENTS: a student in both is written twice by one Save, in
+ * two separate upserts, and the second silently overwrites the first. */
+section('buildEffortData: everyone buildGradeData excluded, and nobody it kept');
+
+const ed = G.buildEffortData(OFFERING, STUDENTS, GRADE_MAP, SUBMISSION_MAP, RESPONSE_MAP);
+
+check('the interactive taker is here', !!ed[1002]);
+eq('...marked as the interactive card', ed[1002].kind, 'interactive');
+eq('...opening on the points his effort grade already earned', ed[1002].points, 1);
+check('the written taker is NOT here', ed[1001] === undefined);
+check('the draft student is NOT here — he has answers, so he keeps the written card',
+      ed[1003] === undefined);
+
+const inBoth = STUDENTS.filter(s => gd[s.student_id] && ed[s.student_id]);
+const inNeither = STUDENTS.filter(s => !gd[s.student_id] && !ed[s.student_id]);
+eq('no student is in both models', inBoth.map(s => s.student_id), []);
+eq('no student is in neither', inNeither.map(s => s.student_id), []);
+
+section('effort rows: an untouched card writes nothing, and a touched one nulls effort');
+
+check('nobody edited, so a Save writes no effort row',
+      G.writableCount(ctx, OFFERING, STUDENTS, {}, GRADE_MAP, ed) === 0);
+
+// THE RULE THAT MATTERS MOST. Re-sending an untouched interactive row would clear grades.effort
+// on every derived grade in the section the first time anyone clicked Save on somebody else's
+// card — the inverse of gradeRows() rule 1, and a far worse failure.
+ed[1002].points = 0;
+ed[1002].modified = true;
+check('one edited card writes exactly one row',
+      G.writableCount(ctx, OFFERING, STUDENTS, {}, GRADE_MAP, ed) === 1);
+check('...and the untouched no-submission cards are still not among them',
+      G.writableCount(ctx, OFFERING, STUDENTS, {}, GRADE_MAP,
+        G.buildEffortData(OFFERING, STUDENTS, GRADE_MAP, SUBMISSION_MAP, RESPONSE_MAP)) === 0);
 
 /* ══════════════════════════════════════════════════════════════════════════════
  * buildGradingQueue — the hand-grading queue (Roadmap P1.14)

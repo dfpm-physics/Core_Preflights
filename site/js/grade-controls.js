@@ -91,18 +91,124 @@ export function creditControlNode(sid, q, gd, idPrefix) {
   return tmp.firstElementChild;
 }
 
-/**
- * How many answers are edited but unwritten, across a whole gradeData model.
+/* ══════════════════════════════════════════════════════════════════════════════
+ * The POINTS control — the same three-state idea, for a card with no questions
  *
- * Counts QUESTIONS rather than students: that is the unit being changed, and it is the number a
- * reader can check against what they remember doing. Feedback typing counts — `modified` is set by
- * the textarea handler too, and losing a paragraph of written feedback is worse than losing a
- * click.
+ * An interactive grade has no question rows to chip, so there is nothing for creditControl() to
+ * attach to: migration 014's `grades_one_grading_mechanism` CHECK forces `question_scores = '{}'`
+ * on any row carrying an effort, and the whole grade is one number. This is that number's control,
+ * kept beside the credit chip so the two screens that grade cannot render one and not the other.
+ *
+ * It cycles POINTS, not effort, and the write path clears `grades.effort` — see effortRows() in
+ * faculty-grade.js for why that is load-bearing rather than incidental.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * The three point values an instructor can land on, mirroring the effort curve's own three bands
+ * (`app.grades_points_from_effort`, migration 019): nothing, the flat partial point, or the whole
+ * assignment. `full` is the OFFERING's points_possible — 2 in Physics 215, 3 in Physics 310 — so
+ * this never hardcodes a 2.
+ *
+ * `null` is a fourth, display-only state meaning NO GRADE ROW EXISTS. It is not a score and the
+ * cycle never returns to it. Without it a cadet nobody has graded renders a red "0 pts" chip,
+ * which is precisely the "graded 0 looks identical to never graded" confusion that the
+ * `Not yet graded` tag was added to the card header to end.
  */
-export function dirtyCount(gradeData) {
+export function pointsLabel(v, pointsPossible) {
+  if (v == null) return '— not graded';
+  const pp = Number(pointsPossible) || 0;
+  if (v <= 0) return '✗ 0 pts';
+  if (v >= pp) return `✓ ${fmtPts(pp)} pts`;
+  return `◐ ${fmtPts(v)} pt${v === 1 ? '' : 's'}`;
+}
+
+/** Drop the trailing `.00` the DB numeric carries, while keeping a genuine half point legible. */
+const fmtPts = n => String(Number(n));
+
+/** Which credit-chip colour a point value wears, so red/amber/green mean one thing site-wide. */
+export function pointsStatus(v, pointsPossible) {
+  if (v == null) return 'none';
+  const pp = Number(pointsPossible) || 0;
+  if (v <= 0) return 'zero';
+  return v >= pp ? 'full' : 'warn';
+}
+
+/**
+ * The cycle: not-graded → 0 → partial → full → 0 → …
+ *
+ * THE PARTIAL STEP COLLAPSES on a one-point assignment, and must. The curve's partial band is
+ * `LEAST(1, points_possible)`, so where the offering is worth a single point a "partial" 1 IS full
+ * credit — offering it as a separate stop would show two chips that write the same number and
+ * disagree about their colour.
+ */
+export function nextPoints(v, pointsPossible) {
+  const pp = Number(pointsPossible) || 0;
+  const partial = Math.min(1, pp);
+  const stops = partial > 0 && partial < pp ? [0, partial, pp] : [0, pp];
+  if (v == null) return stops[0];
+  const i = stops.findIndex(s => Math.abs(s - Number(v)) < 1e-9);
+  return stops[(i + 1) % stops.length];   // an off-curve value (i === -1) lands on stops[0]
+}
+
+/** Advance one student's points in place, and mark the card unsaved. */
+export function applyPoints(ed, pointsPossible) {
+  ed.points = nextPoints(ed.points, pointsPossible);
+  ed.modified = true;
+  return ed;
+}
+
+/**
+ * The control itself: one chip, or `was → will be` once an edit has moved it — the same pending
+ * change model as creditControl(), so an unsaved points change reads as a change rather than as a
+ * state that was always so.
+ *
+ * @param {number|string} sid
+ * @param {{points:number|null, original:number|null}} ed
+ * @param {number} pointsPossible
+ * @param {string} [idPrefix] distinguishes the two screens; defaults to the Grade page's.
+ */
+export function pointsControl(sid, ed, pointsPossible, idPrefix = 'pts') {
+  const id = `${idPrefix}-${sid}`;
+  const chip = (v, extra = '') =>
+    `<button class="credit-toggle ${pointsStatus(v, pointsPossible)}" id="${id}" data-act="points"
+             data-sid="${esc(String(sid))}"${extra}>${esc(pointsLabel(v, pointsPossible))}</button>`;
+
+  const same = (a, b) => (a == null && b == null) || Number(a) === Number(b);
+  if (same(ed.points, ed.original)) return chip(ed.points);
+
+  return `<span class="credit-change">
+    <span class="credit-toggle ${pointsStatus(ed.original, pointsPossible)} was" aria-hidden="true">${esc(pointsLabel(ed.original, pointsPossible))}</span>
+    <span class="credit-arrow" aria-hidden="true">→</span>
+    ${chip(ed.points, ` aria-label="Changing from ${esc(pointsLabel(ed.original, pointsPossible))} to ${esc(pointsLabel(ed.points, pointsPossible))}. Click to keep cycling."`)}
+  </span>`;
+}
+
+/** The same markup as a live node, for swapping one control in place after a click. */
+export function pointsControlNode(sid, ed, pointsPossible, idPrefix) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = pointsControl(sid, ed, pointsPossible, idPrefix).trim();
+  return tmp.firstElementChild;
+}
+
+/**
+ * How many edits are unwritten, across a whole grading model.
+ *
+ * Counts the UNIT BEING CHANGED, which differs by card: a question on the written card (four
+ * re-scored answers on one cadet is four), and the whole card on an interactive or no-submission
+ * one (there is only the one number and its note). Both are numbers a reader can check against
+ * what they remember doing. Feedback typing counts — `modified` is set by the textarea handlers
+ * too, and losing a paragraph of written feedback is worse than losing a click.
+ *
+ * Takes either shape, so the two models share one banner rather than racing two counters:
+ * `gradeData` is sid → questionId → entry, `effortData` is sid → entry. An entry is recognised by
+ * carrying `modified` itself.
+ */
+export function dirtyCount(model) {
   let n = 0;
-  for (const qMap of Object.values(gradeData || {})) {
-    for (const gd of Object.values(qMap || {})) if (gd?.modified) n++;
+  for (const entry of Object.values(model || {})) {
+    if (!entry || typeof entry !== 'object') continue;
+    if ('modified' in entry) { if (entry.modified) n++; continue; }
+    for (const gd of Object.values(entry)) if (gd?.modified) n++;
   }
   return n;
 }

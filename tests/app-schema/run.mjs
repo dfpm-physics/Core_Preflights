@@ -42,9 +42,11 @@ function resetTestData() {
 // the stub is global and would otherwise leak into anything imported after it.
 // test-db-schema.mjs is structural-offline, but its last check shells out to
 // gen_db_schema.py --check, so it does touch the network when a .venv is present.
+// test-grade-cards.mjs installs the browser shim (its units reach util.js, which reads
+// location at module load), so it sits with the suites that do the same rather than before them.
 const OFFLINE = ['./test-schema.mjs', './test-config.mjs', './test-roster-import.mjs',
                  './test-db-schema.mjs', './test-nav.mjs', './test-modals.mjs',
-                 './test-legacy-actions.mjs'];
+                 './test-grade-cards.mjs', './test-legacy-actions.mjs'];
 const LIVE    = ['./test-rest.mjs', './test-student.mjs', './test-isolation.mjs'];
 
 for (const s of OFFLINE) {
@@ -71,6 +73,10 @@ for (const s of OFFLINE) {
 //   test-gradebook  imports faculty-gradebook.js for the grid arithmetic (pure, but the module's
 //                 supabase.js import still binds a client)
 //   test-grade    imports faculty-grade.js for buildGradeData's interactive-taker exclusion (P0.14)
+//   test-grade-effort-write  same module behind a RECORDING window.db, because the three rules in
+//                 effortRows() are all invisible from outside and all destructive when wrong —
+//                 above all `effort: null`, without which the migration-019 trigger silently puts
+//                 an instructor's overridden points back to what the effort curve says
 //   test-ei      same for faculty-ei.js — the UTC round trip and the batch counting
 //   test-student-detail  imports faculty-student.js, which pulls in faculty-rollup.js and
 //                 faculty-gradebook.js. NOT test-student.mjs, which is the LIVE suite about the
@@ -100,7 +106,8 @@ for (const s of OFFLINE) {
 //                 does by default and is not something a wrong answer announces
 for (const suite of ['test-imports.mjs', 'test-rollup.mjs', 'test-system-prefs.mjs',
                      'test-run-banner.mjs', 'test-help-status.mjs', 'test-prefs.mjs',
-                     'test-tasks.mjs', 'test-gradebook.mjs', 'test-grade.mjs', 'test-ei.mjs',
+                     'test-tasks.mjs', 'test-gradebook.mjs', 'test-grade.mjs',
+                     'test-grade-effort-write.mjs', 'test-ei.mjs',
                      'test-dashboard-rows.mjs', 'test-student-detail.mjs', 'test-feedback.mjs',
                      'test-feedback-admin.mjs', 'test-lesson-due.mjs',
                      'test-lesson-isolation.mjs', 'test-student-completion.mjs',

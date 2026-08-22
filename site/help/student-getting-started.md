@@ -114,6 +114,10 @@ For an **interactive lesson**, the grade is worked out automatically from your e
 soon as you submit your report — there is nothing to wait for. It still shows up on the assignment
 like any other grade. See [How AI is used on your work](help.html?doc=ai-and-your-work).
 
+**An instructor can change either one afterwards**, and when they do they can leave a short note
+saying why. If there is one, it appears with your score on the lesson page. A grade you never see a
+note on was not changed by hand.
+
 **Because that grade lands straight away, the report you submit is the one that counts.** Running
 the lesson again will not replace it, and the submit page will tell you so rather than saving a
 second report. You can always relaunch a lesson to study — nothing about that touches your grade —

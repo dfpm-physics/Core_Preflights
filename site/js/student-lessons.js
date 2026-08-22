@@ -163,6 +163,12 @@ export function deriveCompletion(item, offering = item) {
     // student page ever rendered it, and as of 2026-08-10 the student grade select does not fetch
     // `diagnostic` at all (schema.js, GRADE_SELECT_STUDENT) — so keeping the field would leave a
     // permanently-null property that reads as live. The diagnostic is faculty-side by design.
+    //
+    // The instructor's note is the one exception, and it is not a diagnostic: it is the reason for
+    // a score a human chose. An interactive grade has no question_scores, so this is the ONLY
+    // channel it has for the feedback that must accompany withheld credit. GRADE_SELECT_STUDENT
+    // projects that single jsonb key and nothing else around it.
+    instructorNote: String(item.grade?.instructor_note?.text ?? ''),
     is_finalized: finalized,
     completed_at: item.submission?.committedAt || null,
   };

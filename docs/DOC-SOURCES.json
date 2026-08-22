@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-08-21",
+  "updated": "2026-08-22",
   "_comment": [
     "Dependency index for documents that MUST STAY CURRENT. Each entry names the authoritative",
     "sources a document was derived from, and the date it was last checked against them.",
@@ -20,7 +20,7 @@
       "doc": "site/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-08-21",
+      "reviewed": "2026-08-22",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -55,19 +55,21 @@
       "doc": "site/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-08-21",
+      "reviewed": "2026-08-22",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
         "site/js/faculty-grade.js",
         "site/faculty/grade.html",
+        "site/js/grade-controls.js",
+        "site/js/schema.js",
         "site/js/nav.js",
         "site/js/auth.js",
         "site/js/faculty-tasks.js",
         "site/faculty/lessons.html",
         "site/faculty/report.html"
       ],
-      "note": "The 3-state toggle, question_scores shape, and the 'all my sections' scoping rule. If the Grade tab's behaviour changes, this doc is wrong before anything else is. nav.js is a source because the page has NO nav entry (P1.14, 2026-07-23) — the doc's 'getting to the Grade page' section is the only place that is written down, so a nav change silently invalidates it. grade.html is a source because the hand-grading queue is rendered there, not in the data module. faculty-tasks.js is a source since 2026-07-27: the due-out boxes are the documented route to this page, and they are now one box per assignment that deep-links into it, so a change to that registry invalidates the 'Getting to the Grade page' section. lessons.html is a source since 2026-07-29: the Assignments page now carries a Grade button that deep-links here, so it is one of the enumerated routes and a change to it invalidates the list. report.html is a source since 2026-08-10: the doc's last section documents the Report tab's two response panels — their controls, their sampling and their selection behaviour — and had been describing that page since it was written with nothing connecting the two, so a change there could never have flagged it."
+      "note": "The 3-state toggle, question_scores shape, and the 'all my sections' scoping rule. If the Grade tab's behaviour changes, this doc is wrong before anything else is. nav.js is a source because the page has NO nav entry (P1.14, 2026-07-23) — the doc's 'getting to the Grade page' section is the only place that is written down, so a nav change silently invalidates it. grade.html is a source because the hand-grading queue is rendered there, not in the data module. faculty-tasks.js is a source since 2026-07-27: the due-out boxes are the documented route to this page, and they are now one box per assignment that deep-links into it, so a change to that registry invalidates the 'Getting to the Grade page' section. lessons.html is a source since 2026-07-29: the Assignments page now carries a Grade button that deep-links here, so it is one of the enumerated routes and a change to it invalidates the list. report.html is a source since 2026-08-10: the doc's last section documents the Report tab's two response panels — their controls, their sampling and their selection behaviour — and had been describing that page since it was written with nothing connecting the two, so a change there could never have flagged it. grade-controls.js and schema.js became sources on 2026-08-21, when the page stopped having only one kind of card: grade-controls.js owns BOTH controls the doc describes (the 3-state credit chip and the 0/1/full points toggle), and schema.js's cardKindFor() decides which card each cadet gets — so a change to either alters what an instructor sees without touching faculty-grade.js or grade.html at all."
     },
     {
       "doc": "site/help/director-ai-rules.md",
@@ -154,7 +156,7 @@
       "doc": "site/help/director-course-structure.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-21",
+      "reviewed": "2026-08-22",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/003_term_calendar.sql",
@@ -171,7 +173,7 @@
       "doc": "site/help/director-schema-reference.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-21",
+      "reviewed": "2026-08-22",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/002_rls.sql",

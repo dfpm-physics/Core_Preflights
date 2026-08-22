@@ -87,9 +87,10 @@
     import * as S from '../js/faculty-student.js';
     import * as EI from '../js/faculty-ei.js';
     import * as G from '../js/faculty-grade.js';
-    import { questionsOf, submissionLateness, lateBy } from '../js/schema.js';
+    import { questionsOf, submissionLateness, lateBy, effortSignal } from '../js/schema.js';
     import {
       CREDIT_LABEL, applyCredit, creditControl, creditControlNode, dirtyCount, WARN_HINT,
+      applyPoints, pointsControl, pointsControlNode, pointsLabel, pointsStatus,
     } from '../js/grade-controls.js';
     import { CELL, zoneIndex } from '../js/faculty-gradebook.js';
 
@@ -429,7 +430,11 @@
      *   A section is ~20 students.
      */
     let sgOffering = null, sgStudent = null, sgGradeData = {}, sgGradeMap = {},
-        sgExtension = null, sgSubmission = null, sgResponses = {}, sgQuestions = [];
+        sgExtension = null, sgSubmission = null, sgResponses = {}, sgQuestions = [],
+        // The non-written model, or null when this cadet is on the written card. Exactly one of
+        // sgGradeData / sgEffort is populated — see buildGradeData()'s header on why a student in
+        // both would be written twice by one Save.
+        sgEffort = null;
 
     function sgClose() { document.getElementById('sg-modal').classList.remove('open'); }
 
@@ -440,8 +445,12 @@
       // Delegated on the modal body, which is replaced on every open and every re-render.
       document.getElementById('sg-body').addEventListener('click', onGradeClick);
       document.getElementById('sg-body').addEventListener('input', (e) => {
-        const t = e.target.closest('textarea[data-act="feedback"]');
+        const t = e.target.closest('textarea[data-act="feedback"], textarea[data-act="note"]');
         if (!t) return;
+        if (t.dataset.act === 'note') {
+          if (sgEffort) { sgEffort.note = t.value; sgEffort.modified = true; sgSyncDirty(); }
+          return;
+        }
         const gd = sgGradeData[t.dataset.qid];
         if (gd) { gd.feedback = t.value; gd.modified = true; sgSyncDirty(); }
       });
@@ -452,7 +461,7 @@
 
     /** Closing discards whatever has not been written, so it asks first. */
     function attemptClose() {
-      const n = dirtyCount({ x: sgGradeData });
+      const n = sgDirty();
       if (n && !confirm(`You have ${n} unsaved change${n === 1 ? '' : 's'}.\n\n`
                       + `Closing discards them. Continue?`)) return;
       sgClose();
@@ -492,27 +501,31 @@
       sgSubmission = data.submissionMap[sid] || null;
       sgResponses = data.responseMap[sid] || {};
       sgQuestions = questionsOf(sgOffering.written);
-      // Same exclusion as the Grade page, for the same reason: an interactive taker is graded on
-      // effort by the migration-015 trigger, answered no written question, and a Save built from
-      // this model would write zeros over their effort grade.
-      sgGradeData = G.isEffortGraded(sgOffering, sgSubmission)
-        ? {}
-        : (G.buildGradeData(sgOffering, [student], sgResponses ? { [sid]: sgResponses } : {},
-                            sgGradeMap, { [sid]: sgSubmission })[sid] || {});
+      // Both models, from the same two builders the Grade page uses — so this screen cannot decide
+      // a cadet is on a different path than that one does. Exactly one comes back populated.
+      const one = { [sid]: sgResponses };
+      const subs = { [sid]: sgSubmission };
+      sgGradeData = G.buildGradeData(sgOffering, [student], one, sgGradeMap, subs)[sid] || {};
+      sgEffort = G.buildEffortData(sgOffering, [student], sgGradeMap, subs, one)[sid] || null;
       renderGradeModal();
     }
 
+    /** The pending total, or null when nothing has been graded at all. */
     function sgTotal() {
-      if (!Object.keys(sgGradeData).length) return Number(sgGradeMap[sgStudent.student_id]?.pointsEarned ?? 0);
+      if (sgEffort) return sgEffort.points;
       return sgQuestions.reduce((s, q) => s + (Number(sgGradeData[q.id]?.score) || 0), 0);
     }
+
+    const sgTotalText = () => {
+      const t = sgTotal();
+      return `${t == null ? '—' : Number(t).toFixed(2)} / ${Number(sgOffering.pointsPossible ?? 0).toFixed(2)} pts`;
+    };
 
     function renderGradeModal() {
       const sid = sgStudent.student_id;
       const prior = sgGradeMap[sid];
       const finalized = !!prior?.finalized;
       const maxTotal = Number(sgOffering.pointsPossible ?? 0);
-      const effortGraded = G.isEffortGraded(sgOffering, sgSubmission);
       const late = submissionLateness(sgOffering, sgStudent.section_id,
                                       sgExtension?.due || null, sgSubmission?.committedAt);
 
@@ -527,15 +540,37 @@
           <button class="btn btn-ghost btn-sm" data-act="ext-remove">Remove</button>`
           : `<button class="btn btn-ghost btn-sm" data-act="ext">Grant extension</button>`}
         <span class="grow"></span>
-        <span class="gc-total" id="sg-total">${sgTotal().toFixed(2)} / ${maxTotal.toFixed(2)} pts</span>`;
+        <span class="gc-total" id="sg-total">${esc(sgTotalText())}</span>`;
 
-      // The interactive path has nothing to grade by hand. Say why, rather than showing an empty
-      // question list that looks like a loading failure.
-      const body = effortGraded
-        ? `<div class="alert alert-info">This cadet took the interactive lesson, which is graded
-             automatically from the lesson report on submission (effort → points). There are no
-             written answers to score. Reopening the grade is still available above if you need to
-             adjust it.</div>`
+      /* The non-written card, identical in behaviour to the Grade page's — same shared control,
+         same write path. It used to be an alert saying the grade came from the lesson report and
+         that Reopen was the only thing available here, which was true and was the whole problem:
+         grade.html pointed the reader AT this screen to "adjust one", and this screen's Save and
+         Finalize were disabled for exactly the cadets it sent. */
+      const body = sgEffort
+        ? (() => {
+            const { effort, source } = effortSignal(prior || null, null);
+            const measured = effort == null ? '' :
+              ` · effort <b>${effort}/5</b> <span class="muted">(${source === 'grade' ? 'graded' : 'measured by the lesson'})</span>`;
+            const control = finalized
+              ? `<span class="credit-toggle ${pointsStatus(sgEffort.points, maxTotal)}" disabled>${esc(pointsLabel(sgEffort.points, maxTotal))}</span>`
+              : pointsControl(sid, sgEffort, maxTotal, 'sgpts');
+            const note = finalized
+              ? (sgEffort.note ? `<div class="feedback-block" style="margin-top:8px">${esc(sgEffort.note)}</div>` : '')
+              : `<textarea class="feedback-input" data-act="note"
+                    placeholder="Why this score — shown to the cadet (required to withhold credit)…">${esc(sgEffort.note)}</textarea>`;
+            return `<div class="gc-body gc-effort" style="padding:0">
+              <div class="grade-q" data-effort>
+                <div class="gq-head"><span class="gq-label">${sgEffort.kind === 'interactive' ? 'Interactive lesson' : 'No submission'}</span>${control}</div>
+                ${sgEffort.kind === 'interactive'
+                  ? `<div class="gq-text">Graded from the interactive lesson report${measured}. The report itself is on this page, above.</div>`
+                  : `<div class="grade-answer empty">No submission on any graded path.</div>`}
+                ${note}
+                ${finalized ? `<div class="warn-hint" style="color:var(--muted)">This grade is published,
+                   so the score is locked. Use <b>Reopen</b> above to change it.</div>` : ''}
+              </div>
+            </div>`;
+          })()
         : sgQuestions.filter(q => Number(q.points) !== 0).map(q => {
             const idx = sgQuestions.indexOf(q);
             const ans = sgResponses[q.id] ?? '';
@@ -571,15 +606,18 @@
       // Finalized work is read-only until it is reopened, so the write buttons would only ever
       // produce a no-op or an argument with the DB. Reopen is on the header row above.
       document.getElementById('sg-actions').hidden = false;
-      document.getElementById('sg-save').disabled = finalized || effortGraded;
-      document.getElementById('sg-finalize').disabled = finalized || effortGraded;
+      document.getElementById('sg-save').disabled = finalized;
+      document.getElementById('sg-finalize').disabled = finalized;
       sgSyncDirty();
     }
+
+    /** Both models, one count. `x:` wraps the per-question map so dirtyCount sees the nested shape. */
+    const sgDirty = () => dirtyCount({ x: sgGradeData }) + (sgEffort?.modified ? 1 : 0);
 
     function sgSyncDirty() {
       const el = document.getElementById('sg-dirty');
       if (!el) return;
-      const n = dirtyCount({ x: sgGradeData });
+      const n = sgDirty();
       el.hidden = n === 0;
       if (n) el.innerHTML = `<strong>${n} unsaved change${n === 1 ? '' : 's'}.</strong>
         Nothing reaches the cadet until you Save draft or Finalize &amp; publish.`;
@@ -590,6 +628,7 @@
       if (!el) return;
       switch (el.dataset.act) {
         case 'toggle':     sgToggle(el.dataset.qid, Number(el.dataset.pts)); break;
+        case 'points':     sgTogglePoints(); break;
         case 'reopen':     sgReopen(); break;
         case 'ext':        openExt(); break;
         case 'ext-remove': removeExt(); break;
@@ -611,7 +650,19 @@
         } else if (gd.status !== 'warn' && hint) hint.remove();
       }
       const tot = document.getElementById('sg-total');
-      if (tot) tot.textContent = `${sgTotal().toFixed(2)} / ${Number(sgOffering.pointsPossible ?? 0).toFixed(2)} pts`;
+      if (tot) tot.textContent = sgTotalText();
+      sgSyncDirty();
+    }
+
+    /** The same click on the one-number card. */
+    function sgTogglePoints() {
+      if (!sgEffort) return;
+      const pp = Number(sgOffering.pointsPossible ?? 0);
+      applyPoints(sgEffort, pp);
+      const old = document.getElementById('sg-body').querySelector('.credit-change, .credit-toggle');
+      if (old) old.replaceWith(pointsControlNode(sgStudent.student_id, sgEffort, pp, 'sgpts'));
+      const tot = document.getElementById('sg-total');
+      if (tot) tot.textContent = sgTotalText();
       sgSyncDirty();
     }
 
@@ -627,9 +678,10 @@
         `Publish this grade to ${sgStudent.name}?\n\nThey will see their score and feedback immediately.`)) return;
       st.textContent = finalize ? 'Publishing…' : 'Saving…';
       const model = { [sid]: sgGradeData };
+      const effort = sgEffort ? { [sid]: sgEffort } : {};
       const res = finalize
-        ? await G.finalizeScores(ctx, sgOffering, students, model, sgGradeMap)
-        : await G.saveScores(ctx, sgOffering, students, model, sgGradeMap);
+        ? await G.finalizeScores(ctx, sgOffering, students, model, sgGradeMap, effort)
+        : await G.saveScores(ctx, sgOffering, students, model, sgGradeMap, effort);
       if (res.error) { st.textContent = ''; document.getElementById('sg-error').textContent = 'Failed: ' + res.error.message; return; }
       if (res.skipped) { st.textContent = 'Nothing to save — no grade exists yet and nothing was edited.'; return; }
       st.textContent = finalize ? '✅ Published' : '✓ Saved draft';

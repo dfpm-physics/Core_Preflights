@@ -301,6 +301,10 @@
               ? `Graded on effort<br>via the ${l.completion.path === 'interaction' ? 'interactive' : 'written'} version`
               : 'Graded on effort<br>no work was submitted'}</div>
         </div>
+        ${l.completion.instructorNote
+          ? `<div class="feedback-block" style="margin-top:12px">
+               <strong>From your instructor:</strong> ${esc(l.completion.instructorNote)}</div>`
+          : ''}
       </div>`;
     }
 

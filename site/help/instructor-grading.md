@@ -116,11 +116,30 @@ counting them as a zero in the total — a number nobody could reconcile.
 they submit later, the next run replaces the zero with a real grade. If you have already published
 the column, reopen their grade first — from this page, or from the Grade button on their own page.
 
-## Students who did the interactive lesson
+## Three kinds of card
 
-Some assignments let a student choose the interactive lesson instead of the written preflight.
-**Those students are not on the Grade tab at all.** A short line above the cards says how many were
-left out, so the count you see and the roster still add up.
+Which card a cadet gets depends on the path they are actually being graded on, not on the
+assignment alone. A short line above the cards says how the roster splits, so the counts on screen
+can be reconciled against the roster.
+
+**The written card** — the question rows described above. Shown to anyone who submitted written
+answers, and to everyone on a free-response-only lesson.
+
+**The interactive card** — shown to a cadet whose grade comes from the lesson report. It carries no
+questions, because there are none to mark: the whole grade is one number. It shows the effort the
+lesson measured and links to the full report.
+
+**The no-submission card** — shown to a cadet who has committed to nothing. On a lesson where the
+interactive path is required, that is most of the roster until the deadline nears, and it is not an
+error.
+
+*(Until 2026-08-21 there were only written cards. A cadet on an interaction-required lesson who had
+not yet submitted got a full set of written questions stamped red **No credit** — for questions
+that carry no credit for them, before their deadline had even passed. On the first such lesson that
+was about 157 of 169 cadets. Before that, from 2026-07-27, interactive takers were dropped from the
+page entirely, which replaced the wrong card with no card and no way to adjust the grade.)*
+
+## Grading the interactive and no-submission cards
 
 Their grade comes from **effort**, scored 0–5 from the lesson report: 0 earns no points, 1–2 earns
 **one point**, 3–5 earns **whatever the assignment is worth**. Full credit scales with the
@@ -128,18 +147,24 @@ assignment; partial credit is the same single point on a 2-point preflight and o
 reading reflection that is not meaningful caps effort at 2 — so at that one point — regardless of
 engagement elsewhere.
 
-**Unlike the written path, this grade is automatic and final.** It is written the moment the student
-commits, from the report, and the student sees it immediately — there is no review step and nothing
-for you to publish. That is deliberate: the effort rule above is arithmetic, not a judgement, so
-holding the result back would delay a grade nobody was going to change.
+**That grade is automatic.** It is written the moment the student commits, from the report, and the
+student sees it immediately — no review step, nothing for you to publish. The effort rule is
+arithmetic rather than judgement, so holding it back would delay a grade nobody was going to change.
+Interactive takers are likewise absent from your *Needs grading by hand* row.
 
-They are likewise absent from your *Needs grading by hand* row. If you *do* need to change an effort
-score, open the student's page from the gradebook and use **Grade** on that assignment's row —
-which lets you reopen the automatic grade and adjust it.
+**You can still override it.** Both cards carry a points control that cycles **0 → 1 → full
+credit**, and the note box beneath it is shown to the cadet. Overriding replaces the automatic score
+with yours and marks the grade as instructor-authored, so a later re-submission cannot overwrite it.
+What the lesson *measured* is left alone: the effort figure the charts and the rollup read is
+unchanged by a points decision, because a grading judgement should not silently move a measurement.
 
-*(Until 2026-07-27 these students appeared here as a read-only card marked **Interactive**. It was
-accurate and it was in the way: a card you cannot mark, in the middle of a screen for marking, which
-you had to identify and skip on every pass. Their grade is unchanged — only the card is gone.)*
+**The no-submission card can be graded too**, and awarding credit is the case it exists for — a
+cadet whose upload failed, or whose submission was lost, can be given full credit without inventing
+a written submission for them. A card nobody has touched shows **— not graded** and writes nothing:
+opening a lesson and clicking Save does not create grades for cadets you never looked at.
+
+**Withholding credit needs a reason.** The note is the only feedback these cards can carry, since
+there are no per-question comments on them, and a cadet dropped to 0 with no note is told nothing.
 
 ## Saving and publishing
 
@@ -205,7 +230,8 @@ assignment to catch a few late submissions.
 
 A student still *inside* a live extension is not here — they arrive when their own deadline passes.
 Neither is anybody who took the interactive lesson: those are graded automatically the moment the
-student commits, so there is nothing for you to do (see above).
+student commits, so there is nothing *owed*. Their card is still on the Grade tab if you want to
+override the score (see above); the queue lists work waiting on a human, not work you may revisit.
 
 Each card says what state the work is in — *no grade yet*, *AI suggested, unreviewed*, or *draft
 saved* — so you can tell what you are walking into before you select it.

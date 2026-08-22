@@ -1234,7 +1234,19 @@ tr:last-child td { border-bottom: none; }
 .grade-answer.empty { color: var(--muted); font-style: italic; }
 .feedback-input { width: 100%; min-height: 44px; font-size: 0.85em; }
 
+/* The non-written cards (interactive lesson, no submission). One decision instead of a column of
+   answers, so the single row loses its divider and the card sits visibly shorter than a written
+   one beside it — which is the honest signal that there is less here to read, not less to do. */
+.gc-body.gc-effort { padding-bottom: 8px; }
+.gc-effort .grade-q { border-bottom: none; padding: 12px 0; }
+.gc-effort .grade-answer { margin-bottom: 0; }
+.gc-effort .gq-text { margin-bottom: 8px; }
+
 .credit-toggle { border: 1px solid var(--border); border-radius: 6px; padding: 7px 13px; font-size: 0.8em; font-weight: 700; cursor: pointer; white-space: nowrap; transition: filter 0.12s, transform 0.05s; background: var(--card); color: var(--text); }
+/* "— not graded": no colour, because no judgement has been made. A red chip here would be
+   indistinguishable from a deliberate zero, which is the confusion the tag in the header exists
+   to prevent. See pointsLabel() in grade-controls.js. */
+.credit-toggle.none { background: var(--card); color: var(--muted); border-style: dashed; }
 .credit-toggle:active { transform: scale(0.97); }
 .credit-toggle.full { background: var(--alert-ok-bg);    color: var(--alert-ok-fg);    border-color: var(--alert-ok-bd); }
 .credit-toggle.warn { background: var(--alert-warn-bg);  color: var(--alert-warn-fg);  border-color: var(--alert-warn-bd); }

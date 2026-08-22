@@ -53,8 +53,19 @@ check('the student submission select asks for no report_markdown',
       !SUBMISSION_SELECT_STUDENT.includes('report_markdown'));
 check('…and no submission_activities.content — the interactive `d`',
       !SUBMISSION_SELECT_STUDENT.includes('content'));
-check('the student grade select asks for no diagnostic',
-      !GRADE_SELECT_STUDENT.includes('diagnostic'));
+/* The student select must not ask for the `diagnostic` COLUMN — that is the whole schema:1
+ * assessment: honor.status and its free text, needs_follow_up, per-objective understanding, the
+ * misconceptions the rollup turns into "Integrity concern" pills. A cadet with devtools open
+ * would be reading the finding about themselves.
+ *
+ * Since 2026-08-21 it does project one key OUT of that column, `instructor_note` — the reason a
+ * human chose a score, on an interactive grade that has no question_scores to carry feedback in.
+ * So a substring test for "diagnostic" no longer says what it means. Pin the two real properties
+ * instead: the bare column is not selected, and the only jsonb path taken is that one key. */
+check('the student grade select does not ask for the diagnostic column',
+      !/(^|,)\s*diagnostic\s*(,|$)/.test(GRADE_SELECT_STUDENT));
+check('…and the only key it projects out of it is instructor_note',
+      (GRADE_SELECT_STUDENT.match(/diagnostic->>?[a-z_]+/g) || []).join() === 'diagnostic->instructor_note');
 // …while the faculty ones still do. The rollup's flag pills are built from exactly these.
 check('the faculty selects still carry them, or the rollup goes blank',
       SUBMISSION_SELECT.includes('content') && GRADE_SELECT.includes('diagnostic'));

@@ -75,9 +75,17 @@ export const SUBMISSION_SELECT_STUDENT =
   'unlocked_by,unlocked_at,updated_at,' +
   'submission_activities(id,activity_id,payload_bytes,is_final,updated_at)';
 
+/* `instructor_note` is projected as a SINGLE JSONB KEY, never the column around it. An interactive
+ * grade has no question_scores, so it has nowhere else to carry the instructor's reason — and a
+ * score withheld without one is the thing the course rule exists to prevent. Selecting
+ * `diagnostic` outright would undo the privacy fix documented above: that column holds the whole
+ * schema:1 assessment (honor.status and its free text, needs_follow_up, per-objective
+ * understanding, misconceptions), which is the material the faculty rollup turns into
+ * "Integrity concern" pills. PostgREST projects the one key; the rest never leaves the server. */
 export const GRADE_SELECT_STUDENT =
   'id,enrollment_id,assignment_offering_id,submission_id,points_earned,points_possible,' +
-  'effort,question_scores,source,is_finalized,graded_by,graded_at,updated_at';
+  'effort,question_scores,source,is_finalized,graded_by,graded_at,updated_at,' +
+  'instructor_note:diagnostic->instructor_note';
 
 /** A per-student deadline override, with its grant and revocation provenance (migration 007).
  *  ALWAYS pair this with `.is('revoked_at', null)` when computing a deadline — see the note
@@ -223,6 +231,53 @@ export function writtenPathCounts({ hasWritten, writtenGraded, interactiveGraded
   // rendering the written card beats rendering an empty page. Hidden only when the interactive
   // is demonstrably the path carrying the points.
   return writtenGraded || !interactiveGraded;
+}
+
+/**
+ * Which grading card one student gets for one offering. The FACULTY-side counterpart to
+ * writtenPathCounts(), and here for the same reason: two independent derivations of "which path
+ * is this person on" is how the student page once offered a written path it had already taken away.
+ *
+ *   'written'       the question rows, credit chips and feedback boxes — unchanged behaviour
+ *   'interactive'   the lesson report earned this grade; there are no questions to score
+ *   'nosubmission'  nothing committed and nothing typed; there is no work here yet
+ *
+ * THE BUG THIS EXISTS TO FIX. The Grade page used to ask only `isEffortGraded()` — "did they commit
+ * to something other than the written activity" — which is false for a cadet who has not committed
+ * *at all*. On an interaction-required offering that is most of the roster right up to the deadline,
+ * and every one of them fell through to a written card whose unanswered questions default to `zero`.
+ * The screen showed ~157 cadets stamped red "No credit" on questions that carry no credit for them.
+ *
+ * `committed` outranks the policy, and deliberately so: on a `choice` offering the grading MECHANISM
+ * is a property of the student, not of the offering, and `chosen_activity_id` IS that decision.
+ *
+ * The uncommitted cases split three ways rather than two:
+ *   preflight    — written is the only graded path, so it is the card, exactly as before.
+ *   interaction  — the written activity is `practice` here. Practice answers are not work anybody
+ *                  grades, so rendering them as a gradable card is what produced the red wall.
+ *   choice       — either path is still open, so the answer depends on whether they have started
+ *                  one. Typed answers with no commit is a real state (autosave without pressing
+ *                  submit) and it must keep its written card, or the placeholder hides real work.
+ *
+ * @param {object}      a
+ * @param {object}      a.offering        a shapeOffering() result
+ * @param {object|null} a.submission      a shapeSubmission() result, or null
+ * @param {object|null} a.writtenAnswers  their answers on the written activity, if any
+ */
+export function cardKindFor({ offering, submission, writtenAnswers }) {
+  const chosen = submission?.chosenActivityId;
+  if (chosen) return chosen === offering?.written?.id ? 'written' : 'interactive';
+
+  const policy = policyOf(offering);
+  if (policy === 'preflight') return 'written';
+  if (policy === 'interaction') return 'nosubmission';
+  return hasAnyAnswer(writtenAnswers) ? 'written' : 'nosubmission';
+}
+
+/** Has this student typed anything at all into the written activity? Blank strings do not count. */
+export function hasAnyAnswer(answers) {
+  if (!answers || typeof answers !== 'object') return false;
+  return Object.values(answers).some(v => String(v ?? '').trim().length > 0);
 }
 
 /** Normalize a submission row (with its submission_activities) for rendering. */

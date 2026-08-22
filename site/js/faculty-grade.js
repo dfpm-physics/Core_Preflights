@@ -24,7 +24,7 @@ import {
   OFFERING_SELECT, GRADE_SELECT, SUBMISSION_SELECT, EXTENSION_SELECT,
   shapeOffering, withResolvedDue, offeringSections,
   shapeSubmission, questionsOf, effectiveDue, submissionLateness,
-  actionableSections, fetchAll,
+  actionableSections, fetchAll, cardKindFor,
 } from './schema.js';
 
 /** Scheduled assignments for the current offering, for the picker. */
@@ -205,20 +205,32 @@ export function isEffortGraded(offering, submission) {
  * policy, not a schema detail — but it now reads questions out of the written activity's
  * content rather than off the assignment row.
  *
- * INTERACTIVE TAKERS ARE EXCLUDED ENTIRELY, and that omission is load-bearing. Their grade comes
- * from effort; they answered no written question, so every question would default to `zero` here
- * (`hasAnswer` false), and because they DO have a prior grade row, gradeRows() rule 2 would not
- * skip them — one click of Save on somebody else's card would write `question_scores` full of
- * zeros over their effort grade and set points_earned to 0. Giving them no gradeData entry is
- * what makes rule 2 skip them for the right reason. Migration 014's
+ * ANYONE NOT ON THE WRITTEN CARD IS EXCLUDED ENTIRELY, and that omission is load-bearing. An
+ * interactive taker's grade comes from effort; they answered no written question, so every question
+ * would default to `zero` here (`hasAnswer` false), and because they DO have a prior grade row,
+ * gradeRows() rule 2 would not skip them — one click of Save on somebody else's card would write
+ * `question_scores` full of zeros over their effort grade and set points_earned to 0. Giving them
+ * no gradeData entry is what makes rule 2 skip them for the right reason. Migration 014's
  * `grades_one_grading_mechanism` CHECK is the second line of defence, turning the same mistake
  * into a rejected write rather than a silent zero.
+ *
+ * The test is cardKindFor() rather than isEffortGraded() because THIS MODEL AND buildEffortData()
+ * MUST BE EXACT COMPLEMENTS. Every student belongs to exactly one of them; a student in both would
+ * be written twice by one Save, in two upserts, and the second would silently overwrite the first.
+ * isEffortGraded() only catches a cadet who has already COMMITTED elsewhere, which on an
+ * interaction-required offering is nobody until the deadline nears — so it left the whole roster in
+ * this model, holding a full set of red zeros for questions that carry no credit for them.
  */
 export function buildGradeData(offering, students, responseMap, gradeMap, submissionMap = {}) {
   const questions = questionsOf(offering.written);
   const gradeData = {};
   (students || []).forEach(st => {
-    if (isEffortGraded(offering, submissionMap[st.student_id])) return;
+    const kind = cardKindFor({
+      offering,
+      submission: submissionMap[st.student_id],
+      writtenAnswers: responseMap?.[st.student_id],
+    });
+    if (kind !== 'written') return;
     gradeData[st.student_id] = {};
     questions.forEach(q => {
       const saved = gradeMap[st.student_id]?.qs[q.id];
@@ -251,6 +263,115 @@ export function buildGradeData(offering, students, responseMap, gradeMap, submis
     });
   });
   return gradeData;
+}
+
+/**
+ * The editable model for every student who is NOT on the written card.
+ *
+ * Complements buildGradeData() and is deliberately a SECOND model rather than more keys in the
+ * first. The two produce different row shapes — question_scores vs a bare points_earned — and
+ * confirmEffortRows()'s header already records what happens when unlike rows share an array: "a
+ * PostgREST bulk upsert requires identical keys across the array". Keeping them apart is also what
+ * lets gradeRows() go on assuming every entry it sees has questions in it.
+ *
+ * Covers both non-written cards, distinguished by `kind` for the renderer's benefit only — they
+ * save identically:
+ *   'interactive'   the lesson report earned this grade (migration 015 wrote it, finalized)
+ *   'nosubmission'  nothing committed, nothing typed — usually no grade row at all yet
+ *
+ * `points` starts at whatever is stored, and `null` when nothing is: that is the control's
+ * "— not graded" state, and it is why a placeholder does not open wearing a red zero.
+ */
+export function buildEffortData(offering, students, gradeMap = {}, submissionMap = {}, responseMap = {}) {
+  const effortData = {};
+  (students || []).forEach(st => {
+    const sid = st.student_id;
+    const kind = cardKindFor({
+      offering,
+      submission: submissionMap[sid],
+      writtenAnswers: responseMap[sid],
+    });
+    if (kind === 'written') return;
+
+    const prior = gradeMap[sid];
+    const points = prior?.pointsEarned ?? null;
+    const note = instructorNote(prior?.diagnostic);
+    effortData[sid] = {
+      kind,
+      points,
+      original: points,     // the baseline the `was → will be` pair is drawn against
+      note,
+      noteOriginal: note,
+      modified: false,
+    };
+  });
+  return effortData;
+}
+
+/** The instructor's note off a grade's diagnostic, or '' — the column is polymorphic, so guard it. */
+export function instructorNote(diagnostic) {
+  if (!diagnostic || typeof diagnostic !== 'object' || Array.isArray(diagnostic)) return '';
+  return String(diagnostic.instructor_note?.text ?? '');
+}
+
+/**
+ * Rows for the non-written cards.
+ *
+ * THREE THINGS HERE ARE LOAD-BEARING.
+ *
+ * 1. `effort: null`, ALWAYS. `app.grades_points_from_effort()` (migration 019) is a BEFORE INSERT
+ *    OR UPDATE trigger that recomputes points_earned from effort on every write where effort is
+ *    not null. Send the instructor's 1 point with the effort still populated and the trigger
+ *    silently puts it back to 2 — the override would appear to save and then not be there. Nulling
+ *    it is what hands ownership of points_earned to the instructor, and it satisfies migration
+ *    014's grades_one_grading_mechanism CHECK alongside the empty question_scores.
+ *
+ *    It costs no measurement. The artifact's own effort survives in `diagnostic` — every live
+ *    effort grade carries the schema:1 payload with the identical value — so effortSignal()
+ *    (schema.js) falls through to it and the dashboard, the histogram, the gradebook and the
+ *    rollup all keep reading the same number. What changes is its provenance, from 'grade' to
+ *    'report', which is exactly what has happened: it is the lesson's claim again, not the grade.
+ *
+ * 2. ONLY EDITED ROWS ARE SENT — the inverse of gradeRows() rule 1, for the inverse reason.
+ *    gradeRows() re-sends untouched written rows to preserve provenance a bulk write would
+ *    otherwise stamp over. Re-sending an untouched INTERACTIVE row would do the damage instead:
+ *    every derived grade in the section would have its `grades.effort` cleared by rule 1 above the
+ *    first time anyone clicked Save on somebody else's card. There is nothing to preserve on a row
+ *    nobody touched — the database already holds the derived truth — so it is not sent at all.
+ *
+ * 3. THE NOTE MERGES INTO `diagnostic`, it does not replace it. That column holds the artifact's
+ *    frozen schema:1 payload, and clobbering it would destroy the assessment the whole rollup is
+ *    built from. Clearing the text removes just that one key.
+ */
+function effortRows(ctx, offering, students, effortData, isFinalized, gradeMap = {}) {
+  const enrollmentOf = Object.fromEntries(students.map(s => [s.student_id, s.enrollment_id]));
+  const possible = Number(offering.pointsPossible ?? 0);
+  const now = new Date().toISOString();
+
+  return Object.entries(effortData || {}).map(([sid, ed]) => {
+    if (!ed?.modified) return null;                       // rule 2
+
+    const prior = gradeMap[sid];
+    const base = (prior?.diagnostic && typeof prior.diagnostic === 'object' && !Array.isArray(prior.diagnostic))
+      ? { ...prior.diagnostic } : {};
+    const text = String(ed.note ?? '').trim();
+    if (text) base.instructor_note = { text, by: ctx.user.id, at: now };
+    else delete base.instructor_note;                     // rule 3
+
+    return {
+      enrollment_id: enrollmentOf[sid],
+      assignment_offering_id: offering.offeringId,
+      effort: null,                                       // rule 1
+      question_scores: {},
+      points_earned: ed.points == null ? null : Math.min(Math.max(Number(ed.points), 0), possible),
+      points_possible: possible,
+      diagnostic: Object.keys(base).length ? base : null,
+      source: 'instructor',
+      is_finalized: isFinalized,
+      graded_by: ctx.user.id,
+      graded_at: now,
+    };
+  }).filter(r => r && r.enrollment_id);
 }
 
 /** Did the instructor actually touch this student's card in this sitting? */
@@ -396,32 +517,58 @@ export function confirmEffortRows(ctx, offering, students, gradeData, gradeMap =
   }).filter(Boolean);
 }
 
+/**
+ * TWO UPSERTS, NOT ONE, and they cannot be merged.
+ *
+ * The written rows and the effort rows carry different columns — question_scores and a summed
+ * points_earned on one side, a nulled effort and a merged diagnostic on the other. PostgREST
+ * builds its column list from the union of the payload keys, so putting them in one array would
+ * send `diagnostic` for every written student in the section (re-writing a column this page never
+ * edits, and racing any concurrent /preflight-analyze run) and `question_scores` for every
+ * interactive one. Sequential and separate is the only shape that writes exactly what was edited.
+ *
+ * Either array may be empty; an empty one is skipped rather than sent.
+ */
+async function writeGrades(ctx, offering, students, gradeData, gradeMap, effortData, isFinalized) {
+  const written = gradeRows(ctx, offering, students, gradeData, isFinalized, gradeMap);
+  const effort = effortRows(ctx, offering, students, effortData, isFinalized, gradeMap);
+  if (!written.length && !effort.length) return { data: [], error: null, skipped: true };
+
+  const ids = [];
+  for (const rows of [written, effort]) {
+    if (!rows.length) continue;
+    const res = await db.from('grades')
+      .upsert(rows, { onConflict: 'enrollment_id,assignment_offering_id' }).select('id');
+    if (res.error) return res;
+    ids.push(...(res.data || []));
+  }
+  return { data: ids, error: null };
+}
+
 /** How many rows a save/finalize would actually write — for an honest confirm prompt. */
-export function writableCount(ctx, offering, students, gradeData, gradeMap = {}) {
-  return gradeRows(ctx, offering, students, gradeData, false, gradeMap).length;
+export function writableCount(ctx, offering, students, gradeData, gradeMap = {}, effortData = {}) {
+  return gradeRows(ctx, offering, students, gradeData, false, gradeMap).length
+       + effortRows(ctx, offering, students, effortData, false, gradeMap).length;
 }
 
 /** Upsert all scores as a draft (is_finalized:false). */
-export function saveScores(ctx, offering, students, gradeData, gradeMap = {}) {
-  const rows = gradeRows(ctx, offering, students, gradeData, false, gradeMap);
-  if (!rows.length) return Promise.resolve({ data: [], error: null, skipped: true });
-  return db.from('grades').upsert(rows, { onConflict: 'enrollment_id,assignment_offering_id' });
+export function saveScores(ctx, offering, students, gradeData, gradeMap = {}, effortData = {}) {
+  return writeGrades(ctx, offering, students, gradeData, gradeMap, effortData, false);
 }
 
 /**
  * Save then publish. Finalizing is what makes a grade visible to the student
  * (grades_own_finalized), so it is also the moment worth recording in the audit log.
  */
-export async function finalizeScores(ctx, offering, students, gradeData, gradeMap = {}) {
-  const rows = gradeRows(ctx, offering, students, gradeData, true, gradeMap);
-  if (!rows.length) return { data: [], error: null, skipped: true };
-  const res = await db.from('grades').upsert(rows, { onConflict: 'enrollment_id,assignment_offering_id' })
-    .select('id');
-  if (res.error) return res;
+export async function finalizeScores(ctx, offering, students, gradeData, gradeMap = {}, effortData = {}) {
+  const res = await writeGrades(ctx, offering, students, gradeData, gradeMap, effortData, true);
+  if (res.error || res.skipped) return res;
 
   // Publishing full credit confirms a capped effort. Best-effort and deliberately after the
   // upsert: this amends a diagnostic, and failing to raise it must never cost the grades that
   // were just published. See confirmEffortRows().
+  //
+  // Written rows only — it is passed `gradeData`, and an effort row has no effort left to raise.
   for (const u of confirmEffortRows(ctx, offering, students, gradeData, gradeMap)) {
     const { error } = await db.from('grades').update({ diagnostic: u.diagnostic })
       .eq('enrollment_id', u.enrollment_id)
