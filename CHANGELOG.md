@@ -8,6 +8,48 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-22 (third) — Casey Pellizzari via Claude
+
+### The nightly lesson-cycle no longer runs on Saturday or Sunday
+
+The phys-215 cron job on the Linux box moved from `0 1 * * *` to **`0 1 * * 1-5`**, at the
+operator's request. Wrapper, gates, notification and invocation are all unchanged — only the
+schedule.
+
+**What this actually covers.** The 01:00 run closes out the deadline that passed at 23:59 the
+*previous* evening, so the run weekday is always the deadline night plus one. Mon–Fri runs cover
+deadlines falling **Sunday night through Thursday night**.
+
+Counted before changing anything, against `assignment_due_dates` for every phys-215 section
+through the end of Fall 2026 — 777 effective deadlines:
+
+| Deadline night | Sun | Mon | Tue | Wed | Thu | Fri | Sat |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Deadlines | 152 | 157 | 139 | 179 | 148 | **2** | **0** |
+
+The two Friday-night rows are `preflight-04-training` at 17:59 on 2026-08-14 — a sandbox offering,
+already past. **No graded cadet deadline loses its run.**
+
+**What was given up.** `* * *` was deliberate, and this reverses its reasoning. SKILL.md notes a run
+with nothing due records `skipped` and exits, so a no-op costs seconds — cheap insurance against the
+academy calendar moving a deadline onto an uncovered night. That insurance is gone, and the failure
+it covered is silent in a way the job's other failures are not: a missing run produces no exit code,
+no ntfy message and no `analysis_runs` row, and **"the alarm is silence" cannot catch it**, because
+Saturday and Sunday are now supposed to be silent. The symptom would be a lesson that was simply
+never graded.
+
+The mitigation is a recheck rather than an alarm: `docs/operations/SCHEDULED-LESSON-CYCLE.md`
+§"Why Mon–Fri" now carries the SQL that counts deadlines by weekday, and says to restore `* * *` if
+a `Fri` or `Sat` row ever appears. Run it after any calendar change.
+
+**Changed:** the user crontab (not version-controlled), the header comment in
+`~/.local/bin/prep-lesson-cycle.sh` (outside the repo by design), and
+`docs/operations/SCHEDULED-LESSON-CYCLE.md`, which is the only committed record of either.
+
+Job 2 (phys-110 / phys-310, Windows box, 00:33) is untouched and still nightly.
+
+---
+
 ## 2026-08-22 (second) — Casey Pellizzari via Claude
 
 ### Saving a score on the new iPREP card failed outright: `diagnostic` is NOT NULL

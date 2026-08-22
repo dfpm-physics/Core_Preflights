@@ -9,7 +9,7 @@ or in an agent's private memory (CORE.md §0 forbids the latter).
 
 | Job | Machine | Courses | Fires |
 |---|---|---|---|
-| [phys-215 wrapper](#job-1--phys-215-linux-box) | Linux box, `~/projects/Core_Preflights` | phys-215 | 01:00 nightly |
+| [phys-215 wrapper](#job-1--phys-215-linux-box) | Linux box, `~/projects/Core_Preflights` | phys-215 | 01:00 **Mon–Fri** |
 | [phys-110 / phys-310 session loop](#job-2--phys-110--phys-310-windows-box) | Windows box, `d:\01 -- AI Projects\Core_Preflights` | phys-110, phys-310 | 00:33 nightly |
 
 **The disjointness is the safety property, not the schedules.** They overlap in wall-clock time —
@@ -28,7 +28,7 @@ course is ever added to one, check it is not in the other.**
 
 | | |
 |---|---|
-| **Trigger** | user cron, `0 1 * * *` — 01:00 every night, America/Denver |
+| **Trigger** | user cron, `0 1 * * 1-5` — 01:00 Mon–Fri, America/Denver |
 | **Wrapper** | `~/.local/bin/prep-lesson-cycle.sh` — **outside the repo** (see below) |
 | **Logs** | `~/.local/state/prep/lesson-cycle-YYYY-MM-DD.log`, 30-day retention |
 | **Notification** | ntfy.sh; the topic is in the wrapper (**do not commit it** — see below) |
@@ -42,13 +42,63 @@ moved before). 01:00 is **61 minutes** after the deadline: late enough that the 
 certainly passed, early enough that a human is unlikely to be working the same offering, which is
 the mitigation the coordination gate asks for.
 
-## Why every night, not Mon–Fri
+## Why Mon–Fri
 
-SKILL.md: *"One trigger per night is enough — it fires, finds nothing due, records `skipped`, and
-exits."* Deadlines currently land Sunday through Thursday nights, so Mon–Fri would cover today's
-calendar — but the academy calendar shifts, and a schedule that only *just* covers the deadlines
-drops a lesson silently when one moves. A no-op run costs seconds and leaves an `analysis_runs` row
-saying it declined.
+**Changed 2026-08-22, at the operator's request. It used to be `* * *`, every night.**
+
+The 01:00 run closes out the deadline that passed at **23:59 the previous evening**, so the run
+weekday is always the deadline night **plus one**. Mon–Fri runs therefore cover deadlines falling
+**Sunday night through Thursday night**, and drop coverage of Friday and Saturday nights.
+
+That matches the live calendar exactly. Counted against `assignment_due_dates` on 2026-08-22 — every
+effective per-section deadline for phys-215 through the end of Fall 2026:
+
+| Deadline night | Deadlines | Run that covers it | Still fires? |
+|---|---:|---|---|
+| Sun | 152 | Mon 01:00 | yes |
+| Mon | 157 | Tue 01:00 | yes |
+| Tue | 139 | Wed 01:00 | yes |
+| Wed | 179 | Thu 01:00 | yes |
+| Thu | 148 | Fri 01:00 | yes |
+| **Fri** | **2** | Sat 01:00 | **no** |
+| **Sat** | **0** | Sun 01:00 | **no** |
+
+The two Friday-night rows are `preflight-04-training` (M1A, M3A) at 17:59 on 2026-08-14 — a sandbox
+offering, and already past. **No graded cadet deadline is uncovered.**
+
+### The trade, made knowingly
+
+Every-night was not an accident, and this reverses its reasoning. SKILL.md: *"One trigger per night
+is enough — it fires, finds nothing due, records `skipped`, and exits."* A no-op run costs seconds,
+so `* * *` was cheap insurance against exactly one failure: **the academy calendar moving a deadline
+onto a night the schedule does not cover.**
+
+That insurance is now gone, and the failure it covered is a quiet one:
+
+- A missed night does **not** fail. There is no run, so there is no exit code, no ntfy message, and
+  no `analysis_runs` row. The job did not break — it was never asked.
+- **"The alarm is silence" cannot catch it.** That rule reads a missing notification as a fault, but
+  Saturday and Sunday are now *supposed* to be silent. The two cases are indistinguishable.
+- The visible symptom would be a lesson that simply never got graded, noticed whenever someone next
+  looks at the gradebook.
+
+**So: if the calendar shifts, re-check this.** Re-run the count above and restore `0 1 * * *` if any
+graded deadline lands on a Friday or Saturday night:
+
+```sql
+SELECT to_char(COALESCE(d.due_at, o.due_at) AT TIME ZONE 'America/Denver', 'Dy') AS deadline_night,
+       count(*)
+  FROM app.assignment_offerings o
+  JOIN app.assignments a        ON a.id  = o.assignment_id
+  JOIN app.course_offerings co  ON co.id = o.course_offering_id
+  JOIN app.courses c            ON c.id  = co.course_id
+  LEFT JOIN app.assignment_due_dates d ON d.assignment_offering_id = o.id
+ WHERE c.code = 'phys-215'
+   AND COALESCE(d.due_at, o.due_at) > now()
+ GROUP BY 1 ORDER BY 2 DESC;
+```
+
+Any `Fri` or `Sat` row is a deadline the schedule will not close out.
 
 ## Why the cron entry names only the course
 
