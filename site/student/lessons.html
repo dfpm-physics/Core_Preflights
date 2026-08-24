@@ -31,6 +31,14 @@
     .lesson-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
     .study-note { font-size: 0.85em; color: var(--muted); line-height: 1.5; margin-top: 10px; }
 
+    /* The permitted-fallback panel (lessons 8-11). Deliberately NOT a .choice-card: it must not
+       read as the second half of a pair, because it is not one — see permissionBlock() below for
+       why this lesson range departs from the equal-weight rule. Muted surface, secondary button. */
+    .fallback-card { border: 1px dashed var(--border); border-radius: var(--radius);
+      padding: 14px 16px; margin-top: 4px; display: flex; flex-direction: column; gap: 8px; }
+    .fallback-title { font-weight: 700; font-size: 0.95em; }
+    .fallback-body { font-size: 0.88em; color: var(--text-soft); line-height: 1.5; }
+
     /* THE TWO TUTOR BUTTONS. Same size, always — `flex: 1 1 190px` with a max-width means one
        button and two buttons are the same width, so the control does not change shape between
        a lesson that has a backup and one that does not.
@@ -424,6 +432,63 @@
       window.scrollTo(0, 0);
     }
 
+    /**
+     * LESSONS 8-11: the interactive is the lesson; the written path is a permitted fallback.
+     *
+     * This is a DELIBERATE exception to the equal-weight rule in
+     * docs/architecture/STUDENT-LESSON-VIEW.md section 5 ("neither option is visually primary").
+     * That rule protects a preference measurement — it exists so cadets are not nudged toward one
+     * path when which path they pick is the thing being measured. Here there is no preference to
+     * measure: the course has decided these lessons are taught by iPREP, and the written path
+     * exists only for cadets who CANNOT run it (age limits, age verification, technical faults).
+     * Presenting the two as equal would misdescribe the assignment. Section 5 has been updated to
+     * record this exception rather than left to contradict the code.
+     *
+     * Both activities are still `grading_role='graded'` — the gate is presentational, and the
+     * permission is between the cadet and their instructor. Nothing here enforces it, exactly as
+     * nothing enforces the rest of the course's honour expectations.
+     */
+    function permissionBlock(l) {
+      const qn = l.preflight?.questions?.length ?? 0;
+      const writtenLabel = l.state === STATE.DRAFT ? 'Resume writing' : 'Start writing';
+      const interactiveAction = l.interactiveAvailable
+        ? `${launchRow(l, 'choice')}${launchNote(l)}`
+        : `${launchRow(l, 'choice', { disabled: true, title: 'Not available yet' })}
+           <div class="study-note" style="margin-top:8px">Available ${esc(l.interactiveGateReason || 'later')}.</div>`;
+
+      return `<div class="card">
+        <div class="card-title">Complete the interactive iPREP lesson</div>
+        <div style="font-size:0.9em;color:var(--text-soft);margin-top:6px">Worth
+          ${l.points ?? 2} points, graded on effort — not on getting the physics right.</div>
+        <div class="choice-grid" style="grid-template-columns:1fr">
+          <div class="choice-card">
+            <div class="choice-head">
+              <div class="choice-ic">⚡</div>
+              <div class="choice-titles">
+                <div class="choice-title">Interactive lesson (iPREP)</div>
+                <div class="choice-meta">Guided conversation</div>
+              </div>
+            </div>
+            <div class="choice-body">Work through the material with an AI tutor that asks you
+              questions and responds as you go, then sends a report back here.</div>
+            ${interactiveAction}
+          </div>
+        </div>
+        <div class="fallback-card">
+          <div class="fallback-title">Can’t complete the interactive lesson?</div>
+          <div class="fallback-body">If you are not able to complete the interactive iPREP and you
+            have permission from your instructor, you may complete the assignment using PREP.</div>
+          <div class="lesson-actions">
+            <a class="btn btn-secondary" href="${esc(writtenHref(l))}">${writtenLabel}</a>
+            <span class="choice-meta">Written preflight · ${qn} question${qn === 1 ? '' : 's'}</span>
+          </div>
+        </div>
+        <div class="study-note">You can switch later — but once you submit an interactive report it
+          becomes your grade for this assignment, your written answers stop counting, and you can’t
+          switch back.</div>
+      </div>`;
+    }
+
     function choiceBlock(l) {
       const qn = l.preflight?.questions?.length ?? 0;
       // A real choice only when BOTH paths carry credit. This was `l.interactiveGraded`, which is
@@ -431,6 +496,9 @@
       // choice, complete with a live "Start writing" button for a path worth nothing. openLesson
       // now keeps that case out of this function entirely; the derived policy is the test.
       const isChoice = l.policy === 'choice';
+      // The interactive is the lesson and the written path is a permitted fallback — a different
+      // layout, not a different sentence. Derived in student-lessons.js, never re-derived here.
+      if (isChoice && l.writtenByPermission) return permissionBlock(l);
       const writtenLabel = l.state === STATE.DRAFT ? 'Resume writing' : 'Start writing';
 
       const heading = isChoice ? 'Choose how to complete this assignment'

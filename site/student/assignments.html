@@ -39,7 +39,8 @@
     import {
       loadAssignmentStatuses, saveWrittenAnswers, commitSubmission,
     } from '../js/student-data.js';
-    import { questionsOf, readingLinkOf, displayPoints, releaseNote, isGradedPath } from '../js/schema.js';
+    import { questionsOf, readingLinkOf, displayPoints, releaseNote, isGradedPath,
+             isWrittenByPermission } from '../js/schema.js';
     import { esc, deadlineClass, fmtDateTime, runPage } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
@@ -111,8 +112,13 @@
           ? (a.isPast ? `Closed ${a.due.toLocaleDateString()}` : `Due ${fmtDateTime(a.due)}`)
           : 'No due date';
         // A lesson offering both paths says so, so the list never reads as two separate items.
-        const choiceTag = a.isChoice
-          ? `<span class="tag blue" title="You may do the written preflight or the interactive lesson">choice</span>` : '';
+        // A PERMITTED-FALLBACK lesson is not a choice and must not claim to be one: both paths
+        // carry credit, but the written one needs an instructor's permission, and a cadet who
+        // reads "choice" here and picks it has been told something untrue by this list.
+        const choiceTag = !a.isChoice ? ''
+          : isWrittenByPermission(a)
+            ? `<span class="tag" title="Interactive lesson — the written preflight is available only with your instructor's permission">iPREP</span>`
+            : `<span class="tag blue" title="You may do the written preflight or the interactive lesson">choice</span>`;
         return `<a class="list-item" href="?a=${encodeURIComponent(a.offeringId)}" data-open="${esc(a.offeringId)}">
           <span class="status-dot ${meta.dot}"></span>
           <div class="li-body">
@@ -315,7 +321,12 @@
       // choice lesson, decides which path is graded. Say that plainly before they click.
       const extra = current.isChoice
         ? `\n\nThis makes the written preflight the version that counts for this assignment, and you ` +
-          `won't be able to switch to the interactive lesson afterwards.`
+          `won't be able to switch to the interactive lesson afterwards.` +
+          // On a permitted-fallback lesson the interactive is the expected path, so committing to
+          // the written one is the bigger decision and the confirm is the last place to say so.
+          (isWrittenByPermission(current)
+            ? ` Submit this only if you have your instructor's permission to use PREP instead of the interactive lesson.`
+            : '')
         : '';
       if (!confirm(`Submit with ${answered} of ${qs.length} questions answered?` +
                    `\n\nYou can keep editing your answers until the deadline.${extra}`)) return;

@@ -148,6 +148,20 @@ For a written activity, `content` holds the question list — each with its text
 objective it maps to, and the expected response used for grading. For an interactive activity it
 holds the artifact link.
 
+A written activity's `content` may also carry **`access`**, which is how the questions are
+*offered* rather than whether they are graded:
+
+| `access` | What a student sees |
+|---|---|
+| absent, or `open` | The default. On a choice assignment, both paths side by side, pick either |
+| `by_permission` | The interactive lesson is presented as the assignment, with the questions offered underneath it and a note that they need their instructor's permission to use them |
+
+`by_permission` is **presentational only** — the questions still need `grading_role = 'graded'` to
+earn anything, and nothing in the software enforces the permission. Set it from the assignment
+editor's *Only with instructor permission* box, which appears under Free-Response when the allowed
+mode is *Choice*. Any value the system does not recognise is treated as `open`, deliberately: this
+setting can only ever take a route away from a student, so a mistake fails toward offering it.
+
 **Rebuilding an interactive lesson means updating that link, not creating a second activity.** The
 slug stays as it is, so already-deployed lessons keep working and slugs never proliferate.
 
@@ -337,6 +351,9 @@ students may work and which one counts:
 Marking two activities `graded` gives students a choice. Marking one `graded` and one `practice`
 makes one required and keeps the other available. Swapping those two values moves the whole class
 from one modality to the other, and students who already earned a grade keep it.
+
+A choice can be offered as a *permitted fallback* rather than a free pick — both `graded`, with the
+written activity's `content.access` set to `by_permission`. See `activities.content` above.
 
 ### enrollments and staff_assignments
 

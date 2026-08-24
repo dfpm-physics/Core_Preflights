@@ -119,6 +119,24 @@ export const ENROLLMENT_SELECT =
  * decision — with the activity slug as a stable tiebreak so ordering never depends on
  * the order PostgREST happened to return embedded rows in.
  */
+/** The two access values, and the reason there is a default.
+ *
+ *  'open'           anyone offered this path may take it — the historical behaviour, and what
+ *                   every activity written before 2026-08-24 reads as.
+ *  'by_permission'  the path carries credit, but the lesson expects the other one; a student
+ *                   takes it only with their instructor's permission.
+ *
+ *  ANYTHING UNRECOGNISED READS AS 'open', deliberately. This flag can only ever take a route
+ *  AWAY from a student, so a typo or a half-written value must fail toward offering the work,
+ *  not toward withholding it.
+ */
+export const ACCESS_OPEN = 'open';
+export const ACCESS_BY_PERMISSION = 'by_permission';
+
+function accessOf(content) {
+  return content?.access === ACCESS_BY_PERMISSION ? ACCESS_BY_PERMISSION : ACCESS_OPEN;
+}
+
 export function shapeOffering(row) {
   if (!row) return null;
   const a = row.assignments || {};
@@ -135,6 +153,11 @@ export function shapeOffering(row) {
         availableAfter: oa.available_after,
         isVisible: oa.is_visible,
         position: oa.position ?? 0,
+        // Whether this path may be taken freely or only with an instructor's say-so. Stored in
+        // the activity's own content because there is no column for it and DDL on `app` is
+        // coordinated (CORE.md section 0); `activities` rows have been per-offering since the
+        // 2026-07-28 content isolation, so a flag here is already a per-term fact.
+        access: accessOf(act.content),
       };
     })
     .sort((x, y) => (x.position - y.position) || String(x.slug || '').localeCompare(String(y.slug || '')));
@@ -207,6 +230,32 @@ export function policyOf(offering) {
 
 /** Does this modality carry credit on this offering? Explicit, so "absent" never reads as "graded". */
 export const isGradedPath = (activity) => activity?.gradingRole === 'graded';
+
+/**
+ * May the written path be taken freely, or only with an instructor's permission?
+ *
+ * Here, beside policyOf() and writtenPathCounts(), for the reason the whole module exists: the
+ * student lesson page renders it and the faculty editor writes it, and two independent
+ * derivations of one rule is exactly how those two once disagreed about whether a lesson was a
+ * choice at all.
+ *
+ * IT IS NOT A SECOND GRADING RULE. `by_permission` says nothing about credit — the written
+ * activity must still be `grading_role='graded'` for the points to exist, and this only changes
+ * how the choice is PRESENTED. A gated path that is not graded would be a lesson offering work
+ * worth nothing, which is the defect writtenPathCounts() already guards; ask both questions.
+ *
+ * Returns 'open' when there is no written activity at all, so a caller that forgets to check
+ * gets the harmless answer rather than a gate on a path that does not exist.
+ */
+export function writtenAccessOf(offering) {
+  return offering?.written?.access === ACCESS_BY_PERMISSION ? ACCESS_BY_PERMISSION : ACCESS_OPEN;
+}
+
+/** Is the written path offered, graded, AND gated behind instructor permission? The three
+ *  questions the lesson page has to ask together — a gate only means anything on a real choice. */
+export function isWrittenByPermission(offering) {
+  return !!offering?.isChoice && writtenAccessOf(offering) === ACCESS_BY_PERMISSION;
+}
 
 /**
  * May a student surface still offer the WRITTEN path as a way to complete this assignment?

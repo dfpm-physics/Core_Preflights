@@ -51,6 +51,7 @@
 import { db } from './supabase.js';
 import {
   OFFERING_SELECT, shapeOffering, questionsOf, lessonNumber, chunked, policyOf,
+  ACCESS_OPEN, ACCESS_BY_PERMISSION, writtenAccessOf,
 } from './schema.js';
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -61,6 +62,11 @@ import {
 // editor writes it. Re-exported here because this module is where the pairing with roleFor()
 // belongs, and callers (and site/faculty/lessons.html) already name this file for both.
 export { policyOf };
+
+// Same pairing, same reason: the editor WRITES `content.access` and the student lesson page READS
+// it back, so both sides must resolve it through one function. Re-exported here because callers
+// (and site/faculty/lessons.html) already name this module for the authoring half of the contract.
+export { writtenAccessOf, ACCESS_OPEN, ACCESS_BY_PERMISSION };
 
 /** grading_role for one modality under a chosen policy. */
 export function roleFor(policy, modality) {
@@ -675,11 +681,17 @@ export async function saveLesson(ctx, model, editingOfferingId) {
   const wanted = [];      // [{ id, modality }] — everything that should be attached this term
 
   if (model.written?.include) {
+    // THIS OBJECT REPLACES `content` WHOLESALE, so every key the model does not name is erased on
+    // save. `access` is here for exactly that reason: it is set per term (by script, or by the
+    // checkbox in lessons.html), and leaving it out meant the first director to open one of these
+    // lessons and press Save would silently remove the permission gate from it. A key added to
+    // `activities.content` anywhere else has to be added here too, or it does not survive an edit.
     const content = {
       questions: model.written.questions || [],
       reading_link: model.written.reading_link || null,
       reference_pdf: model.written.reference_pdf || null,
       reference_pages: model.written.reference_pages || null,
+      access: model.written.access === ACCESS_BY_PERMISSION ? ACCESS_BY_PERMISSION : ACCESS_OPEN,
     };
     if (existing.written) {
       // Snapshot the stored points BEFORE the overwrite so a change can be detected.

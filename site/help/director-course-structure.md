@@ -80,9 +80,18 @@ Those two settings cover every arrangement you need:
 | What you want | How to set it |
 |---|---|
 | Students choose their path | Mark both activities **graded** |
+| The lesson is the assignment, but questions are a fallback | Both **graded**, plus **Only with instructor permission** |
 | Everyone does the questions; the lesson is available too | Written **graded**, interactive **practice** |
 | Everyone does the interactive lesson | Interactive **graded**, written **practice** |
 | One way only | Include one activity, **graded** |
+
+**The second arrangement is for a lesson you intend everyone to do interactively, when some
+students cannot.** Age limits, age-verification failures and technical faults leave a few cadets
+unable to run the interactive lesson at all; marking both graded and ticking *Only with instructor
+permission* (under Free-Response, shown when the mode is *Choice*) presents the interactive lesson
+as the assignment and offers the questions beneath it, with a note that the student needs your
+permission to use them. Both paths still carry full credit — the permission is an expectation
+between you and the student, and nothing in the software enforces it.
 
 The third arrangement is worth setting up even when you intend everyone to use the interactive
 lesson. Keeping the questions present as practice means that if the lesson has a problem

@@ -10,6 +10,7 @@ import {
   questionsOf, questionPoints, answeredCount, lessonNumber, chunked,
   taughtSectionIds, actionableSections, isArtifactLaunchable,
   policyOf, isGradedPath, writtenPathCounts,
+  writtenAccessOf, isWrittenByPermission, ACCESS_OPEN, ACCESS_BY_PERMISSION,
 } from '../../site/js/schema.js';
 
 const NOW = new Date('2026-09-01T12:00:00Z');
@@ -94,6 +95,58 @@ eq('interactiveGraded is true for BOTH choice and interaction-only, which is why
    [true, true]);
 eq('isGradedPath is false for a practice activity', isGradedPath(interactionOnly.written), false);
 eq('isGradedPath of a missing activity is false, not undefined', isGradedPath(null), false);
+
+/* ── writtenAccessOf / isWrittenByPermission: PREP as a permitted fallback ─── */
+// Lessons 8-11 of Fall 2026: both paths carry credit, but the interactive is the assignment and
+// the written path is offered underneath it only with an instructor's permission. Stored as
+// `activities.content.access` on the written activity, because there is no column for it.
+//
+// THE DIRECTION OF FAILURE IS THE POINT. This flag can only ever take a route AWAY from a
+// student, so every unrecognised, missing or malformed value must resolve to 'open'. A bug that
+// wrongly opens a path costs nothing; a bug that wrongly closes one strands a cadet who cannot
+// run the interactive at all, which is the exact person the fallback exists for.
+section('writtenAccessOf');
+
+const gatedRaw = structuredClone(rawOffering);
+gatedRaw.offering_activities[0].grading_role = 'graded';                       // interactive
+gatedRaw.offering_activities[1].activities.content.access = ACCESS_BY_PERMISSION;
+const gated = shapeOffering(gatedRaw);
+
+eq('a written activity with no access key reads as open', writtenAccessOf(off), ACCESS_OPEN);
+eq('by_permission is carried through shapeOffering', writtenAccessOf(gated), ACCESS_BY_PERMISSION);
+eq('the flag rides on the activity, not the offering', gated.written.access, ACCESS_BY_PERMISSION);
+eq('an offering with no written activity is open, not undefined',
+   writtenAccessOf({ written: null }), ACCESS_OPEN);
+eq('a missing offering does not throw', writtenAccessOf(null), ACCESS_OPEN);
+
+// Fail-open, spelled out for each way the value can be wrong.
+for (const bad of ['by-permission', 'BY_PERMISSION', 'permission', '', null, 0, true, {}]) {
+  const raw = structuredClone(rawOffering);
+  raw.offering_activities[1].activities.content.access = bad;
+  eq(`an unrecognised access value (${JSON.stringify(bad)}) fails OPEN`,
+     writtenAccessOf(shapeOffering(raw)), ACCESS_OPEN);
+}
+
+// The gate only means anything where there is a real choice to gate. A lesson whose written path
+// is `practice` carries no credit, so "by permission" would offer work worth nothing — the same
+// defect writtenPathCounts() exists to prevent, reached by a different route.
+eq('gated AND both graded => the permission layout', isWrittenByPermission(gated), true);
+eq('the flag alone is not enough — a non-choice offering is never gated',
+   isWrittenByPermission(shapeOffering((() => {
+     const r = structuredClone(rawOffering);          // written graded, interactive practice
+     r.offering_activities[1].activities.content.access = ACCESS_BY_PERMISSION;
+     return r;
+   })())), false);
+eq('a plain choice with no flag is not gated',
+   isWrittenByPermission(shapeOffering(choiceRaw)), false);
+eq('isWrittenByPermission(null) is false, not undefined', isWrittenByPermission(null), false);
+
+// The gate is presentational: it must not disturb who is graded or which paths are offered.
+eq('gating does not change the derived policy', policyOf(gated), 'choice');
+eq('gating leaves the written path graded', isGradedPath(gated.written), true);
+eq('gating still offers the written path at all',
+   writtenPathCounts({ hasWritten: true, writtenGraded: true,
+                       interactiveGraded: true, committedModality: null }), true);
 
 /* ── writtenPathCounts: may the questions be offered at all? ───────────────── */
 section('writtenPathCounts');

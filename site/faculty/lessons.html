@@ -87,6 +87,15 @@
             <span class="muted" style="font-size:0.8em">Everything else is an ordinary question.</span>
           </div>
           <div class="field-hint" style="margin:-2px 0 10px" id="lb-pinned-hint"></div>
+          <!-- The permission gate. Presentational only: the written activity still carries credit
+               (that is grading_role, set by the policy control above), and this decides how the
+               student page OFFERS it. Meaningless unless the policy is Choice, so the row hides
+               itself otherwise rather than showing a setting that does nothing. -->
+          <div class="lb-pinned" id="lb-pf-access-row" style="display:none">
+            <label class="check-inline"><input type="checkbox" id="f-pf-bypermission">
+              <span>Only with instructor permission</span></label>
+          </div>
+          <div class="field-hint" style="margin:-2px 0 10px" id="lb-pf-access-hint"></div>
           <div class="alert alert-info" id="lb-pinned-notice" style="display:none;margin-bottom:10px"></div>
           <div id="lb-q-list"></div>
         </div>
@@ -362,6 +371,7 @@
       // with an items array the moment there is a retiring surface worth reaching.
       wireModal();
       wirePinnedToggles();
+      wireAccessToggle();
       wireDelete();
       loadRagManifest();
       // Returned, not fired and forgotten: runPage()'s catch only covers what init() hands back,
@@ -575,7 +585,8 @@
         // Both on for a new lesson: that is every course so far, and the toggle exists so a
         // course that does not want a reading question is not forced to carry one.
         pinned: { reading_time: true, reading_reflection: true },
-        written:     { include: true, reference_pdf: '', reference_pages: '', reading_link: '' },
+        written:     { include: true, reference_pdf: '', reference_pages: '', reading_link: '',
+                       access: L.ACCESS_OPEN },
         // OFF by default (director, 2026-07-30). It defaulted to on, which was harmless only while
         // the URL was mandatory: the save refused until the director dealt with the interaction, so
         // they could not create one by accident. Making the URL optional removed that stop, and
@@ -623,6 +634,10 @@
           reference_pdf:   w?.content?.reference_pdf   || '',
           reference_pages: w?.content?.reference_pages || '',
           reading_link:    w?.content?.reading_link    || '',
+          // Read through the shared helper, never off the raw jsonb: the student page resolves
+          // the same key the same way, and an unrecognised value must read as 'open' on BOTH
+          // sides or the editor shows a gate the lesson page is not applying.
+          access: L.writtenAccessOf(l),
         },
         interactive: {
           include: !!i,
@@ -808,6 +823,7 @@
       updatePolicyAvailability();     // also refreshes the policy segmented control + hint
       pinnedNotice('');
       renderPinnedToggles();
+      renderAccessToggle();
       renderQuestions();
       // Nothing typed yet, so a straight Cancel must not nag — unless a prefill link filled the
       // form, which is unsaved content the director would have to go back and re-click to recover.
@@ -1050,6 +1066,7 @@
       document.getElementById('f-policy-hint').textContent = POLICY_HINT[model.policy] || '';
       // switch_policy only means anything when there is a choice to lock.
       document.getElementById('f-switch-wrap').style.display = model.policy === 'choice' ? '' : 'none';
+      renderAccessToggle();   // only meaningful under Choice — see its header
       updateInteractionUrlHint();
     }
 
@@ -1216,6 +1233,36 @@
       el.textContent = msg || '';
     }
 
+    /* The permission gate: its checked state, its visibility, and the hint that says what it does.
+     *
+     * VISIBILITY IS TIED TO THE POLICY because the flag is only meaningful on a Choice lesson.
+     * Under Free-Response the written path is the assignment, and under AI Interaction it carries
+     * no credit at all — gating either would describe something the student page will not do, and
+     * a control whose setting is quietly ignored is worse than no control. The stored value is
+     * left alone when hidden, so flipping the policy away and back does not silently clear it. */
+    function renderAccessToggle() {
+      const box = document.getElementById('f-pf-bypermission');
+      const row = document.getElementById('lb-pf-access-row');
+      const hint = document.getElementById('lb-pf-access-hint');
+      if (!box || !row || !hint) return;
+      const meaningful = model.policy === 'choice' && model.written.include;
+      row.style.display = meaningful ? '' : 'none';
+      hint.style.display = meaningful ? '' : 'none';
+      box.checked = model.written.access === L.ACCESS_BY_PERMISSION;
+      hint.textContent = box.checked
+        ? 'Students see the interactive lesson as the assignment, with the written preflight offered '
+          + 'underneath it as a fallback they need your permission to use. Both still carry full credit.'
+        : 'Students see both paths side by side and pick either one, with no permission needed.';
+    }
+
+    function wireAccessToggle() {
+      document.getElementById('f-pf-bypermission')?.addEventListener('change', (e) => {
+        lmDirty = true;
+        model.written.access = e.target.checked ? L.ACCESS_BY_PERMISSION : L.ACCESS_OPEN;
+        renderAccessToggle();
+      });
+    }
+
     function wirePinnedToggles() {
       const apply = (role, on) => {
         model.pinned[role] = on;
@@ -1230,6 +1277,7 @@
             : '');
         }
         renderPinnedToggles();
+      renderAccessToggle();
         renderQuestions();
       };
       document.getElementById('f-q-readtime')
@@ -1588,6 +1636,8 @@
           reference_pdf:   (model.written.reference_pdf   || '').trim() || null,
           reference_pages: (model.written.reference_pages || '').trim() || null,
           reading_link:    (model.written.reading_link    || '').trim() || null,
+          access: model.written.access === L.ACCESS_BY_PERMISSION
+            ? L.ACCESS_BY_PERMISSION : L.ACCESS_OPEN,
         } : { include: false },
         interactive: model.interactive.include ? {
           include: true,

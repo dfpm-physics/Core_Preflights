@@ -8,6 +8,125 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-24 — Casey Pellizzari via Claude
+
+### PREP comes back as a permitted fallback on lessons 8-11, and a free choice from 12
+
+Lessons 7-11 were taught as **iPREP-only** — the interactive lesson was the only path carrying
+credit. A handful of cadets cannot run it at all: Google/Anthropic age limits, age-verification
+failures, and technical faults that no retry clears. Those cadets had no way to earn the points.
+The written preflight is offered again, in two different shapes, because the two lesson ranges
+want different things:
+
+- **Lessons 8-11** — iPREP is still the assignment. PREP is offered *underneath* it, with the
+  course director's wording: *"If you are not able to complete the interactive iPREP and you have
+  permission from your instructor, you may complete the assignment using PREP."*
+- **Lessons 12+** — an ordinary free choice; the cadet picks either one.
+- **Lesson 7 is untouched** in both courses and stays iPREP-only, at the director's request.
+
+**11 offerings changed, and 3 were deliberately left alone.** Written and interactive are both
+`grading_role='graded'` on all 11, so PREP carries full credit wherever it is offered:
+
+| Course | Lessons | What changed |
+|---|---|---|
+| phys-215 | 08, 09, 10 | written `practice` → `graded`, gated |
+| phys-110 | 08, 09, 11 | written activity **attached** to the term, `graded`, gated |
+| phys-110 | 12, 14, 15, 16, 17 | interactive `practice` → `graded`, free choice |
+
+Untouched, and the script prints why on every run: **phys-215 lesson 11** (LAB: Mapping Electric
+Potential — no interactive activity exists and no artifact was ever built, matching every other
+phys-215 lab), **phys-110 lesson 10** (LAB 2 — PREP is already the graded path there, so gating it
+would take away a route cadets have today), and **lesson 7** in both courses.
+
+**The phys-110 questions already existed and were merely detached.** `preflight-08`, `-09` and
+`-11` each had a complete, topic-correct written activity in the library — hockey puck / Newton's
+laws, heavy box / friction, flat circular curve — with reference PDFs and page ranges intact. They
+were simply not attached to this term's offering.
+
+**That is also why this was a script and not the Lessons page.** `pick()` in
+`site/faculty/lessons.html` hydrates the written section from `offering_activities`, so a detached
+activity reads to the editor as ABSENT: ticking "Include" would have started from blank default
+questions, and `saveLesson()` step 2 replaces `activities.content` wholesale. Saving would have
+destroyed the real Q3 on all three, silently. `scripts/fall2026/set_activity_roles.py` writes
+`offering_activities` directly, never rebuilds a question set, and asserts on read-back that no
+written activity ended up with zero questions.
+
+### Where "by permission" is stored, and why there
+
+`activities.content.access` on the written activity — `'by_permission'`, or absent/`'open'` for the
+normal case. `assignment_offerings` has no free-form jsonb (`content_snapshot` is frozen-at-publish
+and must not be repurposed) and a new column is DDL on `app`, which is coordinated and was not
+worth taking for this. `activities` rows have been per-offering since the 2026-07-28 content
+isolation, so a flag there is already a per-term fact rather than a shared-library one.
+
+Read back through `writtenAccessOf()` / `isWrittenByPermission()` in `site/js/schema.js`, beside
+`policyOf()` and for the same reason: the student page renders it and the faculty editor writes
+it, and two independent derivations of one rule is exactly how those two have disagreed before.
+**Anything unrecognised reads as `'open'`** — this flag can only ever take a route *away* from a
+student, so a typo must fail toward offering the work.
+
+**It is presentational only.** Both activities stay `graded`, PREP carries full credit when used,
+and nothing in the software enforces the permission — it is an expectation between a cadet and
+their instructor, like the rest of the course's honour expectations.
+
+### The editor keeps the flag, which it would otherwise have erased
+
+`saveLesson()` rebuilds `activities.content` from a fixed set of keys, so **the first director to
+open one of these lessons and press Save would have silently removed the gate.** `access` is now
+one of those keys, and `site/faculty/lessons.html` gains an **Only with instructor permission**
+checkbox under Free-Response — visible only when the mode is *Choice*, because the flag means
+nothing otherwise, and a control whose setting is quietly ignored is worse than no control.
+
+### A recorded exception to the equal-weight rule
+
+`docs/architecture/STUDENT-LESSON-VIEW.md` §5 requires that neither path be visually primary — a
+styled default is a thumb on the scale of the preference the design exists to measure. Lessons 8-11
+break that deliberately: there is no preference to measure, because the course has decided these
+lessons are taught by iPREP and PREP is for cadets who cannot. Presenting them as equal would
+misdescribe the assignment. **§5a now records the exception**, so the next reader finds a decision
+rather than a contradiction to tidy away.
+
+`permissionBlock()` renders the interactive card alone in a one-column grid with the fallback in a
+dashed `.fallback-card` beneath — deliberately not a second `.choice-card`, so the two cannot read
+as a pair. The Assignments list stops tagging these lessons `choice` (they are tagged `iPREP`),
+because a cadet who reads "choice" and picks PREP has been told something untrue.
+
+### Verification
+
+- `scripts/fall2026/set_activity_roles.py` — dry-run, `--commit`, then a third run reporting
+  **attach 0 · re-role 0 · access flag 0** (idempotent).
+- Read back **independently of the script** over the service role: 11/11 offerings with both
+  activities `graded`, all six gated ones carrying `by_permission`, and **all 11 written activities
+  still holding their 3 questions**.
+- The 4 untouched lessons confirmed unchanged; all 27 cadets who had already committed to iPREP on
+  lessons 8/9 keep their chosen activity and their finalized grades.
+- **A real signed-in student session** (the test cadet, through RLS, through
+  `loadAssignmentStatuses`) sees `preflight-08/09/10` as `choice=true` and `gated=true`, with
+  lessons 02-07 unchanged.
+- `tests/app-schema/` — **623 passed**, up from 584, with the same 10 pre-existing failures on a
+  clean tree before and after. New: 20 cases in `test-schema.mjs` for the access derivation and
+  its fail-open behaviour, and `test-permission-block.mjs` (19 cases), which lifts
+  `permissionBlock()` out of the shipped page and runs it — so a reworded fallback fails the suite
+  instead of shipping quietly.
+- `scripts/docs/check_doc_sources.py` — four help docs re-read and updated, not just re-dated.
+
+**Node-only for the layout.** `tests/browser-harness/` has no `node_modules` on this machine, so
+nothing was driven in a real browser: the markup and copy are proven by rendering the shipped
+function, and the CSS — the one-column grid and the dashed fallback panel — is unverified on a real
+screen and still wants a human's eyes.
+
+**One pre-existing test failure is now explained.** `test-student.mjs`'s "found an offering with
+two graded activities" fails because `bootstrap()` resolves the test cadet to the **TRAINING
+SANDBOX**, not phys-215 Fall 2026 — that student is actively enrolled in both, and the sandbox has
+no choice offerings at all. The live-term half of their enrollment has never been exercised by that
+suite. Not fixed here; recorded so the next person does not re-derive it.
+
+**`PROJECT.md` undercounts phys-110 artifacts.** It says 5; the database holds 11 interactive
+activities for phys-110 Fall 2026, each with a distinct claude.ai URL. The doc counts the
+gitignored builder cache rather than the live rows. Not corrected here.
+
+---
+
 ## 2026-08-22 (fifth) — Bryan Egner via Claude
 
 ### PHYS 110 lesson 12, and the first artifact written against the syllabus objectives

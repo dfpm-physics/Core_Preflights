@@ -131,6 +131,43 @@ of the exact measurement this is here to take (§2).
 
 The switch warning at the bottom is the **first of three**; see §6.
 
+### 5a. The one recorded exception: a permitted fallback (2026-08-24)
+
+**Fall 2026 lessons 8–11 in both courses deliberately break the equal-weight rule above**, and the
+break is the point rather than a regression to tidy away.
+
+Those lessons were taught as iPREP-only: the interactive lesson was the sole graded path. Some
+cadets cannot run it at all — Google/Anthropic age limits, age-verification failures, technical
+faults no retry clears — and for them there was no way to earn the points. The written preflight
+was reopened for those cadets **as a fallback, not as a second option**: the course's answer is
+still "do the interactive lesson", and PREP is what you use when you cannot, with your
+instructor's permission.
+
+Presenting the two as equal would therefore *misdescribe the assignment*. And there is no
+measurement to protect here: §2's equal weight exists so a free choice is not nudged, and on these
+lessons there is no free choice being offered.
+
+**How it renders** (`permissionBlock()` in `site/student/lessons.html`): the interactive card alone
+in a single-column grid, and beneath it a dashed `.fallback-card` — deliberately *not* a
+`.choice-card`, so the two cannot read as a pair — carrying the course director's wording verbatim:
+
+> If you are not able to complete the interactive iPREP and you have permission from your
+> instructor, you may complete the assignment using PREP.
+
+**How it is stored.** `activities.content.access = 'by_permission'` on the written activity, read
+back through `writtenAccessOf()` / `isWrittenByPermission()` in `site/js/schema.js`. It is
+**presentational only** — both activities are still `grading_role='graded'`, so PREP carries full
+credit when it is used, and nothing in the software enforces the permission. It is an expectation
+between a cadet and their instructor, like the rest of the course's honour expectations.
+
+Anything unrecognised in that key reads as `'open'`, on purpose: the flag can only ever take a
+route *away* from a student, so a typo must fail toward offering the work.
+
+**Lessons 12+ are an ordinary free choice** and keep the equal-weight layout above. Lesson 7 stays
+iPREP-only. Covered by `tests/app-schema/test-permission-block.mjs`, which renders the function out
+of the shipped page — including an assertion that there is exactly **one** `.choice-card`, so
+restoring the pair by accident fails the suite.
+
 ---
 
 ## 6. The three warnings

@@ -46,6 +46,7 @@ function resetTestData() {
 // location at module load), so it sits with the suites that do the same rather than before them.
 const OFFLINE = ['./test-schema.mjs', './test-config.mjs', './test-roster-import.mjs',
                  './test-db-schema.mjs', './test-nav.mjs', './test-modals.mjs',
+                 './test-permission-block.mjs',
                  './test-grade-cards.mjs', './test-legacy-actions.mjs'];
 const LIVE    = ['./test-rest.mjs', './test-student.mjs', './test-isolation.mjs'];
 

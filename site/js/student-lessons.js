@@ -22,7 +22,7 @@
 
 import { loadAssignmentStatuses } from './student-data.js';
 import { questionsOf, answeredCount, displayPoints, isActivityAvailable, isArtifactLaunchable,
-         policyOf, writtenPathCounts } from './schema.js';
+         policyOf, writtenPathCounts, isWrittenByPermission } from './schema.js';
 
 /**
  * Why the interactive path is not launchable yet, in words a student can act on.
@@ -283,6 +283,11 @@ export async function loadLessonStatuses(ctx) {
       showWrittenPath: writtenPathCounts({
         hasWritten: !!written, writtenGraded, interactiveGraded, committedModality,
       }),
+      // Both paths carry credit, but the interactive is the one the lesson expects: the written
+      // route is offered underneath it and only with an instructor's permission. Derived HERE for
+      // the same reason as showWrittenPath — a renderer that re-derives it is a renderer that can
+      // disagree with the one above about which lesson it is looking at.
+      writtenByPermission: isWrittenByPermission(item),
       committedModality,
       interactiveGateReason: interactiveAvailable ? null : interactiveGate(interactive),
 

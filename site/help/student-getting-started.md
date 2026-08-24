@@ -26,7 +26,10 @@ course director, not a system administrator.
 
 **Assignments** is the one place to look. Each card shows what is due, when it is due, and
 whether you have finished it. Some assignments ask for a written preflight, some open an
-interactive lesson, and some offer a choice between the two — the card tells you which.
+interactive lesson, and some offer a choice between the two — the card tells you which. A card
+tagged **iPREP** is the interactive lesson, with the written preflight available underneath it
+only if your instructor gives you permission; see *When the interactive lesson is the assignment*
+below.
 
 **Dashboard** is the short version of the same thing: what is due next, and what you have missed.
 
@@ -71,6 +74,23 @@ choose again.
 Sometimes the interactive lesson is offered only for **practice** — it does not carry the grade, and
 it may be locked until you submit your written preflight or the deadline passes. When that is the
 case the assignment says so, and the practice card is greyed out until it opens.
+
+### When the interactive lesson is the assignment
+
+On some lessons the interactive lesson is what you are meant to do, and the written preflight sits
+underneath it as a fallback. Those pages say so plainly:
+
+> If you are not able to complete the interactive iPREP and you have permission from your
+> instructor, you may complete the assignment using PREP.
+
+Take that at its word. **Try the interactive lesson first**, and if it will not run for you — an
+age or age-verification block, or a technical fault that retrying does not clear — **ask your
+instructor before writing the preflight instead.** Both paths are worth the same points and both
+are graded on effort, so nobody gains or loses marks by which one they take; the permission exists
+because the lesson is meant to be taught the interactive way.
+
+If your instructor says yes, just open the written preflight from that same page and answer it
+normally. Submitting it commits you to it, exactly as on any other lesson.
 
 A greyed card that says *Available once your instructor adds the lesson link* means the lesson
 itself is not ready yet — the assignment expects one, and nobody has published it. Nothing is
