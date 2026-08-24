@@ -86,6 +86,13 @@ lessons are taught by iPREP and PREP is for cadets who cannot. Presenting them a
 misdescribe the assignment. **§5a now records the exception**, so the next reader finds a decision
 rather than a contradiction to tidy away.
 
+The permission clause itself — *and you have permission from your instructor* — is **bold and
+underlined** inside the sentence, at the director's request. That half is the CONDITION rather than
+decoration: a cadet skimming the box is deciding whether it applies to them, and emphasising the
+whole sentence would have emphasised nothing. `test-permission-block.mjs` strips tags before
+checking the wording and asserts the emphasis separately, so a styling tweak never reads as a copy
+change and a reformat that splits the tags across the clause still fails.
+
 `permissionBlock()` renders the interactive card alone in a one-column grid with the fallback in a
 dashed `.fallback-card` beneath — deliberately not a second `.choice-card`, so the two cannot read
 as a pair. The Assignments list stops tagging these lessons `choice` (they are tagged `iPREP`),

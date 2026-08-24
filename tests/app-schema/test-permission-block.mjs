@@ -50,6 +50,10 @@ const SENTENCE = 'If you are not able to complete the interactive iPREP and you 
                  'from your instructor, you may complete the assignment using PREP.';
 
 const norm = s => s.replace(/\s+/g, ' ');
+// The sentence carries markup inside it (the permission clause is bold + underlined), so the
+// wording check strips tags first. Checking the raw HTML instead would make every styling tweak
+// look like a copy change, which is the opposite of what this file is for.
+const text = s => norm(s.replace(/<[^>]*>/g, ''));
 const base = { offeringId: 'off-1', points: 2, state: STATE.NOT_STARTED,
                interactiveAvailable: true, preflight: { questions: [{}, {}, {}] } };
 
@@ -57,7 +61,13 @@ const base = { offeringId: 'off-1', points: 2, state: STATE.NOT_STARTED,
 section('permissionBlock — the offered fallback');
 
 let html = norm(permissionBlock(base));
-check("carries the director's sentence verbatim", html.includes(SENTENCE));
+check("carries the director's sentence verbatim", text(permissionBlock(base)).includes(SENTENCE));
+// The CONDITION is emphasised, not the whole sentence: a cadet skimming the box is deciding
+// whether it applies to them, and this is the clause that decides it. Asserted as one unbroken
+// run so a reformat that splits the tags across the clause fails here.
+check('the permission clause is bold AND underlined',
+      /<strong><u>and you have permission from your instructor<\/u><\/strong>/.test(
+        norm(permissionBlock(base))));
 check('the interactive is the headline', html.includes('Complete the interactive iPREP lesson'));
 check('the interactive card is launchable', html.includes('<LAUNCH where=choice disabled=false>'));
 check('the written path is given a working link', html.includes('href="?a=off-1"'));
@@ -84,7 +94,8 @@ section('permissionBlock — draft, gated, and singular');
 
 html = norm(permissionBlock({ ...base, state: STATE.DRAFT }));
 check('a started draft says Resume writing', html.includes('>Resume writing<'));
-check('the permission sentence is still there mid-draft', html.includes(SENTENCE));
+check('the permission sentence is still there mid-draft',
+      text(permissionBlock({ ...base, state: STATE.DRAFT })).includes(SENTENCE));
 
 // A lesson whose interactive is not launchable yet must NOT withdraw the fallback: the cadet who
 // cannot run iPREP is exactly the person reading this, and a dead button plus no alternative is
@@ -102,9 +113,11 @@ check('one question is "1 question", not "1 questions"', !html.includes('1 quest
 
 // A malformed lesson must still render the sentence rather than throw: this layout is the last
 // thing standing between a blocked cadet and a blank page.
-html = norm(permissionBlock({ offeringId: 'off-2', state: STATE.NOT_STARTED,
-                              interactiveAvailable: true, preflight: null }));
-check('a lesson with no question set still renders the fallback', html.includes(SENTENCE));
+const bare = { offeringId: 'off-2', state: STATE.NOT_STARTED,
+               interactiveAvailable: true, preflight: null };
+html = norm(permissionBlock(bare));
+check('a lesson with no question set still renders the fallback',
+      text(permissionBlock(bare)).includes(SENTENCE));
 check('a missing points value falls back to 2', html.includes('2 points'));
 
 summary();

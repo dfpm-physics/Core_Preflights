@@ -476,8 +476,12 @@
         </div>
         <div class="fallback-card">
           <div class="fallback-title">Can’t complete the interactive lesson?</div>
-          <div class="fallback-body">If you are not able to complete the interactive iPREP and you
-            have permission from your instructor, you may complete the assignment using PREP.</div>
+          <!-- The permission clause is emphasised because it is the CONDITION, not decoration:
+               a cadet skimming this box is deciding whether it applies to them, and the half that
+               decides it is the half about asking their instructor first. -->
+          <div class="fallback-body">If you are not able to complete the interactive iPREP
+            <strong><u>and you have permission from your instructor</u></strong>, you may complete
+            the assignment using PREP.</div>
           <div class="lesson-actions">
             <a class="btn btn-secondary" href="${esc(writtenHref(l))}">${writtenLabel}</a>
             <span class="choice-meta">Written preflight · ${qn} question${qn === 1 ? '' : 's'}</span>
