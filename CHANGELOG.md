@@ -136,6 +136,14 @@ two cadets in the same course were getting different reliability.
   `GRANT ... ON ALL TABLES` covered only what existed then. **Every new table in `app` starts with
   no grants to anyone**, each migration must grant for itself, and nothing checks. The next table
   added here will hit this too.*
+
+  **021 applied, and the whole path verified end to end** — POST returned `{"success":true}`, the
+  row read back over `prep_app_read` with every counter intact (including `thinking_tokens`), a
+  deliberate extra field in the payload was **not** stored, which is the whitelist doing its job,
+  and `prep_app_read` can now read every table in `app` (0 unreadable). **One synthetic row
+  remains**, `slug = '__deploy-test__'`, `cadet_id` NULL. It is harmless and obviously not a
+  cadet, but it shows on the faculty page as one lesson involved. Clear it whenever:
+  `DELETE FROM app.tutor_error_log WHERE slug = '__deploy-test__';`
 - **No live tutor turn was run.** Verification was the two Node harnesses only (CORE.md §2): a real
   free-tier Gemini key is needed to prove the thinking budget behaves as intended against Google.
   **That is the one thing still worth checking by hand**, and it is the central claim of this entry.
