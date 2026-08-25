@@ -28,6 +28,17 @@
     // The written-preflight surface. Reached from a lesson; students navigate by lesson, not
     // by modality (STUDENT-LESSON-VIEW.md §1).
     //
+    // THIS PAGE IS A FORM, NOT A LIST. It carried a second assignment list until 2026-08-25 — a
+    // survivor of the pre-unification world, when Assignments and Interactions were two nav
+    // entries. The 2026-07-28 unification gave the nav slot to lessons.html and left this list
+    // orphaned but still reachable, via a Back button that stripped ?a= and re-rendered it. It
+    // showed only assignments whose WRITTEN path is graded, so an iPREP-only lesson was simply
+    // absent from it — and because renderNav() lights the same "Assignments" tab on both pages,
+    // a cadet could not tell the two apart and read the gap as a deleted lesson. (Reported by a
+    // phys-215 cadet about Lesson 07, whose written activity is grading_role='practice'.)
+    // Arriving here without a resolvable ?a= now sends the cadet to lessons.html, which is the
+    // one and only assignment list.
+    //
     // AGAINST SCHEMA `app`: an assignment's questions live in the WRITTEN ACTIVITY's content,
     // the student's answers live in submission_activities, and committing is an explicit act
     // that sets submissions.status='committed' and records which activity carries credit.
@@ -39,9 +50,9 @@
     import {
       loadAssignmentStatuses, saveWrittenAnswers, commitSubmission,
     } from '../js/student-data.js';
-    import { questionsOf, readingLinkOf, displayPoints, releaseNote, isGradedPath,
+    import { questionsOf, readingLinkOf, displayPoints, isGradedPath,
              isWrittenByPermission } from '../js/schema.js';
-    import { esc, deadlineClass, fmtDateTime, runPage } from '../js/util.js';
+    import { esc, fmtDateTime, runPage } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
     runPage(ctx, init);
@@ -53,98 +64,51 @@
 
     async function init() {
       initTheme();
-      renderNav(ctx, { active: 'lessons', onCourseChange: () => loadList() });
-      await loadList();
+      renderNav(ctx, { active: 'lessons', onCourseChange: () => route() });
+      await route();
     }
 
-    async function loadList() {
+    /** Fetch the written preflights this student can earn points on, into `list`. */
+    async function loadData() {
       const root = document.getElementById('main');
       if (!ctx.currentOffering) {
         root.innerHTML = `<div class="alert alert-warn">You're not enrolled in a course this term.</div>`;
-        return;
+        return false;
       }
       root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
-      // `.filter()` returns a fresh array, which would drop the release-window count the loader
-      // attached — carry it across so the list below can say what is still to come.
       const all = await loadAssignmentStatuses(ctx);
       // A written activity that is only PRESENT is not a written preflight — an interaction-only
-      // lesson attaches one as `practice`, and listing it here put a full question set with a live
-      // Submit button in front of a cadet whose commit the DB was always going to refuse. This
-      // page is "work I can earn points for by writing", so the graded role is the test.
+      // lesson attaches one as `practice`, and opening one here would put a full question set with
+      // a live Submit button in front of a cadet whose commit the DB was always going to refuse.
+      // This page is "work I can earn points for by writing", so the graded role is the test.
       list = all.filter(a => isGradedPath(a.written));
-      list.lockedCount = all.lockedCount || 0;
-
-      const params = new URLSearchParams(location.search);
-      const openId = params.get('a');
-      if (openId) {
-        const a = list.find(x => String(x.offeringId) === String(openId));
-        if (a) { openAssignment(a); return; }
-      }
-      renderList();
+      return true;
     }
 
-    const STATUS_META = {
-      'graded':      { dot: 'green', text: a => `${a.earned ?? 0} / ${a.pointsPossible} pts` },
-      'pending':     { dot: 'blue',  text: () => '⏳ Pending grading' },
-      'submitted':   { dot: 'green', text: () => '✓ Submitted' },
-      'in-progress': { dot: 'blue',  text: a => `Draft · ${a.answered}/${a.qCount} answered` },
-      'overdue':     { dot: 'red',   text: () => 'Not submitted' },
-      'not-started': { dot: 'grey',  text: () => 'Not started' },
-    };
-
-    function renderList() {
-      const root = document.getElementById('main');
-      // Preflights the release window is still holding back, said out loud rather than left as a
-      // gap in a numbered list. See schema.js releaseNote().
-      const locked = releaseNote(list.lockedCount);
-      if (!list.length) {
-        root.innerHTML = `<div class="page-head"><h1>Written preflights</h1></div>
-          <div class="empty-state"><div class="es-ic">📋</div>
-          <h3>${list.lockedCount ? 'Nothing open right now' : 'No written preflights yet'}</h3>
-          <p>${list.lockedCount ? esc(locked)
-                                : `Published preflights for ${esc(ctx.courseTitleOf(ctx.currentOffering))} will appear here.`}</p></div>`;
-        return;
-      }
-      const items = list.map(a => {
-        const meta = STATUS_META[a.status] || STATUS_META['not-started'];
-        const dueCls = deadlineClass(a.due, a.isPast);
-        const dueText = a.due
-          ? (a.isPast ? `Closed ${a.due.toLocaleDateString()}` : `Due ${fmtDateTime(a.due)}`)
-          : 'No due date';
-        // A lesson offering both paths says so, so the list never reads as two separate items.
-        // A PERMITTED-FALLBACK lesson is not a choice and must not claim to be one: both paths
-        // carry credit, but the written one needs an instructor's permission, and a cadet who
-        // reads "choice" here and picks it has been told something untrue by this list.
-        const choiceTag = !a.isChoice ? ''
-          : isWrittenByPermission(a)
-            ? `<span class="tag" title="Interactive lesson — the written preflight is available only with your instructor's permission">iPREP</span>`
-            : `<span class="tag blue" title="You may do the written preflight or the interactive lesson">choice</span>`;
-        return `<a class="list-item" href="?a=${encodeURIComponent(a.offeringId)}" data-open="${esc(a.offeringId)}">
-          <span class="status-dot ${meta.dot}"></span>
-          <div class="li-body">
-            <div class="li-title">${esc(a.title)} ${choiceTag}</div>
-            <div class="li-meta"><span>${a.qCount} question${a.qCount===1?'':'s'} · ${a.pointsPossible} pts</span>
-              <span class="deadline ${dueCls}">${esc(dueText)}</span></div>
-          </div>
-          <div class="li-right"><span class="muted" style="font-size:0.82em">${esc(meta.text(a))}</span><span class="li-arrow">›</span></div>
-        </a>`;
-      }).join('');
-      root.innerHTML = `<div class="page-head"><h1>My written preflights</h1>
-        <div class="sub">Open preflights can be edited until you submit. Click one to work on it or view your grade.</div></div>
-        <div class="list">${items}</div>
-        ${locked ? `<div class="field-hint" style="margin-top:14px">${esc(locked)}</div>` : ''}`;
-
-      root.querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', (e) => {
-        e.preventDefault();
-        const a = list.find(x => String(x.offeringId) === el.dataset.open);
-        if (a) { history.replaceState(null, '', `?a=${encodeURIComponent(a.offeringId)}`); openAssignment(a); }
-      }));
+    /**
+     * The only thing this page does is open ONE assignment's question form. Every link that
+     * legitimately arrives here carries ?a=<offeringId> — lessons.html writtenHref(), and those
+     * links only render on a lesson whose written path is graded.
+     *
+     * Anything else is a stale bookmark or a Back button, and it goes to lessons.html rather than
+     * to a list. A miss is not always a mistake: a lesson whose written path was later set to
+     * `practice` drops out of `list`, and the cadet asking for it needs the assignment list that
+     * still has it, not a page that quietly omits it. location.replace() so Back does not bounce
+     * them straight back to the miss.
+     */
+    async function route() {
+      if (!(await loadData())) return;
+      const openId = new URLSearchParams(location.search).get('a');
+      const a = openId ? list.find(x => String(x.offeringId) === String(openId)) : null;
+      if (a) { openAssignment(a); return; }
+      location.replace('lessons.html');
     }
 
-    function backToList() {
-      current = null;
-      history.replaceState(null, '', location.pathname);
-      renderList();
+    /** Back goes to the assignment list, which lives on lessons.html — the label has always said
+     *  "Back to assignments" and now it is true. location.href, not replace: Back from the list
+     *  should return to the assignment the cadet was just looking at. */
+    function backToLessons() {
+      location.href = 'lessons.html';
     }
 
     function openAssignment(a) {
@@ -192,7 +156,7 @@
             you can still read them, but they no longer count toward this assignment.</div>
           <div id="questions"></div>`;
         renderQuestions(questions, true);
-        document.getElementById('back-btn').addEventListener('click', backToList);
+        document.getElementById('back-btn').addEventListener('click', backToLessons);
         window.scrollTo(0, 0);
         return;
       }
@@ -233,7 +197,7 @@
         document.getElementById('submit-btn')?.addEventListener('click', submitAssignment);
         if (!locked) wireInputs();
       }
-      document.getElementById('back-btn').addEventListener('click', backToList);
+      document.getElementById('back-btn').addEventListener('click', backToLessons);
       window.scrollTo(0, 0);
     }
 
@@ -351,9 +315,9 @@
         btn.disabled = false; btn.textContent = 'Submit assignment'; return;
       }
 
-      await loadList();                                        // re-read the committed state
+      await loadData();                                        // re-read the committed state
       const again = list.find(x => x.offeringId === current.offeringId);
-      if (again) openAssignment(again); else backToList();
+      if (again) openAssignment(again); else backToLessons();
     }
 
     function renderReviewQuestions(questions, studentAnswers, questionScores) {

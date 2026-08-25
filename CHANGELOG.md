@@ -8,6 +8,69 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-25 — Casey Pellizzari via Claude
+
+### `student/assignments.html` loses its leftover list and becomes the question form only
+
+A phys-215 cadet reported that Lesson 07 had disappeared from their assignments. It had not. They
+were on `site/student/assignments.html`, which listed **only** assignments whose written path is
+graded (`list = all.filter(a => isGradedPath(a.written))`). Lesson 07 is iPREP-only at the
+director's request — its written activity is `grading_role='practice'` — so that page dropped it.
+It was present and correct the whole time on `site/student/lessons.html`, the list the nav bar
+links to.
+
+**The two pages were indistinguishable.** `assignments.html` calls `renderNav(ctx, { active:
+'lessons' })`, so the same **Assignments** tab lights on both. A cadet who landed on the wrong one
+read the gap as a deleted lesson rather than as a filter, and there was nothing on screen to
+suggest a second list existed.
+
+That list was a survivor of the pre-unification world, when Assignments and Interactions were two
+nav entries. The 2026-07-28 promotion gave the nav slot to `lessons.html` and left this one
+orphaned but still reachable — by the Back button, which stripped `?a=` and re-rendered it. So the
+reported path was: open a written preflight from Assignments → click Back → land on a list that
+hides every iPREP-only lesson.
+
+**The page itself was never the problem** and is not deleted. It is the written-preflight *form*
+— question inputs, autosave, Submit — and nothing else does that job; `lessons.html` has no form
+and hands off via `writtenHref()`. Keeping it as a form reached from a lesson is the documented
+design (`docs/architecture/STUDENT-LESSON-VIEW.md` §3). Only the list came out:
+
+- `renderList()`, `STATUS_META` and the old `backToList()` are gone (−84 lines, +48).
+- `loadList()` split into `loadData()` (fetch) and `route()` (decide). Arriving without a
+  resolvable `?a=` now `location.replace('lessons.html')` instead of rendering a list.
+- **Both misses redirect, not just the empty one.** A `?a=` that matches nothing previously fell
+  through to the list — the worst version of the bug, since the cadet had asked for one specific
+  lesson and got a page that omits it. A miss is not always a mistake: a lesson whose written path
+  is later set to `practice` drops out of `list`, and that cadet needs the list that still has it.
+- `backToLessons()` navigates to `lessons.html`. The button label already said *"← Back to
+  assignments"* since it was written; it is now true. It uses `location.href`, not the old
+  `history.replaceState`, so browser Back returns to the assignment instead of skipping the page.
+- Unused imports dropped: `releaseNote` (schema.js), `deadlineClass` (util.js). Both still exist
+  and are still used by `lessons.html`.
+
+**The `isGradedPath` filter stays.** It was not the bug; the fall-through was. All three
+`writtenHref()` call sites in `lessons.html` sit inside blocks that only render when the written
+path is graded, so no legitimate link can hit the filter. It remains the guard that stops a stale
+bookmark putting a live Submit button in front of a cadet whose commit the DB would refuse.
+
+**No data changed** — no migration, no DDL, no write of any kind. One file, frontend only.
+
+**Verified:** `node --check` on the extracted module (clean); every remaining import confirmed to
+have a live use and a matching export; `renderList`/`STATUS_META`/`backToList`/`releaseNote`/
+`deadlineClass`/`lockedCount` confirmed at zero references; the page served from
+`python -m http.server` loads, runs its module and redirects to sign-in with **no console errors**;
+`scripts/docs/check_doc_sources.py` clean (31/31).
+
+**NOT verified: the signed-in browser walkthrough.** Nobody has clicked Back from a real written
+preflight, or opened a stale `?a=`, as a logged-in cadet. That is the check that actually proves
+the redirect, and it is outstanding — the next operator should do it before trusting this entry.
+
+`site/help/student-getting-started.md` line 27 already told cadets *"Assignments is the one place
+to look"*, which this change makes true; it is left as written and was not re-dated, since none of
+its registered sources moved.
+
+---
+
 ## 2026-08-24 — Casey Pellizzari via Claude
 
 ### PREP comes back as a permitted fallback on lessons 8-11, and a free choice from 12
