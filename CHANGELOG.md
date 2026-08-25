@@ -119,7 +119,23 @@ two cadets in the same course were getting different reliability.
   so it is safe to simply re-run. Worth knowing for next time: without the wrapper the CREATE
   TABLE does not roll back with the policy, and it would have landed the table in `public`, which
   this project keeps only as the cutover rollback.*
-- **`log-tutor-error` is written and NOT deployed.**
+- **`log-tutor-error` is deployed** (via the dashboard) and **migration 020 is applied**, both
+  later the same day. **`021_tutor_error_log_grants.sql` is written and NOT applied**, and until
+  it is, every logged error is silently dropped.
+
+  *020 granted `SELECT` to `authenticated` and stopped, so the faculty page worked and the table
+  looked finished. Two roles had nothing. `service_role` could not INSERT — the first real POST
+  returned `{"error":"permission denied for table tutor_error_log"}`, at **HTTP 200**, because
+  the function reports its own failures in the body. That is the trap worth naming: **service_role
+  bypasses RLS, not GRANTS.** The policy work in 020 was correct and never reached. And
+  `prep_app_read` could not SELECT, making this the only table in `app` the audit tier could not
+  see — on the one table built for counting, which CORE.md §3 says must be counted from that tier
+  and not from a staff session.*
+
+  *Both were missing for one reason: schema `app` has no DEFAULT PRIVILEGES, so the bootstrap's
+  `GRANT ... ON ALL TABLES` covered only what existed then. **Every new table in `app` starts with
+  no grants to anyone**, each migration must grant for itself, and nothing checks. The next table
+  added here will hit this too.*
 - **No live tutor turn was run.** Verification was the two Node harnesses only (CORE.md §2): a real
   free-tier Gemini key is needed to prove the thinking budget behaves as intended against Google.
   **That is the one thing still worth checking by hand**, and it is the central claim of this entry.
