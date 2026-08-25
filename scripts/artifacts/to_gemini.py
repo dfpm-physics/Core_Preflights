@@ -2044,6 +2044,17 @@ def main():
             jsx, component, nl = port(src, slug, verbose=a.verbose, ladder=a.policy)
             html = wrap(jsx, component, title, COURSE_LABELS.get(course, course), lesson_label)
 
+            # The 2026-08-25 diagnosability + thinking-budget fix set, applied in the SAME
+            # operation as the port rather than left to a script someone has to remember.
+            # docs/operations/TUTOR-BEHAVIOR-PARITY.md exists because nine fixes landed on
+            # the shipped builds and none of them reached the generator; a port that quietly
+            # drops this set looks perfectly healthy while reintroducing the failure cadets
+            # reported. Idempotent, so a build that already carries it is left alone.
+            # Imported lazily: patch_tutor_diagnostics imports detect_nl from this module,
+            # so a top-level import would be circular.
+            from patch_tutor_diagnostics import apply_fixset
+            html, _fixsteps = apply_fixset(html)
+
             out = OUT_ROOT / course / f"{slug}.html"
             same = out.exists() and out.read_bytes() == html
             state = "unchanged" if same else ("write" if a.commit else "WOULD WRITE")
@@ -2066,6 +2077,16 @@ def main():
     print(f"\n{total} ported | {written} written | {unchanged} already current")
     if a.commit:
         MANIFEST.parent.mkdir(parents=True, exist_ok=True)
+        # Drop entries whose build no longer exists on disk. The manifest is MERGED across
+        # runs so a scoped port does not wipe the other courses, and it therefore never
+        # pruned -- a deleted build stayed listed and became a dead Open-the-lesson link on
+        # site/student/backup.html. Keyed on the file, so a scoped run still cannot remove a
+        # course it was not asked about.
+        for _slug in list(manifest["builds"]):
+            _c = manifest["builds"][_slug].get("course")
+            if _c and not (OUT_ROOT / _c / f"{_slug}.html").exists():
+                del manifest["builds"][_slug]
+                print(f"  prune    {_slug} (no build on disk)")
         manifest["builds"] = dict(sorted(manifest["builds"].items()))
         MANIFEST.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
                             encoding="utf-8")

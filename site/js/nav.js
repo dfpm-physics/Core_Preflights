@@ -127,6 +127,17 @@ export const USER_MENU_LINKS = [
    * discoverability; RLS is the boundary. */
   { key: 'artifacts', label: 'Artifacts', href: 'artifacts.html', icon: 'interactions', emoji: '🧪',
     facultyOnly: true },
+  /* Tutor errors -- every failure a cadet actually saw in a backup (Gemini) lesson.
+   *
+   * `facultyOnly` but NOT `adminOnly`, which was asked for explicitly: instructors,
+   * directors and admins all read it, and RLS (migration app/020) is what enforces that. An
+   * instructor needs it precisely because the useful question is comparative -- is lesson 14
+   * failing for everyone, or only for my section? -- and a per-section slice cannot answer it.
+   *
+   * It sits beside Artifacts rather than on the bar: like Artifacts it is a reference surface
+   * opened when something has gone wrong, not while teaching. */
+  { key: 'tutor-errors', label: 'Tutor errors', href: 'tutor-errors.html',
+    icon: 'info', emoji: '⚠️', facultyOnly: true },
   // Separated by a rule above it: it is a different tier from "your own account", and running the
   // two together is how somebody lands on the raw table browser looking for their password.
   { key: 'system',  label: 'System',  href: 'system.html',  icon: 'settings', emoji: '🛠️',

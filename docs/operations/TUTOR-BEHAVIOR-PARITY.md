@@ -26,7 +26,7 @@ applied because it exists somewhere.
 |---|---|---|---|---|
 | **A** | **The kit** | The build system a Claude Project reads to emit a **new** artifact. Hash-locked | `_builder/preflight-kit/skill/preflight-factory-v2/SKILL.md` (+ 6 more in `MANIFEST.sha256`) | a human, deliberately, then re-hashes the manifest |
 | **B** | **The 51 published sources** | Artifacts already built and published on claude.ai. Cached at `_builder/courses/<course>/artifacts/*.jsx`, stored in the private `artifact-sources` bucket | claude.ai serves what was **published**; the cache is what tools read | `scripts/artifacts/patch_artifacts.py`, then a human **republishes** each one |
-| **C** | **The 38 Gemini builds** | The same lessons as pages on our own site, talking to Google's API with the cadet's key. **The default path since 2026-08-21** | `site/gemini/<course>/<slug>.html` | `scripts/artifacts/to_gemini.py`, regenerated — never hand-edited |
+| **C** | **The 44 Gemini builds** | The same lessons as pages on our own site, talking to Google's API with the cadet's key. **The default path since 2026-08-21** | `site/gemini/<course>/<slug>.html` | `scripts/artifacts/to_gemini.py`, regenerated — never hand-edited |
 
 **A produces B produces C.** That is the whole reason parity matters: a behaviour absent from **A**
 is absent from every artifact built from tomorrow on, and no amount of patching **B** or **C** puts
@@ -96,6 +96,46 @@ manifest re-hashed, which is the process working.
 
 ---
 
+### 2.3 The 2026-08-25 diagnosability + thinking-budget fix set
+
+**This is the set that closes the "No usable Gemini model was found for this key" reports.**
+It went to **C only**, in one operation with the port
+(`to_gemini.py` now calls `patch_tutor_diagnostics.apply_fixset` on every build it emits), and
+to the six phys-110 builds that have no `.jsx` source and therefore cannot be ported at all.
+
+| Behaviour | A (kit) | B (sources) | C (Gemini) | Note |
+|---|---|---|---|---|
+| A thinking budget is sent, and `MAX_TOKENS` is 32768 | ❌ | ❌ | ✅ | **the cadet-facing bug** — see below |
+| A `MAX_TOKENS` blank retries the SAME model with less thinking | ❌ | ❌ | ✅ | instead of burning a rung on a fault every rung shares |
+| A 400 naming the thinking field drops it and retries | ❌ | ❌ | ✅ | so a model that rejects it does not 400 every turn |
+| `nextModel()` skips rungs already marked spent | ❌ | n/a | ✅ | `seatLadder` always did; these two disagreed |
+| `advance()` = step down, then one bounded whole-ladder retry | ❌ | n/a | ✅ | does in-app what a cadet was doing by reloading |
+| A 404 marks the model spent | ❌ | n/a | ✅ | the only walking path that never did |
+| `gemini-2.5-flash-lite` is the ladder floor | ❌ | n/a | ✅ | every pool used to END on the oldest model it used |
+| Per-model telemetry from `usageMetadata` | ❌ | ❌ | ✅ | calls, outcomes, and prompt/**thinking**/output tokens |
+| The running model is shown DURING the session | ❌ | ❌ | ✅ | it existed only on the start screen |
+| The error bar carries the full diagnostic + Copy | ❌ | ❌ | ✅ | so a screenshot is actionable |
+| Errors POST to `log-tutor-error` | ❌ | ❌ | ✅ | reaches the cadet who gives up and never submits |
+| The extension turn has a working Retry | ❌ | ❌ | ✅ | it shipped with none, at the report stage |
+
+**The one that mattered.** Gemini 3.x and 2.5 think before they answer, and thinking tokens are
+charged against `maxOutputTokens`. At the old ceiling of 8192 a long turn could spend the whole
+budget on thoughts and return a candidate with `finishReason: MAX_TOKENS` and **no text**.
+`callTutor` read that as a broken model, marked it spent, and stepped down — so a cadet with
+thousands of requests still available walked off the bottom of a five-rung ladder in a few turns
+and was told no usable model existed.
+
+**§2.1 of this file already recorded the signature and read it as capacity**: *"real INPUT tokens
+and ZERO output tokens"*, on an instructor's dashboard, far below every limit. That is what
+prompted dropping `3.7-flash` from the report pool. Dropping it was not wrong — the latency
+argument in §4.3 stands on its own — but it was not the fix, and the bug survived it on every
+other rung.
+
+**A and B are untouched and that is a real gap, not an oversight deferred quietly.** Every row
+above except the four ladder-mechanics ones applies just as much to a published Claude artifact:
+claude.ai injects the model, so the thinking rows read differently there, but the diagnostics, the
+central log and the extension-turn Retry do not. Carried into §5 as backlog.
+
 ## 3. What the Claude artifact still gets wrong
 
 **Filed as [`docs/findings/2026-08-21-claude-artifact-unwalked-failure-paths.md`](../findings/2026-08-21-claude-artifact-unwalked-failure-paths.md)** — a work order with a status, where this section is a summary. The finding carries the verification commands, the separation of what was observed from what was inferred, and the falsification conditions.
@@ -144,31 +184,37 @@ three pools. The fix is correspondingly smaller.
 
 ---
 
-## 4. The planned model ladder, and where it lives
+## 4. The model ladder — SHIPPED 2026-08-25, no longer a sandbox
 
-**It is not a branch, a draft or an uncommitted edit.** It is `scripts/artifacts/to_gemini.py`
-run with `--policy teaching` instead of `--policy legacy`, and it is checked in as
-`tests/browser/test-gemini-new-ladder.html`, emitted from the same tool on the same day as the live
-set. That is deliberate and is the property to preserve: **the sandbox cannot drift from live**,
-because both come out of one script and the only difference is a flag.
+> **This section described a proposal until 2026-08-25.** `--policy teaching` is now what all
+> **44** live builds run, applied with `to_gemini.py --policy teaching` (its default) for the 38
+> that have a `.jsx` source, and by `patch_tutor_diagnostics.py` for the six phys-110 builds that
+> do not. `--policy legacy` still exists and still reproduces the old ordering; nothing runs it.
+>
+> The sandbox `tests/browser/test-gemini-new-ladder.html` is now the same policy as live, which
+> makes it a *regression* fixture rather than a preview. Keep it: the property it was created for
+> — that the sandbox and live come out of one script and cannot drift — is unchanged.
 
-`--policy` is gated behind `tests/browser/`'s `guard.js` (global admin, or director of any
-offering), so faculty can try it and cadets cannot reach it.
+### 4.1 The ladder as it ships
 
-### 4.1 The two policies, side by side
-
-`MODEL_LITE` is a `const` and is **identical under both** — the high-quota floor where a ladder
-ends:
+`MODEL_LITE` is the high-quota floor where every pool ends:
 
 ```js
 const MODEL_LITE = [
-  "gemini-3.5-flash-lite",    // 15 RPM, 500 RPD
-  "gemini-3.1-flash-lite",    // 15 RPM, 500 RPD
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
   "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",   // added 2026-08-25 — see below
 ];
 ```
 
-| | `legacy` — **the 38 live builds** | `teaching` — **the sandbox** |
+**`gemini-2.5-flash-lite` was added because every pool used to end on `gemini-2.5-flash`, the
+oldest model on the ladder, and Google has already shut the whole 2.0 line down.** The last rung
+is the one that prints *"No usable Gemini model was found for this key"* when it fails, so ending
+there on the model most likely to be retired next is how a ladder dead-ends. flash-lite also
+carries the higher per-day allowance of the two, which is what a last rung is for.
+
+| | `legacy` — **nothing runs this** | `teaching` — **all 44 live builds** |
 |---|---|---|
 | **`MODEL_CHAT`** | `3.5-flash-lite`, `3.1-flash-lite`, `3.5-flash`, `3-flash`, `2.5-flash` | `3.6-flash`, `3.5-flash`, then `.concat(MODEL_LITE)` |
 | **`MODEL_STUDY`** | `= MODEL_CHAT` — **the same array object** | `= MODEL_LITE.slice()` |
@@ -177,6 +223,16 @@ const MODEL_LITE = [
 
 Ordering principle: **legacy is ordered by quota, teaching is ordered by capability**, with only
 the floor still ordered by quota.
+
+> **`gemini-3-flash` in the legacy column is not a real model.** Google ships
+> `gemini-3-flash-preview` and no stable `gemini-3-flash`. `discoverModel()` filtered it out
+> whenever the key listing succeeded, which is why it never surfaced as a bug; it was a dead rung
+> for as long as it shipped. It is gone from all 44 builds with the teaching ladder.
+
+> **The RPM/RPD figures that used to be quoted here per model are unverifiable and have been
+> dropped.** Google no longer publishes a free-tier table — the rate-limit docs now say limits are
+> per project and visible only in AI Studio. The numbers still in the code comments are inherited
+> guesses; do not order a ladder by them, and do not add more.
 
 ### 4.2 Why the reorder was proposed
 

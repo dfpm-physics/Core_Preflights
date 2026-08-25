@@ -87,3 +87,8 @@ _upload/
 # -- the durable record of a republish is the CHANGELOG entry and each course's index.json. Keep
 # the file locally until the republish is confirmed good, then delete it.
 artifact-url-rollback*.json
+
+# Raw cadet/instructor feedback dropped here for triage. Never committed: it is free-text student
+# writing, which CORE.md §3 bars from the repo even without a name attached, and the images are
+# screenshots of live sessions. Read it, act on it, record the CONCLUSION in docs/ or CHANGELOG.md.
+_feedback/

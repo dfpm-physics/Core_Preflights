@@ -47,7 +47,9 @@ const block = src.slice(a, src.indexOf('\n}', zMark) + 2);
 // sit together precisely so they can be lifted out and reasoned about in one piece.
 const S = new Function(block + `
   return { MODEL_LITE, MODEL_CHAT, MODEL_REPORT, MODEL_STUDY, MODEL_FALLBACKS, scoreModel,
-           seatLadder, nextModel, spentModels, onModelSwitch };`)();
+           seatLadder, nextModel, spentModels, onModelSwitch,
+           advance, resetLadder, waitedFor, diagState, modelStats, statFor, noteCall,
+           noteOk, noteFail, genConfig, MAX_TOKENS, THINKING_BUDGET };`)();
 const isLite = (n) => S.MODEL_LITE.includes(n);
 
 let pass = 0, fail = 0;
@@ -162,7 +164,7 @@ ok(isLite(S.MODEL_REPORT[S.MODEL_REPORT.length - 1]),
 // ladder ordering only makes a hang less likely.
 ok(/AbortError[\s\S]{0,400}spentModels\[activeModelRef\.current\] = true/.test(src),
    'a TIMED-OUT model is marked spent - otherwise Retry repeats the same two-minute wait');
-ok(/res\.status >= 500[\s\S]{0,600}spentModels\[activeModelRef\.current\] = true[\s\S]{0,200}nextModel\(activeModelRef\)/
+ok(/res\.status >= 500[\s\S]{0,600}spentModels\[activeModelRef\.current\] = true[\s\S]{0,300}advance\(activeModelRef\)/
      .test(src),
    'a 5xx WALKS the ladder - a 503 is per-model, not per-project, so there is something to '
    + 'switch to');
@@ -221,6 +223,100 @@ const ref4 = {};
 S.seatLadder(ref4, S.MODEL_CHAT);
 S.nextModel(ref4);
 ok(seen === ref4.current, 'a model switch notifies the connection light');
+
+
+// --- the 2026-08-25 fix set -------------------------------------------------------------
+// Every assertion below stands for a way a cadet ran out of models while their key still had
+// thousands of requests left. None of them is about ORDERING; they are about the ladder
+// refusing to declare itself dead while there was somewhere left to go.
+
+ok(S.MODEL_LITE[S.MODEL_LITE.length - 1] === 'gemini-2.5-flash-lite',
+   'the floor is 2.5-flash-lite, not 2.5-flash - a ladder must not END on its oldest model');
+ok(S.MODEL_CHAT[S.MODEL_CHAT.length - 1] === 'gemini-2.5-flash-lite' &&
+   S.MODEL_REPORT[S.MODEL_REPORT.length - 1] === 'gemini-2.5-flash-lite' &&
+   S.MODEL_STUDY[S.MODEL_STUDY.length - 1] === 'gemini-2.5-flash-lite',
+   'every pool ends on the new floor - the last rung is what prints "No usable model"');
+
+// nextModel used to advance by exactly one and could seat a model already known dead:
+// three retries and ~3.5s of backoff spent proving it again, per phase change.
+(() => {
+  Object.keys(S.spentModels).forEach(k => delete S.spentModels[k]);
+  const ref = {};
+  S.seatLadder(ref, S.MODEL_CHAT);
+  S.spentModels[S.MODEL_CHAT[1]] = true;
+  S.spentModels[S.MODEL_CHAT[2]] = true;
+  S.nextModel(ref);
+  ok(ref.current === S.MODEL_CHAT[3],
+     'nextModel SKIPS spent rungs rather than seating one it already knows is dead');
+})();
+
+// The bounded whole-ladder retry. This is the cadet's "I reloaded and it worked for another
+// minute", done in the app: a reload cleared spentModels because it is module scope.
+(() => {
+  Object.keys(S.spentModels).forEach(k => delete S.spentModels[k]);
+  S.diagState.resets = 0;
+  const ref = {};
+  S.seatLadder(ref, S.MODEL_CHAT);
+  S.MODEL_CHAT.forEach(m => { S.spentModels[m] = true; });
+  ok(S.nextModel(ref) === false, 'with every rung spent, nextModel alone gives up');
+  ok(S.advance(ref) === true,
+     'advance() takes the whole-ladder retry instead - per-minute quota clears, capacity returns');
+  ok(Object.keys(S.spentModels).length === 0,
+     'the retry actually clears the spent set, which is what a page reload used to do');
+  ok(ref.current === S.MODEL_CHAT[0], 'and re-seats at the top of the pool');
+})();
+
+(() => {
+  Object.keys(S.spentModels).forEach(k => delete S.spentModels[k]);
+  S.diagState.resets = 0;
+  const ref = {};
+  S.seatLadder(ref, S.MODEL_CHAT);
+  let resets = 0;
+  for (let i = 0; i < 12; i++) {
+    S.MODEL_CHAT.forEach(m => { S.spentModels[m] = true; });
+    if (S.advance(ref)) resets++; else break;
+  }
+  ok(resets === 2, 'the retry is BOUNDED (2) - a genuinely dead key must still terminate, got ' + resets);
+})();
+
+// The 404 path was the only walking path that never marked the model spent, so a model that
+// 404s was re-seated at the top of the next pool and 404d again, all session.
+ok(/res\.status === 404[\s\S]{0,400}spentModels\[activeModelRef\.current\] = true/.test(src),
+   'a 404 model is marked spent - every other walking path did this and this one did not');
+
+// THE cadet-facing bug: thinking tokens are charged against maxOutputTokens, so a long turn
+// spent the whole 8192 ceiling on thoughts and returned no text at all.
+ok(S.MAX_TOKENS >= 32768, 'the output ceiling covers thinking AND an answer, got ' + S.MAX_TOKENS);
+ok(S.genConfig().thinkingConfig &&
+   S.genConfig().thinkingConfig.thinkingBudget === S.THINKING_BUDGET,
+   'a thinking budget is actually sent - an uncapped model eats the whole ceiling');
+ok(S.genConfig().maxOutputTokens === S.MAX_TOKENS, 'and the ceiling rides with it');
+ok(/why === "MAX_TOKENS"[\s\S]{0,400}return callTutor\(/.test(src),
+   'a MAX_TOKENS blank retries the SAME model with less thinking, instead of burning a rung');
+ok(/thinkingSupported[\s\S]{0,300}delete body\.generationConfig\.thinkingConfig/.test(src),
+   'a model that rejects thinkingConfig drops the field instead of 400ing every turn');
+
+// Telemetry: the reason an error can now say what was tried and how often.
+(() => {
+  Object.keys(S.modelStats).forEach(k => delete S.modelStats[k]);
+  S.noteCall('m1');
+  S.noteOk('m1', { promptTokenCount: 100, thoughtsTokenCount: 8000, candidatesTokenCount: 0 });
+  S.noteFail('m1', 'empty');
+  const s1 = S.statFor('m1');
+  ok(s1.calls === 1 && s1.ok === 1 && s1.fail === 1 && s1.kinds.empty === 1,
+     'per-model counters record calls, outcomes and failure kinds');
+  ok(s1.thoughtTok === 8000,
+     'thinking tokens are captured - the number that proves the empty-answer bug');
+  ok(S.diagState.model === 'm1', 'the running model is tracked for the error panel');
+})();
+
+ok(/usageMetadata/.test(src),
+   'usageMetadata is read off the response - every build received it and threw it away');
+ok(/app\.tutor_error_log|log-tutor-error/.test(src),
+   'errors POST to the central log - the half that reaches a cadet who never submits');
+ok(!/report_markdown|messages\.map|m\.content/.test(src.slice(src.indexOf('function diagSnapshot'),
+                                                             src.indexOf('function diagText'))),
+   'the logged payload is a whitelist of counters - no conversation text can reach it');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 console.log('NOTE: no live key is used — this checks selection logic, not a real tutor turn.');

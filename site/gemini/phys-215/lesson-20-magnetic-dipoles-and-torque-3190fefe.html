@@ -209,36 +209,58 @@ const MODEL_LITE = [
   "gemini-3.5-flash-lite",    // 15 RPM, 500 RPD
   "gemini-3.1-flash-lite",    // 15 RPM, 500 RPD
   "gemini-2.5-flash",
+  // Added 2026-08-25 as the real floor. Until then every pool ended on gemini-2.5-flash --
+  // the OLDEST model on the ladder, and Google has already shut the whole 2.0 line down.
+  // Ending on the thing most likely to be retired next is how a ladder dead-ends, and a
+  // dead-ended ladder is exactly the "No usable Gemini model was found" cadets reported.
+  // flash-lite also carries the higher per-day allowance of the two, which is what a last
+  // rung is for.
+  "gemini-2.5-flash-lite",
 ];
 
-// LEGACY ORDERING -- what the live builds shipped with, ordered by quota rather than by
-// capability. Reproduced exactly so a rebuild carries the freeze fix and NOTHING else.
+// Ordinary conversation turns: ~12 of the ~14 requests in a session. THIS IS THE TEACHING, and
+// it now gets the strongest models the key can reach.
+//
+// It used to start on flash-lite to conserve quota, and on 2026-08-21 a cadet reported the
+// result: "it would try to tutor me and then give me the answer instead of walking me through
+// it." A lite model can open Socratically -- the prompt tells it to -- and then collapses into
+// stating the answer, because holding that stance across ~12 turns under a ~70,000-char
+// instruction is the reasoning-heavy part. The prompt was never the problem: every Socratic
+// line survives the port at identical counts.
+//
+// The quota it was conserving was not under pressure. Peak use across the whole course was 22
+// of flash-lite's 500 requests/day, while 3.7-flash sat at 23 of 20 -- over its cap -- because
+// the REPORT was the only thing allowed to use it.
+//
+// A session is ~14 requests, so it fits inside ONE of these 20/day caps.
+//
+// 3.7-flash IS DELIBERATELY ABSENT. It was the top rung for a few hours on 2026-08-21 and the
+// course director's verdict on trying it was immediate: the first reply took long enough that
+// the page reads as broken. That cost is paid on EVERY turn, against a quality difference over
+// 3.6 nobody could point to. A tutor a cadet gives up waiting on teaches nothing.
+//
+// It is also the likeliest explanation of the freeze that prompted all of this: the cadet who
+// hung was at the REPORT stage, which is the one request the live builds have always sent to
+// 3.7 -- a slow model, a large generation, and until that day no timeout at all.
 let MODEL_CHAT = [
-  "gemini-3.5-flash-lite",    // 15 RPM, 500 RPD
-  "gemini-3.1-flash-lite",    // 15 RPM, 500 RPD
-  "gemini-3.5-flash",         //  5 RPM,  20 RPD -- from here down, one session's worth
-  "gemini-3-flash",
-  "gemini-2.5-flash",
-];
+  "gemini-3.6-flash",         //  5 RPM,  20 RPD
+  "gemini-3.5-flash",         //  5 RPM,  20 RPD
+].concat(MODEL_LITE);
 
-// LEGACY: study shares the conversation pool, which is what the live builds do. Deliberately
-// the SAME ARRAY, not a copy -- seatLadder switches on identity, so sharing the object is what
-// makes a mode change a no-op, exactly as it behaved before MODEL_STUDY existed.
-let MODEL_STUDY = MODEL_CHAT;
+// Study mode is UNGRADED practice a cadet may run as often as they like, and it produces no
+// report and no grade. It must never spend the graded session's strong-model allowance, so it
+// is pinned to the floor -- where 478 of 500 requests/day are going unused anyway.
+let MODEL_STUDY = MODEL_LITE.slice();
 
 // The report is ONE request per session and it is the graded artifact the cohort rollup reads,
-// so it gets a strong model and can afford a 20/day cap. It falls through into the chat pool
-// rather than failing: a report from a weaker model beats no report.
-//
-// 3.7-flash headed this pool until 2026-08-21 and is GONE from it. Instructors were held in a
-// loop that never produced a summary: the report is the largest generation of the session, on
-// the slowest model, and it routinely missed the two-minute deadline. See the AbortError
-// handler in rawCall for the other half of that bug -- the ladder head alone would only have
-// moved the loop down one rung.
+// so it gets the strongest model still on the ladder and can afford a 20/day cap. It falls
+// through to the floor rather than failing: a report from a weaker model beats no report. Kept
+// as its own array even though it now matches MODEL_CHAT -- seatLadder switches on array
+// IDENTITY, and sharing one object would silently stop the report from re-seating.
 let MODEL_REPORT = [
   "gemini-3.6-flash",
   "gemini-3.5-flash",
-].concat(MODEL_CHAT);
+].concat(MODEL_LITE);
 
 // Used only if the ListModels call itself fails, so it never gets filtered against a listing.
 const MODEL_FALLBACKS = MODEL_CHAT;
@@ -250,7 +272,32 @@ const MODEL_FALLBACKS = MODEL_CHAT;
 // non-empty, so the empty-candidate guard in callTutor never runs and a report that stops
 // mid-table is accepted as a whole one, with its jitt-data fence cut off. These models
 // allow far more than this; nothing else in the session comes near it.
-const MAX_TOKENS = 8192;
+const MAX_TOKENS = 32768;
+
+// THE THINKING BUDGET -- the fix for the empty answers that emptied the ladder.
+//
+// Gemini 3.x and 2.5 think before they answer, and thinking tokens are charged against
+// maxOutputTokens. At 8192 a long turn could spend the ENTIRE ceiling on thoughts and come
+// back with finishReason MAX_TOKENS and no text. callTutor read that as a broken model,
+// marked it spent, and stepped down -- so a cadet with thousands of requests still to spend
+// walked off the bottom of the ladder in a few turns. The 2026-08-21 note recorded the
+// signature exactly ("real INPUT tokens and ZERO output tokens") and read it as capacity.
+//
+// Capped rather than switched off: a budget of 0 is rejected outright by some models, and a
+// little planning measurably helps the one big generation, the report.
+const THINKING_BUDGET = 1024;
+
+// thinkingConfig is a 2.5-era parameter and a newer model may reject it. A rejection must
+// not 400 every turn for the rest of the session, so the first 400 naming the field clears
+// this flag and the raised ceiling above carries most of the fix on its own.
+let thinkingSupported = true;
+let thinkingBudget = THINKING_BUDGET;
+
+function genConfig() {
+  const g = { maxOutputTokens: MAX_TOKENS };
+  if (thinkingSupported) g.thinkingConfig = { thinkingBudget: thinkingBudget };
+  return g;
+}
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 // Reject anything that is not a text tutor (media/embedding/live/tts) and anything
@@ -296,14 +343,80 @@ function seatLadder(ref, ladder) {
 // for the same reason apiKeyRef is: rawCall is not inside the component.
 const onModelSwitch = { fn: null };
 
+// --- Per-model telemetry ----------------------------------------------------------------
+// Counters, and nothing but counters. They exist so an error can say WHAT was tried and HOW
+// OFTEN instead of "something went wrong", and so the same facts can be logged centrally.
+//
+// There is deliberately nowhere in here to put a message. CORE.md section 3 permits a cadet
+// ID and bars free-text student writing paired with an identity, and a fixed set of integers
+// cannot leak prose by someone forgetting to redact it.
+const modelStats = {};
+
+function statFor(name) {
+  return modelStats[name] || (modelStats[name] = {
+    calls: 0, ok: 0, fail: 0, promptTok: 0, thoughtTok: 0, outTok: 0, kinds: {},
+  });
+}
+function noteCall(name) { statFor(name).calls++; diagState.model = name; }
+function noteOk(name, um) {
+  const s = statFor(name);
+  s.ok++;
+  if (um) {
+    s.promptTok  += um.promptTokenCount     || 0;
+    s.thoughtTok += um.thoughtsTokenCount   || 0;
+    s.outTok     += um.candidatesTokenCount || 0;
+  }
+}
+function noteFail(name, kind) {
+  const s = statFor(name);
+  s.fail++;
+  s.kinds[kind] = (s.kinds[kind] || 0) + 1;
+}
+
+// Everything the error panel and the central log need that is not a per-model counter.
+// Module scope for the same reason apiKeyRef is: rawCall runs outside the component.
+const diagState = { cadet: "", mode: "", phase: "start", turn: 0, startedAt: 0, resets: 0,
+                    model: "" };
+
+// A ladder whose every rung is spent is NOT permanently dead. Per-minute quota clears,
+// capacity comes back, and a model that returned one empty answer usually answers the next.
+// A cadet found this by hand and reported it -- "I reloaded and it worked for another
+// minute" -- because a reload clears spentModels, which is module scope and which nothing
+// else ever cleared. Do it in the app rather than leaving each cadet to rediscover it.
+//
+// Bounded, because a genuinely dead key must still terminate instead of looping forever.
+const LADDER_RESET_LIMIT = 2;
+
+function resetLadder(ref) {
+  if (diagState.resets >= LADDER_RESET_LIMIT) return false;
+  diagState.resets++;
+  Object.keys(spentModels).forEach((k) => { delete spentModels[k]; });
+  Object.keys(waitedFor).forEach((k) => { delete waitedFor[k]; });
+  const lad = ref.ladder || MODEL_FALLBACKS;
+  ref.i = 0;
+  ref.current = lad[0];
+  if (onModelSwitch.fn) { try { onModelSwitch.fn(ref.current); } catch (e) {} }
+  return true;
+}
+
+// The one mover every failure path calls: step down, and when there is nothing below, take
+// the bounded whole-ladder retry before declaring the session dead.
+function advance(ref) { return nextModel(ref) || resetLadder(ref); }
+
 function nextModel(ref) {
   const lad = ref.ladder || MODEL_FALLBACKS;
   if (ref.i === undefined) ref.i = Math.max(0, lad.indexOf(ref.current));
-  if (ref.i >= lad.length - 1) return false;
-  ref.i++;
-  ref.current = lad[ref.i];
-  if (onModelSwitch.fn) { try { onModelSwitch.fn(ref.current); } catch (e) {} }
-  return true;
+  // SKIPS SPENT RUNGS. It used to advance by exactly one, so it could seat a model already
+  // known dead -- three retries and ~3.5s of backoff spent proving it again, while the cadet
+  // watches a spinner. seatLadder always skipped them; this did not, and they disagreed.
+  while (ref.i < lad.length - 1) {
+    ref.i++;
+    if (spentModels[lad[ref.i]]) continue;
+    ref.current = lad[ref.i];
+    if (onModelSwitch.fn) { try { onModelSwitch.fn(ref.current); } catch (e) {} }
+    return true;
+  }
+  return false;
 }
 
 // Module-scope holder for the cadet's key. Threading it through rawCall/callTutor and
@@ -326,7 +439,7 @@ const KEY_STORE = "prep.gemini.apikey";
 // EXTRACTED AT BUILD TIME from this artifact's own prompt. Do not edit them here --
 // edit the prompt and re-port, or the app will say one thing and the tutor believe
 // another.
-const APP_OPENING = false;  // see --policy
+const APP_OPENING = true;  // see --policy
 const OPENING_HONOR = "This conversation is governed by the USAFA Honor Code. Please do this on your own \u2014 don't have someone else's responses fed in, and don't paste from solution manuals. The conversation is short and the goal is your understanding, not a perfect performance. Ready to start?";
 const OPENING_QUESTION = "What did you find interesting or difficult in the reading?";
 
@@ -684,6 +797,22 @@ const STYLE = `
   @keyframes blink { 0%,80%,100% { opacity:.2; } 40% { opacity:1; } }
 
   /* ── Error ── */
+  .tutor-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+                  margin: 0 16px 8px; font-size: 12px; color: var(--muted); }
+  .tutor-status-model { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .tutor-status-btn { padding: 1px 8px; font-size: 11px; background: var(--white);
+                      color: var(--muted); border: 1px solid var(--line);
+                      border-radius: var(--radius-sm); cursor: pointer; }
+  .error-diag { margin-top: 8px; }
+  .error-diag summary { cursor: pointer; font-size: 12px; font-weight: 600; }
+  .error-diag-pre { margin: 8px 16px; padding: 10px 12px; background: var(--white);
+                    border: 1px solid var(--line); border-radius: var(--radius-sm);
+                    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                    font-size: 11px; line-height: 1.5; color: var(--ink);
+                    white-space: pre; overflow-x: auto; }
+  .error-copy { margin-top: 8px; padding: 2px 10px; font-size: 12px; font-weight: 600;
+                background: var(--white); color: #dc2626; border: 1px solid #fecaca;
+                border-radius: var(--radius-sm); cursor: pointer; }
   .error-bar { background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius-sm);
                padding: 10px 14px; font-size: 13px; color: #dc2626; margin: 0 16px; }
   .error-retry { margin-left: 10px; padding: 2px 10px; font-size: 12px; font-weight: 600;
@@ -2550,6 +2679,7 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
       // use. A query string lands in browser history and in any Referer the page emits;
       // a header does neither. Same authentication, strictly less leakage.
       const ctl = new AbortController();
+      noteCall(activeModelRef.current);   // counts retries too -- "how many times" is the point
       const deadline = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
       try {
         res = await fetch(
@@ -2576,13 +2706,15 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
       // only made it rarer.
       if (e && e.name === "AbortError") {
         spentModels[activeModelRef.current] = true;
-        throw { kind: "timeout", status: 0, moved: nextModel(activeModelRef) };
+        noteFail(activeModelRef.current, "timeout");
+        throw { kind: "timeout", status: 0, moved: advance(activeModelRef) };
       }
       if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
       throw { kind: "network", status: 0 };
     }
     if (res.ok) return res;
     if (res.status === 401 || res.status === 403) {
+      noteFail(activeModelRef.current, "auth");
       throw { kind: "auth", status: res.status };   // missing or unauthorized key
     }
     // 400 is AMBIGUOUS on generateContent and used to be lumped in with the two above, so a
@@ -2593,12 +2725,29 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
     if (res.status === 400) {
       let msg = "";
       try { msg = String((((await res.json()) || {}).error || {}).message || ""); } catch (e) {}
+      // A model that does not accept thinkingConfig must not 400 every turn for the rest of
+      // the session. Drop the field from THIS body -- the same object the retry re-sends --
+      // and try again; the raised MAX_TOKENS carries most of the thinking fix on its own.
+      if (thinkingSupported && /thinking|thought/i.test(msg)) {
+        thinkingSupported = false;
+        noteFail(activeModelRef.current, "thinking-unsupported");
+        if (body && body.generationConfig) delete body.generationConfig.thinkingConfig;
+        attempt = 0;
+        continue;
+      }
+      noteFail(activeModelRef.current,
+               /api[\s_-]?key|credential|unregistered/i.test(msg) ? "auth" : "badrequest");
       throw /api[\s_-]?key|credential|unregistered/i.test(msg)
         ? { kind: "auth", status: 400 }
         : { kind: "badrequest", status: 400, detail: msg.slice(0, 300) };
     }
     if (res.status === 404) {                       // model unavailable -> next rung
-      if (nextModel(activeModelRef)) { attempt = 0; continue; }
+      // MARKS IT SPENT, which every other walking path did and this one did not. Without it
+      // a model that 404s is re-seated at the top of the next pool and 404s again, at every
+      // phase change, for the whole session.
+      spentModels[activeModelRef.current] = true;
+      noteFail(activeModelRef.current, "model");
+      if (advance(activeModelRef)) { attempt = 0; continue; }
       throw { kind: "model", status: 404 };
     }
     // 429 is Gemini's rate-limit AND its daily-quota code. The BODY says which: a per-minute
@@ -2632,7 +2781,7 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
       }
       if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
       spentModels[activeModelRef.current] = true;
-      if (nextModel(activeModelRef)) { attempt = 0; continue; }
+      if (advance(activeModelRef)) { attempt = 0; continue; }
       throw { kind: "quota", status: 429 };
     }
     // Server capacity, not the cadet's quota -- but it is per MODEL, not per project, and
@@ -2650,7 +2799,7 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
     if (res.status === 529 || res.status >= 500) {
       if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
       spentModels[activeModelRef.current] = true;
-      if (nextModel(activeModelRef)) { attempt = 0; continue; }
+      if (advance(activeModelRef)) { attempt = 0; continue; }
       throw { kind: "capacity", status: res.status };
     }
     throw { kind: "request", status: res.status };
@@ -2725,9 +2874,13 @@ async function callTutor(activeModelRef, history, sys, note) {
   const res = await rawCall(activeModelRef, {
     systemInstruction: { parts: [{ text: sys }] },
     contents: contents,
-    generationConfig: { maxOutputTokens: MAX_TOKENS },
+    generationConfig: genConfig(),
   });
   const data = await res.json();
+  // usageMetadata rides on EVERY response and every build threw it away. thoughtsTokenCount
+  // is the one that matters: it is how much of the output ceiling went on thinking, so a
+  // turn near the ceiling with no text is the thinking bug rather than a broken model.
+  noteOk(activeModelRef.current, data.usageMetadata);
   const cand = (data.candidates || [])[0];
   const text = ((cand && cand.content && cand.content.parts) || [])
     .map((p) => p.text || "").join("").trim();
@@ -2748,8 +2901,18 @@ async function callTutor(activeModelRef, history, sys, note) {
     if (why === "SAFETY" || why === "PROHIBITED_CONTENT") {
       throw { kind: "blocked", status: 0 };
     }
+    // MAX_TOKENS with no text is the THINKING bug, not a broken model: the whole ceiling
+    // went on thoughts and there was nothing left to say with. Walking the ladder for a
+    // fault every rung shares is what emptied it. Cut the budget and give the SAME model
+    // another go -- it is the cheapest fix and it keeps the strong model the cadet is on.
+    if (why === "MAX_TOKENS" && thinkingSupported && thinkingBudget > 0) {
+      thinkingBudget = 0;
+      noteFail(activeModelRef.current, "thinking-overrun");
+      return callTutor(activeModelRef, history, sys, note);
+    }
     spentModels[activeModelRef.current] = true;
-    throw { kind: "empty", status: 0, moved: nextModel(activeModelRef), why: why || "" };
+    noteFail(activeModelRef.current, "empty");
+    throw { kind: "empty", status: 0, moved: advance(activeModelRef), why: why || "" };
   }
   return text;
 }
@@ -2781,6 +2944,128 @@ function errorMessage(err, { afterRetries = false } = {}) {
     default:
       return "The tutor request failed (HTTP " + ((err && err.status) || "?") + "). Wait a moment and Retry.";
   }
+}
+
+// --- Diagnostics -------------------------------------------------------------------------
+// One snapshot of everything an instructor needs in order to act on a stuck cadet, in two
+// forms: `text` for the screen, a screenshot and the clipboard, and `obj` for the central
+// log. Both are built from the SAME whitelist, so what a cadet can read is exactly what
+// gets stored -- there is no second, richer copy going somewhere they cannot see.
+function diagSnapshot(err) {
+  const models = [];
+  Object.keys(modelStats).forEach((n) => {
+    const s = modelStats[n];
+    models.push({
+      model: n, calls: s.calls, ok: s.ok, fail: s.fail,
+      prompt_tokens: s.promptTok, thinking_tokens: s.thoughtTok, output_tokens: s.outTok,
+      kinds: s.kinds, spent: !!spentModels[n],
+    });
+  });
+  models.sort((a, b) => b.calls - a.calls);
+  let ua = "";
+  try { ua = String(navigator.userAgent || "").slice(0, 180); } catch (e) {}
+  const obj = {
+    v: 1,
+    slug: INTERACTION_ID,
+    cadet_id: diagState.cadet || null,
+    at: new Date().toISOString(),
+    kind: (err && err.kind) || "unknown",
+    http_status: (err && err.status) || 0,
+    finish_reason: (err && err.why) || "",
+    detail: (err && err.detail) ? String(err.detail).slice(0, 300) : "",
+    model: diagState.model || "",
+    mode: diagState.mode || "",
+    phase: diagState.phase || "",
+    turn: diagState.turn || 0,
+    session_sec: diagState.startedAt
+      ? Math.round((Date.now() - diagState.startedAt) / 1000) : 0,
+    ladder_resets: diagState.resets || 0,
+    max_tokens: MAX_TOKENS,
+    thinking_budget: thinkingSupported ? thinkingBudget : -1,
+    models: models,
+    ua: ua,
+  };
+  return { obj: obj, text: diagText(obj) };
+}
+
+// Fixed-width so it stays readable in a screenshot, which is how most of these will arrive.
+function diagText(o) {
+  const pad = (s, n) => (String(s) + "                          ").slice(0, n);
+  const k = (v) => (v >= 1000 ? (v / 1000).toFixed(1) + "k" : String(v));
+  const lines = [
+    "PREP tutor error -- show this to your instructor",
+    "lesson  : " + o.slug,
+    "cadet   : " + (o.cadet_id || "-"),
+    "when    : " + o.at,
+    "error   : " + o.kind + "   HTTP " + o.http_status
+      + (o.finish_reason ? "   finish=" + o.finish_reason : ""),
+    "model   : " + (o.model || "-"),
+    "stage   : " + (o.mode || "-") + "/" + (o.phase || "-") + "   turn " + o.turn
+      + "   session " + o.session_sec + "s   ladder resets " + o.ladder_resets,
+    "budget  : " + o.max_tokens + " tokens, thinking "
+      + (o.thinking_budget < 0 ? "not supported" : o.thinking_budget),
+  ];
+  if (o.detail) lines.push("detail  : " + o.detail);
+  lines.push("models tried:");
+  if (!o.models.length) lines.push("  (none -- failed before the first request)");
+  o.models.forEach((m) => {
+    const kinds = Object.keys(m.kinds).map((x) => x + " x" + m.kinds[x]).join(", ");
+    lines.push("  " + pad(m.model, 23)
+      + " calls " + pad(m.calls, 3) + " ok " + pad(m.ok, 3) + " fail " + pad(m.fail, 3)
+      + " tok in/think/out " + k(m.prompt_tokens) + "/" + k(m.thinking_tokens)
+      + "/" + k(m.output_tokens)
+      + (m.spent ? "  SPENT" : "") + (kinds ? "  [" + kinds + "]" : ""));
+  });
+  return lines.join("\n");
+}
+
+// The central log. Fire-and-forget in the strongest sense: the cadet is already looking at
+// one error and a logging failure must never become a second, so every path here swallows.
+//
+// It reaches the cadets the course could not see before -- the ones who hit an error, give
+// up, and never submit, so nothing about their session ever arrives. That population is
+// most of the problem, which is why this posts at the moment of failure rather than riding
+// home with the report.
+//
+// The anon key is public by design and protected by RLS, exactly as site/js/config.js is;
+// the function it calls is the only writer of app.tutor_error_log.
+const LOG_ENDPOINT = "https://shzvpmlnqfmzfmuxkowi.supabase.co/functions/v1/log-tutor-error";
+const LOG_ANON = "sb_publishable_wHlVYRPryp7fgByHaDujZw_AXvonsru";
+const LOG_STORE = "prep.gemini.errorlog";
+const errorLog = [];
+
+function logError(obj) {
+  try {
+    errorLog.push(obj);
+    while (errorLog.length > 20) errorLog.shift();
+    try { localStorage.setItem(LOG_STORE, JSON.stringify(errorLog)); } catch (e) {}
+  } catch (e) {}
+  try {
+    fetch(LOG_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": LOG_ANON,
+        "Authorization": "Bearer " + LOG_ANON,
+      },
+      body: JSON.stringify(obj),
+      keepalive: true,           // survives the cadet closing the tab in disgust
+    }).catch(() => {});
+  } catch (e) {}
+}
+
+// Every setError site goes through here, so an error cannot reach the screen without also
+// being snapshotted and logged. That is the point: the four sites drifted before, and one
+// of them (the extension turn) shipped with no Retry at all.
+function mkError(err, retryFn) {
+  const d = diagSnapshot(err);
+  logError(d.obj);
+  return {
+    kind: err && err.kind,
+    text: errorMessage(err, { afterRetries: true }),
+    diag: d,
+    retry: retryFn || null,
+  };
 }
 
 function pacingNote(activeSec, topicCount) {
@@ -2905,7 +3190,8 @@ function Lesson20Preflight() {
   const [connStatus, setConnStatus] = useState("checking"); // checking | ok | unavailable
   const [connMsg, setConnMsg] = useState("");
   const activeModelRef = useRef(MODEL_CHAT[0]);        // replaced by discoverModel()
-  const [modelName, setModelName] = useState("");          // shown on the start screen
+  const [modelName, setModelName] = useState("");          // start screen AND status strip
+  const [showDiag, setShowDiag] = useState(false);         // connection details, on demand
   useEffect(() => { apiKeyRef.current = apiKey.trim(); }, [apiKey]);
 
   const sysRef = useRef("");        // study mode's prompt, and the graded opener
@@ -3090,6 +3376,11 @@ function Lesson20Preflight() {
   async function startSession(selectedMode) {
     if (started) return;
     if (selectedMode === "graded" && !cadetId.trim()) return;
+    // Identify the session for the error log. Cadet ID only -- never a name (CORE.md s3).
+    diagState.cadet = cadetId.trim();
+    diagState.mode = selectedMode;
+    diagState.phase = "opening";
+    diagState.startedAt = Date.now();
     const localTime = new Date().toLocaleString();
     const sys = selectedMode === "graded"
       ? buildSystemPrompt(cadetId.trim(), localTime, "probe")
@@ -3173,11 +3464,7 @@ function Lesson20Preflight() {
       const reply = await callTutor(activeModelRef, history, sys, null); // no pacing note on the opener
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch (err) {
-      setError({
-        kind: err.kind,
-        text: errorMessage(err, { afterRetries: true }),
-        retry: () => startRetry(selectedMode, sys, resume || seed),
-      });
+      setError(mkError(err, () => startRetry(selectedMode, sys, resume || seed)));
     } finally { setLoading(false); }
   }
   function begin() { startSession("graded"); }
@@ -3192,15 +3479,13 @@ function Lesson20Preflight() {
       const reply = await callTutor(activeModelRef, history, sys, null);
       setMessages([...history, { role: "assistant", content: reply }]);
     } catch (err) {
-      setError({
-        kind: err.kind,
-        text: errorMessage(err, { afterRetries: true }),
-        retry: () => startRetry(selectedMode, sys, seed),
-      });
+      setError(mkError(err, () => startRetry(selectedMode, sys, seed)));
     } finally { setLoading(false); }
   }
 
   async function runTurn(history) {
+    diagState.turn++;
+    diagState.phase = reportPhaseRef.current ? "report" : "chat";
     const pacing = mode === "graded" ? pacingNote(activeSecRef.current, PROBE_TOPIC_COUNT) : null;
     // Exactly two visible assistant turns means both are the scripted ones and this is the
     // first request of the session.
@@ -3213,11 +3498,7 @@ function Lesson20Preflight() {
       const reply = await callTutor(activeModelRef, history, sysFor(), note);
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch (err) {
-      setError({
-        kind: err.kind,
-        text: errorMessage(err, { afterRetries: true }),
-        retry: () => runTurn(history),
-      });
+      setError(mkError(err, () => runTurn(history)));
     } finally { setLoading(false); }
   }
 
@@ -3359,7 +3640,10 @@ function Lesson20Preflight() {
         const reply = await callTutor(activeModelRef, history, sysFor(), null);
         setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
       } catch (err) {
-        setError({ kind: err.kind, text: errorMessage(err, { afterRetries: true }) });
+        setError(mkError(err, () => {
+          extSentRef.current = false;
+          setError(null);
+        }));
       } finally { setLoading(false); }
     })();
   }, [hasReport, mode, loading, messages, payloadState]);
@@ -3563,10 +3847,34 @@ function Lesson20Preflight() {
           )}
         </div>
 
+        {started && (
+          <div className="tutor-status">
+            <span className="tutor-status-model">Tutor model: {modelName || "—"}</span>
+            <button className="tutor-status-btn" onClick={() => setShowDiag((v) => !v)}>
+              {showDiag ? "Hide connection details" : "Connection details"}
+            </button>
+          </div>
+        )}
+        {started && showDiag && !error && (
+          <pre className="error-diag-pre">{diagSnapshot(null).text}</pre>
+        )}
+
         {error && (
           <div className="error-bar">
-            ⚠ {error.text}
-            {error.retry && <button className="error-retry" onClick={error.retry}>Retry</button>}
+            <div>
+              ⚠ {error.text}
+              {error.retry &&
+                <button className="error-retry" onClick={error.retry}>Retry</button>}
+            </div>
+            {error.diag && (
+              <details className="error-diag" open>
+                <summary>Details — send these to your instructor</summary>
+                <pre className="error-diag-pre">{error.diag.text}</pre>
+                <button className="error-copy" onClick={() => {
+                  try { navigator.clipboard.writeText(error.diag.text); } catch (e) {}
+                }}>Copy details</button>
+              </details>
+            )}
           </div>
         )}
 

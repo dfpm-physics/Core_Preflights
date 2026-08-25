@@ -8,6 +8,121 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-25 — Matthew Recker via Claude
+
+### "No usable Gemini model was found for this key" — the thinking budget, and everything the error could not tell us
+
+Instructors forwarded cadet reports: a backup lesson works for a few minutes, then says no usable
+Gemini model was found, and *"I reloaded and it worked for another minute before the same error."*
+Two more instructors reported cadets stuck mid-conversation and were collecting names after class.
+The course director's read was that cadets should have had plenty of requests left. That was right,
+and it was the clue.
+
+**The cause was the thinking budget, not quota and not the key.** Gemini 3.x and 2.5 think before
+they answer, and thinking tokens are charged against `maxOutputTokens`. The builds set that to
+8192, so a long turn could spend the entire ceiling on thoughts and return a candidate with
+`finishReason: MAX_TOKENS` and **no text at all**. `callTutor` treated an empty answer as a broken
+model, marked it spent, and stepped down the ladder — a fault every rung shares, so a cadet with
+thousands of requests still available walked off the bottom of a five-rung ladder in a few turns.
+`spentModels` is module scope and nothing ever cleared it, which is exactly why a page reload
+bought another minute.
+
+`docs/operations/TUTOR-BEHAVIOR-PARITY.md` §2.1 had already recorded the signature — *"real INPUT
+tokens and ZERO output tokens"* on an instructor's dashboard, far below every limit — and read it
+as Google capacity. Dropping `3.7-flash` from the report pool on that reading was not wrong (the
+latency argument stands), but it was not the fix, and the bug survived on every other rung.
+
+**Shipped to all 44 live Gemini builds**, verified with `gemini-model-ladder.mjs` (48 assertions,
+extended for this set) and `gemini-build.mjs` (renders in a real browser) on one build per course:
+
+- **A thinking budget of 1024 and `MAX_TOKENS` 32768.** A `MAX_TOKENS` blank now retries the *same*
+  model with thinking cut to 0 rather than burning a rung. A 400 naming the field drops it from
+  the body and retries, so a model that rejects `thinkingConfig` does not 400 every turn.
+- **`nextModel()` skips rungs already marked spent.** `seatLadder` always did; these two disagreed,
+  so a walk could seat a model already known dead and spend three retries and ~3.5s proving it.
+- **`advance()` = step down, then one bounded whole-ladder retry** (limit 2). This does in the app
+  what cadets were doing by hand: per-minute quota clears, capacity returns, and a model that
+  returned one empty answer usually answers the next.
+- **A 404 marks the model spent.** It was the only walking path that never did, so a 404ing model
+  was re-seated at the top of every subsequent pool.
+- **`gemini-2.5-flash-lite` is the new floor.** Every pool used to end on `gemini-2.5-flash` — the
+  oldest model in use, with the 2.0 line already shut down. The last rung is the one that prints
+  this error when it fails.
+- **`gemini-3-flash` is gone.** It is not a real model; Google ships only `gemini-3-flash-preview`.
+  `discoverModel()` filtered it out whenever the key listing succeeded, so it never surfaced — a
+  dead rung for as long as it shipped.
+
+### The error can now be acted on, and it reports itself
+
+Asked for by the course director, because "collecting a list of names after class" is the course
+paying a human to be a log file.
+
+- **The running model is shown during the session**, not only on the start screen.
+- **The error bar carries the full diagnostic** — failure kind, HTTP status, finish reason, model,
+  stage and turn, session length, ladder resets, token budget, and per-model counters including
+  **thinking tokens** — with a **Copy details** button. A cadet's screenshot is now actionable.
+- **Every error POSTs to a new `log-tutor-error` edge function**, fire-and-forget. This is the half
+  that reaches the cadet who hits an error, gives up, and never submits — the population every
+  diagnosis so far has been blind to, because nothing about those sessions reached PREP.
+- **The extension turn has a working Retry.** It shipped with none, and it fires at the report
+  stage, which is where instructors reported being stuck.
+- **New staff page `site/faculty/tutor-errors.html`** (nav: More → Tutor errors), readable by
+  instructors, directors and admins. Filter by window, failure kind and lesson; each row expands
+  to the same text the cadet saw.
+
+**No conversation text is stored, by construction.** The client payload and the function's insert
+are both fixed whitelists of counters, enums and integers — not redactors — so a future field
+cannot leak a cadet's writing by being forgotten. CORE.md §3 permits the cadet ID and bars
+free-text student writing paired with an identity. `detail` holds *Google's* error message, capped
+at 300 characters.
+
+### The teaching ladder shipped to all 44 builds
+
+`--policy teaching` was a faculty-trial sandbox; it is now what everything runs. Chat starts on
+`3.6-flash` and steps down, study is pinned to the lite floor so practice never spends the graded
+allowance, and the app delivers the two scripted opening turns instead of paying a model for them.
+Six phys-110 builds (lessons 10, 12, 14, 15, 16, 17) already had it and the other 38 did not, so
+two cadets in the same course were getting different reliability.
+
+### Tooling
+
+- **`scripts/artifacts/patch_tutor_diagnostics.py`** (new) applies the fix set by byte anchor to
+  all 44 shipped builds. It exists because **six phys-110 builds have no `.jsx` source** — they
+  were authored as Gemini pages directly, so `to_gemini.py` cannot regenerate them. Idempotent
+  behind one sentinel; asserts `INTERACTION_ID` is unchanged before writing.
+- **`to_gemini.py` now calls `apply_fixset` on every build it emits**, in the same operation as the
+  port. TUTOR-BEHAVIOR-PARITY.md exists because nine fixes landed on the Gemini builds and none
+  reached the generator; a port that silently drops this set looks healthy while reintroducing the
+  exact failure cadets reported.
+- **`to_gemini.py` prunes the build manifest.** `site/data/backup-builds.json` is merged across
+  runs so a scoped port cannot wipe other courses, and it therefore never removed anything — a
+  deleted build stayed listed and became a dead "Open the lesson" link on `student/backup.html`.
+- **`nlfix` in the patcher is not `to_gemini.adapt`.** `adapt` rewrites the four-byte *text* for
+  CR LF inside a regex *source*; every anchor here is literal text authored LF against CRLF
+  builds, so `adapt` returned each pattern unchanged and matched zero times. It refused rather
+  than corrupted, which is the good failure mode, but the two are not interchangeable. `detect_nl`
+  stays shared.
+
+### Not done, and needing a human
+
+- **`supabase/migrations/app/020_tutor_error_log.sql` is written and NOT applied.** DDL on `app` is
+  a coordination event (CORE.md §0) and no agent runs it alone. `020_..._ROLLBACK.sql` sits beside
+  it. **Until it is applied, `log-tutor-error` will fail and `faculty/tutor-errors.html` will show
+  an error** — everything else in this entry works without it, including the on-screen diagnostic.
+- **`log-tutor-error` is written and NOT deployed.**
+- **No live tutor turn was run.** Verification was the two Node harnesses only (CORE.md §2): a real
+  free-tier Gemini key is needed to prove the thinking budget behaves as intended against Google.
+  **That is the one thing still worth checking by hand**, and it is the central claim of this entry.
+- **The artifact builder and the 51 published Claude sources did not get any of this.** Carried
+  into TUTOR-BEHAVIOR-PARITY.md §2.3 and §5 as backlog.
+
+### Also
+
+`_feedback/` is gitignored. It holds raw cadet and instructor feedback, which is free-text student
+writing and stays out of the repo (CORE.md §3); the conclusions belong here and in `docs/`.
+
+---
+
 ## 2026-08-25 — Casey Pellizzari via Claude
 
 ### `student/assignments.html` loses its leftover list and becomes the question form only
