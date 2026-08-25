@@ -526,8 +526,19 @@ This section documents what was done to deploy the system — only needed if sta
 
 ```bash
 brew install supabase/tap/supabase   # Mac
+npx supabase --version               # Windows -- no install; Node is already on the director's machine
 ```
 Or download from https://supabase.com/docs/guides/cli
+
+> **On Windows there is no `brew`, and the CLI is not on this project's machines.** `npx supabase`
+> runs it without installing anything and is the shortest path; prefix every command below with
+> `npx`. It works from PowerShell or Git Bash, from the repo root. Scoop
+> (`scoop install supabase`) is the alternative if you would rather have it on `PATH`.
+>
+> **There is also a no-terminal path**: the Supabase dashboard's Edge Functions section can
+> create and deploy a function from pasted source. Use it when the CLI is fighting you; the repo
+> file stays the source of truth either way, so paste FROM the repo, never edit only in the
+> dashboard.
 
 **2. Log in and link the project**
 
@@ -545,6 +556,7 @@ supabase functions deploy provision-students
 supabase functions deploy reset-student-password
 supabase functions deploy reset-staff-password
 supabase functions deploy set-own-password
+supabase functions deploy log-tutor-error
 ```
 
 That's it — the functions run on Supabase's servers from that point on. No one else needs the CLI.
