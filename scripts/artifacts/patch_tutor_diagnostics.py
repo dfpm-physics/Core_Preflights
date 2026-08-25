@@ -761,11 +761,66 @@ def apply_socratic(raw):
     return p.buf, p.applied
 
 
+# --- SET 3: speak the cadet's notation, and never re-send the same question ----------------
+# Its own sentinel again, because sets 1 and 2 had already shipped to all 44 builds.
+#
+# THE TRANSCRIPT THAT PROMPTED IT (phys-215 lesson 08, 2026-08-25). Set 2 worked -- one
+# question a turn, no lecture, no handing over the derivation. Then the cadet spent FOUR
+# consecutive turns correcting notation rather than answering:
+#
+#     tutor: ...inside the flux integral  E . nhat dA ?
+#     cadet: what is n-hat?
+#     cadet: our text uses r-hat
+#     cadet: dA is a vector in our textbook
+#     cadet: that is not how our text writes it. E.dA = EdA cos theta
+#
+# Two separate faults, and only the second one is the tutor's judgment.
+#
+# 1. NOTATION. The tutor was not hallucinating -- it was reading its grounding faithfully.
+#    TEXTBOOK_REFERENCE for this lesson writes the flux integrand as `E . nhat dA`, and uses
+#    `nhat` 19 times and `rhat` 21 times across 38,327 characters. It contains the string
+#    `cos` ZERO times, and no vector dA and no closed-integral sign anywhere. So the
+#    `E.dA = EdA cos theta` form the cadet actually reads cannot be produced from it. The
+#    grounding is an ASCII paraphrase of the source (eps0, 4*pi*eps0), and the paraphrase
+#    silently chose a notation.
+#
+#    Fixing the grounding is the real repair and it is 44 rebuilds and a decision about which
+#    book is authoritative. This is the cheap half that works today on every lesson and every
+#    course: when a cadet shows you their notation, switch to it. Their book outranks ours --
+#    they are being graded on theirs.
+#
+# 2. THE LOOP. Having answered each correction in one line, the tutor re-sent the SAME
+#    question VERBATIM five times. Nothing in the ~137,000-character prompt forbids that, and
+#    set 2's note actively encouraged the shape of it: "their reply tells you the next
+#    question" is true, and says nothing about a reply that is not an answer at all. A cadet
+#    who asks "what is n-hat?" is not refusing the question; they are blocked before it.
+
+NOTATION_MARKER = b"adopt their notation"
+
+OLD_PACING2 = rb"""    + `is worth more than a step you hand them.]`;"""
+NEW_PACING2 = rb"""    + `is worth more than a step you hand them. If their reply was a CORRECTION or a `
+    + `QUESTION rather than an answer, answer it in one line, adopt their notation and symbols `
+    + `for the rest of the session -- their textbook outranks the reference you were given, `
+    + `because they are graded on theirs -- and then ask a DIFFERENT, smaller question. Never `
+    + `re-send a question you have already asked; if they did not answer it, it was the wrong `
+    + `question or they are blocked before it.]`;"""
+
+
+def apply_notation(raw):
+    """Set 3. Separate sentinel: sets 1 and 2 shipped to all 44 before this existed."""
+    if NOTATION_MARKER in raw:
+        return raw, ["already"]
+    p = Patcher(raw, None)
+    p.sub("notation-and-no-repeat", OLD_PACING2, NEW_PACING2)
+    return p.buf, p.applied
+
+
 def patch_one(path, verbose=False):
     raw = path.read_bytes()
     buf, applied = apply_fixset(raw)
     buf, applied2 = apply_socratic(buf)
-    applied = applied + applied2
+    buf, applied3 = apply_notation(buf)
+    applied = applied + applied2 + applied3
     if verbose:
         for a in applied:
             print("      . " + a)

@@ -103,6 +103,38 @@ Two causes, and the first one arrived with this morning's fix.
   and let their reply choose the next question. Kept to three clauses on purpose: it rides on every
   turn, and a per-turn note that grows into a second prompt starts competing with the first.
 
+### The tutor spoke a notation the cadets do not read, then asked the same question five times
+
+A second real session, straight after the fix above. **The Socratic change worked** — one question
+a turn, no lecturing, no handing over the derivation. What it exposed was underneath.
+
+The cadet spent four consecutive turns correcting notation instead of answering: *"what is
+n-hat?"*, *"our text uses r-hat"*, *"dA is a vector in our textbook"*, *"that is not how our text
+writes it. E.dA = EdA cos theta"*.
+
+**The tutor was not hallucinating — it was reading its grounding faithfully.** Measured in
+`lesson-08`'s `TEXTBOOK_REFERENCE`: 38,327 characters that use `nhat` **19 times**, `rhat` **21
+times**, and contain the string `cos` **zero times**, with no vector `dA` and no closed-integral
+sign anywhere. The `E·dA = E dA cos θ` form the cadet actually reads **cannot be produced from it**.
+The grounding is an ASCII paraphrase of OpenStax (`eps0`, `4*pi*eps0`) and the paraphrase silently
+picked a notation.
+
+Then, having answered each correction in one line, it **re-sent the same question verbatim five
+times**. Nothing in the ~137,000-character prompt forbids that, and the new per-turn note had
+encouraged the shape of it: *"their reply tells you the next question"* is true and says nothing
+about a reply that is not an answer at all. A cadet asking *"what is n-hat?"* is not refusing the
+question — they are blocked before it.
+
+**Shipped to all 44** as set 3, one sentence added to the per-turn note: if the reply was a
+correction or a question, answer it in one line, **adopt the cadet's notation for the rest of the
+session** — their textbook outranks our reference, because they are graded on theirs — and ask a
+different, smaller question. Never re-send a question already asked.
+
+**The real repair is the grounding, and it is not done.** Every lesson's reference was written in
+one ASCII notation that may not be the course's. Fixing it means regenerating grounding for 44
+lessons and first deciding which book is authoritative for each course — a question for the course
+directors, not a patch. Until then the tutor adapts on contact, which costs the cadet one turn.
+
 ### An error that came from us logged as "unknown" with nothing attached
 
 The same session logged `kind: unknown, HTTP 0` with `fail 0` on every model — a throw that never
