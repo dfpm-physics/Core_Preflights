@@ -2052,8 +2052,9 @@ def main():
             # reported. Idempotent, so a build that already carries it is left alone.
             # Imported lazily: patch_tutor_diagnostics imports detect_nl from this module,
             # so a top-level import would be circular.
-            from patch_tutor_diagnostics import apply_fixset
+            from patch_tutor_diagnostics import apply_fixset, apply_socratic
             html, _fixsteps = apply_fixset(html)
+            html, _socsteps = apply_socratic(html)
 
             out = OUT_ROOT / course / f"{slug}.html"
             same = out.exists() and out.read_bytes() == html

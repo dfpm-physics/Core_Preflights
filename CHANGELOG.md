@@ -76,6 +76,44 @@ cannot leak a cadet's writing by being forgotten. CORE.md §3 permits the cadet 
 free-text student writing paired with an identity. `detail` holds *Google's* error message, capped
 at 300 characters.
 
+### The tutor lectured, then asked two questions at once
+
+The course director ran two real graded sessions the same evening and read the transcripts back:
+*"This feels like a lot of direction and not so much Socratic. It also seems to ask multiple
+compound questions."* Correct on both counts, and it is visible in the transcript — on Gauss's law
+the tutor **handed over the derivation the cadet should have produced** (`E∮dA = E(4πr²)`, then
+equating it to `q/ε₀`), did the `4π(2r)²` arithmetic itself, and closed each turn with two stacked
+questions.
+
+Two causes, and the first one arrived with this morning's fix.
+
+- **The thinking budget was cut too far.** Set 1 capped it at 1024 to stop thoughts eating the
+  answer. The diagnostic panel — working exactly as intended, on its first real use — showed **~800
+  thinking tokens across three turns**, about 270 a turn. Choosing the single best next question is
+  the reasoning-heavy part of Socratic tutoring; it is the same failure the 2026-08-21 note
+  described when a lite model *"would try to tutor me and then give me the answer instead"*.
+  Starving it bought nothing, because the original blank-answer bug was a **total** ceiling of
+  8192 and that ceiling is now 32768. **Raised to 8192.**
+- **The one-question rule is 127,000 characters into the prompt and nothing repeats it.** The
+  system prompt does say `ASK ONE QUESTION AT A TIME`, in those words, and `do not lecture` ten
+  thousand characters later. Both are real; both are buried. Meanwhile `pacingNote` is re-injected
+  into the last user turn on **every** turn — so the model got a fresh reminder about the clock
+  every turn and a fresh reminder about how to teach never. Recency was doing the teaching. The
+  per-turn note now carries one question only, do not explain the result you are about to ask for,
+  and let their reply choose the next question. Kept to three clauses on purpose: it rides on every
+  turn, and a per-turn note that grows into a second prompt starts competing with the first.
+
+### An error that came from us logged as "unknown" with nothing attached
+
+The same session logged `kind: unknown, HTTP 0` with `fail 0` on every model — a throw that never
+came from Gemini, so nothing in the transport typed it. `diagSnapshot` read `.kind`, `.status` and
+`.detail` off a native `Error`, found none of them, and stored "unknown". The one error the panel
+could not explain was the one it discarded the evidence for. It now keeps `name` and `message`.
+
+*Shipped to all 44 builds as a second, separately-sentineled set (set 1 had already landed).
+Re-verified: 48/48 ladder assertions on all 44, 7/7 browser render on two, porter output matches
+disk. The cause of that particular `unknown` is still unidentified — the next occurrence will say.*
+
 ### The teaching ladder shipped to all 44 builds
 
 `--policy teaching` was a faculty-trial sandbox; it is now what everything runs. Chat starts on

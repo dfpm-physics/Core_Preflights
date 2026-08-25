@@ -691,9 +691,81 @@ def apply_fixset(raw):
     return p.buf, p.applied
 
 
+# --- SET 2: the 2026-08-25 Socratic-quality + native-error fix set -------------------------
+# Its own sentinel, because set 1 was already applied to all 44 builds before this existed.
+
+SOCRATIC_MARKER = b"ONE QUESTION ONLY"
+
+# 1. THE THINKING BUDGET WAS CUT TOO FAR.
+#
+# Set 1 capped thinking at 1024 to stop thoughts eating the whole answer. That fixed the blank
+# answers and cost teaching quality: the course director read a real transcript the same day
+# and the tutor had lectured, handed over the derivation the cadet should have produced, and
+# closed with two stacked questions. The diagnostic panel showed ~800 thinking tokens across
+# three turns -- about 270 a turn.
+#
+# Choosing the single best next question IS the reasoning-heavy part of Socratic tutoring; it
+# is the thing the 2026-08-21 note identified when a lite model "would try to tutor me and
+# then give me the answer instead". Starving it buys nothing here, because the ORIGINAL bug
+# was a total ceiling of 8192, and that ceiling is now 32768. There is room for both.
+OLD_THINK = rb"""const THINKING_BUDGET = 1024;"""
+NEW_THINK = rb"""const THINKING_BUDGET = 8192;"""
+
+# 2. THE ONE-QUESTION RULE IS 127,000 CHARACTERS INTO THE PROMPT AND NOTHING REPEATS IT.
+#
+# The system prompt says ASK ONE QUESTION AT A TIME, in those words, and says "do not lecture"
+# ten thousand characters later. Both are real and both are buried. Meanwhile pacingNote is
+# re-injected into the LAST USER TURN on every single turn -- so the model gets a fresh
+# reminder about the clock every turn and a fresh reminder about how to teach never.
+#
+# Recency is doing the teaching. This puts the two rules that define the exercise where the
+# reminder actually lands. Deliberately three short clauses: this rides on every turn, and a
+# per-turn note that grows into a second prompt starts competing with the first one.
+OLD_PACING = rb"""    + `back-and-forth and pauses about 5 seconds after typing stops.]`;"""
+NEW_PACING = rb"""    + `back-and-forth and pauses about 5 seconds after typing stops.`
+    + `
+
+ONE QUESTION ONLY this turn. Ask a single question and stop; do not stack a second `
+    + `one, and do not append "and what does that let you do with...". Do not explain, derive, `
+    + `or state the result you are about to ask them for -- if you have written the answer, the `
+    + `question is already spent. Their reply tells you the next question; a gap they show you `
+    + `is worth more than a step you hand them.]`;"""
+
+# 3. A NATIVE ERROR ARRIVED AS "unknown" WITH NOTHING ATTACHED.
+#
+# The same transcript logged `kind: unknown, HTTP 0` with fail 0 on every model -- an error
+# that never came from Gemini, so nothing in the transport typed it. diagSnapshot then read
+# `.kind`, `.status`, `.detail` off a native Error, found none of them, and stored "unknown".
+#
+# That is the diagnostic failing at its own job: the one error it could not explain is the one
+# it discarded the evidence for. A native Error carries `name` and `message`; keep them.
+OLD_DIAGKIND = rb"""    detail: (err && err.detail) ? String(err.detail).slice(0, 300) : "","""
+NEW_DIAGKIND = rb"""    // A THROW FROM OUTSIDE THE TRANSPORT has no .kind and no .detail -- a JSON parse that
+    // failed on a 200, a bug in our own post-processing. It logged as "unknown" with nothing
+    // attached, which is the one case the panel most needed to explain. Keep what a native
+    // Error does carry.
+    detail: (err && err.detail) ? String(err.detail).slice(0, 300)
+          : (err && (err.message || err.name))
+            ? String((err.name || "Error") + ": " + (err.message || "")).slice(0, 300)
+            : "","""
+
+
+def apply_socratic(raw):
+    """Set 2. Separate sentinel because set 1 shipped to all 44 builds before this existed."""
+    if SOCRATIC_MARKER in raw:
+        return raw, ["already"]
+    p = Patcher(raw, None)
+    p.sub("thinking-budget-8192", OLD_THINK, NEW_THINK)
+    p.sub("per-turn-one-question", OLD_PACING, NEW_PACING)
+    p.sub("native-error-detail", OLD_DIAGKIND, NEW_DIAGKIND)
+    return p.buf, p.applied
+
+
 def patch_one(path, verbose=False):
     raw = path.read_bytes()
     buf, applied = apply_fixset(raw)
+    buf, applied2 = apply_socratic(buf)
+    applied = applied + applied2
     if verbose:
         for a in applied:
             print("      . " + a)

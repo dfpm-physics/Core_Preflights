@@ -204,7 +204,7 @@ const MAX_TOKENS = 32768;
 //
 // Capped rather than switched off: a budget of 0 is rejected outright by some models, and a
 // little planning measurably helps the one big generation, the report.
-const THINKING_BUDGET = 1024;
+const THINKING_BUDGET = 8192;
 
 // thinkingConfig is a 2.5-era parameter and a newer model may reject it. A rejection must
 // not 400 every turn for the rest of the session, so the first 400 naming the field clears
@@ -1731,7 +1731,14 @@ function diagSnapshot(err) {
     kind: (err && err.kind) || "unknown",
     http_status: (err && err.status) || 0,
     finish_reason: (err && err.why) || "",
-    detail: (err && err.detail) ? String(err.detail).slice(0, 300) : "",
+    // A THROW FROM OUTSIDE THE TRANSPORT has no .kind and no .detail -- a JSON parse that
+    // failed on a 200, a bug in our own post-processing. It logged as "unknown" with nothing
+    // attached, which is the one case the panel most needed to explain. Keep what a native
+    // Error does carry.
+    detail: (err && err.detail) ? String(err.detail).slice(0, 300)
+          : (err && (err.message || err.name))
+            ? String((err.name || "Error") + ": " + (err.message || "")).slice(0, 300)
+            : "",
     model: diagState.model || "",
     mode: diagState.mode || "",
     phase: diagState.phase || "",
@@ -1834,7 +1841,14 @@ function pacingNote(activeSec, topicCount) {
     + `for time spent earlier. When the current topic has had about ${PER_TOPIC_BUDGET_MIN} active `
     + `min, OFFER the cadet the choice to go deeper or move on (never silently cut off or grind on). `
     + `No hard stop; close when the priority topics are covered. This clock counts only active `
-    + `back-and-forth and pauses about 5 seconds after typing stops.]`;
+    + `back-and-forth and pauses about 5 seconds after typing stops.`
+    + `
+
+ONE QUESTION ONLY this turn. Ask a single question and stop; do not stack a second `
+    + `one, and do not append "and what does that let you do with...". Do not explain, derive, `
+    + `or state the result you are about to ask them for -- if you have written the answer, the `
+    + `question is already spent. Their reply tells you the next question; a gap they show you `
+    + `is worth more than a step you hand them.]`;
 }
 
 /* ── Structured payload: extract, enrich ─────────────────────────────────── */
