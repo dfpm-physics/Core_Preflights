@@ -40,6 +40,33 @@
 --   Asked for explicitly: instructors, directors and admins. A tutor failure is not student
 --   work and carries no grade, and the useful question -- "is lesson 14 failing for everyone
 --   or just my section?" -- cannot be answered from a per-section slice.
+--
+-- WHY THE BEGIN / SET LOCAL WRAPPER BELOW IS NOT OPTIONAL
+--   It was missing on the first attempt (2026-08-25) and the migration failed on the policy
+--   with `function is_staff() does not exist`. Every helper in 002_rls.sql lives in schema
+--   `app`, and an unqualified call only resolves while `app` is on the search path -- which
+--   it is NOT by default for `prep_app_owner` in a fresh SQL-editor session.
+--
+--   The failure mode is worse than a clean error, which is why this note is here rather than
+--   in the CHANGELOG. Without the wrapper the statements do not roll back together: the
+--   CREATE TABLE runs first and succeeds, landing `tutor_error_log` in whatever schema the
+--   search path did resolve to -- `public` -- and only the policy fails. The result looks
+--   like a failed migration and is actually a half-applied one, with a stray table in the
+--   schema this project keeps only as a rollback (CORE.md §0).
+--
+--   `SET LOCAL` is scoped to the transaction, so it also cannot leak into whatever the
+--   operator runs next. This is the pattern every other migration in this chain uses
+--   (003, 005, 006, 007, 012, 018); 009 is the exception and is not the one to copy.
+--
+--   IF THE FIRST ATTEMPT WAS ALREADY RUN, check for the stray table before re-running:
+--       SELECT table_schema FROM information_schema.tables WHERE table_name = 'tutor_error_log';
+--   A row naming `public` is the half-applied attempt. Drop it -- it holds no data and
+--   nothing references it -- then run this file:
+--       DROP TABLE IF EXISTS public.tutor_error_log;
+
+BEGIN;
+
+SET LOCAL search_path = app, public;
 
 CREATE TABLE IF NOT EXISTS tutor_error_log (
   id             bigserial PRIMARY KEY,
@@ -87,13 +114,21 @@ CREATE INDEX IF NOT EXISTS tutor_error_log_cadet_idx
 ALTER TABLE tutor_error_log ENABLE ROW LEVEL SECURITY;
 
 -- READ: every staff member, no offering filter. See the header.
+--
+-- `app.is_staff()` is schema-qualified even though SET LOCAL above already puts `app` on the
+-- path. A policy's USING expression is stored parsed, so this one would have resolved either
+-- way -- but this is the exact line the first attempt died on, and spelling it out means the
+-- statement is correct when read on its own, pasted on its own, or re-run by someone who did
+-- not scroll up.
 DROP POLICY IF EXISTS tel_read_staff ON tutor_error_log;
 CREATE POLICY tel_read_staff ON tutor_error_log
   FOR SELECT TO authenticated
-  USING (is_staff());
+  USING (app.is_staff());
 
 -- NO WRITE POLICY, deliberately. The edge function holds the service role and BYPASSRLS;
 -- `authenticated` must not be able to forge or delete a failure record, and `anon` must not
 -- be able to reach the table at all except through the validating function.
 
 GRANT SELECT ON tutor_error_log TO authenticated;
+
+COMMIT;

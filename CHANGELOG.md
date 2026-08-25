@@ -109,6 +109,16 @@ two cadets in the same course were getting different reliability.
   a coordination event (CORE.md §0) and no agent runs it alone. `020_..._ROLLBACK.sql` sits beside
   it. **Until it is applied, `log-tutor-error` will fail and `faculty/tutor-errors.html` will show
   an error** — everything else in this entry works without it, including the on-screen diagnostic.
+
+  *First attempt failed with `function is_staff() does not exist`: the file was missing the
+  `BEGIN; SET LOCAL search_path = app, public;` wrapper every other migration in this chain uses
+  (003, 005, 006, 007, 012, 018 — 009 is the exception and is not the one to copy). Every RLS
+  helper lives in schema `app`, and `app` is not on the path by default for `prep_app_owner` in a
+  fresh SQL-editor session. Fixed, and the policy now spells `app.is_staff()` out. Verified over
+  `prep_app_read` that the failed run left nothing behind — no `tutor_error_log` in any schema —
+  so it is safe to simply re-run. Worth knowing for next time: without the wrapper the CREATE
+  TABLE does not roll back with the policy, and it would have landed the table in `public`, which
+  this project keeps only as the cutover rollback.*
 - **`log-tutor-error` is written and NOT deployed.**
 - **No live tutor turn was run.** Verification was the two Node harnesses only (CORE.md §2): a real
   free-tier Gemini key is needed to prove the thinking budget behaves as intended against Google.
