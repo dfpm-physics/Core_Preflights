@@ -406,6 +406,18 @@ function noteOk(name, um) {
     s.outTok     += um.candidatesTokenCount || 0;
   }
 }
+// Records WHICH quota Google said was exhausted, verbatim from the 429 body's QuotaFailure
+// violation. On 2026-08-26 that name -- GenerateRequestsPerMinutePerProjectPerModel-FreeTier --
+// settled a question two rounds of arithmetic could not: the ceiling is per project AND per
+// model, so a neighbouring rung is a real fresh allowance and walking the ladder is sound.
+// Counters only, and the id is a Google metric name, so it passes the same whitelist rule as
+// every other field in diagSnapshot (CORE.md section 3).
+function noteQuota(name, id) {
+  const s = statFor(name);
+  if (!s.quotaIds) s.quotaIds = {};
+  s.quotaIds[id] = (s.quotaIds[id] || 0) + 1;
+}
+
 function noteFail(name, kind) {
   const s = statFor(name);
   s.fail++;
@@ -424,7 +436,13 @@ const diagState = { cadet: "", mode: "", phase: "start", turn: 0, startedAt: 0, 
 // else ever cleared. Do it in the app rather than leaving each cadet to rediscover it.
 //
 // Bounded, because a genuinely dead key must still terminate instead of looping forever.
-const LADDER_RESET_LIMIT = 2;
+//
+// ONE, not two, since 2026-08-26. Each extra lap is another request on every rung. With
+// QUOTA_WALK_RETRIES at zero this puts the worst case at 3 requests per model per turn --
+// one per lap, plus one more after the ladder wait -- against a measured Flash cap of 5 per
+// minute. At the old settings it was 6, and an instructor's usage dashboard peaked at exactly
+// 6 on both Flash models, which is that number's fingerprint seen from Google's side.
+const LADDER_RESET_LIMIT = 1;
 
 // Blind retries before a WALKABLE failure gives up on its rung. This was the shared
 // `retries = 3`, which meant one 429 cost four calls in ~3.5s on that model, six rungs cost
@@ -438,6 +456,33 @@ const LADDER_RESET_LIMIT = 2;
 // The NETWORK path deliberately keeps all three: a dropped connection really does come back,
 // and that path neither marks the model spent nor walks the ladder.
 const WALK_RETRIES = 1;
+
+// MEASURED 2026-08-26 against a live free-tier key with
+// tests/browser/test-gemini-rate-limits.html, after two readings of this failure had been
+// overturned by arithmetic rather than by evidence. Google names the quota
+// `GenerateRequestsPerMinutePerProjectPerModel-FreeTier`, dimensioned
+// {"model": "...", "location": "global"} -- per PROJECT *and* per MODEL, which is why the
+// per-key reading and the per-model reading were each half right.
+//
+// THE DECISIVE RESULT: asked every other model the instant one was walled,
+// gemini-3.1-flash-lite answered HTTP 200 while gemini-3.5-flash-lite was still refusing. The
+// next rung genuinely carries its own allowance, so WALKING IS THE CORRECT RESPONSE TO A 429.
+// What was wrong was retrying the rung FIRST: a per-minute window cannot clear in the 500ms
+// this transport waited, and measured recovery was 20.6 SECONDS.
+//
+// Zero, therefore. The 5xx path keeps WALK_RETRIES -- server capacity is a different failure
+// and a repeat really can succeed -- and the network path keeps all three retries.
+const QUOTA_WALK_RETRIES = 0;
+
+// The wait taken once the WHOLE ladder is spent, which is the only moment waiting beats
+// walking. NOT set from Google's own number: the probe showed RetryInfo is unreliable in both
+// directions, naming 8s on a wall still standing 11 seconds later and then 57s on one that
+// cleared in 10. Waiting it literally would hold a cadet 57 seconds to clear a ten-second
+// wall. 25s covers the 20.6s recovery that was actually measured, and the RetryInfo value is
+// used only to make this SHORTER.
+const LADDER_WAIT_MS = 25000;
+const LADDER_WAITS_PER_TURN = 1;
+let ladderWaits = 0;
 
 // Clears every spend that is going to pass on its own and KEEPS the ones that are not.
 // A 404 is the only permanent kind: quota clears on Google's clock, capacity comes back, a
@@ -454,6 +499,7 @@ function reviveSpent() {
     if (spentModels[k] !== "model") { delete spentModels[k]; revived++; }
   });
   Object.keys(waitedFor).forEach((k) => { delete waitedFor[k]; });
+  ladderWaits = 0;    // the ladder-wait allowance is per TURN, like the revival it rides with
   return revived;
 }
 
@@ -2582,6 +2628,28 @@ ${EXTENSION_PROBLEMS}`;
 // ===========================================================================
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+// Waits out an exhausted ladder IN VIEW instead of behind a spinner. Measured recovery is ~20
+// seconds, and twenty seconds of unexplained spinner is indistinguishable from the freeze this
+// transport shipped on 2026-08-19 and again on 2026-08-21 -- the cadet's only signal that
+// anything is wrong is that nothing is happening, so they reload and lose the session.
+//
+// Drives the status strip that already exists: onModelSwitch is the same hook that shows the
+// running model, so this needs no new UI and cannot drift out of step with one. The plain name
+// is restored on the way out, and every call is guarded because the hook is null until the
+// component mounts.
+async function waitVisibly(model, ms) {
+  const tell = (n) => {
+    if (!onModelSwitch.fn) return;
+    try {
+      onModelSwitch.fn(n > 0 ? (model + " \u2014 rate limited, retrying in " + n + "s") : model);
+    } catch (e) {}
+  };
+  let left = Math.ceil(ms / 1000);
+  tell(left);
+  while (left > 0) { await sleep(1000); left--; tell(left); }
+  await sleep(500);   // grace, so the retry lands just past the window rather than on it
+}
 function backoffMs(attempt) { return Math.round(500 * Math.pow(2, attempt) + Math.random() * 300); }
 
 async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
@@ -2680,23 +2748,33 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
     //
     // (This comment previously said the response "does not say which". It does.)
     if (res.status === 429) {
-      if (!waitedFor[activeModelRef.current]) {
-        let waitMs = 0;
-        try {
-          const j = await res.json();
-          const info = (((j.error || {}).details) || []).find(
-            (d) => String(d["@type"] || "").indexOf("RetryInfo") > -1);
-          const m = info && /^([0-9.]+)s$/.exec(String(info.retryDelay || ""));
-          if (m) waitMs = Math.round(parseFloat(m[1]) * 1000);
-        } catch (e) { /* no body, or not JSON -- fall through to the ladder */ }
-        if (waitMs > 0 && waitMs <= 15000) {
-          waitedFor[activeModelRef.current] = true;
-          await sleep(waitMs + 500);
-          attempt = 0;
-          continue;
-        }
-      }
-      if (attempt < WALK_RETRIES) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      // READ THE BODY ONCE, UNCONDITIONALLY. It carries the two facts that decide what to
+      // do next, and this branch used to read neither reliably: RetryInfo says how long to
+      // hold off, and QuotaFailure NAMES THE QUOTA that was exhausted. The parse sat inside
+      // the `waitedFor` guard, so on a second 429 the body was dropped unread -- and
+      // res.json() can be called only once, so there was no second chance at it.
+      //
+      // The quota id is what turned a fourth theory into a measurement. Keep it: the probe
+      // that produced these constants is not going to be re-run mid-term, so the next failing
+      // cadet's error block has to carry the answer by itself.
+      let waitMs = 0;
+      let quotaId = "";
+      try {
+        const j = await res.json();
+        const det = ((j.error || {}).details) || [];
+        const info = det.find((d) => String(d["@type"] || "").indexOf("RetryInfo") > -1);
+        const m = info && /^([0-9.]+)s$/.exec(String(info.retryDelay || ""));
+        if (m) waitMs = Math.round(parseFloat(m[1]) * 1000);
+        const qf = det.find((d) => String(d["@type"] || "").indexOf("QuotaFailure") > -1);
+        const v = qf && (qf.violations || [])[0];
+        if (v) quotaId = String(v.quotaId || v.quotaMetric || "").slice(0, 120);
+      } catch (e) { /* no body, or not JSON -- fall through to the ladder */ }
+      if (quotaId) noteQuota(activeModelRef.current, quotaId);
+      // WALK, AND DO NOT RETRY THIS RUNG. Zero, measured: the limit is per project PER
+      // MODEL, and the probe watched a neighbouring model answer HTTP 200 while this one
+      // refused -- so the next rung is a fresh allowance, and the 500ms backoff that used to
+      // come first was spent against a window that takes ~20 seconds to clear.
+      if (attempt < QUOTA_WALK_RETRIES) { await sleep(backoffMs(attempt)); attempt++; continue; }
       // RECORD IT. This branch marked the model spent and walked without ever calling
       // noteFail, so a rung burned by quota reached the log as `calls: 12, ok: 0, fail: 0,
       // kinds: {}` -- twelve requests and no account of one of them. Every rung above the
@@ -2705,6 +2783,17 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
       noteFail(activeModelRef.current, "quota");
       spentModels[activeModelRef.current] = "quota";
       if (advance(activeModelRef)) { attempt = 0; continue; }
+      // EVERY RUNG IS SPENT, and only now is waiting better than walking. The walls are
+      // per-minute and they do clear -- measured at 20.6s -- so one bounded wait buys a whole
+      // fresh ladder for the price of a countdown the cadet can see. RetryInfo is allowed to
+      // make this shorter and never longer, because the probe caught it naming 57s for a wall
+      // that cleared in 10.
+      if (ladderWaits < LADDER_WAITS_PER_TURN) {
+        ladderWaits++;
+        await waitVisibly(activeModelRef.current,
+                          waitMs > 0 ? Math.min(waitMs, LADDER_WAIT_MS) : LADDER_WAIT_MS);
+        if (freshTurn(activeModelRef)) { attempt = 0; continue; }
+      }
       throw { kind: "quota", status: 429 };
     }
     // Server capacity, not the cadet's quota -- but it is per MODEL, not per project, and
@@ -2882,7 +2971,7 @@ function diagSnapshot(err) {
     models.push({
       model: n, calls: s.calls, ok: s.ok, fail: s.fail,
       prompt_tokens: s.promptTok, thinking_tokens: s.thoughtTok, output_tokens: s.outTok,
-      kinds: s.kinds, spent: !!spentModels[n],
+      kinds: s.kinds, spent: !!spentModels[n], quota_ids: s.quotaIds || {},
     });
   });
   models.sort((a, b) => b.calls - a.calls);
@@ -2949,6 +3038,11 @@ function diagText(o) {
       + " tok in/think/out " + k(m.prompt_tokens) + "/" + k(m.thinking_tokens)
       + "/" + k(m.output_tokens)
       + (m.spent ? "  SPENT" : "") + (kinds ? "  [" + kinds + "]" : ""));
+    // On its own line: a quota id is long, and it is the line to read FIRST. A name carrying
+    // PerModel means the neighbouring rung still has an allowance and the walk was right; one
+    // that does not means the whole project is capped and the walk was never going to help.
+    const qids = Object.keys(m.quota_ids || {});
+    if (qids.length) lines.push("      quota: " + qids.join(", "));
   });
   return lines.join("\n");
 }

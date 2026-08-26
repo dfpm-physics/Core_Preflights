@@ -242,6 +242,70 @@ The terminal error names where a session died, never why. **Read the `models` ar
 `http_status`.**
 
 
+### 2.6 The next evening — measured, after two readings had been overturned by arithmetic
+
+**§2.5 ended by saying "the next burst will say" whether the trigger is a 429 or a 5xx. It did,
+within a day, and it said 429.** It also said that §2.5's own reading of the lite rungs was
+wrong. So this section is the first one here written from an experiment rather than from a
+usage dashboard.
+
+**The pattern this file keeps recording.** §2.4 read the terminal error and reached a wrong
+cause. §2.5 read the per-model counters and reached a checkable one. §2.6's first draft read the
+dashboard and reached a cause the course director rejected on the lite rungs' arithmetic — 6 and
+4 calls against a cap of 15 is not a rate limit being hit. **Three rounds of inference, two of
+them wrong.** The fix was to stop inferring: `tests/browser/test-gemini-rate-limits.html` asks
+Google directly, and every constant in set 7 is one of its outputs.
+
+**What it measured** — 2026-08-26, live free-tier key, 32 requests:
+
+| Measurement | Result | Consequence |
+|---|---|---|
+| quota id | `GenerateRequestsPerMinutePerProjectPerModel-FreeTier` | per project **and** per model. Google's "per project, not per API key" is true and does **not** mean one ceiling across models |
+| dimensions | `{"model": "...", "location": "global"}` | scoped to one model |
+| **blast radius** | **`gemini-3.1-flash-lite` = 200 while `gemini-3.5-flash-lite` refused** | **walking the ladder on a 429 is CORRECT.** The neighbour has its own allowance |
+| the wall | 15 answered, 16th refused | the documented 15/min is exact |
+| recovery | **20.6 s** | not a daily cap; not a full minute |
+| RetryInfo | `8s` on a wall still standing 11 s later; `57s` on one that cleared in 10 s | **do not wait Google's number literally** |
+
+**Why the cadet's session died.** Flash is 5/min and the old walk sent 6 per model per turn — one
+turn breaks Flash. Lite is 15/min and 6 is fine once, but the cadet "kept cycling", and three
+attempts inside a minute is 18 against 15. Self-inflicted on both tiers, by different arithmetic.
+
+| Behaviour | A (kit) | B (sources) | C (Gemini) | Note |
+|---|---|---|---|---|
+| A 429 walks instead of retrying its rung (`QUOTA_WALK_RETRIES = 0`) | ❌ | ❌ | ✅ | **the biggest reduction** — 2 calls a rung becomes 1 |
+| A 5xx keeps its retry | n/a | n/a | ✅ | capacity is a different failure from a rate limit |
+| One whole-ladder lap per turn, not two | ❌ | n/a | ✅ | with the above, 3 requests per model per turn against a cap of 5 |
+| The wait happens once the WHOLE ladder is spent | ❌ | ❌ | ✅ | waiting on a rung whose neighbour answers is wasted |
+| The wait is bounded at 25s by **our** number, not Google's | ❌ | ❌ | ✅ | `RetryInfo` may only shorten it |
+| The wait is SHOWN, counting down | ❌ | ❌ | ✅ | drives the existing `onModelSwitch` strip |
+| The 429 body is read once, before the walk | ❌ | ❌ | ✅ | `res.json()` can be called only once |
+| **The `QuotaFailure` name is recorded (`noteQuota`)** | ❌ | ❌ | ✅ | **the row to carry forward** — see below |
+
+**Why the last row outlives the rest.** The probe is a one-off; it will not be re-run mid-term,
+and nobody should have to re-derive this from a dashboard again. The quota id now rides in every
+cadet's error block and in `log-tutor-error`, so the *next* failure names its own cause. A name
+carrying `PerModel` says the neighbouring rung still has an allowance and the walk was right; one
+that does not says the ceiling is shared and the walk was never going to help.
+
+**Two things an earlier draft of set 7 shipped, and the probe removed.** A 65s honoured-wait
+ceiling, reasoned from "a per-minute window is sixty seconds" — correct arithmetic, wrong answer
+once `RetryInfo` was measured. And a 1.2s inter-rung gap, hedging against a project-wide ceiling
+that **does not exist**. Both are recorded rather than quietly dropped, because the reasoning
+behind them was sound and still wrong, and that is the whole argument for measuring.
+
+**What set 7 does NOT claim.** In the original evidence the first call of *every* rung failed,
+including the first call of the turn, so that key was already throttled before the walk began.
+**The walk is an amplifier, not the origin.** Set 7 stops the amplification; it cannot un-throttle
+a key.
+
+**One assertion pins the arithmetic** so it cannot regress quietly:
+`(QUOTA_WALK_RETRIES + 1) * (LADDER_RESET_LIMIT + 1 + LADDER_WAITS_PER_TURN) <= 5`.
+
+**Still unverified: a real tutor turn on a live key with the new code.** The ladder-wait path has
+never executed.
+
+
 ## 3. What the Claude artifact still gets wrong
 
 **Filed as [`docs/findings/2026-08-21-claude-artifact-unwalked-failure-paths.md`](../findings/2026-08-21-claude-artifact-unwalked-failure-paths.md)** — a work order with a status, where this section is a summary. The finding carries the verification commands, the separation of what was observed from what was inferred, and the falsification conditions.

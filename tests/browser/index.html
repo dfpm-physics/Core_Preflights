@@ -47,6 +47,20 @@
   <p class="lede">Standalone preview pages driven by <b>synthetic data</b>. Director access only. Pick one:</p>
 
   <div class="links">
+    <a class="linkcard" href="test-gemini-rate-limits.html">
+      <span class="ic">📏</span>
+      <span class="t">Gemini rate limits &mdash; measure them, stop guessing <b>(needs your API key)</b></span>
+      <span class="d">Two readings of the 2026-08-25 ladder collapse have now been overturned, both
+        by arithmetic rather than by evidence. The dashboard breaks usage out <b>per model</b>, but
+        Google applies rate limits <b>per project</b> &mdash; so nothing available to us could say
+        whether one model was throttled or the whole project was. This page asks Google directly:
+        it finds where the 429 starts, then <b>the instant one model is walled it tries every
+        other one</b>, which is the test that settles it. It also times how long the wall lasts and
+        captures the <code>QuotaFailure</code> name the tutor used to throw away. <b>It spends real
+        quota</b>, so it is capped, counted, and lite-only by default &mdash; Flash carries 20
+        requests a day and the volume tests never touch it. Your key stays in the tab.</span>
+    </a>
+
     <a class="linkcard" href="test-gemini-new-ladder.html">
       <span class="ic">🎓</span>
       <span class="t">Gemini backup — does it still tutor? <b>(needs your verdict)</b></span>

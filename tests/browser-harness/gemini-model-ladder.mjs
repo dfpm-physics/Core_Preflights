@@ -50,7 +50,9 @@ const S = new Function(block + `
            seatLadder, nextModel, spentModels, onModelSwitch,
            advance, resetLadder, waitedFor, diagState, modelStats, statFor, noteCall,
            noteOk, noteFail, genConfig, MAX_TOKENS, THINKING_BUDGET,
-           freshTurn, reviveSpent, WALK_RETRIES };`)();
+           freshTurn, reviveSpent, WALK_RETRIES, LADDER_RESET_LIMIT, noteQuota,
+           QUOTA_WALK_RETRIES, LADDER_WAIT_MS, LADDER_WAITS_PER_TURN,
+           ladderWaitsNow: () => ladderWaits, spendLadderWait: () => { ladderWaits++; } };`)();
 const isLite = (n) => S.MODEL_LITE.includes(n);
 
 let pass = 0, fail = 0;
@@ -174,7 +176,7 @@ ok(/res\.status >= 500[\s\S]{0,900}spentModels\[activeModelRef\.current\] = "cap
 // quota reached the error log as `calls: 12, ok: 0, fail: 0, kinds: {}` -- twelve requests
 // and no account of one of them -- which is why the 2026-08-25 rows cannot say whether the
 // cadets were rate-limited or Google was refusing capacity. Also in rawCall, so also textual.
-ok(/res\.status === 429[\s\S]{0,1600}noteFail\(activeModelRef\.current, "quota"\)/.test(src),
+ok(/res\.status === 429[\s\S]{0,3000}noteFail\(activeModelRef\.current, "quota"\)/.test(src),
    'a 429 records a failure kind - a rung burned by quota must not look untried in the log');
 ok(/res\.status >= 500[\s\S]{0,400}noteFail\(activeModelRef\.current, "capacity"\)/.test(src),
    'a 5xx records a failure kind - same blind spot, same fix');
@@ -294,7 +296,7 @@ ok(S.MODEL_CHAT[S.MODEL_CHAT.length - 1] === 'gemini-3.1-flash-lite' &&
     S.MODEL_CHAT.forEach(m => { S.spentModels[m] = true; });
     if (S.advance(ref)) resets++; else break;
   }
-  ok(resets === 2, 'the retry is BOUNDED (2) - a genuinely dead key must still terminate, got ' + resets);
+  ok(resets === 1, 'the retry is BOUNDED (1) - a genuinely dead key must still terminate, got ' + resets);
 })();
 
 // The 404 path was the only walking path that never marked the model spent, so a model that
@@ -403,6 +405,86 @@ ok(/if \(attempt < retries\)/.test(src),
    'the NETWORK path keeps the full retry budget - a dropped connection does come back');
 ok(/diagState\.turn\+\+;[\s\S]{0,400}freshTurn\(activeModelRef\)/.test(src),
    'freshTurn is wired to the turn boundary in runTurn - outside the block this file evaluates');
+
+// --- set 7: measured, not reasoned ------------------------------------------------------
+//
+// Every constant below came out of tests/browser/test-gemini-rate-limits.html run against a
+// live free-tier key on 2026-08-26, after two readings of the same failure had been overturned
+// by arithmetic. What it measured:
+//
+//   quota id     GenerateRequestsPerMinutePerProjectPerModel-FreeTier
+//   dimensions   {"model": "...", "location": "global"}      -> per project AND per model
+//   blast radius gemini-3.1-flash-lite answered 200 while gemini-3.5-flash-lite refused
+//   the wall     15 answered, the 16th refused                -> exactly the documented 15/min
+//   recovery     20.6 seconds
+//   RetryInfo    8s on a wall still standing 11s later; 57s on one that cleared in 10s
+//
+// The blast-radius result is why a 429 now WALKS instead of retrying: the neighbour has its own
+// allowance. The RetryInfo result is why the wait is bounded by our own number and not Google's.
+
+ok(S.QUOTA_WALK_RETRIES === 0,
+   `a 429 does NOT retry its rung - measured: the neighbouring model answers 200 while this one refuses, and a per-minute window cannot clear in 500ms, got ${S.QUOTA_WALK_RETRIES}`);
+
+ok(S.WALK_RETRIES === 1,
+   `a 5xx still retries once - server capacity is a different failure from a rate limit, got ${S.WALK_RETRIES}`);
+
+ok(S.LADDER_RESET_LIMIT === 1,
+   `ONE whole-ladder lap per turn, not two, got ${S.LADDER_RESET_LIMIT}`);
+
+// The arithmetic that broke the cadet's session, pinned so it cannot regress quietly.
+// Worst case per model per turn: one call per lap, plus one more after the ladder wait.
+ok((S.QUOTA_WALK_RETRIES + 1) * (S.LADDER_RESET_LIMIT + 1 + S.LADDER_WAITS_PER_TURN) <= 5,
+   `worst-case requests per model per TURN must stay under the MEASURED Flash cap of 5/min, got ${(S.QUOTA_WALK_RETRIES + 1) * (S.LADDER_RESET_LIMIT + 1 + S.LADDER_WAITS_PER_TURN)}`);
+
+ok(S.LADDER_WAIT_MS >= 20600 && S.LADDER_WAIT_MS <= 40000,
+   `the ladder wait covers the 20.6s measured recovery without becoming a freeze, got ${S.LADDER_WAIT_MS}`);
+
+ok(S.LADDER_WAITS_PER_TURN >= 1,
+   `an exhausted ladder waits at least once before giving up - the walls are per-minute and they clear, got ${S.LADDER_WAITS_PER_TURN}`);
+
+(() => {                       // the ladder-wait allowance is per TURN, not per session
+  clearSpent();
+  S.spendLadderWait();
+  ok(S.ladderWaitsNow() === 1, 'a ladder wait is counted');
+  S.reviveSpent();
+  ok(S.ladderWaitsNow() === 0,
+     'reviveSpent clears it - it rides with the turn boundary, got ' + S.ladderWaitsNow());
+})();
+
+// These live beside rawCall, outside the block this file evaluates, so they are read as text.
+ok(!/waitMs <= 15000/.test(src) && !/RETRY_WAIT_CEILING_MS/.test(src),
+   'the per-rung wait is GONE - waiting on a rung whose neighbour answers is wasted');
+ok(/if \(attempt < QUOTA_WALK_RETRIES\)/.test(src),
+   'the 429 branch reads the measured constant rather than sharing the 5xx one');
+ok(/if \(advance\(activeModelRef\)\) \{ attempt = 0; continue; \}[\s\S]{0,700}ladderWaits < LADDER_WAITS_PER_TURN/.test(src),
+   'the wait comes AFTER the walk fails, which is the only moment it beats walking');
+ok(/Math\.min\(waitMs, LADDER_WAIT_MS\)/.test(src),
+   "Google's RetryInfo may only SHORTEN the wait - measured at 57s for a wall that cleared in 10");
+ok(/async function waitVisibly\(model, ms\)/.test(src) && /onModelSwitch\.fn\(n > 0 \?/.test(src),
+   'the wait is SHOWN on the existing status strip, not hidden behind a spinner');
+ok(/if \(freshTurn\(activeModelRef\)\) \{ attempt = 0; continue; \}/.test(src),
+   'after the wait the ladder is revived and re-seated, so the wait buys a whole fresh ladder');
+
+// --- set 7, the logging half: record WHICH quota Google named ---------------------------
+(() => {
+  clearSpent();
+  S.noteQuota('gemini-3.6-flash', 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier');
+  S.noteQuota('gemini-3.6-flash', 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier');
+  const s = S.statFor('gemini-3.6-flash');
+  ok(s.quotaIds && s.quotaIds['GenerateRequestsPerMinutePerProjectPerModel-FreeTier'] === 2,
+     'noteQuota counts the quota id Google named, so a repeat is visible as a count');
+})();
+
+ok(/QuotaFailure/.test(src),
+   'the 429 body is read for its QuotaFailure violation - the name is what settled per-model vs per-project');
+ok(/if \(quotaId\) noteQuota\(activeModelRef\.current, quotaId\)/.test(src),
+   'the quota id is recorded against the model that was refused');
+ok(/quota_ids: s\.quotaIds \|\| \{\}/.test(src),
+   'the quota id reaches diagSnapshot, so it is in the block a cadet copies and in the central log');
+ok(/lines\.push\("      quota: " \+ qids\.join\(", "\)\)/.test(src),
+   'the quota id is PRINTED - the probe will not be re-run mid-term, so the error block must carry it');
+ok(src.indexOf('let quotaId = ""') < src.indexOf('noteFail(activeModelRef.current, "quota")'),
+   'the 429 body is parsed BEFORE the walk - res.json() can be called only once, so a guarded parse dropped it unread');
 
 clearSpent();
 S.diagState.resets = 0;

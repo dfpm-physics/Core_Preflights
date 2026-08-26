@@ -8,6 +8,99 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-25 — Matthew Recker via Claude
+
+### A 429 asks you to wait, and the tutor answered by going faster
+
+**This is the first change to the model ladder that rests on measurement rather than on
+arithmetic**, and that is the point of the entry. Sets 4 and 5 each proposed a cause the course
+director overturned by doing sums the build could have done for itself. Rather than propose a
+third, the failing evidence was used to build a probe and the probe was run against a live key.
+
+**The evidence.** The course director ran the live-key turn the previous entry recorded as
+unverified. Error block, lesson `lesson-08-gausss-law-and-its-applications-5f57cc30`:
+
+```
+error : quota   HTTP 429      stage: graded/chat  turn 1  session 29s  ladder resets 2
+  gemini-3.6-flash        calls 6   ok 0   fail 3   tok in/think/out 0/0/0  SPENT  [quota x3]
+  gemini-3.5-flash        calls 6   ok 0   fail 3   tok in/think/out 0/0/0  SPENT  [quota x3]
+  gemini-3.5-flash-lite   calls 6   ok 0   fail 3   tok in/think/out 0/0/0  SPENT  [quota x3]
+  gemini-3.1-flash-lite   calls 6   ok 0   fail 3   tok in/think/out 0/0/0  SPENT  [quota x3]
+```
+
+24 requests in 29 seconds, on turn one, from one cadet. `tok 0/0/0` everywhere, so nothing was
+generated: not the thinking-budget bug, not a token cap.
+
+**The first reading was per-model RPM** — the Flash cap is 5 and the dashboard peaked at exactly
+6. **The course director rejected it on the lite rungs' own arithmetic**: 6 and 4 calls against a
+cap of 15 is not a rate limit being hit. That objection was correct, and it is what produced the
+probe instead of a fourth theory.
+
+**Added: `tests/browser/test-gemini-rate-limits.html`**, linked from `tests/browser/index.html`.
+It finds where the 429 starts, then — the instant one model is walled — asks every other model
+once, which is the test that settles per-model against per-project. It then times the recovery
+and runs a paced send. Capped, counted, and lite-only by default: Flash carries 20 requests a day
+and no volume test touches it. Every request is a two-character prompt capped at one output
+token, so a 429 there cannot be a token limit. The key is typed into the tab and never stored.
+
+**What it measured**, 2026-08-26, live free-tier key, 32 requests:
+
+| Measurement | Result | What it overturned |
+|---|---|---|
+| quota id | `GenerateRequestsPerMinutePerProjectPerModel-FreeTier` | per project **and** per model — both readings were half right |
+| dimensions | `{"model": "...", "location": "global"}` | scoped to one model, not shared across the ladder |
+| **blast radius** | **`gemini-3.1-flash-lite` answered 200 while `gemini-3.5-flash-lite` refused** | **the ladder is right** — the neighbour has its own allowance |
+| the wall | 15 answered, the 16th refused | exactly the documented 15/min; the caps are real |
+| recovery | **20.6 s** | not a daily cap, and not a full minute either |
+| RetryInfo | `8s` on a wall still standing 11 s later, then `57s` on one that cleared in 10 s | **Google's own number is unreliable in both directions** |
+
+**So why did the session die?** Flash is 5/min and the old walk sent **6 per model per turn** —
+one turn breaks Flash. Lite is 15/min and 6 is fine once, but the error block says the cadet
+"kept cycling", and three attempts inside a minute is 18 against a cap of 15. **Both tiers were
+self-inflicted; only the arithmetic differed.**
+
+**Changed** — `scripts/artifacts/patch_tutor_diagnostics.py` set 7, applied to all 44 builds and
+wired into `to_gemini.py` so the next port cannot drop it:
+
+- **A 429 no longer retries its rung — it walks** (`QUOTA_WALK_RETRIES = 0`). The probe watched
+  a neighbouring model answer normally while this one refused, and a per-minute window cannot
+  clear in the 500 ms the old backoff waited. **The single biggest reduction: 2 calls a rung
+  becomes 1.** The 5xx path keeps its retry — capacity is a different failure — and the network
+  path keeps all three.
+- **One whole-ladder lap per turn, not two** (`LADDER_RESET_LIMIT` 2 → 1). With the above, worst
+  case is **3 requests per model per turn** against a measured cap of 5.
+- **The wait moved to the end**, where it is the only move left. Waiting on a rung whose
+  neighbour answers is wasted; waiting once the *whole* ladder is spent buys a fresh ladder.
+  Bounded at **25 s** to cover the 20.6 s measured recovery, and `RetryInfo` may only make it
+  **shorter** — waiting `57s` literally to clear a ten-second wall is the trap the probe caught.
+- **The wait is shown**, counting down on the status strip that already exists
+  (`onModelSwitch`). Twenty seconds of silence and twenty seconds of "retrying in 18s" are the
+  same delay and a completely different experience.
+- **The 429 body is read once, and its `QuotaFailure` name is recorded** (`noteQuota`), printed
+  in the cadet's error block on its own `quota:` line and sent to `log-tutor-error`. The parse
+  used to sit inside the `waitedFor` guard, and `res.json()` can be called only once, so the
+  body was dropped unread on every repeat. **The probe will not be re-run mid-term — the next
+  failing cadet's error block has to carry the answer by itself.**
+
+**Two things an earlier draft of this set shipped and the probe removed**: a 65 s honoured-wait
+ceiling, reasoned from "a per-minute window is sixty seconds" — correct arithmetic, wrong answer
+once `RetryInfo` was measured; and a 1.2 s gap between rungs, hedging against a project-wide
+ceiling that **does not exist**. Both are recorded here because the reasoning behind them was
+sound and still wrong, which is the argument for measuring.
+
+**Verified:** ladder harness **83/83** (up from 63), including
+`(QUOTA_WALK_RETRIES + 1) * (LADDER_RESET_LIMIT + 1 + LADDER_WAITS_PER_TURN) <= 5` so the burst
+cannot regress past the measured Flash cap; `gemini-build.mjs` 7/7 in real Chrome on one build
+per course; the probe page itself 10/10 in real Chrome, including that Run with no key warns and
+spends zero; all 44 builds still CRLF; **0 `INTERACTION_ID` lines touched**, so every slug is
+intact; `name_scan` PASS.
+
+**NOT verified: a real tutor turn on a live key with the new code.** The ladder-wait path in
+particular has never executed. Run one graded turn; if it still fails, the error block now names
+the quota.
+
+---
+
 ## 2026-08-25 — Casey Pellizzari via Claude
 
 ### One failing turn burned the whole ladder in twenty seconds
