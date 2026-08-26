@@ -62,7 +62,7 @@ const S = new Function(block + `
            advance, resetLadder, waitedFor, diagState, modelStats, statFor, noteCall,
            noteOk, noteFail, genConfig, MAX_TOKENS, THINKING_BUDGET,
            freshTurn, reviveSpent, WALK_RETRIES, LADDER_RESET_LIMIT, noteQuota,
-           QUOTA_WALK_RETRIES, LADDER_WAIT_MS, LADDER_WAITS_PER_TURN,
+           QUOTA_WALK_RETRIES, LADDER_WAIT_MS, LADDER_WAIT_MIN_MS, LADDER_WAITS_PER_TURN,
            QUOTA_STORE, quotaDay, book, bookFor, saveBook, RPM_FLASH, RPM_LITE, rpmOf,
            sentSince, noteSend, quotaScope, lockDay, dayLocked, pacedOut, seedDayLocks,
            RPD_FLASH, RPD_LITE, rpdOf, DAILY_CONFIDENCE,
@@ -451,8 +451,13 @@ ok(S.LADDER_RESET_LIMIT === 1,
 ok((S.QUOTA_WALK_RETRIES + 1) * (S.LADDER_RESET_LIMIT + 1 + S.LADDER_WAITS_PER_TURN) <= 5,
    `worst-case requests per model per TURN must stay under the MEASURED Flash cap of 5/min, got ${(S.QUOTA_WALK_RETRIES + 1) * (S.LADDER_RESET_LIMIT + 1 + S.LADDER_WAITS_PER_TURN)}`);
 
-ok(S.LADDER_WAIT_MS >= 20600 && S.LADDER_WAIT_MS <= 40000,
-   `the ladder wait covers the 20.6s measured recovery without becoming a freeze, got ${S.LADDER_WAIT_MS}`);
+// RAISED BY SET 12, and the old bound is why. 20.6s was measured on one wall; the wall this
+// number exists to outlast was measured on 2026-08-26 at 41s, which the old ceiling of 40000
+// actually FORBADE. A wait that expires before the wall clears is spent for nothing.
+ok(S.LADDER_WAIT_MS >= 41000 && S.LADDER_WAIT_MS <= 60000,
+   `the ladder wait outlasts the 41s measured recovery without becoming a freeze, got ${S.LADDER_WAIT_MS}`);
+ok(S.LADDER_WAIT_MIN_MS >= 40000 && S.LADDER_WAIT_MIN_MS <= S.LADDER_WAIT_MS,
+   `RetryInfo may shorten the wait, but never below the measured recovery, got ${S.LADDER_WAIT_MIN_MS}`);
 
 ok(S.LADDER_WAITS_PER_TURN >= 1,
    `an exhausted ladder waits at least once before giving up - the walls are per-minute and they clear, got ${S.LADDER_WAITS_PER_TURN}`);
@@ -475,7 +480,7 @@ ok(/if \(attempt < QUOTA_WALK_RETRIES\)/.test(src),
 // set 11's scope vote. The ORDER is what this asserts, not the distance between the two.
 ok(/if \(advance\(activeModelRef\)\) \{ attempt = 0; continue; \}[\s\S]{0,2200}ladderWaits < LADDER_WAITS_PER_TURN/.test(src),
    'the wait comes AFTER the walk fails, which is the only moment it beats walking');
-ok(/Math\.min\(waitMs, LADDER_WAIT_MS\)/.test(src),
+ok(/Math\.min\(Math\.max\(waitMs, LADDER_WAIT_MIN_MS\), LADDER_WAIT_MS\)/.test(src),
    "Google's RetryInfo may only SHORTEN the wait - measured at 57s for a wall that cleared in 10");
 ok(/async function waitVisibly\(model, ms\)/.test(src) && /onModelSwitch\.fn\(n > 0 \?/.test(src),
    'the wait is SHOWN on the existing status strip, not hidden behind a spinner');
@@ -738,15 +743,92 @@ ok(/const scopeOut = allDay \? "day"/.test(src) && /qs\.indexOf\("unknown"\) > -
 ok(/\.filter\(\(s\) => s === "day" \|\| s === "minute" \|\| s === "unknown"\)/.test(src),
    'only rungs spent on QUOTA get a vote - a 404 says nothing about anyone\'s allowance');
 ok(/err\.scope === "day"/.test(src) && /err\.scope === "minute"/.test(src)
-   && /did not say which limit you hit/.test(src),
+   && /it did not say why/.test(src),
    'three cadet-facing answers, and the third one admits it does not know');
-ok(/Wait a minute and press Retry; if it still fails, come back after the reset/.test(src),
-   'and the unknown one gives BOTH actions rather than promising either');
+// Set 12 changed WHAT the third one says. It used to hedge across two actions because it was
+// hedging across two causes; measurement removed one of the causes, so it now gives the one
+// action that fits what is known, and does not send the cadet away for the night.
+ok(/Wait a minute and press Retry\./.test(src)
+   && /nothing is lost if you close the page/.test(src),
+   'and the unknown one gives ONE action plus the reassurance that makes it safe to take');
 
 clearSpent();
 globalThis.localStorage.removeItem(S.QUOTA_STORE);
 S.book().m = {};
 S.diagState.resets = 0;
+
+// --- set 12: the first fix set corrected by measurement rather than by the next incident --
+//
+// 107 recorded requests against a disposable key, plus a census of app.tutor_error_log.
+// Everything below is asserted against a string or a number that was OBSERVED. Sets 9-11
+// each shipped an inference and were corrected within a day by the cadets who met it.
+
+// A real quota refusal is chatty. Both measured 429s named the metric, the limit, the model
+// and a delay -- so when Google DOES name it, the name still decides, and these must not have
+// been broken by set 12.
+ok(S.quotaScope('gemini-3.1-flash-lite',
+                'GenerateRequestsPerMinutePerProjectPerModel-FreeTier') === 'minute',
+   'the MEASURED per-minute quota id still reads as minute');
+ok(S.quotaScope('gemini-3.5-flash',
+                'GenerateRequestsPerDayPerProjectPerModel-FreeTier') === 'day',
+   'and the MEASURED per-day quota id still reads as day');
+
+// The measured caps, which the run confirmed to the request.
+ok(S.RPD_FLASH === 20, 'flash walled on request 20 exactly - measured, not documented');
+ok(S.RPM_LITE === 15, 'lite walled on request 16 exactly - measured, not documented');
+
+// THE ONE THAT MATTERS. 781 live refusals, every one bare, and this row settles it:
+//     gemini-3.5-flash-lite   calls 1   ok 0   kinds {quota: 1}
+// One request against caps of 15/minute and 500/day. Whatever refused it, it was not that
+// key's allowance -- so the cadet must not be told their allowance is gone.
+// Matched against the RETURN statement, not the file. The set-12 comment quotes both removed
+// sentences deliberately -- that quotation is the record of what measurement disproved -- so a
+// bare substring search here would fail on this fix's own documentation.
+const RETURNED = (src.match(/return "[^"]*"/g) || []).join('\n');
+ok(!/The usual cause is your Google project's free daily allowance/.test(RETURNED),
+   'the unknown 429 no longer blames the cadet\'s daily allowance - measured false');
+ok(!/come back after the reset/.test(RETURNED),
+   'and it no longer sends them away for the night on a refusal that named nothing');
+ok(/almost certainly Google being busy/.test(src)
+   && /nowhere near your limits/.test(src),
+   'it says what our own ledger actually knows, and names the likely cause without asserting it');
+ok(/worst in the evening, when the whole class is working/.test(src),
+   'and tells the cadet the one thing that makes the pattern make sense to them');
+
+// The day and minute messages are untouched: those scopes only fire on Google's own name now,
+// and both names were observed.
+ok(/resets at midnight Pacific time/.test(src) && /Retrying now cannot work/.test(src),
+   'a NAMED daily refusal still says come back tomorrow, because that one is evidenced');
+
+// --- the two key failures cadets actually get --------------------------------------------
+// Set 10's five patterns matched 0 live rows in four days. These two produced 13.
+ok(keyErrorKind(403, "Permission denied: Consumer 'api_key:AQ.Ab8RN6K3ra' has been "
+   + 'suspended.') === 'suspended',
+   'a SUSPENDED project is named as suspended - 10 live rows, all told to re-copy a perfect key');
+ok(keyErrorKind(401, 'The bound service account is deleted or disabled. The service account '
+   + 'bound to the API key must be active.') === 'deadproject',
+   'a dead service account is named too - 3 live rows, same wrong advice');
+ok(/case "suspended":/.test(src) && /re-copying it will not help/.test(src),
+   'and both messages say re-copying will not help, which is the whole content of the fix');
+ok(/PERSONAL Google account/.test(src),
+   'the suspended message gives the one action that has a chance of working');
+
+// The suspended test must sit ABOVE `forbidden`, because that test excludes any message
+// mentioning a key and this message contains the literal string "api_key:". That exclusion
+// was a guess in set 10, and it swallowed a real case.
+ok(src.indexOf('return "suspended"') < src.indexOf('return "forbidden"'),
+   'suspended is tested before forbidden - forbidden\'s key-exclusion would swallow it');
+
+// Google's REAL wording for a mangled key, captured at last. Both still land on auth, which
+// is correct -- set 10 got these right by accident of its exclusions, and now they are pinned.
+ok(keyErrorKind(401, 'Request had invalid authentication credentials. Expected OAuth 2 access '
+   + 'token, login cookie or other valid authentication credential. See '
+   + 'https://developers.google.com/identity/sign-in/web/devconsole-project.') === 'auth',
+   'a key with trailing junk returns 401 with OAuth wording, and still reads as auth');
+ok(keyErrorKind(403, "Method doesn't allow unregistered callers (callers without established "
+   + 'identity). Please use API Key or other form of API consumer identity to call this '
+   + 'API.') === 'auth',
+   'an EMPTY key returns 403, and must not be mistaken for an entitlement problem');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 console.log('NOTE: no live key is used — this checks selection logic, not a real tutor turn.');

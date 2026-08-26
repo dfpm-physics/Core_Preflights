@@ -503,12 +503,19 @@ const WALK_RETRIES = 1;
 const QUOTA_WALK_RETRIES = 0;
 
 // The wait taken once the WHOLE ladder is spent, which is the only moment waiting beats
-// walking. NOT set from Google's own number: the probe showed RetryInfo is unreliable in both
-// directions, naming 8s on a wall still standing 11 seconds later and then 57s on one that
-// cleared in 10. Waiting it literally would hold a cadet 57 seconds to clear a ten-second
-// wall. 25s covers the 20.6s recovery that was actually measured, and the RetryInfo value is
-// used only to make this SHORTER.
-const LADDER_WAIT_MS = 25000;
+// walking. RetryInfo is unreliable in BOTH directions and is therefore clamped, never obeyed:
+// the 2026-08-25 probe caught it naming 8s on a wall still standing 11 seconds later and 57s
+// on one that cleared in 10, and the 2026-08-26 measurement caught it under-stating -- 31s
+// named on a wall that was still standing at 31s and cleared at 41s.
+//
+// 25s CAME FROM A RECOVERY OF 20.6s THAT WAS MEASURED ON A DIFFERENT WALL. The one wall this
+// number exists to outlast took 41s, so 25s expired early every time: the cadet watched a
+// countdown, pressed on, and collected the same refusal. A wait that cannot outlast the wall
+// is worse than no wait, because it spends the cadet's patience and buys nothing at all.
+// 45s covers the 41s that was measured, and the floor stops RetryInfo talking it back down
+// below what that same measurement showed to be too little.
+const LADDER_WAIT_MS = 45000;
+const LADDER_WAIT_MIN_MS = 40000;
 const LADDER_WAITS_PER_TURN = 1;
 let ladderWaits = 0;
 
@@ -2540,7 +2547,8 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
       if (!allDay && ladderWaits < LADDER_WAITS_PER_TURN) {
         ladderWaits++;
         await waitVisibly(activeModelRef.current,
-                          waitMs > 0 ? Math.min(waitMs, LADDER_WAIT_MS) : LADDER_WAIT_MS);
+                          waitMs > 0 ? Math.min(Math.max(waitMs, LADDER_WAIT_MIN_MS), LADDER_WAIT_MS)
+                                     : LADDER_WAIT_MS);
         if (freshTurn(activeModelRef)) { attempt = 0; continue; }
       }
       throw { kind: "quota", status: 429, scope: scopeOut,
@@ -2706,6 +2714,14 @@ function keyErrorKind(status, msg) {
   if (/API_KEY_\w*BLOCKED|from referer|from referrer|are blocked|IP address restriction/i.test(m)) return "keyrestricted";
   // "User location is not supported for the API use."
   if (/location is not supported|user location/i.test(m)) return "region";
+  // MEASURED, not guessed -- 10 rows on 2026-08-26: "Permission denied: Consumer
+  // 'api_key:AQ...' has been suspended." Tested ABOVE `forbidden` on purpose: that test
+  // excludes any message mentioning a key, and this message contains "api_key:", so the
+  // exclusion swallowed it and the cadet was told to re-copy a perfect key.
+  if (/has been suspended|CONSUMER_SUSPENDED/i.test(m)) return "suspended";
+  // 3 rows, at 401: "The bound service account is deleted or disabled. The service account
+  // bound to the API key must be active."
+  if (/service account is deleted or disabled|bound service account/i.test(m)) return "deadproject";
   // A 403 that never mentions the key is not about the key.
   if (status === 403 && !/api[\s_-]?key|credential|unregistered/i.test(m)) return "forbidden";
   return "auth";
@@ -2730,6 +2746,12 @@ function errorMessage(err, { afterRetries = false } = {}) {
       return "Google will not serve the free Gemini API from this network location. Try a phone hotspot or a different network, and tell your instructor.";
     case "forbidden":
       return "Google refused that key, and this is NOT a typo \u2014 the key was read fine. The usual cause is a school Google account that blocks AI Studio; a personal Google account normally works. Google's own words are below \u2014 show them to your instructor.";
+    case "suspended":
+      // The key is typed perfectly and Google has cut off the project behind it. "Check your
+      // key" is the one instruction that cannot help, and it is what we said 10 times.
+      return "Google has SUSPENDED the Google project behind that key. The key is typed correctly \u2014 re-copying it will not help. Make a NEW key at aistudio.google.com signed in with a PERSONAL Google account, and tell your instructor this happened.";
+    case "deadproject":
+      return "That key exists, but the Google project behind it has been deleted or switched off, so Google will not serve it. Re-copying it will not help. Make a NEW key at aistudio.google.com and tell your instructor.";
     case "quota":
       // This hedged -- "a per-minute limit clears in about a minute; the daily one resets on
       // Google's clock" -- because the transport could not tell which had happened. It can
@@ -2745,7 +2767,13 @@ function errorMessage(err, { afterRetries = false } = {}) {
       if (err.scope === "minute") {
         return "Google is asking us to slow down \u2014 the per-minute limit on your key is full. It clears in about a minute. Wait, then press Retry.";
       }
-      return "Google is refusing every model your key can use, and it did not say which limit you hit. The usual cause is your Google project's free daily allowance, which resets at midnight Pacific time \u2014 1am Mountain. Wait a minute and press Retry; if it still fails, come back after the reset. Your conversation is saved in this browser.";
+      // WAS: "The usual cause is your Google project's free daily allowance ... come back
+      // after the reset." Measured false on 2026-08-26. A real allowance refusal names the
+      // metric, the limit and the model every time; this one names nothing, and it lands on
+      // models that have had a single request against caps of 15/minute and 500/day. Telling
+      // a cadet their allowance is gone -- when our own ledger says they have barely started
+      // -- sends them away from a lesson that would very likely work in two minutes.
+      return "Google is turning away requests for every model your key can use, and it did not say why. Our own count says you are nowhere near your limits, so this is almost certainly Google being busy rather than anything wrong with your key. It is worst in the evening, when the whole class is working. Wait a minute and press Retry. Your conversation is saved in this browser, so nothing is lost if you close the page.";
     case "blocked":
       return "Gemini declined to answer that turn. Rephrase and try again \u2014 and tell your instructor if it keeps happening.";
     case "model":

@@ -10,6 +10,72 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-26 — Matthew Recker via Claude
 
+### 107 requests against a disposable key, and three fix sets were answering the wrong question
+
+Sets 9, 10 and 11 each shipped an inference and were corrected within a day by the cadet who met
+it. The course director's answer to the fourth was *"this has to be tested to death"*, and this is
+the result: `tests/browser/test-gemini-api-truth.html` run end to end — **107 requests, 12m 55s** —
+read alongside a census of `app.tutor_error_log`. Full record, with the captured wording:
+`docs/operations/TUTOR-BEHAVIOR-PARITY.md` §2.10.
+
+**The caps were right; two other numbers were not.** Flash walled on request **20** and lite on
+request **16**, confirming 20/day and 15/minute exactly, and a wall proved strictly per-model —
+which is what the ladder exists to walk around. But recovery from a per-minute wall took **41 s**,
+not the 20.6 s a different wall was measured at, and Google's own `RetryInfo` named **31 s** for a
+wall still standing at 31 s. So `LADDER_WAIT_MS = 25000` expired early *every* time: the cadet
+watched a countdown, pressed on, and collected the same refusal.
+
+**A real quota refusal names the metric, the limit, the model and a delay. All 781 quota refusals
+in the live log name nothing** — the bare sentence *"Resource has been exhausted (e.g. check
+quota)."*, `quota_ids: {}` on every row. One row settles it: `gemini-3.5-flash-lite  calls 1  ok 0
+kinds {quota: 1}` — **one request**, against caps of 15/minute and 500/day. They also cluster
+02:20–05:25 UTC, which is 20:20–23:25 Mountain: the evening the whole cohort works before a
+deadline. That is shared capacity, not one cadet's allowance.
+
+**Set 10's five key-error patterns matched zero live rows in four days. Two causes nobody had
+guessed produced 13** — `Consumer 'api_key:…' has been suspended` (10 rows, at 403) and `The bound
+service account is deleted or disabled` (3 rows, at 401). Both fell through to "re-copy your key",
+which cannot help, because in both cases the key is typed perfectly and the project behind it is
+gone. **Ten cadets are holding keys Google has suspended.** The first one missed because set 10's
+`forbidden` test excludes any message mentioning a key — and that message contains the literal
+string `api_key:`.
+
+**Changed — `scripts/artifacts/patch_tutor_diagnostics.py` set 12, all 45 builds, wired into
+`to_gemini.py`:**
+
+- **`LADDER_WAIT_MS` 25 s → 45 s**, with a new `LADDER_WAIT_MIN_MS` floor of 40 s. RetryInfo is now
+  clamped in **both** directions instead of being trusted to shorten — it was measured
+  over-stating on 2026-08-25 and under-stating on 2026-08-26.
+- **The unnamed 429 stops blaming the cadet's daily allowance** and stops sending them away for the
+  night. It now says our own count puts them nowhere near a limit, that this is almost certainly
+  Google being busy, that it is worst in the evening, and to wait a minute and press Retry. This
+  **removes** a claim rather than replacing it with a better guess.
+- **`suspended` and `deadproject`**, matched against the wording in the log and tested *above*
+  `forbidden` so its key-exclusion cannot swallow them again. Both messages lead with "re-copying
+  it will not help", which is the entire content of the fix.
+
+**Verified:** ladder harness **169/169** on four builds covering all three courses and both build
+vintages. Three assertions changed — two of set 11's, which asserted a sentence rather than the
+property behind it, and one of set 12's own, which searched the file and so matched the comment
+quoting the text it had just removed (it now matches against `return` statements only).
+`gemini-build.mjs` **7/7 in real Chrome** on the same four. All 45 CRLF, **0 `INTERACTION_ID`
+lines touched**, 36 lines changed per build, `name_scan` PASS.
+
+**Still unmeasured, and said plainly rather than assumed:** `RPM_FLASH = 5` and `RPD_LITE = 500`
+were not reached — the lite daily probe hit a 503 capacity refusal at request 39. The bare 429 has
+not been reproduced on demand; it is load-dependent and evening-shaped, so the reading above rests
+on its shape, its timing and one single-call row. That inference is used only to *remove* a claim.
+
+> **The finding no code change addresses.** Twenty Flash requests a day is about four tutoring
+> turns. A cadet working two lessons in a day exhausts the top two rungs before the second one
+> starts, and the whole cohort shares one free tier at the same hour the night before a deadline.
+> **The free tier is not sized for this class.** That is a paid-key or server-proxy decision and it
+> belongs to the course director, not to another fix set.
+
+---
+
+## 2026-08-26 — Matthew Recker via Claude
+
 ### A testbed, because four fix sets in two days is the symptom and guessing is the disease
 
 **Asked for by the course director, in those terms:** *"This has to be tested to death… these

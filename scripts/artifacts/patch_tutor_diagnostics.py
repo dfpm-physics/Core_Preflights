@@ -2245,6 +2245,133 @@ def apply_quota_receipts(raw):
     return p.buf, p.applied
 
 
+
+# --- Set 12: the first fix set built on measurements instead of inference -------------------
+#
+# 2026-08-26, from 107 recorded requests against a disposable key
+# (tests/browser/test-gemini-api-truth.html) plus a census of app.tutor_error_log. Sets 9-11
+# each corrected the previous one's guess; this one corrects a guess with a number.
+#
+# THREE THINGS THE MEASUREMENT SETTLED.
+#
+# 1. THE LADDER WAIT IS TOO SHORT, AND GOOGLE'S OWN HINT IS WHY. A per-minute wall on
+#    gemini-3.1-flash-lite carried RetryInfo saying 31s. The wall was still standing at 31s
+#    and cleared at 41s. Set 7 used RetryInfo only to make the wait SHORTER, on the strength
+#    of a probe that caught it over-stating; it under-states too, and a wait that expires
+#    before the wall does is spent for nothing -- the cadet watches a countdown, presses on,
+#    and gets the same refusal.
+#
+# 2. A REAL QUOTA REFUSAL IS CHATTY, AND THE ONE HITTING CADETS IS NOT. Both measured 429s --
+#    per-minute and per-day -- named the metric, the numeric limit, the model and a retry
+#    delay. All 781 quota refusals in the live log on 2026-08-26 carried the bare sentence
+#    "Resource has been exhausted (e.g. check quota)." with no name, no limit and no delay,
+#    and `quota_ids: {}` on every one. One logged row settles it on its own:
+#
+#        gemini-3.5-flash-lite   calls 1   ok 0   kinds {quota: 1}
+#
+#    ONE request. The measured caps for that model are 15/minute and 500/day. A first call
+#    cannot exhaust either, so the thing refusing it is not that key's allowance. The refusals
+#    also cluster 02:20-05:25 UTC -- 20:20-23:25 Mountain, the evening the whole cohort works
+#    before a deadline. That is the shape of shared free-tier capacity, not of one cadet's
+#    quota. Set 11 already routed these to `unknown`, which was right; the WORDS still told
+#    the cadet the usual cause was their daily allowance and to come back after the reset.
+#    This set stops saying that. It does not replace it with a better guess -- it says what is
+#    known, which is that our own count puts them nowhere near a limit.
+#
+# 3. THE TWO KEY FAILURES CADETS ACTUALLY GET WERE BOTH CLASSIFIED WRONG. Set 10 split the
+#    400/401/403 lump using patterns written from imagination; in four days of live rows those
+#    patterns matched NOTHING, while two causes nobody had guessed produced 13 rows:
+#
+#        403 x10  "Permission denied: Consumer 'api_key:...' has been suspended."
+#        401 x3   "The bound service account is deleted or disabled. The service account
+#                  bound to the API key must be active."
+#
+#    Both fell through to `auth`, whose advice is "re-copy the key" -- which cannot help,
+#    because in both cases the key is typed perfectly and the project behind it is gone. Note
+#    WHY the first one missed: set 10's `forbidden` test excludes any message mentioning a
+#    key, and this message contains the literal string "api_key:". A guessed exclusion caught
+#    a real case.
+#
+# The apioff / keyrestricted / region patterns are LEFT IN PLACE. They have matched nothing
+# yet, but they are cheap, they are ordered below the measured ones, and removing an
+# unfired branch is not the same as knowing it never fires.
+
+SET12_MARKER = b"LADDER_WAIT_MIN_MS"
+
+OLD_WAITC = rb"""// The wait taken once the WHOLE ladder is spent, which is the only moment waiting beats
+// walking. NOT set from Google's own number: the probe showed RetryInfo is unreliable in both
+// directions, naming 8s on a wall still standing 11 seconds later and then 57s on one that
+// cleared in 10. Waiting it literally would hold a cadet 57 seconds to clear a ten-second
+// wall. 25s covers the 20.6s recovery that was actually measured, and the RetryInfo value is
+// used only to make this SHORTER.
+const LADDER_WAIT_MS = 25000;"""
+
+NEW_WAITC = rb"""// The wait taken once the WHOLE ladder is spent, which is the only moment waiting beats
+// walking. RetryInfo is unreliable in BOTH directions and is therefore clamped, never obeyed:
+// the 2026-08-25 probe caught it naming 8s on a wall still standing 11 seconds later and 57s
+// on one that cleared in 10, and the 2026-08-26 measurement caught it under-stating -- 31s
+// named on a wall that was still standing at 31s and cleared at 41s.
+//
+// 25s CAME FROM A RECOVERY OF 20.6s THAT WAS MEASURED ON A DIFFERENT WALL. The one wall this
+// number exists to outlast took 41s, so 25s expired early every time: the cadet watched a
+// countdown, pressed on, and collected the same refusal. A wait that cannot outlast the wall
+// is worse than no wait, because it spends the cadet's patience and buys nothing at all.
+// 45s covers the 41s that was measured, and the floor stops RetryInfo talking it back down
+// below what that same measurement showed to be too little.
+const LADDER_WAIT_MS = 45000;
+const LADDER_WAIT_MIN_MS = 40000;"""
+
+OLD_WAITCALL = rb"""waitMs > 0 ? Math.min(waitMs, LADDER_WAIT_MS) : LADDER_WAIT_MS);"""
+NEW_WAITCALL = rb"""waitMs > 0 ? Math.min(Math.max(waitMs, LADDER_WAIT_MIN_MS), LADDER_WAIT_MS)
+                                     : LADDER_WAIT_MS);"""
+
+OLD_KEK = rb"""  // A 403 that never mentions the key is not about the key.
+  if (status === 403 && !/api[\s_-]?key|credential|unregistered/i.test(m)) return "forbidden";"""
+
+NEW_KEK = rb"""  // MEASURED, not guessed -- 10 rows on 2026-08-26: "Permission denied: Consumer
+  // 'api_key:AQ...' has been suspended." Tested ABOVE `forbidden` on purpose: that test
+  // excludes any message mentioning a key, and this message contains "api_key:", so the
+  // exclusion swallowed it and the cadet was told to re-copy a perfect key.
+  if (/has been suspended|CONSUMER_SUSPENDED/i.test(m)) return "suspended";
+  // 3 rows, at 401: "The bound service account is deleted or disabled. The service account
+  // bound to the API key must be active."
+  if (/service account is deleted or disabled|bound service account/i.test(m)) return "deadproject";
+  // A 403 that never mentions the key is not about the key.
+  if (status === 403 && !/api[\s_-]?key|credential|unregistered/i.test(m)) return "forbidden";"""
+
+OLD_MSG12 = rb"""    case "quota":"""
+NEW_MSG12 = rb"""    case "suspended":
+      // The key is typed perfectly and Google has cut off the project behind it. "Check your
+      // key" is the one instruction that cannot help, and it is what we said 10 times.
+      return "Google has SUSPENDED the Google project behind that key. The key is typed correctly \u2014 re-copying it will not help. Make a NEW key at aistudio.google.com signed in with a PERSONAL Google account, and tell your instructor this happened.";
+    case "deadproject":
+      return "That key exists, but the Google project behind it has been deleted or switched off, so Google will not serve it. Re-copying it will not help. Make a NEW key at aistudio.google.com and tell your instructor.";
+    case "quota":"""
+
+OLD_UNK = rb"""      return "Google is refusing every model your key can use, and it did not say which limit you hit. The usual cause is your Google project's free daily allowance, which resets at midnight Pacific time \u2014 1am Mountain. Wait a minute and press Retry; if it still fails, come back after the reset. Your conversation is saved in this browser.";"""
+
+NEW_UNK = rb"""      // WAS: "The usual cause is your Google project's free daily allowance ... come back
+      // after the reset." Measured false on 2026-08-26. A real allowance refusal names the
+      // metric, the limit and the model every time; this one names nothing, and it lands on
+      // models that have had a single request against caps of 15/minute and 500/day. Telling
+      // a cadet their allowance is gone -- when our own ledger says they have barely started
+      // -- sends them away from a lesson that would very likely work in two minutes.
+      return "Google is turning away requests for every model your key can use, and it did not say why. Our own count says you are nowhere near your limits, so this is almost certainly Google being busy rather than anything wrong with your key. It is worst in the evening, when the whole class is working. Wait a minute and press Retry. Your conversation is saved in this browser, so nothing is lost if you close the page.";"""
+
+
+def apply_measured_truths(raw):
+    """Set 12. The first set corrected by measurement rather than by the next incident."""
+    if SET12_MARKER in raw:
+        return raw, ["already"]
+    p = Patcher(raw, None)
+    p.sub("wait-45s", OLD_WAITC, NEW_WAITC)
+    p.sub("wait-clamped-both-ways", OLD_WAITCALL, NEW_WAITCALL)
+    p.sub("real-key-failures", OLD_KEK, NEW_KEK)
+    p.sub("suspended-and-deadproject-messages", OLD_MSG12, NEW_MSG12)
+    p.sub("unknown-429-is-not-your-quota", OLD_UNK, NEW_UNK)
+    return p.buf, p.applied
+
+
 def patch_one(path, verbose=False):
     raw = path.read_bytes()
     buf, applied = apply_fixset(raw)
@@ -2258,8 +2385,11 @@ def patch_one(path, verbose=False):
     buf, applied9 = apply_quota_ledger(buf)
     buf, applied10 = apply_key_error_kinds(buf)
     buf, applied11 = apply_quota_receipts(buf)
+    # Set 12 AFTER 11: it rewrites the unknown-scope message set 11 introduces, and
+    # inserts errorMessage cases directly above the `quota` case set 11 edits.
+    buf, applied12 = apply_measured_truths(buf)
     applied = (applied + applied2 + applied3 + applied4 + applied5 + applied6
-               + applied7 + applied8 + applied9 + applied10 + applied11)
+               + applied7 + applied8 + applied9 + applied10 + applied11 + applied12)
     if verbose:
         for a in applied:
             print("      . " + a)

@@ -508,6 +508,117 @@ that plainly, gives both actions, and promises neither.
 
 ---
 
+### 2.10 The next day — 107 requests, and three of the four fix sets turn out to be answering the wrong question
+
+**This is the first entry in this section whose numbers were measured rather than inferred.**
+Sets 9, 10 and 11 each shipped an inference and were corrected within a day by the cadet who met
+it. The course director's response to the fourth was *"this has to be tested to death"*, which was
+right, and the answer was
+[`tests/browser/test-gemini-api-truth.html`](../../tests/browser/test-gemini-api-truth.html) —
+a harness that deliberately exhausts a disposable key and records status, headers and body for
+every call. **107 requests, 12m 55s.** Read alongside a census of `app.tutor_error_log`.
+
+#### What the caps actually are
+
+| | Guessed | Measured | |
+|---|---|---|---|
+| Flash requests per day | 20 | walled on request **20** | exact |
+| Lite requests per minute | 15 | walled on request **16** | exact |
+| Blast radius of a wall | one model | other three rungs returned 200 | exact |
+| A daily lock clearing on its own | no | still refusing after 90 s | exact |
+| Recovery from a per-minute wall | 20.6 s | **41 s** | **the shipped wait was too short** |
+| Lite requests per day | 500 | hit 503 capacity at 39 | **still unmeasured** |
+
+The ladder's *shape* is therefore right — per-model walls, walked around, are exactly what the
+ladder is for. Two of its *numbers* were not.
+
+#### A real quota refusal is chatty. The one hitting cadets says nothing.
+
+Both measured 429s named everything:
+
+```
+GenerateRequestsPerMinutePerProjectPerModel-FreeTier   {model: gemini-3.1-flash-lite, location: global}
+  "Quota exceeded for metric: ...generate_content_free_tier_requests, limit: 15,
+   model: gemini-3.1-flash-lite. Please retry in 31.944139553s."
+
+GenerateRequestsPerDayPerProjectPerModel-FreeTier      {model: gemini-3.5-flash, location: global}
+  "... limit: 20, model: gemini-3.5-flash. Please retry in 44.016147424s."
+```
+
+**All 781 quota refusals in the live log on 2026-08-26 look like neither.** Every one carries the
+bare sentence *"Resource has been exhausted (e.g. check quota)."* — no metric, no limit, no model,
+no retry delay, and `quota_ids: {}` on every row. One logged row settles it without any argument
+about wording:
+
+```
+gemini-3.5-flash-lite    calls 1    ok 0    kinds {quota: 1}
+```
+
+**One request**, against measured caps of 15/minute and 500/day. A first call cannot exhaust
+either. Whatever refused it was not that key's allowance.
+
+The timing says the same thing from the other side. All 781 fall between **02:20 and 05:25 UTC** —
+20:20 to 23:25 Mountain, the evening the whole cohort works before a deadline — peaking at 22
+refusals a minute. That is the shape of shared free-tier capacity, not of one cadet's quota.
+
+> **So §2.7's entire day-versus-minute question is the wrong question for the common case.**
+> §2.9 was right to add `unknown` and right that this was the common branch; what it still got
+> wrong was the *words*, which told the cadet the usual cause was their daily allowance and to come
+> back after the reset. Set 12 stops saying that. **It does not substitute a better guess** — it
+> says what the ledger actually knows, which is that the cadet is nowhere near a limit.
+
+#### Set 10's five patterns matched nothing. Two causes nobody guessed produced 13 rows.
+
+| Real message, from the log | Rows | Set 10 said | Truth |
+|---|---|---|---|
+| `Permission denied: Consumer 'api_key:…' has been suspended.` | 10 | `auth` — "re-copy your key" | Google **suspended the project**. Re-copying cannot help |
+| `The bound service account is deleted or disabled.` | 3 | `auth` — "re-copy your key" | the project behind the key is gone |
+| `API key not valid. Please pass a valid API key.` | 11 | `auth` | correct |
+| *(apioff / keyrestricted / region)* | **0** | — | never observed |
+
+**Ten cadets hold keys Google has suspended**, and every one of them was told to check their
+typing. Note *why* the first one missed: set 10's `forbidden` test excludes any message mentioning
+a key, and this message contains the literal string `api_key:`. **A guessed exclusion caught a real
+case.** The two new tests are therefore ordered *above* it.
+
+The apioff / keyrestricted / region patterns are left in place — they are cheap, they now sit below
+the measured ones, and an unfired branch is not the same as a branch known never to fire.
+
+#### And Google's real wording for a bad key, captured at last (this part costs no quota)
+
+| What the cadet did | Status | Google says |
+|---|---|---|
+| pasted a key with trailing junk | **401** | *"Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie…"* |
+| pasted nothing | **403** | *"Method doesn't allow unregistered callers…"* |
+| pasted something that is not a key | **400** | *"API key not valid. Please pass a valid API key."* |
+
+All three still classify as `auth`, which is correct — set 10 got them right by accident of its
+exclusions, and the harness now pins them against the observed strings rather than against
+imagined ones.
+
+| Behaviour | A (kit) | B (sources) | C (Gemini) | Note |
+|---|---|---|---|---|
+| Ladder wait outlasts the measured 41 s recovery | ❌ | ❌ | ✅ | 25 s expired early every time |
+| RetryInfo clamped in **both** directions | ❌ | ❌ | ✅ | it under-states as well as over-states |
+| The unnamed 429 stops blaming the cadet's allowance | n/a | n/a | ✅ | measured false |
+| `suspended` and `deadproject` named from real wording | ❌ | ❌ | ✅ | 13 live rows, all previously misadvised |
+| `suspended` tested above `forbidden` | n/a | n/a | ✅ | the key-exclusion swallowed it |
+
+> **What is still unmeasured, stated plainly.** `RPM_FLASH = 5` and `RPD_LITE = 500` were not
+> reached by this run — the lite daily probe hit a 503 capacity refusal at request 39 and stopped.
+> The bare 429 itself has **not** been reproduced on demand; it is load-dependent and appears in
+> the evening, so the reading above is inference from its shape, its timing and one single-call
+> row, not from a controlled repeat. That inference is used only to **remove** a claim, never to
+> add one, which is the direction it is safe to be wrong in.
+
+> **The finding no code change addresses.** Twenty Flash requests a day is roughly four tutoring
+> turns. A cadet who works two lessons in a day exhausts the top two rungs before the second one
+> starts, and the whole cohort shares one free tier at the same hour the night before a deadline.
+> **The free tier is not sized for this class**, and no client-side cleverness changes that — it is
+> a paid-key or server-proxy decision, and it belongs to the course director.
+
+---
+
 ## 3. What the Claude artifact still gets wrong
 
 **Filed as [`docs/findings/2026-08-21-claude-artifact-unwalked-failure-paths.md`](../findings/2026-08-21-claude-artifact-unwalked-failure-paths.md)** — a work order with a status, where this section is a summary. The finding carries the verification commands, the separation of what was observed from what was inferred, and the falsification conditions.

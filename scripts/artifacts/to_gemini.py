@@ -2060,7 +2060,8 @@ def main():
                                                   apply_quota_detail,
                                                   apply_quota_ledger,
                                                   apply_key_error_kinds,
-                                                  apply_quota_receipts)
+                                                  apply_quota_receipts,
+                                                  apply_measured_truths)
             html, _fixsteps = apply_fixset(html)
             html, _socsteps = apply_socratic(html)
             html, _notsteps = apply_notation(html)
@@ -2081,6 +2082,10 @@ def main():
             html, _keysteps = apply_key_error_kinds(html)
             # Set 11 rewrites what set 9 wrote, so it must run after it.
             html, _recsteps = apply_quota_receipts(html)
+            # Set 12 rewrites the unknown-scope message set 11 introduces and inserts
+            # errorMessage cases directly above the `quota` case set 11 edits, so it
+            # runs after it. It also lowers the LADDER_WAIT_MS that set 7 wrote.
+            html, _meassteps = apply_measured_truths(html)
 
             out = OUT_ROOT / course / f"{slug}.html"
             same = out.exists() and out.read_bytes() == html
