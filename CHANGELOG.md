@@ -8,6 +8,86 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-25 — Casey Pellizzari via Claude
+
+### The ladder's new floor was a model that does not exist, and it took the whole session down with it
+
+Instructors reported cadets finishing a Gemini backup preflight and nothing reaching the PREP
+dashboard. Three cadets were named (phys-215, sections M1C and M3C; IDs `3000129493`,
+`3000139051`, `3000139582` — none has any row of any kind since 2026-08-17, not even a draft).
+
+**PREP was not dropping anything.** Over the previous ten days it stored **665** interactive
+reports and auto-graded **661** of them; **650** carry `transport=gemini`. The sessions were dying
+before a report existed.
+
+**The error log shipped this morning caught it on its first evening** — which is the whole point of
+it, and the reason this is a same-day correction rather than a term-long mystery. Its first 30 rows
+(01:06–01:12 UTC, both courses) are unanimous:
+
+- **All 30 terminal errors are `kind=model http=404 model=gemini-2.5-flash-lite`.** `kind: model`
+  is thrown *only* from the 404 branch, so that is a real HTTP 404 from Google, not an exhaustion
+  symptom. `gemini-2.5-flash` 404s beside it (`kinds: {model: 3}` in the same rows).
+- **Every row carries `ladder_resets: 2`** — the whole ladder walked three times over.
+- **Two rows are `phase=report`.** One is turn 22 at `session_sec` 1061: an eighteen-minute
+  conversation a cadet finished and could not submit. That is the instructor report in one row.
+
+`gemini-2.5-flash-lite` was added *this morning* as "the real floor" precisely because ending on
+the oldest model was judged fragile. The reasoning was sound and the choice was wrong, and nothing
+checked it against what the fleet had run: across the last 400 stored reports, `content->>'model'`
+reads **`gemini-3.6-flash` 375 · `gemini-3.5-flash-lite` 12 · `gemini-3.5-flash` 6 ·
+`gemini-3.1-flash-lite` 4 · `gemini-2.5-flash` one · `gemini-2.5-flash-lite` zero.**
+
+**`discoverModel()` cannot save you here.** The cadets' keys *list* both 2.5 names with
+`generateContent` support and `:generateContent` then answers 404. A listing is not an entitlement,
+so the names have to come out of the source ladder.
+
+**Shipped to all 44 live Gemini builds** as set 5 of `patch_tutor_diagnostics.py`, with
+`to_gemini.py` updated in the same commit so the next port cannot silently drop it:
+
+- **The 2.5 line is gone. The floor is `gemini-3.1-flash-lite`** — a ladder must end on a model
+  that answers.
+- **A 429 now calls `noteFail(model, "quota")` and a 5xx `noteFail(model, "capacity")`.** Both
+  branches marked the model spent and walked *without recording anything*, so a rung burned by
+  quota reached the log as `calls: 12, ok: 0, fail: 0, kinds: {}` — twelve requests and no account
+  of one of them. Every rung above the floor in those 30 rows looks exactly like that, which is why
+  they cannot say whether the cadets were rate-limited or Google was refusing capacity.
+
+**What this fixes and what it does not.** It does not conjure a rung for a cadet whose key is out
+of quota. It stops the **lie**: with the dead floor gone an exhausted ladder throws `quota`, so the
+cadet reads *"wait and Retry"* instead of *"No usable Gemini model was found for this key. Tell
+your instructor"* — a dead end that sent cadets with working keys to go find a person. The second
+fix is what makes tonight's next thirty rows able to answer the quota-versus-capacity question at
+all.
+
+**Verified:** `gemini-model-ladder.mjs` **51 assertions pass** (extended: the floor assertions now
+assert the 2.5 line's *absence*, and two new ones cover the `noteFail` calls, which sit in
+`rawCall` outside the block the harness evaluates); `gemini-build.mjs` renders one build per course
+in real Chrome, 7/7 each, no console errors; all 44 files stay CRLF and no `INTERACTION_ID` line
+moved (`git diff` touching that constant: 0 lines); `check_doc_sources.py` exit 0; `name_scan.py`
+PASS.
+
+**Not verified, and it is the check that matters most: one real tutor turn with a live Gemini key.**
+Per CORE.md §2 this is a Node-only verification. Nobody has watched a cadet's session survive to a
+report on the new floor. `check_artifact.py` reports 5 failures per build about `100vh`; those
+**pre-date this change** (confirmed against `HEAD`) and are an artefact of pointing a `.jsx`
+checker at a full-page HTML build.
+
+**Two floors were chosen in one day, both on plausible reasoning, and neither was checked against
+`content->>'model'`.** Ask that query before adding a rung back. Recorded in
+`docs/operations/TUTOR-BEHAVIOR-PARITY.md` §2.4 with the evidence.
+
+### Still open, and neither is fixed here
+
+- **The error log still cannot name a cadet.** Migration `app/022_tutor_error_log_cadet_ref.sql`
+  is committed but **not applied** — there is no `cadet_ref` column in the live database — so the
+  deployed function drops the value and all 30 rows are anonymous. That is DDL on `app` and needs
+  the course director (CORE.md §0). Until it lands, no error can be tied to the cadets who report
+  one.
+- **The 2.5 line's removal is C-only.** The kit and the 51 published Claude sources still carry it;
+  parity table row in §2.4.
+
+---
+
 ## 2026-08-25 — Matthew Recker via Claude
 
 ### "No usable Gemini model was found for this key" — the thinking budget, and everything the error could not tell us

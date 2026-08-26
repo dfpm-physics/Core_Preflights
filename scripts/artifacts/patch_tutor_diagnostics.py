@@ -855,13 +855,132 @@ def apply_cadet_ref(raw):
     return p.buf, p.applied
 
 
+
+# ═══════════════════════════════════════════════════════════════════════════════════════════
+# SET 5 -- 2026-08-25 evening. The ladder ended on a model that does not exist, and the two
+# branches that end most sessions recorded no failure at all.
+#
+# THE EVIDENCE, from the error log's first six minutes of life (30 rows, 01:06-01:12 UTC):
+#
+#   * ALL 30 terminal errors are `kind=model http=404 model=gemini-2.5-flash-lite`, each
+#     after ladder_resets=2 -- i.e. the whole ladder walked three times over. `kind: model`
+#     is thrown ONLY from the 404 branch, so that is a real HTTP 404 from Google, not an
+#     exhaustion symptom. gemini-2.5-flash 404s beside it (kinds {model: 3} in the same row).
+#   * Two of the 30 died at phase=report. One was turn 22, session_sec 1061 -- an eighteen
+#     minute conversation the cadet finished and could not submit. That is the instructor
+#     report ("they complete it and it never reaches PREP") in one row.
+#   * Across the last 400 stored Gemini reports, `content->>'model'` shows gemini-3.6-flash
+#     375, gemini-3.5-flash-lite 12, gemini-3.5-flash 6, gemini-3.1-flash-lite 4,
+#     gemini-2.5-flash ONE, gemini-2.5-flash-lite ZERO. The 2.5 line has produced one usable
+#     report in the fleet's life and 404s otherwise.
+#
+# discoverModel() does not save us here: the key's ListModels call HAPPILY LISTS these two
+# with generateContent support, and :generateContent then answers 404. A listing is not an
+# entitlement. That is why the names have to come out of the source list.
+#
+# 5a  DROP THE 2.5 LINE.  It cost nothing to carry while it merely never won; it costs a
+#     cadet the whole session now that it 404s, because it is the LAST rung and therefore
+#     the kind reported when the ladder ends.
+#
+# 5b/5c  429 AND 5xx NOW RECORD A FAILURE KIND.  Both branches marked the model spent and
+#     walked without ever calling noteFail, so a rung burned by quota showed up in the log as
+#     `calls: 12, ok: 0, fail: 0, kinds: {}` -- twelve requests and no account of any of them.
+#     Every rung above the 2.5 line in those 30 rows looks exactly like that, so the log could
+#     not say whether the cadets were rate-limited or whether Google was refusing capacity.
+#     Two counters, and tonight's next thirty rows answer it.
+#
+# WHAT THIS FIXES AND WHAT IT DOES NOT.  It does not conjure a rung for a cadet whose key is
+# out of quota. What it does is stop LYING to them: with the dead floor gone the ladder now
+# ends on gemini-3.1-flash-lite, so an exhausted session throws `quota` and the cadet is told
+# "wait and Retry" instead of "No usable Gemini model was found for this key. Tell your
+# instructor" -- a dead end that sends a cadet with a working key to go find a person.
+
+OLD_LITE5 = rb'''const MODEL_LITE = [
+  "gemini-3.5-flash-lite",    // 15 RPM, 500 RPD
+  "gemini-3.1-flash-lite",    // 15 RPM, 500 RPD
+  "gemini-2.5-flash",
+  // Added 2026-08-25 as the real floor. Until then every pool ended on gemini-2.5-flash --
+  // the OLDEST model on the ladder, and Google has already shut the whole 2.0 line down.
+  // Ending on the thing most likely to be retired next is how a ladder dead-ends, and a
+  // dead-ended ladder is exactly the "No usable Gemini model was found" cadets reported.
+  // flash-lite also carries the higher per-day allowance of the two, which is what a last
+  // rung is for.
+  "gemini-2.5-flash-lite",
+];'''
+
+NEW_LITE5 = rb'''const MODEL_LITE = [
+  "gemini-3.5-flash-lite",    // 15 RPM, 500 RPD
+  "gemini-3.1-flash-lite",    // 15 RPM, 500 RPD
+  // THE 2.5 LINE IS GONE -- removed 2026-08-25 on evidence, not on principle.
+  //
+  // gemini-2.5-flash-lite was added as "the real floor" that same morning and every one of
+  // the error log's first 30 rows ends on it with HTTP 404. gemini-2.5-flash 404s beside it.
+  // Both are LISTED by ListModels for the cadets' keys and both refuse :generateContent, so
+  // discoverModel() cannot filter them out -- a listing is not an entitlement.
+  //
+  // They were also not earning their place. Over the last 400 stored reports the 2.5 line
+  // produced exactly ONE, against 375 from gemini-3.6-flash. A rung that wins once in 400
+  // and 404s the rest of the time is not a safety net; it is the kind the cadet is shown
+  // when the ladder ends, and "No usable Gemini model was found for this key" sent cadets
+  // with perfectly good keys to go find an instructor.
+  //
+  // The floor is now gemini-3.1-flash-lite, which answers. An exhausted ladder therefore
+  // reports `quota` -- which is what is actually happening above it. Before adding any rung
+  // back, check content->>'model' across recent reports: a model that has never produced one
+  // is a liability at the bottom of the ladder, not insurance.
+];'''
+
+OLD_429TAIL = rb'''      if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      spentModels[activeModelRef.current] = true;
+      if (advance(activeModelRef)) { attempt = 0; continue; }
+      throw { kind: "quota", status: 429 };'''
+
+NEW_429TAIL = rb'''      if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      // RECORD IT. This branch marked the model spent and walked without ever calling
+      // noteFail, so a rung burned by quota reached the log as `calls: 12, ok: 0, fail: 0,
+      // kinds: {}` -- twelve requests and no account of one of them. Every rung above the
+      // floor in the 2026-08-25 rows looks like that, which is why those rows cannot say
+      // whether the cadet was rate-limited or Google was refusing.
+      noteFail(activeModelRef.current, "quota");
+      spentModels[activeModelRef.current] = true;
+      if (advance(activeModelRef)) { attempt = 0; continue; }
+      throw { kind: "quota", status: 429 };'''
+
+OLD_5XXTAIL = rb'''      if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      spentModels[activeModelRef.current] = true;
+      if (advance(activeModelRef)) { attempt = 0; continue; }
+      throw { kind: "capacity", status: res.status };'''
+
+NEW_5XXTAIL = rb'''      if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      noteFail(activeModelRef.current, "capacity");   // see the note in the 429 branch
+      spentModels[activeModelRef.current] = true;
+      if (advance(activeModelRef)) { attempt = 0; continue; }
+      throw { kind: "capacity", status: res.status };'''
+
+# Sentinel. 5a rewrites its own anchor away, but 5b/5c do not, so this set needs one marker
+# that only lands once all three have.
+LADDER5_MARKER = b'THE 2.5 LINE IS GONE'
+
+
+def apply_ladder_floor(raw):
+    """Set 5. Drop the two 404ing 2.5 rungs; make 429 and 5xx record a failure kind."""
+    if LADDER5_MARKER in raw:
+        return raw, ["already"]
+    p = Patcher(raw, None)
+    p.sub("drop-2.5-line", OLD_LITE5, NEW_LITE5)
+    p.sub("notefail-quota", OLD_429TAIL, NEW_429TAIL)
+    p.sub("notefail-capacity", OLD_5XXTAIL, NEW_5XXTAIL)
+    return p.buf, p.applied
+
+
 def patch_one(path, verbose=False):
     raw = path.read_bytes()
     buf, applied = apply_fixset(raw)
     buf, applied2 = apply_socratic(buf)
     buf, applied3 = apply_notation(buf)
     buf, applied4 = apply_cadet_ref(buf)
-    applied = applied + applied2 + applied3 + applied4
+    buf, applied5 = apply_ladder_floor(buf)
+    applied = applied + applied2 + applied3 + applied4 + applied5
     if verbose:
         for a in applied:
             print("      . " + a)

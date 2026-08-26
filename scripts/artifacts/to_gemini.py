@@ -2053,11 +2053,15 @@ def main():
             # Imported lazily: patch_tutor_diagnostics imports detect_nl from this module,
             # so a top-level import would be circular.
             from patch_tutor_diagnostics import (apply_fixset, apply_socratic,
-                                                  apply_notation, apply_cadet_ref)
+                                                  apply_notation, apply_cadet_ref,
+                                                  apply_ladder_floor)
             html, _fixsteps = apply_fixset(html)
             html, _socsteps = apply_socratic(html)
             html, _notsteps = apply_notation(html)
             html, _refsteps = apply_cadet_ref(html)
+            # Set 5 runs LAST and must stay last: it rewrites the MODEL_LITE block that
+            # apply_fixset writes, so the two are ordered, not independent.
+            html, _ladsteps = apply_ladder_floor(html)
 
             out = OUT_ROOT / course / f"{slug}.html"
             same = out.exists() and out.read_bytes() == html

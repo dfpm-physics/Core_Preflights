@@ -254,6 +254,18 @@ Porting one silently would produce a build with no deferral at all — the exact
 | Gemini 3.7 / 3.6 / 3.5 / 3 Flash, 2.5 Flash, 2.5 Flash Lite | 5–10 | **20** |
 | Gemini 3.5 Flash Lite, 3.1 Flash Lite | 15 | **500** |
 
+> **`MODEL_LITE` is `3.5-flash-lite` then `3.1-flash-lite`, and the 2.5 line is NOT in it.**
+> *(2026-08-25 evening.)* Both `gemini-2.5-flash` and `gemini-2.5-flash-lite` answer **HTTP 404**
+> on `:generateContent` for cadets' keys while `ListModels` lists them with `generateContent`
+> support — so `discoverModel()` cannot filter them and they have to come out of the source
+> ladder. They were the last rungs, and the last rung's failure kind is the message the cadet
+> reads, so every quota exhaustion was being reported as *"No usable Gemini model was found for
+> this key"*. Evidence and the full reasoning:
+> [`TUTOR-BEHAVIOR-PARITY.md`](../../../docs/operations/TUTOR-BEHAVIOR-PARITY.md) §2.4.
+> **Before adding a rung back, ask `content->>'model'` over recent `submission_activities` what
+> the fleet has actually run.** Two floors were chosen in one day on plausible reasoning and
+> neither was checked against that.
+
 One tutor session is 10–14 requests. So a 20/day model gives a cadet **one session** and then locks them out until the daily reset at midnight Pacific — which is 1:00 AM in Denver, i.e. *after* a 2359 deadline has already passed. A section hit exactly this on 2026-08-20, at 21 requests against a cap of 20.
 
 **The port used to pick the worst available model, and nothing could see it.** `scoreModel` awarded +25 to any name containing `latest`, so `gemini-flash-latest` outranked every pinned name. Google hot-swaps that alias to whatever shipped most recently — their own docs say it "can be a stable, preview or experimental release" — and a new Flash launches on the tight 20/day quota. So cadets were moved onto a 20/day model *by Google*, with nobody choosing it and nothing reporting it. The `MODEL_REJECT` regex screens names containing `preview`, and never fired: the alias does not **say** preview, it merely **resolves** to one. A name-based screen cannot see through an alias.
@@ -264,7 +276,7 @@ A cadet reported the result: *"it would try to tutor me and then give me the ans
 
 The quota it was protecting was never under pressure. Measured on the course director's key: **22 of flash-lite's 500 requests/day** used across the whole course, while **3.7-flash sat at 23 against a cap of 20** — because the report was the only thing allowed to touch it. **We were spending the best model on the summary an instructor reads and the worst on the conversation a cadet learns from.**
 
-So: `MODEL_CHAT` now runs `3.7 → 3.6 → 3.5`, then falls through to `MODEL_LITE` as its floor. A session is 10–14 requests, so **one whole session fits inside a single 20/day cap** — a cadet doing one lesson a day runs it entirely on 3.7; a second lands on 3.6, a third on 3.5, and only a fourth reaches the floor. `MODEL_REPORT` keeps the same head, so a chat session that spends 3.7 pushes its own report one rung down. **That trade is deliberate**: summarising is far easier than tutoring, so the strong model is worth more to the conversation. `tests/browser-harness/gemini-model-ladder.mjs` asserts it rather than leaving it to be rediscovered from a report that looks weaker than it used to.
+So: `MODEL_CHAT` now runs `3.6 → 3.5`, then falls through to `MODEL_LITE` as its floor. A session is 10–14 requests, so **one whole session fits inside a single 20/day cap** — a cadet doing one lesson a day runs it entirely on 3.6; a second lands on 3.5, and a third reaches the floor. *(This sentence headed the ladder with 3.7 until 2026-08-25; 3.7 was dropped hours after it was written, and the very next paragraph has said so ever since.)* `MODEL_REPORT` keeps the same head, so a chat session that spends 3.7 pushes its own report one rung down. **That trade is deliberate**: summarising is far easier than tutoring, so the strong model is worth more to the conversation. `tests/browser-harness/gemini-model-ladder.mjs` asserts it rather than leaving it to be rediscovered from a report that looks weaker than it used to.
 
 **3.7-flash is absent, deliberately.** It was the head of this ladder for a few hours on 2026-08-21 and was dropped the same day: its first reply takes long enough that the page reads as broken, on every turn, against a quality difference over 3.6 nobody could point to. It is also the likeliest explanation of the freeze that started all this — the cadet who hung was at the **report** stage, the one request the live builds have always sent to 3.7, with a large generation and (until that day) no timeout at all. The harness asserts its **absence**, because a ladder that quietly regains it is the regression.
 

@@ -111,7 +111,7 @@ to the six phys-110 builds that have no `.jsx` source and therefore cannot be po
 | `nextModel()` skips rungs already marked spent | ❌ | n/a | ✅ | `seatLadder` always did; these two disagreed |
 | `advance()` = step down, then one bounded whole-ladder retry | ❌ | n/a | ✅ | does in-app what a cadet was doing by reloading |
 | A 404 marks the model spent | ❌ | n/a | ✅ | the only walking path that never did |
-| `gemini-2.5-flash-lite` is the ladder floor | ❌ | n/a | ✅ | every pool used to END on the oldest model it used |
+| ~~`gemini-2.5-flash-lite` is the ladder floor~~ | — | — | — | **reversed the same evening — see §2.4** |
 | Per-model telemetry from `usageMetadata` | ❌ | ❌ | ✅ | calls, outcomes, and prompt/**thinking**/output tokens |
 | The running model is shown DURING the session | ❌ | ❌ | ✅ | it existed only on the start screen |
 | The error bar carries the full diagnostic + Copy | ❌ | ❌ | ✅ | so a screenshot is actionable |
@@ -135,6 +135,59 @@ other rung.
 above except the four ladder-mechanics ones applies just as much to a published Claude artifact:
 claude.ai injects the model, so the thinking rows read differently there, but the diagnostics, the
 central log and the extension-turn Retry do not. Carried into §5 as backlog.
+
+### 2.4 The 2026-08-25 evening correction — the floor was a 404, and two branches recorded nothing
+
+**§2.3 shipped a floor that does not exist, and the error log it shipped alongside caught it the
+same evening.** That is the log working on its first real day, and it is the reason this row is a
+correction and not a term-long mystery.
+
+Instructors reported cadets completing a backup lesson and nothing reaching PREP. The pipe was
+fine — 665 Gemini reports stored over ten days, 661 auto-graded. The sessions were dying upstream.
+
+**What the first 30 rows of `app.tutor_error_log` said** (01:06–01:12 UTC, both courses):
+
+| Observation | Reading |
+|---|---|
+| All 30 terminal errors are `kind=model http=404 model=gemini-2.5-flash-lite` | `kind: model` is thrown **only** from the 404 branch, so this is a real HTTP 404 from Google — not an exhaustion symptom |
+| `gemini-2.5-flash` shows `kinds: {model: 3}` in the same rows | the 404 is the whole 2.5 line, not one name |
+| Every row carries `ladder_resets: 2` | the ladder was walked three times over before the cadet was told anything |
+| Two rows are `phase=report`; one at turn 22, `session_sec` 1061 | **an eighteen-minute conversation the cadet finished and could not submit** — the instructor report, in one row |
+| Every rung *above* the 2.5 line reads `calls: 12, ok: 0, fail: 0, kinds: {}` | twelve requests and no account of one of them — see the second fix below |
+
+**`discoverModel()` does not save you here.** The cadets' keys **list** both 2.5 names with
+`generateContent` support, and `:generateContent` then answers 404. A listing is not an
+entitlement, so the names have to come out of the source ladder.
+
+They were also not earning the place. Across the last 400 stored Gemini reports,
+`content->>'model'` reads **`gemini-3.6-flash` 375, `gemini-3.5-flash-lite` 12,
+`gemini-3.5-flash` 6, `gemini-3.1-flash-lite` 4, `gemini-2.5-flash` one, `gemini-2.5-flash-lite`
+zero.** A rung that wins once in 400 is not a safety net; at the bottom of the ladder it is the
+failure kind the cadet is shown.
+
+| Behaviour | A (kit) | B (sources) | C (Gemini) | Note |
+|---|---|---|---|---|
+| The 2.5 line is gone; the floor is `gemini-3.1-flash-lite` | ❌ | n/a | ✅ | a ladder must END on a model that answers |
+| A 429 calls `noteFail(model, "quota")` | ❌ | ❌ | ✅ | it marked the model spent and recorded nothing |
+| A 5xx calls `noteFail(model, "capacity")` | ❌ | ❌ | ✅ | same blind spot, same fix |
+
+**What this fixes, and what it does not.** It does not conjure a rung for a cadet whose key is out
+of quota. What it stops is the **lie**: with the dead floor gone the ladder ends on a model that
+answers, so an exhausted session throws `quota` and the cadet reads *"wait and Retry"* instead of
+*"No usable Gemini model was found for this key. Tell your instructor"* — a dead end that sends a
+cadet with a working key to go find a person.
+
+**The second fix is what makes the next thirty rows readable.** The 429 and 5xx branches both
+marked the model spent and walked **without calling `noteFail`**, so a rung burned by quota was
+indistinguishable in the log from a rung never tried. That is why the 30 rows above cannot say
+whether those cadets were rate-limited or whether Google was refusing capacity — the single fact
+that would decide what to do next.
+
+**A caution for whoever reads this next.** Two floors were chosen in one day, on reasoning that
+sounded good both times, and neither was checked against what the fleet had actually run.
+`content->>'model'` over recent `submission_activities` answers that in one query. **Ask it before
+adding a rung, not after.**
+
 
 ## 3. What the Claude artifact still gets wrong
 
@@ -203,16 +256,15 @@ three pools. The fix is correspondingly smaller.
 const MODEL_LITE = [
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",   // added 2026-08-25 — see below
 ];
 ```
 
-**`gemini-2.5-flash-lite` was added because every pool used to end on `gemini-2.5-flash`, the
-oldest model on the ladder, and Google has already shut the whole 2.0 line down.** The last rung
-is the one that prints *"No usable Gemini model was found for this key"* when it fails, so ending
-there on the model most likely to be retired next is how a ladder dead-ends. flash-lite also
-carries the higher per-day allowance of the two, which is what a last rung is for.
+**The whole 2.5 line was removed on the evening of 2026-08-25, hours after `gemini-2.5-flash-lite`
+was added to it — see [§2.4](#24-the-2026-08-25-evening-correction--the-floor-was-a-404-and-two-branches-recorded-nothing).**
+Both 2.5 names answer HTTP 404 on `:generateContent` for the cadets' keys while `ListModels`
+happily lists them, so `discoverModel()` cannot filter them out. The last rung is the one that
+prints *"No usable Gemini model was found for this key"*, so a 404ing rung there is the worst
+possible choice — it converts every quota exhaustion into a message that blames the cadet's key.
 
 | | `legacy` — **nothing runs this** | `teaching` — **all 44 live builds** |
 |---|---|---|
@@ -264,9 +316,11 @@ go unused.
   **absence**, because a ladder that quietly regains it is the regression.
 - **`MODEL_REPORT` stays its own array even when its contents match `MODEL_CHAT`.** `seatLadder`
   switches on array **identity**; sharing one object would silently stop the report re-seating.
-- **`legacy` is written out in full, not composed from `MODEL_LITE`.** `MODEL_LITE` ends on
-  `2.5-flash` and so does the legacy chat ladder, so `MODEL_LITE.concat([...])` would put
-  `2.5-flash` third and reorder a live ladder while looking like a faithful reproduction.
+- **`legacy` is written out in full, not composed from `MODEL_LITE`.** It used to be that both
+  ended on `2.5-flash`, so `MODEL_LITE.concat([...])` would have reordered a live ladder while
+  looking like a faithful reproduction. Since §2.4 the two no longer share a tail at all —
+  `MODEL_LITE` ends on `3.1-flash-lite` and `legacy` still ends on `2.5-flash` — which makes
+  composing them worse, not safer: it would silently drag the 404ing 2.5 line back in.
 
 ### 4.4 What shipping it means
 

@@ -169,6 +169,15 @@ ok(/res\.status >= 500[\s\S]{0,600}spentModels\[activeModelRef\.current\] = true
    'a 5xx WALKS the ladder - a 503 is per-model, not per-project, so there is something to '
    + 'switch to');
 
+// Both of those walking paths marked the model spent and RECORDED NOTHING. A rung burned by
+// quota reached the error log as `calls: 12, ok: 0, fail: 0, kinds: {}` -- twelve requests
+// and no account of one of them -- which is why the 2026-08-25 rows cannot say whether the
+// cadets were rate-limited or Google was refusing capacity. Also in rawCall, so also textual.
+ok(/res\.status === 429[\s\S]{0,1600}noteFail\(activeModelRef\.current, "quota"\)/.test(src),
+   'a 429 records a failure kind - a rung burned by quota must not look untried in the log');
+ok(/res\.status >= 500[\s\S]{0,400}noteFail\(activeModelRef\.current, "capacity"\)/.test(src),
+   'a 5xx records a failure kind - same blind spot, same fix');
+
 // --- the 429 walk: every rung is tried before a cadet is told the quota is gone ---------
 const ref = {};
 S.seatLadder(ref, S.MODEL_CHAT);
@@ -230,11 +239,19 @@ ok(seen === ref4.current, 'a model switch notifies the connection light');
 // thousands of requests left. None of them is about ORDERING; they are about the ladder
 // refusing to declare itself dead while there was somewhere left to go.
 
-ok(S.MODEL_LITE[S.MODEL_LITE.length - 1] === 'gemini-2.5-flash-lite',
-   'the floor is 2.5-flash-lite, not 2.5-flash - a ladder must not END on its oldest model');
-ok(S.MODEL_CHAT[S.MODEL_CHAT.length - 1] === 'gemini-2.5-flash-lite' &&
-   S.MODEL_REPORT[S.MODEL_REPORT.length - 1] === 'gemini-2.5-flash-lite' &&
-   S.MODEL_STUDY[S.MODEL_STUDY.length - 1] === 'gemini-2.5-flash-lite',
+// The floor moved AGAIN on 2026-08-25, hours after it moved to 2.5-flash-lite, and the
+// second move undid the first. The error log's first 30 rows all end
+// `kind=model http=404 model=gemini-2.5-flash-lite`, and gemini-2.5-flash 404s beside it:
+// ListModels lists both for the cadets' keys and :generateContent refuses both, so
+// discoverModel() cannot filter them. A rung that 404s is the WORST possible last rung,
+// because the last rung's failure kind is the message the cadet is shown.
+ok(!S.MODEL_LITE.some((m) => m.startsWith('gemini-2.5')),
+   'no 2.5 rung survives - both 404 in production and neither can be filtered by discovery');
+ok(S.MODEL_LITE[S.MODEL_LITE.length - 1] === 'gemini-3.1-flash-lite',
+   'the floor is 3.1-flash-lite - a ladder must END on a model that answers');
+ok(S.MODEL_CHAT[S.MODEL_CHAT.length - 1] === 'gemini-3.1-flash-lite' &&
+   S.MODEL_REPORT[S.MODEL_REPORT.length - 1] === 'gemini-3.1-flash-lite' &&
+   S.MODEL_STUDY[S.MODEL_STUDY.length - 1] === 'gemini-3.1-flash-lite',
    'every pool ends on the new floor - the last rung is what prints "No usable model"');
 
 // nextModel used to advance by exactly one and could seat a model already known dead:

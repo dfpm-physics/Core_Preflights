@@ -125,14 +125,23 @@ const { useState, useRef, useEffect } = React;
 const MODEL_LITE = [
   "gemini-3.5-flash-lite",    // 15 RPM, 500 RPD
   "gemini-3.1-flash-lite",    // 15 RPM, 500 RPD
-  "gemini-2.5-flash",
-  // Added 2026-08-25 as the real floor. Until then every pool ended on gemini-2.5-flash --
-  // the OLDEST model on the ladder, and Google has already shut the whole 2.0 line down.
-  // Ending on the thing most likely to be retired next is how a ladder dead-ends, and a
-  // dead-ended ladder is exactly the "No usable Gemini model was found" cadets reported.
-  // flash-lite also carries the higher per-day allowance of the two, which is what a last
-  // rung is for.
-  "gemini-2.5-flash-lite",
+  // THE 2.5 LINE IS GONE -- removed 2026-08-25 on evidence, not on principle.
+  //
+  // gemini-2.5-flash-lite was added as "the real floor" that same morning and every one of
+  // the error log's first 30 rows ends on it with HTTP 404. gemini-2.5-flash 404s beside it.
+  // Both are LISTED by ListModels for the cadets' keys and both refuse :generateContent, so
+  // discoverModel() cannot filter them out -- a listing is not an entitlement.
+  //
+  // They were also not earning their place. Over the last 400 stored reports the 2.5 line
+  // produced exactly ONE, against 375 from gemini-3.6-flash. A rung that wins once in 400
+  // and 404s the rest of the time is not a safety net; it is the kind the cadet is shown
+  // when the ladder ends, and "No usable Gemini model was found for this key" sent cadets
+  // with perfectly good keys to go find an instructor.
+  //
+  // The floor is now gemini-3.1-flash-lite, which answers. An exhausted ladder therefore
+  // reports `quota` -- which is what is actually happening above it. Before adding any rung
+  // back, check content->>'model' across recent reports: a model that has never produced one
+  // is a liability at the bottom of the ladder, not insurance.
 ];
 
 // Ordinary conversation turns: ~12 of the ~14 requests in a session. THIS IS THE TEACHING, and
@@ -1696,6 +1705,12 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
         }
       }
       if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      // RECORD IT. This branch marked the model spent and walked without ever calling
+      // noteFail, so a rung burned by quota reached the log as `calls: 12, ok: 0, fail: 0,
+      // kinds: {}` -- twelve requests and no account of one of them. Every rung above the
+      // floor in the 2026-08-25 rows looks like that, which is why those rows cannot say
+      // whether the cadet was rate-limited or Google was refusing.
+      noteFail(activeModelRef.current, "quota");
       spentModels[activeModelRef.current] = true;
       if (advance(activeModelRef)) { attempt = 0; continue; }
       throw { kind: "quota", status: 429 };
@@ -1714,6 +1729,7 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
     // whole ladder is refusing, which is the case that message was actually written for.
     if (res.status === 529 || res.status >= 500) {
       if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      noteFail(activeModelRef.current, "capacity");   // see the note in the 429 branch
       spentModels[activeModelRef.current] = true;
       if (advance(activeModelRef)) { attempt = 0; continue; }
       throw { kind: "capacity", status: res.status };
