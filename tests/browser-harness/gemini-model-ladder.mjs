@@ -43,6 +43,17 @@ if (a < 0 || zMark < 0) {
 }
 const block = src.slice(a, src.indexOf('\n}', zMark) + 2);
 
+// Set 9's ledger reads and writes localStorage, and every access there is wrapped in a
+// try/catch -- so under bare Node it would silently degrade to "no memory at all" and the
+// persistence tests below would pass against a no-op. Give it a real store instead: the
+// point of those tests is that a day lock SURVIVES, which cannot be observed without one.
+globalThis.localStorage = {
+  _d: Object.create(null),
+  getItem(k) { return k in this._d ? this._d[k] : null; },
+  setItem(k, v) { this._d[k] = String(v); },
+  removeItem(k) { delete this._d[k]; },
+};
+
 // The block is self-contained by construction: ladders, scorer, spent-set and both movers
 // sit together precisely so they can be lifted out and reasoned about in one piece.
 const S = new Function(block + `
@@ -52,6 +63,9 @@ const S = new Function(block + `
            noteOk, noteFail, genConfig, MAX_TOKENS, THINKING_BUDGET,
            freshTurn, reviveSpent, WALK_RETRIES, LADDER_RESET_LIMIT, noteQuota,
            QUOTA_WALK_RETRIES, LADDER_WAIT_MS, LADDER_WAITS_PER_TURN,
+           QUOTA_STORE, quotaDay, book, bookFor, saveBook, RPM_FLASH, RPM_LITE, rpmOf,
+           sentSince, noteSend, quotaScope, lockDay, dayLocked, pacedOut, seedDayLocks,
+           PACE_WALK_LIMIT, QUIET_WAIT_MS,
            ladderWaitsNow: () => ladderWaits, spendLadderWait: () => { ladderWaits++; } };`)();
 const isLite = (n) => S.MODEL_LITE.includes(n);
 
@@ -456,7 +470,9 @@ ok(!/waitMs <= 15000/.test(src) && !/RETRY_WAIT_CEILING_MS/.test(src),
    'the per-rung wait is GONE - waiting on a rung whose neighbour answers is wasted');
 ok(/if \(attempt < QUOTA_WALK_RETRIES\)/.test(src),
    'the 429 branch reads the measured constant rather than sharing the 5xx one');
-ok(/if \(advance\(activeModelRef\)\) \{ attempt = 0; continue; \}[\s\S]{0,700}ladderWaits < LADDER_WAITS_PER_TURN/.test(src),
+// Widened from 700 to 1400 on 2026-08-26: set 9 inserted the all-day-locked gate and its
+// reasoning between the walk and the wait. The ORDER is what this asserts, not the distance.
+ok(/if \(advance\(activeModelRef\)\) \{ attempt = 0; continue; \}[\s\S]{0,1400}ladderWaits < LADDER_WAITS_PER_TURN/.test(src),
    'the wait comes AFTER the walk fails, which is the only moment it beats walking');
 ok(/Math\.min\(waitMs, LADDER_WAIT_MS\)/.test(src),
    "Google's RetryInfo may only SHORTEN the wait - measured at 57s for a wall that cleared in 10");
@@ -491,10 +507,112 @@ ok(/let quotaMsg = "";/.test(src),
    "Google's own 429 message is kept - `detail` was NULL in every row of the 2026-08-25 night");
 ok(/if \(j\.error && j\.error\.message\) quotaMsg = String\(j\.error\.message\)\.slice\(0, 300\)/.test(src),
    'the message is read from the SAME body parse set 7 already does - no extra request');
-ok(/throw \{ kind: "quota", status: 429, detail: quotaMsg \}/.test(src),
+// Set 9 split this throw across two lines and gave it a scope, so the one-line form is gone.
+ok(/detail: \(allDay \? "\[daily\] " : ""\) \+ quotaMsg/.test(src),
    'and it rides out on the throw, which is what reaches log-tutor-error');
 ok(!/throw \{ kind: "quota", status: 429 \};/.test(src),
    'the detail-less quota throw is gone - it was 774 of 872 rows');
+
+
+// --- set 9: a per-DAY 429 and a per-MINUTE 429 are opposite problems --------------------
+//
+// The expensive half is the daily one. gemini-3.6-flash is 20 requests per DAY and a lesson
+// is ~14, so a cadet's SECOND lesson of the day begins with the top rung already dead --
+// and before this set, freshTurn() revived it at the top of every turn and spent one
+// guaranteed refusal on it, and another beneath it, in front of everything the cadet typed.
+clearSpent();
+S.diagState.resets = 0;
+globalThis.localStorage.removeItem(S.QUOTA_STORE);
+S.book().m = {};            // and drop the in-memory copy the module is holding
+
+// Google NAMES the quota, which is cheaper and stricter than any inference.
+ok(S.quotaScope('gemini-3.6-flash',
+                'GenerateRequestsPerDayPerProjectPerModel-FreeTier') === 'day',
+   'a quota id naming PerDay is read as the DAILY cap - Google says so, we do not guess');
+ok(S.quotaScope('gemini-3.6-flash',
+                'GenerateRequestsPerMinutePerProjectPerModel-FreeTier') === 'minute',
+   'the id measured on 2026-08-26 is read as the per-MINUTE cap');
+
+// The fallback, for a 429 whose body carried no QuotaFailure at all. This is the course
+// director's own reasoning: the smallest per-minute cap on this ladder is 5, so a refusal
+// after fewer than 5 sends in the last minute cannot be a per-minute limit.
+ok(S.quotaScope('gemini-3.6-flash', '') === 'day',
+   'no quota id + nothing sent recently = DAILY: no per-minute cap can be full at that rate');
+for (let i = 0; i < S.RPM_FLASH; i++) S.noteSend('gemini-3.6-flash');
+ok(S.quotaScope('gemini-3.6-flash', '') === 'minute',
+   'no quota id + a full minute of sends = per-MINUTE, which is the one that clears on its own');
+ok(S.quotaScope('gemini-3.6-flash',
+                'GenerateRequestsPerDayPerProjectPerModel-FreeTier') === 'day',
+   'and the NAME still wins over the arithmetic when the body carried one');
+
+// The measured caps, and the pacer built on them.
+ok(S.RPM_FLASH === 5 && S.RPM_LITE === 15,
+   'the per-minute caps are the ones measured against a live key, not the ones published');
+ok(S.rpmOf('gemini-3.5-flash-lite') === S.RPM_LITE && S.rpmOf('gemini-3.6-flash') === S.RPM_FLASH,
+   'rpmOf tells a lite rung from a flash rung - they differ by 3x and share a ladder');
+ok(S.pacedOut('gemini-3.6-flash'),
+   'a flash rung with 5 sends in the last minute is paced out - the next request is a known 429');
+ok(!S.pacedOut('gemini-3.5-flash-lite'),
+   'a lite rung at the same count is NOT - the limit is per model, so it has its own allowance');
+ok(S.sentSince('gemini-3.6-flash', 0) === 0,
+   'sentSince honours its window rather than counting everything ever sent');
+
+// A day lock is not a spend that comes back at the turn boundary.
+S.lockDay('gemini-3.6-flash');
+ok(S.dayLocked('gemini-3.6-flash') && !S.dayLocked('gemini-3.5-flash'),
+   'a day lock is recorded against ONE model - the cap is per model and so is the lock');
+S.spentModels['gemini-3.6-flash'] = 'day';
+S.spentModels['gemini-3.5-flash'] = 'quota';
+S.reviveSpent();
+ok(S.spentModels['gemini-3.6-flash'] === 'day',
+   'reviveSpent KEEPS a day lock - it cannot clear before midnight Pacific, so reviving it buys a guaranteed 429 every turn');
+ok(!S.spentModels['gemini-3.5-flash'],
+   'and still clears a per-minute one, which is the whole point of freshTurn');
+
+// The lock survives a reload, which is why it is in localStorage at all. A cadet who reloads
+// looked like a fresh session to counters that lived in module scope and died with the page.
+ok(/gemini-3\.6-flash/.test(globalThis.localStorage.getItem(S.QUOTA_STORE) || ''),
+   'the lock is written through to localStorage, so it outlives the page load');
+clearSpent();
+ok(S.seedDayLocks([['gemini-3.6-flash', 'gemini-3.5-flash-lite']]) === 1,
+   'a new page load seeds today\'s locks back onto the ladder before the first turn is typed');
+ok(S.spentModels['gemini-3.6-flash'] === 'day' && !S.spentModels['gemini-3.5-flash-lite'],
+   'and seeds only what is actually locked');
+ok(S.modelStats['gemini-3.6-flash'] && S.modelStats['gemini-3.6-flash'].kinds.daily_capped === 1,
+   'a rung skipped before it was ever tried still appears in the error panel and the log');
+
+// The expiry mechanism is the stored Pacific date failing to match. There is no timer.
+ok(/^\d{4}-\d{2}-\d{2}$/.test(S.quotaDay()),
+   'quotaDay is a sortable YYYY-MM-DD, and it is PACIFIC - Google resets RPD at midnight PT, which is 1am here');
+S.book().day = '2000-01-01';
+S.saveBook();
+ok(!S.dayLocked('gemini-3.6-flash'),
+   'a new Pacific day wipes every lock - nothing is scheduled, the stored day simply stops matching');
+
+// Read as text: these live beside rawCall, outside the block this file evaluates.
+ok(/if \(paced < PACE_WALK_LIMIT && pacedOut\(activeModelRef\.current\)\)/.test(src),
+   'the pacer runs BEFORE the fetch - a predictable refusal is a round trip the cadet waits through');
+ok(/paced\+\+;\s*\r?\n\s*if \(nextModel\(activeModelRef\)\) continue;/.test(src),
+   'the pacer walks with nextModel, NOT advance - advance spends a whole-ladder lap, and pacing is routine, not failure');
+ok(S.PACE_WALK_LIMIT >= S.MODEL_CHAT.length,
+   'the pacer may step past every rung of the ladder it is on, and no further - it cannot spin');
+ok(/const allDay = spentLadder\.every\(\(n\) => spentModels\[n\] === "day"\)/.test(src)
+   && /if \(!allDay && ladderWaits < LADDER_WAITS_PER_TURN\)/.test(src),
+   'a fully day-locked ladder does NOT take the 25s wait - that wait cannot help before midnight');
+ok(/scope: allDay \? "day" : "minute"/.test(src),
+   'the throw says WHICH quota, so the cadet-facing message can stop hedging');
+ok(/err\.scope === "day"/.test(src)
+   && /resets at midnight Pacific time/.test(src)
+   && /Google is asking us to slow down/.test(src),
+   'and the cadet is told the one thing that is true for their case: wait a minute, or come back tomorrow');
+ok(S.QUIET_WAIT_MS > 0 && S.QUIET_WAIT_MS <= 5000,
+   'a short pause is taken silently - announcing a 2s wait as an error teaches a working page as broken');
+ok(/if \(ms <= QUIET_WAIT_MS\) \{ await sleep\(ms\); return; \}/.test(src),
+   'and waitVisibly is where that decision lives, so every caller inherits it');
+ok(/noteSend\(name\);/.test(src) && /function noteCall\(name\) \{[\s\S]{0,200}noteSend\(name\)/.test(src),
+   'every request the transport sends is counted, retries included - a retry costs quota whether or not it works');
+ok(/seedDayLocks\(\[MODEL_CHAT, MODEL_REPORT, MODEL_STUDY\]\)/.test(src),
+   'seeding happens after discovery filters the ladders, so it runs against the final lists');
 
 clearSpent();
 S.diagState.resets = 0;

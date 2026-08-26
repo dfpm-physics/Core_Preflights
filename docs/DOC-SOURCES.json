@@ -90,7 +90,7 @@
       "doc": "site/help/admin-system-operations.md",
       "kind": "help",
       "tier": "admin",
-      "reviewed": "2026-08-21",
+      "reviewed": "2026-08-26",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -113,7 +113,7 @@
       "doc": "docs/operations/SYSTEM_GUIDE.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-25",
+      "reviewed": "2026-08-26",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -332,7 +332,7 @@
       "doc": "docs/operations/ONBOARD-ARTIFACTS.md",
       "kind": "operations",
       "tier": "staff",
-      "reviewed": "2026-08-25",
+      "reviewed": "2026-08-26",
       "sources": [
         "scripts/artifacts/sync_artifacts.py",
         "scripts/artifacts/artifact_parse.py",
@@ -348,7 +348,7 @@
       "doc": "docs/operations/TUTOR-BEHAVIOR-PARITY.md",
       "kind": "operations",
       "tier": "staff",
-      "reviewed": "2026-08-25",
+      "reviewed": "2026-08-26",
       "sources": [
         "scripts/artifacts/to_gemini.py",
         "scripts/artifacts/patch_artifacts.py",
@@ -360,13 +360,13 @@
         ".ai/instructions/PROJECT.md",
         "scripts/artifacts/patch_tutor_diagnostics.py"
       ],
-      "note": "The one table of what each of the three tutor builds carries -- the kit that emits a new artifact, the 51 published sources, and the 38 Gemini builds -- and the carry-forward backlog for the artifact builder. Written 2026-08-21 after nine changes landed on the Gemini builds in one day and none reached the kit. Every source here is load-bearing in a different way. to_gemini.py owns section 4 verbatim: the two ladders quoted there ARE its LADDER_TEACHING and LADDER_LEGACY constants, so a model name added, dropped or reordered makes that section wrong immediately, and --policy is documented as short-lived so its deletion must delete section 4.4 with it. patch_artifacts.py owns the 2026-08-20 fix-set rows in section 2.1 and the keep-the-slug rule in section 5. The kit SKILL.md and MANIFEST.sha256 are what section 2.2's central claim was measured against -- eleven markers probed, all zero -- so any kit update invalidates that column and is exactly the event this doc exists to be re-read on. The gemini-port skill owns how a build is produced and verified. The data contract owns the submit wire format all three share, and its 3.2 slug rule is what section 5 warns is a rule about a new OFFERING and not about a patch. CORE.md and PROJECT.md carry the no-Node-on-the-deploy-path rule and the sharp-edges table that section 7 restates. Section 3's claim -- that three report-stage hang bugs are still live in the Claude artifact -- was read out of the cached .jsx sources, which are gitignored and cannot be listed as a source here; re-verify it against _builder/courses/*/artifacts/*.jsx rather than trusting this file. patch_tutor_diagnostics.py became a source on 2026-08-25: it owns section 2.3 outright and it is now the only writer of the fix set for the six phys-110 builds that have no .jsx source and cannot be ported -- so a step added or dropped there makes 2.3 wrong for part of the fleet with to_gemini.py unchanged. Section 4 stopped describing a proposal on the same day: --policy teaching is what all 44 builds run."
+      "note": "The one table of what each of the three tutor builds carries -- the kit that emits a new artifact, the 51 published sources, and the 44 Gemini builds -- and the carry-forward backlog for the artifact builder. Written 2026-08-21 after nine changes landed on the Gemini builds in one day and none reached the kit. Every source here is load-bearing in a different way. to_gemini.py owns section 4 verbatim: the two ladders quoted there ARE its LADDER_TEACHING and LADDER_LEGACY constants, so a model name added, dropped or reordered makes that section wrong immediately, and --policy is documented as short-lived so its deletion must delete section 4.4 with it. patch_artifacts.py owns the 2026-08-20 fix-set rows in section 2.1 and the keep-the-slug rule in section 5. The kit SKILL.md and MANIFEST.sha256 are what section 2.2's central claim was measured against -- eleven markers probed, all zero -- so any kit update invalidates that column and is exactly the event this doc exists to be re-read on. The gemini-port skill owns how a build is produced and verified. The data contract owns the submit wire format all three share, and its 3.2 slug rule is what section 5 warns is a rule about a new OFFERING and not about a patch. CORE.md and PROJECT.md carry the no-Node-on-the-deploy-path rule and the sharp-edges table that section 7 restates. Section 3's claim -- that three report-stage hang bugs are still live in the Claude artifact -- was read out of the cached .jsx sources, which are gitignored and cannot be listed as a source here; re-verify it against _builder/courses/*/artifacts/*.jsx rather than trusting this file. patch_tutor_diagnostics.py became a source on 2026-08-25: it owns section 2.3 outright and it is now the only writer of the fix set for the six phys-110 builds that have no .jsx source and cannot be ported -- so a step added or dropped there makes 2.3 wrong for part of the fleet with to_gemini.py unchanged. Section 4 stopped describing a proposal on the same day: --policy teaching is what all 44 builds run."
     },
     {
       "doc": "docs/operations/PUBLISH-ARTIFACT.md",
       "kind": "operations",
       "tier": null,
-      "reviewed": "2026-08-25",
+      "reviewed": "2026-08-26",
       "sources": [
         "_builder/preflight-kit/contracts/INTERACTION-DATA-CONTRACT.md",
         "_builder/preflight-kit/skill/preflight-factory-v2/SKILL.md",
@@ -448,7 +448,7 @@
       "doc": ".ai/skills/gemini-port/SKILL.md",
       "kind": "skill",
       "tier": "internal",
-      "reviewed": "2026-08-25",
+      "reviewed": "2026-08-26",
       "sources": [
         ".ai/instructions/CORE.md",
         "scripts/artifacts/to_gemini.py",

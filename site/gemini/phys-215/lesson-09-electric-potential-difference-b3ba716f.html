@@ -275,6 +275,103 @@ const spentModels = {};
 // dropping to a rung that has room.
 const waitedFor = {};
 
+// --- The quota ledger: what THIS KEY has already spent today -----------------------------
+//
+// Survives reloads, because Google's counters do and ours did not. Everything above this line
+// is module scope and resets on every page load, which is exactly the blind spot that made an
+// early 429 unreadable: a cadet on their second lesson of the day looked identical to a cadet
+// on their first request ever.
+//
+// Google resets requests-per-day at MIDNIGHT PACIFIC -- not the cadet's midnight, and not on a
+// rolling 24 hours. Cadets here are Mountain, so that is 1am local, and a lock taken at 11pm
+// has two hours left to run, not one minute. `en-CA` is used only because it formats as
+// YYYY-MM-DD, which compares correctly as a plain string.
+const QUOTA_STORE = "prep.gemini.quota";
+
+function quotaDay() {
+  try { return new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" }); }
+  catch (e) { return new Date().toISOString().slice(0, 10); }   // no Intl tz data: UTC is close
+}
+
+let quotaBook = null;
+function book() {
+  const day = quotaDay();
+  if (quotaBook && quotaBook.day === day) return quotaBook;
+  let b = null;
+  try { b = JSON.parse(localStorage.getItem(QUOTA_STORE) || "null"); } catch (e) {}
+  // A NEW PACIFIC DAY WIPES EVERY LOCK, which is the whole expiry mechanism. There is no
+  // timer and nothing to schedule: the stored day simply stops matching.
+  if (!b || b.day !== day || !b.m) b = { day: day, m: {} };
+  quotaBook = b;
+  return b;
+}
+function bookFor(name) {
+  const m = book().m;
+  return m[name] || (m[name] = { sent: 0, t: [], day: 0 });
+}
+function saveBook() {
+  try { localStorage.setItem(QUOTA_STORE, JSON.stringify(quotaBook)); } catch (e) {}
+}
+
+// MEASURED 2026-08-26, tests/browser/test-gemini-rate-limits.html. Not read from a doc page:
+// the published tables disagreed with the live key twice.
+const RPM_FLASH = 5;      // gemini-3.6-flash, gemini-3.5-flash -- also 20 requests per DAY
+const RPM_LITE = 15;      // the lite floor -- 500 per day, which no session has come near
+function rpmOf(name) { return /lite/i.test(name) ? RPM_LITE : RPM_FLASH; }
+
+function sentSince(name, ms) {
+  const cut = Date.now() - ms;
+  return bookFor(name).t.filter((t) => t > cut).length;
+}
+
+// Called from noteCall, so it counts exactly what the transport actually sent -- retries
+// included. A retry costs quota whether or not it succeeds, and the old counters hid that.
+function noteSend(name) {
+  const e = bookFor(name);
+  e.sent++;
+  e.t.push(Date.now());
+  if (e.t.length > 30) e.t = e.t.slice(-30);   // one minute of history is all this is asked for
+  saveBook();
+}
+
+// WHICH quota did Google mean? Its own name first; the director's arithmetic second.
+//
+// The fallback reads: we got a 429 having sent fewer than the SMALLEST per-minute cap on this
+// ladder in the last minute. No per-minute limit on any rung can be full at that rate, so the
+// refusal has to be the daily one. RPM_FLASH is the conservative choice here -- using the
+// per-model rpmOf() would call a lite rung "daily" at 14 sends/min, which is a minute limit
+// about to close, not a day one.
+function quotaScope(name, quotaId) {
+  if (/PerDay/i.test(quotaId)) return "day";
+  if (/PerMinute/i.test(quotaId)) return "minute";
+  return sentSince(name, 60000) < RPM_FLASH ? "day" : "minute";
+}
+
+function lockDay(name) { bookFor(name).day = 1; saveBook(); }
+function dayLocked(name) { return !!bookFor(name).day; }
+
+// True when this model has already used its per-minute allowance, so the next request to it
+// is a refusal we can predict. Walking costs nothing and a refusal costs a round trip.
+function pacedOut(name) { return sentSince(name, 60000) >= rpmOf(name); }
+
+// Carries today's locks into a FRESH PAGE LOAD, which is the point of storing them. Without
+// this the ledger would only help within one session, and the session that needs it most is
+// the one that starts after the cap is already gone.
+//
+// statFor() is called deliberately: it puts the model in modelStats with calls 0, so a rung
+// skipped before it was ever tried still appears in the cadet's error panel and in the log
+// instead of silently vanishing from the list of what was attempted.
+function seedDayLocks(ladders) {
+  let n = 0;
+  ladders.forEach((lad) => (lad || []).forEach((name) => {
+    if (!dayLocked(name) || spentModels[name]) return;
+    spentModels[name] = "day";
+    statFor(name).kinds.daily_capped = 1;
+    n++;
+  }));
+  return n;
+}
+
 function seatLadder(ref, ladder) {
   if (ref.ladder !== ladder) { ref.ladder = ladder; ref.i = 0; }
   while (ref.i < ladder.length - 1 && spentModels[ladder[ref.i]]) ref.i++;
@@ -299,7 +396,11 @@ function statFor(name) {
     calls: 0, ok: 0, fail: 0, promptTok: 0, thoughtTok: 0, outTok: 0, kinds: {},
   });
 }
-function noteCall(name) { statFor(name).calls++; diagState.model = name; }
+function noteCall(name) {
+  statFor(name).calls++;
+  diagState.model = name;
+  noteSend(name);   // the persistent half: survives the reload the counters above do not
+}
 function noteOk(name, um) {
   const s = statFor(name);
   s.ok++;
@@ -387,6 +488,16 @@ const LADDER_WAIT_MS = 25000;
 const LADDER_WAITS_PER_TURN = 1;
 let ladderWaits = 0;
 
+// How many rungs the per-minute pacer may step down before it gives up and sends anyway.
+// One per rung of the longest ladder; it exists only so a bug cannot turn into a spin.
+const PACE_WALK_LIMIT = 6;
+
+// A pause shorter than this is taken SILENTLY. Announcing a two-second wait as "rate limited"
+// teaches a cadet that the page is broken when it is working exactly as designed -- and the
+// message costs more attention than the wait it explains. Longer than this and the countdown
+// is worth showing, because unexplained silence is what makes cadets reload and lose work.
+const QUIET_WAIT_MS = 3000;
+
 // Clears every spend that is going to pass on its own and KEEPS the ones that are not.
 // A 404 is the only permanent kind: quota clears on Google's clock, capacity comes back, a
 // timeout was one slow request, and an empty answer is usually not repeated. Returns how many
@@ -399,7 +510,14 @@ let ladderWaits = 0;
 function reviveSpent() {
   let revived = 0;
   Object.keys(spentModels).forEach((k) => {
-    if (spentModels[k] !== "model") { delete spentModels[k]; revived++; }
+    // "day" JOINS "model" AS PERMANENT-FOR-NOW. A daily cap does not clear until midnight
+    // Pacific, so reviving one buys a guaranteed 429 on that rung at the top of every
+    // remaining turn -- ~60 of them across a long session, each one a round trip the cadet
+    // waits through before the first model that can actually answer is even tried.
+    if (spentModels[k] !== "model" && spentModels[k] !== "day") {
+      delete spentModels[k];
+      revived++;
+    }
   });
   Object.keys(waitedFor).forEach((k) => { delete waitedFor[k]; });
   ladderWaits = 0;    // the ladder-wait allowance is per TURN, like the revival it rides with
@@ -2730,6 +2848,7 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 // is restored on the way out, and every call is guarded because the hook is null until the
 // component mounts.
 async function waitVisibly(model, ms) {
+  if (ms <= QUIET_WAIT_MS) { await sleep(ms); return; }   // too short to be worth alarming over
   const tell = (n) => {
     if (!onModelSwitch.fn) return;
     try {
@@ -2745,7 +2864,20 @@ function backoffMs(attempt) { return Math.round(500 * Math.pow(2, attempt) + Mat
 
 async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
   let attempt = 0;
+  let paced = 0;
   while (true) {
+    // DON'T SEND A REQUEST WE CAN ALREADY PREDICT WILL BE REFUSED. If this rung has used its
+    // measured per-minute allowance, step down instead -- the limit is per model, so the next
+    // rung has its own, and walking is instant where a refusal is a round trip.
+    //
+    // nextModel, NOT advance: advance() falls through to resetLadder, which spends one of the
+    // session's two whole-ladder laps. Pacing must never consume that budget; it is a routine
+    // step, not a failure. Bounded so it can never spin, and when nothing is left to walk to
+    // it simply falls through and sends -- the 429 path below still handles the wait.
+    if (paced < PACE_WALK_LIMIT && pacedOut(activeModelRef.current)) {
+      paced++;
+      if (nextModel(activeModelRef)) continue;
+    }
     let res;
     try {
       // The key rides in a HEADER, not the "?key=" query parameter Google's quickstarts
@@ -2876,20 +3008,33 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
       // floor in the 2026-08-25 rows looks like that, which is why those rows cannot say
       // whether the cadet was rate-limited or Google was refusing.
       noteFail(activeModelRef.current, "quota");
-      spentModels[activeModelRef.current] = "quota";
+      // MINUTE OR DAY. Google's own name decides it when the body carried one; otherwise our
+      // own send history does. A day lock is written through to localStorage, so it outlives
+      // this page load -- the cadet's next lesson starts with this rung already skipped
+      // instead of rediscovering it at one wasted request per turn.
+      const scope = quotaScope(activeModelRef.current, quotaId);
+      if (scope === "day") lockDay(activeModelRef.current);
+      spentModels[activeModelRef.current] = scope === "day" ? "day" : "quota";
       if (advance(activeModelRef)) { attempt = 0; continue; }
       // EVERY RUNG IS SPENT, and only now is waiting better than walking. The walls are
       // per-minute and they do clear -- measured at 20.6s -- so one bounded wait buys a whole
       // fresh ladder for the price of a countdown the cadet can see. RetryInfo is allowed to
       // make this shorter and never longer, because the probe caught it naming 57s for a wall
       // that cleared in 10.
-      if (ladderWaits < LADDER_WAITS_PER_TURN) {
+      //
+      // BUT NOT IF EVERY RUNG IS DAY-LOCKED. Twenty-five seconds against a cap that resets at
+      // midnight buys nothing at all, and it buys it while the cadet watches a countdown that
+      // promises the opposite. That case is over; say so instead of stalling.
+      const spentLadder = activeModelRef.ladder || MODEL_FALLBACKS;
+      const allDay = spentLadder.every((n) => spentModels[n] === "day");
+      if (!allDay && ladderWaits < LADDER_WAITS_PER_TURN) {
         ladderWaits++;
         await waitVisibly(activeModelRef.current,
                           waitMs > 0 ? Math.min(waitMs, LADDER_WAIT_MS) : LADDER_WAIT_MS);
         if (freshTurn(activeModelRef)) { attempt = 0; continue; }
       }
-      throw { kind: "quota", status: 429, detail: quotaMsg };
+      throw { kind: "quota", status: 429, scope: allDay ? "day" : "minute",
+              detail: (allDay ? "[daily] " : "") + quotaMsg };
     }
     // Server capacity, not the cadet's quota -- but it is per MODEL, not per project, and
     // treating it as "nothing to switch to" is what hung the report stage on 2026-08-21.
@@ -2955,6 +3100,11 @@ async function discoverModel(activeModelRef) {
   // start at all. It still costs graded quota in that case -- which is why it is the fallback
   // and not the default.
   MODEL_STUDY = study.length ? study : MODEL_CHAT;
+
+  // Anything this key already exhausted TODAY is dead before the first turn is typed. Done
+  // here rather than at module load because the ladders are only final once discovery has
+  // filtered them against what this key can actually reach.
+  seedDayLocks([MODEL_CHAT, MODEL_REPORT, MODEL_STUDY]);
 
   activeModelRef.ladder = null;             // force a re-seat onto the filtered list
   seatLadder(activeModelRef, MODEL_CHAT);
@@ -3036,7 +3186,14 @@ function errorMessage(err, { afterRetries = false } = {}) {
     case "auth":
       return "That API key was rejected. Check you pasted the whole key from Google AI Studio (it starts with \u201CAIza\u201D), and that the Generative Language API is enabled for it.";
     case "quota":
-      return "Your Gemini free-tier quota is used up for now. A per-minute limit clears in about a minute; the daily one resets on Google's clock. Wait and Retry.";
+      // This hedged -- "a per-minute limit clears in about a minute; the daily one resets on
+      // Google's clock" -- because the transport could not tell which had happened. It can
+      // now, so the cadet gets the one instruction that is actually true for their case. The
+      // difference matters: one of them is "wait a moment", the other is "come back tomorrow",
+      // and telling a cadet to Retry against a daily cap is an hour of pressing a dead button.
+      return err.scope === "day"
+        ? "Your Gemini free-tier DAILY limit is used up on every model this lesson can use. It resets at midnight Pacific time \u2014 1am Mountain. Retrying now cannot work. Your conversation is saved in this browser, so you can come back and pick it up."
+        : "Google is asking us to slow down \u2014 the per-minute limit on your key is full. It clears in about a minute. Wait, then press Retry.";
     case "blocked":
       return "Gemini declined to answer that turn. Rephrase and try again \u2014 and tell your instructor if it keeps happening.";
     case "model":

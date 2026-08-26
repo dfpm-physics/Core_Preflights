@@ -306,6 +306,77 @@ a key.
 never executed.
 
 
+### 2.7 The morning after — a per-day 429 and a per-minute 429 are opposite problems
+
+**§2.6 made the ladder stop thrashing. It did not make it stop paying for the wrong thing.** Set
+7 treats every 429 alike, and the two kinds want opposite responses:
+
+| | clears | waiting | retrying |
+|---|---|---|---|
+| **per minute** | ~20 s, measured | correct, and worth a countdown | correct, once |
+| **per day** | midnight **Pacific** | worthless | worse than worthless — each attempt spends a request against a cap already full |
+
+**The daily case is the expensive one, and it is the common one.** `gemini-3.6-flash` is **20
+requests per day** and a lesson is ~14, so a cadet's *second* lesson of the day begins with the
+top rung already dead. `freshTurn()` — §2.5's fix, and a good one — then revived it at the top of
+every turn, seated it, and spent one guaranteed refusal on it and another on `3.5-flash` beneath
+it. Over a 30-turn session that is **~60 requests whose only possible outcome is a refusal**,
+plus two round trips of latency in front of everything the cadet types. The 2026-08-25 log
+carries the fingerprint: one session at `calls 20, ok 6` on `gemini-3.6-flash` — the entire daily
+allowance, in one lesson.
+
+**The course director's reasoning, 2026-08-26, and it is sound:** if the first few requests of a
+session are refused, that cannot be a per-minute limit — the smallest cap on this ladder is
+5/min — so it must be the daily one.
+
+**One correction was needed, and it is the whole reason this section exists.** *"The first few
+requests"* has to mean the first few **this key has sent**, not the first few **this page has
+sent**. Every counter in the transport lived in module scope and died on each reload, so a cadet
+who reloaded — or who ran a lesson an hour earlier — looked identical to a cadet on their first
+request ever. The inference was correct and the evidence it needed did not survive the page. Set
+9 therefore puts the ledger in `localStorage`, keyed by the **Pacific** date.
+
+**And Google just says so, which is cheaper than any inference.** Set 7 already parses the
+`QuotaFailure` violation out of the 429 body; the name reads
+`GenerateRequestsPerMinutePerProjectPerModel-FreeTier`. Matching `/PerDay/` against it is the
+primary test and the director's arithmetic is the fallback for a body carrying no `QuotaFailure`
+at all. Both are kept — §2.6's lesson was to stop inferring where a measurement exists, not to
+throw away the reasoning that still answers when one does not.
+
+| Behaviour | A (kit) | B (sources) | C (Gemini) | Note |
+|---|---|---|---|---|
+| A 429 is classified `day` vs `minute` | n/a | n/a | ✅ | Google's quota id first; our own send history second |
+| A day lock survives the page load (`localStorage`, Pacific date) | n/a | n/a | ✅ | the reload was the blind spot, not the arithmetic |
+| `reviveSpent()` keeps a day lock, clears a minute one | ❌ | n/a | ✅ | **the ~60 wasted requests** — see above |
+| Today's locks are seeded onto the ladder before turn 1 | n/a | n/a | ✅ | so lesson two starts where lesson one finished |
+| Per-**model** pacing before the send | n/a | n/a | ✅ | walk instead of sending a refusal we can predict |
+| A fully day-locked ladder skips the 25 s wait | ❌ | ❌ | ✅ | that wait cannot help before midnight |
+| A pause ≤ 3 s is taken **silently** | ❌ | ❌ | ✅ | announcing a 2 s wait as an error teaches a working page as broken |
+| The cadet is told **which** limit, and what to do about it | ❌ | ❌ | ✅ | *"wait a minute"* and *"come back tomorrow"* are different instructions |
+
+**Deliberately NOT built, and both were tempting:**
+
+- **A global pacer across all models.** §2.6's probe settled it: asked every other model the
+  instant one was walled, `gemini-3.1-flash-lite` answered **200** while `gemini-3.5-flash-lite`
+  was still refusing. The ceiling is per project **and per model**, so a project-wide pacer would
+  slow every rung to guard against a limit that does not exist.
+- **A token check.** TPM on the free tier is 250,000/min and a turn is a few thousand; the probe
+  drew a 429 on a **two-character** prompt. Tokens are already counted and logged. Gating on them
+  would add a branch that never fires.
+
+**Why A and B are mostly `n/a` here.** Quota ids, `RetryInfo`, per-model daily caps and midnight
+Pacific are **Google's** semantics. The Claude artifact walks its own ladder against claude.ai,
+whose limits this repository has never measured. Two rows are not `n/a` and do carry forward as
+*concepts*: **do not revive a rung that cannot recover**, and **do not show a countdown for a
+wait that will not help**. Both are surface-independent, and both are currently wrong in the kit.
+
+**The number that survives set 9 unchanged.** This stops waste; it cannot make the free tier
+bigger. Chat still starts on a 5/min · 20/day model and falls to 15/min · 500/day, spending the
+scarce budget first — see §4.2. That reorder remains a teaching-quality decision for the course
+director, and set 9 makes its cost easier to read rather than smaller.
+
+---
+
 ## 3. What the Claude artifact still gets wrong
 
 **Filed as [`docs/findings/2026-08-21-claude-artifact-unwalked-failure-paths.md`](../findings/2026-08-21-claude-artifact-unwalked-failure-paths.md)** — a work order with a status, where this section is a summary. The finding carries the verification commands, the separation of what was observed from what was inferred, and the falsification conditions.

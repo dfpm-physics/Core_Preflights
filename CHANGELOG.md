@@ -10,6 +10,87 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-26 — Matthew Recker via Claude
 
+### A per-day 429 and a per-minute 429 are opposite problems, and the tutor treated them alike
+
+**Set 7 (yesterday) made the ladder stop thrashing on a 429. It did not make it stop paying for
+the wrong kind.** The two want opposite responses: a per-minute wall clears in ~20 s, so waiting
+is right and a countdown is worth showing; a per-day cap does not clear until **midnight
+Pacific**, so waiting is worthless and every retry spends a request against a cap already full.
+
+**The daily case is both the expensive one and the common one.** `gemini-3.6-flash` is **20
+requests per day** and a lesson is ~14 — so a cadet's *second* lesson of the day starts with the
+top rung already dead. `freshTurn()` then revived it at the top of every turn, seated it, and
+spent one guaranteed refusal on it plus another on `3.5-flash` beneath it: **~60 requests per
+long session whose only possible outcome is a refusal**, each one a round trip in front of
+something the cadet typed. The 2026-08-25 log already carried the fingerprint — one session at
+`calls 20, ok 6` on `gemini-3.6-flash`, the whole daily allowance in one lesson.
+
+**The course director's reasoning, and it is sound:** a 429 on the first few requests of a session
+cannot be a per-minute limit, because the smallest cap on this ladder is 5/min — so it must be the
+daily one.
+
+**One correction was needed, and it is the substance of this change.** *"The first few requests"*
+has to mean the first few **this key has sent**, not the first few **this page has sent**. Every
+counter in the transport lived in module scope and died on each reload, so a cadet who reloaded —
+or who ran a lesson an hour earlier — looked identical to a cadet on their first request ever. The
+inference was right; the evidence it needed did not survive the page. The ledger is now in
+`localStorage`, keyed by the **Pacific** date, because that is when Google resets requests-per-day
+— 1am Mountain, not the cadet's midnight.
+
+**And Google names the quota anyway, which is cheaper than any inference.** Set 7 already parses
+the `QuotaFailure` violation out of the 429 body. Matching `/PerDay/` against that name is the
+primary test; the director's arithmetic is the fallback for a body that carries no `QuotaFailure`
+at all. Both are kept — the lesson of 2026-08-26 was to stop inferring where a measurement exists,
+not to discard reasoning that still answers where one does not.
+
+**Changed — `scripts/artifacts/patch_tutor_diagnostics.py` set 9, applied to all 44 Gemini builds
+and wired into `to_gemini.py` so a fresh port cannot drop it:**
+
+- **A persistent per-model ledger** (`prep.gemini.quota`), scoped to the Pacific date. A new
+  Pacific day wipes every lock: nothing is scheduled, the stored day simply stops matching.
+- **429 classification** — `day` or `minute`, by Google's quota id first and our own send count
+  second.
+- **A day lock is written through and survives the reload.** `reviveSpent()` now keeps it, as it
+  already kept a 404; today's locks are seeded back onto the ladder at discovery, so lesson two
+  starts where lesson one finished instead of rediscovering the cap one wasted request per turn.
+- **Per-model pacing before the send.** A rung that has used its measured per-minute allowance is
+  walked past rather than asked. It walks with `nextModel`, never `advance`: pacing is routine and
+  must not spend one of the session's whole-ladder laps.
+- **A fully day-locked ladder skips the 25 s wait**, which cannot help before midnight.
+- **A pause of 3 s or less is taken silently.** Announcing a two-second wait as "rate limited"
+  teaches a cadet that a working page is broken.
+- **The cadet-facing message stops hedging.** It said *"a per-minute limit clears in about a
+  minute; the daily one resets on Google's clock"* because the transport could not tell which had
+  happened. It can now, and *"wait a minute"* and *"come back tomorrow"* are different
+  instructions — telling a cadet to Retry against a daily cap is an hour of pressing a dead button.
+
+**Deliberately not built, both tempting:** a **global** pacer across all models — the 2026-08-26
+probe watched `gemini-3.1-flash-lite` answer 200 while `gemini-3.5-flash-lite` refused, so the
+ceiling is per project *and per model* and a project-wide pacer would slow every rung against a
+limit that does not exist; and a **token check** — TPM is 250,000/min against a turn of a few
+thousand, and the probe drew a 429 on a two-character prompt.
+
+**Verified:** ladder harness **116/116** on one build of each of the three courses (31 assertions
+are new, including a `localStorage` stub so the persistence is actually exercised rather than
+swallowed by its own try/catch); `gemini-build.mjs` **7/7 in real Chrome** per course; all 44
+builds still CRLF; **0 `INTERACTION_ID` lines touched**; `name_scan` PASS. **Not verified: a real
+tutor turn against a live key** — that needs a cadet's own quota and the daily path needs a key
+that is already capped, so the first real evidence will be tomorrow's error log.
+
+**Also confirmed today:** migration `app/022` is applied — `tutor_error_log.cadet_ref` exists —
+and the `log-tutor-error` deploy carrying the `quota_ids` whitelist is live. No rows have landed
+since (the last is 05:25 UTC, before the deploy), so the three holes closed yesterday are fixed
+but **not yet observed working**.
+
+**Unchanged, and it is still the ceiling on all of this:** chat starts on a 5/min · 20/day model
+and falls to 15/min · 500/day, spending the scarce budget first. Set 9 makes that cost easier to
+read; it does not make the free tier bigger. Reordering the ladder is a teaching-quality decision
+(parity doc §4.2) and belongs to the course director.
+
+---
+
+## 2026-08-26 — Matthew Recker via Claude
+
 ### The error log ran a whole night and answered none of the three questions it was opened for
 
 **872 rows, 01:06–05:25 UTC, and the log could not say who, what Google said, or which quota.**

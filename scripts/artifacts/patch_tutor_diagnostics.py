@@ -1520,6 +1520,290 @@ def apply_quota_detail(raw):
     return p.buf, p.applied
 
 
+# --- SET 9: tell a per-MINUTE 429 from a per-DAY one, and stop paying for the difference --
+#
+# Set 7 made the ladder walk instead of thrash, and it was right to. What it still cannot do
+# is tell the two 429s apart, and they are opposite problems:
+#
+#   per MINUTE  clears in ~20s. Waiting is correct, and a countdown is worth showing.
+#   per DAY     does not clear until midnight PACIFIC. Waiting is worthless, retrying is
+#               worthless, and every attempt spends a request against a cap already full.
+#
+# Treated as one thing, the daily case is the expensive one. gemini-3.6-flash is 20 requests
+# per DAY, and a single lesson is ~14 -- so a cadet's SECOND lesson of the day starts with the
+# top rung already dead. freshTurn() then revives it at the top of every turn, seats it, and
+# spends one guaranteed 429 on it, and another on 3.5-flash beneath it. Over a 30-turn session
+# that is ~60 requests whose only possible outcome is a refusal, plus two round trips of
+# latency in front of every single thing the cadet types.
+#
+# THE COURSE DIRECTOR'S REASONING, 2026-08-26, and it is sound: if the first few requests of a
+# session are refused, that cannot be a per-minute limit -- the smallest cap on this ladder is
+# 5/min -- so it must be the daily one. One correction was needed. "The first few requests"
+# has to mean the first few THIS KEY HAS SENT, not the first few THIS PAGE has sent, and until
+# now the counters lived in module scope and died on every reload. A cadet who reloads, or who
+# ran a lesson an hour ago, looked like a fresh session to code that had no memory. So the
+# ledger below is in localStorage, keyed by the Pacific date.
+#
+# GOOGLE ALSO JUST SAYS SO, which is cheaper than any inference. Set 7 already parses the
+# QuotaFailure violation out of the 429 body, and the name is literally
+# `GenerateRequestsPerMinutePerProjectPerModel-FreeTier`. Matching /PerDay/ against it is the
+# primary test; the director's send-count inference is the fallback for a body that carries no
+# QuotaFailure at all. Both are kept -- the name is authoritative when present, and the
+# arithmetic still answers when it is not.
+#
+# WHAT IS DELIBERATELY *NOT* BUILT:
+#
+#   A GLOBAL pacer across all models. The 2026-08-26 probe settled this: asked every other
+#   model the instant one was walled, gemini-3.1-flash-lite answered HTTP 200 while
+#   gemini-3.5-flash-lite was still refusing. The ceiling is per project AND PER MODEL, so a
+#   project-wide pacer would slow every rung down to protect against a limit that does not
+#   exist. The pacer here is per model, which is both correct and faster.
+#
+#   A token check. TPM on the free tier is 250,000/min and a turn is a few thousand, so it has
+#   never been the binding limit -- the probe drew a 429 on a TWO-CHARACTER prompt. Tokens are
+#   already counted and logged; gating on them would add a branch that never fires.
+
+OLD_SEATLADDER = rb"""function seatLadder(ref, ladder) {"""
+NEW_SEATLADDER = rb"""// --- The quota ledger: what THIS KEY has already spent today -----------------------------
+//
+// Survives reloads, because Google's counters do and ours did not. Everything above this line
+// is module scope and resets on every page load, which is exactly the blind spot that made an
+// early 429 unreadable: a cadet on their second lesson of the day looked identical to a cadet
+// on their first request ever.
+//
+// Google resets requests-per-day at MIDNIGHT PACIFIC -- not the cadet's midnight, and not on a
+// rolling 24 hours. Cadets here are Mountain, so that is 1am local, and a lock taken at 11pm
+// has two hours left to run, not one minute. `en-CA` is used only because it formats as
+// YYYY-MM-DD, which compares correctly as a plain string.
+const QUOTA_STORE = "prep.gemini.quota";
+
+function quotaDay() {
+  try { return new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" }); }
+  catch (e) { return new Date().toISOString().slice(0, 10); }   // no Intl tz data: UTC is close
+}
+
+let quotaBook = null;
+function book() {
+  const day = quotaDay();
+  if (quotaBook && quotaBook.day === day) return quotaBook;
+  let b = null;
+  try { b = JSON.parse(localStorage.getItem(QUOTA_STORE) || "null"); } catch (e) {}
+  // A NEW PACIFIC DAY WIPES EVERY LOCK, which is the whole expiry mechanism. There is no
+  // timer and nothing to schedule: the stored day simply stops matching.
+  if (!b || b.day !== day || !b.m) b = { day: day, m: {} };
+  quotaBook = b;
+  return b;
+}
+function bookFor(name) {
+  const m = book().m;
+  return m[name] || (m[name] = { sent: 0, t: [], day: 0 });
+}
+function saveBook() {
+  try { localStorage.setItem(QUOTA_STORE, JSON.stringify(quotaBook)); } catch (e) {}
+}
+
+// MEASURED 2026-08-26, tests/browser/test-gemini-rate-limits.html. Not read from a doc page:
+// the published tables disagreed with the live key twice.
+const RPM_FLASH = 5;      // gemini-3.6-flash, gemini-3.5-flash -- also 20 requests per DAY
+const RPM_LITE = 15;      // the lite floor -- 500 per day, which no session has come near
+function rpmOf(name) { return /lite/i.test(name) ? RPM_LITE : RPM_FLASH; }
+
+function sentSince(name, ms) {
+  const cut = Date.now() - ms;
+  return bookFor(name).t.filter((t) => t > cut).length;
+}
+
+// Called from noteCall, so it counts exactly what the transport actually sent -- retries
+// included. A retry costs quota whether or not it succeeds, and the old counters hid that.
+function noteSend(name) {
+  const e = bookFor(name);
+  e.sent++;
+  e.t.push(Date.now());
+  if (e.t.length > 30) e.t = e.t.slice(-30);   // one minute of history is all this is asked for
+  saveBook();
+}
+
+// WHICH quota did Google mean? Its own name first; the director's arithmetic second.
+//
+// The fallback reads: we got a 429 having sent fewer than the SMALLEST per-minute cap on this
+// ladder in the last minute. No per-minute limit on any rung can be full at that rate, so the
+// refusal has to be the daily one. RPM_FLASH is the conservative choice here -- using the
+// per-model rpmOf() would call a lite rung "daily" at 14 sends/min, which is a minute limit
+// about to close, not a day one.
+function quotaScope(name, quotaId) {
+  if (/PerDay/i.test(quotaId)) return "day";
+  if (/PerMinute/i.test(quotaId)) return "minute";
+  return sentSince(name, 60000) < RPM_FLASH ? "day" : "minute";
+}
+
+function lockDay(name) { bookFor(name).day = 1; saveBook(); }
+function dayLocked(name) { return !!bookFor(name).day; }
+
+// True when this model has already used its per-minute allowance, so the next request to it
+// is a refusal we can predict. Walking costs nothing and a refusal costs a round trip.
+function pacedOut(name) { return sentSince(name, 60000) >= rpmOf(name); }
+
+// Carries today's locks into a FRESH PAGE LOAD, which is the point of storing them. Without
+// this the ledger would only help within one session, and the session that needs it most is
+// the one that starts after the cap is already gone.
+//
+// statFor() is called deliberately: it puts the model in modelStats with calls 0, so a rung
+// skipped before it was ever tried still appears in the cadet's error panel and in the log
+// instead of silently vanishing from the list of what was attempted.
+function seedDayLocks(ladders) {
+  let n = 0;
+  ladders.forEach((lad) => (lad || []).forEach((name) => {
+    if (!dayLocked(name) || spentModels[name]) return;
+    spentModels[name] = "day";
+    statFor(name).kinds.daily_capped = 1;
+    n++;
+  }));
+  return n;
+}
+
+function seatLadder(ref, ladder) {"""
+
+OLD_NOTECALL = rb"""function noteCall(name) { statFor(name).calls++; diagState.model = name; }"""
+NEW_NOTECALL = rb"""function noteCall(name) {
+  statFor(name).calls++;
+  diagState.model = name;
+  noteSend(name);   // the persistent half: survives the reload the counters above do not
+}"""
+
+OLD_REVIVE9 = rb"""    if (spentModels[k] !== "model") { delete spentModels[k]; revived++; }"""
+NEW_REVIVE9 = rb"""    // "day" JOINS "model" AS PERMANENT-FOR-NOW. A daily cap does not clear until midnight
+    // Pacific, so reviving one buys a guaranteed 429 on that rung at the top of every
+    // remaining turn -- ~60 of them across a long session, each one a round trip the cadet
+    // waits through before the first model that can actually answer is even tried.
+    if (spentModels[k] !== "model" && spentModels[k] !== "day") {
+      delete spentModels[k];
+      revived++;
+    }"""
+
+OLD_SEED = rb"""  activeModelRef.ladder = null;             // force a re-seat onto the filtered list
+  seatLadder(activeModelRef, MODEL_CHAT);"""
+NEW_SEED = rb"""  // Anything this key already exhausted TODAY is dead before the first turn is typed. Done
+  // here rather than at module load because the ladders are only final once discovery has
+  // filtered them against what this key can actually reach.
+  seedDayLocks([MODEL_CHAT, MODEL_REPORT, MODEL_STUDY]);
+
+  activeModelRef.ladder = null;             // force a re-seat onto the filtered list
+  seatLadder(activeModelRef, MODEL_CHAT);"""
+
+OLD_RAWCALL_HEAD = rb"""async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
+  let attempt = 0;
+  while (true) {
+    let res;"""
+NEW_RAWCALL_HEAD = rb"""async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
+  let attempt = 0;
+  let paced = 0;
+  while (true) {
+    // DON'T SEND A REQUEST WE CAN ALREADY PREDICT WILL BE REFUSED. If this rung has used its
+    // measured per-minute allowance, step down instead -- the limit is per model, so the next
+    // rung has its own, and walking is instant where a refusal is a round trip.
+    //
+    // nextModel, NOT advance: advance() falls through to resetLadder, which spends one of the
+    // session's two whole-ladder laps. Pacing must never consume that budget; it is a routine
+    // step, not a failure. Bounded so it can never spin, and when nothing is left to walk to
+    // it simply falls through and sends -- the 429 path below still handles the wait.
+    if (paced < PACE_WALK_LIMIT && pacedOut(activeModelRef.current)) {
+      paced++;
+      if (nextModel(activeModelRef)) continue;
+    }
+    let res;"""
+
+OLD_PACELIMIT = rb"""const LADDER_WAIT_MS = 25000;
+const LADDER_WAITS_PER_TURN = 1;
+let ladderWaits = 0;"""
+NEW_PACELIMIT = rb"""const LADDER_WAIT_MS = 25000;
+const LADDER_WAITS_PER_TURN = 1;
+let ladderWaits = 0;
+
+// How many rungs the per-minute pacer may step down before it gives up and sends anyway.
+// One per rung of the longest ladder; it exists only so a bug cannot turn into a spin.
+const PACE_WALK_LIMIT = 6;
+
+// A pause shorter than this is taken SILENTLY. Announcing a two-second wait as "rate limited"
+// teaches a cadet that the page is broken when it is working exactly as designed -- and the
+// message costs more attention than the wait it explains. Longer than this and the countdown
+// is worth showing, because unexplained silence is what makes cadets reload and lose work.
+const QUIET_WAIT_MS = 3000;"""
+
+OLD_WAITVIS = rb"""async function waitVisibly(model, ms) {
+  const tell = (n) => {"""
+NEW_WAITVIS = rb"""async function waitVisibly(model, ms) {
+  if (ms <= QUIET_WAIT_MS) { await sleep(ms); return; }   // too short to be worth alarming over
+  const tell = (n) => {"""
+
+OLD_429SPEND = rb"""      noteFail(activeModelRef.current, "quota");
+      spentModels[activeModelRef.current] = "quota";
+      if (advance(activeModelRef)) { attempt = 0; continue; }"""
+NEW_429SPEND = rb"""      noteFail(activeModelRef.current, "quota");
+      // MINUTE OR DAY. Google's own name decides it when the body carried one; otherwise our
+      // own send history does. A day lock is written through to localStorage, so it outlives
+      // this page load -- the cadet's next lesson starts with this rung already skipped
+      // instead of rediscovering it at one wasted request per turn.
+      const scope = quotaScope(activeModelRef.current, quotaId);
+      if (scope === "day") lockDay(activeModelRef.current);
+      spentModels[activeModelRef.current] = scope === "day" ? "day" : "quota";
+      if (advance(activeModelRef)) { attempt = 0; continue; }"""
+
+OLD_429WAITGATE = rb"""      if (ladderWaits < LADDER_WAITS_PER_TURN) {
+        ladderWaits++;
+        await waitVisibly(activeModelRef.current,
+                          waitMs > 0 ? Math.min(waitMs, LADDER_WAIT_MS) : LADDER_WAIT_MS);
+        if (freshTurn(activeModelRef)) { attempt = 0; continue; }
+      }
+      throw { kind: "quota", status: 429, detail: quotaMsg };"""
+NEW_429WAITGATE = rb"""      //
+      // BUT NOT IF EVERY RUNG IS DAY-LOCKED. Twenty-five seconds against a cap that resets at
+      // midnight buys nothing at all, and it buys it while the cadet watches a countdown that
+      // promises the opposite. That case is over; say so instead of stalling.
+      const spentLadder = activeModelRef.ladder || MODEL_FALLBACKS;
+      const allDay = spentLadder.every((n) => spentModels[n] === "day");
+      if (!allDay && ladderWaits < LADDER_WAITS_PER_TURN) {
+        ladderWaits++;
+        await waitVisibly(activeModelRef.current,
+                          waitMs > 0 ? Math.min(waitMs, LADDER_WAIT_MS) : LADDER_WAIT_MS);
+        if (freshTurn(activeModelRef)) { attempt = 0; continue; }
+      }
+      throw { kind: "quota", status: 429, scope: allDay ? "day" : "minute",
+              detail: (allDay ? "[daily] " : "") + quotaMsg };"""
+
+OLD_QUOTAMSG = rb"""    case "quota":
+      return "Your Gemini free-tier quota is used up for now. A per-minute limit clears in about a minute; the daily one resets on Google's clock. Wait and Retry.";"""
+NEW_QUOTAMSG = rb"""    case "quota":
+      // This hedged -- "a per-minute limit clears in about a minute; the daily one resets on
+      // Google's clock" -- because the transport could not tell which had happened. It can
+      // now, so the cadet gets the one instruction that is actually true for their case. The
+      // difference matters: one of them is "wait a moment", the other is "come back tomorrow",
+      // and telling a cadet to Retry against a daily cap is an hour of pressing a dead button.
+      return err.scope === "day"
+        ? "Your Gemini free-tier DAILY limit is used up on every model this lesson can use. It resets at midnight Pacific time \u2014 1am Mountain. Retrying now cannot work. Your conversation is saved in this browser, so you can come back and pick it up."
+        : "Google is asking us to slow down \u2014 the per-minute limit on your key is full. It clears in about a minute. Wait, then press Retry.";"""
+
+SET9_MARKER = b"QUOTA_STORE"
+
+
+def apply_quota_ledger(raw):
+    """Set 9. A per-day 429 and a per-minute 429 are opposite problems; tell them apart, and
+    stop retrying the one that cannot clear until midnight Pacific."""
+    if SET9_MARKER in raw:
+        return raw, ["already"]
+    p = Patcher(raw, None)
+    p.sub("quota-ledger", OLD_SEATLADDER, NEW_SEATLADDER)
+    p.sub("note-send", OLD_NOTECALL, NEW_NOTECALL)
+    p.sub("keep-day-locks", OLD_REVIVE9, NEW_REVIVE9)
+    p.sub("seed-day-locks", OLD_SEED, NEW_SEED)
+    p.sub("pace-constants", OLD_PACELIMIT, NEW_PACELIMIT)
+    p.sub("pace-before-send", OLD_RAWCALL_HEAD, NEW_RAWCALL_HEAD)
+    p.sub("quiet-short-wait", OLD_WAITVIS, NEW_WAITVIS)
+    p.sub("classify-429", OLD_429SPEND, NEW_429SPEND)
+    p.sub("no-wait-when-daily", OLD_429WAITGATE, NEW_429WAITGATE)
+    p.sub("quota-message-splits", OLD_QUOTAMSG, NEW_QUOTAMSG)
+    return p.buf, p.applied
+
+
 def patch_one(path, verbose=False):
     raw = path.read_bytes()
     buf, applied = apply_fixset(raw)
@@ -1530,8 +1814,9 @@ def patch_one(path, verbose=False):
     buf, applied6 = apply_turn_revive(buf)
     buf, applied7 = apply_rate_limit_backoff(buf)
     buf, applied8 = apply_quota_detail(buf)
+    buf, applied9 = apply_quota_ledger(buf)
     applied = (applied + applied2 + applied3 + applied4 + applied5 + applied6
-               + applied7 + applied8)
+               + applied7 + applied8 + applied9)
     if verbose:
         for a in applied:
             print("      . " + a)

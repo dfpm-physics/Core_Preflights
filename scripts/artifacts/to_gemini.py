@@ -2057,7 +2057,8 @@ def main():
                                                   apply_ladder_floor,
                                                   apply_turn_revive,
                                                   apply_rate_limit_backoff,
-                                                  apply_quota_detail)
+                                                  apply_quota_detail,
+                                                  apply_quota_ledger)
             html, _fixsteps = apply_fixset(html)
             html, _socsteps = apply_socratic(html)
             html, _notsteps = apply_notation(html)
@@ -2072,6 +2073,8 @@ def main():
             html, _ratesteps = apply_rate_limit_backoff(html)
             # Set 8 edits the 429 branch set 7 writes, so it runs after it.
             html, _detsteps = apply_quota_detail(html)
+            # Set 9 edits what sets 7 and 8 leave behind, so it runs last.
+            html, _ledsteps = apply_quota_ledger(html)
 
             out = OUT_ROOT / course / f"{slug}.html"
             same = out.exists() and out.read_bytes() == html
