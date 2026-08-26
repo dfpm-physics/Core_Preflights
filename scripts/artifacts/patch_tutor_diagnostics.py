@@ -973,6 +973,214 @@ def apply_ladder_floor(raw):
     return p.buf, p.applied
 
 
+# ═══════════════════════════════════════════════════════════════════════════════════════════
+# SET 6 -- 2026-08-25, late. ONE FAILING TURN BURNED THE WHOLE LADDER IN TWENTY SECONDS.
+#
+# Set 5 removed a 404ing floor and read the rungs above it as "used up by quota". The course
+# director rejected that on arithmetic -- the lite rungs carry ~500 requests/day and a session
+# is 10-14 requests, so a cadet cannot reach them by spending. That objection is what found
+# this, and set 5's reading of the rungs above the floor was wrong.
+#
+# WHAT THE 75 ERROR ROWS ACTUALLY SAY, summed per model across every row:
+#
+#     model                  calls     ok   fail   spent   kinds
+#     gemini-3.6-flash        1269    284      0   75/75   {}
+#     gemini-3.5-flash        1005     28      0   75/75   {}
+#     gemini-3.5-flash-lite    948     46      0   75/75   {}
+#     gemini-3.1-flash-lite    924      0      0   75/75   {}
+#     gemini-2.5-flash-lite    471      0    471   75/75   {model: 471}
+#     gemini-2.5-flash         225      0    225   75/75   {model: 225}
+#
+# gemini-3.6-flash ANSWERED 284 TIMES and was still marked spent in all 75 sessions. A model
+# that is answering is not out of quota. The per-session call totals are the giveaway: 60, 61,
+# 58, 61, 62 API calls -- to reach TURN 5. 81 calls by turn 22.
+#
+# THE ARITHMETIC. rawCall retried a 429 or a 5xx THREE times (0.5s / 1s / 2s) before walking,
+# so one bad response cost 4 calls in ~3.5s on that rung. Six rungs = 24 calls in ~21 seconds,
+# and resetLadder ran that twice more: 72. The observed 58-81 is exactly this, and all of it
+# happens INSIDE A SINGLE TURN. Nothing about it is a daily budget.
+#
+# THE HALF THAT MADE IT PERMANENT. `spentModels` is module scope and only resetLadder ever
+# cleared it -- twice per page load, then never again. seatLadder walks past every spent rung
+# to the LAST one. So from the first failing turn onward the cadet was pinned to the bottom
+# rung for the rest of the session, and until set 5 the bottom rung was a guaranteed 404. That
+# is the whole reported symptom: a session that works, one bad turn, then "No usable Gemini
+# model was found for this key" forever after -- with 284 good answers' worth of model sitting
+# unused at the top of the ladder.
+#
+# 6a  A SPENT MODEL RECORDS WHY.  `spentModels[name]` becomes the failure kind instead of
+#     `true`. Truthiness is unchanged, so every existing check and the diag snapshot keep
+#     working, and the harness's `= true` fixtures still read as spent.
+#
+# 6b  TRANSIENT SPEND IS REVIVED AT THE START OF EVERY TURN (`freshTurn`).  quota, capacity,
+#     timeout and empty all pass on their own; a 404 does not, and is deliberately KEPT --
+#     re-seating a model Google says does not exist is pure waste. `resetLadder` now uses the
+#     same rule and REFUSES when nothing is revivable, so a genuinely dead key stops instead
+#     of walking a ladder of 404s twice more to prove it.
+#
+# 6c  THE BLIND RETRY ON A WALKABLE FAILURE DROPS FROM 3 TO 1 (`WALK_RETRIES`).  Retrying the
+#     same model 0.5s after a per-minute 429 is close to useless -- that window is a minute --
+#     and a 503 is per-model, so stepping down beats trying again. Two calls per rung instead
+#     of four halves the storm. The NETWORK path keeps all three: a dropped connection really
+#     does come back, and it neither marks spent nor walks.
+#
+# WHAT IS STILL UNKNOWN, and this set says so rather than implying otherwise: whether the
+# trigger is a 429 or a 5xx. All 75 rows predate set 5's noteFail counters, carry no Google
+# message and no per-model status. The next burst will say, and the two want opposite
+# handling -- so this set reduces SELF-INFLICTED load rather than tuning a response to a cause
+# nobody has confirmed.
+
+OLD_SPENT_ABORT = rb"""      if (e && e.name === "AbortError") {
+        spentModels[activeModelRef.current] = true;"""
+NEW_SPENT_ABORT = rb"""      if (e && e.name === "AbortError") {
+        spentModels[activeModelRef.current] = "timeout";"""
+
+OLD_SPENT_404 = rb"""      spentModels[activeModelRef.current] = true;
+      noteFail(activeModelRef.current, "model");"""
+NEW_SPENT_404 = rb"""      // THE ONE PERMANENT SPEND. freshTurn() and resetLadder() revive every other kind and
+      // deliberately keep this one: a model Google says does not exist will not exist next
+      // turn either, and re-seating it costs the cadet a rung and a round trip every time.
+      spentModels[activeModelRef.current] = "model";
+      noteFail(activeModelRef.current, "model");"""
+
+OLD_SPENT_QUOTA = rb"""      noteFail(activeModelRef.current, "quota");
+      spentModels[activeModelRef.current] = true;"""
+NEW_SPENT_QUOTA = rb"""      noteFail(activeModelRef.current, "quota");
+      spentModels[activeModelRef.current] = "quota";"""
+
+OLD_SPENT_CAP = rb"""      noteFail(activeModelRef.current, "capacity");   // see the note in the 429 branch
+      spentModels[activeModelRef.current] = true;"""
+NEW_SPENT_CAP = rb"""      noteFail(activeModelRef.current, "capacity");   // see the note in the 429 branch
+      spentModels[activeModelRef.current] = "capacity";"""
+
+OLD_SPENT_EMPTY = rb"""    spentModels[activeModelRef.current] = true;
+    noteFail(activeModelRef.current, "empty");"""
+NEW_SPENT_EMPTY = rb"""    spentModels[activeModelRef.current] = "empty";
+    noteFail(activeModelRef.current, "empty");"""
+
+OLD_RESET = rb"""function resetLadder(ref) {
+  if (diagState.resets >= LADDER_RESET_LIMIT) return false;
+  diagState.resets++;
+  Object.keys(spentModels).forEach((k) => { delete spentModels[k]; });
+  Object.keys(waitedFor).forEach((k) => { delete waitedFor[k]; });
+  const lad = ref.ladder || MODEL_FALLBACKS;
+  ref.i = 0;
+  ref.current = lad[0];
+  if (onModelSwitch.fn) { try { onModelSwitch.fn(ref.current); } catch (e) {} }
+  return true;
+}"""
+
+NEW_RESET = rb"""// Clears every spend that is going to pass on its own and KEEPS the ones that are not.
+// A 404 is the only permanent kind: quota clears on Google's clock, capacity comes back, a
+// timeout was one slow request, and an empty answer is usually not repeated. Returns how many
+// rungs came back, so a caller can tell "nothing to revive" from "revived nothing useful".
+//
+// `= true` still counts as revivable. The harness marks rungs that way and so did every build
+// before 2026-08-25; treating an unlabelled spend as transient is the safe direction, because
+// the cost of reviving a dead rung is one round trip and the cost of keeping a live one is
+// the rest of the cadet's session.
+function reviveSpent() {
+  let revived = 0;
+  Object.keys(spentModels).forEach((k) => {
+    if (spentModels[k] !== "model") { delete spentModels[k]; revived++; }
+  });
+  Object.keys(waitedFor).forEach((k) => { delete waitedFor[k]; });
+  return revived;
+}
+
+// Called once at the top of every turn. THIS IS THE FIX FOR THE PINNED SESSION.
+//
+// spentModels is module scope and only resetLadder ever cleared it -- twice per page load,
+// then never again. seatLadder walks past every spent rung to the LAST one, so after the
+// first failing turn a cadet was seated on the bottom rung for the rest of the session while
+// gemini-3.6-flash -- which answered 284 times across the logged sessions -- sat unused at
+// the top. A rung burned by a per-minute limit on turn 4 has no business still being burned
+// on turn 12.
+//
+// It does NOT touch diagState.resets. That bound is what stops a genuinely dead key looping,
+// and this function removes the need to spend it rather than refilling it.
+function freshTurn(ref) {
+  const revived = reviveSpent();
+  if (!revived || !ref || !ref.ladder) return revived;
+  // Clearing the set is not enough on its own: activeModelRef.current still points at the
+  // rung the last turn walked down to, and nothing re-seats it until a phase change.
+  ref.i = 0;
+  seatLadder(ref, ref.ladder);
+  if (onModelSwitch.fn) { try { onModelSwitch.fn(ref.current); } catch (e) {} }
+  return revived;
+}
+
+function resetLadder(ref) {
+  if (diagState.resets >= LADDER_RESET_LIMIT) return false;
+  // REFUSES when every remaining rung is a 404. The old version deleted the whole set, so a
+  // key that could reach nothing walked a ladder of 404s twice more to rediscover it, at a
+  // round trip a rung, while the cadet watched a spinner.
+  const revived = reviveSpent();
+  if (!revived) return false;
+  diagState.resets++;
+  const lad = ref.ladder || MODEL_FALLBACKS;
+  ref.i = 0;
+  while (ref.i < lad.length - 1 && spentModels[lad[ref.i]]) ref.i++;
+  ref.current = lad[ref.i];
+  if (onModelSwitch.fn) { try { onModelSwitch.fn(ref.current); } catch (e) {} }
+  return true;
+}"""
+
+OLD_RESETLIMIT = rb"""const LADDER_RESET_LIMIT = 2;"""
+NEW_RESETLIMIT = rb"""const LADDER_RESET_LIMIT = 2;
+
+// Blind retries before a WALKABLE failure gives up on its rung. This was the shared
+// `retries = 3`, which meant one 429 cost four calls in ~3.5s on that model, six rungs cost
+// 24 in ~21s, and resetLadder ran it twice more -- 72 calls, inside a single turn. That is
+// what the logged sessions show: 60, 61, 58, 61, 62 calls to reach turn 5.
+//
+// Retrying half a second after a PER-MINUTE 429 cannot succeed; that window is a minute. A
+// 5xx is per-model, so the next rung is a better bet than the same one. One retry still
+// covers a genuinely flaky single response and halves the storm.
+//
+// The NETWORK path deliberately keeps all three: a dropped connection really does come back,
+// and that path neither marks the model spent nor walks the ladder.
+const WALK_RETRIES = 1;"""
+
+OLD_429RETRY = rb"""      if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      // RECORD IT."""
+NEW_429RETRY = rb"""      if (attempt < WALK_RETRIES) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      // RECORD IT."""
+
+OLD_5XXRETRY = rb"""      if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      noteFail(activeModelRef.current, "capacity");"""
+NEW_5XXRETRY = rb"""      if (attempt < WALK_RETRIES) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      noteFail(activeModelRef.current, "capacity");"""
+
+OLD_RUNTURN = rb"""  async function runTurn(history) {
+    diagState.turn++;"""
+NEW_RUNTURN = rb"""  async function runTurn(history) {
+    diagState.turn++;
+    // Give back every rung that was spent on something transient. Without this, one bad turn
+    // pinned the whole session to the bottom of the ladder -- see freshTurn().
+    freshTurn(activeModelRef);"""
+
+LADDER6_MARKER = b"function freshTurn(ref)"
+
+
+def apply_turn_revive(raw):
+    """Set 6. Spend records a reason; transient spends revive each turn; walk sooner."""
+    if LADDER6_MARKER in raw:
+        return raw, ["already"]
+    p = Patcher(raw, None)
+    p.sub("spent-reason-abort", OLD_SPENT_ABORT, NEW_SPENT_ABORT)
+    p.sub("spent-reason-404", OLD_SPENT_404, NEW_SPENT_404)
+    p.sub("spent-reason-quota", OLD_SPENT_QUOTA, NEW_SPENT_QUOTA)
+    p.sub("spent-reason-capacity", OLD_SPENT_CAP, NEW_SPENT_CAP)
+    p.sub("spent-reason-empty", OLD_SPENT_EMPTY, NEW_SPENT_EMPTY)
+    p.sub("walk-retries-const", OLD_RESETLIMIT, NEW_RESETLIMIT)
+    p.sub("revive-and-reset", OLD_RESET, NEW_RESET)
+    p.sub("walk-retries-429", OLD_429RETRY, NEW_429RETRY)
+    p.sub("walk-retries-5xx", OLD_5XXRETRY, NEW_5XXRETRY)
+    p.sub("fresh-turn-hook", OLD_RUNTURN, NEW_RUNTURN)
+    return p.buf, p.applied
+
+
 def patch_one(path, verbose=False):
     raw = path.read_bytes()
     buf, applied = apply_fixset(raw)
@@ -980,7 +1188,8 @@ def patch_one(path, verbose=False):
     buf, applied3 = apply_notation(buf)
     buf, applied4 = apply_cadet_ref(buf)
     buf, applied5 = apply_ladder_floor(buf)
-    applied = applied + applied2 + applied3 + applied4 + applied5
+    buf, applied6 = apply_turn_revive(buf)
+    applied = applied + applied2 + applied3 + applied4 + applied5 + applied6
     if verbose:
         for a in applied:
             print("      . " + a)

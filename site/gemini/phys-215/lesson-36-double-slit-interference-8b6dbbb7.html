@@ -396,14 +396,71 @@ const diagState = { cadet: "", mode: "", phase: "start", turn: 0, startedAt: 0, 
 // Bounded, because a genuinely dead key must still terminate instead of looping forever.
 const LADDER_RESET_LIMIT = 2;
 
+// Blind retries before a WALKABLE failure gives up on its rung. This was the shared
+// `retries = 3`, which meant one 429 cost four calls in ~3.5s on that model, six rungs cost
+// 24 in ~21s, and resetLadder ran it twice more -- 72 calls, inside a single turn. That is
+// what the logged sessions show: 60, 61, 58, 61, 62 calls to reach turn 5.
+//
+// Retrying half a second after a PER-MINUTE 429 cannot succeed; that window is a minute. A
+// 5xx is per-model, so the next rung is a better bet than the same one. One retry still
+// covers a genuinely flaky single response and halves the storm.
+//
+// The NETWORK path deliberately keeps all three: a dropped connection really does come back,
+// and that path neither marks the model spent nor walks the ladder.
+const WALK_RETRIES = 1;
+
+// Clears every spend that is going to pass on its own and KEEPS the ones that are not.
+// A 404 is the only permanent kind: quota clears on Google's clock, capacity comes back, a
+// timeout was one slow request, and an empty answer is usually not repeated. Returns how many
+// rungs came back, so a caller can tell "nothing to revive" from "revived nothing useful".
+//
+// `= true` still counts as revivable. The harness marks rungs that way and so did every build
+// before 2026-08-25; treating an unlabelled spend as transient is the safe direction, because
+// the cost of reviving a dead rung is one round trip and the cost of keeping a live one is
+// the rest of the cadet's session.
+function reviveSpent() {
+  let revived = 0;
+  Object.keys(spentModels).forEach((k) => {
+    if (spentModels[k] !== "model") { delete spentModels[k]; revived++; }
+  });
+  Object.keys(waitedFor).forEach((k) => { delete waitedFor[k]; });
+  return revived;
+}
+
+// Called once at the top of every turn. THIS IS THE FIX FOR THE PINNED SESSION.
+//
+// spentModels is module scope and only resetLadder ever cleared it -- twice per page load,
+// then never again. seatLadder walks past every spent rung to the LAST one, so after the
+// first failing turn a cadet was seated on the bottom rung for the rest of the session while
+// gemini-3.6-flash -- which answered 284 times across the logged sessions -- sat unused at
+// the top. A rung burned by a per-minute limit on turn 4 has no business still being burned
+// on turn 12.
+//
+// It does NOT touch diagState.resets. That bound is what stops a genuinely dead key looping,
+// and this function removes the need to spend it rather than refilling it.
+function freshTurn(ref) {
+  const revived = reviveSpent();
+  if (!revived || !ref || !ref.ladder) return revived;
+  // Clearing the set is not enough on its own: activeModelRef.current still points at the
+  // rung the last turn walked down to, and nothing re-seats it until a phase change.
+  ref.i = 0;
+  seatLadder(ref, ref.ladder);
+  if (onModelSwitch.fn) { try { onModelSwitch.fn(ref.current); } catch (e) {} }
+  return revived;
+}
+
 function resetLadder(ref) {
   if (diagState.resets >= LADDER_RESET_LIMIT) return false;
+  // REFUSES when every remaining rung is a 404. The old version deleted the whole set, so a
+  // key that could reach nothing walked a ladder of 404s twice more to rediscover it, at a
+  // round trip a rung, while the cadet watched a spinner.
+  const revived = reviveSpent();
+  if (!revived) return false;
   diagState.resets++;
-  Object.keys(spentModels).forEach((k) => { delete spentModels[k]; });
-  Object.keys(waitedFor).forEach((k) => { delete waitedFor[k]; });
   const lad = ref.ladder || MODEL_FALLBACKS;
   ref.i = 0;
-  ref.current = lad[0];
+  while (ref.i < lad.length - 1 && spentModels[lad[ref.i]]) ref.i++;
+  ref.current = lad[ref.i];
   if (onModelSwitch.fn) { try { onModelSwitch.fn(ref.current); } catch (e) {} }
   return true;
 }
@@ -2463,7 +2520,7 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
       // Marking it spent is the half that ENDS the loop; dropping 3.7 from the report pool
       // only made it rarer.
       if (e && e.name === "AbortError") {
-        spentModels[activeModelRef.current] = true;
+        spentModels[activeModelRef.current] = "timeout";
         noteFail(activeModelRef.current, "timeout");
         throw { kind: "timeout", status: 0, moved: advance(activeModelRef) };
       }
@@ -2503,7 +2560,10 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
       // MARKS IT SPENT, which every other walking path did and this one did not. Without it
       // a model that 404s is re-seated at the top of the next pool and 404s again, at every
       // phase change, for the whole session.
-      spentModels[activeModelRef.current] = true;
+      // THE ONE PERMANENT SPEND. freshTurn() and resetLadder() revive every other kind and
+      // deliberately keep this one: a model Google says does not exist will not exist next
+      // turn either, and re-seating it costs the cadet a rung and a round trip every time.
+      spentModels[activeModelRef.current] = "model";
       noteFail(activeModelRef.current, "model");
       if (advance(activeModelRef)) { attempt = 0; continue; }
       throw { kind: "model", status: 404 };
@@ -2537,14 +2597,14 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
           continue;
         }
       }
-      if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      if (attempt < WALK_RETRIES) { await sleep(backoffMs(attempt)); attempt++; continue; }
       // RECORD IT. This branch marked the model spent and walked without ever calling
       // noteFail, so a rung burned by quota reached the log as `calls: 12, ok: 0, fail: 0,
       // kinds: {}` -- twelve requests and no account of one of them. Every rung above the
       // floor in the 2026-08-25 rows looks like that, which is why those rows cannot say
       // whether the cadet was rate-limited or Google was refusing.
       noteFail(activeModelRef.current, "quota");
-      spentModels[activeModelRef.current] = true;
+      spentModels[activeModelRef.current] = "quota";
       if (advance(activeModelRef)) { attempt = 0; continue; }
       throw { kind: "quota", status: 429 };
     }
@@ -2561,9 +2621,9 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
     // Now it walks, exactly as the 429 path does. `capacity` is reported only when the
     // whole ladder is refusing, which is the case that message was actually written for.
     if (res.status === 529 || res.status >= 500) {
-      if (attempt < retries) { await sleep(backoffMs(attempt)); attempt++; continue; }
+      if (attempt < WALK_RETRIES) { await sleep(backoffMs(attempt)); attempt++; continue; }
       noteFail(activeModelRef.current, "capacity");   // see the note in the 429 branch
-      spentModels[activeModelRef.current] = true;
+      spentModels[activeModelRef.current] = "capacity";
       if (advance(activeModelRef)) { attempt = 0; continue; }
       throw { kind: "capacity", status: res.status };
     }
@@ -2675,7 +2735,7 @@ async function callTutor(activeModelRef, history, sys, note) {
       noteFail(activeModelRef.current, "thinking-overrun");
       return callTutor(activeModelRef, history, sys, note);
     }
-    spentModels[activeModelRef.current] = true;
+    spentModels[activeModelRef.current] = "empty";
     noteFail(activeModelRef.current, "empty");
     throw { kind: "empty", status: 0, moved: advance(activeModelRef), why: why || "" };
   }
@@ -3272,6 +3332,9 @@ function Lesson36Preflight() {
 
   async function runTurn(history) {
     diagState.turn++;
+    // Give back every rung that was spent on something transient. Without this, one bad turn
+    // pinned the whole session to the bottom of the ladder -- see freshTurn().
+    freshTurn(activeModelRef);
     diagState.phase = reportPhaseRef.current ? "report" : "chat";
     const pacing = mode === "graded" ? pacingNote(activeSecRef.current, PROBE_TOPIC_COUNT) : null;
     // Exactly two visible assistant turns means both are the scripted ones and this is the

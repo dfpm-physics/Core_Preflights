@@ -189,6 +189,59 @@ sounded good both times, and neither was checked against what the fleet had actu
 adding a rung, not after.**
 
 
+### 2.5 The same evening, later — one failing turn burned the whole ladder in twenty seconds
+
+**§2.4 read the rungs above the 404 floor as "used up by quota". That was wrong, and the course
+director rejected it on arithmetic**: the lite rungs carry ~500 requests/day and a session is
+10–14 requests, so a cadet cannot reach them by spending. The objection is what found this.
+
+**Summed per model across all 75 error rows:**
+
+| model | calls | ok | fail | spent | kinds |
+|---|---|---|---|---|---|
+| `gemini-3.6-flash` | 1269 | **284** | 0 | 75/75 | `{}` |
+| `gemini-3.5-flash` | 1005 | 28 | 0 | 75/75 | `{}` |
+| `gemini-3.5-flash-lite` | 948 | 46 | 0 | 75/75 | `{}` |
+| `gemini-3.1-flash-lite` | 924 | 0 | 0 | 75/75 | `{}` |
+| `gemini-2.5-flash-lite` | 471 | 0 | 471 | 75/75 | `{model: 471}` |
+| `gemini-2.5-flash` | 225 | 0 | 225 | 75/75 | `{model: 225}` |
+
+**`gemini-3.6-flash` answered 284 times and was still marked spent in every one of the 75
+sessions.** A model that is answering is not out of quota. And the per-session call totals settle
+it: **60, 61, 58, 61, 62 API calls — to reach turn 5.** 81 by turn 22.
+
+**The arithmetic.** `rawCall` retried a 429 or a 5xx **three** times (0.5s / 1s / 2s) before
+walking, so one bad response cost **4 calls in ~3.5 s** on that rung. Six rungs = 24 calls in ~21
+seconds; `resetLadder` ran that twice more = **72**. The observed 58–81 is exactly this, and all of
+it happens **inside a single turn**. Nothing about it is a daily budget.
+
+**The half that made it permanent.** `spentModels` is module scope and only `resetLadder` ever
+cleared it — twice per page load, then never again. `seatLadder` walks past every spent rung to the
+**last** one. So from the first failing turn onward the cadet was **pinned to the bottom rung for
+the rest of the session**, and until §2.4 the bottom rung was a guaranteed 404. That is the entire
+reported symptom: a session that works, one bad turn, then *"No usable Gemini model was found for
+this key"* forever after — with 284 good answers' worth of model idle at the top of the ladder.
+
+| Behaviour | A (kit) | B (sources) | C (Gemini) | Note |
+|---|---|---|---|---|
+| `spentModels[name]` records **why** it was spent | ❌ | n/a | ✅ | truthiness unchanged, so every existing check still works |
+| `freshTurn()` revives transient spends at the top of every turn | ❌ | n/a | ✅ | **the pinned-session fix** |
+| A 404 spend is deliberately **kept** | ❌ | n/a | ✅ | quota/capacity/timeout/empty all pass; a 404 does not |
+| `resetLadder()` refuses when every rung is a 404 | ❌ | n/a | ✅ | the old one walked a dead ladder twice more to prove it |
+| `WALK_RETRIES = 1` on a 429 or 5xx | ❌ | ❌ | ✅ | 2 calls a rung, not 4; the network path keeps all 3 |
+
+**Still unknown, and worth stating plainly: whether the trigger is a 429 or a 5xx.** All 75 rows
+predate §2.4's `noteFail` counters, carry no Google message and no per-model status. The two want
+opposite handling — a 429 says back off, a 5xx says walk fast — so this set reduces
+**self-inflicted** load rather than tuning a response to an unconfirmed cause. The next burst will
+say which.
+
+**The lesson that outlives both fixes.** §2.4 was written from the *last* error in each session and
+reached a wrong cause; §2.5 was written from the *per-model counters* and reached a checkable one.
+The terminal error names where a session died, never why. **Read the `models` array, not
+`http_status`.**
+
+
 ## 3. What the Claude artifact still gets wrong
 
 **Filed as [`docs/findings/2026-08-21-claude-artifact-unwalked-failure-paths.md`](../findings/2026-08-21-claude-artifact-unwalked-failure-paths.md)** — a work order with a status, where this section is a summary. The finding carries the verification commands, the separation of what was observed from what was inferred, and the falsification conditions.

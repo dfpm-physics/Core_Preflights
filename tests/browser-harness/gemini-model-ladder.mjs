@@ -49,7 +49,8 @@ const S = new Function(block + `
   return { MODEL_LITE, MODEL_CHAT, MODEL_REPORT, MODEL_STUDY, MODEL_FALLBACKS, scoreModel,
            seatLadder, nextModel, spentModels, onModelSwitch,
            advance, resetLadder, waitedFor, diagState, modelStats, statFor, noteCall,
-           noteOk, noteFail, genConfig, MAX_TOKENS, THINKING_BUDGET };`)();
+           noteOk, noteFail, genConfig, MAX_TOKENS, THINKING_BUDGET,
+           freshTurn, reviveSpent, WALK_RETRIES };`)();
 const isLite = (n) => S.MODEL_LITE.includes(n);
 
 let pass = 0, fail = 0;
@@ -162,9 +163,9 @@ ok(isLite(S.MODEL_REPORT[S.MODEL_REPORT.length - 1]),
 // looped on it forever. Checked against the raw source: both sit in rawCall, outside the model
 // block this file evaluates. These are the assertions that keep the report stage un-hung; the
 // ladder ordering only makes a hang less likely.
-ok(/AbortError[\s\S]{0,400}spentModels\[activeModelRef\.current\] = true/.test(src),
+ok(/AbortError[\s\S]{0,400}spentModels\[activeModelRef\.current\] = "timeout"/.test(src),
    'a TIMED-OUT model is marked spent - otherwise Retry repeats the same two-minute wait');
-ok(/res\.status >= 500[\s\S]{0,600}spentModels\[activeModelRef\.current\] = true[\s\S]{0,300}advance\(activeModelRef\)/
+ok(/res\.status >= 500[\s\S]{0,900}spentModels\[activeModelRef\.current\] = "capacity"[\s\S]{0,300}advance\(activeModelRef\)/
      .test(src),
    'a 5xx WALKS the ladder - a 503 is per-model, not per-project, so there is something to '
    + 'switch to');
@@ -298,7 +299,7 @@ ok(S.MODEL_CHAT[S.MODEL_CHAT.length - 1] === 'gemini-3.1-flash-lite' &&
 
 // The 404 path was the only walking path that never marked the model spent, so a model that
 // 404s was re-seated at the top of the next pool and 404d again, all session.
-ok(/res\.status === 404[\s\S]{0,400}spentModels\[activeModelRef\.current\] = true/.test(src),
+ok(/res\.status === 404[\s\S]{0,700}spentModels\[activeModelRef\.current\] = "model"/.test(src),
    'a 404 model is marked spent - every other walking path did this and this one did not');
 
 // THE cadet-facing bug: thinking tokens are charged against maxOutputTokens, so a long turn
@@ -334,6 +335,77 @@ ok(/app\.tutor_error_log|log-tutor-error/.test(src),
 ok(!/report_markdown|messages\.map|m\.content/.test(src.slice(src.indexOf('function diagSnapshot'),
                                                              src.indexOf('function diagText'))),
    'the logged payload is a whitelist of counters - no conversation text can reach it');
+
+// --- SET 6: one failing turn must not cost the cadet the rest of the session ------------
+//
+// The bug this asserts against, measured from 75 logged sessions: `spentModels` is module
+// scope and only resetLadder ever cleared it -- twice per page load, then never again.
+// seatLadder walks past every spent rung to the LAST one, so after the first failing turn a
+// cadet was seated on the bottom rung for good, while gemini-3.6-flash (284 successful
+// answers across those sessions) sat unused at the top.
+const clearSpent = () => Object.keys(S.spentModels).forEach(k => delete S.spentModels[k]);
+
+clearSpent();
+S.diagState.resets = 0;
+S.MODEL_CHAT.forEach(m => { S.spentModels[m] = 'quota'; });
+const revived = S.reviveSpent();
+ok(revived === S.MODEL_CHAT.length,
+   `reviveSpent gives back every transient rung, got ${revived}`);
+ok(Object.keys(S.spentModels).length === 0,
+   'and leaves nothing behind when every spend was transient');
+
+clearSpent();
+S.spentModels[S.MODEL_CHAT[0]] = 'quota';
+S.spentModels[S.MODEL_CHAT[1]] = 'capacity';
+S.spentModels[S.MODEL_CHAT[S.MODEL_CHAT.length - 1]] = 'model';
+S.reviveSpent();
+ok(!S.spentModels[S.MODEL_CHAT[0]] && !S.spentModels[S.MODEL_CHAT[1]],
+   'quota and capacity are transient - they pass on their own clock');
+ok(S.spentModels[S.MODEL_CHAT[S.MODEL_CHAT.length - 1]] === 'model',
+   'a 404 is KEPT - re-seating a model Google says does not exist is pure waste');
+
+// The pinned session, reproduced: walk to the bottom, then start a new turn.
+clearSpent();
+S.diagState.resets = 0;
+const t = {};
+S.seatLadder(t, S.MODEL_CHAT);
+while (S.nextModel(t)) { S.spentModels[t.current] = 'quota'; }
+S.spentModels[S.MODEL_CHAT[0]] = 'quota';
+ok(t.current === S.MODEL_CHAT[S.MODEL_CHAT.length - 1],
+   'a bad turn walks the cadet down to the bottom rung');
+S.freshTurn(t);
+ok(t.current === S.MODEL_CHAT[0],
+   'freshTurn puts the NEXT turn back on the strongest model - the pinned-session fix');
+
+// A key that can reach nothing must stop, not walk a ladder of 404s twice more to prove it.
+clearSpent();
+S.diagState.resets = 0;
+S.MODEL_CHAT.forEach(m => { S.spentModels[m] = 'model'; });
+const dead = {};
+S.seatLadder(dead, S.MODEL_CHAT);
+dead.i = S.MODEL_CHAT.length - 1;
+ok(S.resetLadder(dead) === false,
+   'resetLadder REFUSES when every rung is a 404 - the retry would be theatre');
+ok(S.diagState.resets === 0,
+   'and does not spend a reset doing it');
+
+// freshTurn must not refill the bound that stops a dead key looping.
+clearSpent();
+S.diagState.resets = 2;
+S.spentModels[S.MODEL_CHAT[0]] = 'quota';
+S.freshTurn({});
+ok(S.diagState.resets === 2,
+   'freshTurn leaves diagState.resets alone - it removes the need to spend one, not the bound');
+
+ok(S.WALK_RETRIES === 1,
+   `a walkable failure retries ONCE, not 3x - 4 calls a rung is what burned 60 calls by turn 5, got ${S.WALK_RETRIES}`);
+ok(/if \(attempt < retries\)/.test(src),
+   'the NETWORK path keeps the full retry budget - a dropped connection does come back');
+ok(/diagState\.turn\+\+;[\s\S]{0,400}freshTurn\(activeModelRef\)/.test(src),
+   'freshTurn is wired to the turn boundary in runTurn - outside the block this file evaluates');
+
+clearSpent();
+S.diagState.resets = 0;
 
 console.log(`\n${pass} passed, ${fail} failed`);
 console.log('NOTE: no live key is used — this checks selection logic, not a real tutor turn.');

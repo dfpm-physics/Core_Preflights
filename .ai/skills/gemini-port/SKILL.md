@@ -262,6 +262,13 @@ Porting one silently would produce a build with no deferral at all — the exact
 > reads, so every quota exhaustion was being reported as *"No usable Gemini model was found for
 > this key"*. Evidence and the full reasoning:
 > [`TUTOR-BEHAVIOR-PARITY.md`](../../../docs/operations/TUTOR-BEHAVIOR-PARITY.md) §2.4.
+>
+> **§2.5, later the same evening, is the one to read first.** Removing the 404 floor fixed where
+> sessions *landed*, not why they fell: one failing turn was burning the entire ladder in ~20
+> seconds (four blind retries a rung), and `spentModels` never cleared, so the cadet stayed pinned
+> to the bottom rung for the rest of the session. A model that had answered 284 times was marked
+> spent in all 75 logged sessions. **Read the `models` array in a log row, never `http_status` —
+> the terminal error names where a session died, never why.**
 > **Before adding a rung back, ask `content->>'model'` over recent `submission_activities` what
 > the fleet has actually run.** Two floors were chosen in one day on plausible reasoning and
 > neither was checked against that.
