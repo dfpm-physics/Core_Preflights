@@ -10,6 +10,152 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-26 — Matthew Recker via Claude
 
+### "Come back tomorrow" was being said on no evidence at all
+
+**Set 9 shipped this morning. By this evening the live log had falsified its main premise.**
+Across all 885 rows of the day, **Google named the exhausted quota zero times** — every 429
+carried the bare sentence *"Resource has been exhausted (e.g. check quota)."*, with no
+`QuotaFailure` block and no `RetryInfo`.
+
+So set 9's primary test never fired once, and every classification fell to its tiebreaker:
+*fewer than 5 sends to this model in the last minute ⇒ daily.* **A rung the ladder walks to has
+had exactly one call**, and one is always fewer than five — so every walked-to rung was labelled
+daily, and a cadet five turns into a lesson was told to come back after midnight. Set 9 shipped
+a branch that could not return "minute" for a walked-to rung at tutoring pace.
+
+**What that looked like:** one cadet took the daily message at turn 5 after four good turns on
+`gemini-3.6-flash`; another was told to come back tomorrow, reloaded, and was told it again
+**four seconds into the new session**. The lite rungs in those rows had made **one call each**
+against a measured 500/day.
+
+**The two errors are not the same size and set 9 defaulted to the expensive one** — saying
+"daily" when it is per-minute ends a lesson for nothing; saying "per-minute" when it is daily
+costs a 25-second wait and then fails honestly.
+
+**Changed — `scripts/artifacts/patch_tutor_diagnostics.py` set 11, all 45 builds, wired into
+`to_gemini.py`:**
+
+- **`day` now needs receipts.** The ledger set 9 already keeps — requests sent to this model
+  *today*, across reloads — must reach `DAILY_CONFIDENCE` (0.8) of that model's daily cap. Not
+  1.0: the ledger is per browser, so a cadet who started on a phone begins the laptop session at
+  zero, and undercounting must fail **safe**.
+- **A third scope, `unknown`**, for the unnamed refusal — which is the common case in live data.
+  Every rung refusing at once with nothing named is not the shape of a per-model limit; the
+  2026-08-26 probe hit a per-model wall and Google named it every time. The message says so,
+  gives both actions, and promises neither.
+- **The real scope is stored** rather than flattened to `"quota"`, so the throw can tell a
+  confidently-finished ladder from an unexplained one. Only rungs spent on quota vote; a 404
+  says nothing about anyone's allowance.
+- **`detail` carries the scope name** — `[day]` / `[minute]` / `[unknown]` — instead of
+  daily-or-nothing.
+
+**Verified:** ladder harness **152/152** on one build of each course. Five set-9 assertions were
+**reversed**, and they were the wrong half: they asserted the very inference the live log
+disproved. `gemini-build.mjs` **7/7 in real Chrome** on four builds. All 45 CRLF, **0
+`INTERACTION_ID` lines touched**, `name_scan` PASS.
+
+> **The honest status of the constants.** `RPD_FLASH = 20` and `RPD_LITE = 500` come from
+> documentation and from a probe that measured the *minute* wall and never exhausted a key.
+> `keyErrorKind`'s patterns (set 10) are matched against Google's wording **as we imagine it**,
+> not wording anyone has captured. Four fix sets in two days have each corrected the previous
+> one's inference. Set 11 is shipped because it strictly reduces harm over what is live — its
+> worst case is a wait and an honest "I don't know", where set 9's worst case is ending a working
+> cadet's lesson — **not** because its numbers are known. A testbed that deliberately exhausts a
+> disposable key and records what Google actually returns is the next piece of work, and it
+> should have come before set 9.
+
+**Also in the tree and NOT committed here:** a new phys-310 build,
+`site/gemini/phys-310/phys310-nuclear-reactions-d02377ad.html`, plus its `BUILD-LOG.md`,
+`REVIEW-NOTES.json` and `site/data/backup-builds.json` entries, ported by someone else at 14:48
+local while this work was in progress. **It was patched to set 11 with the other 44** so the
+fleet is consistent, and left uncommitted for whoever is porting it.
+
+---
+
+## 2026-08-26 — Matthew Recker via Claude
+
+### A rejected objective is a rewrite, not a field, and this one crossed into next lesson's reading
+
+**PHYS 310 lesson 8, Nuclear Reactions.** recker reviewed the artifact on the Artifacts page and
+rejected objective 3, `capture-activation-breeding`, with the comment *"Replace with reaction
+rates"*. Objectives 1 and 2 accepted. The decision was in Storage, not the repo -- pulled back with
+`sync_artifacts.py pull-reviews`, which is what that command is for.
+
+**The instruction crosses a lesson boundary, and that is the whole story of this change.** Reaction
+rate is `R = SIGMA * phi` and it lives in Murray section 4.5 -- the reading for **lesson 9, Mon 31
+Aug**. Lesson 8 is **Thu 27 Aug** and its reading is 4.1-4.4. A cadet sitting this preflight has not
+read a word about cross sections. Grading them on sigma, the barn and SIGMA would have been grading
+work nobody assigned them. The artifact also carried a hard `do NOT introduce sigma, Sigma, barns,
+mean free path, or reaction rate` rule, written precisely to hold that line.
+
+**Put to recker before the edit; he chose the bridge.** Topic 3 now asks the cadet what they would
+need to know to predict how many reactions happen per second in a real block of material, and has
+them reason out three ingredients from material they HAVE read: how many target nuclei are in the
+way, how many neutrons are arriving, and how likely one neutron meeting one nucleus is to react.
+The third carries the two corrections that matter -- `Q > 0` does not mean it happens, and the
+likelihood is **not the physical size of the nucleus**. The lever for the second is a comparison
+the cadet can check in their own reading: boron-10 is a small nucleus and an outstanding absorber,
+which is why 4.3 singles it out for control rods.
+
+**The vocabulary is spoken once, at the end, and never graded.** After the reasoning arrives, the
+tutor names sigma, the barn, SIGMA = N*sigma and `R = SIGMA*phi` in one breath, says they are next
+lesson's, and stops. `TEXTBOOK_REFERENCE` gained a 4.5 block labelled **CARRIED**, the way the
+nuclide masses already were, under three rules: name never teach, nothing beyond the names, and
+never grade on the vocabulary. A cadet who built all three ingredients and had never heard the word
+"barn" has the objective completely. He also chose to let capture/activation/breeding go rather
+than add a fourth topic -- it stays in the reference as engage-if-raised, so the tutor still answers
+it well; it is simply not probed.
+
+**Ten anchored edits, and the slug did not move.** Header comment, `OBJECTIVE_KEYS`, the 4.3
+"how likely" bullet (a hard boundary, now the topic's on-ramp), the new carried 4.5 block, probe
+topic 3 in full, misconceptions 3 and 6, prerequisites, and two `scope_note` blocks. Bytes-only
+read/write with every anchor asserted to appear exactly once -- PROJECT.md's sharp-edge table
+records what a text-mode read costs on this tree. `check_artifact.py` 37/37, LF preserved, 0 NUL,
+138,479 -> 146,584 bytes. **`INTERACTION_ID` is byte-identical and had to be**: this is a patched
+republish into the same offering, not a rebuild for a new one, so `activities.slug` stays
+`phys310-nuclear-reactions-d02377ad` and the lesson keeps one row.
+
+**Ported, uploaded, registered.**
+- **Gemini build** `site/gemini/phys-310/phys310-nuclear-reactions-d02377ad.html`, 234 KB, same
+  slug. Rendered in real Chrome via `tests/browser-harness/gemini-build.mjs`: **7/7**, parse and
+  mount, no console errors, no 404s. **Not yet run against a live Gemini key** -- CORE.md section 2
+  says to say so, so: that step is unperformed. Built with the working tree's in-flight
+  `to_gemini.py`, which adds set 11 (`apply_quota_receipts`), so it matches the 44 builds another
+  session was regenerating at the same moment rather than lagging them.
+- **Artifact library**: `sync_artifacts.py push` uploaded 6 objects -- this source, its build
+  record, and `phys-310/index.json`, plus three pieces of pre-existing drift that had never been
+  pushed (`phys-110/index.json`, and the build records for phys-310's lab-1 and radioactivity).
+  Round trip verified byte-for-byte, sha256 `d3aacbb71842eff4`.
+- **Registered live** as `lesson-08`, `Lesson 08 Preflight -- Nuclear Reactions`, 3 points,
+  `grading_mode='points'`, one graded interactive activity -- mirroring lesson-06, its closest
+  sibling. **Due `2026-08-27 15:30:00+00`, which is 0930 America/Denver on the day of the lesson**,
+  as recker asked. `due_by_day` written as `{"T": ...}` and the per-section `assignment_due_dates`
+  row materialized, because only the lesson editor normally writes both and an empty map silently
+  puts a section on the M-day deadline (CORE.md section 2). Verified after commit: 0 offerings in
+  this course have an empty day map. `opens_at` left NULL, which selects the 7-day rolling window --
+  for a 27 Aug deadline that opened on 20 Aug, so it is visible now.
+
+**Two things are still open, and both need a human.**
+1. **The claude.ai build is stale.** A published artifact cannot be edited in place; the
+   2026-08-20 URL still serves the old objective 3. Republishing mints a new claude.ai URL that has
+   to be written into `activities.content.artifact_url` and into BUILD-LOG.md. In practice cadets
+   are unaffected -- `site/student/lessons.html` shows one launch button and it is the Gemini one
+   wherever a build exists -- but the fallback is wrong until it is republished.
+2. **There is no written half.** Every other PHYS 310 lesson pairs the artifact with a Q1/Q2/Q3
+   written activity whose Q3 and expected response are hand-authored by the course director. That
+   cannot be invented, so lesson 8 has the interactive activity only. Activity `position` 1 was
+   left free at 0 for a written half to slot in.
+
+**Nothing was committed.** Another session was working in this same tree throughout -- 44 Gemini
+builds, `to_gemini.py` and `patch_tutor_diagnostics.py` were clean when this run started and
+modified by the time it finished. CORE.md section 0 says never run two agents in one working tree;
+since that had already happened, the safer half of the rule is to stage nothing. These files are
+left uncommitted, and `site/gemini/phys-310/phys310-nuclear-reactions-d02377ad.html` is untracked.
+
+---
+
+## 2026-08-26 — Matthew Recker via Claude
+
 ### "That API key was rejected — it starts with AIza" was a guess, and it was usually wrong
 
 **Reported by the course director: cadets seeing a message about keys starting with `AIza`, with

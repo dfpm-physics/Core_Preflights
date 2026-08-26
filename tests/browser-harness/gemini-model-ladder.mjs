@@ -65,6 +65,7 @@ const S = new Function(block + `
            QUOTA_WALK_RETRIES, LADDER_WAIT_MS, LADDER_WAITS_PER_TURN,
            QUOTA_STORE, quotaDay, book, bookFor, saveBook, RPM_FLASH, RPM_LITE, rpmOf,
            sentSince, noteSend, quotaScope, lockDay, dayLocked, pacedOut, seedDayLocks,
+           RPD_FLASH, RPD_LITE, rpdOf, DAILY_CONFIDENCE,
            PACE_WALK_LIMIT, QUIET_WAIT_MS,
            ladderWaitsNow: () => ladderWaits, spendLadderWait: () => { ladderWaits++; } };`)();
 const isLite = (n) => S.MODEL_LITE.includes(n);
@@ -470,9 +471,9 @@ ok(!/waitMs <= 15000/.test(src) && !/RETRY_WAIT_CEILING_MS/.test(src),
    'the per-rung wait is GONE - waiting on a rung whose neighbour answers is wasted');
 ok(/if \(attempt < QUOTA_WALK_RETRIES\)/.test(src),
    'the 429 branch reads the measured constant rather than sharing the 5xx one');
-// Widened from 700 to 1400 on 2026-08-26: set 9 inserted the all-day-locked gate and its
-// reasoning between the walk and the wait. The ORDER is what this asserts, not the distance.
-ok(/if \(advance\(activeModelRef\)\) \{ attempt = 0; continue; \}[\s\S]{0,1400}ladderWaits < LADDER_WAITS_PER_TURN/.test(src),
+// Widened twice on 2026-08-26 -- 700 to 1400 for set 9's day-lock gate, then to 2200 for
+// set 11's scope vote. The ORDER is what this asserts, not the distance between the two.
+ok(/if \(advance\(activeModelRef\)\) \{ attempt = 0; continue; \}[\s\S]{0,2200}ladderWaits < LADDER_WAITS_PER_TURN/.test(src),
    'the wait comes AFTER the walk fails, which is the only moment it beats walking');
 ok(/Math\.min\(waitMs, LADDER_WAIT_MS\)/.test(src),
    "Google's RetryInfo may only SHORTEN the wait - measured at 57s for a wall that cleared in 10");
@@ -507,8 +508,9 @@ ok(/let quotaMsg = "";/.test(src),
    "Google's own 429 message is kept - `detail` was NULL in every row of the 2026-08-25 night");
 ok(/if \(j\.error && j\.error\.message\) quotaMsg = String\(j\.error\.message\)\.slice\(0, 300\)/.test(src),
    'the message is read from the SAME body parse set 7 already does - no extra request');
-// Set 9 split this throw across two lines and gave it a scope, so the one-line form is gone.
-ok(/detail: \(allDay \? "\[daily\] " : ""\) \+ quotaMsg/.test(src),
+// Set 11 replaced set 9's two-valued "[daily] " prefix with the scope's own name, so the
+// log's `detail` says day, minute or unknown rather than daily-or-nothing.
+ok(/detail: "\[" \+ scopeOut \+ "\] " \+ quotaMsg/.test(src),
    'and it rides out on the throw, which is what reaches log-tutor-error');
 ok(!/throw \{ kind: "quota", status: 429 \};/.test(src),
    'the detail-less quota throw is gone - it was 774 of 872 rows');
@@ -533,17 +535,20 @@ ok(S.quotaScope('gemini-3.6-flash',
                 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier') === 'minute',
    'the id measured on 2026-08-26 is read as the per-MINUTE cap');
 
-// The fallback, for a 429 whose body carried no QuotaFailure at all. This is the course
-// director's own reasoning: the smallest per-minute cap on this ladder is 5, so a refusal
-// after fewer than 5 sends in the last minute cannot be a per-minute limit.
-ok(S.quotaScope('gemini-3.6-flash', '') === 'day',
-   'no quota id + nothing sent recently = DAILY: no per-minute cap can be full at that rate');
+// REVERSED BY SET 11, and this is the assertion that was wrong rather than the code.
+// It read: fewer than 5 sends in the last minute cannot be a per-minute limit, therefore
+// daily. True as far as it goes -- and useless, because a rung the ladder WALKS TO has had
+// exactly one call, so every walked-to rung took that branch and every exhausted ladder was
+// reported as "come back tomorrow". Google named the quota in 0 of 885 live rows, so this
+// branch was not a fallback; it was the whole function.
+ok(S.quotaScope('gemini-3.6-flash', '') === 'unknown',
+   'no quota id and nothing sent today = UNKNOWN, not daily - ending a lesson needs evidence');
 for (let i = 0; i < S.RPM_FLASH; i++) S.noteSend('gemini-3.6-flash');
 ok(S.quotaScope('gemini-3.6-flash', '') === 'minute',
-   'no quota id + a full minute of sends = per-MINUTE, which is the one that clears on its own');
+   'a full per-minute window IS claimable as minute - that is a fact about our own sending');
 ok(S.quotaScope('gemini-3.6-flash',
                 'GenerateRequestsPerDayPerProjectPerModel-FreeTier') === 'day',
-   'and the NAME still wins over the arithmetic when the body carried one');
+   'and the NAME still wins over any arithmetic when the body carried one');
 
 // The measured caps, and the pacer built on them.
 ok(S.RPM_FLASH === 5 && S.RPM_LITE === 15,
@@ -596,10 +601,10 @@ ok(/paced\+\+;\s*\r?\n\s*if \(nextModel\(activeModelRef\)\) continue;/.test(src)
    'the pacer walks with nextModel, NOT advance - advance spends a whole-ladder lap, and pacing is routine, not failure');
 ok(S.PACE_WALK_LIMIT >= S.MODEL_CHAT.length,
    'the pacer may step past every rung of the ladder it is on, and no further - it cannot spin');
-ok(/const allDay = spentLadder\.every\(\(n\) => spentModels\[n\] === "day"\)/.test(src)
+ok(/const allDay = qs\.length > 0 && qs\.every\(\(s\) => s === "day"\)/.test(src)
    && /if \(!allDay && ladderWaits < LADDER_WAITS_PER_TURN\)/.test(src),
    'a fully day-locked ladder does NOT take the 25s wait - that wait cannot help before midnight');
-ok(/scope: allDay \? "day" : "minute"/.test(src),
+ok(/scope: scopeOut/.test(src),
    'the throw says WHICH quota, so the cadet-facing message can stop hedging');
 ok(/err\.scope === "day"/.test(src)
    && /resets at midnight Pacific time/.test(src)
@@ -684,6 +689,64 @@ ok(/throw \{ kind: akind, status: res\.status, detail: amsg\.slice\(0, 300\) \}/
    'when every rung refuses, the throw still carries what Google said');
 ok(/throw \{ kind: k400, status: 400, detail: msg\.slice\(0, 300\) \}/.test(src),
    'the mid-session 400 now attaches detail too - all seven auth rows of 2026-08-25 stored NULL there');
+
+// --- set 11: "come back tomorrow" was being said on no evidence at all -------------------
+//
+// Within hours of set 9 shipping, the live log said its primary test never runs: across all
+// 885 rows of 2026-08-26 Google named the quota ZERO times. Every 429 carried the bare
+// sentence "Resource has been exhausted (e.g. check quota)." So every classification fell to
+// the tiebreaker, and the tiebreaker said "day" for any rung with fewer than 5 sends in the
+// last minute -- which is every rung the ladder walks to, because a walked-to rung has had
+// exactly one call. One cadet was told to come back tomorrow, reloaded, and was told it again
+// four seconds into the new session.
+clearSpent();
+globalThis.localStorage.removeItem(S.QUOTA_STORE);
+S.book().m = {};
+
+ok(S.RPD_FLASH === 20 && S.RPD_LITE === 500,
+   'the DAILY caps are known to the classifier at last - set 9 had them in a comment only');
+ok(S.rpdOf('gemini-3.5-flash-lite') === S.RPD_LITE && S.rpdOf('gemini-3.6-flash') === S.RPD_FLASH,
+   'rpdOf tells a 20-a-day rung from a 500-a-day one - they differ by 25x and share a ladder');
+ok(S.DAILY_CONFIDENCE > 0 && S.DAILY_CONFIDENCE <= 1,
+   'the daily threshold is a fraction of the cap, not the cap - the ledger is per browser and undercounts');
+
+// The whole point: a lite rung refused on its FIRST call is not a 500-a-day cap.
+ok(S.quotaScope('gemini-3.5-flash-lite', '') === 'unknown',
+   'a lite rung refused with nothing sent today is UNKNOWN - nobody reaches 500 requests by turn 5');
+S.bookFor('gemini-3.5-flash-lite').sent = Math.round(S.RPD_LITE * S.DAILY_CONFIDENCE);
+ok(S.quotaScope('gemini-3.5-flash-lite', '') === 'day',
+   'and it becomes DAILY once our own ledger can show the requests - "come back tomorrow" needs receipts');
+
+// A flash rung is the case that actually happens: 20 a day is four turns of a second lesson.
+S.bookFor('gemini-3.5-flash').sent = Math.round(S.RPD_FLASH * S.DAILY_CONFIDENCE);
+ok(S.quotaScope('gemini-3.5-flash', '') === 'day',
+   'a flash rung at 80% of 20 IS claimable as daily - this is the one a real cadet hits');
+S.bookFor('gemini-3.5-flash').sent = 1;
+ok(S.quotaScope('gemini-3.5-flash', '') === 'unknown',
+   'and one send is not - the same rung, the same 429, and the honest answer changes');
+
+// Undercounting must fail SAFE. A cadet who started the day on a phone begins the laptop
+// session at zero, and the wrong direction there is the one that ends the lesson.
+ok(S.quotaScope('gemini-3.6-flash', '') !== 'day',
+   'an empty ledger never yields "day" - undercounting costs a wait, overcounting costs the lesson');
+
+// Read as text.
+ok(/spentModels\[activeModelRef\.current\] = scope;/.test(src),
+   'the real scope is stored, not flattened to "quota" - the throw has to tell confident from unexplained');
+ok(/const scopeOut = allDay \? "day"/.test(src) && /qs\.indexOf\("unknown"\) > -1/.test(src),
+   'one unexplained rung is enough to stop the ladder claiming the day is over');
+ok(/\.filter\(\(s\) => s === "day" \|\| s === "minute" \|\| s === "unknown"\)/.test(src),
+   'only rungs spent on QUOTA get a vote - a 404 says nothing about anyone\'s allowance');
+ok(/err\.scope === "day"/.test(src) && /err\.scope === "minute"/.test(src)
+   && /did not say which limit you hit/.test(src),
+   'three cadet-facing answers, and the third one admits it does not know');
+ok(/Wait a minute and press Retry; if it still fails, come back after the reset/.test(src),
+   'and the unknown one gives BOTH actions rather than promising either');
+
+clearSpent();
+globalThis.localStorage.removeItem(S.QUOTA_STORE);
+S.book().m = {};
+S.diagState.resets = 0;
 
 console.log(`\n${pass} passed, ${fail} failed`);
 console.log('NOTE: no live key is used — this checks selection logic, not a real tutor turn.');

@@ -409,6 +409,19 @@ const RPM_FLASH = 5;      // gemini-3.6-flash, gemini-3.5-flash -- also 20 reque
 const RPM_LITE = 15;      // the lite floor -- 500 per day, which no session has come near
 function rpmOf(name) { return /lite/i.test(name) ? RPM_LITE : RPM_FLASH; }
 
+// The DAILY caps, which set 9 knew and never used. They are the receipt a "come back tomorrow"
+// has to produce: 20/day on a flash rung is four turns of a second lesson, but 500/day on a
+// lite rung is not reachable by a cadet at turn 5 under any story.
+const RPD_FLASH = 20;
+const RPD_LITE = 500;
+function rpdOf(name) { return /lite/i.test(name) ? RPD_LITE : RPD_FLASH; }
+
+// How much of the daily cap our own count must show before we will say "daily". Not 1.0: the
+// ledger is per browser, so a cadet who started on a phone begins the laptop session at zero
+// and an exact threshold would never fire. Undercounting fails SAFE -- it yields `minute` or
+// `unknown`, never a false "come back tomorrow".
+const DAILY_CONFIDENCE = 0.8;
+
 function sentSince(name, ms) {
   const cut = Date.now() - ms;
   return bookFor(name).t.filter((t) => t > cut).length;
@@ -424,17 +437,30 @@ function noteSend(name) {
   saveBook();
 }
 
-// WHICH quota did Google mean? Its own name first; the director's arithmetic second.
+// WHICH quota did Google mean? Three answers, and it is allowed to say it does not know.
 //
-// The fallback reads: we got a 429 having sent fewer than the SMALLEST per-minute cap on this
-// ladder in the last minute. No per-minute limit on any rung can be full at that rate, so the
-// refusal has to be the daily one. RPM_FLASH is the conservative choice here -- using the
-// per-model rpmOf() would call a lite rung "daily" at 14 sends/min, which is a minute limit
-// about to close, not a day one.
+// Google's own name first -- except that across all 885 rows of 2026-08-26 it named the quota
+// ZERO times, so in practice the tiebreakers below are the whole function. That is why they
+// stopped being a footnote.
+//
+// "day" ENDS THE LESSON, so it needs receipts: our own ledger must show enough requests sent to
+// THIS model TODAY, across reloads, to have plausibly reached its daily cap. Set 9 asked
+// instead whether we had sent fewer than 5 in the last minute -- which is true of every rung
+// the ladder walks to, since a walked-to rung has had exactly one call. Every one of them was
+// therefore labelled "day" on no evidence.
+//
+// "minute" is claimed when we can see the per-minute window is genuinely full.
+//
+// "unknown" is the honest remainder, and it is the common case. An unnamed refusal is NOT the
+// shape of a per-model limit: the probe that produced these constants hit a per-model wall and
+// Google named it every single time. Every rung refusing at once with nothing named is most
+// likely the PROJECT's free-tier allowance, which is neither of the other two answers.
 function quotaScope(name, quotaId) {
   if (/PerDay/i.test(quotaId)) return "day";
   if (/PerMinute/i.test(quotaId)) return "minute";
-  return sentSince(name, 60000) < RPM_FLASH ? "day" : "minute";
+  if (bookFor(name).sent >= Math.round(rpdOf(name) * DAILY_CONFIDENCE)) return "day";
+  if (sentSince(name, 60000) >= rpmOf(name)) return "minute";
+  return "unknown";
 }
 
 function lockDay(name) { bookFor(name).day = 1; saveBook(); }
@@ -3568,7 +3594,10 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
       // instead of rediscovering it at one wasted request per turn.
       const scope = quotaScope(activeModelRef.current, quotaId);
       if (scope === "day") lockDay(activeModelRef.current);
-      spentModels[activeModelRef.current] = scope === "day" ? "day" : "quota";
+      // STORE THE SCOPE ITSELF, not a flattened "quota". reviveSpent keeps "day" and clears
+      // the other two, exactly as before -- but the throw below can now tell a ladder that is
+      // confidently finished for the day from one that merely could not be explained.
+      spentModels[activeModelRef.current] = scope;
       if (advance(activeModelRef)) { attempt = 0; continue; }
       // EVERY RUNG IS SPENT, and only now is waiting better than walking. The walls are
       // per-minute and they do clear -- measured at 20.6s -- so one bounded wait buys a whole
@@ -3580,15 +3609,22 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
       // midnight buys nothing at all, and it buys it while the cadet watches a countdown that
       // promises the opposite. That case is over; say so instead of stalling.
       const spentLadder = activeModelRef.ladder || MODEL_FALLBACKS;
-      const allDay = spentLadder.every((n) => spentModels[n] === "day");
+      // Only the rungs this turn actually spent on QUOTA get a vote. A rung already spent as
+      // a 404 or a capacity failure says nothing about anybody's allowance, and letting it
+      // count either way would decide the cadet's message on an unrelated failure.
+      const qs = spentLadder.map((n) => spentModels[n])
+                            .filter((s) => s === "day" || s === "minute" || s === "unknown");
+      const allDay = qs.length > 0 && qs.every((s) => s === "day");
+      const scopeOut = allDay ? "day"
+                     : qs.indexOf("unknown") > -1 || !qs.length ? "unknown" : "minute";
       if (!allDay && ladderWaits < LADDER_WAITS_PER_TURN) {
         ladderWaits++;
         await waitVisibly(activeModelRef.current,
                           waitMs > 0 ? Math.min(waitMs, LADDER_WAIT_MS) : LADDER_WAIT_MS);
         if (freshTurn(activeModelRef)) { attempt = 0; continue; }
       }
-      throw { kind: "quota", status: 429, scope: allDay ? "day" : "minute",
-              detail: (allDay ? "[daily] " : "") + quotaMsg };
+      throw { kind: "quota", status: 429, scope: scopeOut,
+              detail: "[" + scopeOut + "] " + quotaMsg };
     }
     // Server capacity, not the cadet's quota -- but it is per MODEL, not per project, and
     // treating it as "nothing to switch to" is what hung the report stage on 2026-08-21.
@@ -3780,9 +3816,16 @@ function errorMessage(err, { afterRetries = false } = {}) {
       // now, so the cadet gets the one instruction that is actually true for their case. The
       // difference matters: one of them is "wait a moment", the other is "come back tomorrow",
       // and telling a cadet to Retry against a daily cap is an hour of pressing a dead button.
-      return err.scope === "day"
-        ? "Your Gemini free-tier DAILY limit is used up on every model this lesson can use. It resets at midnight Pacific time \u2014 1am Mountain. Retrying now cannot work. Your conversation is saved in this browser, so you can come back and pick it up."
-        : "Google is asking us to slow down \u2014 the per-minute limit on your key is full. It clears in about a minute. Wait, then press Retry.";
+      // THREE answers, and the third one is the common one. Saying "come back tomorrow" to a
+      // cadet whose limit clears in twenty seconds ends a lesson for nothing, so that sentence
+      // is now reserved for the case where our own count of today's requests backs it up.
+      if (err.scope === "day") {
+        return "Your Gemini free-tier DAILY limit is used up on every model this lesson can use. It resets at midnight Pacific time \u2014 1am Mountain. Retrying now cannot work. Your conversation is saved in this browser, so you can come back and pick it up.";
+      }
+      if (err.scope === "minute") {
+        return "Google is asking us to slow down \u2014 the per-minute limit on your key is full. It clears in about a minute. Wait, then press Retry.";
+      }
+      return "Google is refusing every model your key can use, and it did not say which limit you hit. The usual cause is your Google project's free daily allowance, which resets at midnight Pacific time \u2014 1am Mountain. Wait a minute and press Retry; if it still fails, come back after the reset. Your conversation is saved in this browser.";
     case "blocked":
       return "Gemini declined to answer that turn. Rephrase and try again \u2014 and tell your instructor if it keeps happening.";
     case "model":

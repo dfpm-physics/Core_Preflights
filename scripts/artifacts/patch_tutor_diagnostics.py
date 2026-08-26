@@ -2077,6 +2077,174 @@ def apply_key_error_kinds(raw):
     return p.buf, p.applied
 
 
+# --- SET 11: "come back tomorrow" was being said on no evidence at all --------------------
+#
+# Set 9 classifies a 429 as per-DAY or per-MINUTE, Google's own quota name first and our send
+# history second. Within hours of shipping, the live log said the first half never runs:
+#
+#     quota ids Google named today, across all 885 rows:  NONE.
+#
+# Every 429 today carried the bare sentence "Resource has been exhausted (e.g. check quota)."
+# -- no QuotaFailure block, no RetryInfo. So `quotaId` is always "" and every classification
+# falls to the tiebreaker, which was:
+#
+#     return sentSince(name, 60000) < RPM_FLASH ? "day" : "minute";
+#
+# A rung the ladder WALKS TO has had exactly one call. One is always fewer than five. So every
+# walked-to rung was labelled `day`, `allDay` went true, and a cadet five turns into a lesson
+# was told to come back after midnight. SET 9 COULD NOT RETURN "minute" FOR A WALKED-TO RUNG
+# AT ALL -- the branch existed and was unreachable at tutoring pace.
+#
+# THE TWO ERRORS ARE NOT THE SAME SIZE, and the old default picked the expensive one:
+#
+#                        truth is per-minute          truth is per-day
+#     we say "day"       LESSON OVER FOR NOTHING      correct
+#     we say "minute"    correct                      a 25s wait, then an honest failure
+#
+# Observed: one cadet was told to come back tomorrow, reloaded, and was told it again four
+# seconds into the new session (19:27:08 and 19:27:12, turns 0 and 1).
+#
+# SO "day" NOW NEEDS RECEIPTS. The ledger set 9 already keeps -- how many requests this key has
+# sent to this model TODAY, across reloads -- is the receipt, and set 9 never consulted it for
+# this. A daily claim requires our own count to have plausibly reached that model's daily cap.
+#
+# AND A THIRD ANSWER IS ADDED, because two were not enough for what the log actually shows.
+# Every rung refusing at once, seconds apart, with Google naming nothing, is not the shape of a
+# per-model limit -- the 2026-08-26 probe hit a per-model wall and Google named it every time.
+# An unnamed refusal across the whole ladder is most likely the PROJECT's free-tier allowance,
+# which is neither of the two things set 9 could say. `unknown` says exactly that, gives both
+# actions, and promises neither.
+#
+# WHY 0.8 AND NOT 1.0. The ledger is per browser. A cadet who ran their first lesson on a phone
+# and their second on a laptop starts the second with a count of zero, so an exact threshold
+# would never fire for them. 0.8 lets a mostly-complete count still speak. Undercounting now
+# fails SAFE: it yields `minute` or `unknown`, never a false "come back tomorrow".
+
+OLD_RPM_BLOCK = rb"""// MEASURED 2026-08-26, tests/browser/test-gemini-rate-limits.html. Not read from a doc page:
+// the published tables disagreed with the live key twice.
+const RPM_FLASH = 5;      // gemini-3.6-flash, gemini-3.5-flash -- also 20 requests per DAY
+const RPM_LITE = 15;      // the lite floor -- 500 per day, which no session has come near
+function rpmOf(name) { return /lite/i.test(name) ? RPM_LITE : RPM_FLASH; }"""
+NEW_RPM_BLOCK = rb"""// MEASURED 2026-08-26, tests/browser/test-gemini-rate-limits.html. Not read from a doc page:
+// the published tables disagreed with the live key twice.
+const RPM_FLASH = 5;      // gemini-3.6-flash, gemini-3.5-flash -- also 20 requests per DAY
+const RPM_LITE = 15;      // the lite floor -- 500 per day, which no session has come near
+function rpmOf(name) { return /lite/i.test(name) ? RPM_LITE : RPM_FLASH; }
+
+// The DAILY caps, which set 9 knew and never used. They are the receipt a "come back tomorrow"
+// has to produce: 20/day on a flash rung is four turns of a second lesson, but 500/day on a
+// lite rung is not reachable by a cadet at turn 5 under any story.
+const RPD_FLASH = 20;
+const RPD_LITE = 500;
+function rpdOf(name) { return /lite/i.test(name) ? RPD_LITE : RPD_FLASH; }
+
+// How much of the daily cap our own count must show before we will say "daily". Not 1.0: the
+// ledger is per browser, so a cadet who started on a phone begins the laptop session at zero
+// and an exact threshold would never fire. Undercounting fails SAFE -- it yields `minute` or
+// `unknown`, never a false "come back tomorrow".
+const DAILY_CONFIDENCE = 0.8;"""
+
+OLD_SCOPE = rb"""// WHICH quota did Google mean? Its own name first; the director's arithmetic second.
+//
+// The fallback reads: we got a 429 having sent fewer than the SMALLEST per-minute cap on this
+// ladder in the last minute. No per-minute limit on any rung can be full at that rate, so the
+// refusal has to be the daily one. RPM_FLASH is the conservative choice here -- using the
+// per-model rpmOf() would call a lite rung "daily" at 14 sends/min, which is a minute limit
+// about to close, not a day one.
+function quotaScope(name, quotaId) {
+  if (/PerDay/i.test(quotaId)) return "day";
+  if (/PerMinute/i.test(quotaId)) return "minute";
+  return sentSince(name, 60000) < RPM_FLASH ? "day" : "minute";
+}"""
+NEW_SCOPE = rb"""// WHICH quota did Google mean? Three answers, and it is allowed to say it does not know.
+//
+// Google's own name first -- except that across all 885 rows of 2026-08-26 it named the quota
+// ZERO times, so in practice the tiebreakers below are the whole function. That is why they
+// stopped being a footnote.
+//
+// "day" ENDS THE LESSON, so it needs receipts: our own ledger must show enough requests sent to
+// THIS model TODAY, across reloads, to have plausibly reached its daily cap. Set 9 asked
+// instead whether we had sent fewer than 5 in the last minute -- which is true of every rung
+// the ladder walks to, since a walked-to rung has had exactly one call. Every one of them was
+// therefore labelled "day" on no evidence.
+//
+// "minute" is claimed when we can see the per-minute window is genuinely full.
+//
+// "unknown" is the honest remainder, and it is the common case. An unnamed refusal is NOT the
+// shape of a per-model limit: the probe that produced these constants hit a per-model wall and
+// Google named it every single time. Every rung refusing at once with nothing named is most
+// likely the PROJECT's free-tier allowance, which is neither of the other two answers.
+function quotaScope(name, quotaId) {
+  if (/PerDay/i.test(quotaId)) return "day";
+  if (/PerMinute/i.test(quotaId)) return "minute";
+  if (bookFor(name).sent >= Math.round(rpdOf(name) * DAILY_CONFIDENCE)) return "day";
+  if (sentSince(name, 60000) >= rpmOf(name)) return "minute";
+  return "unknown";
+}"""
+
+# --- the 429 branch stores the real scope, so the throw can report the honest one -----------
+OLD_SPEND11 = rb"""      const scope = quotaScope(activeModelRef.current, quotaId);
+      if (scope === "day") lockDay(activeModelRef.current);
+      spentModels[activeModelRef.current] = scope === "day" ? "day" : "quota";"""
+NEW_SPEND11 = rb"""      const scope = quotaScope(activeModelRef.current, quotaId);
+      if (scope === "day") lockDay(activeModelRef.current);
+      // STORE THE SCOPE ITSELF, not a flattened "quota". reviveSpent keeps "day" and clears
+      // the other two, exactly as before -- but the throw below can now tell a ladder that is
+      // confidently finished for the day from one that merely could not be explained.
+      spentModels[activeModelRef.current] = scope;"""
+
+OLD_ALLDAY = rb"""      const spentLadder = activeModelRef.ladder || MODEL_FALLBACKS;
+      const allDay = spentLadder.every((n) => spentModels[n] === "day");
+      if (!allDay && ladderWaits < LADDER_WAITS_PER_TURN) {"""
+NEW_ALLDAY = rb"""      const spentLadder = activeModelRef.ladder || MODEL_FALLBACKS;
+      // Only the rungs this turn actually spent on QUOTA get a vote. A rung already spent as
+      // a 404 or a capacity failure says nothing about anybody's allowance, and letting it
+      // count either way would decide the cadet's message on an unrelated failure.
+      const qs = spentLadder.map((n) => spentModels[n])
+                            .filter((s) => s === "day" || s === "minute" || s === "unknown");
+      const allDay = qs.length > 0 && qs.every((s) => s === "day");
+      const scopeOut = allDay ? "day"
+                     : qs.indexOf("unknown") > -1 || !qs.length ? "unknown" : "minute";
+      if (!allDay && ladderWaits < LADDER_WAITS_PER_TURN) {"""
+
+OLD_THROW11 = rb"""      throw { kind: "quota", status: 429, scope: allDay ? "day" : "minute",
+              detail: (allDay ? "[daily] " : "") + quotaMsg };"""
+NEW_THROW11 = rb"""      throw { kind: "quota", status: 429, scope: scopeOut,
+              detail: "[" + scopeOut + "] " + quotaMsg };"""
+
+# --- a third message, for the answer we can actually stand behind --------------------------
+OLD_QMSG11 = rb"""      return err.scope === "day"
+        ? "Your Gemini free-tier DAILY limit is used up on every model this lesson can use. It resets at midnight Pacific time \u2014 1am Mountain. Retrying now cannot work. Your conversation is saved in this browser, so you can come back and pick it up."
+        : "Google is asking us to slow down \u2014 the per-minute limit on your key is full. It clears in about a minute. Wait, then press Retry.";"""
+NEW_QMSG11 = rb"""      // THREE answers, and the third one is the common one. Saying "come back tomorrow" to a
+      // cadet whose limit clears in twenty seconds ends a lesson for nothing, so that sentence
+      // is now reserved for the case where our own count of today's requests backs it up.
+      if (err.scope === "day") {
+        return "Your Gemini free-tier DAILY limit is used up on every model this lesson can use. It resets at midnight Pacific time \u2014 1am Mountain. Retrying now cannot work. Your conversation is saved in this browser, so you can come back and pick it up.";
+      }
+      if (err.scope === "minute") {
+        return "Google is asking us to slow down \u2014 the per-minute limit on your key is full. It clears in about a minute. Wait, then press Retry.";
+      }
+      return "Google is refusing every model your key can use, and it did not say which limit you hit. The usual cause is your Google project's free daily allowance, which resets at midnight Pacific time \u2014 1am Mountain. Wait a minute and press Retry; if it still fails, come back after the reset. Your conversation is saved in this browser.";"""
+
+SET11_MARKER = b"DAILY_CONFIDENCE"
+
+
+def apply_quota_receipts(raw):
+    """Set 11. "Come back tomorrow" ends a lesson, so make it produce receipts -- and add the
+    third answer, for the unnamed refusal that is what the log actually shows."""
+    if SET11_MARKER in raw:
+        return raw, ["already"]
+    p = Patcher(raw, None)
+    p.sub("daily-caps", OLD_RPM_BLOCK, NEW_RPM_BLOCK)
+    p.sub("scope-needs-receipts", OLD_SCOPE, NEW_SCOPE)
+    p.sub("store-real-scope", OLD_SPEND11, NEW_SPEND11)
+    p.sub("scope-out", OLD_ALLDAY, NEW_ALLDAY)
+    p.sub("throw-real-scope", OLD_THROW11, NEW_THROW11)
+    p.sub("third-quota-message", OLD_QMSG11, NEW_QMSG11)
+    return p.buf, p.applied
+
+
 def patch_one(path, verbose=False):
     raw = path.read_bytes()
     buf, applied = apply_fixset(raw)
@@ -2089,8 +2257,9 @@ def patch_one(path, verbose=False):
     buf, applied8 = apply_quota_detail(buf)
     buf, applied9 = apply_quota_ledger(buf)
     buf, applied10 = apply_key_error_kinds(buf)
+    buf, applied11 = apply_quota_receipts(buf)
     applied = (applied + applied2 + applied3 + applied4 + applied5 + applied6
-               + applied7 + applied8 + applied9 + applied10)
+               + applied7 + applied8 + applied9 + applied10 + applied11)
     if verbose:
         for a in applied:
             print("      . " + a)

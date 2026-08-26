@@ -444,6 +444,70 @@ from the line-ending rewrite in PROJECT.md's sharp-edges table.
 
 ---
 
+### 2.9 Hours later — "come back tomorrow" was being said on no evidence at all
+
+**Set 9 shipped in the morning. By evening the live log had falsified its main premise.**
+
+```
+quota ids Google named, across all 885 rows of 2026-08-26:   NONE
+```
+
+Every 429 that day carried the bare sentence *"Resource has been exhausted (e.g. check
+quota)."* — **no `QuotaFailure` block and no `RetryInfo`**. So §2.7's primary test never fired
+once, and every classification fell through to the tiebreaker:
+
+```js
+return sentSince(name, 60000) < RPM_FLASH ? "day" : "minute";
+```
+
+**A rung the ladder WALKS TO has had exactly one call, and one is always fewer than five.** So
+every walked-to rung was labelled `day`, `allDay` went true, and a cadet five turns into a
+lesson was told to come back after midnight. §2.7 shipped a branch that could not return
+`minute` for a walked-to rung at tutoring pace — the code existed and was unreachable.
+
+**Observed, from the screenshot the course director forwarded and the rows behind it:** one
+cadet took the daily message at turn 5 after four good turns; another was told to come back
+tomorrow, reloaded, and was told it again **four seconds into the new session** (19:27:08 and
+19:27:12, turns 0 and 1). The lite rungs in those rows had made **one call each** against a
+measured 500/day.
+
+**The two errors are not the same size, and §2.7 defaulted to the expensive one:**
+
+| | truth is per-minute | truth is per-day |
+|---|---|---|
+| we say **day** | **lesson over for nothing** | correct |
+| we say **minute** | correct | a 25 s wait, then an honest failure |
+
+**So `day` now needs receipts.** The ledger §2.7 built — how many requests this key has sent to
+this model *today*, across reloads — is the receipt, and §2.7 never consulted it for this. A
+daily claim now requires our own count to have reached `DAILY_CONFIDENCE` (0.8) of that model's
+daily cap. Not 1.0, because the ledger is per browser: a cadet who started on a phone begins the
+laptop session at zero, and undercounting must fail **safe** — it yields `minute` or `unknown`,
+never a false *"come back tomorrow"*.
+
+**And a third answer was added, because two were not enough for what the log shows.** Every rung
+refusing at once, seconds apart, with Google naming nothing, is **not** the shape of a per-model
+limit — §2.6's probe hit a per-model wall and Google named it every single time. `unknown` says
+that plainly, gives both actions, and promises neither.
+
+| Behaviour | A (kit) | B (sources) | C (Gemini) | Note |
+|---|---|---|---|---|
+| `day` requires our own ledger to back it | n/a | n/a | ✅ | ending a lesson needs evidence |
+| A third scope, `unknown`, for the unnamed refusal | n/a | n/a | ✅ | **the common case in live data** |
+| The real scope is stored, not flattened to `"quota"` | n/a | n/a | ✅ | confident vs unexplained must survive to the throw |
+| Only quota-spent rungs vote on the scope | n/a | n/a | ✅ | a 404 says nothing about anyone's allowance |
+| `detail` carries the scope name, not daily-or-nothing | ❌ | ❌ | ✅ | `[day]` / `[minute]` / `[unknown]` in the log |
+
+> **These constants are still not measured, and that is now the top of the backlog.** `RPD_FLASH
+> = 20` and `RPD_LITE = 500` come from documentation and from §2.6's probe, which measured the
+> *minute* wall and never exhausted a key. `keyErrorKind`'s patterns in §2.8 are matched against
+> **Google's wording as we imagine it**, not wording anyone has captured. Four fix sets in two
+> days have each corrected the previous one's inference; the way out is a testbed that
+> deliberately exhausts a disposable key and records what Google actually returns. See
+> `tests/browser/` — §2.6's probe is the shape to extend.
+
+---
+
 ## 3. What the Claude artifact still gets wrong
 
 **Filed as [`docs/findings/2026-08-21-claude-artifact-unwalked-failure-paths.md`](../findings/2026-08-21-claude-artifact-unwalked-failure-paths.md)** — a work order with a status, where this section is a summary. The finding carries the verification commands, the separation of what was observed from what was inferred, and the falsification conditions.
