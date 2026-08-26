@@ -486,6 +486,16 @@ ok(/lines\.push\("      quota: " \+ qids\.join\(", "\)\)/.test(src),
 ok(src.indexOf('let quotaId = ""') < src.indexOf('noteFail(activeModelRef.current, "quota")'),
    'the 429 body is parsed BEFORE the walk - res.json() can be called only once, so a guarded parse dropped it unread');
 
+// --- set 8: the log's `detail` column was NULL in all 872 rows it ever held -------------
+ok(/let quotaMsg = "";/.test(src),
+   "Google's own 429 message is kept - `detail` was NULL in every row of the 2026-08-25 night");
+ok(/if \(j\.error && j\.error\.message\) quotaMsg = String\(j\.error\.message\)\.slice\(0, 300\)/.test(src),
+   'the message is read from the SAME body parse set 7 already does - no extra request');
+ok(/throw \{ kind: "quota", status: 429, detail: quotaMsg \}/.test(src),
+   'and it rides out on the throw, which is what reaches log-tutor-error');
+ok(!/throw \{ kind: "quota", status: 429 \};/.test(src),
+   'the detail-less quota throw is gone - it was 774 of 872 rows');
+
 clearSpent();
 S.diagState.resets = 0;
 

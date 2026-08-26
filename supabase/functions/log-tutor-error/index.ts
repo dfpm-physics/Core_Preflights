@@ -85,6 +85,23 @@ const models = (v: unknown) => {
         kinds[String(name).slice(0, 40)] = int(count, 0, 100000);
       }
     }
+    // WHICH quota Google named, verbatim from the 429 body's QuotaFailure violation -- e.g.
+    // `GenerateRequestsPerMinutePerProjectPerModel-FreeTier`. Added 2026-08-26, because the
+    // client began sending it and this whitelist dropped it on the floor: 872 rows were
+    // logged over one night carrying every counter and not the one field that says WHAT was
+    // exhausted. A name containing PerModel means the neighbouring rung still has an
+    // allowance and walking the ladder was right; one that does not means the ceiling is
+    // shared and walking was never going to help.
+    //
+    // Same shape and same caps as `kinds`, for the same reason: it is a Google metric name
+    // and a count, so it carries no cadet writing and cannot start to.
+    const quota_ids: Record<string, number> = {};
+    const q = o.quota_ids;
+    if (q && typeof q === "object") {
+      for (const [name, count] of Object.entries(q as Record<string, unknown>).slice(0, 10)) {
+        quota_ids[String(name).slice(0, 120)] = int(count, 0, 100000);
+      }
+    }
     return {
       model: str(o.model, 60) ?? "?",
       calls: int(o.calls, 0, 100000),
@@ -95,6 +112,7 @@ const models = (v: unknown) => {
       output_tokens: int(o.output_tokens, 0, 100000000),
       spent: o.spent === true,
       kinds,
+      quota_ids,
     };
   });
 };

@@ -1462,6 +1462,64 @@ def apply_rate_limit_backoff(raw):
     return p.buf, p.applied
 
 
+# --- SET 8: the log's `detail` column was NULL in every row it ever held -------------------
+#
+# 872 rows over the night of 2026-08-25, and `detail` -- the column that exists to hold
+# GOOGLE's own error message -- was NULL in all 872. Not mostly. All.
+#
+# The cause is one branch. `detail` is attached only where a 400 is disambiguated, because
+# that is the only place the body was ever parsed for its message. The three throws that
+# actually fire in production carry none:
+#
+#     throw { kind: "quota",    status: 429 };            774 rows, 89% of the night
+#     throw { kind: "capacity", status: res.status };
+#     throw { kind: "model",    status: 404 };
+#
+# So an instructor opening the log to ask "what did Google say" got a column full of NULLs,
+# and the answer had to be reconstructed from counters. Set 7 already reads the 429 body --
+# it has to, for the RetryInfo delay and the QuotaFailure name -- so the message is sitting
+# in a local variable one line away from being kept. This keeps it.
+#
+# SCOPED TO 429 ON PURPOSE. That is 774 of 872 rows, and it is the branch that already parses
+# the body, so nothing new is read and no extra work is done on a failing path. The 404 class
+# was closed by set 5 and the 5xx class is rare; both would need a fresh `res.text()` on a
+# path that is trying to get out of the way, which is a worse trade for the remaining 11%.
+#
+# CORE.md section 3: `detail` is Google's message, capped at 300 characters by the client and
+# again by the edge function. It is never anything the cadet typed -- the table has nowhere to
+# put a sentence and the edge function builds its insert from a whitelist.
+
+OLD_QUOTA_DECL = rb"""      let waitMs = 0;
+      let quotaId = "";"""
+NEW_QUOTA_DECL = rb"""      let waitMs = 0;
+      let quotaId = "";
+      let quotaMsg = "";"""
+
+OLD_QUOTA_PARSE = rb"""        if (v) quotaId = String(v.quotaId || v.quotaMetric || "").slice(0, 120);
+      } catch (e) { /* no body, or not JSON -- fall through to the ladder */ }"""
+NEW_QUOTA_PARSE = rb"""        if (v) quotaId = String(v.quotaId || v.quotaMetric || "").slice(0, 120);
+        // Google's own sentence, which the log's `detail` column exists for and which was
+        // NULL in all 872 rows of the 2026-08-25 night because no throw below ever set it.
+        if (j.error && j.error.message) quotaMsg = String(j.error.message).slice(0, 300);
+      } catch (e) { /* no body, or not JSON -- fall through to the ladder */ }"""
+
+OLD_QUOTA_THROW = rb"""      throw { kind: "quota", status: 429 };"""
+NEW_QUOTA_THROW = rb"""      throw { kind: "quota", status: 429, detail: quotaMsg };"""
+
+SET8_MARKER = b"let quotaMsg"
+
+
+def apply_quota_detail(raw):
+    """Set 8. Keep Google's 429 message, so the log's `detail` column stops being NULL."""
+    if SET8_MARKER in raw:
+        return raw, ["already"]
+    p = Patcher(raw, None)
+    p.sub("quota-msg-decl", OLD_QUOTA_DECL, NEW_QUOTA_DECL)
+    p.sub("quota-msg-parse", OLD_QUOTA_PARSE, NEW_QUOTA_PARSE)
+    p.sub("quota-msg-throw", OLD_QUOTA_THROW, NEW_QUOTA_THROW)
+    return p.buf, p.applied
+
+
 def patch_one(path, verbose=False):
     raw = path.read_bytes()
     buf, applied = apply_fixset(raw)
@@ -1471,8 +1529,9 @@ def patch_one(path, verbose=False):
     buf, applied5 = apply_ladder_floor(buf)
     buf, applied6 = apply_turn_revive(buf)
     buf, applied7 = apply_rate_limit_backoff(buf)
+    buf, applied8 = apply_quota_detail(buf)
     applied = (applied + applied2 + applied3 + applied4 + applied5 + applied6
-               + applied7)
+               + applied7 + applied8)
     if verbose:
         for a in applied:
             print("      . " + a)

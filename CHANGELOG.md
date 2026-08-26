@@ -8,6 +8,100 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-26 — Matthew Recker via Claude
+
+### The error log ran a whole night and answered none of the three questions it was opened for
+
+**872 rows, 01:06–05:25 UTC, and the log could not say who, what Google said, or which quota.**
+Read from `app.tutor_error_log` over `prep_app_read`, after the previous night's set 7 went
+live at 04:31:21 UTC.
+
+**What the night showed, against the commits:**
+
+| Window (UTC) | Code | Errors | Kind |
+|---|---|---|---|
+| 01:06–01:19 | before `abbb9a8` | 75 | **all 404** on `gemini-2.5-flash-lite` |
+| 01:19–02:15 | — | 0 | quiet |
+| 02:15–04:31 | `abbb9a8` + `a7bbf0a` | 673 | 652 quota 429 |
+| after 04:31 | mostly still old (CDN) | 124 | 122 quota, 2 auth |
+
+**`abbb9a8` worked and the failure changed clothes.** The 404 storm stopped dead and never
+returned. The 429s underneath it were always there — the dead floor had been converting an
+exhausted ladder into a 404, which is precisely what
+[`TUTOR-BEHAVIOR-PARITY.md`](docs/operations/TUTOR-BEHAVIOR-PARITY.md) §2.4 predicted.
+
+**Set 7 barely got a chance to run.** Of ~177 sessions, three loaded after the deploy, and
+GitHub Pages serves `cache-control: max-age=600`, so two of those three still received the old
+file from the CDN. **Exactly one session provably ran set 7** (page loaded 04:47:44) and it
+behaved as designed: **1 call per failure per rung** instead of 2, `ladder_resets` of 1 and 0
+instead of 2, and 18 and 5 calls where the old code took 24–26. A sample of one is evidence,
+not proof, and is recorded as such.
+
+**Then the three holes, which are the actual subject of this entry.**
+
+**1. `quota_ids` never reached the database — introduced by set 7, the night before.**
+`supabase/functions/log-tutor-error/index.ts` builds `models[]` from a whitelist of nine
+fields, deliberately, so a future caller cannot leak cadet writing by adding a key. Set 7 added
+`quota_ids` to the client payload and the whitelist dropped it on the floor. The quota name
+reached the cadet's screen and their clipboard; **0 of 872 rows carried it.** The whitelist is
+right and the fix is to name the field in it, with the same caps and shape as `kinds`.
+
+**2. `cadet_ref` does not exist in the live table, so every row is still anonymous.**
+`cadet_id` is NULL in all 872 rows. `supabase/migrations/app/022_tutor_error_log_cadet_ref.sql`
+was written on 2026-08-25 and **never applied** — DDL on `app` is a coordination event
+(CORE.md §0) and the commit that fixed the client shipped without it. So the log still cannot
+name the cadet, which is the one thing it was built to do.
+
+> **The deployed edge function is OLDER than this repository, and that is the only reason
+> logging still works at all.** The committed function writes `cadet_ref`; the live table has
+> no such column, and a PostgREST insert naming an unknown column fails. The function swallows
+> its own errors by design — it must never become a second error in front of a cadet already
+> looking at one — so **deploying it before the migration would take error logging to zero,
+> silently, with nothing reporting it.** Apply the migration FIRST.
+
+**3. `detail` was NULL in all 872 rows.** The column exists to hold Google's own message, and
+only the 400-disambiguation branch ever set it. The three throws that actually fire — quota,
+capacity, model — carried none. So an instructor asking "what did Google say" got a column of
+NULLs.
+
+**Changed:**
+
+- **`supabase/functions/log-tutor-error/index.ts`** — `quota_ids` added to the `models[]`
+  whitelist, same shape and caps as `kinds` (10 entries, 120-char names, integer counts). It is
+  a Google metric name and a count, so it carries no cadet writing and cannot start to.
+  **Needs deploying; a repo edit changes nothing on its own.**
+- **`scripts/artifacts/patch_tutor_diagnostics.py` set 8**, applied to all 44 builds and wired
+  into `to_gemini.py` — the 429 branch keeps Google's `error.message` and attaches it to the
+  throw as `detail`. Scoped to 429 on purpose: that is 774 of 872 rows and the branch set 7
+  already parses the body, so nothing extra is read on a failing path. The 404 class is closed
+  and the 5xx class is rare; both would need a fresh `res.text()` for the remaining 11%.
+
+**Not changed here, and it is the one that needs a human:** migration 022 is still unapplied.
+It is additive and idempotent (`ADD COLUMN IF NOT EXISTS`, a comment, a partial index) with a
+`_ROLLBACK.sql` beside it.
+
+**The number that outlives all of this.** One session spent `calls 20, ok 6` on
+`gemini-3.6-flash` — the entire 20-requests-per-**day** free-tier allowance, in one lesson. The
+worst session ran **326 calls over 46 turns and 59 minutes** and still failed at the report.
+Set 7 stops the waste; it cannot make the free tier bigger. Chat starts on a 5/min · 20/day
+model and falls to 15/min · 500/day, which spends the scarce budget first. Reordering that is a
+teaching-quality decision (parity doc §4 records why chat was moved *to* 3.6) and belongs to the
+course director, not to a patch.
+
+**For scale: 202 submissions landed the same night** — 117 on the two lesson-08 tutors, 81
+written preflights, with reports from 3.6-flash (48), 3.5-flash-lite (38), 3.5-flash (29) and
+3.1-flash-lite (5). **How many cadets failed versus finished cannot be answered**, because the
+error log has no cadet identity to join on. That is hole 2 costing the exact question the table
+was created for.
+
+**Verified:** ladder harness **87/87**; `gemini-build.mjs` 7/7 in real Chrome on one build per
+course; all 44 builds still CRLF; **0 `INTERACTION_ID` lines touched**; `name_scan` PASS.
+**NOT verified: the edge function TypeScript.** Deno is not installed on this machine, so the
+change is unchecked beyond mirroring the adjacent `kinds` block line for line — check it at
+deploy time.
+
+---
+
 ## 2026-08-25 — Matthew Recker via Claude
 
 ### A 429 asks you to wait, and the tutor answered by going faster

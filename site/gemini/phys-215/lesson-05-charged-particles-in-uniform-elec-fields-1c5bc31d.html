@@ -2301,6 +2301,7 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
       // cadet's error block has to carry the answer by itself.
       let waitMs = 0;
       let quotaId = "";
+      let quotaMsg = "";
       try {
         const j = await res.json();
         const det = ((j.error || {}).details) || [];
@@ -2310,6 +2311,9 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
         const qf = det.find((d) => String(d["@type"] || "").indexOf("QuotaFailure") > -1);
         const v = qf && (qf.violations || [])[0];
         if (v) quotaId = String(v.quotaId || v.quotaMetric || "").slice(0, 120);
+        // Google's own sentence, which the log's `detail` column exists for and which was
+        // NULL in all 872 rows of the 2026-08-25 night because no throw below ever set it.
+        if (j.error && j.error.message) quotaMsg = String(j.error.message).slice(0, 300);
       } catch (e) { /* no body, or not JSON -- fall through to the ladder */ }
       if (quotaId) noteQuota(activeModelRef.current, quotaId);
       // WALK, AND DO NOT RETRY THIS RUNG. Zero, measured: the limit is per project PER
@@ -2336,7 +2340,7 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
                           waitMs > 0 ? Math.min(waitMs, LADDER_WAIT_MS) : LADDER_WAIT_MS);
         if (freshTurn(activeModelRef)) { attempt = 0; continue; }
       }
-      throw { kind: "quota", status: 429 };
+      throw { kind: "quota", status: 429, detail: quotaMsg };
     }
     // Server capacity, not the cadet's quota -- but it is per MODEL, not per project, and
     // treating it as "nothing to switch to" is what hung the report stage on 2026-08-21.

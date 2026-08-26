@@ -2056,7 +2056,8 @@ def main():
                                                   apply_notation, apply_cadet_ref,
                                                   apply_ladder_floor,
                                                   apply_turn_revive,
-                                                  apply_rate_limit_backoff)
+                                                  apply_rate_limit_backoff,
+                                                  apply_quota_detail)
             html, _fixsteps = apply_fixset(html)
             html, _socsteps = apply_socratic(html)
             html, _notsteps = apply_notation(html)
@@ -2069,6 +2070,8 @@ def main():
             # Set 7 rewrites the WALK_RETRIES and LADDER_RESET_LIMIT that set 6 emits, and
             # inserts noteQuota beside set 5's noteFail. It runs last for both reasons.
             html, _ratesteps = apply_rate_limit_backoff(html)
+            # Set 8 edits the 429 branch set 7 writes, so it runs after it.
+            html, _detsteps = apply_quota_detail(html)
 
             out = OUT_ROOT / course / f"{slug}.html"
             same = out.exists() and out.read_bytes() == html
