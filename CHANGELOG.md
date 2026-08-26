@@ -10,6 +10,77 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-26 — Matthew Recker via Claude
 
+### "That API key was rejected — it starts with AIza" was a guess, and it was usually wrong
+
+**Reported by the course director: cadets seeing a message about keys starting with `AIza`, with
+the Start button greyed out.** Both are one event. When a key is pasted, the page asks Google for a
+model list; on 400, 401 or 403 `discoverModel` threw a single kind for all three, and the greyed
+button is just `connStatus !== "ok"` disabling Start and Study.
+
+**Those three codes are three different problems.** 400 means the key really is wrong — the message
+was right. **403 means the key is fine**: the Generative Language API is switched off for its
+project, or the key carries a referrer/IP restriction, or a school Google account blocks AI Studio.
+Telling that cadet to re-copy their key sends them to fix something that was never broken.
+
+**Google names the real cause in the response body, and all 44 builds discarded it** — measured, 0
+of 44 read `error.message` before throwing. The *mid-session* 400 branch has read that sentence
+since 2026-08-25, a fix made because a too-long request was being reported as a bad key. The start
+screen, which is where a cadet is actually stopped, never got the same treatment.
+
+**Two more findings came out of looking, and both are worse than the reported symptom.**
+
+**The start screen has never written to the error log.** All 878 rows in `app.tutor_error_log`
+carry phase `chat`, `opening` or `report`, because `checkConnection`'s catch was the only error path
+in the build that did not log. A cadet blocked at the door produced no count, no name and no cause.
+That is why this had to be diagnosed from the source rather than from the data.
+
+**A mid-session 403 killed the session and blamed the cadet's key.** One cadet took a 403 at **turn
+9**, after eight turns that worked. A key does not go bad at turn 9. A 403 whose message never
+mentions the key is *this model* refusing *this project* — the same per-model failure that the 404
+and 429 branches already walk away from. Ten `auth` rows exist in the table and all ten stored
+`detail` NULL, so not one of them can say what Google actually meant.
+
+**Changed — `scripts/artifacts/patch_tutor_diagnostics.py` set 10, all 44 builds, wired into
+`to_gemini.py`:**
+
+- **`keyErrorKind()`** splits the lump into `apioff` / `keyrestricted` / `region` / `forbidden` /
+  `auth`, matched against Google's own wording, each with the one instruction that helps. It is
+  deliberately conservative: anything unrecognised at 403 becomes `forbidden`, which says *"this is
+  not a typo, and here is what Google said"* rather than naming a cause. Guessing wrong is the
+  subject of this entry, and a fallback that guesses is the same bug with better vocabulary.
+- **Google's sentence is shown under our advice**, in a quieter monospace line, and stored as
+  `detail`. Our advice is a classification and can still be wrong; this lets an instructor read
+  past us.
+- **The start screen logs**, deduped per (kind, status) per page load — the check is debounced on
+  every keystroke, and a cadet fixing a typo one character at a time must not write a row each time.
+- **A non-key 403 walks the ladder** and is marked spent for the session, since an entitlement does
+  not appear mid-lesson. If every rung refuses, the throw still carries Google's words.
+- **The mid-session 400 routes through the same classifier**, so a switched-off API reads the same
+  at turn 9 as at the door — and `auth` carries a `detail` for the first time.
+
+**No edge-function change was needed:** `log-tutor-error` takes `kind` as a free string capped at 40
+characters, so the four new names land without a deploy. That is the opposite of `quota_ids`
+yesterday, which the `models[]` whitelist dropped silently.
+
+**Worth recording: the 44 builds are two vintages.** 33 carry a tight `connMsg` declaration and a
+wrapped `.conn-msg` CSS rule; the 11 phys-110 builds carry a column-aligned declaration and a
+single-line rule. `checkConnection` itself is byte-identical in both, so it is cosmetic drift from
+when those were ported, not a fork. The patcher **refused all 11 rather than guessing**, and now
+matches both shapes and asserts one landed — rather than normalising 11 builds, whose diff would
+have been indistinguishable from the line-ending rewrite in PROJECT.md's sharp-edges table.
+
+**Verified:** ladder harness **139/139** on one build of each course (23 new assertions, including
+`keyErrorKind` lifted out and run against Google's actual wording for each case, rather than
+asserting a regex is present); `gemini-build.mjs` **7/7 in real Chrome** on four builds, covering
+both vintages; all 44 still CRLF; **0 `INTERACTION_ID` lines touched**; `name_scan` PASS.
+**Not verified: a real refused key against a live Google account** — reproducing `apioff` or
+`keyrestricted` needs a deliberately misconfigured key, so the first real evidence is the next
+cadet who hits it, which the log will now record.
+
+---
+
+## 2026-08-26 — Matthew Recker via Claude
+
 ### A per-day 429 and a per-minute 429 are opposite problems, and the tutor treated them alike
 
 **Set 7 (yesterday) made the ladder stop thrashing on a 429. It did not make it stop paying for

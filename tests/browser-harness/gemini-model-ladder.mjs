@@ -617,6 +617,74 @@ ok(/seedDayLocks\(\[MODEL_CHAT, MODEL_REPORT, MODEL_STUDY\]\)/.test(src),
 clearSpent();
 S.diagState.resets = 0;
 
+// --- set 10: "it starts with AIza" was a GUESS, and it was usually wrong -----------------
+//
+// discoverModel threw one kind for 400, 401 AND 403, so a cadet whose key was perfect but
+// whose Generative Language API was switched off was told to re-copy it -- with the Start
+// button greyed out behind that advice, because connStatus was not "ok". Google names the
+// real cause in error.message and all 44 builds discarded it.
+//
+// keyErrorKind is a pure function and lives outside the block this file evaluates, so lift
+// it out on its own and run it against Google's ACTUAL wording rather than asserting that
+// some regex is present.
+const kekSrc = src.slice(src.indexOf('function keyErrorKind('));
+const keyErrorKind = new Function(
+  kekSrc.slice(0, kekSrc.indexOf('\n}') + 2) + '\nreturn keyErrorKind;')();
+
+ok(keyErrorKind(403, 'Generative Language API has not been used in project 41 before or it '
+   + 'is disabled. Enable it by visiting https://console.developers.google.com/apis/api/'
+   + 'generativelanguage.googleapis.com/overview?project=41 then retry.') === 'apioff',
+   'a switched-off API is NOT a mistyped key - this is the case that sent cadets to re-copy a perfect key');
+ok(keyErrorKind(403, 'Requests from referer https://dfpm-physics.github.io/ are blocked.')
+   === 'keyrestricted',
+   'a referrer-restricted key is named as restricted, not as wrong');
+ok(keyErrorKind(400, 'User location is not supported for the API use.') === 'region',
+   'a region refusal is not a key problem and no amount of re-pasting fixes it');
+ok(keyErrorKind(400, 'API key not valid. Please pass a valid API key.') === 'auth',
+   'and a key that really IS invalid still reads as auth - the narrow case the old message fits');
+ok(keyErrorKind(403, 'Permission denied on resource project.') === 'forbidden',
+   'a 403 that never mentions the key is NOT about the key - it gets its own honest message');
+ok(keyErrorKind(401, '') === 'auth',
+   'a 401 with no body falls back to auth rather than inventing a cause');
+ok(keyErrorKind(400, '') === 'auth',
+   'so does a bare 400 - unrecognised at 400 is a key problem, unrecognised at 403 is not');
+
+// Every kind the classifier can return must have a cadet-facing message. A kind with no case
+// falls to the default "HTTP ?" text, which is exactly the uninformative answer this set removes.
+['apioff', 'keyrestricted', 'region', 'forbidden', 'auth'].forEach((k) => {
+  ok(new RegExp('case "' + k + '":').test(src), 'kind `' + k + '` has its own cadet-facing message');
+});
+ok(!/it starts with \\u201CAIza\\u201D/.test(src),
+   'the old one-size message is GONE - it was the answer to three different problems');
+ok(/aistudio\.google\.com/.test(src),
+   'and the new ones name where to actually get a key');
+
+// The door reads the sentence.
+ok(/kind: keyErrorKind\(res\.status, msg\), status: res\.status, detail: msg\.slice\(0, 300\)/.test(src),
+   'discoverModel classifies from Google\'s message and keeps it as detail');
+ok(!/if \(res\.status === 400 \|\| res\.status === 401 \|\| res\.status === 403\) \{\s*\r?\n\s*throw \{ kind: "auth"/.test(src),
+   'the lumped three-code throw is gone');
+
+// The door LOGS. All 878 rows carried phase chat/opening/report because this catch did not.
+ok(/diagState\.phase = "start";/.test(src) && /logError\(diagSnapshot\(err\)\.obj\)/.test(src),
+   'a cadet stopped at the start screen now reaches the central log - 0 of 878 rows ever did');
+ok(/loggedKeyErrors\[sig\]/.test(src),
+   'and it is deduped per kind+status, because the check is debounced on every keystroke');
+ok(/const \[connDetail, setConnDetail\] = useState\(""\)/.test(src)
+   && /Google said: \{connDetail\}/.test(src) && /\.conn-detail \{/.test(src),
+   "Google's own words are shown under our advice - our advice is a classification and can still be wrong");
+
+// A mid-session 403 is a per-model failure, like the 404 and 429 that already walk.
+ok(/if \(res\.status === 403 && akind === "forbidden"\) \{[\s\S]{0,300}if \(advance\(activeModelRef\)\) \{ attempt = 0; continue; \}/.test(src),
+   'a 403 that is not about the key WALKS THE LADDER - one cadet took this at turn 9 and was told their key was bad');
+ok(/spentModels\[activeModelRef\.current\] = "model";[\s\S]{0,120}if \(res\.status === 403/.test(src)
+   || /akind === "forbidden"\) \{[\s\S]{0,200}spentModels\[activeModelRef\.current\] = "model"/.test(src),
+   'and it is marked permanent for the session - an entitlement does not appear mid-lesson');
+ok(/throw \{ kind: akind, status: res\.status, detail: amsg\.slice\(0, 300\) \}/.test(src),
+   'when every rung refuses, the throw still carries what Google said');
+ok(/throw \{ kind: k400, status: 400, detail: msg\.slice\(0, 300\) \}/.test(src),
+   'the mid-session 400 now attaches detail too - all seven auth rows of 2026-08-25 stored NULL there');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 console.log('NOTE: no live key is used — this checks selection logic, not a real tutor turn.');
 process.exit(fail ? 1 : 0);

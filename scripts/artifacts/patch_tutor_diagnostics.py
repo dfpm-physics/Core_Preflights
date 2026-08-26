@@ -1804,6 +1804,279 @@ def apply_quota_ledger(raw):
     return p.buf, p.applied
 
 
+# --- SET 10: "it starts with AIza" was a GUESS, and it was usually wrong -------------------
+#
+# A cadet pastes a key. The page asks Google for a model list. Google refuses with 400, 401 or
+# 403, and discoverModel throws one kind for all three:
+#
+#     if (res.status === 400 || res.status === 401 || res.status === 403) {
+#       throw { kind: "auth", status: res.status };
+#     }
+#
+# -- so every one of them is told *"That API key was rejected. Check you pasted the whole key
+# (it starts with AIza)"*, and the Start button greys out because connStatus is not "ok".
+# THOSE THREE CODES ARE THREE DIFFERENT PROBLEMS:
+#
+#     400  the key really is wrong or malformed          the message is correct
+#     403  the key is FINE -- the Generative Language API is off for its project, or the key
+#          carries a referrer/IP restriction, or a school Google account blocks AI Studio
+#                                                        the message is WRONG, and it sends
+#                                                        the cadet to re-copy a good key
+#     401  no key was sent at all                        rare from this page
+#
+# GOOGLE SAYS WHICH ONE IT IS, IN THE RESPONSE BODY, AND ALL 44 BUILDS THREW IT AWAY. The
+# mid-session 400 branch has read that sentence since 2026-08-25 -- that fix exists precisely
+# because a too-long request was being reported as a bad key -- and the start screen, which is
+# where a cadet is actually stopped, never got it.
+#
+# THREE THINGS ARE FIXED HERE.
+#
+# 1. Read the sentence, classify it, and SHOW IT. `keyErrorKind` splits the lump into apioff /
+#    keyrestricted / region / forbidden / auth, each with the one instruction that helps, and
+#    Google's own words are printed underneath so an instructor can read past our guess.
+#
+# 2. LOG THE START SCREEN. Every one of the 878 rows in `app.tutor_error_log` came from
+#    mid-lesson -- phases chat, opening and report, and nothing else -- because checkConnection's
+#    catch was the only error path in the build that did not log. A cadet blocked at the door
+#    was invisible: no count, no cadet, no cause. Deduped per (kind, status) per page load,
+#    because the check is debounced on every keystroke.
+#
+# 3. A MID-SESSION 403 STOPS KILLING THE SESSION. One cadet took a 403 at TURN 9, after eight
+#    turns that worked, and was told their key was bad. A key does not go bad at turn 9. A 403
+#    whose message never mentions the key is this MODEL refusing this project -- a per-model
+#    failure, exactly like the 404 and 429 that already walk the ladder. It now walks too.
+#
+# CORE.md section 3: `detail` is GOOGLE's sentence, capped at 300 characters here and again in
+# the edge function, which builds its insert from a whitelist. `kind` is a free string capped at
+# 40 there, so the four new names need no edge-function change.
+
+OLD_KEYKIND = rb"""function errorMessage(err, { afterRetries = false } = {}) {"""
+NEW_KEYKIND = rb"""// 400 / 401 / 403 are THREE problems and this build called them all "auth". Google names the
+// real one in error.message; these patterns are its own wording.
+//
+// Ordered most-specific first, and deliberately conservative: anything unrecognised at 403
+// becomes `forbidden`, which says "not a typo, and here is what Google said" rather than
+// inventing a cause. Guessing wrong is what this whole set exists to stop.
+function keyErrorKind(status, msg) {
+  const m = String(msg || "");
+  // "Generative Language API has not been used in project ... before or it is disabled."
+  if (/SERVICE_DISABLED|has not been used in project|it is disabled|enable it by visiting|API is not enabled/i.test(m)) return "apioff";
+  // "Requests from referer <origin> are blocked." / API_KEY_HTTP_REFERRER_BLOCKED
+  if (/API_KEY_\w*BLOCKED|from referer|from referrer|are blocked|IP address restriction/i.test(m)) return "keyrestricted";
+  // "User location is not supported for the API use."
+  if (/location is not supported|user location/i.test(m)) return "region";
+  // A 403 that never mentions the key is not about the key.
+  if (status === 403 && !/api[\s_-]?key|credential|unregistered/i.test(m)) return "forbidden";
+  return "auth";
+}
+
+function errorMessage(err, { afterRetries = false } = {}) {"""
+
+OLD_AUTHMSG = rb"""    case "auth":
+      return "That API key was rejected. Check you pasted the whole key from Google AI Studio (it starts with \u201CAIza\u201D), and that the Generative Language API is enabled for it.";"""
+NEW_AUTHMSG = rb"""    case "auth":
+      // Narrowed on 2026-08-26. This used to be the answer to all of 400/401/403 and so had
+      // to hedge across causes that need opposite actions; the four cases below took the ones
+      // it was getting wrong, and this keeps only the case where the key really is bad.
+      return "Google says that API key is not valid. Re-copy the whole key from aistudio.google.com \u2014 no spaces and no line break \u2014 and paste it again. If it still fails, make a new key there.";
+    case "apioff":
+      return "Your key is fine, but the Generative Language API is switched off for its Google project. The quickest fix is a NEW key made at aistudio.google.com \u2014 keys made there have it switched on already. Google's own words are below, and they include the link that turns it on.";
+    case "keyrestricted":
+      return "Your key is real, but it carries a restriction that blocks it from this page. Make a NEW key at aistudio.google.com and do not add any restrictions to it.";
+    case "region":
+      return "Google will not serve the free Gemini API from this network location. Try a phone hotspot or a different network, and tell your instructor.";
+    case "forbidden":
+      return "Google refused that key, and this is NOT a typo \u2014 the key was read fine. The usual cause is a school Google account that blocks AI Studio; a personal Google account normally works. Google's own words are below \u2014 show them to your instructor.";"""
+
+# --- discoverModel: read the sentence instead of guessing ---------------------------------
+OLD_DISCOVER = rb"""  if (res.status === 400 || res.status === 401 || res.status === 403) {
+    throw { kind: "auth", status: res.status };
+  }"""
+NEW_DISCOVER = rb"""  if (res.status === 400 || res.status === 401 || res.status === 403) {
+    // READ THE BODY. This threw one kind for all three codes and discarded the one sentence
+    // that says which -- so a cadet whose API was merely switched off was told to re-copy a
+    // key that was already perfect, and the Start button greyed out behind that advice.
+    let msg = "";
+    try { msg = String((((await res.json()) || {}).error || {}).message || ""); } catch (e) {}
+    throw { kind: keyErrorKind(res.status, msg), status: res.status, detail: msg.slice(0, 300) };
+  }"""
+
+# --- mid-session 401/403: a 403 that is not about the key is about the MODEL ---------------
+OLD_MID403 = rb"""    if (res.status === 401 || res.status === 403) {
+      noteFail(activeModelRef.current, "auth");
+      throw { kind: "auth", status: res.status };   // missing or unauthorized key
+    }"""
+NEW_MID403 = rb"""    if (res.status === 401 || res.status === 403) {
+      let amsg = "";
+      try { amsg = String((((await res.json()) || {}).error || {}).message || ""); } catch (e) {}
+      const akind = keyErrorKind(res.status, amsg);
+      // A 403 THAT NEVER MENTIONS THE KEY IS THIS MODEL REFUSING THIS PROJECT, not a dead
+      // session. One cadet took this at TURN 9, after eight turns that worked, and was told
+      // their key was bad -- a key does not go bad at turn 9. It is the same per-model
+      // failure the 404 and 429 branches already walk away from, and this one did not.
+      //
+      // Marked "model", i.e. permanent for the session: an entitlement does not appear
+      // mid-lesson, so reviving it would buy one refusal per turn for the rest of the session.
+      // If every rung refuses, the throw below still carries Google's own words.
+      if (res.status === 403 && akind === "forbidden") {
+        noteFail(activeModelRef.current, "forbidden");
+        spentModels[activeModelRef.current] = "model";
+        if (advance(activeModelRef)) { attempt = 0; continue; }
+      }
+      noteFail(activeModelRef.current, akind);
+      throw { kind: akind, status: res.status, detail: amsg.slice(0, 300) };
+    }"""
+
+# --- mid-session 400: route the key-ish half through the same classifier -------------------
+OLD_MID400 = rb"""      noteFail(activeModelRef.current,
+               /api[\s_-]?key|credential|unregistered/i.test(msg) ? "auth" : "badrequest");
+      throw /api[\s_-]?key|credential|unregistered/i.test(msg)
+        ? { kind: "auth", status: 400 }
+        : { kind: "badrequest", status: 400, detail: msg.slice(0, 300) };"""
+NEW_MID400 = rb"""      // Through the SAME classifier the door uses, so a switched-off API or an unsupported
+      // location reads identically whether it lands at turn 0 or turn 9. It also gives the
+      // auth case a `detail` for the first time -- all seven auth rows of the 2026-08-25
+      // night stored NULL there, so nobody could see what Google had actually said.
+      const keyish = /api[\s_-]?key|credential|unregistered|location is not supported|SERVICE_DISABLED|has not been used in project/i.test(msg);
+      const k400 = keyish ? keyErrorKind(400, msg) : "badrequest";
+      noteFail(activeModelRef.current, k400);
+      throw { kind: k400, status: 400, detail: msg.slice(0, 300) };"""
+
+# --- the start screen: keep Google's words, and LOG the failure ----------------------------
+# TWO VINTAGES, and they differ ONLY in whitespace and in one CSS rule. 33 builds carry the
+# tight declaration and the wrapped .conn-msg rule; the 11 phys-110 builds carry a
+# column-aligned declaration and a single-line rule. That is cosmetic drift from when those
+# were ported, not a behavioural fork -- checkConnection itself is byte-identical in both --
+# so both shapes are matched rather than one being rewritten to look like the other.
+#
+# Each pair is `optional`, and the step asserts afterwards that ONE of them landed. Two
+# optional subs with no assertion would silently do nothing on a third vintage.
+CONNDETAIL_DECL = """
+  // Google's own sentence, kept beside our advice. Our advice is a classification and could
+  // still be wrong; this is evidence, and an instructor can read past us with it.
+  const [connDetail, setConnDetail] = useState("");"""
+
+OLD_CONNSTATE = rb"""  const [connMsg, setConnMsg] = useState("");"""
+NEW_CONNSTATE = OLD_CONNSTATE + enc(CONNDETAIL_DECL)
+
+OLD_CONNSTATE_110 = rb"""  const [connMsg, setConnMsg]       = useState("");"""
+NEW_CONNSTATE_110 = OLD_CONNSTATE_110 + enc(CONNDETAIL_DECL)
+
+OLD_CONNCLEAR1 = rb"""    if (!apiKey.trim()) {
+      setConnStatus("unavailable"); setModelName("");
+      setConnMsg("Paste your Gemini API key to check access.");
+      return;
+    }
+    setConnStatus("checking"); setConnMsg("");"""
+NEW_CONNCLEAR1 = rb"""    if (!apiKey.trim()) {
+      setConnStatus("unavailable"); setModelName(""); setConnDetail("");
+      setConnMsg("Paste your Gemini API key to check access.");
+      return;
+    }
+    setConnStatus("checking"); setConnMsg(""); setConnDetail("");"""
+
+OLD_CONNOK = rb"""      setConnStatus("ok"); setConnMsg("");"""
+NEW_CONNOK = rb"""      setConnStatus("ok"); setConnMsg(""); setConnDetail("");"""
+
+OLD_CONNCATCH = rb"""    } catch (err) {
+      setConnStatus("unavailable"); setModelName("");
+      setConnMsg(errorMessage(err, { afterRetries: true }));
+    }
+  }"""
+NEW_CONNCATCH = rb"""    } catch (err) {
+      setConnStatus("unavailable"); setModelName("");
+      setConnMsg(errorMessage(err, { afterRetries: true }));
+      setConnDetail((err && err.detail) ? String(err.detail).slice(0, 300) : "");
+      // LOG IT. All 878 rows in app.tutor_error_log carry phase chat, opening or report and
+      // nothing else, because this catch was the only error path in the build that never
+      // logged -- so a cadet stopped at the door produced no count, no name and no cause,
+      // and the only evidence anyone had was a cadet saying "it went grey".
+      //
+      // Deduped per (kind, status) per page load: the check is debounced on every keystroke,
+      // and a cadet fixing a typo one character at a time must not write a row per character.
+      const sig = ((err && err.kind) || "?") + ":" + ((err && err.status) || 0);
+      if (!loggedKeyErrors[sig]) {
+        loggedKeyErrors[sig] = 1;
+        diagState.phase = "start";
+        if (cadetId.trim()) diagState.cadet = cadetId.trim();
+        try { logError(diagSnapshot(err).obj); } catch (e) {}
+      }
+    }
+  }"""
+
+OLD_CONNEFFECT = rb"""    const k = apiKey.trim();
+    if (!k) {
+      setConnStatus("unavailable"); setModelName("");
+      setConnMsg("Paste your Gemini API key to check access.");
+      return;
+    }"""
+NEW_CONNEFFECT = rb"""    const k = apiKey.trim();
+    if (!k) {
+      setConnStatus("unavailable"); setModelName(""); setConnDetail("");
+      setConnMsg("Paste your Gemini API key to check access.");
+      return;
+    }"""
+
+OLD_LOGGEDSET = rb"""const diagState = { cadet: "", mode: "", phase: "start", turn: 0, startedAt: 0, resets: 0,
+                    model: "" };"""
+NEW_LOGGEDSET = rb"""const diagState = { cadet: "", mode: "", phase: "start", turn: 0, startedAt: 0, resets: 0,
+                    model: "" };
+
+// One start-screen key failure of each (kind, status) per page load reaches the central log.
+// The connection check is debounced on every keystroke, so without this a cadet correcting a
+// pasted key one character at a time would write a row per character.
+const loggedKeyErrors = {};"""
+
+OLD_CONNRENDER = rb"""            {connStatus === "unavailable" && <div className="conn-msg">{connMsg}</div>}"""
+NEW_CONNRENDER = rb"""            {connStatus === "unavailable" && <div className="conn-msg">{connMsg}</div>}
+            {connStatus === "unavailable" && connDetail && (
+              <div className="conn-msg conn-detail">Google said: {connDetail}</div>
+            )}"""
+
+CONNDETAIL_CSS = """
+  /* Google's sentence, verbatim. Quieter than the advice above it on purpose: that is an
+     instruction for the cadet, this is evidence for whoever they show it to. */
+  .conn-detail { color: #6b7280; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                 font-size: 10px; word-break: break-word; }"""
+
+OLD_CONNCSS = rb"""  .conn-msg { width: 100%; max-width: 480px; box-sizing: border-box;
+              font-size: 11px; color: #dc2626; margin-top: 4px; line-height: 1.5; }"""
+NEW_CONNCSS = OLD_CONNCSS + enc(CONNDETAIL_CSS)
+
+OLD_CONNCSS_110 = rb"""  .conn-msg { font-size: 11px; color: #dc2626; margin-top: 4px; line-height: 1.5; }"""
+NEW_CONNCSS_110 = OLD_CONNCSS_110 + enc(CONNDETAIL_CSS)
+
+SET10_MARKER = b"function keyErrorKind"
+
+
+def apply_key_error_kinds(raw):
+    """Set 10. Stop telling every refused key that it was mistyped: read the sentence Google
+    sends, log the start screen at all, and let a per-model 403 walk the ladder."""
+    if SET10_MARKER in raw:
+        return raw, ["already"]
+    p = Patcher(raw, None)
+    p.sub("key-error-classifier", OLD_KEYKIND, NEW_KEYKIND)
+    p.sub("four-new-messages", OLD_AUTHMSG, NEW_AUTHMSG)
+    p.sub("discover-reads-body", OLD_DISCOVER, NEW_DISCOVER)
+    p.sub("mid-403-walks", OLD_MID403, NEW_MID403)
+    p.sub("mid-400-classified", OLD_MID400, NEW_MID400)
+    p.sub("logged-key-errors-set", OLD_LOGGEDSET, NEW_LOGGEDSET)
+    p.sub("conn-detail-state", OLD_CONNSTATE, NEW_CONNSTATE, optional=True)
+    p.sub("conn-detail-state-110", OLD_CONNSTATE_110, NEW_CONNSTATE_110, optional=True)
+    if b"connDetail, setConnDetail" not in p.buf:
+        raise Refused("conn-detail-state: neither build vintage's declaration matched")
+    p.sub("conn-clear-nokey", OLD_CONNCLEAR1, NEW_CONNCLEAR1)
+    p.sub("conn-clear-ok", OLD_CONNOK, NEW_CONNOK)
+    p.sub("conn-catch-logs", OLD_CONNCATCH, NEW_CONNCATCH)
+    p.sub("conn-effect-clear", OLD_CONNEFFECT, NEW_CONNEFFECT)
+    p.sub("conn-detail-render", OLD_CONNRENDER, NEW_CONNRENDER)
+    p.sub("conn-detail-css", OLD_CONNCSS, NEW_CONNCSS, optional=True)
+    p.sub("conn-detail-css-110", OLD_CONNCSS_110, NEW_CONNCSS_110, optional=True)
+    if b".conn-detail {" not in p.buf:
+        raise Refused("conn-detail-css: neither build vintage's .conn-msg rule matched")
+    return p.buf, p.applied
+
+
 def patch_one(path, verbose=False):
     raw = path.read_bytes()
     buf, applied = apply_fixset(raw)
@@ -1815,8 +2088,9 @@ def patch_one(path, verbose=False):
     buf, applied7 = apply_rate_limit_backoff(buf)
     buf, applied8 = apply_quota_detail(buf)
     buf, applied9 = apply_quota_ledger(buf)
+    buf, applied10 = apply_key_error_kinds(buf)
     applied = (applied + applied2 + applied3 + applied4 + applied5 + applied6
-               + applied7 + applied8 + applied9)
+               + applied7 + applied8 + applied9 + applied10)
     if verbose:
         for a in applied:
             print("      . " + a)

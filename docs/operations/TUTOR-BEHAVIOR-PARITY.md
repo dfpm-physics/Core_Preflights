@@ -377,6 +377,73 @@ director, and set 9 makes its cost easier to read rather than smaller.
 
 ---
 
+### 2.8 The same day — "it starts with AIza" was a guess, and it was usually wrong
+
+**Reported by the course director: cadets seeing a message that a Gemini key starts with `AIza`,
+and the Start button greyed out.** Both come from one branch in `discoverModel`:
+
+```js
+if (res.status === 400 || res.status === 401 || res.status === 403) {
+  throw { kind: "auth", status: res.status };
+}
+```
+
+The greyed button is the same event — `connStatus` is not `"ok"`, and both Start and Study are
+disabled on that. **Those three codes are three different problems:**
+
+| Google says | What it actually is | What the cadet was told |
+|---|---|---|
+| **400** | the key really is wrong or malformed | correct |
+| **403** | the key is **fine** — the Generative Language API is off for its project, the key carries a referrer/IP restriction, or a school Google account blocks AI Studio | **wrong**, and it sends them to re-copy a perfect key |
+| **401** | no key was sent | rare from this page |
+
+**Google says which one it is, in the response body, and all 44 builds threw it away.** Measured:
+0 of 44 read `error.message` before throwing. The *mid-session* 400 branch has read that sentence
+since §2.3 — that fix exists precisely because a too-long request was being reported as a bad key —
+and the start screen, which is where a cadet is actually stopped, never got it.
+
+**Two more findings came out of looking.**
+
+**The start screen has never written to the error log.** All 878 rows in `app.tutor_error_log`
+carry phase `chat`, `opening` or `report` and nothing else, because `checkConnection`'s catch was
+the only error path in the build that did not log. A cadet blocked at the door produced no count,
+no name and no cause — the only evidence anyone had was a cadet saying it went grey. **This is why
+the reported symptom could not be diagnosed from the data**, only from the source.
+
+**A mid-session 403 killed the session and blamed the key.** One cadet took a 403 at **turn 9**,
+after eight turns that worked (`lesson-09-application-of-newtons-laws`, 2026-08-26 16:16 UTC, the
+first row ever to carry a `cadet_ref`). A key does not go bad at turn 9. A 403 whose message never
+mentions the key is **this model refusing this project** — the same per-model failure the 404 and
+429 branches already walk away from. Ten `auth` rows exist in total; all ten stored `detail` NULL,
+so none of them can say what Google meant.
+
+| Behaviour | A (kit) | B (sources) | C (Gemini) | Note |
+|---|---|---|---|---|
+| 400/401/403 classified from Google's message | n/a | n/a | ✅ | `apioff` / `keyrestricted` / `region` / `forbidden` / `auth` |
+| Google's sentence shown under our advice | ❌ | ❌ | ✅ | our advice is a classification and can still be wrong |
+| The start screen reaches the central log | ❌ | ❌ | ✅ | **0 of 878 rows** came from it before |
+| A non-key 403 walks the ladder | ❌ | n/a | ✅ | it is per model, exactly like 404 and 429 |
+| `auth` and `badrequest` carry `detail` | ❌ | ❌ | ✅ | all ten auth rows stored NULL |
+
+**Why `keyErrorKind` is conservative on purpose.** Anything unrecognised at 403 becomes
+`forbidden`, whose message says *"this is not a typo, and here is what Google said"* rather than
+naming a cause. Guessing wrong is the entire subject of this section; a fallback that guesses is
+the same bug with better vocabulary.
+
+**No edge-function change was needed.** `log-tutor-error` takes `kind` as a free string capped at
+40 characters, so the four new names land without a deploy — unlike `quota_ids` in §2.6, which the
+`models[]` whitelist dropped silently.
+
+**One thing this section had to work around.** The 44 builds are **two vintages** that differ in
+whitespace and in one CSS rule: 33 carry a tight `connMsg` declaration and a wrapped `.conn-msg`
+rule, the 11 phys-110 builds carry a column-aligned declaration and a single-line rule.
+`checkConnection` itself is byte-identical in both, so this is cosmetic drift from when those were
+ported, not a fork. The patcher matches **both shapes and asserts one landed**, rather than
+normalising 11 builds to look like the other 33 — the diff for that would have been indistinguishable
+from the line-ending rewrite in PROJECT.md's sharp-edges table.
+
+---
+
 ## 3. What the Claude artifact still gets wrong
 
 **Filed as [`docs/findings/2026-08-21-claude-artifact-unwalked-failure-paths.md`](../findings/2026-08-21-claude-artifact-unwalked-failure-paths.md)** — a work order with a status, where this section is a summary. The finding carries the verification commands, the separation of what was observed from what was inferred, and the falsification conditions.

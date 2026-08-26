@@ -2058,7 +2058,8 @@ def main():
                                                   apply_turn_revive,
                                                   apply_rate_limit_backoff,
                                                   apply_quota_detail,
-                                                  apply_quota_ledger)
+                                                  apply_quota_ledger,
+                                                  apply_key_error_kinds)
             html, _fixsteps = apply_fixset(html)
             html, _socsteps = apply_socratic(html)
             html, _notsteps = apply_notation(html)
@@ -2075,6 +2076,8 @@ def main():
             html, _detsteps = apply_quota_detail(html)
             # Set 9 edits what sets 7 and 8 leave behind, so it runs last.
             html, _ledsteps = apply_quota_ledger(html)
+            # Set 10 rewrites the 400/403 branches set 2 last touched; independent of 7-9.
+            html, _keysteps = apply_key_error_kinds(html)
 
             out = OUT_ROOT / course / f"{slug}.html"
             same = out.exists() and out.read_bytes() == html
