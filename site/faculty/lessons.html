@@ -562,17 +562,40 @@
     }
 
     /** The deadlines actually in force, labelled by section code where they differ. */
+    /* Bucket by the deadline's LOCAL calendar day, and format the TIMESTAMP, never a date string.
+     *
+     * This used to do `byDate[String(iso).slice(0, 10)]` and then `fmtDate(dates[0])`, which is
+     * TWO opposite one-day errors that cancelled each other for every deadline this system had:
+     *
+     *   1. `.slice(0, 10)` takes the UTC date. A 19:59 Mountain deadline is stored as 01:59Z the
+     *      NEXT day, so the key was already a day late.
+     *   2. `fmtDate` on a bare "YYYY-MM-DD" hits the JS rule that a date-only string parses as UTC
+     *      MIDNIGHT. Rendered in the viewer's zone (fmtDate uses `undefined` locale/zone) that is
+     *      18:00 the PREVIOUS day, pulling it a day early again.
+     *
+     * Net zero, so the card looked right — until a deadline landed in the MORNING, where step 1
+     * has nothing to carry and step 2 still fires. PHYS 310 lesson 8 is due 09:30 Mountain on
+     * 27 Aug and the card said "Due Aug 26". The same fault hit phys-215 for the week its
+     * deadline was 17:59 (CORE.md §2), and it would hit any course that ever moves off an
+     * evening deadline. Verified in Node under TZ=America/Denver against all four cases.
+     *
+     * The editor is NOT affected and never was: `toEditorDue()` (faculty-lessons.js) reads local
+     * date parts off a real Date, which is what this now does too. */
     function dueSummary(l) {
+      const p = (n) => String(n).padStart(2, '0');
       const byDate = {};
       (vm.sections || []).forEach(s => {
         const iso = l.dueBySection?.[s.id] || l.dueAt;
         if (!iso) return;
-        (byDate[String(iso).slice(0, 10)] ||= []).push(s.code);
+        const at = new Date(iso);
+        if (isNaN(at)) return;
+        const key = `${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())}`;
+        (byDate[key] ||= { codes: [], at: iso }).codes.push(s.code);
       });
       const dates = Object.keys(byDate).sort();
       if (!dates.length) return l.dueAt ? fmtDate(l.dueAt) : '';
-      if (dates.length === 1) return fmtDate(dates[0]);
-      return dates.map(d => `${byDate[d].join('/')} ${fmtDate(d)}`).join(' · ');
+      if (dates.length === 1) return fmtDate(byDate[dates[0]].at);
+      return dates.map(d => `${byDate[d].codes.join('/')} ${fmtDate(byDate[d].at)}`).join(' · ');
     }
 
     function wireNew() { document.getElementById('new-btn')?.addEventListener('click', () => openEdit(null)); }

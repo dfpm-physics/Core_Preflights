@@ -10,6 +10,58 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-26 — Matthew Recker via Claude
 
+### Two one-day errors that cancelled, until a deadline landed in the morning
+
+**Reported by the course director: the faculty Assignments page showed PHYS 310 lesson 8 as "Due
+Aug 26" when its deadline is 27 Aug 0930 Mountain.** The database was right, the lesson editor was
+right, and the two lessons above it on the same card list -- lesson 04 "Due Aug 16", lesson 06
+"Due Aug 22" -- were also right. Only the new one was wrong, by exactly one day.
+
+**`dueSummary()` in `site/faculty/lessons.html` made two opposite one-day errors, and every
+deadline this system has ever had made them cancel.**
+
+1. It bucketed by `String(iso).slice(0, 10)` -- **the UTC date**. A 19:59 Mountain deadline is
+   stored as `01:59Z` the NEXT day, so that key was already a day late.
+2. It then formatted that bare `"YYYY-MM-DD"` with `fmtDate`, and a date-only string parses in JS
+   as **UTC midnight**. Rendered in the viewer's zone (`fmtDate` passes `undefined` for locale and
+   zone, so it uses the browser's) that is 18:00 the PREVIOUS day -- pulling it a day early again.
+
+Net zero. Both courses run evening deadlines -- phys-310 at 1959, phys-110 and phys-215 at 2359 --
+so step 1 always had a day to carry and step 2 always gave it back. **The card has been printing
+the right answer for the wrong reason for as long as it has existed.**
+
+**A morning deadline breaks the arithmetic.** At 0930 Mountain the UTC date and the local date are
+the same day, so step 1 carries nothing and step 2 still fires. Lesson 8 is the first morning
+deadline in this system, which is why nobody had seen it. It is not the only case: phys-215 ran a
+**1759** deadline from 2026-07-29 to 2026-08-06 (CORE.md section 2), and `17:59` Mountain is
+`23:59Z` the same day -- so every phys-215 card was a day early for that week, and the training
+sandbox offering still is. Any course that moves off an evening deadline hits this immediately.
+
+**The fix is to bucket by the LOCAL calendar day and format the timestamp, never a date string.**
+That is what `toEditorDue()` in `faculty-lessons.js` already does with local date getters, which is
+why the editor was never wrong and showed 0930 on the 27th correctly throughout. Verified in Node
+under `TZ=America/Denver` across eight cases: the three real phys-310 rows, a 2359 phys-215 row, a
+1759 row, a split M/T offering, a `dueAt`-only offering with no per-section rows, and no deadline
+at all. The four that were already correct stay correct.
+
+**Scope checked, deliberately narrow.** Two neighbouring `.slice(0, 10)` calls on the same page
+(`dueDatePart`, and the `opensAt` split in `renderRelease`) are **not** this bug: both read a
+model value that `toEditorDue()` has already converted to local, so slicing them is correct. The
+remaining hits are `new Date().toISOString().slice(0, 10)` in `faculty-admin.js` and
+`faculty-artifacts.js`, which stamp today's date on export filenames and review records; those are
+UTC-dated on purpose and were left alone. **Nothing on the student side is affected** --
+`assignments.html` renders `fmtDateTime(a.due)` on the real timestamp.
+
+**One thing this does not change, and it is worth a decision separately.** The card prints a date
+and no time. That reads fine for a deadline at 1959 or 2359 and is genuinely ambiguous for one at
+0930 -- an instructor looking at "Due Aug 27" would reasonably assume end of day. Left as-is
+because it changes every card in every course; raise it if the morning deadline is going to be a
+pattern rather than a one-off.
+
+---
+
+## 2026-08-26 — Matthew Recker via Claude
+
 ### 107 requests against a disposable key, and three fix sets were answering the wrong question
 
 Sets 9, 10 and 11 each shipped an inference and were corrected within a day by the cadet who met
