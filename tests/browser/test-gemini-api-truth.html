@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemini API truth harness</title>
+<!--
+  test-gemini-api-truth.html -- capture what Google's free tier ACTUALLY returns, verbatim,
+  instead of inferring it and shipping the inference to cadets.
+
+  WHY THIS EXISTS, stated plainly. Between 2026-08-25 and 2026-08-26 the Gemini tutor took four
+  fix sets in two days -- 7, 9, 10, 11 -- and each one corrected the previous one's guess:
+
+    set 7   read the 429 body for RetryInfo and the QuotaFailure NAME. Correct, and it worked.
+    set 9   split day from minute. Its primary test was the quota name; the live log then showed
+            Google named the quota in 0 of 885 rows, so the test never fired and the fallback
+            labelled every walked-to rung "daily". Cadets were told to come back tomorrow five
+            turns into a lesson.
+    set 10  split the 400/401/403 lump. Its patterns are matched against Google's wording AS WE
+            IMAGINE IT. Nobody has ever captured the real strings.
+    set 11  made "daily" produce receipts, using caps (20/day flash, 500/day lite) taken from
+            documentation and from a probe that measured the MINUTE wall and never exhausted
+            a key.
+
+  Every one of those was reasoning where a measurement was available. `test-gemini-rate-limits.html`
+  settled per-model-vs-per-project by experiment and it settled it permanently. This page is that
+  method applied to everything still outstanding.
+
+  WHAT IT ANSWERS, and each of these is currently a guess in shipped code:
+
+    A  What does a DAILY refusal look like? Does its body carry QuotaFailure, a quotaId naming
+       PerDay, a RetryInfo? (Set 9 and set 11 both branch on this and neither has seen one.)
+    B  What is the real requests-per-day, per model, today? (RPD_FLASH/RPD_LITE in set 11.)
+    C  When one model's DAY is gone, are the others gone too? (The probe answered this for the
+       MINUTE wall -- per model -- and the daily case is unmeasured.)
+    D  Does a daily-refused model come back within the hour? (Set 11 says no and never checked.)
+    E  Google's EXACT wording for a bad key, an empty key, a disabled API, a restricted key.
+       (Set 10's keyErrorKind is built entirely on invented strings.)
+    F  Can ListModels accept a key that generateContent then rejects? Five cadets on 2026-08-26
+       got a green connection light and "API key not valid" on their first message.
+
+  IT SPENDS REAL QUOTA, DELIBERATELY, AND THAT IS THE POINT. Question A cannot be answered
+  without exhausting something. USE A DISPOSABLE KEY -- a new key on a new Google Cloud project,
+  or a second Google account -- because a full run leaves that key's Flash models dead until
+  midnight PACIFIC (1am Mountain). Do not run this on the key you use to test the tutor.
+
+  Everything is capped, counted and stoppable. Every request sends a two-character prompt with
+  maxOutputTokens 1, so tokens-per-minute cannot be what any 429 here is measuring: only the
+  REQUEST is under test. Every response is recorded whole -- status, headers, parsed body -- and
+  the run downloads as JSON, because the value of this page is the transcript, not its verdict.
+
+  THE KEY IS NEVER STORED. It lives in one variable, rides in the x-goog-api-key header, and is
+  not written to localStorage, the URL, or the downloaded file.
+
+  This is a DIAGNOSTIC. Nothing on the site links to it, nothing imports it, and deleting it
+  changes nothing.
+-->
+<style>
+  :root {
+    --bg: #10131a; --panel: #181c26; --line: #2b3242; --ink: #e6e9f0; --dim: #97a0b5;
+    --ok: #4ade80; --bad: #f87171; --warn: #fbbf24; --accent: #60a5fa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--bg); color: var(--ink);
+    font: 14px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1140px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 24px 0 8px; color: var(--accent); }
+  .sub { color: var(--dim); margin: 0 0 18px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+           padding: 16px; margin-bottom: 16px; }
+  label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+  input[type=password], input[type=text], input[type=number] {
+    width: 100%; padding: 8px 10px; background: #0c0f15; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px; font: 13px ui-monospace, monospace;
+  }
+  input[type=number] { width: 110px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+  .row > div { flex: 1 1 220px; }
+  button {
+    padding: 9px 16px; border-radius: 6px; border: 1px solid var(--line);
+    background: #222839; color: var(--ink); font: 600 13px ui-sans-serif, system-ui;
+    cursor: pointer;
+  }
+  button.go { background: var(--accent); color: #08101d; border-color: var(--accent); }
+  button.stop { background: #3a1d22; border-color: #6b2b33; color: #ffc9cf; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .exps { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 8px; }
+  .exp { display: flex; gap: 9px; align-items: flex-start; padding: 9px 11px;
+         background: #0c0f15; border: 1px solid var(--line); border-radius: 6px; }
+  .exp input { margin-top: 3px; }
+  .exp b { display: block; font-size: 13px; }
+  .exp span { display: block; font-size: 11.5px; color: var(--dim); }
+  .cost { color: var(--warn); font-family: ui-monospace, monospace; }
+  .bar { height: 6px; background: #0c0f15; border-radius: 3px; overflow: hidden;
+         border: 1px solid var(--line); margin: 10px 0 6px; }
+  .bar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+  pre { background: #0c0f15; border: 1px solid var(--line); border-radius: 6px;
+        padding: 12px; overflow: auto; max-height: 460px; font: 12px/1.5 ui-monospace, monospace;
+        white-space: pre-wrap; word-break: break-word; margin: 0; }
+  .st-ok { color: var(--ok); } .st-bad { color: var(--bad); } .st-warn { color: var(--warn); }
+  .st-dim { color: var(--dim); }
+  .note { font-size: 12px; color: var(--dim); margin-top: 8px; }
+  .danger { border-color: #6b2b33; background: #1a1216; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Gemini API truth harness</h1>
+<p class="sub">
+  Records what Google actually returns, verbatim, for every refusal the tutor can hit.
+  <b>It spends real quota on purpose.</b> Use a disposable key.
+</p>
+
+<div class="panel danger">
+  <b>Read this before you start.</b>
+  <div class="note">
+    A full run leaves this key's <b>Flash</b> models refusing until <b>midnight Pacific</b>
+    (1am Mountain). That is the only way to see what a daily refusal looks like, which is the
+    thing four shipped fix sets have each guessed at. Make a new key at
+    <code>aistudio.google.com</code> for this, or accept that the key you paste is spent for
+    the day. The key is never stored, never logged, and never written into the download.
+  </div>
+</div>
+
+<div class="panel">
+  <div class="row">
+    <div style="flex:3 1 420px">
+      <label for="key">Gemini API key (disposable)</label>
+      <input id="key" type="password" placeholder="AIza..." autocomplete="off" spellcheck="false">
+    </div>
+    <div style="flex:0 0 130px">
+      <label for="budget">Hard cap</label>
+      <input id="budget" type="number" value="700" min="10" max="3000">
+    </div>
+  </div>
+  <div class="note">
+    The hard cap is absolute: the run stops at that many requests no matter what is still queued.
+  </div>
+</div>
+
+<h2>Experiments</h2>
+<div class="panel">
+  <div class="exps" id="exps"></div>
+  <div class="note" id="estimate"></div>
+</div>
+
+<div class="panel">
+  <div class="row">
+    <div style="flex:0 0 auto">
+      <button class="go" id="run">Run selected</button>
+      <button class="stop" id="halt" disabled>Stop</button>
+      <button id="dl" disabled>Download JSON</button>
+      <button id="copy" disabled>Copy JSON</button>
+    </div>
+  </div>
+  <div class="bar"><i id="bar"></i></div>
+  <div class="note" id="status">Idle.</div>
+</div>
+
+<h2>Transcript</h2>
+<pre id="out">Nothing yet.</pre>
+
+</div>
+
+<script>
+"use strict";
+
+// ── Constants ─────────────────────────────────────────────────────────────────────────────
+// The ladder the shipped tutor actually uses, newest first. Kept literal rather than imported:
+// this page must be able to test a model the tutor has dropped, and vice versa.
+const BASE = "https://generativelanguage.googleapis.com/v1beta";
+const LADDER = [
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+];
+// Where the volume tests do their damage. The DAILY kill deliberately uses 3.5-flash and not
+// 3.6-flash, so that if the operator has to abandon the run the tutor's TOP rung is still alive
+// on this key.
+const KILL_FLASH = "gemini-3.5-flash";
+const KILL_LITE  = "gemini-3.1-flash-lite";
+
+// A two-character prompt and a one-token ceiling. Tokens-per-minute on the free tier is 250,000
+// against a few tokens here, so TPM cannot be what any 429 on this page is measuring.
+const TINY = {
+  contents: [{ role: "user", parts: [{ text: "hi" }] }],
+  generationConfig: { maxOutputTokens: 1 },
+};
+
+// ── Run state ─────────────────────────────────────────────────────────────────────────────
+let KEY = "";            // never stored, never logged, never downloaded
+let LOG = [];
+let spent = 0, cap = 700, halted = false, running = false;
+
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const now = () => new Date().toISOString();
+
+function say(msg, cls) {
+  $("status").innerHTML = '<span class="' + (cls || "st-dim") + '">' + msg + "</span>";
+}
+function bar() {
+  $("bar").style.width = Math.min(100, (spent / cap) * 100) + "%";
+}
+function emit(line, cls) {
+  const pre = $("out");
+  if (pre.textContent === "Nothing yet.") pre.textContent = "";
+  const s = document.createElement("span");
+  if (cls) s.className = cls;
+  s.textContent = line + "\n";
+  pre.appendChild(s);
+  pre.scrollTop = pre.scrollHeight;
+}
+
+// ── The one request primitive ─────────────────────────────────────────────────────────────
+// EVERYTHING goes through here so that nothing can escape the budget, and so that every single
+// response is recorded whole. The transcript is the product of this page; the summary printed
+// on screen is a convenience.
+//
+// Headers are captured because Google sometimes carries rate-limit facts there (retry-after and
+// friends) that never appear in the JSON body, and no shipped code has ever looked.
+async function call(exp, label, path, opts) {
+  if (halted) throw new Error("halted");
+  if (spent >= cap) { halted = true; throw new Error("budget"); }
+  spent++; bar();
+  const started = Date.now();
+  const rec = { i: spent, t: now(), exp: exp, label: label, path: path };
+  let res;
+  try {
+    res = await fetch(BASE + path, opts);
+  } catch (e) {
+    rec.transport = String(e && e.message || e);
+    LOG.push(rec);
+    return rec;
+  }
+  rec.ms = Date.now() - started;
+  rec.status = res.status;
+  rec.ok = res.ok;
+  rec.headers = {};
+  try { res.headers.forEach((v, k) => { rec.headers[k] = v; }); } catch (e) {}
+  const text = await res.text().catch(() => "");
+  try { rec.body = JSON.parse(text); } catch (e) { rec.bodyText = text.slice(0, 4000); }
+  LOG.push(rec);
+  return rec;
+}
+
+const genOpts = (key) => ({
+  method: "POST",
+  headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+  body: JSON.stringify(TINY),
+});
+const listOpts = (key) => ({ headers: { "x-goog-api-key": key } });
+
+// Pull the parts shipped code branches on, so the transcript can be read at a glance.
+function digest(rec) {
+  const err = (rec.body && rec.body.error) || {};
+  const det = err.details || [];
+  const qf = det.find((d) => String(d["@type"] || "").indexOf("QuotaFailure") > -1);
+  const ri = det.find((d) => String(d["@type"] || "").indexOf("RetryInfo") > -1);
+  const v = qf && (qf.violations || [])[0];
+  return {
+    status: rec.status,
+    message: err.message || "",
+    reason: err.status || "",
+    quotaId: (v && (v.quotaId || v.quotaMetric)) || "",
+    quotaDims: (v && v.quotaDimensions) || null,
+    retryDelay: (ri && ri.retryDelay) || "",
+    named: !!v,
+  };
+}
+function show(rec, prefix) {
+  const d = digest(rec);
+  const cls = rec.transport ? "st-warn" : rec.ok ? "st-ok" : rec.status === 429 ? "st-warn" : "st-bad";
+  emit("  " + (prefix || "") + " HTTP " + (rec.status || "net") + "  " + (rec.ms || 0) + "ms"
+       + (d.reason ? "  " + d.reason : "")
+       + (d.named ? "  QUOTA=" + d.quotaId : (rec.status === 429 ? "  QUOTA=(none named)" : ""))
+       + (d.retryDelay ? "  retry=" + d.retryDelay : "")
+       + (d.message ? "\n      “" + d.message.slice(0, 200) + "”" : ""), cls);
+  return d;
+}
+
+// ── Experiments ───────────────────────────────────────────────────────────────────────────
+// Each returns a short verdict object that goes into the download beside the raw transcript.
+
+// E: the wording questions, and they cost NO quota -- a rejected key never reaches a quota.
+// This is the experiment that should have run before set 10 was written.
+async function expWording() {
+  emit("\n=== E0  What Google says about a BAD key (costs no quota) ===", "st-warn");
+  const out = {};
+  const cases = [
+    ["trailing-junk", KEY + "ZZ"],
+    ["truncated", KEY.slice(0, 12)],
+    ["empty", ""],
+    ["not-a-key", "hello-this-is-not-a-key"],
+  ];
+  for (const [name, k] of cases) {
+    if (halted) break;
+    emit("[" + name + "] ListModels");
+    out[name + ".list"] = show(await call("E0", name + ".list", "/models?pageSize=5", listOpts(k)));
+    emit("[" + name + "] generateContent");
+    out[name + ".gen"] = show(await call("E0", name + ".gen",
+      "/models/" + LADDER[0] + ":generateContent", genOpts(k)));
+  }
+  emit("\n  WHY THIS MATTERS: set 10's keyErrorKind() matches these strings and nobody had", "st-dim");
+  emit("  ever read one. Compare every `message` above against those patterns.", "st-dim");
+  return out;
+}
+
+// F: can ListModels accept a key that generateContent then refuses? Five cadets on 2026-08-26
+// got a green connection light and "API key not valid" on their very first message.
+async function expDoorVsUse() {
+  emit("\n=== E1  Inventory, and the door-vs-use asymmetry ===", "st-warn");
+  const list = await call("E1", "list", "/models?pageSize=200", listOpts(KEY));
+  const d = show(list, "ListModels");
+  const models = ((list.body || {}).models || [])
+    .filter((m) => (m.supportedGenerationMethods || []).indexOf("generateContent") > -1)
+    .map((m) => String(m.name || "").replace(/^models\//, ""));
+  emit("  reachable for generateContent: " + models.length + " model(s)");
+  emit("  our ladder present: " + LADDER.filter((n) => models.indexOf(n) > -1).join(", "));
+  const missing = LADDER.filter((n) => models.indexOf(n) < 0);
+  if (missing.length) emit("  our ladder MISSING from the listing: " + missing.join(", "), "st-warn");
+
+  emit("\n  now asking each ladder model ONE tiny question -- a listing is not an entitlement:");
+  const reach = {};
+  for (const m of LADDER) {
+    if (halted) break;
+    const r = await call("E1", "reach." + m, "/models/" + m + ":generateContent", genOpts(KEY));
+    reach[m] = show(r, m.padEnd(24));
+  }
+  const listedNotUsable = LADDER.filter(
+    (m) => models.indexOf(m) > -1 && reach[m] && reach[m].status && reach[m].status !== 200);
+  emit("\n  ANSWER TO F: " + (listedNotUsable.length
+       ? listedNotUsable.length + " model(s) were LISTED and then refused -- the green light lies"
+       : "every listed ladder model also answered; no asymmetry seen on this key"),
+       listedNotUsable.length ? "st-bad" : "st-ok");
+  return { listing: d, reachable: models, reach: reach };
+}
+
+// The MINUTE wall, re-measured, because set 11's rpmOf() still depends on it.
+async function expMinuteWall() {
+  emit("\n=== E2  The per-MINUTE wall on " + KILL_LITE + " ===", "st-warn");
+  emit("  firing as fast as the network allows until one is refused (cap 25)");
+  let okCount = 0, wall = null;
+  for (let i = 1; i <= 25 && !halted; i++) {
+    const r = await call("E2", "burst." + i, "/models/" + KILL_LITE + ":generateContent", genOpts(KEY));
+    if (r.ok) { okCount++; continue; }
+    wall = show(r, "#" + i + " refused after " + okCount + " ok:");
+    break;
+  }
+  if (!wall) { emit("  no wall inside 25 requests", "st-ok"); return { okBefore: okCount, wall: null }; }
+  emit("  ANSWER: this model answered " + okCount + " and refused the next.", "st-ok");
+
+  emit("\n  --- blast radius: asking the OTHER models the instant this one is walled ---");
+  const others = {};
+  for (const m of LADDER) {
+    if (m === KILL_LITE || halted) continue;
+    others[m] = show(await call("E2", "blast." + m, "/models/" + m + ":generateContent",
+                                genOpts(KEY)), m.padEnd(24));
+  }
+  const anyOk = Object.keys(others).filter((m) => others[m].status === 200);
+  emit("  ANSWER TO C (minute case): " + (anyOk.length
+       ? "PER MODEL -- " + anyOk.join(", ") + " still answering. Walking the ladder is right."
+       : "every other model refused too. That is NOT per model."),
+       anyOk.length ? "st-ok" : "st-bad");
+  return { okBefore: okCount, wall: wall, blast: others };
+}
+
+// D: does the minute wall clear, and how fast? Set 7's LADDER_WAIT_MS is built on this number.
+async function expRecovery() {
+  emit("\n=== E3  Recovery of " + KILL_LITE + " (polls every 5s, up to 2 min) ===", "st-warn");
+  const t0 = Date.now();
+  for (let i = 1; i <= 24 && !halted; i++) {
+    await sleep(5000);
+    const r = await call("E3", "poll." + i, "/models/" + KILL_LITE + ":generateContent", genOpts(KEY));
+    const secs = Math.round((Date.now() - t0) / 1000);
+    if (r.ok) {
+      emit("  cleared after " + secs + "s", "st-ok");
+      return { clearedSec: secs };
+    }
+    emit("  " + secs + "s still refused", "st-dim");
+  }
+  emit("  STILL refusing after 2 minutes -- that is not a per-minute window", "st-bad");
+  return { clearedSec: null };
+}
+
+// A and B, the questions that cost something and that nothing else can answer.
+//
+// THE DESIGN POINT: pace UNDER the per-minute cap. Flash is 5/min, so firing 4 per minute means
+// any refusal that arrives CANNOT be the minute limit -- the only wall left standing is the
+// daily one. That is the separation four fix sets have been guessing at.
+async function expDailyKill(model, perMin, maxReq, tag) {
+  emit("\n=== " + tag + "  Driving " + model + " to its DAILY cap ===", "st-warn");
+  emit("  paced at " + perMin + "/min, deliberately UNDER the per-minute cap, so any refusal", "st-dim");
+  emit("  here cannot be the minute limit. This is the experiment that answers A and B.", "st-dim");
+  const gap = Math.ceil(60000 / perMin);
+  let okCount = 0, first = null;
+  for (let i = 1; i <= maxReq && !halted; i++) {
+    const r = await call(tag, "day." + i, "/models/" + model + ":generateContent", genOpts(KEY));
+    if (r.ok) {
+      okCount++;
+      if (okCount % 5 === 0) emit("  " + okCount + " answered...", "st-dim");
+    } else {
+      first = show(r, "#" + i + " refused after " + okCount + " ok:");
+      break;
+    }
+    await sleep(gap);
+  }
+  if (!first) {
+    emit("  no wall inside " + maxReq + " requests at this pace", "st-warn");
+    return { model: model, okBefore: okCount, wall: null };
+  }
+  emit("  ANSWER TO B: " + model + " answered " + okCount + " request(s) today before refusing.", "st-ok");
+  emit("  ANSWER TO A: quota named = " + (first.named ? first.quotaId : "NOTHING")
+       + " | retryDelay = " + (first.retryDelay || "none"), first.named ? "st-ok" : "st-bad");
+  if (!first.named) {
+    emit("  ^^ THIS IS THE FINDING. Set 9 and set 11 both branch on that name. If it is", "st-bad");
+    emit("     absent here too, no client can ever classify a daily 429 from the body.", "st-bad");
+  }
+
+  emit("\n  --- does it come back? (90s, then one poll) ---");
+  await sleep(90000);
+  const back = await call(tag, "recheck", "/models/" + model + ":generateContent", genOpts(KEY));
+  const bd = show(back, "after 90s:");
+  emit("  ANSWER TO D: " + (back.ok
+       ? "IT RECOVERED -- so that was NOT a daily cap, and set 11 would have locked it wrongly"
+       : "still refusing after 90s, consistent with a daily cap"),
+       back.ok ? "st-bad" : "st-ok");
+
+  emit("\n  --- blast radius after a DAILY refusal ---");
+  const others = {};
+  for (const m of LADDER) {
+    if (m === model || halted) continue;
+    others[m] = show(await call(tag, "blast." + m, "/models/" + m + ":generateContent",
+                                genOpts(KEY)), m.padEnd(24));
+  }
+  const anyOk = Object.keys(others).filter((m) => others[m].status === 200);
+  emit("  ANSWER TO C (daily case): " + (anyOk.length
+       ? "PER MODEL -- " + anyOk.join(", ") + " still answering"
+       : "EVERY other model refused too -- that is a PROJECT-level exhaustion, and it is what "
+         + "the 2026-08-26 cadet rows look like"),
+       anyOk.length ? "st-ok" : "st-warn");
+  return { model: model, okBefore: okCount, wall: first, recovered90: back.ok, blast: others };
+}
+
+// ── Registry ──────────────────────────────────────────────────────────────────────────────
+const EXPERIMENTS = [
+  { id: "wording", on: true, cost: "8 requests, no quota",
+    name: "E0 — what a rejected key actually says",
+    why: "set 10's classifier matches invented strings. Free: a rejected key never reaches a quota.",
+    run: expWording },
+  { id: "door", on: true, cost: "~5 requests",
+    name: "E1 — inventory + door-vs-use",
+    why: "can ListModels accept a key that generateContent refuses? Five cadets hit exactly that.",
+    run: expDoorVsUse },
+  { id: "minute", on: true, cost: "~20 requests",
+    name: "E2 — the per-minute wall + blast radius",
+    why: "re-measures rpmOf() and re-confirms that walking the ladder is the right response.",
+    run: expMinuteWall },
+  { id: "recovery", on: true, cost: "~24 requests over 2 min",
+    name: "E3 — how fast the minute wall clears",
+    why: "LADDER_WAIT_MS is 25s because one probe once measured 20.6s. Confirm it.",
+    run: expRecovery },
+  { id: "dayflash", on: true, cost: "~25 requests over ~8 min — KILLS FLASH FOR THE DAY",
+    name: "E4 — drive " + KILL_FLASH + " to its DAILY cap",
+    why: "the main event. Paced under the minute cap, so any refusal is the daily one. Answers A, B, C, D.",
+    run: () => expDailyKill(KILL_FLASH, 4, 40, "E4") },
+  { id: "daylite", on: false, cost: "up to 520 requests over ~35 min — KILLS LITE FOR THE DAY",
+    name: "E5 — drive " + KILL_LITE + " to its DAILY cap",
+    why: "RPD_LITE = 500 is documentation, never measured. Expensive; opt in deliberately.",
+    run: () => expDailyKill(KILL_LITE, 14, 560, "E5") },
+];
+
+function renderExps() {
+  $("exps").innerHTML = "";
+  EXPERIMENTS.forEach((e) => {
+    const d = document.createElement("label");
+    d.className = "exp";
+    d.innerHTML = '<input type="checkbox" data-id="' + e.id + '"' + (e.on ? " checked" : "") + ">"
+      + "<span><b>" + e.name + '</b><span class="cost">' + e.cost + "</span><span>"
+      + e.why + "</span></span>";
+    d.querySelector("input").addEventListener("change", (ev) => {
+      e.on = ev.target.checked; estimate();
+    });
+    $("exps").appendChild(d);
+  });
+  estimate();
+}
+function estimate() {
+  const n = EXPERIMENTS.filter((e) => e.on).length;
+  const kills = EXPERIMENTS.filter((e) => e.on && e.id.indexOf("day") === 0).map((e) => e.name);
+  $("estimate").innerHTML = n + " experiment(s) selected."
+    + (kills.length ? ' <span class="st-bad">This run will exhaust a model for the rest of the '
+        + "day (Pacific).</span>" : "");
+}
+
+// ── Driver ────────────────────────────────────────────────────────────────────────────────
+async function run() {
+  KEY = $("key").value.trim();
+  if (!KEY) { say("Paste a key first.", "st-bad"); return; }
+  cap = Math.max(10, Math.min(3000, parseInt($("budget").value, 10) || 700));
+  spent = 0; LOG = []; halted = false; running = true;
+  $("out").textContent = ""; bar();
+  $("run").disabled = true; $("halt").disabled = false;
+  $("dl").disabled = true; $("copy").disabled = true;
+
+  const verdicts = {};
+  emit("Gemini API truth harness — run started " + now());
+  emit("hard cap " + cap + " requests. Key is never stored, logged or downloaded.\n");
+
+  for (const e of EXPERIMENTS) {
+    if (!e.on) continue;
+    if (halted) break;
+    say("Running " + e.name + " — " + spent + "/" + cap + " requests spent", "st-warn");
+    try {
+      verdicts[e.id] = await e.run();
+    } catch (err) {
+      const m = String(err && err.message || err);
+      emit("\n  " + (m === "budget" ? "HARD CAP REACHED — stopping."
+                   : m === "halted" ? "STOPPED by operator."
+                   : "experiment threw: " + m), "st-bad");
+      verdicts[e.id] = { aborted: m };
+      if (m === "budget" || m === "halted") break;
+    }
+  }
+
+  emit("\n=== RUN COMPLETE — " + spent + " requests spent ===", "st-ok");
+  emit("Download the JSON. The transcript is the product of this page; the lines above are a "
+     + "convenience and the bodies below them are the evidence.", "st-dim");
+  window.__RESULT = {
+    tool: "test-gemini-api-truth.html",
+    startedAt: LOG.length ? LOG[0].t : now(),
+    finishedAt: now(),
+    requests: spent,
+    cap: cap,
+    ladder: LADDER,
+    verdicts: verdicts,
+    transcript: LOG,
+  };
+  running = false;
+  $("run").disabled = false; $("halt").disabled = true;
+  $("dl").disabled = false; $("copy").disabled = false;
+  say("Done. " + spent + " requests. Download the JSON.", "st-ok");
+}
+
+$("run").addEventListener("click", run);
+$("halt").addEventListener("click", () => { halted = true; say("Stopping…", "st-warn"); });
+$("dl").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(window.__RESULT, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "gemini-api-truth-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+$("copy").addEventListener("click", () => {
+  navigator.clipboard.writeText(JSON.stringify(window.__RESULT, null, 2))
+    .then(() => say("Copied to clipboard.", "st-ok"))
+    .catch(() => say("Clipboard refused — use Download instead.", "st-bad"));
+});
+window.addEventListener("beforeunload", (e) => {
+  if (running) { e.preventDefault(); e.returnValue = ""; }
+});
+
+renderExps();
+</script>
+</body>
+</html>

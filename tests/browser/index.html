@@ -47,6 +47,23 @@
   <p class="lede">Standalone preview pages driven by <b>synthetic data</b>. Director access only. Pick one:</p>
 
   <div class="links">
+    <a class="linkcard" href="test-gemini-api-truth.html">
+      <span class="ic">&#128300;</span>
+      <span class="t">Gemini API truth harness &mdash; capture what Google really says <b>(needs a DISPOSABLE API key)</b></span>
+      <span class="d">The rate-limit probe beside this one settled per-model-vs-per-project by
+        experiment, and settled it for good. Everything else about Google's refusals is still
+        <b>inferred</b>, and between 2026-08-25 and 2026-08-26 the tutor took four fix sets in two
+        days, each correcting the previous one's guess &mdash; ending with cadets being told to come
+        back tomorrow five turns into a lesson. This page removes the guessing: it paces requests
+        <b>deliberately under the per-minute cap</b>, so any refusal that arrives can only be the
+        <b>daily</b> one, and records the complete response &mdash; status, headers and body &mdash;
+        for every class of failure the tutor can hit. It also asks what a <b>rejected</b> key
+        actually says, which costs no quota at all and is what the shipped key-error classifier was
+        written without. <b>It exhausts a model on purpose</b>, so the key you paste is spent until
+        midnight Pacific: make a throwaway one. Capped, counted, stoppable; downloads the whole
+        transcript as JSON. Your key never leaves the tab and is not in the download.</span>
+    </a>
+
     <a class="linkcard" href="test-gemini-rate-limits.html">
       <span class="ic">📏</span>
       <span class="t">Gemini rate limits &mdash; measure them, stop guessing <b>(needs your API key)</b></span>

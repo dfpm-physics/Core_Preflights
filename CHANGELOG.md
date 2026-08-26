@@ -10,6 +10,70 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-26 — Matthew Recker via Claude
 
+### A testbed, because four fix sets in two days is the symptom and guessing is the disease
+
+**Asked for by the course director, in those terms:** *"This has to be tested to death… these
+constant failures and updates are unreasonable. If you need to create a test bed to run wild with
+my API token and learn everything you can about the API, make it happen."* Correct on both counts.
+
+**The record it is answering.** Sets 7, 9, 10 and 11 landed inside two days and each corrected the
+previous one's inference:
+
+| Set | What it assumed | How it was falsified |
+|---|---|---|
+| 7 | read `RetryInfo` and the `QuotaFailure` name | *(held — it was measured)* |
+| 9 | Google names the quota, so day vs minute is readable | the live log: **named in 0 of 885 rows** |
+| 10 | Google's wording for a bad key looks like *this* | never checked; the patterns are invented |
+| 11 | flash is 20/day, lite is 500/day | documentation, plus a probe that measured the **minute** wall and never exhausted a key |
+
+`tests/browser/test-gemini-rate-limits.html` settled per-model-vs-per-project by experiment and
+settled it permanently. **Every remaining constant is still a guess**, and cadets have been the
+ones finding out.
+
+**New: [`tests/browser/test-gemini-api-truth.html`](tests/browser/test-gemini-api-truth.html)**,
+linked from the sandbox index. Six experiments, each aimed at one shipped guess:
+
+- **E0 — what a rejected key actually says.** Trailing junk, a truncated key, an empty key, and a
+  non-key, through **both** `ListModels` and `generateContent`. **Costs no quota at all** — a
+  rejected key never reaches one — and it is precisely the evidence set 10's `keyErrorKind()` was
+  written without.
+- **E1 — inventory, and the door-vs-use asymmetry.** Five cadets on 2026-08-26 got a green
+  connection light and *"API key not valid"* on their first message; this asks whether `ListModels`
+  can accept a key `generateContent` then refuses.
+- **E2 — the per-minute wall, plus blast radius** — re-measures `rpmOf()` and re-confirms that
+  walking the ladder is the right response to a 429.
+- **E3 — how fast that wall clears.** `LADDER_WAIT_MS` is 25 s because one probe once measured
+  20.6 s.
+- **E4 — drive `gemini-3.5-flash` to its DAILY cap.** *The design point:* it paces at **4/min,
+  deliberately under the 5/min cap**, so any refusal that arrives **cannot** be the minute limit and
+  the only wall left standing is the daily one. That separation is what every set since 9 has been
+  guessing at. It then records the body verbatim, waits 90 s to see whether it recovers, and asks
+  every other model whether they went down with it.
+- **E5 — the same for `gemini-3.1-flash-lite`** (up to 520 requests, ~35 min), **off by default**.
+
+`gemini-3.5-flash` is the kill target rather than `3.6` so that an abandoned run still leaves the
+tutor's top rung alive on that key.
+
+**It spends real quota deliberately, and says so before you start** — question A cannot be
+answered any other way. A full run leaves that key's Flash models refusing until **midnight
+Pacific**. Everything is capped (hard stop, default 700), counted, stoppable, and every response is
+recorded whole — status, **headers** (no shipped code has ever read those) and parsed body — and
+downloads as JSON. **The transcript is the product; the on-screen verdicts are a convenience.**
+The key lives in one variable: never `localStorage`, never the URL, never in the download.
+
+**Verified in real Chrome:** page loads clean, 6 experiments render, the estimate line tracks
+selection, Run with no key refuses rather than throwing, and — checked explicitly by aborting any
+request to `googleapis` — **it makes zero network calls until you press Run**. Inline script passes
+`node --check`. Nothing links to it from the site; deleting it changes nothing.
+
+**What to do with it:** run E0–E4 on a throwaway key, download the JSON, and hand it back. The
+answers replace `RPD_FLASH`, `RPD_LITE`, `keyErrorKind()`'s patterns and set 11's whole fallback
+with measurements — at which point those branches stop being opinions.
+
+---
+
+## 2026-08-26 — Matthew Recker via Claude
+
 ### "Come back tomorrow" was being said on no evidence at all
 
 **Set 9 shipped this morning. By this evening the live log had falsified its main premise.**
