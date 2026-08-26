@@ -199,16 +199,29 @@ republish into the same offering, not a rebuild for a new one, so `activities.sl
   this course have an empty day map. `opens_at` left NULL, which selects the 7-day rolling window --
   for a 27 Aug deadline that opened on 20 Aug, so it is visible now.
 
-**Two things are still open, and both need a human.**
-1. **The claude.ai build is stale.** A published artifact cannot be edited in place; the
-   2026-08-20 URL still serves the old objective 3. Republishing mints a new claude.ai URL that has
-   to be written into `activities.content.artifact_url` and into BUILD-LOG.md. In practice cadets
-   are unaffected -- `site/student/lessons.html` shows one launch button and it is the Gemini one
-   wherever a build exists -- but the fallback is wrong until it is republished.
-2. **There is no written half.** Every other PHYS 310 lesson pairs the artifact with a Q1/Q2/Q3
-   written activity whose Q3 and expected response are hand-authored by the course director. That
-   cannot be invented, so lesson 8 has the interactive activity only. Activity `position` 1 was
-   left free at 0 for a written half to slot in.
+**The claude.ai artifact is deliberately NOT being republished.** Asked whether the Gemini build
+could ship without it -- *"Those aren't working on free accounts right now"* -- and the answer,
+checked in the code rather than assumed, is yes. `site/student/lessons.html` renders exactly one
+launch button: Gemini where `backupHref` is set, Claude only where it is null. This lesson has a
+Gemini build, so the Claude branch is unreachable for it; nothing cadet-facing under
+`site/student/` links to claude.ai; and the four claude.ai strings inside the build are comments,
+with `BACKUP_ENDPOINT`, the backup button and the handoff anchor all stripped by the porter. The
+2026-08-20 URL therefore keeps serving the old objective 3 and no cadet ever opens it. Recorded in
+BUILD-LOG.md as a decision, because written as an open task it would have sat in front of every
+future operator forever.
+
+**One trap came out of that, and it is the only real risk in this arrangement: do NOT null
+`activities.content.artifact_url`.** It reads as dead weight once Claude is unused. But
+`backupHref` is gated on `interactiveAvailable`, which is gated on `isArtifactLaunchable()`, which
+is nothing but `/^https?:\/\//i.test(artifact_url)` (`site/js/schema.js:516`) -- it never fetches
+the URL and cannot tell stale from current. Clear it and the Gemini button disappears, the Claude
+branch is taken with no URL to open, and **the lesson goes unreachable while the row still looks
+healthy**. The stale URL is load-bearing precisely because nothing reads it.
+
+**One thing is genuinely still open.** Every other PHYS 310 lesson pairs the artifact with a
+Q1/Q2/Q3 written activity whose Q3 and expected response are hand-authored by the course director.
+That cannot be invented, so lesson 8 has the interactive activity only. Activity `position` 1 was
+used, leaving 0 free for a written half to slot in.
 
 **Nothing was committed.** Another session was working in this same tree throughout -- 44 Gemini
 builds, `to_gemini.py` and `patch_tutor_diagnostics.py` were clean when this run started and

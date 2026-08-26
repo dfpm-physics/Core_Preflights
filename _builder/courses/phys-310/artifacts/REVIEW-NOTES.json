@@ -1,7 +1,7 @@
 {
  "schema": 1,
  "course": "phys-310",
- "updated": "2026-08-07",
+ "updated": "2026-08-26",
  "note": "Review decisions from scripts/review/serve_artifact_review.py. NOTHING HERE HAS BEEN APPLIED — these are instructions for a later edit, and the .jsx artifacts are untouched. Each objective carries the `sha` of the probe-topic prose it was judged against; if the artifact is rebuilt the sha stops matching and the note is stale (run the server with --stale to list those). Rejecting anything in a PUBLISHED artifact costs a republish and a new 8-hex slug per contract 3.2, which registers as a NEW lesson row.",
  "artifacts": {
   "phys310-atoms-and-nuclei-83022f32": {
@@ -72,7 +72,88 @@
    },
    "file": "phys310_preflight_cross_sections.jsx",
    "reviewed": "2026-08-06"
+  },
+  "phys310-radioactivity-77500fd7": {
+   "objectives": {
+    "decay-modes-and-balance": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "83f5629972eaa335",
+     "label": "Predicts decay mode from instability; balances A and Z",
+     "by": "Matthew Recker"
+    },
+    "chains-equilibrium-series": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "6ecb3af7cfcca6ff",
+     "label": "Reasons about decay chains and the natural series",
+     "by": "Matthew Recker"
+    },
+    "decay-law-and-activity": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "0bc3b89540c43d8b",
+     "label": "Uses the decay law; half-life is a rate, not a lifetime",
+     "by": "Matthew Recker"
+    }
+   },
+   "file": "phys310_preflight_radioactivity.jsx",
+   "reviewed": "2026-08-10"
+  },
+  "phys310-lab-1-measurement-of-half-life-11c49dbc": {
+   "objectives": {
+    "semilog-linearization-and-fit": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "584ce42280901103",
+     "label": "Linearizes the decay law and reads lambda, t-half and A-zero off a semi-log fit",
+     "by": "Matthew Recker"
+    },
+    "counting-statistics-and-background": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "be4514872268d4f8",
+     "label": "Puts an honest uncertainty on a count: sigma = sqrt(N), background subtraction, and what the fit quality means",
+     "by": "Matthew Recker"
+    },
+    "alara-time-distance-shielding": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "148114dffbd874d8",
+     "label": "Applies ALARA - time, distance and shielding - to their own bench work",
+     "by": "Matthew Recker"
+    }
+   },
+   "file": "phys310_preflight_lab_1_measurement_of_half_life.jsx",
+   "reviewed": "2026-08-19"
+  },
+  "phys310-nuclear-reactions-d02377ad": {
+   "objectives": {
+    "q-value-and-threshold": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "f9c3b37a1b2083e2",
+     "label": "Balances a reaction; reads the Q-value sign and threshold",
+     "by": "Matthew Recker"
+    },
+    "capture-activation-breeding": {
+     "decision": "rejected",
+     "comment": "Replace with reaction rates",
+     "sha": "f11c2e97f7de601b",
+     "label": "Traces what neutron absorption produces",
+     "by": "Matthew Recker"
+    },
+    "elastic-scattering-moderation": {
+     "decision": "accepted",
+     "comment": "",
+     "sha": "6edd3ba2b816465e",
+     "label": "Explains why light nuclei slow neutrons and heavy ones do not",
+     "by": "Matthew Recker"
+    }
+   },
+   "file": "phys310_preflight_nuclear_reactions.jsx",
+   "reviewed": "2026-08-26"
   }
  },
- "revision": 6
+ "revision": 21
 }

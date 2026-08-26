@@ -63,7 +63,7 @@ moment to catch a reconstruction error is before any of these is published.**
 | **Blocked — no reading assigned** | **1** (Admin Overview — the reading is the syllabus), **16** (Lab 2), **20** (Lab 3). All three are `PF = Y` in the schedule, so none is a deliberate skip. Blocked on recker to say what they should cover, or to mark them `PF = N` |
 | **Not a preflight** | 5, 7, 11, 12, 17, 21, 22, 23, 27, 28, 29, 30, 33–41 — lectures, field trips, Graded Reviews, case-study days, the final |
 | **Published** | **4 of 17.** Lessons 2, 3, 4 and **6 (Lab 1, published 2026-08-19)**. The first three were REPUBLISHED on 2026-08-14 carrying the backup-version button, and their `artifact_url` repointed the same day. *(This row said "1 of 17, lesson 2 only" until 2026-08-14: lessons 3 and 4 had been published and registered in the database, and nothing updated this log. `index.json` is DERIVED from this file, so the staleness propagated into Storage on the next push.)* |
-| **Registered on the DFPM site** | **none.** Not one lesson row exists for this course, and `course_id: phys-310` has never been confirmed to exist on the receiver at all |
+| **Registered on the DFPM site** | **6 of 17** — lessons 1, 2, 3, 4, 6 and, as of 2026-08-26, **8**. *(This row said "none. Not one lesson row exists for this course, and `course_id: phys-310` has never been confirmed to exist on the receiver at all" until 2026-08-26. Both halves were wrong by then: the course offering `5d8d5b43-9b84-40ce-a288-71a4880518f1` exists, carries one section `T3A`, and lessons 1—6 were already registered and published. Nothing updated this row when they were.)* |
 
 **Seventeen lessons in this course can hold a preflight**, not twenty. The schedule marks twenty
 `PF = Y`; three of those assign no reading and have no corpus entry.
@@ -396,14 +396,85 @@ concrete reason a step in the procedure exists.
 | **Cross-check** | DOE NP-02 covers Q-values, scattering and capture; **explicitly thin on §4.4** per the corpus's own note |
 | **Cadets' reading** | Murray & Holbert 4.1–4.4 |
 | **Probe topics** | 3 · ~3 active min each · ~10 min — **§4.4 is grounded and deliberately unprobed** |
-| **Checks** | `check_artifact.py` 37/37, plus forbid-scans for the base lesson's slug, suffix, constants and objective keys. Re-verified independently: 37/37, LF, 0 NUL |
-| **Status** | **DRAFT** — not reviewed, not published, not registered |
+| **Checks** | `check_artifact.py` 37/37 on the 2026-08-26 rebuild, plus forbid-scans for the base lesson's slug, suffix, constants and objective keys. Gemini build rendered in real Chrome, `tests/browser-harness/gemini-build.mjs` 7/7 |
+| **Status** | **REVIEWED 2026-08-26** — objectives 1 and 2 accepted, objective 3 REJECTED and rebuilt (below). Published build on claude.ai is 2026-08-20 and therefore **STALE**: it still runs the old objective 3. **Registered 2026-08-26** as `lesson-08`, due Thu 27 Aug 0930 MDT. Cadets reach it through the **Gemini build**, which is current |
+| **Gemini build** | `site/gemini/phys-310/phys310-nuclear-reactions-d02377ad.html` — ported 2026-08-26 from the rebuilt source, same slug. This is the default door, so it is the build cadets actually get |
 
 | # | key | label |
 |---|---|---|
 | 1 | `q-value-and-threshold` | Balances a reaction; reads the Q-value sign and threshold |
 | 2 | `elastic-scattering-moderation` | Explains why light nuclei slow neutrons and heavy ones do not |
-| 3 | `capture-activation-breeding` | Traces what neutron absorption produces |
+| 3 | `reaction-rate-ingredients` | Reasons out what sets how often a reaction happens |
+
+#### Objective 3 replaced, 2026-08-26 — capture/activation/breeding → reaction rates
+
+**recker's review decision, recorded in `REVIEW-NOTES.json`:** objective 3
+`capture-activation-breeding` **rejected**, comment *"Replace with reaction rates"*. Objectives 1
+and 2 accepted unchanged.
+
+**The instruction crosses a lesson boundary, which is why the replacement is a BRIDGE and not a
+transplant.** Reaction rate is `R = Σφ`, and it lives in corpus **§4.5** — the reading for
+**lesson 9, Mon 31 Aug**. A cadet sitting this preflight on 27 Aug has read 4.1—4.4 and nothing
+else. Grading them on σ, the barn and Σ would be grading work they were never assigned. Confirmed
+with recker before the edit; he chose the bridge depth and chose to let capture/breeding go rather
+than add a fourth topic.
+
+**What topic 3 now does.** The cadet is asked what they would need to know to predict how many
+reactions happen per second in a real block of material, and reasons out three ingredients from
+material they *have* read: how many target nuclei are in the way (number density, from lesson 2),
+how many neutrons are arriving, and how likely one neutron meeting one nucleus is to react. The
+third is the load-bearing one, and it carries two corrections — that `Q > 0` does not mean it
+happens, and that the likelihood is **not** the physical size of the nucleus. The lever for the
+second is a comparison the cadet can check in their own reading: **boron-10 is a small nucleus and
+an outstanding absorber**, which is why §4.3 singles it out for control rods.
+
+**The vocabulary is spoken exactly once, at the end.** After the reasoning has arrived — and only
+then — the tutor names σ, the barn, Σ = Nσ and R = Σφ in one breath, says they are next lesson's
+business, and stops. No values, no 1/v law, no resonances, no mean free path, no worked rate.
+`TEXTBOOK_REFERENCE` carries a §4.5 block **labelled CARRIED**, exactly the way the nuclide masses
+are, with three rules on it: name never teach, nothing beyond the names, and **never grade on the
+vocabulary**. A cadet who built all three ingredients and had never heard the word "barn" has the
+objective completely.
+
+**What moved with it.** Header comment (the four-into-three note now covers §4.3 as well, plus the
+directed-change record) · `OBJECTIVE_KEYS` · the §4.3 "how likely" bullet, which was a hard
+do-not-say boundary and is now the topic's on-ramp · a new carried §4.5 reference block · probe
+topic 3, rewritten in full · misconception 3 (`Q > 0 means it happens`), reframed from boundary to
+on-ramp · misconception 6, replaced with "a bigger nucleus is a bigger target" — the old
+capture-changes-the-element error stays flagged inside the reference, where the chain is written
+out · prerequisites, which now name number density · `scope_note`, where capture/activation/breeding
+became a GROUNDED-BUT-NOT-PROBED block and the cross-section boundary was rewritten as the topic-3
+handover line.
+
+**Checks:** `check_artifact.py` 37/37, LF preserved, 0 NUL, `INTERACTION_ID` byte-identical.
+138,479 → 146,584 bytes. **The slug did NOT change and must not** — this is a patched republish
+into the same offering, not a rebuild for a new one, so `activities.slug` stays
+`phys310-nuclear-reactions-d02377ad` and the lesson keeps one row.
+
+> **⚠ The claude.ai build is stale, and recker decided on 2026-08-26 NOT to republish it. That is
+> a decision, not an outstanding task — do not "fix" it.** *"Can I make the gemini version and not
+> post the claude version? Those aren't working on free accounts right now."* Free-tier Claude is
+> timing cadets out, which is the same reason the site reversed its default on 2026-08-21. So the
+> 2026-08-20 URL keeps serving the OLD objective 3 forever, and no cadet ever opens it.
+>
+> **Verified in the code, not assumed.** `site/student/lessons.html` renders exactly ONE launch
+> button: Gemini where `backupHref` is set, Claude only where it is null. This lesson has a Gemini
+> build, so the Claude branch is unreachable for it. Nothing cadet-facing anywhere under
+> `site/student/` links to claude.ai, and the four claude.ai strings inside the Gemini build are
+> comments. The porter strips `BACKUP_ENDPOINT`, the backup button and the mid-lesson handoff
+> anchor, so the build has no path back either.
+>
+> **THE TRAP, AND IT IS THE ONLY REAL RISK HERE: do NOT null `activities.content.artifact_url`.**
+> It is tempting — the Claude build is stale and unused, so the field looks like dead weight. But
+> `backupHref` is gated on `interactiveAvailable`, which is gated on `isArtifactLaunchable()`, which
+> is nothing but `/^https?:\/\//i.test(artifact_url)` (`site/js/schema.js:516`). It never fetches
+> the URL and cannot tell stale from current. Clear it and `backupHref` goes null, the Gemini button
+> disappears, the Claude branch is taken with no URL to open, and **the lesson becomes unreachable**
+> — with the row still looking perfectly healthy. The stale URL is load-bearing precisely because
+> nothing reads it.
+>
+> If this lesson is ever rebuilt for a LATER OFFERING, that is a different case: contract §3.2 mints
+> a new slug, a new lesson row, and a fresh publish, and none of the above applies.
 
 **Extension problems:** A balance B-10(n,α)?, Be-9(α,n)? and the full breeding chain, sorting
 reactions from decays (approachable) · B minimum retained-energy fraction for deuterium (0.111) and
