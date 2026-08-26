@@ -3117,7 +3117,10 @@ function diagSnapshot(err) {
   const obj = {
     v: 1,
     slug: INTERACTION_ID,
-    cadet_id: diagState.cadet || null,
+    // TWO CLAIMS, not one. This surface collects a last name; a numeric ID would go in
+    // cadet_id, and sending the name there stored NULL for every row until 2026-08-25.
+    cadet_id: null,
+    cadet_ref: diagState.cadet || null,
     at: new Date().toISOString(),
     kind: (err && err.kind) || "unknown",
     http_status: (err && err.status) || 0,
@@ -3152,7 +3155,7 @@ function diagText(o) {
   const lines = [
     "PREP tutor error -- show this to your instructor",
     "lesson  : " + o.slug,
-    "cadet   : " + (o.cadet_id || "-"),
+    "cadet   : " + (o.cadet_ref || o.cadet_id || "-"),
     "when    : " + o.at,
     "error   : " + o.kind + "   HTTP " + o.http_status
       + (o.finish_reason ? "   finish=" + o.finish_reason : ""),

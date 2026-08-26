@@ -16,7 +16,7 @@
     .te-list { border: 1px solid var(--border); border-radius: var(--radius);
       background: var(--card); box-shadow: var(--shadow-sm); overflow: hidden; }
     .te-head, .te-row { display: grid;
-      grid-template-columns: 132px 96px minmax(150px, 1.6fr) minmax(120px, 1fr) 104px 92px;
+      grid-template-columns: 132px 124px minmax(150px, 1.6fr) minmax(120px, 1fr) 104px 92px;
       gap: 12px; align-items: center; padding: 9px 14px; }
     .te-head { background: var(--surface-sunken); border-bottom: 1px solid var(--border);
       font-size: 0.7em; letter-spacing: 0.09em; text-transform: uppercase;
@@ -96,7 +96,7 @@
       const lines = [
         'when    : ' + r.logged_at,
         'lesson  : ' + r.slug,
-        'cadet   : ' + (r.cadet_id ?? '-'),
+        'cadet   : ' + (r.cadet_ref || r.cadet_id || '-'),
         'error   : ' + r.kind + '   HTTP ' + r.http_status +
           (r.finish_reason ? '   finish=' + r.finish_reason : ''),
         'model   : ' + (r.model || '-'),
@@ -125,7 +125,9 @@
       const kinds = [...new Set(state.rows.map((r) => r.kind))].sort();
       const slugs = [...new Set(state.rows.map((r) => r.slug))].sort();
       // Cadets, not rows: one cadet who hit the same wall fifteen times is one problem.
-      const cadets = new Set(rows.map((r) => r.cadet_id).filter(Boolean)).size;
+      // cadet_ref is what these pages actually collect -- a last name. cadet_id stays for
+      // any surface that has a real numeric ID. Count by whichever identifies the row.
+      const cadets = new Set(rows.map((r) => r.cadet_ref || r.cadet_id).filter(Boolean)).size;
 
       main.innerHTML = `
         <h1>Tutor errors</h1>
@@ -169,7 +171,7 @@
           ${rows.map((r, i) => `
             <button class="te-row" data-i="${i}" aria-expanded="${state.open === i}">
               <span class="te-cell te-mono">${esc(fmt(r.logged_at))}</span>
-              <span class="te-cell te-mono">${r.cadet_id ?? '&mdash;'}</span>
+              <span class="te-cell te-mono">${esc(String(r.cadet_ref || r.cadet_id || '—'))}</span>
               <span class="te-cell">${esc(r.slug)}</span>
               <span class="te-cell te-mono">${esc(r.model || '-')}</span>
               <span class="te-cell te-mono">${esc(r.phase || '-')}${r.turn ? ' t' + r.turn : ''}</span>

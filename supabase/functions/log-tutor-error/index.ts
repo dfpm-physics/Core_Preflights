@@ -121,7 +121,13 @@ serve(async (req) => {
     // is a deliberate act; nothing arrives by being forgotten.
     const row = {
       slug,
+      // TWO DIFFERENT CLAIMS, not one. The backup lesson pages collect a LAST NAME, not an
+      // ID -- so `cadet(...)` parsed a surname to NaN and stored NULL, and every row logged
+      // before 2026-08-25 is anonymous. `cadet_ref` keeps what was actually typed; `cadet_id`
+      // stays for any surface that really does have a numeric ID. Accept the name under either
+      // key, because the client sent it as cadet_id first.
       cadet_id: cadet(p.cadet_id),
+      cadet_ref: str(p.cadet_ref, 80) ?? str(p.cadet_id, 80),
       kind: str(p.kind, 40) ?? "unknown",
       http_status: int(p.http_status, 0, 599),
       finish_reason: str(p.finish_reason, 60),

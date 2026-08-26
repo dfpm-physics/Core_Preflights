@@ -103,6 +103,48 @@ Two causes, and the first one arrived with this morning's fix.
   and let their reply choose the next question. Kept to three clauses on purpose: it rides on every
   turn, and a per-turn note that grows into a second prompt starts competing with the first.
 
+### The error log could not name the cadet it was logging
+
+Found by reading a cadet's screenshot, not by any check. The backup lesson page asks for a **last
+name** — *"Enter your last name so your instructor can match this report to you"* — held in a state
+variable called `cadetId` whose own comment reads *"holds the last name; do NOT rename"*. The
+diagnostics read that variable and sent it as `cadet_id`, which the edge function parses by
+stripping non-digits. A surname parses to NaN and stores as **NULL**.
+
+**So every row logged since the feature shipped this morning is anonymous** — the single thing the
+feature existed to prevent. The instructor report that started all of this was *"I am collecting a
+list of names after class"*; the log was collecting no names at all.
+
+Nothing errored, and that is why it survived a full end-to-end verification. `cadet_id` is nullable,
+NULL is what a genuine pre-sign-in error looks like, and the **on-screen panel showed the name
+correctly the whole time** — so a cadet's screenshot was attributable while the server's copy of the
+same event was not.
+
+`022_tutor_error_log_cadet_ref.sql` adds `cadet_ref text` (**written, NOT applied**). `cadet_id`
+stays for any surface that has a real numeric ID; these are two different claims and collapsing them
+would lose the ability to tell an ID from a surname later. The edge function accepts the name under
+either key, the client sends it as `cadet_ref`, and the panel line is relabelled — *"cadet:
+Wierzbanowski"* printed under a heading of `cadet_id` is what made this invisible.
+
+*Storing a name is permitted: CORE.md §3 as amended 2026-08-17. The rule that a name must not stand
+in "where the cadet ID would carry the same meaning" does not bite, because this surface never
+collects an ID — the name IS what the whole interactive path matches on. Free-text student writing
+paired with an identity is still barred and still has nowhere to go. Rows logged before 022 cannot
+be back-filled; the name was discarded client-side at parse time.*
+
+### The billing screenshot, and what it actually means
+
+A cadet reported *"it says the billing is unavailable when it should be the free tier. It worked
+last class but now it is not working."* Their AI Studio screenshot shows the project **`Restricted`**
+with **Billing Tier: Unavailable**. That is Google refusing the account the API, not a PREP fault and
+not something a key can be re-pasted around — it is the account-restriction case flagged as the
+likeliest cause of the *"cannot create a key"* reports back on the first diagnosis.
+
+**They already have a route and it needed no work.** `preflight-08` carries both activities,
+published, visible, both `grading_role='graded'`, with the written path marked
+`access = by_permission` (2026-08-24, commit `a571cd9`). Verified live over `prep_app_read`. The
+cadet does the written PREP for full credit once their instructor says yes.
+
 ### The tutor spoke a notation the cadets do not read, then asked the same question five times
 
 A second real session, straight after the fix above. **The Socratic change worked** — one question

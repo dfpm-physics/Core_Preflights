@@ -815,12 +815,53 @@ def apply_notation(raw):
     return p.buf, p.applied
 
 
+# --- SET 4: the log could not name the cadet it was logging --------------------------------
+# Own sentinel again; sets 1-3 had already shipped.
+#
+# The backup lesson page asks for a LAST NAME -- "Enter your last name so your instructor can
+# match this report to you" -- and holds it in a state variable called `cadetId`, whose own
+# comment reads "holds the last name; do NOT rename". Set 1 read that variable and sent it as
+# `cadet_id`, which the edge function parses by stripping non-digits. A surname parses to NaN
+# and stores as NULL.
+#
+# So every row logged since the feature shipped is anonymous, which is the single thing the
+# feature existed to prevent. Nothing errored: `cadet_id` is nullable, NULL is what a genuine
+# pre-sign-in error looks like, and the ON-SCREEN panel showed the name correctly the whole
+# time -- so a cadet's screenshot was attributable while the server's copy of the same event
+# was not. Found by reading a cadet's screenshot, not by any check.
+#
+# `cadet_ref` (migration app/022) keeps what was typed. The panel line is relabelled to match,
+# because "cadet: Wierzbanowski" under a heading of `cadet_id` is what made this invisible.
+
+CADETREF_MARKER = b"cadet_ref: diagState.cadet"
+
+OLD_SENDID = rb"""    cadet_id: diagState.cadet || null,"""
+NEW_SENDID = rb"""    // TWO CLAIMS, not one. This surface collects a last name; a numeric ID would go in
+    // cadet_id, and sending the name there stored NULL for every row until 2026-08-25.
+    cadet_id: null,
+    cadet_ref: diagState.cadet || null,"""
+
+OLD_PANELID = rb"""    "cadet   : " + (o.cadet_id || "-"),"""
+NEW_PANELID = rb"""    "cadet   : " + (o.cadet_ref || o.cadet_id || "-"),"""
+
+
+def apply_cadet_ref(raw):
+    """Set 4. Separate sentinel: sets 1-3 shipped to all 44 before this existed."""
+    if CADETREF_MARKER in raw:
+        return raw, ["already"]
+    p = Patcher(raw, None)
+    p.sub("send-cadet-ref", OLD_SENDID, NEW_SENDID)
+    p.sub("panel-cadet-ref", OLD_PANELID, NEW_PANELID)
+    return p.buf, p.applied
+
+
 def patch_one(path, verbose=False):
     raw = path.read_bytes()
     buf, applied = apply_fixset(raw)
     buf, applied2 = apply_socratic(buf)
     buf, applied3 = apply_notation(buf)
-    applied = applied + applied2 + applied3
+    buf, applied4 = apply_cadet_ref(buf)
+    applied = applied + applied2 + applied3 + applied4
     if verbose:
         for a in applied:
             print("      . " + a)
