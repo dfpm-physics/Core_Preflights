@@ -8,6 +8,79 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-27 — Matthew Recker via Claude
+
+### The same carry, the opposite direction, and opposite rules
+
+**PHYS 310 lesson 10, Neutron Transport.** recker replaced objective 3 -- out went
+`flux-versus-current-and-leakage`, in came **`moderation-and-collision-count`**, *"Explains why
+light nuclei slow neutrons and heavy ones do not"* -- and asked that it reach for **why alpha for
+water sits close to alpha for H-1 rather than O-16**, because the lesson's own deck asks that
+outright and it is why water is the moderator. Objectives 1 and 2 untouched.
+
+**Moderation is section 4.2, which is LESSON 8's reading, so this carry runs BACKWARDS -- and that
+is the safe direction.** The cadet has already read it and was already probed on it in lesson 8 as
+`elastic-scattering-moderation`. So this is **revision**: ask freely, grade normally, correct
+errors. It is the exact opposite of lesson 8's own third topic, rebuilt yesterday, which reaches
+FORWARD into 4.5 and may therefore only name its vocabulary and never grade on it. **The two carries
+look identical in a diff and are governed by opposite rules**, so both artifacts now say which they
+are, in those words, in their scope notes.
+
+**Section 4.2 is carried into `TEXTBOOK_REFERENCE` and labelled** -- following the pattern this
+artifact already used for lambda = 1/Sigma, which it carries from 4.5. It brings
+alpha = ((A-1)/(A+1))^2 with H->0, C->0.716, U-238->0.983; the bound-not-typical reading; xi and the
+collision count; and the thermal reference.
+
+**The water half is reasoned out, not quoted, because the corpus does not answer it.** The tutor
+works alpha for O-16 from the formula -- (15/17)^2 = 0.7785, the same value lesson 8's extension
+problem B derives -- then asks which nucleus a neutron in water keeps hitting. Two reasons and the
+cadet should find both: two hydrogens per oxygen, and hydrogen scatters strongly at about 20 barns,
+which is in 4.6 and therefore in last lesson's reading. **What the tutor does not have is a
+scattering cross section for oxygen, or a moderating ratio or slowing-down power for anything**, so
+it is instructed to refuse to rank moderators numerically or quote a figure for heavy water or
+graphite. Notation: the deck writes `C = ln(E0/E_F)/xi` and lesson 8 wrote `n = ln(E0/E_th)/xi`; the
+tutor is told they are one equation and to accept either without correcting the letters.
+
+**Two consequences, both deliberate, both recorded on the lesson 10 row in `BUILD-LOG.md`.**
+Flux-versus-current, Fick's law and leakage-as-a-surface-effect are **no longer probed anywhere in
+this course** -- they stay in the reference in full and move to `scope_note` as engage-if-raised,
+and topic 1 still teaches that flux is not a flow, so a cadet who reaches for the current is told
+they have found the right next question. And **a cadet now meets the moderation argument twice in
+three lessons**, in 8 and again here; that is spaced revision plus a question lesson 8 never asked,
+not a duplication. Worth knowing before anyone edits either: **if lesson 8's topic 2 is ever changed
+or dropped, this lesson stops being revision and becomes first contact.**
+
+**Ten anchored bytes-only edits**, every anchor asserted to appear exactly once. `check_artifact.py`
+37/37, LF preserved, 0 NUL, 139,297 -> 148,257 bytes. **`INTERACTION_ID` byte-identical** --
+a patched republish into the same offering keeps its slug, so `phys310-neutron-transport-4ecf35e0`
+still owns one lesson row.
+
+**Ported, uploaded, registered.**
+- **Gemini build** `site/gemini/phys-310/phys310-neutron-transport-4ecf35e0.html`, 241 KB, same
+  slug, carrying the new objective key and both derived values. Rendered in real Chrome via
+  `tests/browser-harness/gemini-build.mjs`: **7/7**. **Not run against a live Gemini key** -- CORE.md
+  section 2 says to say so. 47 builds in `backup-builds.json`.
+- **Artifact library**: three objects pushed, round trip verified byte-for-byte
+  (sha256 `8a6b6766ce9aefe2`), and `status` now reports 0 of 106 pending.
+- **Registered live as `lesson-10`**, 3 points, `grading_mode='points'`, one graded interactive
+  activity -- the same shape as lessons 6, 8 and 9. Lesson 10 meets Wed 02 Sep, so the deadline is
+  this course's normal **1959 America/Denver the night before**: Tue 01 Sep 19:59:59 MDT, stored as
+  `2026-09-02 01:59:59+00`, the same `<lesson date> 01:59:59Z` shape as lessons 2, 3, 4 and 9.
+  `due_by_day` and the per-section row both written; still 0 empty day maps in this course.
+  `opens_at` NULL, so the 7-day window opened 25 Aug and it is visible now.
+
+**The claude.ai build is stale and is deliberately not being republished**, by the standing decision
+of 2026-08-26 -- free-tier Claude is timing cadets out, and `lessons.html` takes the Claude branch
+only where no Gemini build exists. The same trap applies: **do not null
+`activities.content.artifact_url`**, because `isArtifactLaunchable()` only tests that the string
+looks like a URL, so clearing it hides the Gemini button and makes the lesson unreachable while the
+row still looks healthy.
+
+**Still open, unchanged from lessons 8 and 9: no written half.** The Q3 and its expected response
+are the course director's to author. Activity `position` 1 was used again, leaving 0 free.
+
+---
+
 ## 2026-08-26 — Matthew Recker via Claude
 
 ### The far side of the bridge, shipped unchanged

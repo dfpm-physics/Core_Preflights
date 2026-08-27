@@ -63,7 +63,7 @@ moment to catch a reconstruction error is before any of these is published.**
 | **Blocked — no reading assigned** | **1** (Admin Overview — the reading is the syllabus), **16** (Lab 2), **20** (Lab 3). All three are `PF = Y` in the schedule, so none is a deliberate skip. Blocked on recker to say what they should cover, or to mark them `PF = N` |
 | **Not a preflight** | 5, 7, 11, 12, 17, 21, 22, 23, 27, 28, 29, 30, 33–41 — lectures, field trips, Graded Reviews, case-study days, the final |
 | **Published** | **4 of 17.** Lessons 2, 3, 4 and **6 (Lab 1, published 2026-08-19)**. The first three were REPUBLISHED on 2026-08-14 carrying the backup-version button, and their `artifact_url` repointed the same day. *(This row said "1 of 17, lesson 2 only" until 2026-08-14: lessons 3 and 4 had been published and registered in the database, and nothing updated this log. `index.json` is DERIVED from this file, so the staleness propagated into Storage on the next push.)* |
-| **Registered on the DFPM site** | **7 of 17** — lessons 1, 2, 3, 4, 6 and, as of 2026-08-26, **8 and 9**. *(This row said "none. Not one lesson row exists for this course, and `course_id: phys-310` has never been confirmed to exist on the receiver at all" until 2026-08-26. Both halves were wrong by then: the course offering `5d8d5b43-9b84-40ce-a288-71a4880518f1` exists, carries one section `T3A`, and lessons 1—6 were already registered and published. Nothing updated this row when they were.)* |
+| **Registered on the DFPM site** | **8 of 17** — lessons 1, 2, 3, 4, 6, plus **8 and 9** on 2026-08-26 and **10** on 2026-08-27. *(This row said "none. Not one lesson row exists for this course, and `course_id: phys-310` has never been confirmed to exist on the receiver at all" until 2026-08-26. Both halves were wrong by then: the course offering `5d8d5b43-9b84-40ce-a288-71a4880518f1` exists, carries one section `T3A`, and lessons 1—6 were already registered and published. Nothing updated this row when they were.)* |
 
 **Seventeen lessons in this course can hold a preflight**, not twenty. The schedule marks twenty
 `PF = Y`; three of those assign no reading and have no corpus entry.
@@ -634,14 +634,73 @@ per §4.6's Flags — grounded in full, engage-if-raised, walled off from reacti
 | **Cross-check** | DOE NP-02 covers flux, reaction rate and mean free path; not consulted directly |
 | **Cadets' reading** | Murray & Holbert 4.7 |
 | **Probe topics** | 3 · ~3 active min each · ~10 min |
-| **Checks** | `check_artifact.py` 43 passed / 0 failed (37 base + 6 `--forbid` scans covering **both** the structural base and lesson 9's slug). Re-verified independently: 37/37, LF, 0 NUL |
-| **Status** | **DRAFT** — not reviewed, not published, not registered |
+| **Checks** | `check_artifact.py` 37/37 on the 2026-08-27 rebuild, LF preserved, 0 NUL, `INTERACTION_ID` byte-identical. Gemini build rendered in real Chrome, `tests/browser-harness/gemini-build.mjs` 7/7. *(The pre-rebuild run was 43 passed / 0 failed — 37 base plus 6 `--forbid` scans covering the structural base and lesson 9's slug.)* |
+| **Status** | **REVISED 2026-08-27** — objective 3 replaced on the course director's direction (below). Published build on claude.ai is 2026-08-20 and therefore **STALE**: it still runs the old objective 3. **Registered 2026-08-27** as `lesson-10`, due Tue 01 Sep 1959 MDT. Cadets reach it through the **Gemini build**, which is current |
+| **Gemini build** | `site/gemini/phys-310/phys310-neutron-transport-4ecf35e0.html` — ported 2026-08-27 from the rebuilt source, same slug. This is the default door, so it is the build cadets actually get |
+
+#### Objective 3 replaced, 2026-08-27 — flux vs. current / leakage → moderation and the collision count
+
+**recker's direction, given in session rather than through the review page:** replace objective 3
+with `moderation-and-collision-count`, *"Explains why light nuclei slow neutrons and heavy ones do
+not"*, and reach for **why α for water sits close to α for H-1 rather than O-16 — the deck asks
+this outright, and it is why water is the moderator.** Objectives 1 and 2 untouched.
+
+**This crosses a reading boundary BACKWARDS, and that is the safe direction.** Moderation is corpus
+**§4.2**, which is **lesson 8's** reading. The cadet has already read it and was already probed on it
+there, as `elastic-scattering-moderation`. So this is **revision, and the ordinary rules apply**:
+ask freely, grade normally, correct errors. It is the exact opposite case from lesson 8's own third
+topic, which reaches FORWARD into §4.5 and may therefore only name its vocabulary and never grade on
+it. Both artifacts now say so in their scope notes, in those terms, because the two carries look
+identical in a diff and are governed by opposite rules.
+
+**§4.2 is carried into `TEXTBOOK_REFERENCE` and labelled as carried** — following the pattern this
+artifact already used for λ = 1/Σ, which is carried from §4.5. It brings α = ((A-1)/(A+1))² with
+H→0, C→0.716, U-238→0.983; the bound-not-typical reading; ξ and the collision count; and the
+0.025 eV / 2200 m/s reference the file already had.
+
+**The water half is reasoned, not quoted, because the corpus does not answer it.** The tutor works
+α for O-16 from the formula — (15/17)² = 0.7785, the same value lesson 8's extension problem B
+derives — and then asks which nucleus a neutron in water keeps hitting. Two reasons, and the cadet
+should find both: **two hydrogens per oxygen**, and **hydrogen scatters strongly at about 20 barns**,
+which is in §4.6 and therefore in last lesson's reading. **What the tutor does not have is any
+scattering cross section for oxygen, and no moderating ratio or slowing-down power for anything**,
+so it is instructed to refuse to rank moderators numerically or quote a figure for heavy water or
+graphite. The honest answer is the mechanism, not a league table.
+
+**Notation.** The deck writes the collision count `C = ln(E₀/E_F)/ξ`; lesson 8 wrote the same
+relation as `n = ln(E₀/E_th)/ξ`. The tutor is told they are one equation and to accept either from a
+cadet without correcting the letters.
+
+**What was given up, deliberately.** Flux-versus-current, Fick's law and leakage-as-a-surface-effect
+are no longer probed **anywhere in this course**. They stay in `TEXTBOOK_REFERENCE` in full and move
+to `scope_note` as engage-if-raised, so the tutor still handles them well — and topic 1 still
+teaches that flux is not a flow, so a cadet who reaches for the current from there is told they have
+found the right next question. The leakage misconception left the diagnostic list for the same
+reason and was replaced by the two moderation ones (heavy nuclei as good moderators; α read as
+typical rather than as a bound).
+
+**A cadet now meets the moderation argument twice in three lessons**, in lesson 8 and again here.
+That is the point rather than a duplication — spaced revision plus the deck's water question, which
+lesson 8 never asked. It is worth knowing before anyone edits either lesson: **if lesson 8's topic 2
+is ever changed or dropped, this lesson stops being revision and becomes first contact.**
+
+**What moved.** Header comment · `OBJECTIVE_KEYS` · a new carried §4.2 reference block ·
+`reading_assignment` (it now declares two carries, not one) · probe topic 3, rewritten in full ·
+misconception 6 · prerequisites (the 1-D elastic collision is now load-bearing; slowing-down moved
+from background to topic content) · two `scope_note` blocks. 139,297 → 148,257 bytes.
+
+> **⚠ The claude.ai build is stale, and by the same standing decision as lesson 8 it is NOT being
+> republished** — free-tier Claude is timing cadets out (CHANGELOG 2026-08-26). `lessons.html`
+> renders one launch button and takes the Claude branch only where no Gemini build exists, and this
+> lesson has one. **Do NOT null `activities.content.artifact_url` to tidy it up**: `backupHref` is
+> gated on `isArtifactLaunchable()`, which only tests that the string looks like a URL, so clearing
+> it hides the Gemini button and makes the lesson unreachable while the row still looks healthy.
 
 | # | key | label |
 |---|---|---|
 | 1 | `flux-scalar-path-swept` | Reads flux as path length swept, not as a flow |
 | 2 | `reaction-rate-and-mean-free-path` | Uses Σφ as a rate and 1/Σ as a distance |
-| 3 | `flux-versus-current-and-leakage` | Separates flux from current; reads leakage as a surface effect |
+| 3 | `moderation-and-collision-count` | Explains why light nuclei slow neutrons and heavy ones do not |
 
 **Extension problems:** A n = 1.0×10⁸/cm³ at 2200 m/s → φ = 2.2×10¹³, then whether the answer changes
 if all the neutrons go one way — **no** — and what does (approachable) · B *free of what?* — λ_s ≈
