@@ -142,6 +142,20 @@ export const USER_MENU_LINKS = [
   // two together is how somebody lands on the raw table browser looking for their password.
   { key: 'system',  label: 'System',  href: 'system.html',  icon: 'settings', emoji: '🛠️',
     adminOnly: true, facultyOnly: true, groupBefore: true },
+  /* System health -- completion and what is currently broken, across every active course.
+   *
+   * `directorOnly`, not `adminOnly`: directors were added on the course director's call
+   * 2026-08-27, having been admin-only for its first day. Plain instructors are still out.
+   *
+   * The gate here is doing real work, not just discoverability like the entries above. The
+   * page makes claims about TOTALS ("no lesson is missing a fallback", "115 offerings"), and
+   * RLS answers *what may you see* without ever saying which question it answered — CORE.md §3
+   * records a published, confident, wrong count taken through a filtered session. A global
+   * admin's reads are unfiltered, so for that caller the two questions have the same answer;
+   * for a director they do not, and the page says so in a banner rather than quietly showing
+   * a smaller number. Instructors would need every claim scoped to their sections first. */
+  { key: 'health',  label: 'System health',  href: 'health.html',  icon: 'analytics', emoji: '📈',
+    directorOnly: true, facultyOnly: true },
   /* Test & mockup views — `tests/index.html`, the landing page for everything under `tests/`.
    *
    * IT IS NOT PART OF THE APP, which is the whole reason it is here rather than on the bar and why

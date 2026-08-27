@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>System health · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <style>
+    /* Design-system classes are reused (.stat-tile, .seg, .btn, .input, .card). Only what has
+     * no equivalent is defined here, namespaced `hh-`. Tokens only, except the four band
+     * colours, which are their own tokens because a chart hue is not an interface hue. */
+    :root {
+      --h-iprep: #0969da;   /* the interactive path */
+      --h-prep:  #bf8700;   /* the written path */
+      --h-bad:   #cf222e;   /* hit an error, nothing handed in */
+      --h-none:  #d8dee4;   /* not in, no error recorded */
+    }
+    [data-theme="dark"] {
+      --h-iprep: #58a6ff; --h-prep: #d4a72c; --h-bad: #ff7b72; --h-none: #30363d;
+    }
+
+    .hh-lede { color: var(--text-soft); max-width: 76ch; margin: 4px 0 20px; }
+    /* Shown to a director, never to an admin. It is not decoration: it is the difference
+     * between "115 offerings" and "the 37 you can see", which nothing else on the page can
+     * tell you, because a filtered count looks exactly like a fact. */
+    .hh-scoped { display: flex; gap: 10px; align-items: baseline; max-width: 76ch;
+      margin: 0 0 18px; padding: 10px 14px; border-radius: var(--radius);
+      background: var(--surface-sunken); border: 1px solid var(--border);
+      border-left: 3px solid var(--h-prep); font-size: 0.88em; color: var(--text-soft); }
+    .hh-scoped b { color: var(--text); }
+    /* `.stat-row` is used by tutor-errors.html but is defined in no stylesheet, so its tiles
+     * stack one per line. Rather than inherit that, this page owns the row. */
+    .hh-stats { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
+    .hh-stats .stat-tile { flex: 1 1 190px; }
+    .hh-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 16px 0; }
+    .hh-sec { margin: 28px 0 10px; font-size: 0.72em; letter-spacing: 0.09em;
+      text-transform: uppercase; color: var(--muted); font-weight: 700; }
+    .hh-note { color: var(--muted); font-size: 0.82em; margin: 6px 0 0; max-width: 76ch; }
+
+    /* -- Issues ----------------------------------------------------------------------- */
+    .hh-checks { border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--card); box-shadow: var(--shadow-sm); overflow: hidden; }
+    .hh-check { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer;
+      background: var(--card); border: 0; border-bottom: 1px solid var(--border);
+      display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 12px;
+      align-items: center; padding: 11px 14px; }
+    .hh-check:last-child { border-bottom: 0; }
+    .hh-check:hover { background: var(--surface-hover); }
+    .hh-check.pass { color: var(--muted); }
+    .hh-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--h-none);
+      justify-self: center; }
+    .hh-dot.critical { background: var(--h-bad); }
+    .hh-dot.warning { background: var(--h-prep); }
+    .hh-dot.info { background: var(--h-iprep); }
+    .hh-count { font-size: 0.76em; font-weight: 700; color: var(--muted); white-space: nowrap; }
+    .hh-scope { font-size: 0.76em; font-weight: 400; color: var(--muted); margin-left: 10px; }
+    .hh-body { padding: 2px 16px 18px 48px; background: var(--surface-sunken);
+      border-bottom: 1px solid var(--border); }
+    .hh-why { color: var(--text-soft); max-width: 76ch; margin: 10px 0; }
+    .hh-fix { border-left: 3px solid var(--h-iprep); padding: 8px 0 8px 12px;
+      max-width: 76ch; margin: 10px 0 14px; }
+    .hh-fix b { display: block; font-size: 0.72em; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+    .hh-find { display: flex; gap: 10px; padding: 4px 0; font-size: 0.88em;
+      border-top: 1px solid var(--border); }
+    .hh-find span:first-child { font-weight: 600; min-width: 220px; }
+    .hh-find span:last-child { color: var(--muted); }
+
+    /* -- Completion chart --------------------------------------------------------------
+     * Geometry mirrors CHART_METRICS in faculty-health.js: 134px bars, 38px wide, 13px
+     * between the two tracks of one lesson, a 34px axis column. A COLUMN is one teaching-day
+     * slot and is always 89px -- a full M/T pair -- whatever the class meets on, because that
+     * fixed width is the only thing keeping the rows in register with the shared header.
+     * The module sizes the header and the cells in px; the two must stay in step. */
+    .hh-chart { border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--card); box-shadow: var(--shadow-sm); padding: 14px 18px; }
+    /* The chart scrolls sideways on its own when the window is wide; the PAGE never does. */
+    .hh-scroll { overflow-x: auto; padding-bottom: 2px; }
+
+    /* 28px of gutter between columns. Without it the T bar of one lesson day touches the
+     * M bar of the next, and the eye groups them into the wrong pairs -- the chart reads as
+     * a drifting run of bars rather than six discrete lesson days. The header row carries the
+     * SAME gap, which is what keeps it in register with the cells. */
+    .hh-heads { display: flex; gap: 28px; width: max-content;
+      border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    .hh-axispad { flex: 0 0 34px; font-size: 0.56em; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em; align-self: flex-end; }
+    .hh-slot { text-align: center; }
+    .hh-slotn { font-size: 0.72em; font-weight: 700; letter-spacing: 0.04em;
+      white-space: nowrap; }
+    .hh-slotd { font-size: 0.62em; color: var(--muted); white-space: nowrap; }
+
+    .hh-row { padding: 14px 0 6px; border-top: 1px solid var(--border); }
+    .hh-row:first-of-type { border-top: 0; }
+    .hh-rowname { font-size: 0.8em; font-weight: 700; letter-spacing: 0.02em;
+      margin-bottom: 6px; position: sticky; left: 0; }
+    .hh-rowsub { font-weight: 400; color: var(--muted); margin-left: 10px;
+      font-size: 0.9em; letter-spacing: 0; }
+    .hh-plot { display: flex; gap: 28px; align-items: flex-end; width: max-content; }
+    /* The label block under every bar is a FIXED 42px, and the axis is pushed up by the
+     * same 42px. Left to size itself, a cell carrying two out-of-bar callouts is taller than
+     * one carrying none, and since the bars are bottom-aligned the 100% tick then stops
+     * meeting the top of the bars -- the exact defect that made an earlier version of this
+     * chart unreadable. Anything taller than 42px is clipped rather than allowed to shove
+     * the axis. */
+    .hh-axis { flex: 0 0 34px; position: relative; height: 134px; margin-bottom: 42px; }
+    .hh-tick { position: absolute; right: 6px; font-size: 0.62em; line-height: 1;
+      color: var(--muted); white-space: nowrap; }
+
+    /* `min-width: 0` is load-bearing. A flex item's automatic minimum size is its content's
+     * min-content width, which OVERRIDES flex-basis -- so a nowrap label like
+     * "iPREP + PREP - still open" silently widened the cell from 89px to 99px and walked the
+     * later columns out of register with the shared header, by 20px at the right-hand end. */
+    .hh-cell { display: flex; flex-direction: column; justify-content: flex-end;
+      min-width: 0; }
+    .hh-cell.empty { align-items: center; justify-content: flex-end;
+      padding-bottom: 74px; }
+    .hh-nolesson { font-size: 0.56em; color: var(--muted); font-style: italic; }
+    .hh-lnum { font-size: 0.68em; font-weight: 700; letter-spacing: 0.04em;
+      white-space: nowrap; text-align: center; }
+    .hh-lnote { font-size: 0.58em; color: var(--muted); line-height: 1.25;
+      text-align: center; margin-bottom: 3px; }
+    /* flex-start, NOT center: a one-track class must leave the other sub-column empty so
+     * its bars stay under the same track in every row. See TRACK_ORDER. */
+    .hh-bars { display: flex; gap: 13px; justify-content: flex-start; }
+    .hh-col.ghost { visibility: hidden; }
+
+    .hh-col { flex: 0 0 38px; }
+    .hh-stack { position: relative; width: 38px; height: 134px; }
+    .hh-band { position: absolute; left: 0; right: 0; display: flex; align-items: center;
+      justify-content: center; }
+    .hh-bandnum { font-size: 0.6em; font-weight: 700; color: #fff; }
+    .hh-bandnum.sm { font-size: 0.48em; }
+    /* The "not in" band is pale, so white on it is invisible. */
+    .hh-band.pale .hh-bandnum { color: var(--text); }
+    .hh-collab { border-top: 2px solid var(--text); padding-top: 3px; text-align: center;
+      height: 42px; box-sizing: border-box; overflow: hidden; }
+    .hh-track { font-size: 0.58em; font-weight: 700; white-space: nowrap; }
+    .hh-n { font-size: 0.52em; color: var(--muted); white-space: nowrap; }
+    .hh-outnum { font-size: 0.52em; font-weight: 700; white-space: nowrap; }
+    .hh-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px;
+      padding-top: 12px; border-top: 1px solid var(--border);
+      font-size: 0.78em; color: var(--text-soft); }
+    .hh-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 2px;
+      margin-right: 5px; vertical-align: -1px; }
+    /* -- Bar popover ---------------------------------------------------------------------
+     * Positioned in fixed coordinates from the bar's own rect, so it escapes .hh-scroll's
+     * overflow clipping instead of being cut off inside it. */
+    .hh-col { cursor: pointer; }
+    .hh-col:focus-visible { outline: 2px solid var(--h-iprep); outline-offset: 2px; }
+    .hh-col.pinned .hh-stack { box-shadow: 0 0 0 2px var(--h-iprep); border-radius: 4px; }
+    /* 292px, not 268: at the narrower width "Hit an error, nothing in" wrapped onto a second
+     * line and broke the alignment of the value column beside it. */
+    .hh-pop { position: fixed; z-index: 60; width: 292px; display: none;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-md); overflow: hidden;
+      font-size: 0.86em; }
+    .hh-pop.on { display: block; }
+    .hh-phead { position: relative; padding: 10px 34px 9px 13px;
+      background: var(--surface-sunken); border-bottom: 1px solid var(--border); }
+    .hh-ptitle { font-weight: 700; }
+    .hh-psub { font-size: 0.84em; color: var(--muted); margin-top: 1px; }
+    .hh-pclose { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px;
+      border: 0; background: none; color: var(--muted); font-size: 17px; line-height: 1;
+      cursor: pointer; border-radius: var(--radius-sm); display: none; }
+    .hh-pop.pinned .hh-pclose { display: block; }
+    .hh-pclose:hover { background: var(--surface-hover); color: var(--text); }
+    .hh-pbody { padding: 8px 13px; }
+    .hh-prow { display: flex; align-items: baseline; gap: 8px; padding: 2.5px 0; }
+    .hh-prow.zero { opacity: 0.45; }
+    .hh-prow.total { border-top: 1px solid var(--border); margin-top: 5px; padding-top: 6px;
+      font-weight: 700; }
+    .hh-pkey { flex: 1 1 auto; min-width: 0; }
+    .hh-pkey i { display: inline-block; width: 9px; height: 9px; border-radius: 2px;
+      margin-right: 7px; vertical-align: 0; }
+    .hh-pv { flex: 0 0 34px; text-align: right; font-weight: 700;
+      font-variant-numeric: tabular-nums; }
+    .hh-pp { flex: 0 0 38px; text-align: right; color: var(--muted);
+      font-variant-numeric: tabular-nums; }
+    .hh-pfoot { padding: 9px 13px 11px; border-top: 1px solid var(--border);
+      background: var(--surface-sunken); font-size: 0.88em; }
+    .hh-pfoot div { display: flex; justify-content: space-between; gap: 12px; padding: 1.5px 0; }
+    .hh-pfoot span { color: var(--muted); }
+    .hh-pfoot b { text-align: right; }
+
+    .hh-empty { padding: 40px 16px; text-align: center; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main class="page-wide" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Reading system health&hellip;</span></div>
+  </main>
+
+  <script type="module">
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { runPage, esc } from '../js/util.js';
+    import { loadHealth, shapeHealth, runChecks, chartHTML, popoverIndex }
+      from '../js/faculty-health.js';
+
+    // Bootstrap as staff so the nav and theme work for anyone who follows a link here, then
+    // gate on the global admin flag in the page. Why admin-only is a deliberate choice and not
+    // an oversight is argued at the top of faculty-health.js -- in short, this page makes
+    // claims about TOTALS, and RLS answers "what may you see" without ever saying so.
+    const ctx = await bootstrap({ require: 'faculty' });
+    runPage(ctx, init);
+
+    const main = document.getElementById('main');
+    // A global admin sees the system; a director sees their own offerings, because RLS
+    // filters every read. Both are let in — the difference is stated on the page instead of
+    // being left for someone to discover, which is the failure CORE.md §3 records.
+    const isAdmin = () => !!ctx?.instructorRow?.is_global_admin;
+    const isDirector = () => (ctx?.courses || []).some(c => c.role === 'director');
+    const canSee = () => isAdmin() || isDirector();
+
+    // SIX teaching-day slots, not sixteen. The window is the single biggest lever on
+    // whether this page can be read: every extra slot is another 89px column on every row,
+    // and past about eight the chart starts scrolling sideways, which is where a trend stops
+    // being visible. The unit is the ACADEMY's lesson day, shared by every class -- see the
+    // shared-time-axis note in faculty-health.js.
+    const state = { raw: null, model: null, lessonWindow: 9, errorDays: 14,
+                    offering: 'all', open: null, busy: false };
+    const WINDOWS = [6, 9, 12];
+
+    // Fetching and shaping are separate on purpose: shapeHealth is pure, so narrowing to one
+    // offering is a re-render, not a round trip.
+    async function load() {
+      state.raw = await loadHealth({ lessonWindow: state.lessonWindow, errorDays: state.errorDays });
+      reshape();
+    }
+    function reshape() {
+      state.model = shapeHealth(state.raw, { offeringId: state.offering });
+    }
+
+    function checksHTML(m) {
+      const results = runChecks(m);
+      const rows = results.map((c) => {
+        const n = c.findings.length;
+        const open = state.open === c.id;
+        const dot = n ? c.severity : 'pass';
+        const count = n ? `${n} found` : 'clear';
+        // Which population the check ran over. Without this, a setup check reading "clear"
+        // and an outcome check reading "clear" look identical while meaning very different
+        // things -- one covers the whole term, the other only the lessons on screen.
+        const SCOPE = { term: 'every lesson', window: 'lessons shown',
+                        errors: `last ${m.errorDays} days` };
+        return `
+          <button class="hh-check${n ? '' : ' pass'}" data-check="${esc(c.id)}"
+                  aria-expanded="${open}">
+            <span class="hh-dot ${esc(dot)}"></span>
+            <span>${esc(c.label)}<span class="hh-scope">${esc(SCOPE[c.scope] || '')}</span></span>
+            <span class="hh-count">${count}</span>
+          </button>
+          ${open ? `<div class="hh-body">
+            <p class="hh-why">${c.why}</p>
+            <div class="hh-fix"><b>What to do</b>${c.fix}</div>
+            ${c.findings.map(f => `<div class="hh-find">
+              <span>${esc(f.where)}</span><span>${esc(f.detail)}</span></div>`).join('')}
+          </div>` : ''}`;
+      }).join('');
+      const bad = results.filter(c => c.findings.length && c.severity !== 'info').length;
+      return { html: `<div class="hh-checks">${rows}</div>`, bad };
+    }
+
+    function draw() {
+      if (!canSee()) {
+        // The nav already hides this page from instructors; this is the direct-URL case.
+        main.innerHTML = `<h1>System health</h1>
+          <p class="hh-lede">This page is limited to course directors and system
+            administrators. Tutor failures are on <a href="tutor-errors.html">Tutor errors</a>
+            for every instructor, and lesson completion for your own sections is on the
+            <a href="report.html">lesson report</a>.</p>`;
+        return;
+      }
+
+      const m = state.model;
+      const { html: checks, bad } = checksHTML(m);
+      const t = m.totals;
+      const when = m.readAt.toLocaleString(undefined,
+        { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+      main.innerHTML = `
+        <h1>System health</h1>
+        <p class="hh-lede">Live, read straight from the database each time this page opens
+          &mdash; nothing is cached and nothing is prepared in advance. It answers two
+          questions: <strong>are cadets getting their work in</strong>, and
+          <strong>what is currently broken</strong>. <em>iPREP</em> is the interactive lesson;
+          <em>PREP</em> is the written question set.</p>
+
+        ${isAdmin() ? '' : `<div class="hh-scoped">
+          <span>&#9888;</span>
+          <span><b>You are seeing the courses you direct, not the whole system.</b>
+            Every number on this page is read with your own permissions, so a total here is
+            &ldquo;how many <em>you</em> can see&rdquo; &mdash; which is not the same question
+            and does not say so. A system administrator sees the unfiltered figures.</span>
+        </div>`}
+
+        <div class="hh-stats">
+          <div class="stat-tile"><div class="stat-body"><div class="stat-num">${bad}</div>
+            <div class="stat-label">issues to act on</div></div></div>
+          <div class="stat-tile"><div class="stat-body"><div class="stat-num">${t.offerings}</div>
+            <div class="stat-label">active offerings</div></div></div>
+          <div class="stat-tile"><div class="stat-body"><div class="stat-num">${t.cadets}</div>
+            <div class="stat-label">enrolled cadets</div></div></div>
+          <div class="stat-tile"><div class="stat-body"><div class="stat-num">${t.errors}</div>
+            <div class="stat-label">tutor failures, ${m.errorDays}d</div></div></div>
+        </div>
+
+        <div class="hh-bar">
+          <div class="seg" role="group">
+            ${WINDOWS.map(w => `<button class="seg-btn${state.lessonWindow === w ? ' on' : ''}"
+              data-win="${w}">${w} lesson days</button>`).join('')}
+          </div>
+          <select id="foff" class="input">
+            <option value="all">All live courses</option>
+            ${m.offeringLabels.map(o => `<option value="${esc(o.id)}"${
+              state.offering === o.id ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}
+          </select>
+          <button class="btn" id="reload">Reload</button>
+          <span class="hh-n">read ${esc(when)}</span>
+        </div>
+
+        <div class="hh-sec">Issues</div>
+        ${checks}
+        <p class="hh-note">Every check names what to do about it, and says what it looked
+          at. <strong>Setup checks cover every lesson in the term</strong>, not just the ones
+          on screen &mdash; a lesson three weeks out that is missing its artifact link should
+          be caught now, not when it opens. A check that finds nothing stays on the list on
+          purpose: a page that only ever shows failures reads as though nothing was checked.</p>
+
+        <div class="hh-sec">Handed in &mdash; one row per class, one column per lesson day</div>
+        ${chartHTML(m)}
+        <div class="hh-pop" id="hhpop"></div>
+        <p class="hh-note">Every row runs against the <strong>same</strong> columns, so a
+          column is the same week of the term in each of them. A column is one academy lesson
+          day &mdash; an M-day and its paired T-day &mdash; taken from
+          <code>site/data/academic-calendar.json</code>, because which dates are M-days is not
+          in the database and cannot be worked out from it. A class with no preflight that day
+          leaves a gap. Each bar is one whole roster, normalized, so bars of different sizes
+          compare directly &mdash; the roster size is under it as <em>n</em>, and the number
+          inside a band is cadets. &ldquo;Hit an error&rdquo; counts only the cadets the tutor
+          error log can name, so it undercounts: the name box takes whatever a cadet types.
+          <strong>Training sandboxes are excluded everywhere on this page</strong>, chart and
+          issues alike &mdash; an untouched practice roster reads as a cohort that handed
+          nothing in.</p>
+      `;
+
+      wirePopover(m);
+
+      main.querySelectorAll('[data-win]').forEach(b => b.onclick = async () => {
+        if (state.busy) return;
+        state.busy = true; state.lessonWindow = +b.dataset.win; state.open = null;
+        try { await load(); draw(); } finally { state.busy = false; }
+      });
+      const fo = document.getElementById('foff');
+      if (fo) fo.onchange = () => {
+        state.offering = fo.value; state.open = null; reshape(); draw();
+      };
+      const rl = document.getElementById('reload');
+      if (rl) rl.onclick = async () => {
+        if (state.busy) return;
+        state.busy = true;
+        try { await load(); draw(); } finally { state.busy = false; }
+      };
+      main.querySelectorAll('[data-check]').forEach(b => b.onclick = () => {
+        state.open = state.open === b.dataset.check ? null : b.dataset.check; draw();
+      });
+    }
+
+    /* The bar popover. Hover opens it, clicking PINS it open until it is closed.
+     *
+     * Positioned in FIXED coordinates from the bar's own rect. The obvious alternative --
+     * absolute, inside the chart -- is clipped by `.hh-scroll`'s `overflow-x: auto`, so the
+     * popover for a bar near the right-hand edge would simply not appear. It is also placed
+     * AFTER measuring, and flipped to the other side of the bar when it would run off the
+     * viewport, because the rightmost columns are exactly the current lessons and are what
+     * an operator opens first. */
+    function wirePopover(m) {
+      const pop = document.getElementById('hhpop');
+      if (!pop) return;
+      const index = popoverIndex(m);
+      let pinned = null;
+
+      const place = (col) => {
+        const r = col.getBoundingClientRect();
+        pop.style.visibility = 'hidden';
+        pop.classList.add('on');
+        const pr = pop.getBoundingClientRect();
+        const margin = 10;
+        let left = r.right + margin;
+        if (left + pr.width > innerWidth - 8) left = r.left - pr.width - margin;
+        left = Math.max(8, Math.min(left, innerWidth - pr.width - 8));
+        let top = r.top + r.height / 2 - pr.height / 2;
+        top = Math.max(8, Math.min(top, innerHeight - pr.height - 8));
+        pop.style.left = left + 'px';
+        pop.style.top = top + 'px';
+        pop.style.visibility = '';
+      };
+
+      const show = (col) => {
+        const html = index.get(col.dataset.k);
+        if (!html) return;
+        pop.innerHTML = html;
+        place(col);
+      };
+
+      const close = () => {
+        pop.classList.remove('on', 'pinned');
+        if (pinned) pinned.classList.remove('pinned');
+        pinned = null;
+      };
+
+      main.querySelectorAll('.hh-col[data-k]').forEach(col => {
+        col.addEventListener('mouseenter', () => { if (!pinned) show(col); });
+        col.addEventListener('focus', () => { if (!pinned) show(col); });
+        col.addEventListener('mouseleave', () => { if (!pinned) pop.classList.remove('on'); });
+        col.addEventListener('click', () => {
+          if (pinned === col) { close(); return; }
+          if (pinned) pinned.classList.remove('pinned');
+          pinned = col; col.classList.add('pinned');
+          show(col); pop.classList.add('pinned');
+        });
+        col.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); col.click(); }
+        });
+      });
+
+      pop.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) close(); });
+      // A pinned panel is dismissed the way every other pinned thing is: Escape, or a click
+      // somewhere that is neither the panel nor a bar.
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+      document.addEventListener('click', (e) => {
+        if (!pinned) return;
+        if (e.target.closest('.hh-pop') || e.target.closest('.hh-col')) return;
+        close();
+      });
+      // Fixed coordinates go stale the moment anything moves underneath them.
+      addEventListener('scroll', () => { if (pinned) place(pinned); else pop.classList.remove('on'); },
+                       true);
+      addEventListener('resize', close);
+    }
+
+    async function init() {
+      initTheme();
+      renderNav(ctx, { active: 'health' });
+      if (canSee()) await load();
+      draw();
+    }
+  </script>
+</body>
+</html>
