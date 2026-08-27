@@ -10,6 +10,163 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-27 — Matthew Recker via Claude
 
+### The pause read as a fault, and both clocks were blind to the seconds it cost
+
+**Reported by the course director: cadets say a turn takes 2-20 minutes, and cadets separately
+report the rate-limit countdown as a bug in the page.** Set 12 (2026-08-26) was the obvious
+suspect and is not the cause. It worked: measured across its 16:30 cutover in
+`app.tutor_error_log`, API calls per cadet turn went **8.96 -> 1.71** and `quota` rows went
+**794 across 20 cadets -> 13 across 2**. That result had never been written down anywhere, which
+is why it was re-litigated; it is now the first row of §2.11 in
+[`TUTOR-BEHAVIOR-PARITY.md`](docs/operations/TUTOR-BEHAVIOR-PARITY.md).
+
+**The first two things reached for to check the report were both measuring something else.**
+
+- **`duration_min` is cadet keystroke time, not elapsed time.** Its ticker reads
+  `if (loading) return;` — the comment says *"don't charge tutor thinking time"* — and `loading`
+  covers the ENTIRE tutor response, the 45s ladder wait and the 120s request deadline included.
+  `IDLE_PAUSE_MS` stops it again five seconds after the last keystroke. That is the right number
+  for effort and pacing, which is what it was built for. Read as latency it produced **"19 seconds
+  per message" for a cohort reporting minutes**.
+- **`waitVisibly` has one call site and it is on the path that RECOVERS.** A wait that works
+  completes the turn and writes no error row. So a cadet can sit through a 45-second countdown on
+  most turns of a 17-message lesson — roughly twelve minutes of dead time — and the system records
+  a six-minute lesson with zero errors.
+
+**Both instruments were blind to the same seconds.** Four fix sets had been arguing about a
+duration none of them could see.
+
+**Set 13, in `scripts/artifacts/patch_tutor_diagnostics.py`, applied to all 47 builds and wired
+into `to_gemini.py` so the next port cannot drop it.** Two halves:
+
+1. **The countdown says what the pause is for.** It said `<model> — rate limited, retrying in 44s`,
+   rendered under the chat as `Tutor model: gemini-3.6-flash — rate limited, retrying in 44s` in
+   grey 12px with the typing dots still running above it. Cadets read that as a fault and they were
+   reading it correctly — **the pause is not a fault**, it is the page protecting a free-tier
+   allowance they have to make last a semester. It now names the reason and answers the three
+   things a cadet needs at that moment: this is expected, it carries on by itself, nothing is lost.
+   **The mechanism is unchanged; only the words are.**
+2. **A wall clock with none of `activeSec`'s gates**, per-request API time, per-turn time (a TURN
+   is one `callTutor`, however many requests, walks and waits happen inside it), and a count of
+   turns over 30 seconds. Reported as `timing` in the submission payload — **additive per contract
+   §8, beside `duration_min` and never instead of it**, because `pacingNote` and the effort model
+   read `activeSec` and changing it would have silently rescored pacing for every cadet mid-term.
+   It survives a reload, and it prints in the diagnostic block a cadet can screenshot or copy.
+
+**Where it deliberately does not go.** The logged FAILURE row does not carry the timings:
+`app.tutor_error_log` has no column and `log-tutor-error` builds its insert from a whitelist, so a
+new key is dropped without saying so — and silently dropped data is worse than none. The client
+sends it anyway, so the day a column exists it starts working. That column is DDL on `app` and is
+coordinated (CORE.md §0); carried as backlog in §2.11. Failing sessions already have `session_sec`;
+it was the **successful** ones that were unmeasurable, and those submit a payload.
+
+**Verification, and what it does not cover.** `gemini-model-ladder.mjs` — **183 assertions, 0
+failed**, run against a build from each of the three courses, with fourteen new assertions for this
+set (two existing ones needed updating: the MAX_TOKENS retry now recurses into `callTutorInner`, so
+the retry is counted inside the turn it belongs to rather than as a second, shorter turn).
+`gemini-build.mjs` in real Chrome across **all 47 builds** — parse, mount, start screen, no console
+errors. **Both are Node-only (CORE.md §2), and no real tutor turn has been run on a live key.**
+
+**This set makes the question answerable; it answers nothing on its own.** The first cohort of
+payloads carrying `timing` is what says whether a turn is 20 seconds or five minutes — query
+`content->'timing'` over `app.submission_activities`. Ask it before the next fix set, not after.
+
+### A live system-health page, so the question stops costing an agent run
+
+**New: `site/faculty/health.html` + `site/js/faculty-health.js`**, a page for course directors and system admins that
+answers two questions from live REST reads — **are cadets getting their work in**, and **what is
+currently broken**. It replaces the thing it grew out of: the last few days' tutor-failure brief was
+assembled by an agent, by hand, from pooler queries, and re-answering it tomorrow meant running the
+agent again. Nothing on this page costs a token. It is five ordinary Supabase reads plus the
+academic-calendar JSON, through the same anon client every other page uses, aggregated in the
+browser.
+
+**It is deliberately not about this week.** The incident-specific hourly chart is gone; what is left
+is a generic issues panel and a completion chart that work the same in October.
+
+**The x-axis is the academy's teaching-day grid, and that is the design.** Bar geometry is lifted
+from the printed faculty brief unchanged — 134px bars, 38px wide, 13px between the two tracks of one
+lesson, a 34px axis carrying 100/75/50/25/0 — because that layout was iterated on until it read
+correctly. What is new is the axis. **One row per class; one column per lesson day**, an M-day and
+its paired T-day; a class with no preflight that day leaves a gap, and the gap is information.
+
+Getting there took two wrong answers first. *Per-course lesson groups* wrapped onto five ragged rows
+once there were four offerings, and a wrapped row cannot be read as a trend at all. *The last N
+lessons **of each course*** fixed the wrapping but is not a shared window — phys-310 is on lesson 9
+while phys-110 is on preflight 11, so the rows silently showed different weeks side by side. Only
+the academy's own slot numbering makes the rows comparable, and that numbering is **not in the
+database and not derivable** (CORE.md §2), so the page reads `site/data/academic-calendar.json`.
+If that file fails to load the chart says so and draws nothing, rather than inventing an axis.
+
+**Placing a lesson in its column needed a second attempt too, and the first one is the tempting
+one.** A preflight is due the evening before its meeting, so "the first teaching day on or after the
+deadline" looks right — and it is, until a deadline runs a day late, at which point the lesson is
+drawn one column to the **right** of where it was taught. Deadlines here have been a day late
+before, five at once. The rule is now **nearest teaching day of that track, ties going later**,
+which is correct for a night-before deadline, a day-late deadline, and a deadline deliberately moved
+onto the morning of its own lesson. Checked against two independently recorded meeting dates —
+phys-310 lesson 8 and lesson 9, from the 2026-08-26 entry below.
+
+**Training sandboxes are excluded everywhere**, chart and issues alike. phys-215 has two active
+offerings differing only by term, and the sandbox's untouched 80-cadet roster reads as a real cohort
+that handed nothing in while its setup gaps count as real findings. Every offering also now carries
+its term in its label (`phys-215 · Fall 2026`), because a course code does not identify an offering
+— the same conflation CORE.md §3 records for RLS-filtered counts, arriving from a different
+direction.
+
+**Every check carries its own remedy.** `CHECKS` in `faculty-health.js` is an array of
+`{scope, id, label, severity, why, fix, detect}`, and `fix` is written for the person who has to
+act — it names the script, the flag, or the control. Nine ship: no per-day deadline (`due_by_day`
+empty on a multi-track course), iPREP with no graded PREP fallback, published iPREP with no artifact
+link, unpublished inside its release window, dead Google API keys, quota pressure, cadets who hit an
+error and never handed in, a closed lesson under 80%, and error reports naming nobody on the roster.
+**Adding a check is one array entry and nothing else.** Checks that find nothing stay on the list —
+a panel that only ever shows failures reads as though nothing was checked.
+
+**`scope` exists because narrowing the window turned a fault into a pass.** Shrinking the window
+made *"published iPREP with no artifact link"* read **clear** while phys-310 `lesson-01` still had an
+empty `artifact_url` — it had simply scrolled out of view. That is the worst failure available to a
+checklist. The four SETUP checks now run over **every offering in the term** and only the OUTCOME
+checks follow the window; each row states which population it looked at, because "clear" over the
+whole term and "clear" over six lesson days are not the same claim.
+
+**Two things the build caught that were not the point of it.**
+
+*`.stat-row` is used by `tutor-errors.html` and is defined in no stylesheet*, so its stat tiles stack
+one per line instead of forming a row. This page owns its row (`.hh-stats`) rather than inherit a
+class that does not exist; **`tutor-errors.html` is still wrong and was left alone.**
+
+*`min-width: auto` silently broke the shared grid.* A flex item's automatic minimum size is its
+content's min-content width, which **overrides** `flex-basis` — so a nowrap caption reading
+"iPREP + PREP · still open" widened its 89px column to 99px and walked the right-hand columns 20px
+out of register with the header. The caption is gone (the bars are already blue for iPREP and gold
+for PREP; it survives in the hover text), and the cells carry `min-width: 0`.
+
+**Admin-only is doing real work here, not discoverability.** The page states TOTALS, and RLS answers
+*what may you see* without ever saying which question it answered. A global admin's reads are
+unfiltered so the two questions coincide; for an instructor they do not. Widening it means scoping
+every claim to their sections first. A non-admin who follows a direct link is told so and pointed at
+Tutor errors and the lesson report.
+
+**Verified, and where the limits are.** The page was rendered in real Chrome with **one** stub —
+`window.db` replaced by a fake PostgREST client serving 923 enrollments, 5,304 committed submissions
+and 1,085 tutor errors pulled through `prep_app_read` on the pooler. Everything above that stub ran
+for real: the five reads, the calendar fetch, the slot windowing, the checks and the whole render.
+It reproduces the hand-checked completion figures exactly (110·T lesson 07 = 49%, 138 not in; lesson
+08 recovers to 74/75%; the written PREP baseline of 89–97% on lessons 04–06), and the grid holds:
+18 cells, 3 gaps, worst column offset 0.5px, no clipped bands, no caption wider than its column, no
+horizontal page overflow, no console errors. **Not yet verified: those five reads through the real
+anon client under a real admin session.** That is one click by a human, and it is the only thing
+left. Per CORE.md §2 the browser check ran under Node, which not every machine has.
+
+`nav.js` gains the entry in the user menu beside System — `directorOnly`, `facultyOnly`.
+It was `adminOnly` for its first day; the course director widened it to directors on
+2026-08-27. A director's reads are RLS-filtered, so a total on the page is "how many *you*
+can see" — the page says so in a banner shown to everyone except a global admin, rather
+than quietly showing a smaller number (CORE.md §3). Plain instructors are still out.
+
+---
+
 ### The same carry, the opposite direction, and opposite rules
 
 **PHYS 310 lesson 10, Neutron Transport.** recker replaced objective 3 -- out went
