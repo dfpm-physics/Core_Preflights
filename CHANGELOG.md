@@ -10,6 +10,56 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-27 — Matthew Recker via Claude
 
+### A cadet's key was refused and nobody on this end could see what Google said
+
+**Reported by the course director: a cadet's key shows as `restricted` with billing tier
+`unavailable`, and a NEWLY CREATED key fails immediately.** Neither symptom is diagnostic on its
+own — the director's own working key also reads `free tier`, so the AI Studio labels do not
+separate a healthy key from a blocked one — and a new key failing at once means the **account**
+is refused, not the key. What was missing was Google's actual words. The tutor classifies a
+refusal with `keyErrorKind()` and shows the cadet one sentence; the underlying message is never
+recorded anywhere a human can read it. `tests/browser/test-gemini-api-truth.html` has said since
+2026-08-26 that the classifier's bad-key and restricted-key patterns are **invented strings** and
+that nobody has ever captured the real ones.
+
+**Added `site/gemini/key-check.html`** — a cadet-facing diagnostic, handed out by URL when
+someone is stuck. It runs four probes on one key and shows both a plain-English verdict and the
+verbatim transcript:
+
+1. `ListModels` with `x-goog-api-key` header — how the tutor authenticates.
+2. `ListModels` with the key as a `?key=` query string — if one form passes where the other
+   fails, the key *type* is the story, and no shipped surface would ever reveal that.
+3. `generateContent` on `gemini-3.1-flash-lite`, two-character prompt, `maxOutputTokens: 1`.
+   **A listing is not an entitlement** — five cadets on 2026-08-26 got a green connection light
+   and `API key not valid` on their first message, which is exactly this gap.
+4. The same on `gemini-3.5-flash-lite`, only if the first refused.
+
+It costs **at most 2 requests against the 500/day floor**, so running it does not spend a lesson.
+The verdict reuses the shipped `keyErrorKind()` verbatim so a cadet is told the same thing here as
+in the tutor, plus an `age` case the tutor lacks. It also surfaces the **Google project number**
+parsed out of the error text, which is the one identifier that lets an instructor tell a
+school-managed project from a personal one.
+
+**The key is never stored** — not `localStorage`, not the URL, and it is redacted out of the
+copyable report by three patterns, because Google's own 403 body echoes a key prefix
+(`Consumer 'api_key:AQ...' has been suspended`, measured 2026-08-26). Scrubbing only our own copy
+of the string would have leaked Google's.
+
+Placed at `site/gemini/` **top level, not inside a course folder**: `patch_tutor_diagnostics.py`
+globs `*.html` inside each course directory and would treat a file there as a shipped lesson
+build. Self-contained, no imports, no build step; nothing links to it and deleting it changes
+nothing.
+
+**Verified by `node --check` on the extracted script only — it has NOT been run in a browser
+against a real key.** Per CORE.md §2 that is recorded here rather than left implied: the probe
+sequence, the redaction and the verdict wording are all unproven until someone loads the page.
+The captured `probes[]` from the first real cadet run is the point of the exercise — it is the
+measurement `test-gemini-api-truth.html` question E asks for.
+
+---
+
+## 2026-08-27 — Matthew Recker via Claude
+
 ### The pause read as a fault, and both clocks were blind to the seconds it cost
 
 **Reported by the course director: cadets say a turn takes 2-20 minutes, and cadets separately

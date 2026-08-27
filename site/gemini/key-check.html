@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemini key check — PREP</title>
+<!--
+  key-check.html -- a CADET-FACING diagnostic for one Gemini API key.
+
+  WHY IT EXISTS. A cadet whose key is refused sees one sentence inside the tutor, chosen by
+  keyErrorKind() from a message nobody on this end ever reads. On 2026-08-27 a cadet reported a
+  key flagged "restricted" with billing tier "unavailable", and a NEWLY CREATED key that failed
+  immediately -- which is not any of the cases that classifier was built for. There was no way
+  to see what Google actually said. This page is that way.
+
+  It answers the two things the tutor cannot:
+    1. WHAT DID GOOGLE SAY, VERBATIM -- status, structured reason, message, project number,
+       whole body. tests/browser/test-gemini-api-truth.html says outright that the shipped
+       classifier's strings for a bad/restricted key are invented; this collects the real ones
+       from the cadets who are actually hitting them.
+    2. Does ListModels pass while generateContent fails? It can, and it does: five cadets on
+       2026-08-26 got a green connection light and "API key not valid" on their first message.
+       A listing is not an entitlement.
+
+  QUOTA COST: at most 2 generateContent requests, each a two-character prompt with
+  maxOutputTokens 1, against the 500/day floor models. Running this does not use up a lesson.
+
+  THE KEY IS NEVER STORED and never leaves this device except as an x-goog-api-key header to
+  Google. Not localStorage, not the URL, and it is REDACTED out of the copyable report --
+  including out of Google's own error text, which echoes a key prefix ("Consumer 'api_key:AQ...'
+  has been suspended", measured 2026-08-26).
+
+  Self-contained: no imports, no build step, no framework. Nothing links to it; it is handed out
+  by URL when a cadet is stuck. It sits at site/gemini/ top level, NOT inside a course folder,
+  because patch_tutor_diagnostics.py globs *.html inside each course directory and would treat a
+  file there as a shipped lesson build.
+-->
+<style>
+  :root {
+    --bg:#f6f7fb; --panel:#ffffff; --line:#d9dde8; --ink:#161a23; --dim:#5b6478;
+    --ok:#15803d; --okbg:#e8f6ec; --bad:#b42318; --badbg:#fdeceb;
+    --warn:#8a5a00; --warnbg:#fdf3e2; --accent:#2f5fd0; --onaccent:#ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#10131a; --panel:#181c26; --line:#2b3242; --ink:#e6e9f0; --dim:#97a0b5;
+      --ok:#6ee7a0; --okbg:#12281c; --bad:#ff8f85; --badbg:#2a1512;
+      --warn:#f0c274; --warnbg:#2a2113; --accent:#8fb0ff; --onaccent:#10131a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#10131a; --panel:#181c26; --line:#2b3242; --ink:#e6e9f0; --dim:#97a0b5;
+    --ok:#6ee7a0; --okbg:#12281c; --bad:#ff8f85; --badbg:#2a1512;
+    --warn:#f0c274; --warnbg:#2a2113; --accent:#8fb0ff; --onaccent:#10131a;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px 16px 64px; background:var(--bg); color:var(--ink);
+         font:15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width:760px; margin:0 auto; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--dim); margin:0 0 20px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+          padding:16px; margin-bottom:16px; }
+  label { display:block; font-weight:600; margin-bottom:6px; }
+  input[type=password], input[type=text] {
+    width:100%; padding:10px 12px; font:14px ui-monospace, SFMono-Regular, Consolas, monospace;
+    background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  button { font:600 14px/1 system-ui, sans-serif; padding:11px 16px; border-radius:8px;
+           border:1px solid var(--line); background:var(--panel); color:var(--ink);
+           cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:var(--onaccent); }
+  button[disabled] { opacity:.5; cursor:default; }
+  .note { color:var(--dim); font-size:13px; margin-top:10px; }
+  .verdict { padding:14px 16px; border-radius:10px; border:1px solid var(--line);
+             margin-bottom:14px; }
+  .verdict.ok   { background:var(--okbg);   border-color:var(--ok); }
+  .verdict.bad  { background:var(--badbg);  border-color:var(--bad); }
+  .verdict.warn { background:var(--warnbg); border-color:var(--warn); }
+  .verdict h2 { font-size:17px; margin:0 0 6px; }
+  .verdict p { margin:0 0 8px; }
+  ol.todo { margin:8px 0 0; padding-left:20px; }
+  ol.todo li { margin-bottom:6px; }
+  .step { border-top:1px solid var(--line); padding:10px 0; font-size:14px; }
+  .step:first-child { border-top:0; }
+  .step b { font-weight:600; }
+  .pill { display:inline-block; font:600 11px/1 system-ui; padding:4px 7px; border-radius:5px;
+          margin-left:8px; vertical-align:1px; }
+  .pill.ok   { background:var(--okbg);   color:var(--ok); }
+  .pill.bad  { background:var(--badbg);  color:var(--bad); }
+  .pill.warn { background:var(--warnbg); color:var(--warn); }
+  pre { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:12px;
+        overflow-x:auto; font:12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+        white-space:pre-wrap; word-break:break-word; margin:8px 0 0; max-height:420px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Gemini key check</h1>
+  <p class="sub">Paste your Google API key. This page asks Google about it and shows you the
+  exact answer. Nothing is saved, and your key is never sent to PREP.</p>
+
+  <div class="card">
+    <label for="key">Your Gemini API key</label>
+    <input id="key" type="password" autocomplete="off" spellcheck="false"
+           placeholder="AIza... (paste here)">
+    <div class="row">
+      <button id="run" class="primary">Check my key</button>
+      <button id="show" type="button">Show key</button>
+    </div>
+    <p class="note">This uses at most 2 tiny requests. It will not use up your lesson.
+    Your key stays in this browser tab and goes only to Google.</p>
+  </div>
+
+  <div id="out"></div>
+
+  <div id="reportCard" class="card hidden">
+    <label>Send this to your instructor</label>
+    <p class="note" style="margin-top:0">Your key is removed from this text. Copy all of it.</p>
+    <div class="row">
+      <button id="copy" class="primary">Copy report</button>
+      <button id="dl">Download report</button>
+    </div>
+    <pre id="report"></pre>
+  </div>
+
+</div>
+<script>
+"use strict";
+
+var BASE = "https://generativelanguage.googleapis.com/v1beta";
+
+// The rungs the shipped tutor actually walks -- MODEL_CHAT then MODEL_LITE in
+// site/gemini/<course>/*.html. If those change, change these, or this page will call a key
+// healthy for models no lesson ever asks for.
+var LADDER_FLOOR = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite"];
+var LADDER_CHAT  = ["gemini-3.6-flash", "gemini-3.5-flash"];
+
+var transcript = [];
+var theKey = "";
+
+function $(id) { return document.getElementById(id); }
+
+// Redaction. Google's own 403 body echoes a key prefix, so scrubbing only our copy of the
+// string is not enough -- the AIza and api_key: patterns catch what Google put there.
+function scrub(s) {
+  var t = String(s == null ? "" : s);
+  if (theKey && theKey.length > 6) t = t.split(theKey).join("[KEY REDACTED]");
+  t = t.replace(/AIza[0-9A-Za-z_\-]{10,}/g, "[KEY REDACTED]");
+  t = t.replace(/api_key:[0-9A-Za-z_\-]{4,}/g, "api_key:[REDACTED]");
+  return t;
+}
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>]/g, function (c) {
+    return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;";
+  });
+}
+
+// One probe. Records status, parsed body and Google's structured reason, and never throws on an
+// HTTP error -- here the error IS the measurement.
+function probe(name, url, opts) {
+  var rec = { probe: name, url: url.replace(/([?&]key=)[^&]*/, "$1[KEY REDACTED]"),
+              status: null, ok: false, reason: null, message: null, body: null, netError: null };
+  return fetch(url, opts).then(function (r) {
+    rec.status = r.status;
+    rec.ok = r.ok;
+    return r.text().then(function (txt) {
+      var parsed = null;
+      try { parsed = JSON.parse(txt); } catch (e) { parsed = null; }
+      var err = parsed && parsed.error;
+      if (err) {
+        rec.message = scrub(err.message || "");
+        rec.reason = err.status || null;
+        var det = err.details || [];
+        for (var i = 0; i < det.length; i++) {
+          if (det[i].reason) { rec.reason = det[i].reason; break; }
+        }
+        rec.body = JSON.parse(scrub(JSON.stringify(parsed)));
+      } else if (parsed && parsed.models) {
+        // The full listing is ~60 objects of metadata nobody reads. Keep the NAMES on the
+        // record and summarize the rest, so the emailed report stays a page instead of a book.
+        rec.modelNames = parsed.models.map(function (m) {
+          return String(m.name || "").replace(/^models\//, "");
+        });
+        rec.body = { modelCount: parsed.models.length };
+      } else {
+        rec.body = parsed ? JSON.parse(scrub(JSON.stringify(parsed))) : scrub(txt).slice(0, 2000);
+      }
+      transcript.push(rec);
+      return rec;
+    });
+  }).catch(function (e) {
+    rec.netError = scrub(e && e.message ? e.message : String(e));
+    transcript.push(rec);
+    return rec;
+  });
+}
+
+// The tutor's own classifier, copied from the shipped Gemini builds so a cadet is told the same
+// thing here as in the lesson. The MEASURED lines were captured from live refusals on
+// 2026-08-26 -- do not tidy their wording.
+function keyErrorKind(status, msg) {
+  var m = String(msg || "");
+  if (/SERVICE_DISABLED|has not been used in project|it is disabled|enable it by visiting|API is not enabled/i.test(m)) return "apioff";
+  if (/API_KEY_\w*BLOCKED|from referer|from referrer|are blocked|IP address restriction/i.test(m)) return "keyrestricted";
+  if (/location is not supported|user location/i.test(m)) return "region";
+  if (/has been suspended|CONSUMER_SUSPENDED/i.test(m)) return "suspended";              // MEASURED
+  if (/service account is deleted or disabled|bound service account/i.test(m)) return "deadproject"; // MEASURED
+  if (/\bage\b|minor|under 18|birthday|birth date|age verification/i.test(m)) return "age";
+  if (status === 403 && !/api[\s_-]?key|credential|unregistered/i.test(m)) return "forbidden";
+  if (/API key not valid|API_KEY_INVALID|expired|not valid/i.test(m)) return "badkey";
+  return "auth";
+}
+
+var ADVICE = {
+  apioff: { t: "The Generative Language API is switched off for this key's project.",
+    steps: ["Open the link in Google's message below — it goes straight to the Enable button.",
+            "Click Enable, wait about a minute, then run this check again.",
+            "If you cannot reach that page, make a key on a personal @gmail.com account instead."] },
+  keyrestricted: { t: "This key has restrictions on it that block this website.",
+    steps: ["Go to aistudio.google.com/apikey and open this key.",
+            "Set Application restrictions to None, or allow dfpm-physics.github.io.",
+            "Save, wait a minute, then run this check again."] },
+  region: { t: "Google says the API is not available from your location.",
+    steps: ["Turn off any VPN and run the check again.",
+            "Check the country on your Google account matches where you are.",
+            "If it still fails, send the report below — this one is not fixable from your side."] },
+  suspended: { t: "Google has suspended this key.",
+    steps: ["Do not reuse this key or this Google account for the lesson.",
+            "Make a key on a different personal Google account (18+ birth date, no VPN).",
+            "Send the report below to your instructor either way."] },
+  deadproject: { t: "The Google Cloud project behind this key is deleted or disabled.",
+    steps: ["Make a new key at aistudio.google.com/apikey and choose Create in new project.",
+            "Run this check again on the new key."] },
+  age: { t: "Google is blocking this account on age grounds.",
+    steps: ["Check the birth date on the Google account itself at myaccount.google.com — the age gate reads that, not a separate form.",
+            "A verification can take a day to take effect. If the birth date is right and 18+, wait, then re-check.",
+            "A school-managed account can stay blocked whatever your age. Try a personal @gmail.com."] },
+  forbidden: { t: "Google refused the request, and the reason is not about the key itself.",
+    steps: ["This is usually a school or work Google account whose admin blocks AI Studio.",
+            "Make a key on a personal @gmail.com account and run this check again."] },
+  badkey: { t: "Google does not accept this key.",
+    steps: ["Re-copy the key — a missing character or a trailing space does this.",
+            "If a fresh copy still fails, make a new key at aistudio.google.com/apikey.",
+            "If a brand new key also fails at once, the account is the problem, not the key. Send the report below."] },
+  auth: { t: "Google rejected this key and did not say clearly why.",
+    steps: ["Send the report below to your instructor — Google's exact wording is in it.",
+            "Meanwhile, try a key made on a personal @gmail.com account."] },
+  quota: { t: "Your key works. You are just out of requests for now.",
+    steps: ["Wait until after 1am Mountain, when Google's daily count resets.",
+            "Then go straight back to the lesson — you do not need a new key."] }
+};
+
+function render(html) { $("out").innerHTML = html; }
+
+function stepLine(label, rec) {
+  if (!rec) return "";
+  var cls = rec.ok ? "ok" : "bad";
+  var txt = rec.netError ? "could not reach Google"
+          : (rec.status + (rec.reason ? " · " + rec.reason : ""));
+  return '<div class="step"><b>' + esc(label) + '</b>' +
+         '<span class="pill ' + cls + '">' + esc(txt) + '</span>' +
+         (rec.message ? '<div class="note">' + esc(rec.message) + '</div>' : '') +
+         '</div>';
+}
+
+function genProbe(model, key) {
+  return probe("generate:" + model, BASE + "/models/" + model + ":generateContent", {
+    method: "POST",
+    headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: "hi" }] }],
+      generationConfig: { maxOutputTokens: 1 }
+    })
+  });
+}
+
+function run() {
+  theKey = $("key").value.trim();
+  transcript = [];
+  $("reportCard").classList.add("hidden");
+  if (!theKey) {
+    render('<div class="verdict bad"><h2>Paste your key first.</h2></div>');
+    return;
+  }
+
+  $("run").disabled = true;
+  render('<div class="card">Asking Google about your key...</div>');
+
+  var hdr = { "x-goog-api-key": theKey };
+  var listed = [];
+  var res = {};
+
+  // 1. ListModels with header auth -- exactly how the tutor authenticates.
+  probe("list-header", BASE + "/models?pageSize=200", { headers: hdr })
+    .then(function (r) {
+      res.list = r;
+      listed = r.modelNames || [];
+    })
+    // 2. The same call with the key as a query string. If one form passes where the other
+    //    fails, the key TYPE is the story -- and we would never otherwise see it.
+    .then(function () {
+      return probe("list-query", BASE + "/models?pageSize=200&key=" + encodeURIComponent(theKey), {});
+    })
+    // 3. The truth test. A listing is not an entitlement.
+    .then(function (r) { res.listQuery = r; return genProbe(LADDER_FLOOR[0], theKey); })
+    .then(function (r) {
+      res.gen = r;
+      if (r.ok || r.status === 429) return null;
+      return genProbe(LADDER_FLOOR[1], theKey).then(function (r2) { res.gen2 = r2; });
+    })
+    .then(function () { finish(res, listed); })
+    .catch(function (e) {
+      render('<div class="verdict bad"><h2>The check itself broke.</h2><p>' +
+             esc(scrub(e && e.message ? e.message : String(e))) + '</p></div>');
+    })
+    .then(function () { $("run").disabled = false; });
+}
+
+function finish(res, listed) {
+  var gen = (res.gen2 && res.gen && !res.gen.ok) ? res.gen2 : res.gen;
+  var cls, title, steps, extra = "";
+
+  if (gen && gen.ok) {
+    cls = "ok";
+    title = "Your key works.";
+    steps = ["Go back to your lesson and paste this same key.",
+             "If the lesson still refuses it, send the report below to your instructor."];
+  } else if (gen && gen.status === 429) {
+    cls = "warn"; title = ADVICE.quota.t; steps = ADVICE.quota.steps;
+  } else if (gen) {
+    var a = ADVICE[keyErrorKind(gen.status, gen.message)] || ADVICE.auth;
+    cls = "bad"; title = a.t; steps = a.steps;
+    if (res.list && res.list.ok) {
+      extra = "<p><b>Note:</b> Google listed models for this key but refused to run one. " +
+              "The key itself exists — what is blocked is the account behind it.</p>";
+    }
+  } else {
+    cls = "bad";
+    title = "Could not reach Google at all.";
+    steps = ["Check your internet connection and run the check again.",
+             "A school network or VPN can block this. Try a phone hotspot."];
+  }
+
+  var reach = { chat: [], floor: [] };
+  LADDER_CHAT.forEach(function (m) { if (listed.indexOf(m) >= 0) reach.chat.push(m); });
+  LADDER_FLOOR.forEach(function (m) { if (listed.indexOf(m) >= 0) reach.floor.push(m); });
+
+  var html = '<div class="verdict ' + cls + '"><h2>' + esc(title) + '</h2>' + extra +
+             '<ol class="todo">' +
+             steps.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") +
+             '</ol></div>';
+
+  html += '<div class="card">';
+  html += stepLine("Google knows this key (header auth)", res.list);
+  html += stepLine("Google knows this key (query string)", res.listQuery);
+  html += stepLine("Actually ran a model: " + LADDER_FLOOR[0], res.gen);
+  html += stepLine("Actually ran a model: " + LADDER_FLOOR[1], res.gen2);
+  html += '<div class="step"><b>Models offered to this key</b>' +
+          '<span class="pill ' + (listed.length ? "ok" : "bad") + '">' + listed.length + '</span>' +
+          '<div class="note">Lesson models present: ' +
+          esc(reach.chat.concat(reach.floor).join(", ") || "none") + '</div></div>';
+  html += '</div>';
+
+  render(html);
+
+  var projectNumber = null;
+  transcript.forEach(function (r) {
+    var m = /project[s]?[\/ ]([0-9]{6,})/i.exec(r.message || "");
+    if (m && !projectNumber) projectNumber = m[1];
+  });
+
+  var report = {
+    tool: "PREP key-check",
+    when: new Date().toISOString(),
+    verdict: title,
+    key_shape: theKey.slice(0, 4) + "... " + theKey.length + " chars",
+    google_project_number: projectNumber,
+    models_listed_count: listed.length,
+    models_listed: listed,
+    lesson_models_listed: reach,
+    probes: transcript
+  };
+  $("report").textContent = scrub(JSON.stringify(report, null, 2));
+  $("reportCard").classList.remove("hidden");
+}
+
+$("run").addEventListener("click", run);
+$("key").addEventListener("keydown", function (e) { if (e.key === "Enter") run(); });
+$("show").addEventListener("click", function () {
+  var i = $("key");
+  var showing = i.type === "text";
+  i.type = showing ? "password" : "text";
+  this.textContent = showing ? "Show key" : "Hide key";
+});
+$("copy").addEventListener("click", function () {
+  var self = this;
+  navigator.clipboard.writeText($("report").textContent).then(function () {
+    self.textContent = "Copied";
+    setTimeout(function () { self.textContent = "Copy report"; }, 1500);
+  }).catch(function () { self.textContent = "Copy failed — select it by hand"; });
+});
+$("dl").addEventListener("click", function () {
+  var blob = new Blob([$("report").textContent], { type: "application/json" });
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "gemini-key-check.json";
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+});
+</script>
+</body>
+</html>
