@@ -56,6 +56,57 @@ rather than left unsaid.
 
 ## 2026-08-27 — Matthew Recker via Claude
 
+### The browser was filling in the key box, and 52 cadets never knew
+
+**The largest single failure group in `app.tutor_error_log` is not Google's doing.** Of the 99
+cadets who reached a Gemini backup start screen and failed, **52 typed an email address into the
+Last Name box** and 47 typed a name. Those 52 produced **82 `API key not valid` refusals** — more
+cadets than the 24 whose Google projects were suspended.
+
+The course director identified the mechanism from one cadet: the browser autofilled **both**
+boxes, putting the USAFA email in the first and **the saved PREP site password in the second**.
+The "key" Google was rejecting had never been a key. The page's own start screen is a text input
+followed by a `type="password"` input, which is a **login form** to every browser and password
+manager. `autoComplete="off"` was already on both boxes; Chrome has ignored that on login-shaped
+forms for years.
+
+**Applied to `lesson-04-electric-fields-and-superposition-479afcad.html` only**, at the course
+director's instruction, so one build can be tested in a real browser before the other 47 follow.
+
+- **The key input is no longer `type="password"`.** This is the structural fix — it removes the
+  login signature rather than fighting it with an attribute. The `id`/`name` pair also moves off
+  `cadet-id`/`api-key`. Showing the key is deliberate: it is the cadet's own no-billing key on
+  their own screen, and a mispaste was previously invisible behind the dots.
+- **Shape guards that name the problem.** An `@` or a space blocks; under 30 characters warns and
+  still lets the cadet through. **Deliberately not an exact length test** — `AIza`+35 = 39 and
+  `AQ.`+50 = 53 are both valid and both in cadets' hands. All 29 keys Google has echoed to us are
+  53 characters, but that sample exists only because Google echoes a key when it *suspends* one,
+  and every suspended key here was newly minted. Google changed the format once in 2026 and has
+  announced another change for September; a hard length rule is a lockout waiting for that date.
+- **The name box is checked too** — an `@` there gets "that is your email address", which is the
+  actual mistake 52 cadets made.
+- **The guard runs before Google is asked.** `checkConnection` is debounced on every keystroke, so
+  an autofilled password cost a request per edit *and* came back as `API key not valid` — advice
+  that sends a cadet to mint another key, the one action that cannot help.
+- **A remembered key is greyed out and read-only**, with the existing **Forget key** control as
+  the way out. Read-only inputs are also skipped by autofill, so this closes the returning-cadet
+  case as well.
+
+**Verified by parsing the patched build with the Babel it actually ships**
+(`site/vendor/babel.min.js`, via a scratch harness) — 230,485 chars in, 228,054 out, with an
+untouched build as the control. This matters because `node --check` returns **exit 0 on invalid
+JSX** (PROJECT.md, "Sharp edges"); a Gemini build transpiles in the browser, so its vendored Babel
+is a real parser and can be run ahead of time. Byte-mode read/write throughout: the file is
+all-CRLF and a text-mode Python read would have rewritten every line. Diff is **92 insertions, 7
+deletions**; slug and submit URL untouched.
+
+**Not yet verified in a browser** — that is the course director's test, and the reason only one
+build was patched.
+
+---
+
+## 2026-08-27 — Matthew Recker via Claude
+
 ### The first cadet run came back CONSUMER_SUSPENDED, and it was the project, not the key
 
 **`key-check.html` was used on a real cadet key within the hour and answered the question the
