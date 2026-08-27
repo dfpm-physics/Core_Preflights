@@ -63,7 +63,7 @@ moment to catch a reconstruction error is before any of these is published.**
 | **Blocked — no reading assigned** | **1** (Admin Overview — the reading is the syllabus), **16** (Lab 2), **20** (Lab 3). All three are `PF = Y` in the schedule, so none is a deliberate skip. Blocked on recker to say what they should cover, or to mark them `PF = N` |
 | **Not a preflight** | 5, 7, 11, 12, 17, 21, 22, 23, 27, 28, 29, 30, 33–41 — lectures, field trips, Graded Reviews, case-study days, the final |
 | **Published** | **4 of 17.** Lessons 2, 3, 4 and **6 (Lab 1, published 2026-08-19)**. The first three were REPUBLISHED on 2026-08-14 carrying the backup-version button, and their `artifact_url` repointed the same day. *(This row said "1 of 17, lesson 2 only" until 2026-08-14: lessons 3 and 4 had been published and registered in the database, and nothing updated this log. `index.json` is DERIVED from this file, so the staleness propagated into Storage on the next push.)* |
-| **Registered on the DFPM site** | **6 of 17** — lessons 1, 2, 3, 4, 6 and, as of 2026-08-26, **8**. *(This row said "none. Not one lesson row exists for this course, and `course_id: phys-310` has never been confirmed to exist on the receiver at all" until 2026-08-26. Both halves were wrong by then: the course offering `5d8d5b43-9b84-40ce-a288-71a4880518f1` exists, carries one section `T3A`, and lessons 1—6 were already registered and published. Nothing updated this row when they were.)* |
+| **Registered on the DFPM site** | **7 of 17** — lessons 1, 2, 3, 4, 6 and, as of 2026-08-26, **8 and 9**. *(This row said "none. Not one lesson row exists for this course, and `course_id: phys-310` has never been confirmed to exist on the receiver at all" until 2026-08-26. Both halves were wrong by then: the course offering `5d8d5b43-9b84-40ce-a288-71a4880518f1` exists, carries one section `T3A`, and lessons 1—6 were already registered and published. Nothing updated this row when they were.)* |
 
 **Seventeen lessons in this course can hold a preflight**, not twenty. The schedule marks twenty
 `PF = Y`; three of those assign no reading and have no corpus entry.
@@ -552,14 +552,28 @@ than content.
 | **Cross-check** | DOE NP-02 covers microscopic/macroscopic σ and the 1/v law; not consulted directly |
 | **Cadets' reading** | Murray & Holbert 4.5–4.6 |
 | **Probe topics** | 3 · ~3 active min each · ~10 min |
-| **Checks** | `check_artifact.py` 37/37. Re-verified independently: 37/37, LF, 0 NUL |
-| **Status** | **DRAFT** — not reviewed, not published, not registered |
+| **Checks** | `check_artifact.py` 37/37 (re-run 2026-08-26, unchanged source), LF, 0 NUL. Gemini build rendered in real Chrome, `tests/browser-harness/gemini-build.mjs` 7/7 |
+| **Status** | **REVIEWED 2026-08-26 — NO CHANGES.** recker reviewed and had nothing to change, so the `.jsx` is untouched and the claude.ai build published 2026-08-20 is still the current source. **Registered 2026-08-26** as `lesson-09`, due Sun 30 Aug 1959 MDT |
+| **Gemini build** | `site/gemini/phys-310/phys310-cross-sections-9308e38c.html` — ported 2026-08-26, same slug. This is the default door, so it is the build cadets actually get |
 
 | # | key | label |
 |---|---|---|
 | 1 | `sigma-area-not-size` | Reads a cross section as a probability, not a nuclear size |
 | 2 | `macroscopic-sigma-per-path` | Builds Σ = Nσ and reads it per unit path length |
 | 3 | `energy-dependence-1-over-v` | Explains the 1/v law and resonances as energy dependence |
+
+> **This lesson is now the far side of a handover, and objectives 1 and 2 are where a cadet lands.**
+> Lesson 8's third topic was rebuilt on 2026-08-26 to have the cadet REASON OUT the three things a
+> reaction rate depends on, then name sigma, the barn, Sigma = N*sigma and R = Sigma*phi in one
+> breath as this lesson's business and stop. So a cadet arriving here has met the words once,
+> attached to reasoning they did themselves, and has been told nothing else — no values, no 1/v,
+> no resonances, no mean free path. **Nothing in this artifact was changed for that**, and nothing
+> needed to be: `sigma-area-not-size` and `macroscopic-sigma-per-path` are exactly the two ideas
+> lesson 8 hands over, and meeting them twice — once as a name, once as the lesson — is the point
+> of a bridge rather than a duplication. Objective 3 is entirely lesson 9's own.
+>
+> If lesson 8's topic 3 is ever reverted or reworded, **read this row before assuming this lesson
+> still opens on unfamiliar ground.**
 
 **Extension problems:** A 3840 b → cm² → implied radius against B-10's real radius, then U-238's
 *geometric* area in barns (standard) · B 585 b against 2.7 b for the two uranium nuclei whose

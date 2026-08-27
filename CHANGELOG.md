@@ -10,6 +10,55 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-26 — Matthew Recker via Claude
 
+### The far side of the bridge, shipped unchanged
+
+**PHYS 310 lesson 9, Cross Sections, is live.** recker reviewed the artifact and had **no changes**,
+so nothing in the `.jsx` was touched -- no rebuild, no republish, no new slug. `check_artifact.py`
+re-run on the unchanged source: 37/37, LF, 0 NUL. The claude.ai build published 2026-08-20 is still
+the current source, and `phys310-cross-sections-9308e38c` is the slug throughout.
+
+**Gemini build ported** to `site/gemini/phys-310/phys310-cross-sections-9308e38c.html`, 233 KB, same
+slug, all three objective keys present. Rendered in real Chrome via
+`tests/browser-harness/gemini-build.mjs`: **7/7** -- parse, mount, key field, honor text, no scroll,
+no 404s, no console errors. **Not run against a live Gemini key**; CORE.md section 2 says to say so.
+That is 46 builds in `backup-builds.json`.
+
+**Registered live as `lesson-09`**, `Lesson 09 Preflight -- Cross Sections`, 3 points,
+`grading_mode='points'`, one graded interactive activity -- the same shape as lessons 6 and 8.
+
+**Back on the normal schedule, which is the point of this one.** Lesson 8 was the exception: recker
+set it to 0930 on the day of the lesson. Lesson 9 meets Mon 31 Aug and returns to this course's
+standard deadline, **1959 America/Denver the night before** -- Sun 30 Aug 19:59:59 MDT, stored as
+`2026-08-31 01:59:59+00`. That is the identical shape to the lesson 2, 3 and 4 rows, every one of
+which stores `<lesson date> 01:59:59Z`; read back after the write as `Sun 30 Aug 19:59:59`.
+`due_by_day` written as `{"T": ...}` and the per-section `assignment_due_dates` row materialized,
+because only the lesson editor normally writes both. Still 0 empty day maps in this course.
+`opens_at` left NULL, which selects the 7-day rolling window -- for a 30 Aug deadline that opened
+23 Aug, so it is visible now.
+
+**Nothing was changed in this artifact for the lesson 8 handover, and nothing needed to be.** Lesson
+8's rebuilt topic 3 has the cadet reason out what a reaction rate depends on and then names sigma,
+the barn, `Sigma = N*sigma` and `R = Sigma*phi` once, as this lesson's business, and stops. This
+artifact's first two objectives -- `sigma-area-not-size` and `macroscopic-sigma-per-path` -- are
+exactly those two ideas taught properly, and meeting them twice, once as a name attached to the
+cadet's own reasoning and once as the lesson, is what a bridge is for rather than a duplication.
+Objective 3, `energy-dependence-1-over-v`, is entirely lesson 9's own. Recorded as a note on the
+lesson 9 row in `BUILD-LOG.md` so that a later revert of lesson 8's topic 3 does not silently leave
+this lesson opening on ground the cadet has never seen.
+
+**Library in sync.** `sync_artifacts.py push` uploaded three objects -- the two build records and
+`phys-310/index.json` -- and a follow-up `status` reports 0 of 106 pending. The index now carries
+lesson 8's `reaction-rate-ingredients` and lesson 9's three keys.
+
+**Still open, unchanged from lesson 8: there is no written half.** Every PHYS 310 lesson before 8
+pairs the artifact with a Q1/Q2/Q3 written activity whose Q3 and expected response are hand-authored
+by the course director. Lessons 8 and 9 are interactive-only until those exist; activity `position`
+1 was used in both, leaving 0 free for a written half to slot into.
+
+---
+
+## 2026-08-26 — Matthew Recker via Claude
+
 ### Two one-day errors that cancelled, until a deadline landed in the morning
 
 **Reported by the course director: the faculty Assignments page showed PHYS 310 lesson 8 as "Due
