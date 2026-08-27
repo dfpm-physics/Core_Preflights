@@ -56,6 +56,43 @@ rather than left unsaid.
 
 ## 2026-08-27 — Matthew Recker via Claude
 
+### The autofill fix, rolled to all 47 backup builds
+
+**Browser-tested on lesson 4 by the course director, then rolled wide on instruction.** All 47
+Gemini backup builds under `site/gemini/` now carry the fix set described in the entry below —
+46 patched here, plus the lesson-4 build that was the test.
+
+**`scripts/artifacts/patch_autofill_guard.py`** does it, and exists rather than a one-off because
+this is the third bulk edit of these builds (`patch_artifacts.py`, `patch_tutor_diagnostics.py`)
+and the reasoning is worth keeping next to the change. Stdlib, **dry-run by default**, idempotent
+(a build carrying `keyShapeProblem` is skipped), and **all-or-nothing per file**: every one of the
+five anchors must match exactly once or that build is left untouched and reported. Bytes in, bytes
+out, with the CRLF count asserted both ways — a text-mode read applies universal newlines and
+lands a five-line edit as a whole-file rewrite.
+
+Every anchor matched exactly once in all 47, so nothing was reported and nothing was skipped. The
+diff is **4,232 insertions and 322 deletions across 46 files** — exactly 92 and 7 per file, the
+same as the hand-checked lesson 4, which is what a clean bulk patch looks like and what a
+line-ending rewrite would not. Slug, `artifact_url` and the submit URL are untouched in every
+file: this is a patch **into the same offering**, so the slug must not move — `activities.slug` is
+globally `UNIQUE` and every student report already collected hangs off that one row.
+
+**`scripts/artifacts/check_jsx.js`** is new and is what verified them: it parses each build's
+`text/babel` block with **the same `site/vendor/babel.min.js` the page itself ships**. All 47
+parse, 0 failures, 1 file skipped (`key-check.html`, which has no babel block). This matters
+because **`node --check` returns exit 0 on invalid JSX** — the trap PROJECT.md records — so the
+obvious check proves nothing here. A Claude artifact has no parser but publishing; a Gemini build
+transpiles in the browser against a vendored Babel, so that parser can be run ahead of time. Node
+stays optional tooling: no `package.json`, no `node_modules`, nothing on the deploy path, and
+deleting the file leaves the site unchanged.
+
+Confirmed after the roll: **zero `type="password"` inputs remain in any build** — the only
+remaining matches for that string are the explanatory comments the patch itself writes.
+
+---
+
+## 2026-08-27 — Matthew Recker via Claude
+
 ### The browser was filling in the key box, and 52 cadets never knew
 
 **The largest single failure group in `app.tutor_error_log` is not Google's doing.** Of the 99

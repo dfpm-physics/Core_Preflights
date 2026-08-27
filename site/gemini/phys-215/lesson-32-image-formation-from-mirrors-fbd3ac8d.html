@@ -749,6 +749,51 @@ const apiKeyRef = { current: "" };
 // localStorage key, namespaced like the site's other client-side state.
 const KEY_STORE = "prep.gemini.apikey";
 
+// -- WHAT ACTUALLY WENT INTO THE TWO BOXES -------------------------------------
+// MEASURED 2026-08-27 in app.tutor_error_log, not guessed: of the 99 cadets who reached this
+// start screen and failed, 52 typed an EMAIL ADDRESS into the Last Name box and 47 typed a
+// name. Those 52 produced 82 "API key not valid" refusals -- because the browser filled the
+// pair as a LOGIN FORM: USAFA email into the first box, the saved PREP site password into the
+// second. That was the largest failure group in the log, larger than the 24 cadets whose
+// Google projects Google suspended.
+//
+// autoComplete="off" was already on both boxes and Chrome ignored it, which it has done for
+// login-shaped forms for years. The structural fix is in the markup -- the key box is no
+// longer type="password", so the pair no longer looks like a login. These guards catch what
+// is left, and they NAME the problem instead of letting Google answer "API key not valid" to
+// a password the cadet never knowingly typed.
+//
+// DO NOT ADD AN EXACT LENGTH TEST. Two key shapes are both valid and both in cadets' hands:
+// AIza + 35 = 39 characters, and AQ. + 50 = 53. All 29 keys Google has echoed back to us are
+// the 53-character form -- but that sample exists only because Google echoes a key when it
+// SUSPENDS one, and every suspended key here was newly minted, so it says nothing about the
+// AIza keys still in use. Google changed this format once already in 2026 and has announced
+// another change for September. A hard length rule is a lockout waiting for that date; the
+// >= 30 test below only has to separate a key from a PASSWORD, which is why it warns rather
+// than blocks.
+function keyShapeProblem(k) {
+  const v = String(k || "").trim();
+  if (!v) return null;                       // empty is "not yet", not "wrong"
+  if (v.indexOf("@") >= 0) return { block: true,
+    msg: "That looks like an email address, not an API key — your browser may have filled "
+       + "it in for you. Clear the box and paste the key from aistudio.google.com/apikey." };
+  if (/\s/.test(v)) return { block: true,
+    msg: "That has a space in it, so it is not an API key. Clear the box and paste it again." };
+  if (v.length < 30) return { block: false,
+    msg: "That looks too short for a Gemini API key — a saved password often lands here. "
+       + "Check it against aistudio.google.com/apikey before you start." };
+  return null;
+}
+
+function nameShapeProblem(n) {
+  const v = String(n || "").trim();
+  if (!v) return null;
+  if (v.indexOf("@") >= 0) return { block: true,
+    msg: "That is your email address. Enter just your last name, so your instructor can match "
+       + "this report to you." };
+  return null;
+}
+
 // THE OPENING, DELIVERED BY THE APP RATHER THAN BY THE MODEL.
 //
 // The prompt dictates both of these turns -- the Honor Code reminder is quoted in it
@@ -3888,6 +3933,13 @@ function Lesson32Preflight() {
     try { localStorage.removeItem(KEY_STORE); } catch (e) {}
     setKeyRemembered(false); setApiKey("");
   }
+  // Recomputed each render; both are null when the box is empty or fine.
+  const nameIssue = nameShapeProblem(cadetId);
+  const keyIssue = keyShapeProblem(apiKey);
+  // A remembered key is greyed rather than editable. It is the key that WORKED, and a
+  // read-only input is also skipped by browser autofill -- the failure this whole change
+  // is about. "Forget key", in the connection row above, is the way out.
+  const keyLocked = keyRemembered && !!apiKey;
   const [messages, setMessages] = useState([]);    // { role, content, hidden? }
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -4078,6 +4130,16 @@ function Lesson32Preflight() {
     if (!apiKey.trim()) {
       setConnStatus("unavailable"); setModelName(""); setConnDetail("");
       setConnMsg("Paste your Gemini API key to check access.");
+      return;
+    }
+    // Before Google is asked. This check is debounced on every keystroke, so an autofilled
+    // password used to cost a request per edit AND came back as Google's "API key not
+    // valid" -- which tells a cadet to go and make another key, the one action that cannot
+    // help.
+    const shape = keyShapeProblem(apiKey);
+    if (shape && shape.block) {
+      setConnStatus("unavailable"); setModelName(""); setConnDetail("");
+      setConnMsg(shape.msg);
       return;
     }
     setConnStatus("checking"); setConnMsg(""); setConnDetail("");
@@ -4481,9 +4543,10 @@ function Lesson32Preflight() {
             <div className="start-card">
               <h2>Before you begin</h2>
               <p>Enter your last name so your instructor can match this report to you.</p>
-              <label className="field-label" htmlFor="cadet-id">Last Name</label>
+              <label className="field-label" htmlFor="prep-lastname">Last Name</label>
               <input
-                id="cadet-id"
+                id="prep-lastname"
+                name="prep-lastname"
                 className="field-input"
                 type="text"
                 placeholder="Smith"
@@ -4491,22 +4554,42 @@ function Lesson32Preflight() {
                 onChange={(e) => setCadetId(e.target.value)}
                 autoComplete="off"
               />
-              <label className="field-label" htmlFor="api-key" style={{ marginTop: "10px" }}>
+              {nameIssue && (
+                <p className="conn-msg" style={{ marginTop: "6px" }}>{nameIssue.msg}</p>
+              )}
+              <label className="field-label" htmlFor="prep-gkey" style={{ marginTop: "10px" }}>
                 Gemini API key
               </label>
+              {/* type="text", NOT type="password". A text box followed by a password box IS a
+                  login form to every browser and password manager, and no attribute reliably
+                  says otherwise -- autoComplete="off" was already here and was ignored. The id
+                  and name are off "cadet-id"/"api-key" too, so the pair no longer reads as a
+                  credential. Showing the key is deliberate: it is the cadet's own free key on
+                  their own screen, and a bad paste was invisible behind the dots. */}
               <input
-                id="api-key"
+                id="prep-gkey"
+                name="prep-gkey"
                 className="field-input"
-                type="password"
-                placeholder="AIza..."
+                type="text"
+                placeholder="AIza... or AQ...."
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
+                readOnly={keyLocked}
+                style={keyLocked ? { opacity: 0.6, cursor: "not-allowed" } : null}
                 autoComplete="off"
                 spellCheck="false"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && cadetId.trim() && connStatus === "ok") begin();
                 }}
               />
+              {keyLocked && (
+                <p className="study-hint" style={{ marginTop: "6px" }}>
+                  Saved in this browser. Use <strong>Forget key</strong> above to change it.
+                </p>
+              )}
+              {keyIssue && (
+                <p className="conn-msg" style={{ marginTop: "6px" }}>{keyIssue.msg}</p>
+              )}
               <p className="study-hint" style={{ marginTop: "6px", marginBottom: "10px" }}>
                 Get a free key at <strong>aistudio.google.com/apikey</strong>, on a project with
                 <strong> no billing enabled</strong> &mdash; then the worst a lost key can cost you
@@ -4542,7 +4625,9 @@ function Lesson32Preflight() {
                 </div>
               )}
               <button className="start-btn" onClick={begin}
-                      disabled={!cadetId.trim() || connStatus !== "ok"}>
+                      disabled={Boolean(!cadetId.trim() || connStatus !== "ok"
+                                || (nameIssue && nameIssue.block)
+                                || (keyIssue && keyIssue.block))}>
                 Start Preflight &rarr;
               </button>
               <button className="study-btn" onClick={beginStudy} disabled={connStatus !== "ok"}>
