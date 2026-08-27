@@ -67,6 +67,7 @@ const S = new Function(block + `
            sentSince, noteSend, quotaScope, lockDay, dayLocked, pacedOut, seedDayLocks,
            RPD_FLASH, RPD_LITE, rpdOf, DAILY_CONFIDENCE,
            PACE_WALK_LIMIT, QUIET_WAIT_MS,
+           timing, noteTurn, noteApi, noteWait, timingSummary, SLOW_TURN_MS,
            ladderWaitsNow: () => ladderWaits, spendLadderWait: () => { ladderWaits++; } };`)();
 const isLite = (n) => S.MODEL_LITE.includes(n);
 
@@ -326,7 +327,10 @@ ok(S.genConfig().thinkingConfig &&
    S.genConfig().thinkingConfig.thinkingBudget === S.THINKING_BUDGET,
    'a thinking budget is actually sent - an uncapped model eats the whole ceiling');
 ok(S.genConfig().maxOutputTokens === S.MAX_TOKENS, 'and the ceiling rides with it');
-ok(/why === "MAX_TOKENS"[\s\S]{0,400}return callTutor\(/.test(src),
+// callTutorInner, not callTutor. Set 13 wrapped callTutor to time a turn; recursing into the
+// WRAPPER would end the turn's clock here and start a second, shorter one, so the retry would
+// be reported as its own fast turn and the slow one it belongs to would vanish.
+ok(/why === "MAX_TOKENS"[\s\S]{0,400}return callTutorInner\(/.test(src),
    'a MAX_TOKENS blank retries the SAME model with less thinking, instead of burning a rung');
 ok(/thinkingSupported[\s\S]{0,300}delete body\.generationConfig\.thinkingConfig/.test(src),
    'a model that rejects thinkingConfig drops the field instead of 400ing every turn');
@@ -482,7 +486,7 @@ ok(/if \(advance\(activeModelRef\)\) \{ attempt = 0; continue; \}[\s\S]{0,2200}l
    'the wait comes AFTER the walk fails, which is the only moment it beats walking');
 ok(/Math\.min\(Math\.max\(waitMs, LADDER_WAIT_MIN_MS\), LADDER_WAIT_MS\)/.test(src),
    "Google's RetryInfo may only SHORTEN the wait - measured at 57s for a wall that cleared in 10");
-ok(/async function waitVisibly\(model, ms\)/.test(src) && /onModelSwitch\.fn\(n > 0 \?/.test(src),
+ok(/async function waitVisibly\(model, ms\)/.test(src) && /onModelSwitch\.fn\(n > 0\s*\?/.test(src),
    'the wait is SHOWN on the existing status strip, not hidden behind a spinner');
 ok(/if \(freshTurn\(activeModelRef\)\) \{ attempt = 0; continue; \}/.test(src),
    'after the wait the ladder is revived and re-seated, so the wait buys a whole fresh ladder');
@@ -829,6 +833,57 @@ ok(keyErrorKind(403, "Method doesn't allow unregistered callers (callers without
    + 'identity). Please use API Key or other form of API consumer identity to call this '
    + 'API.') === 'auth',
    'an EMPTY key returns 403, and must not be mistaken for an entitlement problem');
+
+// --- set 13: the countdown is not a fault, and a turn is finally measured -----------------
+// Two separate claims. The first is about WORDS a cadet reads; the second is about whether
+// anything in this build can answer "how long did that take", which until 2026-08-27 nothing
+// could -- activeSec stops for `loading`, and a ladder wait that RECOVERS writes no error row,
+// so both instruments were blind to exactly the seconds being complained about.
+
+// The CONCATENATION, not the phrase. Set 13's own comment quotes the old wording verbatim --
+// that is the record of what it used to say and is worth keeping -- so a bare phrase match
+// fails on the explanation rather than on the behaviour. `" + n` only appears where the string
+// is actually being built for the hook.
+ok(!/rate limited, retrying in " \+ n/.test(src),
+   'the countdown no longer says "rate limited" - it renders as `Tutor model: X - rate limited` '
+   + 'under the chat, and cadets reported a working page as broken');
+ok(/pausing " \+ n \+ "s to stay inside Google's free limit/.test(src),
+   'it names what the pause is FOR - the page protecting an allowance they must make last a term');
+ok(/This is normal/.test(src) && /carries on by itself/.test(src) && /work is saved/.test(src),
+   'and answers the three things a cadet needs here: expected, self-clearing, nothing lost');
+
+ok(typeof S.timingSummary === 'function' && typeof S.noteTurn === 'function',
+   'a timing ledger exists at all - this is the whole of what set 13 adds');
+S.noteTurn(4000); S.noteTurn(90000);
+ok(S.timingSummary().turns === 2, 'turns are counted, got ' + S.timingSummary().turns);
+ok(S.timingSummary().max_turn_sec === 90,
+   'the WORST turn is kept, not just the mean - one 90s turn is the complaint, and an average '
+   + 'buries it, got ' + S.timingSummary().max_turn_sec);
+ok(S.timingSummary().slow_turns === 1,
+   'turns over 30s are counted separately, got ' + S.timingSummary().slow_turns);
+S.noteWait(45000); S.noteApi(3000);
+ok(S.timingSummary().wait_sec === 45,
+   'a deliberate wait is charged to waits, not to the model - the 45s ladder pause is OUR '
+   + 'second, not Google being slow, got ' + S.timingSummary().wait_sec);
+ok(S.timingSummary().api_sec === 3,
+   'and time actually inside fetch is charged to the API, got ' + S.timingSummary().api_sec);
+
+// The wall clock is the one that must NOT inherit activeSec's gates, which is the entire bug.
+ok(/timing\.wallSec\+\+/.test(src), 'a wall clock ticks somewhere');
+const wallEffect = src.slice(src.indexOf('timing.wallSec++') - 400,
+                             src.indexOf('timing.wallSec++'));
+ok(!/if \(loading\) return/.test(wallEffect),
+   'the wall clock is NOT gated on `loading` - that gate is why duration_min could not see a '
+   + '120s request deadline or a 45s ladder wait');
+ok(!/IDLE_PAUSE_MS/.test(wallEffect),
+   'nor on the cadet typing - activeSec stops 5s after the last keystroke, by design, and that '
+   + 'design is what made it the wrong number to read as latency');
+
+ok(/d\.timing = timingSummary\(\)/.test(src) && /d\.duration_min = /.test(src),
+   'it is reported BESIDE duration_min, never instead of it - effort and pacing still read the '
+   + 'active clock, and contract section 8 permits the added key');
+ok(/timing: \{ \.\.\.timing \}/.test(src) && /Object\.assign\(timing, saved\.timing\)/.test(src),
+   'and it survives a reload, or a cadet who reloads reports only the tail of their session');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 console.log('NOTE: no live key is used — this checks selection logic, not a real tutor turn.');

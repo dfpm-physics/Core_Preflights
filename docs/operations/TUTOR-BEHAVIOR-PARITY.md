@@ -617,6 +617,81 @@ imagined ones.
 > **The free tier is not sized for this class**, and no client-side cleverness changes that — it is
 > a paid-key or server-proxy decision, and it belongs to the course director.
 
+### 2.11 The next day — the pause read as a fault, and both clocks were blind to it
+
+**Set 12 worked.** Measured across the 2026-08-26 16:30 cutover, from `app.tutor_error_log`:
+
+| | Before | After |
+|---|---|---|
+| API calls per cadet turn | 8.96 | **1.71** |
+| `quota` rows / distinct cadets | 794 / 20 | **13 / 2** |
+
+That is the storm gone — 1.0 is the floor, and the walk now costs less than one extra request a
+turn. §2.10 documented the fix set the day it shipped and could not document its result; this row
+is the result, and it is recorded because a fix set whose *outcome* is never written down gets
+re-litigated by the next person reading the next complaint.
+
+**Which is exactly what happened.** Cadets reported *"2-20 minutes between chat messages"* the
+following morning, and the storm was the obvious suspect. It was not the cause, and the first two
+things reached for to check it were both measuring something else.
+
+#### Both instruments were blind to the same seconds
+
+| Instrument | What it does | Why it could not see the wait |
+|---|---|---|
+| `duration_min` in every report | ticks `activeSec` | `if (loading) return;` — *"don't charge tutor thinking time"*. The ENTIRE tutor response is `loading`, the 45s ladder wait and the 120s request deadline included. `IDLE_PAUSE_MS` stops it again 5s after the last keystroke |
+| `app.tutor_error_log` | one row per failure | `waitVisibly` has ONE call site and it is on the path that **recovers**. A wait that works completes the turn and writes no row |
+
+So `duration_min` is **cadet keystroke time**. That is the right number for effort and pacing —
+what it was built for — and reading it as latency on 2026-08-27 produced *"19 seconds per message"*
+for a cohort reporting minutes. A cadet can sit through a 45-second countdown on most turns of a
+17-message lesson, roughly **twelve minutes of dead time**, and the system records a six-minute
+lesson with zero errors.
+
+**Nothing in this system measured how long a turn took.** Four fix sets had argued about a duration
+none of them could see.
+
+#### And the countdown named a fault that was not happening
+
+Set 7 put the ladder wait on the `onModelSwitch` hook, which was right — it needed no new UI. What
+it wrote there was `gemini-3.6-flash — rate limited, retrying in 44s`, rendered under the chat as
+`Tutor model: gemini-3.6-flash — rate limited, retrying in 44s` in grey 12px, with the typing dots
+still running above it. Cadets reported it as a bug in the page. **They were reading it correctly:
+"rate limited" names a fault, and this is not one** — the pause is the page protecting a free-tier
+allowance they have to make last a semester. The mechanism is unchanged; only the words are.
+
+| Behaviour | A (kit) | B (sources) | C (Gemini) | Note |
+|---|---|---|---|---|
+| The countdown says what the pause is FOR | ❌ | ❌ | ✅ | expected · self-clearing · nothing lost |
+| A wall clock with none of `activeSec`'s gates | ❌ | ❌ | ✅ | the only clock a stopwatch would agree with |
+| Per-turn timing (`callTutor` wrapped) | ❌ | ❌ | ✅ | a TURN = one call, however many requests inside |
+| Per-request API time, and waits counted separately | ❌ | ❌ | ✅ | our second vs Google's second |
+| `timing` in the submission payload | n/a | ❌ | ✅ | additive, contract §8; beside `duration_min`, never instead |
+| `timing` survives a reload | n/a | n/a | ✅ | module scope dies with the page |
+| The diagnostic block carries it | ❌ | ❌ | ✅ | one screenshot answers the question |
+
+**`duration_min` is deliberately unchanged.** `pacingNote` and the effort model read `activeSec`
+and must keep reading it; the new counters sit beside it. Changing it would have silently rescored
+pacing for every cadet mid-term to fix a reporting problem.
+
+> **Where this does NOT go, and it is a real gap.** The logged FAILURE row does not carry the
+> timings. `app.tutor_error_log` has no column for them and `log-tutor-error` builds its insert
+> from a whitelist, so a new key in the POST body is dropped without saying so — and silently
+> dropped data is worse than none. The client sends it anyway, so the day a column exists it
+> starts working. Adding that column is DDL on `app` and is coordinated (CORE.md §0). **Carried
+> as backlog.** Failing sessions already have `session_sec`; it was the SUCCESSFUL ones that were
+> unmeasurable, and those submit a payload.
+
+> **What is still unverified.** No real tutor turn has been run on a live key with this code —
+> same caveat as §2.6. What ran: `gemini-model-ladder.mjs` (183 assertions, 3 courses) and
+> `gemini-build.mjs` in real Chrome across all 47 builds. Both are Node-only (CORE.md §2).
+>
+> **And the numbers themselves are not in yet.** This set makes the question answerable; it
+> answers nothing on its own. The first cohort of payloads carrying `timing` is what says whether
+> a turn is 20 seconds or five minutes — query `content->'timing'` over
+> `app.submission_activities`. **Ask it before the next fix set, not after.** That is the lesson
+> §2.6 recorded and §2.10 had to record again.
+
 ---
 
 ## 3. What the Claude artifact still gets wrong

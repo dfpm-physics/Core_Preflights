@@ -2372,6 +2372,259 @@ def apply_measured_truths(raw):
     return p.buf, p.applied
 
 
+# --- Set 13: the countdown read as a fault, and nothing measured a turn --------------------
+#
+# 2026-08-27, from the course director: cadets report "2-20 minutes between chat messages",
+# and separately report the rate-limit countdown as a bug in the page.
+#
+# TWO FINDINGS, and the second one is why the first could not be answered.
+#
+# 1. THE COUNTDOWN SAYS "rate limited" IN THE STATUS STRIP. Set 7 put the ladder wait on the
+#    onModelSwitch hook, which was right -- it needed no new UI. What it wrote there was
+#    `gemini-3.6-flash -- rate limited, retrying in 44s`, which renders under the chat as
+#    `Tutor model: gemini-3.6-flash -- rate limited, retrying in 44s` in grey 12px, with the
+#    typing dots still running above it. A cadet cannot tell that from a fault, and reported
+#    it as one. The wait is CORRECT -- it is protecting a free-tier allowance the cadet has to
+#    make last a semester -- so the fix is to say so, in words that do not name a fault.
+#
+# 2. NOTHING IN THIS SYSTEM MEASURES HOW LONG A TURN TAKES, and the one number that looks
+#    like it does is measuring something else. `duration_min` comes from `activeSec`, whose
+#    ticker is:
+#
+#        if (hasReport) return;
+#        if (loading) return;          // don't charge tutor thinking time
+#        if (Date.now() - lastActivityRef.current < IDLE_PAUSE_MS) setActiveSec(s => s + 1);
+#
+#    `loading` covers the ENTIRE tutor response -- the 45s ladder wait and the 120s request
+#    deadline included -- and IDLE_PAUSE_MS stops it five seconds after the cadet stops
+#    typing. So activeSec is cadet keystroke time. That is the right number for effort and
+#    pacing, which is what it was built for, and the wrong number for latency. Read as latency
+#    on 2026-08-27 it produced "19 seconds per message" for a cohort reporting minutes.
+#
+#    Worse, `waitVisibly` has ONE call site and it is on the path that RECOVERS: if the wait
+#    works the turn completes and no row is written to tutor_error_log. So a cadet can sit
+#    through a 45-second countdown on most turns of a 17-message lesson -- roughly twelve
+#    minutes of dead time -- and the system records a six-minute lesson with zero errors.
+#    Both instruments were blind to the same seconds, which is why four fix sets argued about
+#    a duration none of them could see.
+#
+# WHAT THIS SET ADDS. A wall clock that never pauses, per-request API time, per-turn time,
+# and a count of turns over 30 seconds -- reported in the submission payload BESIDE
+# duration_min and never instead of it. `pacingNote` and `duration_min` keep reading
+# activeSec; nothing about effort, grading or pacing changes.
+#
+# WHERE IT DELIBERATELY DOES NOT GO. The logged failure row does not carry it.
+# `app.tutor_error_log` has no column for it and `log-tutor-error` builds its insert from a
+# whitelist, so a new key in the POST body is dropped without saying so -- and silently
+# dropped data is worse than none. Adding the column is DDL on `app` and is coordinated
+# (CORE.md section 0); it is carried in TUTOR-BEHAVIOR-PARITY.md as backlog. The diagnostic
+# TEXT does carry it, so a screenshot and the Copy button answer the question today. Failing
+# sessions already have `session_sec`; it is the SUCCESSFUL ones that were unmeasurable, and
+# those submit a payload.
+
+SET13_MARKER = b"function timingSummary("
+
+OLD_TIMING_DECL = rb"""const diagState = { cadet: "", mode: "", phase: "start", turn: 0, startedAt: 0, resets: 0,
+                    model: "" };"""
+
+NEW_TIMING_DECL = rb"""const diagState = { cadet: "", mode: "", phase: "start", turn: 0, startedAt: 0, resets: 0,
+                    model: "" };
+
+// THE WALL CLOCK -- the honest timer, and until 2026-08-27 the only kind this build did not
+// have. `activeSec` in the component stops while `loading` ("don't charge tutor thinking
+// time") and again five seconds after the cadet stops typing, which makes it the right
+// measure of EFFORT and a measure of latency that is wrong by exactly the amount anyone
+// asking would care about: every second spent waiting on the tutor is invisible to it, the
+// 45s ladder wait and the 120s request deadline included.
+//
+// These are reported BESIDE duration_min and never instead of it. Nothing about effort,
+// pacing or grading reads them.
+//
+// Module scope, so a reload resets them -- and the session snapshot carries them back, the
+// same way it carries activeSec. wallSec is driven by the component's own interval because a
+// setInterval out here would also run on the start screen and on a finished report.
+const timing = { turns: 0, turnMs: 0, maxTurnMs: 0, slowTurns: 0, apiMs: 0, waitMs: 0,
+                 wallSec: 0 };
+
+// A turn a cadet would call slow. Not tuned -- chosen so the count means "noticeably worse
+// than a working turn", which on these models runs about 5-20 seconds.
+const SLOW_TURN_MS = 30000;
+
+function noteApi(ms) { timing.apiMs += ms; }      // inside fetch, every attempt, ok or not
+function noteWait(ms) { timing.waitMs += ms; }    // deliberate pauses we chose to take
+function noteTurn(ms) {
+  timing.turns++;
+  timing.turnMs += ms;
+  if (ms > timing.maxTurnMs) timing.maxTurnMs = ms;
+  if (ms >= SLOW_TURN_MS) timing.slowTurns++;
+}
+// Seconds, because nothing downstream needs milliseconds and a tenth of a second is already
+// finer than the thing being complained about.
+function timingSummary() {
+  const r = (ms) => Math.round(ms / 100) / 10;
+  return {
+    turns: timing.turns,
+    avg_turn_sec: timing.turns ? r(timing.turnMs / timing.turns) : 0,
+    max_turn_sec: r(timing.maxTurnMs),
+    slow_turns: timing.slowTurns,
+    api_sec: Math.round(timing.apiMs / 1000),
+    wait_sec: Math.round(timing.waitMs / 1000),
+    wall_sec: timing.wallSec,
+  };
+}"""
+
+OLD_WAITVIS = rb"""async function waitVisibly(model, ms) {
+  if (ms <= QUIET_WAIT_MS) { await sleep(ms); return; }   // too short to be worth alarming over
+  const tell = (n) => {
+    if (!onModelSwitch.fn) return;
+    try {
+      onModelSwitch.fn(n > 0 ? (model + " \u2014 rate limited, retrying in " + n + "s") : model);
+    } catch (e) {}
+  };"""
+
+NEW_WAITVIS = rb"""async function waitVisibly(model, ms) {
+  noteWait(ms);
+  if (ms <= QUIET_WAIT_MS) { await sleep(ms); return; }   // too short to be worth alarming over
+  // WORDS, not mechanism. This said `<model> -- rate limited, retrying in 44s`, which renders
+  // under the chat as `Tutor model: gemini-3.6-flash -- rate limited, retrying in 44s`, with
+  // the typing dots still running above it. Cadets reported it as a bug in the page, and they
+  // were reading it correctly: "rate limited" names a fault, and this is not one. The pause is
+  // the page protecting a free-tier allowance they have to make last the semester.
+  //
+  // Three things a cadet needs at this moment and was told none of: this is expected, it
+  // finishes by itself, and reloading gains nothing.
+  const tell = (n) => {
+    if (!onModelSwitch.fn) return;
+    try {
+      onModelSwitch.fn(n > 0
+        ? (model + " \u2014 pausing " + n + "s to stay inside Google's free limit. This is normal; it carries on by itself and your work is saved.")
+        : model);
+    } catch (e) {}
+  };"""
+
+OLD_APIT = rb"""      const deadline = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
+      try {"""
+NEW_APIT = rb"""      const deadline = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
+      const apiT0 = Date.now();
+      try {"""
+
+OLD_APIF = rb"""      } finally { clearTimeout(deadline); }"""
+NEW_APIF = rb"""      } finally { clearTimeout(deadline); noteApi(Date.now() - apiT0); }"""
+
+# The SIGNATURE only. The six phys-110 builds that were authored as Gemini pages directly
+# carry no `// History is sent in full` comment under it, so anchoring on the comment matched
+# 36 of 47 and refused the rest -- correctly, and uselessly.
+OLD_CT = rb"""async function callTutor(activeModelRef, history, sys, note) {"""
+
+NEW_CT = rb"""// A TURN is one call to this -- however many HTTP requests, ladder walks, retries and waits
+// happen inside it. That is exactly what a cadet means by "the time between chat messages",
+// and it is the number nothing here could produce before.
+//
+// The wrapper exists so the MAX_TOKENS retry below can recurse into the INNER function and be
+// counted as part of the turn it belongs to, rather than as a second turn half the length.
+async function callTutor(activeModelRef, history, sys, note) {
+  const turnT0 = Date.now();
+  try { return await callTutorInner(activeModelRef, history, sys, note); }
+  finally { noteTurn(Date.now() - turnT0); }
+}
+
+async function callTutorInner(activeModelRef, history, sys, note) {"""
+
+OLD_CTREC = rb"""      return callTutor(activeModelRef, history, sys, note);"""
+NEW_CTREC = rb"""      return callTutorInner(activeModelRef, history, sys, note);"""
+
+OLD_TICK = rb"""    return () => clearInterval(id);
+  }, [mode, started, hasReport, loading]);"""
+
+NEW_TICK = rb"""    return () => clearInterval(id);
+  }, [mode, started, hasReport, loading]);
+
+  // THE WALL CLOCK, with none of the gates above. It runs in study mode too, and it keeps
+  // running while the tutor is thinking, while the ladder is waiting, and while the cadet has
+  // walked away -- which is the point. It is the only clock here a cadet's own stopwatch would
+  // agree with. It writes to module scope rather than React state because nothing renders it;
+  // it exists to be reported.
+  useEffect(() => {
+    if (!started) return;
+    const id = setInterval(() => {
+      if (hasReport) return;                                  // freeze with the other clock
+      timing.wallSec++;
+    }, 1000);
+    return () => clearInterval(id);
+  }, [started, hasReport]);"""
+
+OLD_SNAP13 = rb"""      activeSec: activeSecRef.current,"""
+NEW_SNAP13 = rb"""      activeSec: activeSecRef.current,
+      // Module scope dies with the page, so without this a cadet who reloads mid-lesson
+      // reports the timings of whatever is left of the session rather than of the session.
+      timing: { ...timing },"""
+
+OLD_REST13 = rb"""      if (typeof saved.activeSec === "number") activeSecRef.current = saved.activeSec;"""
+NEW_REST13 = rb"""      if (typeof saved.activeSec === "number") activeSecRef.current = saved.activeSec;
+      if (saved.timing && typeof saved.timing === "object") Object.assign(timing, saved.timing);"""
+
+OLD_FINAL13 = rb"""  d.duration_min = Math.max(1, Math.round(activeSec / 60));"""
+NEW_FINAL13 = rb"""  d.duration_min = Math.max(1, Math.round(activeSec / 60));
+  // THE HONEST CLOCK, additive per contract section 8. duration_min above is cadet keystroke
+  // time and stops for every second the tutor is thinking, which is what made "how long does a
+  // turn take" unanswerable from stored data. Read `timing.max_turn_sec` and
+  // `timing.slow_turns` for that, and keep reading duration_min for effort.
+  d.timing = timingSummary();"""
+
+OLD_DIAGO13 = rb"""  let ua = "";
+  try { ua = String(navigator.userAgent || "").slice(0, 180); } catch (e) {}"""
+NEW_DIAGO13 = rb"""  const tsum = timingSummary();
+  let ua = "";
+  try { ua = String(navigator.userAgent || "").slice(0, 180); } catch (e) {}"""
+
+# `obj` is BOTH the screen text's source and the POST body, from one whitelist, which is the
+# property that stops a richer copy going somewhere the cadet cannot see. So the counters go
+# in here to reach diagText -- and log-tutor-error's own whitelist drops them on arrival,
+# today. That is stated rather than worked around: when the column lands, the client already
+# sends it.
+OLD_DIAGOBJ13 = rb"""    cadet_ref: diagState.cadet || null,
+    at: new Date().toISOString(),"""
+NEW_DIAGOBJ13 = rb"""    cadet_ref: diagState.cadet || null,
+    at: new Date().toISOString(),
+    timing: tsum,"""
+
+OLD_DIAGT13 = rb"""    "budget  : " + o.max_tokens + " tokens, thinking "
+      + (o.thinking_budget < 0 ? "not supported" : o.thinking_budget),
+  ];"""
+
+NEW_DIAGT13 = rb"""    "budget  : " + o.max_tokens + " tokens, thinking "
+      + (o.thinking_budget < 0 ? "not supported" : o.thinking_budget),
+    // NOT in the logged row: tutor_error_log has no column for these and log-tutor-error
+    // builds its insert from a whitelist, so a new key would be dropped without saying so.
+    // Here it costs nothing and lets one screenshot answer the question on its own.
+    "timing  : " + o.timing.turns + " turns, avg " + o.timing.avg_turn_sec + "s, worst "
+      + o.timing.max_turn_sec + "s, " + o.timing.slow_turns + " over 30s"
+      + "   (api " + o.timing.api_sec + "s, waits " + o.timing.wait_sec + "s, wall "
+      + o.timing.wall_sec + "s)",
+  ];"""
+
+
+def apply_turn_timing(raw):
+    """Set 13. Say what the pause is, and measure what a turn actually costs."""
+    if SET13_MARKER in raw:
+        return raw, ["already"]
+    p = Patcher(raw, None)
+    p.sub("timing-ledger", OLD_TIMING_DECL, NEW_TIMING_DECL)
+    p.sub("countdown-is-not-an-error", OLD_WAITVIS, NEW_WAITVIS)
+    p.sub("time-the-request", OLD_APIT, NEW_APIT)
+    p.sub("time-the-request-end", OLD_APIF, NEW_APIF)
+    p.sub("time-the-turn", OLD_CT, NEW_CT)
+    p.sub("max-tokens-retry-is-same-turn", OLD_CTREC, NEW_CTREC)
+    p.sub("wall-clock", OLD_TICK, NEW_TICK)
+    p.sub("persist-timing", OLD_SNAP13, NEW_SNAP13)
+    p.sub("restore-timing", OLD_REST13, NEW_REST13)
+    p.sub("report-timing", OLD_FINAL13, NEW_FINAL13)
+    p.sub("diag-timing-obj", OLD_DIAGO13, NEW_DIAGO13)
+    p.sub("diag-timing-payload", OLD_DIAGOBJ13, NEW_DIAGOBJ13)
+    p.sub("diag-timing-text", OLD_DIAGT13, NEW_DIAGT13)
+    return p.buf, p.applied
+
+
 def patch_one(path, verbose=False):
     raw = path.read_bytes()
     buf, applied = apply_fixset(raw)
@@ -2388,8 +2641,14 @@ def patch_one(path, verbose=False):
     # Set 12 AFTER 11: it rewrites the unknown-scope message set 11 introduces, and
     # inserts errorMessage cases directly above the `quota` case set 11 edits.
     buf, applied12 = apply_measured_truths(buf)
+    # Set 13 LAST. Its diagnostics anchors are written against the payload set 4 produces
+    # (`cadet_ref`), and its waitVisibly anchor against the countdown set 7 introduces. It
+    # adds no behaviour of its own to the ladder -- it only measures it and renames one
+    # string -- so nothing after it needs to see its output.
+    buf, applied13 = apply_turn_timing(buf)
     applied = (applied + applied2 + applied3 + applied4 + applied5 + applied6
-               + applied7 + applied8 + applied9 + applied10 + applied11 + applied12)
+               + applied7 + applied8 + applied9 + applied10 + applied11 + applied12
+               + applied13)
     if verbose:
         for a in applied:
             print("      . " + a)

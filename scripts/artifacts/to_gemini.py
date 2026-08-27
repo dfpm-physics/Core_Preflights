@@ -2061,7 +2061,8 @@ def main():
                                                   apply_quota_ledger,
                                                   apply_key_error_kinds,
                                                   apply_quota_receipts,
-                                                  apply_measured_truths)
+                                                  apply_measured_truths,
+                                                  apply_turn_timing)
             html, _fixsteps = apply_fixset(html)
             html, _socsteps = apply_socratic(html)
             html, _notsteps = apply_notation(html)
@@ -2086,6 +2087,11 @@ def main():
             # errorMessage cases directly above the `quota` case set 11 edits, so it
             # runs after it. It also lowers the LADDER_WAIT_MS that set 7 wrote.
             html, _meassteps = apply_measured_truths(html)
+            # Set 13 runs LAST. Its diagnostics anchors are written against the payload
+            # set 4 produces (`cadet_ref`) and its countdown anchor against the string
+            # set 7 introduces, and it adds no ladder behaviour for a later set to read --
+            # it measures what the others do and renames one cadet-facing string.
+            html, _timesteps = apply_turn_timing(html)
 
             out = OUT_ROOT / course / f"{slug}.html"
             same = out.exists() and out.read_bytes() == html

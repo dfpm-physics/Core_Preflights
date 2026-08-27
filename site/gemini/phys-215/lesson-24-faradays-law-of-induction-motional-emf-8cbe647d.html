@@ -521,6 +521,49 @@ function noteFail(name, kind) {
 const diagState = { cadet: "", mode: "", phase: "start", turn: 0, startedAt: 0, resets: 0,
                     model: "" };
 
+// THE WALL CLOCK -- the honest timer, and until 2026-08-27 the only kind this build did not
+// have. `activeSec` in the component stops while `loading` ("don't charge tutor thinking
+// time") and again five seconds after the cadet stops typing, which makes it the right
+// measure of EFFORT and a measure of latency that is wrong by exactly the amount anyone
+// asking would care about: every second spent waiting on the tutor is invisible to it, the
+// 45s ladder wait and the 120s request deadline included.
+//
+// These are reported BESIDE duration_min and never instead of it. Nothing about effort,
+// pacing or grading reads them.
+//
+// Module scope, so a reload resets them -- and the session snapshot carries them back, the
+// same way it carries activeSec. wallSec is driven by the component's own interval because a
+// setInterval out here would also run on the start screen and on a finished report.
+const timing = { turns: 0, turnMs: 0, maxTurnMs: 0, slowTurns: 0, apiMs: 0, waitMs: 0,
+                 wallSec: 0 };
+
+// A turn a cadet would call slow. Not tuned -- chosen so the count means "noticeably worse
+// than a working turn", which on these models runs about 5-20 seconds.
+const SLOW_TURN_MS = 30000;
+
+function noteApi(ms) { timing.apiMs += ms; }      // inside fetch, every attempt, ok or not
+function noteWait(ms) { timing.waitMs += ms; }    // deliberate pauses we chose to take
+function noteTurn(ms) {
+  timing.turns++;
+  timing.turnMs += ms;
+  if (ms > timing.maxTurnMs) timing.maxTurnMs = ms;
+  if (ms >= SLOW_TURN_MS) timing.slowTurns++;
+}
+// Seconds, because nothing downstream needs milliseconds and a tenth of a second is already
+// finer than the thing being complained about.
+function timingSummary() {
+  const r = (ms) => Math.round(ms / 100) / 10;
+  return {
+    turns: timing.turns,
+    avg_turn_sec: timing.turns ? r(timing.turnMs / timing.turns) : 0,
+    max_turn_sec: r(timing.maxTurnMs),
+    slow_turns: timing.slowTurns,
+    api_sec: Math.round(timing.apiMs / 1000),
+    wait_sec: Math.round(timing.waitMs / 1000),
+    wall_sec: timing.wallSec,
+  };
+}
+
 // One start-screen key failure of each (kind, status) per page load reaches the central log.
 // The connection check is debounced on every keystroke, so without this a cadet correcting a
 // pasted key one character at a time would write a row per character.
@@ -3110,11 +3153,22 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 // is restored on the way out, and every call is guarded because the hook is null until the
 // component mounts.
 async function waitVisibly(model, ms) {
+  noteWait(ms);
   if (ms <= QUIET_WAIT_MS) { await sleep(ms); return; }   // too short to be worth alarming over
+  // WORDS, not mechanism. This said `<model> -- rate limited, retrying in 44s`, which renders
+  // under the chat as `Tutor model: gemini-3.6-flash -- rate limited, retrying in 44s`, with
+  // the typing dots still running above it. Cadets reported it as a bug in the page, and they
+  // were reading it correctly: "rate limited" names a fault, and this is not one. The pause is
+  // the page protecting a free-tier allowance they have to make last the semester.
+  //
+  // Three things a cadet needs at this moment and was told none of: this is expected, it
+  // finishes by itself, and reloading gains nothing.
   const tell = (n) => {
     if (!onModelSwitch.fn) return;
     try {
-      onModelSwitch.fn(n > 0 ? (model + " \u2014 rate limited, retrying in " + n + "s") : model);
+      onModelSwitch.fn(n > 0
+        ? (model + " \u2014 pausing " + n + "s to stay inside Google's free limit. This is normal; it carries on by itself and your work is saved.")
+        : model);
     } catch (e) {}
   };
   let left = Math.ceil(ms / 1000);
@@ -3148,6 +3202,7 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
       const ctl = new AbortController();
       noteCall(activeModelRef.current);   // counts retries too -- "how many times" is the point
       const deadline = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
+      const apiT0 = Date.now();
       try {
         res = await fetch(
           GEMINI_BASE + "/models/" + activeModelRef.current + ":generateContent", {
@@ -3159,7 +3214,7 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
             body: JSON.stringify(body),
             signal: ctl.signal,
           });
-      } finally { clearTimeout(deadline); }
+      } finally { clearTimeout(deadline); noteApi(Date.now() - apiT0); }
     } catch (e) {
       // An abort is the deadline, not a flaky network. Still not retried SILENTLY -- the cadet
       // has already waited two minutes and a second silent wait reads as the same freeze they
@@ -3408,7 +3463,19 @@ async function discoverModel(activeModelRef) {
   return activeModelRef.current;
 }
 
+// A TURN is one call to this -- however many HTTP requests, ladder walks, retries and waits
+// happen inside it. That is exactly what a cadet means by "the time between chat messages",
+// and it is the number nothing here could produce before.
+//
+// The wrapper exists so the MAX_TOKENS retry below can recurse into the INNER function and be
+// counted as part of the turn it belongs to, rather than as a second turn half the length.
 async function callTutor(activeModelRef, history, sys, note) {
+  const turnT0 = Date.now();
+  try { return await callTutorInner(activeModelRef, history, sys, note); }
+  finally { noteTurn(Date.now() - turnT0); }
+}
+
+async function callTutorInner(activeModelRef, history, sys, note) {
   // History is sent in full — display-hidden turns (opening seed, repair, extension trigger) are
   // real turns. The pacing note is injected into the LAST user turn only.
   const sendHistory = history.map((m) => ({ role: m.role, content: m.content }));
@@ -3463,7 +3530,7 @@ async function callTutor(activeModelRef, history, sys, note) {
     if (why === "MAX_TOKENS" && thinkingSupported && thinkingBudget > 0) {
       thinkingBudget = 0;
       noteFail(activeModelRef.current, "thinking-overrun");
-      return callTutor(activeModelRef, history, sys, note);
+      return callTutorInner(activeModelRef, history, sys, note);
     }
     spentModels[activeModelRef.current] = "empty";
     noteFail(activeModelRef.current, "empty");
@@ -3581,6 +3648,7 @@ function diagSnapshot(err) {
     });
   });
   models.sort((a, b) => b.calls - a.calls);
+  const tsum = timingSummary();
   let ua = "";
   try { ua = String(navigator.userAgent || "").slice(0, 180); } catch (e) {}
   const obj = {
@@ -3591,6 +3659,7 @@ function diagSnapshot(err) {
     cadet_id: null,
     cadet_ref: diagState.cadet || null,
     at: new Date().toISOString(),
+    timing: tsum,
     kind: (err && err.kind) || "unknown",
     http_status: (err && err.status) || 0,
     finish_reason: (err && err.why) || "",
@@ -3633,6 +3702,13 @@ function diagText(o) {
       + "   session " + o.session_sec + "s   ladder resets " + o.ladder_resets,
     "budget  : " + o.max_tokens + " tokens, thinking "
       + (o.thinking_budget < 0 ? "not supported" : o.thinking_budget),
+    // NOT in the logged row: tutor_error_log has no column for these and log-tutor-error
+    // builds its insert from a whitelist, so a new key would be dropped without saying so.
+    // Here it costs nothing and lets one screenshot answer the question on its own.
+    "timing  : " + o.timing.turns + " turns, avg " + o.timing.avg_turn_sec + "s, worst "
+      + o.timing.max_turn_sec + "s, " + o.timing.slow_turns + " over 30s"
+      + "   (api " + o.timing.api_sec + "s, waits " + o.timing.wait_sec + "s, wall "
+      + o.timing.wall_sec + "s)",
   ];
   if (o.detail) lines.push("detail  : " + o.detail);
   lines.push("models tried:");
@@ -3749,6 +3825,11 @@ function finalizePayload(raw, activeSec, msgs, model) {
   d.schema = 1;
   d.producer = INTERACTION_ID + "@" + ARTIFACT_VERSION;
   d.duration_min = Math.max(1, Math.round(activeSec / 60));
+  // THE HONEST CLOCK, additive per contract section 8. duration_min above is cadet keystroke
+  // time and stops for every second the tutor is thinking, which is what made "how long does a
+  // turn take" unanswerable from stored data. Read `timing.max_turn_sec` and
+  // `timing.slow_turns` for that, and keep reading duration_min for effort.
+  d.timing = timingSummary();
   d.message_count = msgs.filter((m) => m.role === "user" && !m.hidden).length;
   d.completed = true;
   d.model = model || null;
@@ -3914,6 +3995,9 @@ function Lesson24Preflight() {
       v: 1, id: INTERACTION_ID, mode: mode, cadetId: cadetId.trim(),
       msgs: messages, ts: Date.now(),
       activeSec: activeSecRef.current,
+      // Module scope dies with the page, so without this a cadet who reloads mid-lesson
+      // reports the timings of whatever is left of the session rather than of the session.
+      timing: { ...timing },
       reportSec: reportSecRef.current,
       reportPhase: reportPhaseRef.current,
       extSent: extSentRef.current,
@@ -3984,6 +4068,20 @@ function Lesson24Preflight() {
     }, 1000);
     return () => clearInterval(id);
   }, [mode, started, hasReport, loading]);
+
+  // THE WALL CLOCK, with none of the gates above. It runs in study mode too, and it keeps
+  // running while the tutor is thinking, while the ladder is waiting, and while the cadet has
+  // walked away -- which is the point. It is the only clock here a cadet's own stopwatch would
+  // agree with. It writes to module scope rather than React state because nothing renders it;
+  // it exists to be reported.
+  useEffect(() => {
+    if (!started) return;
+    const id = setInterval(() => {
+      if (hasReport) return;                                  // freeze with the other clock
+      timing.wallSec++;
+    }, 1000);
+    return () => clearInterval(id);
+  }, [started, hasReport]);
 
   // ── Effects: connection light ──────────────────────────────────────────────
   async function checkConnection() {
@@ -4081,6 +4179,7 @@ function Lesson24Preflight() {
       payloadTriedRef.current = !!saved.payloadTried && saved.payloadState !== "pending";
       submittedRef.current = !!saved.submitted;
       if (typeof saved.activeSec === "number") activeSecRef.current = saved.activeSec;
+      if (saved.timing && typeof saved.timing === "object") Object.assign(timing, saved.timing);
       reportSecRef.current = (saved.reportSec == null) ? null : saved.reportSec;
       if (saved.hasReport) { setHasReport(true); setReportText(saved.reportText || ""); }
       if (saved.structured) setStructured(saved.structured);
