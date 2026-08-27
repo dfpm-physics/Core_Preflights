@@ -10,6 +10,52 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-27 — Matthew Recker via Claude
 
+### The Claude button is back on a student's lesson, as an option and not as the lesson
+
+**Requested by the course director.** From 2026-08-21 the lesson page rendered exactly ONE way in:
+Gemini where a backup build existed, Claude only where one did not. That removal was right for the
+cadet it was made for — a free claude.ai account was ending sessions with an HTTP 429 partway
+through a lesson — but it also took the route away from the cadet who **pays** for Claude, whom
+that 429 never reaches.
+
+**So Claude renders again beside Gemini, and the ranking is carried in the labels rather than by
+hiding a route.** Gemini keeps `is-preferred` and "Start here"; Claude is unstyled and sub-labelled
+**"Optional — paid account"**. `launchNote()` gained the sentence that decides it: Claude runs the
+same lesson for the same grade, use it only with a **paid** account, a free one can cut you off
+partway through. That warning sits on the page *before* the click, because the failure it describes
+happens ten minutes into a conversation the cadet cannot restart cheaply.
+
+**Nothing about grading, cohorts or reports changes, and that is structural rather than lucky.**
+Both buttons submit under the SAME activity slug to the same receiver (`scripts/artifacts/to_gemini.py`
+asserts slug byte-equality for exactly this reason), so which tutor a cadet picks cannot split a
+cohort, double-count a submission, or move a grade. Both also go through
+`confirmInteractiveLaunch()` unchanged, so neither can silently forfeit saved written answers.
+
+**Where a lesson has no Gemini build, nothing moved** — Claude remains the single button and still
+says "Start here", and `launchNote()` stays silent there because there is no choice to explain.
+`backupHref` is null unless the lesson has a build *and* the interactive is launchable, and
+`interactiveAvailable` already requires a valid `artifact_url`, so wherever the Gemini button
+renders the Claude button beside it has a real URL to open.
+
+Also updated: `site/help/student-getting-started.md` (its tutor paragraph now describes the option
+and the paid-account condition, with the 2026-08-21 removal kept as history rather than as the
+current state), and `docs/DOC-SOURCES.json` — `site/student/lessons.html` is now registered as a
+source for that help topic, since `launchRow`/`launchNote` are what the paragraph describes — plus
+`site/help/DOC-STATUS.json` regenerated.
+
+**Verification, stated plainly because it is Node-only (CORE.md §2).** `launchRow` and `launchNote`
+were extracted and exercised under Node against ten assertions — both buttons present with a build,
+Gemini first, exactly one `is-preferred`, Claude alone and marked "Start here" without one,
+`disabled` greying both, and the note appearing only when there is a choice — all passing, plus a
+`node --check` of the whole page module. **It was not opened in a browser against a live student
+session**, so the rendered layout of the two buttons is unproven by this change; it is the same
+two-button `launch-grid` that shipped before 2026-08-21, which is why that was judged acceptable
+rather than left unsaid.
+
+---
+
+## 2026-08-27 — Matthew Recker via Claude
+
 ### The first cadet run came back CONSUMER_SUSPENDED, and it was the project, not the key
 
 **`key-check.html` was used on a real cadet key within the hour and answered the question the

@@ -248,21 +248,31 @@
       window.open(l.backupHref, '_blank', 'noopener');
     }
 
-    /** The way into the interactive lesson: ONE button.
+    /** The way into the interactive lesson. Gemini leads; Claude is offered beside it.
      *
-     *  Until 2026-08-21 this offered Claude marked "Recommended" with Gemini beside it as the
-     *  "Backup". Claude free tier was timing cadets out mid-lesson, so the course director
-     *  reversed it: Gemini is the lesson now, and Claude is not offered where a Gemini build
-     *  exists.
+     *  The ordering has moved twice, and the history is the reason the labels read as they do.
+     *  Until 2026-08-21 Claude led, marked "Recommended", with Gemini beside it as the "Backup".
+     *  Free Claude accounts were timing cadets out mid-lesson, so the course director reversed it
+     *  and dropped the Claude button where a Gemini build existed: Gemini became the lesson.
      *
-     *  It falls back to Claude when `l.backupHref` is null — a registered lesson whose artifact
-     *  has no Gemini build yet. Hiding Claude there too would leave the cadet with NO way in,
-     *  which is a worse failure than the one this change fixes. So the fallback is not a
-     *  leftover; it is the whole reason this is a conditional rather than a deletion.
+     *  On 2026-08-27 the Claude button came back — NOT as an equal, and NOT as a backup. It is an
+     *  OPTIONAL second route, recommended only for a cadet on a PAID claude.ai account, who is the
+     *  one cadet the 429 behind the removal never reaches. A free-tier cadet taking it lands in
+     *  exactly the failure the removal was for, which is why the sub-label and launchNote() both
+     *  say "paid" up front rather than letting them find out partway through a lesson.
+     *
+     *  The ranking is carried by `is-preferred` and by the two sub-labels, never by hiding a
+     *  route. Both buttons submit under the SAME slug to the same receiver (to_gemini.py), so
+     *  which one a cadet picks cannot split a cohort, double-count, or change a grade.
+     *
+     *  When `l.backupHref` is null — a registered lesson whose artifact has no Gemini build yet —
+     *  Claude is the only button and carries "Start here", because hiding it there would leave the
+     *  cadet with NO way in.
      *
      *  `backupHref` is null unless the lesson has a build AND the interactive is launchable
-     *  (student-lessons.js), so a build that exists but is not yet open to the cadet correctly
-     *  takes the Claude branch rather than showing a button that would not work.
+     *  (student-lessons.js), and `interactiveAvailable` already requires a valid `artifact_url`
+     *  (schema.isArtifactLaunchable) — so wherever the Gemini button renders, the Claude button
+     *  beside it has a real URL to open.
      *
      *  `disabled` greys BOTH rather than hiding them, so a student can see the path exists before
      *  it opens. */
@@ -278,23 +288,29 @@
          </button>`;
       return `<div class="launch-grid">
         ${l.backupHref
-          ? btn(`${prefix}-gemini`, 'gemini', 'Gemini', 'Start here', ' is-preferred')
+          ? btn(`${prefix}-gemini`, 'gemini', 'Gemini', 'Start here', ' is-preferred') +
+            btn(`${prefix}-claude`, 'claude', 'Claude', 'Optional — paid account', '')
           : btn(`${prefix}-claude`, 'claude', 'Claude', 'Start here', ' is-preferred')}
       </div>`;
     }
 
-    /** The note under the button. It names the one real prerequisite the Gemini path has —
-     *  which lives only on the interstitial that `&go=1` skips. Nothing else on this page would
-     *  tell a cadet they need a key, and finding that out only after launching is the whole
-     *  reason the sentence is here.
+    /** The note under the buttons. It names the one real prerequisite EACH route has: for Gemini
+     *  the API key, which lives only on the interstitial that `&go=1` skips; for Claude the paid
+     *  account. Nothing else on this page would tell a cadet either thing, and finding out only
+     *  after launching is the whole reason both sentences are here.
      *
-     *  It no longer ranks the two tutors: as of 2026-08-21 only one button is rendered, so a
-     *  sentence about choosing between them would describe a choice the cadet is not offered. */
+     *  It ranks the two tutors again as of 2026-08-27, because two buttons are rendered again and
+     *  a cadet choosing between them needs the one fact that decides it — a free claude.ai account
+     *  is what was ending sessions mid-lesson. It says nothing when `backupHref` is null, because
+     *  then Claude is the only route and there is no choice to explain. */
     function launchNote(l) {
       if (!l.backupHref) return '';
       return `<div class="study-note">This lesson runs on Google Gemini. It asks for a free
         Google AI Studio key the first time you use it on a device — about a minute to create,
-        and it stays in your browser. PREP never receives it.</div>`;
+        and it stays in your browser. PREP never receives it.
+        <br><br><strong>Claude is optional</strong> and runs the same lesson for the same grade.
+        Use it only if you have a <strong>paid</strong> Claude account — a free one can cut you off
+        partway through, which is why Gemini is the one to start with.</div>`;
     }
 
     function gradeCard(l) {

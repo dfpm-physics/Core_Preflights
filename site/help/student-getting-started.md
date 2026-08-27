@@ -106,9 +106,15 @@ the free tier is enough, and a key with no billing attached cannot cost you mone
 The key is sent only to Google and stays in your own browser. **PREP never receives it**, it is
 never part of your report, and it is never part of your submit link.
 
-*(Lessons used to run on Claude, with Gemini offered beside it as a backup. Free Claude accounts
-were turning cadets away mid-lesson, so from 2026-08-21 Gemini is the lesson. A few lessons that do
-not have a Gemini version yet still show a **Claude** button instead — same assignment, same grade.)*
+**There is also a Claude button, and it is optional.** It runs the same lesson, sends the same
+report, and earns the same grade. Take it only if you **pay for Claude** — a free claude.ai account
+can cut you off partway through a lesson, and that is the whole reason Gemini is the one to start
+with. A few lessons have no Gemini version yet and show **Claude** on its own; there it is not
+optional, it is the lesson, and it works the same way.
+
+*(Lessons used to run on Claude, with Gemini beside it as a backup. Free Claude accounts were
+turning cadets away mid-lesson, so from 2026-08-21 Gemini became the lesson and the Claude button
+was taken away. It came back on 2026-08-27 as the optional route described above.)*
 
 **If the lesson stops partway through.** A red bar appears with **Retry**. Try it: most
 interruptions are brief, and Retry moves you to a different model rather than repeating the same
