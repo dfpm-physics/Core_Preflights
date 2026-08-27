@@ -149,9 +149,16 @@ export const isTrainingOffering = (o) =>
  */
 export async function loadHealth({ lessonWindow = 6, errorDays = 14 } = {}) {
   const db = client();
-  const since = new Date(Date.now() - errorDays * 86400000).toISOString();
+  // TWO windows, and they are not the same number. `errorDays` is what the CHECKS ask about
+  // ("quota refusals in the last 14 days"). The TIMELINE draws the whole span the lesson-day
+  // columns cover, which at nine columns is about three weeks — so the read reaches back far
+  // enough for the chart, and the checks filter the loaded rows down to their own 14 days.
+  // Loading only 14 days would have left the left-hand third of the timeline silently empty,
+  // which reads as "no failures then" rather than "not fetched".
+  const fetchDays = Math.max(errorDays, lessonWindow * 4 + 7);
+  const since = new Date(Date.now() - fetchDays * 86400000).toISOString();
 
-  const [calendar, offRes, secRes, enrRes, aoRes, errRes] = await Promise.all([
+  const [calendar, offRes, secRes, enrRes, aoRes, errRes, firstErrRes] = await Promise.all([
     fetch(CALENDAR_URL).then(r => (r.ok ? r.json() : null)).catch(() => null),
     db.from('course_offerings')
       .select('id,course_id,is_active,courses(code,title),terms(code,label)')
@@ -170,9 +177,17 @@ export async function loadHealth({ lessonWindow = 6, errorDays = 14 } = {}) {
       .gte('logged_at', since)
       .order('logged_at', { ascending: false })
       .limit(5000),
+    // The FIRST row the log ever took, which is a different question from the window above.
+    // Without it, a day with no failures and a day BEFORE THE LOG EXISTED draw identically —
+    // as an empty slot — and the second is a far stronger claim than the data supports. It
+    // is not hypothetical: on 2026-08-27 the log's earliest row was two days old, so a naive
+    // strip asserted three clean weeks that were simply never recorded.
+    // One row, unfiltered by date, so it stays correct however far back the window reaches.
+    db.from('tutor_error_log').select('logged_at')
+      .order('logged_at', { ascending: true }).limit(1),
   ]);
 
-  for (const r of [offRes, secRes, enrRes, aoRes, errRes]) if (r.error) throw r.error;
+  for (const r of [offRes, secRes, enrRes, aoRes, errRes, firstErrRes]) if (r.error) throw r.error;
 
   // Sandboxes are dropped HERE, once. Everything downstream filters on the surviving ids, so
   // there is no second place for one to leak back in.
@@ -214,7 +229,9 @@ export async function loadHealth({ lessonWindow = 6, errorDays = 14 } = {}) {
   return {
     readAt: new Date(),
     lessonWindow, errorDays,
-    calendarOk: !!allSlots.length, termCode, slots, allSlots,
+    loggingSince: firstErrRes.data?.[0]?.logged_at
+      ? denverDate(firstErrRes.data[0].logged_at) : null,
+    calendarOk: !!allSlots.length, termCode, slots, allSlots, fetchDays,
     offerings, sections, enrollments: enrRes.data || [],
     assignments: shown, allAssignments,
     submissions, errors: errRes.data || [],
@@ -416,8 +433,61 @@ export function shapeHealth(raw, { offeringId = 'all' } = {}) {
     tracksPerCourse.get(s.course_offering_id).add(days[0]);
   }
 
+  // The checks say "last 14 days" on their own labels, so they must see 14 days even though
+  // the read now reaches back further for the timeline. Filtering here, once, is what keeps
+  // that label true — widening the fetch must not silently widen every count beneath it.
+  const errorCutoff = Date.now() - raw.errorDays * 86400000;
+  const errorsInCheckWindow = raw.errors.filter(e => Date.parse(e.logged_at) >= errorCutoff);
+
   const errorsByKind = {};
-  for (const e of raw.errors) errorsByKind[e.kind] = (errorsByKind[e.kind] || 0) + 1;
+  for (const e of errorsInCheckWindow) errorsByKind[e.kind] = (errorsByKind[e.kind] || 0) + 1;
+
+  /* ── The timeline ────────────────────────────────────────────────────────────────────
+   * One entry per calendar day across exactly the span the lesson-day columns cover, holding
+   * that day's tutor failures split by band (see FAILURE_BANDS). Submissions are NOT counted
+   * here: the stacked columns above already carry them, per lesson and per track, which is a
+   * better cut than per day — so a per-day copy would only compete with them.
+   *
+   * Errors carry a slug, not an offering, so the offering filter is applied by resolving
+   * each artifact slug back to the offering that runs it. A slug that resolves to nothing
+   * (a lesson outside the window, a retired build) is counted only in the unfiltered view,
+   * which is stated on the page rather than left to be inferred.
+   */
+  const offeringOfSlug = new Map();
+  for (const a of raw.allAssignments) {
+    for (const oa of a.offering_activities || []) {
+      if (oa.activities?.slug) offeringOfSlug.set(oa.activities.slug, a.course_offering_id);
+    }
+  }
+
+  const span = [];
+  const spanDates = raw.slots.flatMap(sl => [sl.M, sl.T]).filter(Boolean).sort();
+  if (spanDates.length) {
+    const day = 86400000;
+    let d = Date.parse(spanDates[0] + 'T00:00:00Z');
+    const last = Date.parse(spanDates[spanDates.length - 1] + 'T00:00:00Z');
+    const slotOfDate = new Map();
+    for (const sl of raw.slots) {
+      if (sl.M) slotOfDate.set(sl.M, { n: sl.n, track: 'M' });
+      if (sl.T) slotOfDate.set(sl.T, { n: sl.n, track: 'T' });
+    }
+    for (; d <= last; d += day) {
+      const iso = new Date(d).toISOString().slice(0, 10);
+      span.push({ date: iso, failures: 0, teaching: slotOfDate.get(iso) || null,
+                  recorded: !raw.loggingSince || iso >= raw.loggingSince,
+                  bands: { stuck: 0, waiting: 0, other: 0 } });
+    }
+  }
+  const byDate = new Map(span.map(x => [x.date, x]));
+
+  for (const e of raw.errors) {
+    const co = offeringOfSlug.get(e.slug);
+    if (offeringId !== 'all' && co !== offeringId) continue;
+    const cell = byDate.get(denverDate(e.logged_at));
+    if (!cell) continue;
+    cell.failures += 1;
+    cell.bands[failureBand(e.kind)] += 1;
+  }
 
   return {
     ...raw,
@@ -425,8 +495,11 @@ export function shapeHealth(raw, { offeringId = 'all' } = {}) {
     offeringLabels,
     lessons,
     allLessons,
+    timeline: span,
+    errorsFetched: raw.errors.length,
     slots: raw.slots || [],
     tracksPerCourse,
+    errors: errorsInCheckWindow,
     errorsByKind,
     totals: {
       // OFFERINGS, not courses: phys-215 is one course and two active offerings, and calling
@@ -437,8 +510,9 @@ export function shapeHealth(raw, { offeringId = 'all' } = {}) {
         .map(i => i.studentId)).size,
       lessonsShown: lessons.length,
       lessonsAll: raw.allAssignments.length,
-      errors: raw.errors.length,
-      erroredCadets: new Set(raw.errors.map(e => (e.cadet_ref || e.cadet_id || '')).filter(Boolean)).size,
+      errors: errorsInCheckWindow.length,
+      erroredCadets: new Set(errorsInCheckWindow
+        .map(e => (e.cadet_ref || e.cadet_id || '')).filter(Boolean)).size,
     },
   };
 }
@@ -590,6 +664,10 @@ export function runChecks(model) {
  * only arrangement where "is this course getting worse?" is answerable by looking.
  */
 const BAR_H = 134, BAR_W = 38, GAP_IN = 13, GAP_OUT = 46, AXIS_W = 34;
+// The gap BETWEEN lesson columns. It is `gap` on .hh-heads/.hh-cells in the page's CSS and
+// arithmetic here, and the timeline sizes itself off it — so the two charts span the same
+// width. Change it in both places or the strips stop lining up.
+const GAP_HEAD = 28;
 
 /** The sub-columns inside one lesson-day cell, in fixed order.
  *
@@ -745,6 +823,120 @@ export function chartHTML(m) {
   </div>`;
 }
 
+/* ── The failure timeline ────────────────────────────────────────────────────────────────
+ * Tutor failures per calendar day, over exactly the span the lesson-day columns cover — so
+ * the two charts are two views of the same three weeks and can be read together.
+ *
+ * FAILURES ONLY, in one direction. This was a mirror against iPREP submissions for about an
+ * hour, until the obvious objection landed: the submissions are already in the stacked
+ * columns above, drawn per lesson and per track, which is a better cut of them than per day.
+ * A mirror would have spent half the height restating them.
+ *
+ * The band is what the failure MEANS, not its `kind` string, because nine kinds is more
+ * colours than anyone can hold and the useful question is only ever "can the cadet get past
+ * this on their own?":
+ *   stuck    — the cadet is blocked and waiting will not help. Someone must act.
+ *   waiting  — quota or capacity. It clears by itself; only the volume matters.
+ *   other    — everything else, which is noise unless it clusters.
+ * That split is the same one tutor-errors.html colours its Kind column by, deliberately.
+ *
+ * Days are spaced EVENLY even though teaching days are not, because this axis is calendar
+ * time — failures land on the evening before a lesson, which is frequently not a teaching
+ * day at all. The teaching days are shaded instead, which ties the strip back to the columns
+ * above without pretending the spacing matches.
+ */
+const TL_H = 96, TL_W = 22, TL_GAP = 5;
+
+export const FAILURE_BANDS = [
+  { key: 'stuck',   colour: 'var(--h-bad)',   label: 'Cadet is stuck',
+    kinds: ['auth', 'model', 'suspended', 'deadproject', 'forbidden'] },
+  { key: 'waiting', colour: 'var(--h-prep)',  label: 'Quota or capacity, clears itself',
+    kinds: ['quota', 'capacity'] },
+  { key: 'other',   colour: 'var(--h-none)',  label: 'Everything else',
+    kinds: [] },
+];
+const BAND_OF_KIND = new Map(
+  FAILURE_BANDS.flatMap(b => b.kinds.map(k => [k, b.key])));
+export const failureBand = (kind) => BAND_OF_KIND.get(kind) || 'other';
+
+const TL_DAY = { weekday: 'short', month: 'short', day: 'numeric' };
+
+export function timelineHTML(m) {
+  const days = m.timeline || [];
+  if (!days.length) return '';
+
+  // The peak and the totals count only RECORDED days, so a stretch of unlogged calendar
+  // cannot quietly drag either one.
+  const live = days.filter(d => d.recorded);
+  const peak = Math.max(1, ...live.map(d => d.failures));
+  const totals = { stuck: 0, waiting: 0, other: 0 };
+  for (const d of live) for (const b of FAILURE_BANDS) totals[b.key] += d.bands?.[b.key] || 0;
+  const grand = totals.stuck + totals.waiting + totals.other;
+
+  // Span exactly the width of the lesson-day chart above, so the two are one span read
+  // twice. Days are laid out evenly inside it — a calendar day cannot be aligned under a
+  // lesson column, because a column is two days with a weekend sometimes between them, and
+  // faking the alignment would be worse than not claiming it.
+  const nSlots = (m.slots || []).length;
+  const daysW = nSlots ? nSlots * (2 * BAR_W + GAP_IN) + (nSlots - 1) * GAP_HEAD : 0;
+  const flex = daysW ? '1 1 0' : `0 0 ${TL_W}px`;
+
+  const cells = days.map(d => {
+    const mark = d.teaching ? `${d.teaching.track}${d.teaching.n}` : '';
+    const dd = new Date(d.date + 'T12:00:00');
+    const when = `${dd.toLocaleDateString(undefined, TL_DAY)}${mark ? ' \u00b7 ' + mark : ''}`;
+    const cls = 'hh-tlday' + (d.teaching ? ' teach' : '') + (d.recorded ? '' : ' unrec');
+
+    // A day before the log existed carries no bar at all — not a zero-height one — and says
+    // so on hover. Drawing it as an empty slot would assert a clean day nobody observed.
+    if (!d.recorded) {
+      return `<div class="${cls}" style="flex:${flex}"
+                   title="${esc(when)} \u2014 not recorded; failure logging had not started">
+        <div class="hh-tlbar"><span class="hh-tlgap"></span></div>
+        <div class="hh-tlnum">${dd.getDate()}</div>
+        <div class="hh-tlmark">${esc(mark)}</div>
+      </div>`;
+    }
+
+    const parts = FAILURE_BANDS
+      .map(b => ({ b, v: d.bands?.[b.key] || 0 })).filter(x => x.v > 0);
+    // The bar's TOTAL height is the day's total, and each band takes its share of that — so
+    // no band gets a minimum height of its own, which would make the bar taller than the day.
+    const total = d.failures > 0 ? Math.max(3, (d.failures / peak) * TL_H) : 0;
+    const stack = parts.map(({ b, v }) =>
+      `<span style="height:${((v / d.failures) * total).toFixed(1)}px;background:${b.colour}"></span>`
+    ).join('');
+    const tip = `${when} \u2014 ${d.failures} tutor failure${d.failures === 1 ? '' : 's'}` +
+      (parts.length ? ': ' + parts.map(x => `${x.v} ${x.b.label.toLowerCase()}`).join(', ') : '');
+    return `<div class="${cls}" style="flex:${flex}" title="${esc(tip)}">
+      <div class="hh-tlbar">${stack}</div>
+      <div class="hh-tlnum">${dd.getDate()}</div>
+      <div class="hh-tlmark">${esc(mark)}</div>
+    </div>`;
+  }).join('');
+
+  const key = FAILURE_BANDS.map(b =>
+    `<span><i style="background:${b.colour}"></i>${esc(b.label)}
+      &mdash; ${totals[b.key]}</span>`).join('');
+  const unrec = days.filter(d => !d.recorded).length;
+  const caveat = unrec
+    ? ` \u00b7 ${unrec} earlier day${unrec === 1 ? '' : 's'} not recorded
+        (logging began ${esc(m.loggingSince || '')})`
+    : '';
+
+  return `<div class="hh-chart hh-tl">
+    <div class="hh-scroll">
+      <div class="hh-tlplot">
+        <div class="hh-tlaxis"><div class="hh-tlcap">${peak}</div><div class="hh-tlzero">0</div></div>
+        <div class="hh-tldays" style="gap:${TL_GAP}px${daysW ? `;width:${daysW}px` : ''}">${cells}</div>
+      </div>
+    </div>
+    <div class="hh-legend">${key}
+      <span class="hh-tlscale">${grand} failures over this span, peak ${peak} in a day${caveat}</span>
+    </div>
+  </div>`;
+}
+
 /* ── The popover ─────────────────────────────────────────────────────────────────────────
  * A 38px bar can carry four numbers and nothing else. Everything an operator then wants —
  * the percentages, the exact deadline, which paths the lesson offered, how many tutor
@@ -827,4 +1019,4 @@ export function popoverIndex(m) {
 }
 
 /** The geometry, for the page's stylesheet — one source of truth for both. */
-export const CHART_METRICS = { BAR_H, BAR_W, GAP_IN, GAP_OUT, AXIS_W };
+export const CHART_METRICS = { BAR_H, BAR_W, GAP_IN, GAP_OUT, AXIS_W, GAP_HEAD, TL_H, TL_W };

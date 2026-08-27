@@ -238,6 +238,51 @@ are the course director's to author. Activity `position` 1 was used again, leavi
 
 ---
 
+### Failures by day, and the difference between a clean day and a day nobody watched
+
+**Added a per-day tutor-failure strip to `site/faculty/health.html`, under the completion chart
+and across exactly the same span**, at the course director's request -- the same stretch of days
+the columns cover, so the two charts are one span read twice.
+
+**It was a mirror for about an hour and should not have been.** Failures grew up, iPREP
+submissions grew down, one shared scale. The objection landed immediately and was right: the
+stacked columns above already carry submissions, cut **per lesson and per track**, which is a
+strictly better view of them than per calendar day. The mirror was spending half its height
+restating the chart it sits under. The downward half is gone and the height went back to the
+failures.
+
+**Bars are stacked by what the failure MEANS, not by its `kind` string.** Nine kinds is more
+colours than anyone holds, and the only question that changes what an operator does is whether
+the cadet can get past it alone -- so: *cadet is stuck* (`auth`, `model`, `suspended`,
+`deadproject`, `forbidden`), *quota or capacity, clears itself* (`quota`, `capacity`), and
+*everything else*. That is the same split `tutor-errors.html` colours its Kind column by,
+deliberately, so the two pages do not teach different vocabularies for one log.
+
+**The first version asserted three clean weeks that nobody had observed, and this is the part
+worth remembering.** `app.tutor_error_log`'s earliest row is **2026-08-25** -- the log is two
+days old. Every day before it drew as an empty slot, which is the same mark a genuinely quiet
+day gets, so the strip silently claimed 15 clean days out of a table that did not exist yet. The
+fix is a seventh read, one row, `order('logged_at').limit(1)`, deliberately **not** date-filtered
+so it stays right however far back the window reaches: days before it get a dotted baseline and
+no bar, the legend names the date logging began, and the peak and the band totals are computed
+over recorded days only. **A zero and an absence must not share a mark** -- the whole value of
+this page is that a clear check means somebody looked.
+
+- `site/js/faculty-health.js` -- `FAILURE_BANDS` / `failureBand()`, `timelineHTML()`, the
+  `loggingSince` read, `recorded` on each timeline day, and `GAP_HEAD` promoted to a named
+  constant so the strip can size itself to the chart above instead of running out two-thirds
+  of the way across. It is `gap` on `.hh-heads` in the page CSS and arithmetic in the module;
+  both places say so.
+- `site/faculty/health.html` -- the `.hh-tl*` block, the section, and the note.
+
+**Verified in a real browser** against live rows over `prep_app_read` (read-only, no mutation):
+24 days drawn, 18 teaching days shaded, 0 stacks spilling their box, no horizontal overflow, no
+console errors, and the failure totals matching a direct `GROUP BY` on the log -- 872 on 25 Aug,
+213 on 26 Aug, 36 on 27 Aug. The one thing a harness cannot prove is that the seventh read
+survives RLS for a director; the six alongside it already do.
+
+---
+
 ## 2026-08-26 — Matthew Recker via Claude
 
 ### The far side of the bridge, shipped unchanged

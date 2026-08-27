@@ -186,6 +186,40 @@
     .hh-pfoot span { color: var(--muted); }
     .hh-pfoot b { text-align: right; }
 
+    /* -- Failure timeline ------------------------------------------------------------
+     * One upward bar per calendar day, stacked by what the failure MEANS (see FAILURE_BANDS
+     * in faculty-health.js). This was a mirror against iPREP submissions until the obvious
+     * objection: the stacked columns above already carry submissions, cut per lesson and per
+     * track, which is strictly better than per day. The mirror spent half its height
+     * restating them, so the height went back to the failures. */
+    .hh-tl .hh-scroll { padding-bottom: 0; }
+    /* The 28px gap is the SAME one .hh-heads uses, so the axis label sits over the axis
+     * column of the chart above and the strip starts where the first lesson column does. */
+    .hh-tlplot { display: flex; align-items: flex-start; width: max-content; gap: 28px; }
+    .hh-tlaxis { flex: 0 0 34px; text-align: right;
+      font-size: 0.62em; color: var(--muted); }
+    .hh-tlcap { height: 96px; }
+    .hh-tlzero { line-height: 1; margin: -0.5em 0 0; font-weight: 700; }
+    .hh-tldays { display: flex; align-items: flex-start; }
+    .hh-tlday { text-align: center; min-width: 0; }
+    /* A teaching day is tinted the full height of the strip, so the lesson rhythm is legible
+     * behind the bars without a second axis competing with the one above. */
+    .hh-tlday.teach { background: var(--surface-sunken); border-radius: 3px; }
+    .hh-tlbar { height: 96px; display: flex; flex-direction: column; justify-content: flex-end;
+      border-bottom: 1px solid var(--text); }
+    /* 1px of surface between bands, so two adjacent colours never read as one block. */
+    .hh-tlbar span { display: block; box-shadow: 0 1px 0 var(--surface); }
+    .hh-tlbar span:first-child { border-radius: 3px 3px 0 0; }
+    .hh-tlbar span:last-child { box-shadow: none; }
+    /* Not recorded is NOT zero. A day before the log existed gets a dotted stub on the
+     * baseline instead of nothing, so it is visibly a different statement from a clean day. */
+    .hh-tlday.unrec .hh-tlbar { border-bottom-style: dotted; border-bottom-color: var(--muted); }
+    .hh-tlday.unrec .hh-tlnum, .hh-tlday.unrec .hh-tlmark { opacity: 0.45; }
+    .hh-tlgap { height: 0; }
+    .hh-tlnum { font-size: 0.58em; color: var(--muted); margin-top: 3px; }
+    .hh-tlmark { font-size: 0.56em; font-weight: 700; min-height: 1.2em; }
+    .hh-tlscale { color: var(--muted); font-style: italic; }
+
     .hh-empty { padding: 40px 16px; text-align: center; color: var(--muted); }
   </style>
 </head>
@@ -199,7 +233,7 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { runPage, esc } from '../js/util.js';
-    import { loadHealth, shapeHealth, runChecks, chartHTML, popoverIndex }
+    import { loadHealth, shapeHealth, runChecks, chartHTML, timelineHTML, popoverIndex }
       from '../js/faculty-health.js';
 
     // Bootstrap as staff so the nav and theme work for anyone who follows a link here, then
@@ -335,6 +369,17 @@
         <div class="hh-sec">Handed in &mdash; one row per class, one column per lesson day</div>
         ${chartHTML(m)}
         <div class="hh-pop" id="hhpop"></div>
+        <div class="hh-sec">Tutor failures &mdash; same span, by day</div>
+        ${timelineHTML(m)}
+        <p class="hh-note">The same span as the chart above, one bar per calendar day, split
+          by <strong>what the failure means</strong> rather than by its error code &mdash;
+          nine codes is more colours than anyone can hold, and the only question that changes
+          what you do is whether the cadet can get past it alone. Submissions are deliberately
+          <em>not</em> drawn here: they are already above, cut per lesson and per track, which
+          is a better view of them than per day. Days are spaced evenly even though teaching
+          days are not, because failures land on the evening before a lesson, which is often
+          not a teaching day; the shaded days are the teaching days, marked underneath.</p>
+
         <p class="hh-note">Every row runs against the <strong>same</strong> columns, so a
           column is the same week of the term in each of them. A column is one academy lesson
           day &mdash; an M-day and its paired T-day &mdash; taken from
