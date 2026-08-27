@@ -105,7 +105,7 @@
   <div class="card">
     <label for="key">Your Gemini API key</label>
     <input id="key" type="password" autocomplete="off" spellcheck="false"
-           placeholder="AIza... (paste here)">
+           placeholder="AIza... or AQ.... (paste here)">
     <div class="row">
       <button id="run" class="primary">Check my key</button>
       <button id="show" type="button">Show key</button>
@@ -149,7 +149,12 @@ function scrub(s) {
   var t = String(s == null ? "" : s);
   if (theKey && theKey.length > 6) t = t.split(theKey).join("[KEY REDACTED]");
   t = t.replace(/AIza[0-9A-Za-z_\-]{10,}/g, "[KEY REDACTED]");
-  t = t.replace(/api_key:[0-9A-Za-z_\-]{4,}/g, "api_key:[REDACTED]");
+  // The new AUTHORIZATION keys are not AIza-shaped. The first cadet key seen here was 53 chars
+  // beginning `AQ.` (2026-08-27), and the dot matters: a character class without it stops at
+  // `api_key:AQ` and leaves the rest of the key in the report. Exact-match on theKey caught it
+  // that time only because Google echoed the key WHOLE; a prefix echo would have leaked.
+  t = t.replace(/AQ\.[0-9A-Za-z_\-.]{10,}/g, "[KEY REDACTED]");
+  t = t.replace(/api_key:[0-9A-Za-z_\-.]{4,}/g, "api_key:[REDACTED]");
   return t;
 }
 
@@ -228,10 +233,16 @@ var ADVICE = {
     steps: ["Turn off any VPN and run the check again.",
             "Check the country on your Google account matches where you are.",
             "If it still fails, send the report below — this one is not fixable from your side."] },
-  suspended: { t: "Google has suspended this key.",
-    steps: ["Do not reuse this key or this Google account for the lesson.",
-            "Make a key on a different personal Google account (18+ birth date, no VPN).",
-            "Send the report below to your instructor either way."] },
+  // MEASURED on a real cadet key, 2026-08-27. The suspension is on the PROJECT, not the key --
+  // Google's own details name the consumer as `projects/<number>`. So "just make a new key" is
+  // the one piece of advice that is guaranteed not to work: AI Studio mints a new key into the
+  // SAME default project, which is why the cadet's brand-new key failed on its first request.
+  // Say the project part first, because everyone tries a new key before reading anything.
+  suspended: { t: "Google has suspended the whole Google Cloud project behind this key — not just the key.",
+    steps: ["Making another key will NOT help. A new key goes into the same suspended project and fails the same way.",
+            "Check the email on this Google account for a suspension notice from Google Cloud — it says why, and it may have an appeal link.",
+            "Fastest way back into the lesson: sign in to aistudio.google.com/apikey with a DIFFERENT personal @gmail.com account and make a key there.",
+            "Send the report below to your instructor — the project number in it is what Google support will ask for."] },
   deadproject: { t: "The Google Cloud project behind this key is deleted or disabled.",
     steps: ["Make a new key at aistudio.google.com/apikey and choose Create in new project.",
             "Run this check again on the new key."] },
@@ -367,10 +378,23 @@ function finish(res, listed) {
 
   render(html);
 
+  // THE PROJECT NUMBER IS IN details[].metadata.consumer, NOT IN THE MESSAGE. The first cadet
+  // run (2026-08-27) returned `"consumer": "projects/1088503605520"` in every one of four
+  // probes and this field still reported null, because it only read `message`. That number is
+  // the whole diagnosis in a CONSUMER_SUSPENDED: it says the suspension is on the PROJECT, so
+  // a new key minted into the same default project fails identically -- which is exactly the
+  // "a new key fails immediately" the cadet reported. The message is kept as a fallback.
   var projectNumber = null;
   transcript.forEach(function (r) {
-    var m = /project[s]?[\/ ]([0-9]{6,})/i.exec(r.message || "");
-    if (m && !projectNumber) projectNumber = m[1];
+    if (projectNumber) return;
+    var det = (r.body && r.body.error && r.body.error.details) || [];
+    for (var i = 0; i < det.length; i++) {
+      var c = det[i].metadata && det[i].metadata.consumer;
+      var m1 = /projects?\/([0-9]{6,})/i.exec(c || "");
+      if (m1) { projectNumber = m1[1]; return; }
+    }
+    var m2 = /projects?[\/ ]([0-9]{6,})/i.exec(r.message || "");
+    if (m2) projectNumber = m2[1];
   });
 
   var report = {

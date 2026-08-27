@@ -10,6 +10,42 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-27 — Matthew Recker via Claude
 
+### The first cadet run came back CONSUMER_SUSPENDED, and it was the project, not the key
+
+**`key-check.html` was used on a real cadet key within the hour and answered the question the
+tutor could not.** All four probes returned HTTP 403 with
+`reason: "CONSUMER_SUSPENDED"` and `"Permission denied: Consumer 'api_key:...' has been
+suspended."` — which settles question E of `tests/browser/test-gemini-api-truth.html` for this
+case with a measured string instead of an invented one. The shipped `keyErrorKind()` already
+classifies it correctly; it just had no way to show anyone the evidence.
+
+**The diagnosis is in a field the report was discarding.** Every probe carried
+`details[].metadata.consumer = "projects/1088503605520"`, and `google_project_number` still
+reported `null`, because the extractor only read `error.message`. Fixed to read the structured
+metadata first and fall back to the message. That number is not a detail — it is the whole
+finding. **The suspension is on the Cloud PROJECT, not on the key**, which is the missing
+explanation for the cadet's "a brand new key fails immediately": AI Studio mints a new key into
+the same default project, so every new key inherits the suspension. The `suspended` advice now
+leads with that, because a cadet tries another key before reading anything.
+
+**The key was 53 characters beginning `AQ.`, not `AIza`.** That is Google's newer authorization
+key format, and it reached the redaction patterns as a near miss: the exact-string scrub caught
+it only because Google echoed the key **whole**, and the `api_key:` character class had no dot
+in it, so a prefix echo would have stopped at `api_key:AQ` and left the rest in a report a cadet
+emails to their instructor. Added an `AQ.` pattern and allowed dots in both.
+
+Checked the shipped builds for a hard `AIza` assumption: **48 Gemini builds mention it and all 48
+only as an input placeholder** — no validation, so an `AQ.` key is not rejected anywhere. The
+placeholder text is cosmetically wrong in all of them and is left alone; fixing it means touching
+48 shipped builds for a hint string.
+
+Still `node --check` only. The page itself is now proven in a browser by the cadet run above; the
+three changes in this entry are not.
+
+---
+
+## 2026-08-27 — Matthew Recker via Claude
+
 ### A cadet's key was refused and nobody on this end could see what Google said
 
 **Reported by the course director: a cadet's key shows as `restricted` with billing tier
