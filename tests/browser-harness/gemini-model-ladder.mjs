@@ -946,6 +946,43 @@ ok(/function runTurn[\s\S]{0,600}freshTurn\(activeModelRef\)/.test(src),
   delete S.spentModels['a']; delete S.spentModels['b'];
 }
 
+// ---- set 15: the pause writes a row ---------------------------------------------------
+// A cadet who pauses and then SUCCEEDS throws nothing and submits normally, so before this
+// they were invisible to both instruments at once: no error row, and only an aggregate inside
+// a payload that only exists if they finished. Measured in app.tutor_error_log: 774 `quota`
+// rows the night before the wait existed, 11 the next, and 0 on the night cadets reported
+// endless countdowns.
+ok(/kind: "pause", status: 429/.test(src),
+   'a visible countdown logs a `pause` row, not only the quota error it may become');
+
+// BOUNDED. The log call must sit inside the allowance guard, or one stuck turn writes a row
+// per pass -- which is the loop set 14 closed, re-opened against the database instead of
+// against the cadet.
+ok(/ladderWaits < LADDER_WAITS_PER_TURN[\s\S]{0,1400}kind: "pause"/.test(src),
+   'the pause row is written inside the per-turn allowance guard, so it is one row per turn');
+
+// BEFORE THE SLEEP, and that is the whole point of it. logError posts with keepalive, so a row
+// already in flight survives the tab closing -- and closing the tab DURING the countdown is
+// exactly what the give-up population does. Logging after the sleep would miss them.
+ok(/kind: "pause"[\s\S]{0,400}await waitVisibly\(activeModelRef\.current, pauseMs\)/.test(src),
+   'the row is posted BEFORE the countdown starts, so a cadet who gives up mid-wait is still '
+   + 'logged');
+
+// One computation, used twice. The wait length used to be an inline expression evaluated only
+// inside the waitVisibly call; logging it meant hoisting it, and the risk of hoisting is that
+// the two drift and the row reports a duration the cadet never saw.
+ok(/const pauseMs = waitMs > 0/.test(src)
+   && (src.match(/pauseMs/g) || []).length >= 3,
+   'the pause length is computed once and both logged and slept, so the row cannot report a '
+   + 'duration different from the one shown');
+
+// Same whitelist as every other row. diagSnapshot builds `obj` from a fixed key list and the
+// edge function builds its INSERT from another, so a pause row cannot carry a field -- or a
+// sentence the cadet typed -- that an error row could not.
+ok(/logError\(diagSnapshot\(\{[\s\S]{0,300}\}\)\.obj\)/.test(src),
+   'the pause row goes through diagSnapshot/logError like every other row, so it inherits the '
+   + 'same whitelist and cannot carry conversation text');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 console.log('NOTE: no live key is used — this checks selection logic, not a real tutor turn.');
 process.exit(fail ? 1 : 0);

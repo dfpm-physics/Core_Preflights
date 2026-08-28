@@ -2731,6 +2731,94 @@ def apply_wait_allowance(raw):
     return p.buf, p.applied
 
 
+# ------------------------------------------------------------------------------------------
+# SET 15 (2026-08-28) -- LOG THE PAUSE ITSELF, NOT ONLY THE FAILURE IT MIGHT BECOME.
+#
+# Asked for by the course director in the same breath as set 14: "obviously if the loop runs
+# and runs they won't submit, so we won't see the cost per turn, and it wasn't identified as
+# an error for them to wait." Exactly right, and it is the second half of the same blind spot.
+#
+# WHAT THE LOG ACTUALLY SAW, measured in app.tutor_error_log before this set:
+#
+#     night of 2026-08-25   774 `quota` rows      (the wait did not exist yet)
+#     night of 2026-08-26    11 `quota` rows
+#     night of 2026-08-27     0 `quota` rows      (cadets reporting endless countdowns)
+#
+# Set 14 explains the first column and fixes it: a turn that pauses now gives up after one
+# wait and throws a real `quota`, which mkError logs. So the FATAL case is visible again.
+#
+# THIS SET IS ABOUT THE OTHER ONE. A cadet who pauses 45s and then succeeds produces no error
+# at all, so no row is written -- and their session is still bad. That population never
+# appears anywhere: not in the error log (no error), and only as an aggregate in the submitted
+# payload's `timing` (survivors only, and only if they finish). A pause is a diagnosis, not a
+# fault, and it is the single most useful thing this course can count right now.
+#
+# WHERE IT LOGS, AND WHY BEFORE RATHER THAN AFTER. The row is posted the moment the countdown
+# starts, not when it ends. logError uses `keepalive`, so a row already in flight survives the
+# cadet closing the tab -- which is precisely what the give-up population does DURING the
+# countdown. Logging after the sleep would miss the ones it exists to catch.
+#
+# WHY IT NEEDS NO MIGRATION AND NO EDGE-FUNCTION DEPLOY. `tutor_error_log.kind` is plain text
+# with no CHECK constraint (verified against pg_constraint 2026-08-28: the only constraint on
+# that table is its primary key), and log-tutor-error passes `kind` through its whitelist as
+# `str(p.kind, 40)`. So a new kind is a client-only change. Every other field a pause row needs
+# -- slug, cadet_ref, model, phase, turn, session_sec, models[] -- is an existing column that
+# diagSnapshot already fills.
+#
+# WHAT IT COSTS. One row per turn at most, because set 14 makes ladderWaits binding. Measured
+# row size is ~735 bytes of payload; the busiest night so far wrote 942 rows. So a heavy night
+# roughly doubles, to about 3 MB. Worth watching over a term -- if it matters, prune by
+# `logged_at`, do not stop logging.
+#
+# WHAT IS DELIBERATELY NOT DONE HERE. `timing` still does not reach the database: diagSnapshot
+# has built it since set 13 and the edge-function whitelist has no slot for it, so all 130 rows
+# logged since carry none of it. That needs a column and a deploy, and it was held back on
+# purpose -- see TUTOR-BEHAVIOR-PARITY.md 2.13. The pause row's `turn` and `session_sec`
+# answer most of the same question with no DDL at all.
+
+SET15_MARKER = b"kind: \"pause\""
+
+OLD_PAUSE15 = rb"""      if (!allDay && ladderWaits < LADDER_WAITS_PER_TURN) {
+        ladderWaits++;
+        await waitVisibly(activeModelRef.current,
+                          waitMs > 0 ? Math.min(Math.max(waitMs, LADDER_WAIT_MIN_MS), LADDER_WAIT_MS)
+                                     : LADDER_WAIT_MS);
+"""
+
+NEW_PAUSE15 = rb"""      if (!allDay && ladderWaits < LADDER_WAITS_PER_TURN) {
+        ladderWaits++;
+        const pauseMs = waitMs > 0
+          ? Math.min(Math.max(waitMs, LADDER_WAIT_MIN_MS), LADDER_WAIT_MS)
+          : LADDER_WAIT_MS;
+        // LOG THE PAUSE, NOT ONLY THE FAILURE IT MIGHT BECOME. A cadet who waits here and then
+        // succeeds throws nothing, submits normally, and is invisible to every instrument the
+        // course has -- while having had a bad lesson. `pause` is a diagnosis, not a fault.
+        //
+        // POSTED BEFORE THE SLEEP, deliberately. logError uses keepalive, so a row already in
+        // flight survives the tab being closed -- and closing the tab DURING the countdown is
+        // exactly what the give-up population does. After the sleep would miss them.
+        //
+        // Swallows like every other logging call: the cadet is already waiting, and a logging
+        // failure must never become a second problem on top of the first.
+        try {
+          logError(diagSnapshot({
+            kind: "pause", status: 429,
+            detail: "[" + scopeOut + "] pausing " + Math.round(pauseMs / 1000) + "s; " + quotaMsg,
+          }).obj);
+        } catch (e) {}
+        await waitVisibly(activeModelRef.current, pauseMs);
+"""
+
+
+def apply_pause_logging(raw):
+    """Set 15. A visible countdown writes a row, even when it later succeeds."""
+    if SET15_MARKER in raw:
+        return raw, ["already"]
+    p = Patcher(raw, None)
+    p.sub("log-the-pause-before-sleeping", OLD_PAUSE15, NEW_PAUSE15)
+    return p.buf, p.applied
+
+
 def patch_one(path, verbose=False):
     raw = path.read_bytes()
     buf, applied = apply_fixset(raw)
@@ -2755,9 +2843,15 @@ def patch_one(path, verbose=False):
     # Set 14 AFTER 13 only because it is newer; they touch disjoint code. 14 edits the ladder
     # wait allowance, 13 edits timing, the countdown string and callTutor.
     buf, applied14 = apply_wait_allowance(buf)
+    # Set 15 AFTER BOTH 13 and 14, and it is a hard ordering rather than a preference. Its
+    # anchor is the wait block as set 12 last shaped it, and the code it injects calls
+    # diagSnapshot and logError -- which set 13 is what teaches to carry `timing` -- inside the
+    # `ladderWaits` guard that set 14 is what makes binding. Run before either and it either
+    # fails to match or logs a row per wait in an unbounded loop.
+    buf, applied15 = apply_pause_logging(buf)
     applied = (applied + applied2 + applied3 + applied4 + applied5 + applied6
                + applied7 + applied8 + applied9 + applied10 + applied11 + applied12
-               + applied13 + applied14)
+               + applied13 + applied14 + applied15)
     if verbose:
         for a in applied:
             print("      . " + a)

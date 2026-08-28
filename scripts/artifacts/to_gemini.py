@@ -2063,7 +2063,8 @@ def main():
                                                   apply_quota_receipts,
                                                   apply_measured_truths,
                                                   apply_turn_timing,
-                                                  apply_wait_allowance)
+                                                  apply_wait_allowance,
+                                                  apply_pause_logging)
             html, _fixsteps = apply_fixset(html)
             html, _socsteps = apply_socratic(html)
             html, _notsteps = apply_notation(html)
@@ -2093,6 +2094,18 @@ def main():
             # set 7 introduces, and it adds no ladder behaviour for a later set to read --
             # it measures what the others do and renames one cadet-facing string.
             html, _timesteps = apply_turn_timing(html)
+            # Set 14 WAS IMPORTED HERE AND NEVER CALLED, for part of 2026-08-28. The 47
+            # shipped builds were patched directly by patch_tutor_diagnostics.py, so nothing
+            # on the site was wrong and nothing reported anything -- but a NEWLY ported build
+            # would have been born with the unbounded-wait loop set 14 exists to close, and
+            # the only symptom would have been a cadet on one new lesson stuck in a countdown
+            # that never ends. An import with no call is not a no-op here; it is a silently
+            # missing fix, and it is why this chain is one call per line with a comment
+            # saying what each depends on.
+            html, _waitsteps = apply_wait_allowance(html)
+            # Set 15 after both: its anchor is the wait block, and the row it logs is bounded
+            # to one per turn only because set 14 makes `ladderWaits` binding.
+            html, _pausesteps = apply_pause_logging(html)
 
             out = OUT_ROOT / course / f"{slug}.html"
             same = out.exists() and out.read_bytes() == html

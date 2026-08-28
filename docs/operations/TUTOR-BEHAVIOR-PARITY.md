@@ -771,6 +771,102 @@ wait. Recovery is unchanged in kind: bounded, visible, under the cadet's control
 > 50 passes of the 429 branch and asserts exactly one wait is taken — and `gemini-build.mjs` in
 > real Chrome across all 47 builds. Both Node-only (CORE.md §2).
 
+### 2.13 The same day — the pause was not an error, so nothing counted it
+
+**Asked by the course director, immediately after §2.12 shipped:** *"Is there a way we can log
+students getting this sort of error? Obviously if the loop runs and runs they won't submit, so we
+won't see the cost per turn, and it wasn't identified as an error for them to wait for the rate to
+slow down."*
+
+That is two separate blind spots in one sentence, and only one of them was closed by §2.12.
+
+**What the error log actually recorded.** Counted in `app.tutor_error_log`, which is the only
+instrument that does not require a cadet to finish:
+
+| Night | `quota` rows | What was true |
+|---|---|---|
+| 2026-08-25 | **774** | the ladder wait did not exist; an exhausted ladder threw at once |
+| 2026-08-26 | 11 | the wait shipped mid-evening (§2.10 fix set) |
+| 2026-08-27 | **0** | cadets reporting endless countdowns, all night |
+
+Zero. Not "few" — none. The loop never terminated, so `mkError` never ran, so nothing was written;
+and the session never finished, so no payload arrived either. **Both instruments were blind to the
+same cadets**, which is the third time in four days (§2.4, §2.12) that the terminal state named
+where a session died and not why.
+
+**§2.12 closes the fatal half.** A turn that pauses now gives up after one wait and throws a real
+`quota`, which is logged. From 2026-08-28 those rows come back.
+
+**§2.13 closes the other half, which nothing else was ever going to reach.** A cadet who pauses 45 s
+and then *succeeds* throws nothing and submits normally. There is no error to log, so there is no
+row — and their lesson was still bad. That population appears nowhere: not in the error log (no
+error), and in the submitted payload only as an aggregate, only if they finished. **A pause is a
+diagnosis, not a fault**, and counting it is the single most useful thing this course can do with
+the instrument it already has.
+
+**So the countdown itself writes a row**, `kind = 'pause'`, posted the moment it starts.
+
+- **Before the sleep, deliberately.** `logError` posts with `keepalive`, so a row already in flight
+  survives the tab closing — and closing the tab **during** the countdown is exactly what the
+  give-up population does. Logging after the sleep would miss the cadets it exists to catch.
+- **Bounded to one row per turn**, and only because §2.12 made `ladderWaits` binding. Run this set
+  against the pre-§2.12 code and one stuck turn writes a row per pass — the same unbounded loop,
+  re-pointed at the database instead of at the cadet. That is why the two sets are ordered and the
+  ordering is asserted rather than assumed.
+- **No migration and no edge-function deploy.** `tutor_error_log.kind` is plain `text` with no
+  CHECK constraint (verified against `pg_constraint`, 2026-08-28: the only constraint on that table
+  is its primary key), and `log-tutor-error` passes it through its whitelist as `str(p.kind, 40)`.
+  Every other field a pause row needs — `slug`, `cadet_ref`, `model`, `phase`, `turn`,
+  `session_sec`, `models[]` — is an existing column `diagSnapshot` already fills. **A client-only
+  change**, which is why it shipped the same night it was asked for.
+- **Same whitelist, so it cannot carry more than an error row can.** `diagSnapshot` builds `obj`
+  from a fixed key list and the edge function builds its `INSERT` from another. There is nowhere to
+  put a sentence the cadet typed, by construction rather than by discipline (migration 020's own
+  reasoning).
+
+**What it costs.** Measured row payload is ~735 bytes, of which 544 is the `models` jsonb; the
+busiest night so far wrote 942 rows. A heavy night roughly doubles, to about 3 MB. Worth watching
+across a term on the free tier — **if it matters, prune by `logged_at`; do not stop logging.**
+
+**A defect found while wiring it, which is the more useful half of this entry.**
+`apply_wait_allowance` — §2.12's fix — was **imported by `to_gemini.py` and never called**, for part
+of 2026-08-28. Nothing was wrong on the site and nothing reported anything, because the 47 shipped
+builds are patched directly by `patch_tutor_diagnostics.py` and never went through the porter. But
+**a newly ported build would have been born with the unbounded-wait loop**, and the only symptom
+would have been one cadet, on one new lesson, in a countdown that never ends — the exact failure
+that had just taken two days to find, reintroduced silently on a surface nobody was watching.
+
+> **An unused import is not a no-op in this chain; it is a silently missing fix.** The porter's
+> fix-set chain is now written one call per line with a comment saying what each depends on, and
+> `patch_one()` in the patcher has the same shape. Neither tool has a test that would have caught
+> it — the ladder harness reads a *built* file, and every built file was correct.
+>
+> Generalised: **the two tools must agree about which of them performs what** (PROJECT.md's
+> sharp-edge table already says this about anchors; it applies to the call list too). After
+> changing either, diff the two lists against each other, not just against what you meant to add.
+
+**Still not carried to the database: `timing`.** `diagSnapshot` has built the turn/wait summary
+since §2.11 and the edge-function whitelist has no slot for it, so **all 130 rows logged since carry
+none of it** — the exact failure `log-tutor-error`'s own comment records happening once before. It
+is on the screen and in the clipboard copy, so a cadet's screenshot answers the question; the server
+copy does not. Closing it needs a column and a deploy, and was held back deliberately when the
+choice was put to the course director. The pause row's `turn` and `session_sec` answer most of the
+same question with no DDL at all.
+
+> **What the log says is the live problem, now that quota is bounded.** Last 30 hours, by distinct
+> cadets: `auth` 22, `suspended` 12, `timeout` 12, `deadproject` 9. That is ~43 cadets whose
+> **Google key or project** is broken, not whose quota is exhausted — a different problem from
+> everything in §2.4 through §2.12, and currently the largest one.
+
+> **What is still unverified.** No real tutor turn on a live key, and **no pause row has yet been
+> written by a cadet** — the shape is asserted, not observed. What ran: `gemini-model-ladder.mjs` —
+> 194 assertions, 0 failed, on a build from each of the three courses, five of them new and covering
+> this set — and `gemini-build.mjs` in real Chrome across all 47 builds. Both Node-only (CORE.md §2).
+> **First check after the next lesson night is that `kind = 'pause'` rows exist at all**; if the
+> count is zero on a night with quota rows, this set is not doing what this entry says it does.
+
+---
+
 ---
 
 ## 3. What the Claude artifact still gets wrong
@@ -1040,6 +1136,29 @@ verification — **if it is all that ran, say so in the CHANGELOG entry.**
 | `gemini-finish-bar.mjs` | drives a graded session to its end with **no API key**, by seeding a finished session; asserts the bar, the submit stamp, the greeting, and the withheld-lz-string state |
 | `gemini-handoff.mjs` | the three-link Claude→Gemini chain, asserting the router's forward separately from the build's restore |
 | `lesson-editor.mjs` | Launch goes through the router, never a build path, always a slug the manifest carries |
+
+**The instrument no harness can stand in for is `app.tutor_error_log`.** It is the only one that
+does not require a cadet to finish, and every reading in §2.4–§2.13 that survived contact with the
+evidence came out of it. Read it over `prep_app_read` on the pooler, never through a staff session
+— RLS answers *what may you see* and never says which question it answered (CORE.md §3).
+
+```sql
+-- After any lesson night. A night with quota rows and NO pause rows means §2.13 is not doing
+-- what it says; a night with pause rows and no quota rows is the fix working.
+SELECT logged_at::date AS night, kind, count(*) AS rows,
+       count(DISTINCT cadet_ref) AS cadets
+  FROM app.tutor_error_log
+ WHERE logged_at > now() - interval '3 days'
+ GROUP BY 1, 2 ORDER BY 1 DESC, 3 DESC;
+
+-- Who paused, how often, and how deep in. More than one pause row per turn is a §2.12
+-- regression -- the allowance has stopped binding.
+SELECT cadet_ref, slug, count(*) AS pauses, max(turn) AS deepest_turn,
+       max(session_sec) AS session_sec
+  FROM app.tutor_error_log
+ WHERE kind = 'pause' AND logged_at > now() - interval '1 day'
+ GROUP BY 1, 2 ORDER BY 3 DESC;
+```
 
 **Two verification traps this project has already paid for:**
 

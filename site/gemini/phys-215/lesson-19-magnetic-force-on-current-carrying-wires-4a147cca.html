@@ -3590,9 +3590,26 @@ async function rawCall(activeModelRef, body, { retries = 3 } = {}) {
                      : qs.indexOf("unknown") > -1 || !qs.length ? "unknown" : "minute";
       if (!allDay && ladderWaits < LADDER_WAITS_PER_TURN) {
         ladderWaits++;
-        await waitVisibly(activeModelRef.current,
-                          waitMs > 0 ? Math.min(Math.max(waitMs, LADDER_WAIT_MIN_MS), LADDER_WAIT_MS)
-                                     : LADDER_WAIT_MS);
+        const pauseMs = waitMs > 0
+          ? Math.min(Math.max(waitMs, LADDER_WAIT_MIN_MS), LADDER_WAIT_MS)
+          : LADDER_WAIT_MS;
+        // LOG THE PAUSE, NOT ONLY THE FAILURE IT MIGHT BECOME. A cadet who waits here and then
+        // succeeds throws nothing, submits normally, and is invisible to every instrument the
+        // course has -- while having had a bad lesson. `pause` is a diagnosis, not a fault.
+        //
+        // POSTED BEFORE THE SLEEP, deliberately. logError uses keepalive, so a row already in
+        // flight survives the tab being closed -- and closing the tab DURING the countdown is
+        // exactly what the give-up population does. After the sleep would miss them.
+        //
+        // Swallows like every other logging call: the cadet is already waiting, and a logging
+        // failure must never become a second problem on top of the first.
+        try {
+          logError(diagSnapshot({
+            kind: "pause", status: 429,
+            detail: "[" + scopeOut + "] pausing " + Math.round(pauseMs / 1000) + "s; " + quotaMsg,
+          }).obj);
+        } catch (e) {}
+        await waitVisibly(activeModelRef.current, pauseMs);
         // reviveLadder, NOT freshTurn: this is mid-turn, and freshTurn would hand back the
         // wait allowance this branch has just spent -- which is the loop it is escaping.
         if (reviveLadder(activeModelRef)) { attempt = 0; continue; }
