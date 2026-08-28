@@ -10,6 +10,59 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-28 — Matthew Recker via Claude
 
+### The written preflight is the cadet's own choice now, so the site stopped asking them to ask
+
+**Course director's decision, 2026-08-28: every remaining assignment in Physics 110 and Physics
+215 is student choice.** Lessons 8-11 shipped four days earlier as *gated* — both paths carrying
+credit, but the interactive lesson presented as the assignment and the written preflight offered
+underneath it **only with an instructor's permission** (2026-08-24 entry). That gate is now off.
+
+**Removed the permission sentence from all three places a cadet could meet it.** It was written
+three times in three different voices, which is why removing it from one would have left the other
+two contradicting the page:
+
+- `site/student/lessons.html` — the fallback card's body, where the clause was in `<strong><u>`
+  precisely because it was the condition rather than decoration. Now reads: *If you are not able
+  to complete the interactive iPREP, you may complete the assignment using PREP instead.*
+- `site/student/assignments.html` — the extra line in the submit confirmation, which was the
+  **last** place a cadet saw the demand and the one that would have caught anyone who got past the
+  card. Its `isWrittenByPermission` import went with it; the helper is still used by
+  `student-lessons.js` and is untouched in `schema.js`.
+- `site/help/student-getting-started.md` — which **quoted the card verbatim** and then spent a
+  paragraph telling cadets to ask first. Rewritten to say the written path is theirs to take. Its
+  `reviewed` date in `docs/DOC-SOURCES.json` moved to 2026-08-28.
+
+**Flipped the six live rows behind it**, because the sentence was only half the gate. With
+`content.access = 'by_permission'` still set, `site/student/lessons.html` keeps rendering
+`permissionBlock()` — interactive on top, written in a smaller dashed *"Can't complete the
+interactive lesson?"* box — so the page would have gone on **presenting** the written path as a
+fallback while no longer **saying** why. Removing the words alone would have left a cadet reading
+a layout that means "this is the lesser option" with nothing explaining it.
+
+Done through `scripts/fall2026/set_activity_roles.py`, the script that set the gate on 2026-08-24,
+by moving lessons 8-11 from `GATED` to `CHOICE` in its `PLAN`. **No new script:** it is already
+idempotent, dry-run by default, and its whole design is that adding or changing a lesson is an
+entry in that map and nothing else. Dry run and commit both reported `attach 0 · re-role 0 ·
+access flag 6` — one jsonb key on six written activities, merged with `||`, and **no**
+`offering_activities` row created, deleted or re-roled, so no cadet's committed choice and no
+grade already earned could be disturbed. Read back independently over `prep_app_read`: **0**
+activities anywhere carry `by_permission`.
+
+| Course | Lessons flipped |
+|---|---|
+| phys-110 | `preflight-08`, `preflight-09`, `preflight-11` |
+| phys-215 | `preflight-08`, `preflight-09`, `preflight-10` |
+
+Two of the six (`preflight-08`, `preflight-09`) were already at or past their deadline, so the
+flip is retrospective for those cohorts and changes only how the closed lesson reads.
+**`preflight-07` and the labs stay exactly as they were** — the script prints its four deliberate
+skips on every run, and they are unchanged.
+
+**The `gated` shape is kept, wired and working.** It is a mode the data model supports and a future
+term may want it back. A comment above `PLAN` now records that re-gating a lesson means restoring
+those three student-facing texts with it — otherwise the page would gate a path without ever
+telling the cadet it had.
+
 ### Taking the wait reset the counter, so one turn could wait forever
 
 **Reported by the course director from the cadets themselves:** the rate-limit countdown "just keeps

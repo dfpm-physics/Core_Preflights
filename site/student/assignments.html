@@ -50,8 +50,7 @@
     import {
       loadAssignmentStatuses, saveWrittenAnswers, commitSubmission,
     } from '../js/student-data.js';
-    import { questionsOf, readingLinkOf, displayPoints, isGradedPath,
-             isWrittenByPermission } from '../js/schema.js';
+    import { questionsOf, readingLinkOf, displayPoints, isGradedPath } from '../js/schema.js';
     import { esc, fmtDateTime, runPage } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
@@ -283,14 +282,12 @@
 
       // Submitting is now a commitment, not just a flag: it locks the answers and, on a
       // choice lesson, decides which path is graded. Say that plainly before they click.
+      // No permission clause: as of 2026-08-28 the written path is the cadet's own choice on
+      // every remaining phys-110 / phys-215 assignment, so the only thing left to say here is
+      // that committing to it is one-way.
       const extra = current.isChoice
         ? `\n\nThis makes the written preflight the version that counts for this assignment, and you ` +
-          `won't be able to switch to the interactive lesson afterwards.` +
-          // On a permitted-fallback lesson the interactive is the expected path, so committing to
-          // the written one is the bigger decision and the confirm is the last place to say so.
-          (isWrittenByPermission(current)
-            ? ` Submit this only if you have your instructor's permission to use PREP instead of the interactive lesson.`
-            : '')
+          `won't be able to switch to the interactive lesson afterwards.`
         : '';
       if (!confirm(`Submit with ${answered} of ${qs.length} questions answered?` +
                    `\n\nYou can keep editing your answers until the deadline.${extra}`)) return;

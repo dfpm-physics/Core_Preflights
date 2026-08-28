@@ -4,14 +4,17 @@
 Fall 2026 lessons 7-11 shipped as iPREP-only — the interactive AI lesson was the only path that
 carried credit. Some cadets cannot complete iPREP at all (age limits, age-verification failures,
 technical faults no retry fixes), and for them there was no way to earn the points. This script
-opens the written path back up, in two different shapes, because the two lesson ranges want
-different things:
+opens the written path back up. It supports two shapes:
 
-    gated   lessons 8-11. Both paths carry credit, but the interactive IS the assignment; the
-            written preflight is offered underneath it and only with an instructor's permission.
-            Written activity gets `content.access = 'by_permission'`.
-    choice  lessons 12+. Both paths carry credit and the cadet picks either one, freely.
+    choice  Both paths carry credit and the cadet picks either one, freely.
             Written activity gets `content.access = 'open'`.
+    gated   Both paths carry credit, but the interactive IS the assignment; the written
+            preflight is offered underneath it and only with an instructor's permission.
+            Written activity gets `content.access = 'by_permission'`.
+
+UPDATED 2026-08-28: the gate is OFF. It applied to lessons 8-11, which shipped gated on
+2026-08-24; the course director ended it four days later, so every lesson in PLAN below is
+now `choice` and `gated` is machinery with no current user. See the note above PLAN.
 
 Lesson 7 is deliberately untouched in both courses (course director, 2026-08-24): it stays
 iPREP-only.
@@ -88,14 +91,22 @@ ACCESS_BY_PERMISSION = "by_permission"
 # one place instead of "these five, plus twenty-one others that happen to be right already".
 PLAN = {}
 
+# NOTHING IS GATED ANY MORE. The course director ended the permission gate on 2026-08-28:
+# every remaining assignment in both courses is the cadet's own choice. Lessons 8-11 moved
+# from GATED to CHOICE here on that date, and the student-facing sentence asking cadets to
+# get permission first was removed from site/student/lessons.html, the submit confirm in
+# site/student/assignments.html, and site/help/student-getting-started.md in the same change.
+#
+# GATED is kept above, wired and working, because it is a shape the model supports and a
+# future term may want it again — but if you re-gate a lesson, those three student-facing
+# texts have to come back with it, or the page will gate a path without ever saying so.
 PLAN["phys-110"] = {
-    **{n: GATED for n in (8, 9, 11)},          # 10 is LAB 2 — see SKIPS
-    **{n: CHOICE for n in (12, 14, 15, 16, 17)},
+    **{n: CHOICE for n in (8, 9, 11, 12, 14, 15, 16, 17)},   # 10 is LAB 2 — see SKIPS
 }
 
 PLAN["phys-215"] = {
-    **{n: GATED for n in (8, 9, 10)},          # 11 is a lab with no artifact — see SKIPS
-    **{n: CHOICE for n in (13, 14, 15, 18, 19, 20, 21, 22, 24, 25, 26,
+    # 11 is a lab with no artifact — see SKIPS
+    **{n: CHOICE for n in (8, 9, 10, 13, 14, 15, 18, 19, 20, 21, 22, 24, 25, 26,
                            28, 29, 30, 31, 32, 33, 36, 37, 39, 41)},
 }
 

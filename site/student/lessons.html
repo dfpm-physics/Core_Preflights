@@ -492,12 +492,11 @@
         </div>
         <div class="fallback-card">
           <div class="fallback-title">Can’t complete the interactive lesson?</div>
-          <!-- The permission clause is emphasised because it is the CONDITION, not decoration:
-               a cadet skimming this box is deciding whether it applies to them, and the half that
-               decides it is the half about asking their instructor first. -->
-          <div class="fallback-body">If you are not able to complete the interactive iPREP
-            <strong><u>and you have permission from your instructor</u></strong>, you may complete
-            the assignment using PREP.</div>
+          <!-- No permission clause: as of 2026-08-28 every remaining phys-110 / phys-215
+               assignment is the cadet's own choice, so this box says what the fallback IS and
+               never asks them to go and get cleared for it first. -->
+          <div class="fallback-body">If you are not able to complete the interactive iPREP, you
+            may complete the assignment using PREP instead.</div>
           <div class="lesson-actions">
             <a class="btn btn-secondary" href="${esc(writtenHref(l))}">${writtenLabel}</a>
             <span class="choice-meta">Written preflight · ${qn} question${qn === 1 ? '' : 's'}</span>
