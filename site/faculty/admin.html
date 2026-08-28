@@ -123,6 +123,7 @@
   </div>
 
   <input type="file" id="csv-file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" style="display:none">
+  <input type="file" id="bb-file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" multiple style="display:none">
 
   <script type="module">
     import { bootstrap } from '../js/auth.js';
@@ -134,6 +135,7 @@
     import * as A from '../js/faculty-admin.js';
     import * as R from '../js/faculty-roster.js';
     import * as RI from '../js/roster-import.js';
+    import * as BB from '../js/blackboard-fill.js';
 
     /* ── One page, four tabs: Students · Staff · Extensions · Export ─────────────
      * The Students tab was two separate pages for a few hours on 2026-07-23 (`roster.html` and
@@ -1990,10 +1992,14 @@
     async function renderExport() {
       const panel = document.getElementById('panel');
       const { data: sections } = await import('../js/supabase.js')
-        .then(m => m.db.from('sections').select('id, code')
+        .then(m => m.db.from('sections').select('id, code, meeting_days')
           .eq('course_offering_id', ctx.currentOffering).order('code'));
       const secs = sections || [];
       const codeOf = Object.fromEntries(secs.map(s => [s.id, s.code]));
+      // Which day a section meets. `meeting_days` is the authority (a clean ['M'] or ['T'] on
+      // every live section); the code's first letter is the fallback for a hand-made section.
+      const trackOf = Object.fromEntries(secs.map(s =>
+        [s.id, (s.meeting_days && s.meeting_days[0]) || String(s.code || '')[0] || '?']));
 
       panel.innerHTML = `
         <div class="card">
@@ -2025,6 +2031,29 @@
             <button class="btn btn-secondary" id="ex-json">Download backup (JSON)</button>
             <span id="bk-status" style="font-size:0.85em"></span>
           </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Fill a Blackboard file</div>
+          <div class="card-meta">Upload the gradebook file you exported <strong>from
+            Blackboard</strong>. Preflight scores are written into the columns that are already
+            there, and the file is handed back ready to re-upload. No column is ever added,
+            renamed or reordered, so Blackboard will still accept it.</div>
+          <div class="card-meta">Cadets are matched on <strong>cadet ID</strong>, never on name.
+            A lesson with no finalized grade — not yet graded, or not yet taught — is left
+            <strong>blank, not zero</strong>.</div>
+          <div class="card-meta"><strong>Upload every file you have at once.</strong> One PREP
+            course can span several Blackboard courses, and the page can only check a section it
+            has a file for — so it lists any section that is missing from all of them.</div>
+
+          <div class="dropzone" id="bb-dz" style="min-height:96px;margin-top:14px">
+            <div class="dz-ic">📄</div>
+            <div><strong>Choose files</strong> or drag &amp; drop them here<br>
+              <span class="card-meta">One per Blackboard course. You can add more after the
+                first.</span></div>
+          </div>
+
+          <div id="bb-preview" style="margin-top:16px"></div>
         </div>`;
 
       document.getElementById('ex-csv').addEventListener('click', async () => {
@@ -2050,6 +2079,162 @@
         st.style.color = 'var(--green)';
         st.textContent = `✓ ${backup.enrollments.length} enrollments, ${backup.grades.length} grades`;
       });
+
+      /* ── Fill a Blackboard file ──────────────────────────────────────────────
+       * Preview-then-commit, the same shape as the roster import above and for the same
+       * reason: a file nobody has looked at should not be acted on. Nothing is written to
+       * the database at any point — this reads `grades` and hands back files.
+       */
+      const bbFiles = [];                // one entry per uploaded file, in upload order
+      let bbData = null;                 // { offerings, roster, lookup } — loaded once, lazily
+
+      async function loadFillData() {
+        if (bbData) return bbData;
+        const matrix = await A.gradeMatrix(ctx, await allSectionIds(ctx));
+        const byCadet = Object.fromEntries(matrix.students.map(s => [s.studentId, s.enrollmentId]));
+        bbData = {
+          // The lesson number comes off the SLUG (`preflight-08`), which is stable, rather than
+          // off the title, which a director may reword at any time.
+          offerings: matrix.columns.map(c => ({
+            id: c.id, title: c.title, lesson: BB.lessonNumberOf(c.slug ?? '') })),
+          roster: matrix.students.map(s => ({
+            studentId: s.studentId, track: trackOf[s.sectionId] || '?',
+            sectionCode: codeOf[s.sectionId] || '' })),
+          lookup: (cadetId, offeringId) => {
+            const enr = byCadet[cadetId];
+            return enr ? matrix.cell(enr, offeringId) : null;
+          },
+        };
+        return bbData;
+      }
+
+      function bbRead(file) {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          const data = await loadFillData();
+          const parsed = BB.readFile(e.target.result, data.offerings);
+          const i = bbFiles.findIndex(f => f.name === file.name);
+          const entry = { name: file.name, label: file.name, ...parsed };
+          if (i >= 0) bbFiles[i] = entry; else bbFiles.push(entry);   // re-picking replaces
+          renderBbPreview();
+        };
+        reader.readAsText(file);
+      }
+
+      {
+        const dz = document.getElementById('bb-dz');
+        const input = document.getElementById('bb-file');
+        if (dz && input) {
+          dz.addEventListener('click', () => input.click());
+          input.addEventListener('change', (e) => {
+            [...e.target.files].forEach(bbRead);
+            e.target.value = '';          // so re-picking the same file fires again
+          });
+          dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-over'); });
+          dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+          dz.addEventListener('drop', (e) => {
+            e.preventDefault(); dz.classList.remove('drag-over');
+            [...e.dataTransfer.files].forEach(bbRead);
+          });
+        }
+      }
+
+      /** One file's line in the preview: what we found, or why we refused it. */
+      function bbFileBlock(f) {
+        if (f.error) {
+          return `<div class="card-meta" style="color:var(--red)">
+            <strong>${esc(f.name)}</strong><br>${esc(f.error)}</div>`;
+        }
+        const matched = f.columns.filter(c => c.offeringId);
+        const dupes = f.columns.filter(c => c.note);
+        const secs = [...new Set(f.ids.map(id => (bbData.roster.find(r => r.studentId === id) || {}).sectionCode)
+                                      .filter(Boolean))].sort();
+        return `<div class="card-meta" style="margin-bottom:10px">
+          <strong>${esc(f.name)}</strong>: ${f.rows} cadet row(s),
+          ${matched.length} preflight column(s) matched.
+          ${secs.length ? `<div>Sections in this file: <strong>${secs.map(esc).join(', ')}</strong></div>` : ''}
+          ${dupes.length ? `<div style="color:var(--red)">${dupes.map(c =>
+            `Skipped “${esc(c.header)}” — ${esc(c.note)}.`).join('<br>')}</div>` : ''}
+          ${f.unmatchedOfferings.length ? `<div>No column here for: ${
+            f.unmatchedOfferings.map(o => esc(o.title)).join('; ')}. Those grades will not post.</div>` : ''}
+        </div>`;
+      }
+
+      function renderBbPreview() {
+        const box = document.getElementById('bb-preview');
+        if (!box) return;
+        if (!bbFiles.length) { box.innerHTML = ''; return; }
+
+        const usable = bbFiles.filter(f => !f.error);
+        const x = BB.checkFiles(usable.map(f => ({ label: f.name, ids: f.ids })),
+                                bbData ? bbData.roster : []);
+
+        // Real errors — every one of these means a grade goes somewhere wrong, or nowhere.
+        const problems = [];
+        for (const [a, b] of x.duplicateFiles) problems.push(
+          `<strong>${esc(a)}</strong> and <strong>${esc(b)}</strong> hold the same cadets — `
+          + 'the same export was probably chosen twice.');
+        for (const p of x.partial) problems.push(
+          `<strong>${esc(p.sectionCode)} is only partly in the upload</strong> — `
+          + `${p.present} of ${p.enrolled} cadets. Missing: ${p.missing.slice(0, 10).join(', ')}`
+          + `${p.missing.length > 10 ? ', …' : ''}. Their grades will not post.`);
+        if (x.inMultiple.length) problems.push(
+          `${x.inMultiple.length} cadet(s) appear in more than one file: `
+          + x.inMultiple.slice(0, 10).map(s => `${s.studentId} (${esc(s.sectionCode)})`).join(', '));
+        if (x.notOnRoster.length) problems.push(
+          `${x.notOnRoster.length} ID(s) in the file(s) are not enrolled in this course — `
+          + 'those rows are left untouched.');
+
+        // NOT an error: a section handled by another instructor, in their own Blackboard course.
+        const uncoveredNote = x.uncovered.length ? `
+          <div class="card-meta" style="margin-top:8px">
+            <strong>${x.uncovered.length} section(s) are in none of these files</strong>
+            (${x.uncovered.reduce((n, s) => n + s.enrolled, 0)} cadets):
+            ${x.uncovered.map(s => `${esc(s.sectionCode)} (${s.enrolled})`).join(', ')}.
+            If another instructor runs those in a separate Blackboard course, they need their own
+            file — nothing here will post a grade for them.
+          </div>` : '';
+
+        box.innerHTML = `
+          ${bbFiles.map(bbFileBlock).join('')}
+          <div class="card-meta" style="margin-top:10px">
+            Covering <strong>${x.coveredCadets}</strong> of ${x.rosterSize} enrolled cadets
+            across ${x.covered.length} fully-matched section(s).
+          </div>
+          ${uncoveredNote}
+          <div class="card-meta" style="margin-top:8px">
+            ${problems.length
+              ? `<div style="color:var(--red)">${problems.map(p => `<div>${p}</div>`).join('')}</div>`
+              : '<span style="color:var(--green)">✓ Every section present in these files is complete.</span>'}
+          </div>
+          <div class="row wrap" style="gap:14px;margin-top:12px">
+            <button class="btn btn-primary" id="bb-go" ${usable.length ? '' : 'disabled'}>
+              Download filled file${usable.length > 1 ? 's' : ''}</button>
+            <button class="btn btn-secondary" id="bb-clear">Clear</button>
+            <span id="bb-status" style="font-size:0.85em"></span>
+          </div>`;
+
+        document.getElementById('bb-clear').addEventListener('click', () => {
+          bbFiles.length = 0; renderBbPreview();
+        });
+        document.getElementById('bb-go').addEventListener('click', () => {
+          const st = document.getElementById('bb-status');
+          const done = [];
+          for (const f of usable) {
+            const r = BB.fillGrid(f.grid, f.idColumn.index, f.matched, bbData.lookup,
+                                  { decimals: f.format.decimals });
+            // The file goes back out in exactly the shape it came in — its own line endings, its
+            // own BOM, its own trailing newline. See toCsv().
+            // Named after the file it came from, because with several in flight "which one is
+            // this?" is the question a generic name cannot answer.
+            triggerDownload(BB.toCsv(r.grid, f.delimiter, f.format),
+              f.name.replace(/\.csv$/i, '') + '_filled.csv', 'text/csv');
+            done.push(`${f.name}: ${r.filled} written, ${r.blanks} blank`);
+          }
+          st.style.color = 'var(--green)';
+          st.innerHTML = '✓ ' + done.join(' · ');
+        });
+      }
     }
 
     /* ───────────────────────────── Modal ───────────────────────────── */

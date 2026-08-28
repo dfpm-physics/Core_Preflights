@@ -8,6 +8,153 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-28 — Casey Pellizzari via Claude
+
+### The Blackboard file the director already has, handed back with the preflight scores in it
+
+**Course director's question, 2026-08-28: could a director upload their Blackboard file and get it
+back with just the preflight scores filled in — without any AI?** Yes to both, and the second half
+matters: this is cadet id → number, a lookup and a string write. A grade posted to an LMS has to be
+reproducible and explainable, and nothing here is a judgment call.
+
+**The proposal removes the risk that has blocked this all term rather than solving it.** ROADMAP
+**P2.1** has said since it was written that *"Blackboard column headers encode the column id; a
+hand-built header will be rejected on upload"* — which is why `buildGradesCsv()`, which invents its
+own headers (`Lesson 08 Preflight — Gauss's Law [2]`), was never an LMS path. Filling Blackboard's
+**own** export means no header is ever written, so there is nothing left to reject. That export
+stays where it is; it is the human-readable one.
+
+**`site/js/blackboard-fill.js`** is new, pure (no DOM, no network, no import that binds a Supabase
+client), and enforces three rules:
+
+- **Match on the cadet id and only on it.** Never on name — two cadets share a surname and the
+  collision is silent. A file with no id column is **refused**, not matched on something weaker.
+- **Blank, never zero.** An ungraded or not-yet-taught lesson leaves an **empty cell**; a real 0
+  still writes as `0`. Both directions are pinned by tests, because they fail in opposite ways: a
+  spurious zero is a score nobody gave, and a blanked zero is a score somebody lost.
+- **Only ever write into cells.** No column or row is added, renamed, reordered or removed. Exams,
+  homework, Total and Blackboard's own bookkeeping pass through untouched, as does any row with no
+  cadet id in it (Blackboard emits a "Points Possible" row).
+
+**The id column is found by CONTENT, not by its header.** A cadet id is a 10-digit number in the
+published 3000000000–3009999999 range, so `studentIdProblem()` (reused from `roster-import.js`)
+identifies the column without knowing what Blackboard called it — and when a header alias and the
+content disagree, **the content wins and the disagreement is reported.** A column labelled `ID`
+holding Blackboard's internal user keys is a real possibility and would otherwise produce a file
+where every lookup silently missed, which reads as *"nobody has a grade yet"* rather than as a
+failure. Column→lesson matching is on the **lesson number** off the slug, never the title, and
+requires the header to say *preflight* — without that guard, `Exam 8` maps onto lesson 8.
+
+**Both day files are uploaded together, and that is the point rather than a convenience.** The
+director keeps a separate M-day and T-day file. Four failures are **invisible** one file at a time,
+because on a single-track upload *"this cadet is not in this file"* is the expected answer for half
+the course: a cadet in **neither** file (their grade never posts and nothing else in the system
+would ever say so), a cadet in **both**, a cadet in the **wrong day's** file, and **the same file
+uploaded into both slots**. All 17 phys-215 sections carry a clean `meeting_days` of `['M']` or
+`['T']`, so the roster knows which file each cadet belongs in. Two files in, **two files back out** —
+never merged, since each belongs to its own Blackboard course. A single file is still accepted and
+the cross-check says plainly that it could not run.
+
+**UI**: a third card in `site/faculty/admin.html` → Export, reusing the roster import's
+preview-then-commit shape — two dropzones, the proposed column mapping and every cross-check
+finding shown **before** anything downloads. `.xlsx` is refused by its `PK\x03\x04` signature with
+the existing *"File → Save As → CSV UTF-8"* message; no spreadsheet library, per CORE.md §2.
+`gradeMatrix()` is reused unchanged, so *finalized-only* and *blank-never-zero* keep their single
+home. **Nothing is written to the database at any point** — this reads `grades` and hands back
+files, entirely in the browser.
+
+**The real Physics 215 exports arrived the same day and changed four things.** The course director
+supplied both live files (M-day and T-day). Every one of these would have shipped wrong:
+
+- **The preflight columns are called `PF 02` … `PF 41`.** Nothing in either file says "Preflight".
+  The first matcher required that word and matched **zero** columns — a safe failure, and a useless
+  one.
+- **The same file carries `Lesson 2 Homework` … `Lesson 41 Homework`, with real marks in them,
+  sharing the lesson numbers AND the `[Total Pts: 2 Score]` suffix.** This is the dangerous one: a
+  matcher keyed on "Lesson N" would overwrite homework grades on a live course. The `PF`/preflight
+  token is now the sole discriminator and is documented as such, with `Exam`/`Lab`/`GR`/`EPQ`/`MSE`/
+  `Block`/`Total`/`Overall` pinned as negative cases.
+- **UTF-8 BOM, and bare LF line endings** despite being a Windows-authored export. The BOM must come
+  off *before* parsing — left on, it hides the first field's opening quote and the first header
+  reads back as `﻿"Last Name"`, quotes included, wrong in a way nothing downstream notices. Emitting
+  CRLF would have rewritten every line ending in a file about to be uploaded to a live course. Both
+  are now detected on read and reproduced on write, along with the trailing newline.
+- **Scores are written `"2.00"`, not `"2"`.** The decimal convention is now read from the file — and
+  from the *whole* file, because the preflight columns are the empty ones and reported "no decimals"
+  on the first attempt.
+
+**Verified against both live files, end to end.** 37 of 37 preflight columns matched in each, with
+`PF 25` and `PF 24` appearing out of order in both and mapping correctly regardless. The cadet ID
+column was found **by content** (index 3, 131/131 and 175/175 rows) rather than by its header.
+
+The proof that matters for a live course: re-parsing the output and comparing every cell against the
+input, **zero cells changed outside the preflight columns** in either file — including all 31
+homework columns and all 26/27 exam, lab, GR, EPQ, MSE, Block and Total columns. Row count, column
+count and the header row are byte-identical; BOM, LF and trailing newline preserved. Then, by a
+second and independent path, all **4,847** M-day cells were re-derived straight from `app.grades`
+and compared: **0 disagreements**. Written: 946 M-day scores and 1,175 T-day, everything from
+`PF 11` onward correctly blank because it is not yet due.
+
+`tests/app-schema/test-blackboard-fill.mjs` is new — **101 assertions, 0 failures**, registered in
+`run.mjs`'s offline list, with the four findings above pinned as regressions. The module also loads
+and runs in real Chrome.
+
+### One PREP course is several Blackboard courses, so the check is per SECTION and files are a set
+
+**The first design took exactly two files, labelled M-day and T-day. That model is wrong**, and the
+director said why: the three sections missing from these exports — `M1C`, `M3C`, `T5C` — belong to
+**another instructor's Blackboard course**, which they upload separately. They are all one course in
+PREP. And that third Blackboard course **mixes M-day and T-day sections in one shell**, so the split
+between files is by *Blackboard course*, never by teaching day.
+
+Under the two-file model those 57 cadets read as *"in neither file"* — an error, in red, that is not
+an error and that nobody on this end can fix. Repeated every upload, that is how a real warning gets
+trained away.
+
+**So the question changed** from *"is every cadet here?"* to *"which sections do these files cover,
+and is every cadet of a COVERED section present?"* `crossCheck` became **`checkFiles`**, which takes
+1..N files and reports per section. Coverage is read from **our roster** — which section each id in
+the file enrols in — rather than from Blackboard's `Child Course ID` column: that column happens to
+exist in these exports and agrees exactly, but it is Blackboard's bookkeeping and may not always be
+there.
+
+The distinction now carrying the weight:
+
+| Finding | Meaning | Shown as |
+|---|---|---|
+| Section **entirely absent** | handled in someone else's Blackboard course | a plain note, with headcount — *"needs its own file"* |
+| Section **partly present** | a column is waiting for them in a file that WAS uploaded | **error** — grades would silently not post |
+| Cadet in **two** files | posts twice, into two courses | **error** |
+| Two uploads, identical id sets | same export picked twice | **error** |
+
+The UI followed: one multi-file dropzone instead of two labelled slots, each file listed with the
+sections it contains, and each filled file downloaded under **its own name** + `_filled` — with
+several in flight, "which one is this?" is the question a generic name cannot answer.
+
+**Re-verified against both live files under the new model.** 2 files, 306 of 364 enrolled cadets,
+**13 sections fully covered**, `M1C`/`M3C`/`T5C` correctly reported as uncovered rather than as
+errors, zero cadets in two files, zero unknown ids — and still zero cells changed outside the
+preflight columns. Tests: **110 assertions, 0 failures**, including the mixed-M/T third course and
+the case where a third file closes the gap.
+
+### Also found: the test account is enrolled in a live section
+
+`3009999999` — the deliberate test cadet (`tests/app-schema/harness.mjs`) — holds an **active
+enrolment in phys-215 Fall 2026 section `M3A`**, so it is in the PREP roster and not in Blackboard.
+It therefore reports, correctly, as `M3A 18/19 — 1 missing`. The check is right; the data is what is
+odd. Nothing here special-cases it, because a fixture id hard-coded into shipped logic is worse than
+the noise. **Left for the course director:** that account inflates every headcount for M3A, not just
+this one, and dropping its enrolment would be the clean fix.
+
+**What is still NOT proven:** nothing has been uploaded to Blackboard. Whether Blackboard accepts
+the returned file is untested, and it is the last real risk — though it is now much smaller than it
+was, since the file returned is byte-identical to the one it produced except inside the preflight
+columns. The Export tab card has also not been seen rendered by a signed-in director; the page boots
+clean with no console error and the module loads in the browser, but the card itself needs a
+session. Roadmap P2.1 stays **built, unproven** until an upload succeeds.
+
+---
+
 ## 2026-08-28 — Matthew Recker via Claude
 
 ### The written preflight is the cadet's own choice now, so the site stopped asking them to ask

@@ -207,7 +207,7 @@
       "doc": "site/help/instructor-accounts.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-08-21",
+      "reviewed": "2026-08-28",
       "sources": [
         ".ai/instructions/PROJECT.md",
         "site/js/roster-import.js",

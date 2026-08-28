@@ -220,7 +220,23 @@ so a second pass costs the same as the first.
 
 ## 3. P2 — Before end of term
 
-### P2.1 — Blackboard grade export · **L**
+### P2.1 — Blackboard grade export · **L** · **BUILT 2026-08-28, UNPROVEN**
+
+> **Built and verified against the real files; not yet uploaded.** `site/js/blackboard-fill.js` +
+> a card in `faculty/admin.html` → Export fill the director's OWN Blackboard export and hand it
+> back, which removes the header-rejection risk below rather than solving it: no header is ever
+> written. Verified against both live phys-215 exports (2026-08-28) — 37/37 preflight columns
+> matched, **zero cells changed outside them**, all 4,847 M-day cells independently re-derived from
+> `app.grades` with 0 disagreements. 101 offline assertions.
+>
+> **Still untested: nothing has been uploaded to Blackboard.** That is the last risk. Note the
+> file returned is byte-identical to the one Blackboard produced except inside the preflight
+> columns, which is a much narrower exposure than a hand-built file.
+>
+> **Design note:** one PREP course spans several Blackboard courses — `M1C`/`M3C`/`T5C` are
+> another instructor's shell, which mixes M-day and T-day sections. The page therefore takes 1..N
+> files and checks coverage **per section**, treating an absent section as "needs its own file"
+> and a *partly* present one as an error. See CHANGELOG 2026-08-28.
 
 *Requested.* Grades must leave the system at term end, and there is no LMS export today —
 `djGradebookProject` has none either (its exports are human-readable Excel), so **there is no

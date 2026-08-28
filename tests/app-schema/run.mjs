@@ -45,6 +45,7 @@ function resetTestData() {
 // test-grade-cards.mjs installs the browser shim (its units reach util.js, which reads
 // location at module load), so it sits with the suites that do the same rather than before them.
 const OFFLINE = ['./test-schema.mjs', './test-config.mjs', './test-roster-import.mjs',
+                 './test-blackboard-fill.mjs',
                  './test-db-schema.mjs', './test-nav.mjs', './test-modals.mjs',
                  './test-permission-block.mjs',
                  './test-grade-cards.mjs', './test-legacy-actions.mjs'];
