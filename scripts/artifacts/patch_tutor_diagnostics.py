@@ -2625,6 +2625,112 @@ def apply_turn_timing(raw):
     return p.buf, p.applied
 
 
+# --- Set 14: taking the wait reset the counter that limited the wait ----------------------
+#
+# 2026-08-28. Reported by the course director from cadets' own screens: "it says to wait a few
+# seconds so you don't exceed the rate limit, but it just keeps restarting the timer without
+# end." Their keys were over the DAILY cap on gemini-3.6-flash and gemini-3.5-flash and
+# nowhere near it on either lite rung, and it failed most often reaching gemini-3.1-flash-lite.
+#
+# ALL OF THAT IS ONE BUG, AND IT IS OURS.
+#
+# `LADDER_WAITS_PER_TURN = 1` is enforced by `ladderWaits`, and the 429 branch spends it:
+#
+#     if (!allDay && ladderWaits < LADDER_WAITS_PER_TURN) {
+#       ladderWaits++;
+#       await waitVisibly(...);
+#       if (freshTurn(activeModelRef)) { attempt = 0; continue; }   // <-- reviveSpent()
+#     }
+#
+# and `reviveSpent()` ends with `ladderWaits = 0`. **Taking the wait resets the allowance that
+# limits the wait**, so the guard never binds and the loop has no exit. `resetLadder()` calls
+# `reviveSpent()` too and leaked the same counter -- bounded, because `diagState.resets` is
+# never cleared and `LADDER_RESET_LIMIT` is 1, but the same defect.
+#
+# MEASURED, in the payloads set 13 shipped the day before. The cap is one wait per turn, so
+# waits can never exceed turns. One session recorded **24 turns and 63 waits** -- 2,835 seconds
+# of countdown inside 142 minutes of wall clock. **21 of the 47 sessions that paused at all
+# broke the cap**, worst ratio 3.67. Without set 13 this was invisible; that is what it was for.
+#
+# WHY IT NEEDS TWO KINDS OF SPEND TO FIRE, which is exactly the configuration reported.
+# `reviveSpent` keeps "model" (404) and "day" and revives everything else, and the wait is
+# skipped entirely when `allDay`. So:
+#   * the two flash rungs 429 with a quota id naming PerDay -> "day" -> kept, correctly
+#   * the two lite rungs 429 with Google's UNNAMED "Resource has been exhausted" (section 2.10)
+#     -> "unknown" -> revived on every pass
+# Two unknowns keep `allDay` false forever, so the wait is always taken and the two lite rungs
+# are always given back. The loop runs on the lite rungs and ends at the floor,
+# `gemini-3.1-flash-lite`, which is precisely where the cadets said it failed.
+#
+# AND IT IS WHY THE LOG SAW NOTHING. The loop never throws, so `mkError` never runs and no row
+# reaches tutor_error_log -- and the session never finishes, so no payload is submitted either.
+# Both instruments were blind to the same sessions, for the second time in two days. There were
+# ZERO `quota` rows on the night this was reported.
+#
+# THE FIX. `ladderWaits` is a per-TURN allowance, so only the TURN BOUNDARY may clear it.
+# `reviveSpent()` is called from three places and only one of them is that boundary, so the
+# reset moves out of it and into `freshTurn()`, which `runTurn()` calls and nothing else does.
+# The wait path and `resetLadder()` now revive without refilling the allowance.
+#
+# WHAT A CADET GETS INSTEAD. One 45s wait, and if the ladder empties again in the same turn, a
+# real `quota` error with a working Retry -- which re-enters `runTurn`, so the next turn gets
+# its own wait. Recovery is unchanged in kind; it is bounded, visible, under the cadet's
+# control, and it LOGS. One wait and an honest message beats sixty-three waits and two hours.
+
+SET14_MARKER = b"function reviveLadder("
+
+OLD_REVIVE_TAIL = rb"""  Object.keys(waitedFor).forEach((k) => { delete waitedFor[k]; });
+  ladderWaits = 0;    // the ladder-wait allowance is per TURN, like the revival it rides with
+  return revived;
+}"""
+
+NEW_REVIVE_TAIL = rb"""  Object.keys(waitedFor).forEach((k) => { delete waitedFor[k]; });
+  // `ladderWaits = 0` USED TO BE HERE, AND IT IS THE 2026-08-28 LOOP. This function is called
+  // from three places and only ONE of them is a turn boundary: the 429 branch calls it after
+  // taking the wait, and resetLadder calls it mid-walk. So spending the allowance immediately
+  // refilled it, `ladderWaits < LADDER_WAITS_PER_TURN` never became false, and the wait had no
+  // exit -- 63 waits across 24 turns in one measured session, 142 minutes of wall clock.
+  // The reset now lives in freshTurn(), which runTurn() calls and nothing else does.
+  return revived;
+}"""
+
+OLD_FRESHTURN = rb"""function freshTurn(ref) {
+  const revived = reviveSpent();
+  if (!revived || !ref || !ref.ladder) return revived;"""
+
+NEW_FRESHTURN = rb"""function freshTurn(ref) {
+  // THE TURN BOUNDARY, and the only place this may be cleared. runTurn() is its one caller.
+  ladderWaits = 0;
+  return reviveLadder(ref);
+}
+
+// The same revive-and-re-seat WITHOUT refilling the per-turn wait allowance, for the callers
+// that are in the MIDDLE of a turn rather than at the start of one. Splitting these two is the
+// whole of the 2026-08-28 fix: they were one function, and the mid-turn caller was silently
+// getting the turn-boundary's reset.
+function reviveLadder(ref) {
+  const revived = reviveSpent();
+  if (!revived || !ref || !ref.ladder) return revived;"""
+
+# The 429 branch is mid-turn by definition -- it is inside the request loop. `if (` and the
+# body pin this to the wait path; runTurn's own call is a bare statement and is left alone.
+OLD_WAITCALL14 = rb"""        if (freshTurn(activeModelRef)) { attempt = 0; continue; }"""
+NEW_WAITCALL14 = rb"""        // reviveLadder, NOT freshTurn: this is mid-turn, and freshTurn would hand back the
+        // wait allowance this branch has just spent -- which is the loop it is escaping.
+        if (reviveLadder(activeModelRef)) { attempt = 0; continue; }"""
+
+
+def apply_wait_allowance(raw):
+    """Set 14. One wait per turn, actually."""
+    if SET14_MARKER in raw:
+        return raw, ["already"]
+    p = Patcher(raw, None)
+    p.sub("wait-allowance-is-not-reviveds-job", OLD_REVIVE_TAIL, NEW_REVIVE_TAIL)
+    p.sub("split-turn-boundary-from-midturn-revive", OLD_FRESHTURN, NEW_FRESHTURN)
+    p.sub("429-wait-path-does-not-refill", OLD_WAITCALL14, NEW_WAITCALL14)
+    return p.buf, p.applied
+
+
 def patch_one(path, verbose=False):
     raw = path.read_bytes()
     buf, applied = apply_fixset(raw)
@@ -2646,9 +2752,12 @@ def patch_one(path, verbose=False):
     # adds no behaviour of its own to the ladder -- it only measures it and renames one
     # string -- so nothing after it needs to see its output.
     buf, applied13 = apply_turn_timing(buf)
+    # Set 14 AFTER 13 only because it is newer; they touch disjoint code. 14 edits the ladder
+    # wait allowance, 13 edits timing, the countdown string and callTutor.
+    buf, applied14 = apply_wait_allowance(buf)
     applied = (applied + applied2 + applied3 + applied4 + applied5 + applied6
                + applied7 + applied8 + applied9 + applied10 + applied11 + applied12
-               + applied13)
+               + applied13 + applied14)
     if verbose:
         for a in applied:
             print("      . " + a)

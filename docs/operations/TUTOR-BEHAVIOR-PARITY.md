@@ -692,6 +692,85 @@ pacing for every cadet mid-term to fix a reporting problem.
 > `app.submission_activities`. **Ask it before the next fix set, not after.** That is the lesson
 > §2.6 recorded and §2.10 had to record again.
 
+### 2.12 The next day — taking the wait reset the counter that limited the wait
+
+**§2.11 shipped the instrument. This is the first thing it found, and it found it in one day.**
+
+Reported by the course director from cadets' own screens: *"it says to wait a few seconds so you
+don't exceed the rate limit, but it just keeps restarting the timer without end."* Their keys were
+over the **daily** cap on `gemini-3.6-flash` and `gemini-3.5-flash`, **nowhere near** it on either
+lite rung, and it failed most often reaching `gemini-3.1-flash-lite`.
+
+All of that is one bug, and it is ours.
+
+```js
+if (!allDay && ladderWaits < LADDER_WAITS_PER_TURN) {
+  ladderWaits++;                                              // spend the allowance
+  await waitVisibly(...);
+  if (freshTurn(activeModelRef)) { attempt = 0; continue; }   // -> reviveSpent()
+}
+```
+
+`reviveSpent()` ended with `ladderWaits = 0`. **Taking the wait refilled the allowance that limits
+the wait**, so `LADDER_WAITS_PER_TURN = 1` never bound and the loop had no exit. `resetLadder()`
+calls `reviveSpent()` too and leaked the same counter — bounded, because `diagState.resets` is
+never cleared, but the same defect.
+
+#### Measured, in §2.11's own payloads
+
+The cap is one wait per turn, so waits can never exceed turns:
+
+| Session | Turns | Waits taken | Wall clock |
+|---|---|---|---|
+| 05:15 | 24 | **63** | **142 min** |
+| 04:57 | 15 | 55 | 56 min |
+| 05:45 | 17 | 42 | 61 min |
+
+**21 of the 47 sessions that paused at all broke the cap**, worst ratio 3.67. Without §2.11 none of
+this existed as data.
+
+#### Why it needs two KINDS of spend, which is exactly the configuration reported
+
+`reviveSpent` keeps `model` (404) and `day` and revives everything else, and the wait is skipped
+entirely when `allDay`. So the two flash rungs 429 with a quota id naming `PerDay` → `day` → kept,
+correctly. The two lite rungs 429 with Google's **unnamed** *"Resource has been exhausted"* (§2.10)
+→ `unknown` → **revived on every pass**. Two unknowns keep `allDay` false forever, so the wait is
+always offered and the lite rungs are always given back. The loop runs on the lite rungs and ends
+at the floor, `gemini-3.1-flash-lite` — precisely where the cadets said it failed.
+
+#### And it is why the log saw nothing, for the second time in two days
+
+The loop never throws, so `mkError` never runs and no row reaches `tutor_error_log` — and the
+session never finishes, so no payload is submitted either. **Zero `quota` rows on the night this
+was reported.** §2.11 said the blind spot was abandoned sessions; this is what was hiding in it.
+
+| Behaviour | A (kit) | B (sources) | C (Gemini) | Note |
+|---|---|---|---|---|
+| `reviveSpent` no longer clears `ladderWaits` | ❌ | n/a | ✅ | it is called mid-turn from two places |
+| `freshTurn` owns the reset; `runTurn` is its only caller | ❌ | n/a | ✅ | the turn boundary, and only it |
+| `reviveLadder` — mid-turn revive, no refill | ❌ | n/a | ✅ | the 429 path and `resetLadder` use it |
+
+**What a cadet gets instead.** One 45s wait, and if the ladder empties again in the same turn, a
+real `quota` error with a working Retry — which re-enters `runTurn`, so the next turn gets its own
+wait. Recovery is unchanged in kind: bounded, visible, under the cadet's control, and **it logs**.
+
+> **Two corrections this set forced on §2.11's own reading, both from confounds.**
+>
+> - **"Drop `gemini-3.5-flash`" was wrong.** Compared in QUIET hours only, where nothing is
+>   exhausted, all three models are identical — 3.1–3.3 s median turn. `gemini-3.5-flash-lite`
+>   looked catastrophic (68 s median) only because 29 of its 31 sessions were in the rush block:
+>   it is where exhausted sessions **end up**, not what makes them slow.
+> - **The rush-hour slowdown was read as free-tier capacity.** Part of it is; a large part was
+>   this loop. Re-measure before sizing the paid-key decision — §2.10's "the free tier is not
+>   sized for this class" still stands on its own arithmetic, but tonight's numbers overstate it.
+>
+> Same lesson as §2.4→§2.6: **the terminal state names where a session died, never why.**
+
+> **What is still unverified.** No real tutor turn on a live key. What ran: `gemini-model-ladder.mjs`
+> — 189 assertions, 0 failed, on a build from each of the three courses, including one that drives
+> 50 passes of the 429 branch and asserts exactly one wait is taken — and `gemini-build.mjs` in
+> real Chrome across all 47 builds. Both Node-only (CORE.md §2).
+
 ---
 
 ## 3. What the Claude artifact still gets wrong

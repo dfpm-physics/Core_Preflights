@@ -68,6 +68,7 @@ const S = new Function(block + `
            RPD_FLASH, RPD_LITE, rpdOf, DAILY_CONFIDENCE,
            PACE_WALK_LIMIT, QUIET_WAIT_MS,
            timing, noteTurn, noteApi, noteWait, timingSummary, SLOW_TURN_MS,
+           freshTurn, reviveLadder,
            ladderWaitsNow: () => ladderWaits, spendLadderWait: () => { ladderWaits++; } };`)();
 const isLite = (n) => S.MODEL_LITE.includes(n);
 
@@ -470,9 +471,19 @@ ok(S.LADDER_WAITS_PER_TURN >= 1,
   clearSpent();
   S.spendLadderWait();
   ok(S.ladderWaitsNow() === 1, 'a ladder wait is counted');
+  // INVERTED ON 2026-08-28, and the old assertion is the bug it was asserting. reviveSpent is
+  // called from THREE places and only one is a turn boundary -- the 429 branch calls it right
+  // after spending the wait, and resetLadder calls it mid-walk. Clearing here refilled the
+  // allowance that had just been spent, so `ladderWaits < LADDER_WAITS_PER_TURN` never became
+  // false and the wait loop had no exit. Measured: 63 waits across 24 turns, 142 minutes.
   S.reviveSpent();
+  ok(S.ladderWaitsNow() === 1,
+     'reviveSpent does NOT refill the wait allowance - it is called mid-turn, and refilling it '
+     + 'there is what made the countdown endless, got ' + S.ladderWaitsNow());
+  S.freshTurn({ ladder: S.MODEL_CHAT, i: 0, current: S.MODEL_CHAT[0] });
   ok(S.ladderWaitsNow() === 0,
-     'reviveSpent clears it - it rides with the turn boundary, got ' + S.ladderWaitsNow());
+     'freshTurn DOES clear it - that is the turn boundary, and runTurn is its only caller, got '
+     + S.ladderWaitsNow());
 })();
 
 // These live beside rawCall, outside the block this file evaluates, so they are read as text.
@@ -488,7 +499,9 @@ ok(/Math\.min\(Math\.max\(waitMs, LADDER_WAIT_MIN_MS\), LADDER_WAIT_MS\)/.test(s
    "Google's RetryInfo may only SHORTEN the wait - measured at 57s for a wall that cleared in 10");
 ok(/async function waitVisibly\(model, ms\)/.test(src) && /onModelSwitch\.fn\(n > 0\s*\?/.test(src),
    'the wait is SHOWN on the existing status strip, not hidden behind a spinner');
-ok(/if \(freshTurn\(activeModelRef\)\) \{ attempt = 0; continue; \}/.test(src),
+// reviveLadder since 2026-08-28, not freshTurn. Same revive, same re-seat, same purpose --
+// what it no longer does is hand back the wait allowance this branch just spent. See set 14.
+ok(/if \(reviveLadder\(activeModelRef\)\) \{ attempt = 0; continue; \}/.test(src),
    'after the wait the ladder is revived and re-seated, so the wait buys a whole fresh ladder');
 
 // --- set 7, the logging half: record WHICH quota Google named ---------------------------
@@ -884,6 +897,54 @@ ok(/d\.timing = timingSummary\(\)/.test(src) && /d\.duration_min = /.test(src),
    + 'active clock, and contract section 8 permits the added key');
 ok(/timing: \{ \.\.\.timing \}/.test(src) && /Object\.assign\(timing, saved\.timing\)/.test(src),
    'and it survives a reload, or a cadet who reloads reports only the tail of their session');
+
+// --- set 14: one wait per turn, actually --------------------------------------------------
+// The 2026-08-28 loop. Cadets: "it just keeps restarting the timer without end", on keys over
+// the DAILY cap on both flash rungs and nowhere near it on either lite rung. All one bug:
+// reviveSpent() refilled `ladderWaits`, and the 429 branch calls reviveSpent() (via freshTurn)
+// immediately after spending it. Set 13's payloads measured it -- 63 waits across 24 turns.
+
+ok(/function reviveLadder\(/.test(src),
+   'the mid-turn revive is its own function - one function serving both a turn boundary and a '
+   + 'mid-turn caller is the whole defect');
+ok(/if \(reviveLadder\(activeModelRef\)\) \{ attempt = 0; continue; \}/.test(src),
+   'the 429 wait path calls reviveLadder, NOT freshTurn - freshTurn would hand back the wait '
+   + 'allowance the branch has just spent');
+ok(/function runTurn[\s\S]{0,600}freshTurn\(activeModelRef\)/.test(src),
+   'runTurn still calls freshTurn - the turn boundary keeps its reset, so Retry gets a fresh '
+   + 'wait and recovery is unchanged in kind');
+
+// resetLadder is the SECOND caller, and it leaked the same counter. Bounded by
+// LADDER_RESET_LIMIT and a diagState.resets that is never cleared, so it could only leak once
+// per page load -- the same defect at a smaller size, and fixed by the same move.
+{
+  const rl = src.slice(src.indexOf('function resetLadder(ref) {'),
+                       src.indexOf('function advance(ref)'));
+  ok(/reviveSpent\(\)/.test(rl) && !/ladderWaits/.test(rl),
+     'resetLadder revives without refilling the allowance either - it runs mid-walk, not at a '
+     + 'turn boundary');
+}
+
+// THE LOOP, pinned shut. Two lite rungs spent as "unknown" is the reported configuration:
+// allDay stays false so the wait is always offered, and both rungs revive every pass. The only
+// thing that ever stopped it was the allowance, and the allowance was being refilled.
+{
+  const lad = ['a', 'b'];
+  const ref = { ladder: lad, i: 0, current: 'a' };
+  S.freshTurn(ref);                                   // turn boundary: allowance = 1
+  let waits = 0;
+  for (let i = 0; i < 50; i++) {                      // 50 passes of the 429 branch
+    S.spentModels['a'] = 'unknown';
+    S.spentModels['b'] = 'unknown';
+    if (S.ladderWaitsNow() < S.LADDER_WAITS_PER_TURN) { S.spendLadderWait(); waits++; }
+    else break;                                       // this is the exit that did not exist
+    S.reviveLadder(ref);
+  }
+  ok(waits === 1,
+     'a single turn can take the ladder wait exactly ONCE, however many times the ladder '
+     + 'empties - before this it was unbounded, got ' + waits);
+  delete S.spentModels['a']; delete S.spentModels['b'];
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 console.log('NOTE: no live key is used — this checks selection logic, not a real tutor turn.');

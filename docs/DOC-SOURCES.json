@@ -333,7 +333,7 @@
       "doc": "docs/operations/ONBOARD-ARTIFACTS.md",
       "kind": "operations",
       "tier": "staff",
-      "reviewed": "2026-08-27",
+      "reviewed": "2026-08-28",
       "sources": [
         "scripts/artifacts/sync_artifacts.py",
         "scripts/artifacts/artifact_parse.py",
@@ -349,7 +349,7 @@
       "doc": "docs/operations/TUTOR-BEHAVIOR-PARITY.md",
       "kind": "operations",
       "tier": "staff",
-      "reviewed": "2026-08-27",
+      "reviewed": "2026-08-28",
       "sources": [
         "scripts/artifacts/to_gemini.py",
         "scripts/artifacts/patch_artifacts.py",
@@ -449,7 +449,7 @@
       "doc": ".ai/skills/gemini-port/SKILL.md",
       "kind": "skill",
       "tier": "internal",
-      "reviewed": "2026-08-27",
+      "reviewed": "2026-08-28",
       "sources": [
         ".ai/instructions/CORE.md",
         "scripts/artifacts/to_gemini.py",

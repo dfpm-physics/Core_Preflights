@@ -8,6 +8,70 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-08-28 — Matthew Recker via Claude
+
+### Taking the wait reset the counter, so one turn could wait forever
+
+**Reported by the course director from the cadets themselves:** the rate-limit countdown "just keeps
+restarting without end", and it happened to cadets whose keys were **over the daily cap on
+`gemini-3.6-flash` and `gemini-3.5-flash` but nowhere near any limit on the two lite models** —
+most often while reaching `gemini-3.1-flash-lite`. That combination is not incidental; it is the
+exact precondition, and it is why this was invisible to everyone else.
+
+**The bug is one line.** `reviveSpent()` ended with `ladderWaits = 0;`. The 429 path increments
+`ladderWaits`, waits 45 s, then calls `freshTurn()` → `reviveSpent()` — which cleared the counter it
+had just incremented. `LADDER_WAITS_PER_TURN = 1` therefore never bound: the "one wait per turn"
+allowance was consumed and refunded in the same breath, so the walk could loop for as long as the
+cadet let it.
+
+**Why that key configuration and no other.** A `day` spend is permanent and a `minute`/`unknown`
+spend is revived. Two flash rungs day-locked plus two lite rungs on Google's unnamed 429 leaves
+`allDay` false forever — so the loop never reaches the terminal "all models are out of quota"
+message that would have ended it, and instead falls to the floor rung, `gemini-3.1-flash-lite`, and
+starts again. A cadet whose flash quota was intact hit the cap once and moved on.
+
+**Set 14 moves the reset to the turn boundary.** `freshTurn()` now owns `ladderWaits = 0` and
+`runTurn()` is its only caller; `reviveLadder()` does the model revival without touching the
+allowance, and the wait path calls that instead. Retry still recovers, because Retry re-enters
+`runTurn()`. Applied by `scripts/artifacts/patch_tutor_diagnostics.py` (set 14) to **all 47** shipped
+Gemini builds — 47 written, 0 refused, 893 insertions / 94 deletions — and added to
+`scripts/artifacts/to_gemini.py` so a newly ported build is born with it.
+
+**Set 13, shipped the day before, is what made this provable.** It put a real clock on each turn and
+each wait and wrote the summary into the submission payload (contract §8 additive keys). Before it,
+`duration_min` counted cadet keystrokes only — `if (loading) return;` skipped the entire tutor
+response, including the 45 s wait and the 120 s deadline — so a 142-minute session reported six
+minutes. The new numbers across 125 sessions / 2225 turns: quiet block median turn **3.3 s** with
+zero pause; rush block (20:00 MT onward) median turn **18.9 s**, median pause **135 s**, 20.5 % of
+turns over 30 s, worst single turn **3047 s**. And the smoking gun for set 14: one session logged
+**63 waits across 24 turns**, with 21 of 47 paused sessions over the one-per-turn cap. Set 13 also
+reworded the countdown, which cadets were reading as a crash, to say the pause is normal, carries on
+by itself, and their work is saved.
+
+**Two corrections this forced on yesterday's reading.** Part of what looked like rush-hour capacity
+was this loop, so the rush figures must be re-measured now that it is fixed before any conclusion is
+drawn about paid keys or a proxy. And an earlier suggestion to drop `gemini-3.5-flash-lite` was
+wrong — a confound: 29 of its 31 sessions were in the rush block, and in quiet hours all three
+models are indistinguishable (3.1–3.3 s median). It is where exhausted sessions end up, not what
+makes them slow.
+
+Verification: `tests/browser-harness/gemini-model-ladder.mjs` — **189 passed, 0 failed** on
+phys-215, phys-110 and phys-310 builds, including a new 50-pass loop test that asserts exactly one
+wait is granted per turn. All 47 builds render clean in real Chrome
+(`tests/browser-harness/gemini-build.mjs`, 8/8 each). Both harnesses are optional Node tooling under
+CORE.md §2; nothing on the deploy path changed.
+
+Also fixed: that Chrome harness asserted `input[type="password"]` for the API-key box, which fix set
+`dc5fbd7` had deliberately removed from every build so the browser stops autofilling a saved
+password into it — so the check failed all 47 for the one reason they were correct. It now anchors
+on `#prep-gkey` and additionally asserts the field is **not** a password input, which is the
+property that change was made to guarantee.
+
+Reasoning and the three-surface assignment: `docs/operations/TUTOR-BEHAVIOR-PARITY.md` §2.11
+(set 13) and §2.12 (set 14).
+
+---
+
 ## 2026-08-27 — Matthew Recker via Claude
 
 ### The Claude button is back on a student's lesson, as an option and not as the lesson

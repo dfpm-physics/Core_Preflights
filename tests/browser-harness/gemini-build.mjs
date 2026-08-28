@@ -107,12 +107,18 @@ const kids = await page.evaluate(() => document.querySelector('#root')?.childEle
 check('#root mounted children (render, not just parse)', kids > 0, `childElementCount=${kids}`);
 
 const ui = await page.evaluate(() => ({
+  key: !!document.querySelector('#prep-gkey'),
   pwd: !!document.querySelector('input[type="password"]'),
   inputs: document.querySelectorAll('input').length,
   text: document.body.innerText.slice(0, 4000),
 }));
-check('API-key field present (type=password) — what the port adds', ui.pwd,
+// Anchored on the id, NOT on type="password": fix set dc5fbd7 deliberately made
+// every key box type="text" so the browser stops autofilling a saved password
+// into it. Asserting the old markup here failed all 47 builds for the one reason
+// they were correct.
+check('API-key field present (#prep-gkey) — what the port adds', ui.key,
       `inputs=${ui.inputs}`);
+check('key box is NOT type="password" (no browser autofill)', !ui.pwd, '');
 check('start screen intact — honor/integrity text survived the port',
       /honor|integrity/i.test(ui.text));
 

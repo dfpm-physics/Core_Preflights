@@ -2062,7 +2062,8 @@ def main():
                                                   apply_key_error_kinds,
                                                   apply_quota_receipts,
                                                   apply_measured_truths,
-                                                  apply_turn_timing)
+                                                  apply_turn_timing,
+                                                  apply_wait_allowance)
             html, _fixsteps = apply_fixset(html)
             html, _socsteps = apply_socratic(html)
             html, _notsteps = apply_notation(html)
