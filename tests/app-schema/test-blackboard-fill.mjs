@@ -12,6 +12,7 @@
 import { check, eq, section } from './harness.mjs';
 import {
   findIdColumn, lessonNumberOf, matchColumns, fillGrid, toCsv, readFile, checkFiles,
+  narrowToPreflights, isGradeColumn,
 } from '../../site/js/blackboard-fill.js';
 
 /* Synthetic cadet IDs in the real 30xxxxxxxx range, and synthetic names. CORE.md §3: a fixture
@@ -367,4 +368,76 @@ for (const h of ['MSE 1 - Algebra and Trig [Total Pts: 2 Score] |534276',
   check('does not introduce CRLF', !out.includes('\r\n'));
   check('keeps the trailing newline', out.endsWith('\n'));
   check('the homework column survives the round trip', out.includes('"2.00"'));
+}
+
+
+/* ── Narrowing the file to the posted columns ────────────────────────────────
+ * The rule this pins was learned from the first real upload (2026-08-28). Handing Blackboard a
+ * column we did not write is not free: it read our passed-through blanks as "erase this" and
+ * offered to clear `Lesson 8 Homework` (46 blank cells) and `MSE 3 - Dot Product` (104), neither
+ * of which we had touched. So the negative assertions below are the point of this section — what
+ * must NOT be in the file matters more than what is.
+ */
+section('narrowToPreflights');
+{
+  const f = readFile(toCsv(BB_GRID, ','), OFFERINGS);
+  const m = matchColumns(BB_HEADER, OFFERINGS);
+  // Only lesson 8 is graded, and only for cadet A.
+  const r = fillGrid(f.grid, 2, m.matched, (id, o) => (id === A && o === 'off-08' ? 2 : null));
+  const n = narrowToPreflights(r.grid, m.matched, 2);
+
+  eq('keeps the three identity columns', n.grid[0].slice(0, 3).join('|'),
+     'Last Name|First Name|Student ID');
+  eq('keeps exactly one preflight column — the only one with a score', n.grid[0].length, 4);
+  eq('and it is lesson 8', n.grid[0][3], 'Preflight 8 [Total Pts: 2] |8842002');
+  check('the EXAM column is gone', !n.grid[0].some(h => /Exam/.test(h)));
+  check('an ungraded preflight column is gone', !n.grid[0].some(h => /Preflight 7|Preflight 9/.test(h)));
+  eq('reports how many columns were left out', n.dropped, 3);
+  eq('names the columns actually posted', n.postedColumns.length, 1);
+
+  eq('every row survives', n.grid.length, BB_GRID.length);
+  eq('the score is carried across', n.grid[1][3], '2');
+  eq('an ungraded cadet stays blank in a posted column', n.grid[2][3], '');
+  eq('the non-student row keeps its identity cells', n.grid[3][0], 'Points Possible');
+  check('the non-student row keeps its untouched preflight cell', n.grid[3][3] === '2');
+}
+{
+  // Nothing graded at all → nothing to post. The caller must be able to see that and refuse,
+  // rather than hand over a file that would tell Blackboard to clear every preflight.
+  const m = matchColumns(BB_HEADER, OFFERINGS);
+  const r = fillGrid(BB_GRID, 2, m.matched, () => null);
+  const n = narrowToPreflights(r.grid, m.matched, 2);
+  eq('with no scores anywhere, no preflight column is posted', n.postedColumns.length, 0);
+  check('and no grade column survives at all', !n.grid[0].some(h => /Total Pts/.test(h)));
+}
+{
+  // isGradeColumn is the whole test, so pin both of Blackboard's markers and the identity case.
+  check('a column-id suffix marks a grade column', isGradeColumn('PF 02 [Total Pts: 2 Score] |574260'));
+  check('a bare column-id suffix is enough', isGradeColumn('Something |526940'));
+  check('a bare points marker is enough', isGradeColumn('Overall Grade [Total Pts: up to 100 USAFA Letter]'));
+  check('Student ID is not a grade column', !isGradeColumn('Student ID'));
+  check('Child Course ID is not a grade column', !isGradeColumn('Child Course ID'));
+  check('Last Access is not a grade column', !isGradeColumn('Last Access'));
+}
+{
+  /* The two columns from the real 2026-08-28 M-day export, verbatim, with the blank counts that
+   * triggered Blackboard's clear-grades warning. Neither may ever reach the output file again. */
+  const HDR = ['Last Name', 'First Name', 'Student ID',
+               "Lesson 8 Homework - Gauss's Law [Total Pts: 2 Score] |534283",
+               'MSE 3 - Dot Product [Total Pts: 2 Score] |534284',
+               'PF 08 [Total Pts: 2 Score] |574266'];
+  const GRID = [HDR,
+                ['Testcadet', 'Alpha', String(A), '', '', ''],
+                ['Testcadet', 'Bravo', String(B), '2.00', '', '']];
+  const m = matchColumns(HDR, OFFERINGS);
+  eq('PF 08 is matched, the lesson-8 HOMEWORK column is not', Object.keys(m.matched).join(), '5');
+  const r = fillGrid(GRID, 2, m.matched, (id, o) => (o === 'off-08' ? 2 : null), { decimals: 2 });
+  const n = narrowToPreflights(r.grid, m.matched, 2);
+  check('Lesson 8 Homework is not in the posted file',
+        !n.grid[0].some(h => /Lesson 8 Homework/.test(h)));
+  check('MSE 3 is not in the posted file', !n.grid[0].some(h => /MSE 3/.test(h)));
+  check('a graded homework cell cannot be blanked, because its column is gone',
+        !n.grid.some(row => row.includes('2.00') && row.indexOf('2.00') !== 3));
+  eq('PF 08 is posted', n.grid[0][3], 'PF 08 [Total Pts: 2 Score] |574266');
+  eq('with the score', n.grid[1][3], '2.00');
 }

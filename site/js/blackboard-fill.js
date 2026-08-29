@@ -11,7 +11,7 @@
 // cells of columns that already exist, and returns the same file. There is nothing for Blackboard
 // to reject because nothing about the file's structure changed.
 //
-// THREE RULES, ALL LOAD-BEARING
+// FOUR RULES, ALL LOAD-BEARING
 //
 //   1. Match on the cadet id and only on it (director, 2026-08-28; ROADMAP P2.1). Never on name —
 //      two cadets share a surname and the collision is silent. If no id column can be found the
@@ -20,9 +20,14 @@
 //      Blackboard as a real score an instructor never gave, and no one can tell it apart from one
 //      that was earned. `gradeMatrix()` already returns null for this case; we must not turn it
 //      into 0 on the way out.
-//   3. Only ever write into cells. Never add, rename, reorder or remove a column or a row.
-//      Exams, homework, Total, and Blackboard's own bookkeeping columns pass through untouched.
-//      This rule is the entire reason the round trip is safe.
+//   3. Never add, rename or reorder a column, and never touch a row. Cells are written only in
+//      preflight columns; a header is never invented. Still the reason the round trip is safe.
+//   4. Send back ONLY the columns we are posting — the identity block plus the filled preflights
+//      (`narrowToPreflights`). This REPLACES the original rule 3, which said to hand every column
+//      back untouched. The first real upload disproved it: Blackboard treats a passed-through
+//      blank as "erase this", and offered to clear two columns whose cells we had provably never
+//      written. A column that is not in the file cannot be acted on. See `narrowToPreflights` for
+//      the full account.
 //
 // PURE ON PURPOSE. No DOM, no network, no imports that bind a Supabase client — so the whole
 // module is testable in Node the way `roster-import.js` is. The caller does the I/O.
@@ -263,6 +268,76 @@ export function fillGrid(grid, idCol, colMap, lookup, { decimals = 0 } = {}) {
   });
 
   return { grid: out, filled, blanks, skippedRows, ids: seenIds, unknownIds };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════
+ * Narrowing the file to just the preflight columns
+ * ════════════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * A Blackboard grade column carries its internal id and its points in the header, e.g.
+ * `PF 02 [Total Pts: 2 Score] |574260`. The identity columns Blackboard leads with — Last Name,
+ * First Name, Username, Student ID, Last Access, Availability, Child Course ID — carry neither.
+ * That is the whole test, and it is Blackboard's own convention rather than ours.
+ */
+const GRADE_COLUMN = /\|\s*\d+\s*$|\[\s*total\s+pts\s*:/i;
+export const isGradeColumn = (h) => GRADE_COLUMN.test(String(h || ''));
+
+/**
+ * Drop every column we are not posting, keeping the identity columns and the filled preflights.
+ *
+ * WHY — AND WHY THIS REVERSES RULE 3 ABOVE
+ *
+ * Rule 3 said the safe move was to hand back every column untouched. The first real upload
+ * (2026-08-28, phys-215 M-day) proved the opposite: **an untouched column is not an inert one.**
+ * Blackboard read our pass-through cells as instructions and offered to clear two columns —
+ * `Lesson 8 Homework` (46 blank cells) and `MSE 3 - Dot Product` (104). Verified byte-for-byte:
+ * we had changed nothing outside the 37 `PF` columns. The blanks were Blackboard's OWN export,
+ * and handing a blank back means "erase this" for any cell that has an attempt behind it.
+ *
+ * The window makes it worse than a one-off. The export is a snapshot; grading continues while the
+ * director works. Every minute between download and upload is a minute in which a fresh grade can
+ * be overwritten by a stale blank, and nothing in the file says which cells went stale.
+ *
+ * So the rule is now: **send only what we are posting.** A column that is not in the file cannot
+ * be acted on — Blackboard updates only the columns it is given, matching each by the id in its
+ * own header. What survives:
+ *
+ *   - every identity column, untouched — they are how Blackboard finds the row
+ *   - every preflight column we wrote at least one score into
+ *
+ * A matched preflight with no scores yet (the lesson has not been taught) is dropped too. It
+ * would be a harmless no-op, but it puts a column in front of the director that they then have to
+ * reason about, and the point of this change is to leave nothing to reason about.
+ *
+ * `idCol` is required, and asking for it is not ceremony. "Which columns carry a score" must be
+ * asked of CADET rows only: a Blackboard export can carry a non-student `Points Possible` row,
+ * `fillGrid` copies such a row through verbatim by design, and its leftover `2` in every preflight
+ * column otherwise makes every column look posted. That would put the whole file back — the exact
+ * failure this function exists to prevent, restored by a row nobody was looking at.
+ *
+ * Pure: takes the FILLED grid, returns a new one. Call it after `fillGrid`, never before.
+ */
+export function narrowToPreflights(grid, colMap, idCol) {
+  if (!grid || !grid.length) return { grid: [], kept: [], dropped: 0, postedColumns: [] };
+
+  const cadetRows = grid.slice(1).filter(row => cadetIdIn(row[idCol]) != null);
+  const posted = new Set();
+  for (const colIdx of Object.keys(colMap || {})) {
+    const c = Number(colIdx);
+    // "Carries a score" is asked of the filled grid, so it means what we wrote, not what arrived.
+    if (cadetRows.some(row => String(row[c] ?? '').trim() !== '')) posted.add(c);
+  }
+
+  const header = grid[0];
+  const kept = header.map((h, i) => i).filter(i => posted.has(i) || !isGradeColumn(header[i]));
+
+  return {
+    grid: grid.map(row => kept.map(i => row[i] ?? '')),
+    kept,
+    dropped: header.length - kept.length,
+    postedColumns: kept.filter(i => posted.has(i)).map(i => header[i]),
+  };
 }
 
 /**

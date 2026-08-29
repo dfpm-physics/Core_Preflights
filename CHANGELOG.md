@@ -10,6 +10,69 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-08-28 — Casey Pellizzari via Claude
 
+### The first real upload: send Blackboard only the columns we are posting
+
+**The feature below was tried against the live phys-215 M-day course, and Blackboard stopped at the
+confirmation page.** It offered to clear two columns — `Lesson 8 Homework - Gauss's Law` and
+`MSE 3 - Dot Product` — with the warning *"You're about to clear some grades with attempts."*
+
+**We had not written to either.** Verified byte-for-byte against the original export: of 104
+columns, cells changed in exactly the 37 `PF` columns and nowhere else, 946 of them. The blanks
+Blackboard objected to were **its own** — 46 empty cells in the lesson-8 homework column and 104 in
+MSE 3, cadets with an attempt lodged and no grade recorded yet. Handing a blank back means *erase
+this*.
+
+**So the original rule 3 — "hand every column back untouched, that is what makes the round trip
+safe" — was exactly backwards.** An untouched column is not an inert one. Worse, the export is a
+snapshot and grading does not stop while the director works: every minute between download and
+upload is a minute in which a fresh grade can be overwritten by a stale blank, and nothing in the
+file marks which cells went stale.
+
+**The file now carries only the identity columns and the preflights that actually hold a score**
+(`narrowToPreflights` in `site/js/blackboard-fill.js`; rule 4 in that file's header, which says
+plainly that it replaces rule 3 and why). A column that is not in the file cannot be acted on.
+On the real M-day export that is **104 columns in, 16 out** — seven identity columns and `PF 02`
+through `PF 10`. The download is named `_preflights.csv` rather than `_filled.csv`, because it is
+no longer the same file coming back.
+
+An unfilled preflight column is dropped too. It would be a harmless no-op, but it is one more thing
+in front of a tired director at 2200, and the point of the change is to leave nothing to weigh up.
+When a file yields no scores at all the download is refused with a message, rather than producing a
+file that would tell Blackboard to clear every preflight.
+
+### Two defects found on the way, both invisible to the tests that existed
+
+- **Every browser download had silently lost its UTF-8 BOM.** `FileReader.readAsText()` decodes
+  "UTF-8 with BOM" by *consuming* the BOM, so `readFile()` never saw one to put back. Node's
+  `readFileSync(path,'utf8')` keeps it — so the offline suite asserted "re-emits the BOM" and
+  passed, over a string the browser never produces. Now read as an ArrayBuffer and decoded with
+  `TextDecoder('utf-8', { ignoreBOM: true })`. Confirmed in a real browser: the old path returns
+  `0x22`, the new one `0xFEFF`.
+- **A Blackboard `Points Possible` row made every column look posted.** `fillGrid` copies a
+  non-student row through verbatim, by design — so its leftover `2` in each preflight column
+  satisfied "this column carries a score" and put the entire file back. `narrowToPreflights` now
+  takes the id column and asks only cadet rows. Caught by a unit test, not by the real export,
+  which has no such row.
+
+### Verification
+
+Node only for the module, plus one real-browser run — **and nothing has been uploaded to Blackboard
+yet**, so P2.1 stays *built, unproven*.
+
+- `test-blackboard-fill.mjs`: **136 assertions, 0 failures**, including a section built from the two
+  real column headers that triggered the warning. The negative assertions are the point of it.
+- Both real exports re-run end to end: M 104→16 columns, T 105→16; **0 identity cells changed**; BOM
+  preserved; no CRLF introduced; every score identical to the wide file the director already had
+  (**1,179 cells compared, 0 disagreements**).
+- Real browser: the BOM behaviour of both read paths, and the full read → fill → narrow → serialize
+  path over a fixture shaped like the real export.
+- `test-nav.mjs` and `test-permission-block.mjs` each report 4 failures. **Pre-existing** — verified
+  by stashing this change and re-running; unrelated to it and not addressed here.
+
+---
+
+## 2026-08-28 — Casey Pellizzari via Claude
+
 ### The Blackboard file the director already has, handed back with the preflight scores in it
 
 **Course director's question, 2026-08-28: could a director upload their Blackboard file and get it

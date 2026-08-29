@@ -227,11 +227,23 @@ so a second pass costs the same as the first.
 > back, which removes the header-rejection risk below rather than solving it: no header is ever
 > written. Verified against both live phys-215 exports (2026-08-28) — 37/37 preflight columns
 > matched, **zero cells changed outside them**, all 4,847 M-day cells independently re-derived from
-> `app.grades` with 0 disagreements. 101 offline assertions.
+> `app.grades` with 0 disagreements.
 >
-> **Still untested: nothing has been uploaded to Blackboard.** That is the last risk. Note the
-> file returned is byte-identical to the one Blackboard produced except inside the preflight
-> columns, which is a much narrower exposure than a hand-built file.
+> **Still untested: nothing has been uploaded to Blackboard.** That is the last risk.
+>
+> **First attempt, 2026-08-28 — Blackboard stopped at the confirmation page**, offering to clear
+> `Lesson 8 Homework` and `MSE 3 - Dot Product`: two columns we had provably never written, whose
+> blanks were Blackboard's own. Handing a blank back means *erase this*, so **a passed-through
+> column is not an inert one** — and the export goes stale the moment it is downloaded, while
+> grading continues. The file now carries **only the identity columns and the preflights holding a
+> score** (104 → 16 on the real M-day export). A column that is not in the file cannot be acted on.
+> This reversed the design's own rule 3; see CHANGELOG 2026-08-28 and the header of
+> `site/js/blackboard-fill.js`.
+>
+> Two defects surfaced with it, both invisible to the offline suite: every browser download had
+> silently dropped its UTF-8 BOM (`FileReader.readAsText` consumes it; Node's `readFileSync` does
+> not, so the test asserting "re-emits the BOM" passed over a string no browser produces), and a
+> Blackboard `Points Possible` row made every column look posted. 136 offline assertions now.
 >
 > **Design note:** one PREP course spans several Blackboard courses — `M1C`/`M3C`/`T5C` are
 > another instructor's shell, which mixes M-day and T-day sections. The page therefore takes 1..N

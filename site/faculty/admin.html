@@ -2039,6 +2039,11 @@
             Blackboard</strong>. Preflight scores are written into the columns that are already
             there, and the file is handed back ready to re-upload. No column is ever added,
             renamed or reordered, so Blackboard will still accept it.</div>
+          <div class="card-meta">The file you get back holds <strong>only the preflight
+            columns</strong>, plus the name and ID columns Blackboard needs to find each cadet.
+            Homework, exams and totals are left out on purpose: Blackboard reads a blank cell as
+            <em>erase this</em>, and your export goes out of date the moment you download it.
+            Leaving those columns out is what makes them impossible to disturb.</div>
           <div class="card-meta">Cadets are matched on <strong>cadet ID</strong>, never on name.
             A lesson with no finalized grade — not yet graded, or not yet taught — is left
             <strong>blank, not zero</strong>.</div>
@@ -2108,17 +2113,24 @@
         return bbData;
       }
 
+      // readAsText() would be the obvious call and it is the wrong one: the File API decodes
+      // "UTF-8 with BOM" by CONSUMING the BOM, so readFile() never sees one and the file we hand
+      // back has lost its first three bytes. Node's readFileSync(path,'utf8') keeps it, so the
+      // unit tests were green while every browser download silently dropped it (found on the real
+      // 2026-08-28 export). Decoding the bytes ourselves with ignoreBOM leaves the marker in the
+      // string for readFile() to detect and strip deliberately.
       function bbRead(file) {
         const reader = new FileReader();
         reader.onload = async (e) => {
+          const text = new TextDecoder('utf-8', { ignoreBOM: true }).decode(e.target.result);
           const data = await loadFillData();
-          const parsed = BB.readFile(e.target.result, data.offerings);
+          const parsed = BB.readFile(text, data.offerings);
           const i = bbFiles.findIndex(f => f.name === file.name);
           const entry = { name: file.name, label: file.name, ...parsed };
           if (i >= 0) bbFiles[i] = entry; else bbFiles.push(entry);   // re-picking replaces
           renderBbPreview();
         };
-        reader.readAsText(file);
+        reader.readAsArrayBuffer(file);
       }
 
       {
@@ -2209,7 +2221,7 @@
           </div>
           <div class="row wrap" style="gap:14px;margin-top:12px">
             <button class="btn btn-primary" id="bb-go" ${usable.length ? '' : 'disabled'}>
-              Download filled file${usable.length > 1 ? 's' : ''}</button>
+              Download preflight file${usable.length > 1 ? 's' : ''}</button>
             <button class="btn btn-secondary" id="bb-clear">Clear</button>
             <span id="bb-status" style="font-size:0.85em"></span>
           </div>`;
@@ -2220,19 +2232,30 @@
         document.getElementById('bb-go').addEventListener('click', () => {
           const st = document.getElementById('bb-status');
           const done = [];
+          const empty = [];
           for (const f of usable) {
             const r = BB.fillGrid(f.grid, f.idColumn.index, f.matched, bbData.lookup,
                                   { decimals: f.format.decimals });
+            // Only the columns we are posting leave this page — the identity block plus the
+            // preflights that actually carry a score. Everything else is dropped, because
+            // Blackboard reads a passed-through blank as "erase this" and the export goes stale
+            // the moment it is downloaded. See narrowToPreflights() for what this cost to learn.
+            const n = BB.narrowToPreflights(r.grid, f.matched, f.idColumn.index);
+            if (!n.postedColumns.length) { empty.push(f.name); continue; }
             // The file goes back out in exactly the shape it came in — its own line endings, its
             // own BOM, its own trailing newline. See toCsv().
             // Named after the file it came from, because with several in flight "which one is
             // this?" is the question a generic name cannot answer.
-            triggerDownload(BB.toCsv(r.grid, f.delimiter, f.format),
-              f.name.replace(/\.csv$/i, '') + '_filled.csv', 'text/csv');
-            done.push(`${f.name}: ${r.filled} written, ${r.blanks} blank`);
+            triggerDownload(BB.toCsv(n.grid, f.delimiter, f.format),
+              f.name.replace(/\.csv$/i, '') + '_preflights.csv', 'text/csv');
+            done.push(`${f.name}: ${r.filled} scores in ${n.postedColumns.length} column(s), `
+                    + `${n.dropped} other column(s) left out`);
           }
-          st.style.color = 'var(--green)';
-          st.innerHTML = '✓ ' + done.join(' · ');
+          st.style.color = done.length ? 'var(--green)' : 'var(--red)';
+          st.innerHTML = (done.length ? '✓ ' + done.join(' · ') : '')
+            + (empty.length ? `${done.length ? '<br>' : ''}<span style="color:var(--red)">`
+                + `No finalized preflight scores yet for ${esc(empty.join(', '))} — nothing to `
+                + `post, so no file was produced.</span>` : '');
         });
       }
     }
