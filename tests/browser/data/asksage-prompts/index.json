@@ -1,0 +1,331 @@
+[
+  {
+    "slug": "lesson-02-1-d-motion-position-velocity-and-acceleration-b17964f2",
+    "course": "phys-110",
+    "source": "site/gemini/phys-110/lesson-02-1-d-motion-position-velocity-and-acceleration-b17964f2.html",
+    "probe_chars": 49538,
+    "probe_approx_tokens": 12384
+  },
+  {
+    "slug": "lesson-07-lab-1-projectile-motion-7e1c4080",
+    "course": "phys-110",
+    "source": "site/gemini/phys-110/lesson-07-lab-1-projectile-motion-7e1c4080.html",
+    "probe_chars": 58645,
+    "probe_approx_tokens": 14661
+  },
+  {
+    "slug": "lesson-08-intro-to-newtons-laws-9667eba1",
+    "course": "phys-110",
+    "source": "site/gemini/phys-110/lesson-08-intro-to-newtons-laws-9667eba1.html",
+    "probe_chars": 51051,
+    "probe_approx_tokens": 12763
+  },
+  {
+    "slug": "lesson-09-application-of-newtons-laws-6a66195f",
+    "course": "phys-110",
+    "source": "site/gemini/phys-110/lesson-09-application-of-newtons-laws-6a66195f.html",
+    "probe_chars": 56131,
+    "probe_approx_tokens": 14033
+  },
+  {
+    "slug": "lesson-10-lab-2-newtons-laws-b9d4356a",
+    "course": "phys-110",
+    "source": "site/gemini/phys-110/lesson-10-lab-2-newtons-laws-b9d4356a.html",
+    "probe_chars": 47722,
+    "probe_approx_tokens": 11930
+  },
+  {
+    "slug": "lesson-11-circular-motion-centripetal-force-11e3a6a5",
+    "course": "phys-110",
+    "source": "site/gemini/phys-110/lesson-11-circular-motion-centripetal-force-11e3a6a5.html",
+    "probe_chars": 55500,
+    "probe_approx_tokens": 13875
+  },
+  {
+    "slug": "lesson-12-application-of-newtons-laws-a97b17f8",
+    "course": "phys-110",
+    "source": "site/gemini/phys-110/lesson-12-application-of-newtons-laws-a97b17f8.html",
+    "probe_chars": 48928,
+    "probe_approx_tokens": 12232
+  },
+  {
+    "slug": "lesson-14-energy-of-a-system-work-23ff79ca",
+    "course": "phys-110",
+    "source": "site/gemini/phys-110/lesson-14-energy-of-a-system-work-23ff79ca.html",
+    "probe_chars": 45269,
+    "probe_approx_tokens": 11317
+  },
+  {
+    "slug": "lesson-15-varying-forces-kinetic-energy-2e4badd6",
+    "course": "phys-110",
+    "source": "site/gemini/phys-110/lesson-15-varying-forces-kinetic-energy-2e4badd6.html",
+    "probe_chars": 43532,
+    "probe_approx_tokens": 10883
+  },
+  {
+    "slug": "lesson-16-potential-energy-nonconservative-forces-52c7ef64",
+    "course": "phys-110",
+    "source": "site/gemini/phys-110/lesson-16-potential-energy-nonconservative-forces-52c7ef64.html",
+    "probe_chars": 46543,
+    "probe_approx_tokens": 11636
+  },
+  {
+    "slug": "lesson-17-conservation-of-energy-0fb9fc37",
+    "course": "phys-110",
+    "source": "site/gemini/phys-110/lesson-17-conservation-of-energy-0fb9fc37.html",
+    "probe_chars": 41539,
+    "probe_approx_tokens": 10385
+  },
+  {
+    "slug": "lesson-02-electric-charge-coulombic-force-3a8e4e18",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-02-electric-charge-coulombic-force-3a8e4e18.html",
+    "probe_chars": 69691,
+    "probe_approx_tokens": 17423
+  },
+  {
+    "slug": "lesson-03-coulombs-law-and-superposition-485f9923",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-03-coulombs-law-and-superposition-485f9923.html",
+    "probe_chars": 55413,
+    "probe_approx_tokens": 13853
+  },
+  {
+    "slug": "lesson-04-electric-fields-and-superposition-479afcad",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-04-electric-fields-and-superposition-479afcad.html",
+    "probe_chars": 50953,
+    "probe_approx_tokens": 12738
+  },
+  {
+    "slug": "lesson-05-charged-particles-in-uniform-elec-fields-1c5bc31d",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-05-charged-particles-in-uniform-elec-fields-1c5bc31d.html",
+    "probe_chars": 50960,
+    "probe_approx_tokens": 12740
+  },
+  {
+    "slug": "lesson-07-charge-distributions-electric-flux-32174e58",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-07-charge-distributions-electric-flux-32174e58.html",
+    "probe_chars": 50393,
+    "probe_approx_tokens": 12598
+  },
+  {
+    "slug": "lesson-08-gausss-law-and-its-applications-5f57cc30",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-08-gausss-law-and-its-applications-5f57cc30.html",
+    "probe_chars": 75040,
+    "probe_approx_tokens": 18760
+  },
+  {
+    "slug": "lesson-09-electric-potential-difference-b3ba716f",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-09-electric-potential-difference-b3ba716f.html",
+    "probe_chars": 86079,
+    "probe_approx_tokens": 21520
+  },
+  {
+    "slug": "lesson-10-electric-potential-potential-energy-c627bfa9",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-10-electric-potential-potential-energy-c627bfa9.html",
+    "probe_chars": 97564,
+    "probe_approx_tokens": 24391
+  },
+  {
+    "slug": "lesson-13-capacitance-energy-and-dielectrics-7444aa79",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-13-capacitance-energy-and-dielectrics-7444aa79.html",
+    "probe_chars": 115448,
+    "probe_approx_tokens": 28862
+  },
+  {
+    "slug": "lesson-14-current-resistance-and-electrical-power-06497f19",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-14-current-resistance-and-electrical-power-06497f19.html",
+    "probe_chars": 135832,
+    "probe_approx_tokens": 33958
+  },
+  {
+    "slug": "lesson-15-dc-circuit-analysis-kirchhoffs-rules-d9d8a7a3",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-15-dc-circuit-analysis-kirchhoffs-rules-d9d8a7a3.html",
+    "probe_chars": 147652,
+    "probe_approx_tokens": 36913
+  },
+  {
+    "slug": "lesson-18-moving-charged-particle-in-a-magnetic-field-cd95f8b3",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-18-moving-charged-particle-in-a-magnetic-field-cd95f8b3.html",
+    "probe_chars": 89044,
+    "probe_approx_tokens": 22261
+  },
+  {
+    "slug": "lesson-19-magnetic-force-on-current-carrying-wires-4a147cca",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-19-magnetic-force-on-current-carrying-wires-4a147cca.html",
+    "probe_chars": 97142,
+    "probe_approx_tokens": 24286
+  },
+  {
+    "slug": "lesson-20-magnetic-dipoles-and-torque-3190fefe",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-20-magnetic-dipoles-and-torque-3190fefe.html",
+    "probe_chars": 79649,
+    "probe_approx_tokens": 19912
+  },
+  {
+    "slug": "lesson-21-sources-of-magnetic-fields-85e63bf8",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-21-sources-of-magnetic-fields-85e63bf8.html",
+    "probe_chars": 99116,
+    "probe_approx_tokens": 24779
+  },
+  {
+    "slug": "lesson-22-amperes-law-gausss-law-in-magnetism-bd81d7d5",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-22-amperes-law-gausss-law-in-magnetism-bd81d7d5.html",
+    "probe_chars": 100165,
+    "probe_approx_tokens": 25041
+  },
+  {
+    "slug": "lesson-24-faradays-law-of-induction-motional-emf-8cbe647d",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-24-faradays-law-of-induction-motional-emf-8cbe647d.html",
+    "probe_chars": 97192,
+    "probe_approx_tokens": 24298
+  },
+  {
+    "slug": "lesson-25-lenzs-law-induced-electric-field-1a98a6d0",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-25-lenzs-law-induced-electric-field-1a98a6d0.html",
+    "probe_chars": 95738,
+    "probe_approx_tokens": 23934
+  },
+  {
+    "slug": "lesson-26-generators-and-motors-ac-transformers-1bbf05b9",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-26-generators-and-motors-ac-transformers-1bbf05b9.html",
+    "probe_chars": 105645,
+    "probe_approx_tokens": 26411
+  },
+  {
+    "slug": "lesson-28-displacement-current-dc9f8b07",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-28-displacement-current-dc9f8b07.html",
+    "probe_chars": 70067,
+    "probe_approx_tokens": 17517
+  },
+  {
+    "slug": "lesson-29-maxwells-equations-7a27dd4c",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-29-maxwells-equations-7a27dd4c.html",
+    "probe_chars": 71643,
+    "probe_approx_tokens": 17911
+  },
+  {
+    "slug": "lesson-30-electromagnetic-waves-em-spectrum-40677a45",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-30-electromagnetic-waves-em-spectrum-40677a45.html",
+    "probe_chars": 118745,
+    "probe_approx_tokens": 29686
+  },
+  {
+    "slug": "lesson-31-light-reflection-refraction-ec714375",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-31-light-reflection-refraction-ec714375.html",
+    "probe_chars": 98401,
+    "probe_approx_tokens": 24600
+  },
+  {
+    "slug": "lesson-32-image-formation-from-mirrors-fbd3ac8d",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-32-image-formation-from-mirrors-fbd3ac8d.html",
+    "probe_chars": 93064,
+    "probe_approx_tokens": 23266
+  },
+  {
+    "slug": "lesson-33-image-formation-from-lenses-d3ec7a43",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-33-image-formation-from-lenses-d3ec7a43.html",
+    "probe_chars": 89970,
+    "probe_approx_tokens": 22492
+  },
+  {
+    "slug": "lesson-36-double-slit-interference-8b6dbbb7",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-36-double-slit-interference-8b6dbbb7.html",
+    "probe_chars": 67832,
+    "probe_approx_tokens": 16958
+  },
+  {
+    "slug": "lesson-37-diffraction-resolution-89cef48b",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-37-diffraction-resolution-89cef48b.html",
+    "probe_chars": 113635,
+    "probe_approx_tokens": 28409
+  },
+  {
+    "slug": "lesson-39-intro-to-nuclear-4084143d",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-39-intro-to-nuclear-4084143d.html",
+    "probe_chars": 115168,
+    "probe_approx_tokens": 28792
+  },
+  {
+    "slug": "lesson-41-photoelectric-effect-wave-particle-518e76f6",
+    "course": "phys-215",
+    "source": "site/gemini/phys-215/lesson-41-photoelectric-effect-wave-particle-518e76f6.html",
+    "probe_chars": 120972,
+    "probe_approx_tokens": 30243
+  },
+  {
+    "slug": "phys310-atoms-and-nuclei-83022f32",
+    "course": "phys-310",
+    "source": "site/gemini/phys-310/phys310-atoms-and-nuclei-83022f32.html",
+    "probe_chars": 42815,
+    "probe_approx_tokens": 10704
+  },
+  {
+    "slug": "phys310-binding-energy-and-stability-e0ceabee",
+    "course": "phys-310",
+    "source": "site/gemini/phys-310/phys310-binding-energy-and-stability-e0ceabee.html",
+    "probe_chars": 47789,
+    "probe_approx_tokens": 11947
+  },
+  {
+    "slug": "phys310-cross-sections-9308e38c",
+    "course": "phys-310",
+    "source": "site/gemini/phys-310/phys310-cross-sections-9308e38c.html",
+    "probe_chars": 52079,
+    "probe_approx_tokens": 13020
+  },
+  {
+    "slug": "phys310-lab-1-measurement-of-half-life-11c49dbc",
+    "course": "phys-310",
+    "source": "site/gemini/phys-310/phys310-lab-1-measurement-of-half-life-11c49dbc.html",
+    "probe_chars": 55197,
+    "probe_approx_tokens": 13799
+  },
+  {
+    "slug": "phys310-neutron-transport-4ecf35e0",
+    "course": "phys-310",
+    "source": "site/gemini/phys-310/phys310-neutron-transport-4ecf35e0.html",
+    "probe_chars": 59854,
+    "probe_approx_tokens": 14964
+  },
+  {
+    "slug": "phys310-nuclear-reactions-d02377ad",
+    "course": "phys-310",
+    "source": "site/gemini/phys-310/phys310-nuclear-reactions-d02377ad.html",
+    "probe_chars": 58250,
+    "probe_approx_tokens": 14562
+  },
+  {
+    "slug": "phys310-radioactivity-77500fd7",
+    "course": "phys-310",
+    "source": "site/gemini/phys-310/phys310-radioactivity-77500fd7.html",
+    "probe_chars": 50943,
+    "probe_approx_tokens": 12736
+  }
+]

@@ -8,6 +8,68 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-09-11 — Matthew Recker via Claude
+
+### A meter for the Ask Sage pool, because the model choice is not the expensive decision
+
+**Asked by the course director:** build this in the test section, linked from the test view —
+*"We have tokens for asksage (10M / month) and I want to see how many tokens it costs to run the
+iPREP interaction through that. Avoiding the cadets needing to use their own API keys."* Two named
+candidates, `gemini-3.5-flash` and `claude-opus-4-6`, and a question about whether something else
+is more token-efficient.
+
+**The headline is that the model is almost irrelevant to that question.** The pool is denominated
+in *tokens*, not dollars, and the tutor's system prompt is re-sent on every one of a session's ~14
+requests. Measured across all 47 built lessons by the new extractor, that prompt runs **10,400 to
+36,900 tokens** — 60-95% of the spend before a cadet types anything. Swapping Opus for Flash moves
+the money and barely moves the tokens. What the model *does* change is latency and thinking
+tokens; the recommendation (Flash for the conversation, Opus for the one report turn) is the split
+`MODEL_CHAT`/`MODEL_REPORT` already uses in the published builds, and it rests on this repo's own
+evidence that `gemini-3.7-flash` was rejected for reading as broken on every turn.
+
+**Estimated at the median lesson: ~281,000 tokens per cadet per lesson**, i.e. **~35 sessions per
+month** on a 10M pool. 300 cadets × one lesson is 8.4 months of pool; a 40-lesson term is roughly
+340. **This is a pilot budget, not a term budget** — a finding, not a verdict, and the whole point
+of the meter is to replace these character estimates with measured ones.
+
+**Four things shipped:**
+
+- **`supabase/functions/asksage-proxy/`** — the key's only home, and the answer to "where do we
+  store it securely". It is a **Supabase secret**, so it never reaches a browser and is never
+  committed; one key serves every model, because the model is a request field and not a
+  credential. Staff-gated through the **caller's own JWT** (RLS decides, not the function), with a
+  model allowlist, because an endpoint any cadet can call is an endpoint that can empty the month
+  by accident. Stores no conversation text — CORE.md §3 bars exactly that. Refuses streaming
+  rather than ignoring it, since a streamed reply carries no `usage` object and usage is the
+  entire point. **Written and reviewed, NOT deployed** — there is no key yet.
+- **`scripts/asksage/extract_prompts.py`** — assembles the real system prompt offline, the same
+  way the build does at runtime, so the meter measures the actual thing. Stdlib, dry-run by
+  default. It **refuses** a build it does not recognise instead of guessing: that caught two real
+  differences — phys-110 uses plain template literals where phys-215/310 use `String.raw`, and the
+  prompt inlines `OBJECTIVE_KEYS` through a `.map()` nobody had accounted for. It also normalizes
+  CRLF to LF *on purpose*, because the builds are stored CRLF and JavaScript normalizes template
+  literals to LF — measuring the file's own bytes would have added ~1,100 phantom tokens a turn.
+- **`tests/browser/test-asksage-tokens.html`** — the meter, linked from `tests/index.html` under a
+  new **Live API trials** heading that says outright it spends real tokens. It never estimates
+  what it can measure, it reports a missing `usage` object as *missing* rather than counting it as
+  zero, and it shows no projection at all until at least one turn has been measured.
+- **`tests/browser-harness/asksage-meter.mjs`** — 24 checks, all passing. It **blocks the proxy
+  URL at the network layer**, so the harness cannot spend the pool even if something clicks Send.
+
+**Verified in a real browser** (Chrome via puppeteer, signed in as the test director): gate,
+lesson index, extracted prompt weight, projection refusal, every control, no console errors, no
+404s. **Not verified:** a real Ask Sage call — there is no key yet, so every token figure in
+`docs/operations/ASKSAGE-TOKEN-TRIAL.md` §3 is a character estimate and is labelled one. The first
+real run replaces them, and that section is wrong until it does.
+
+Runbook, including the two questions worth one email to Ask Sage (does cached input bill against
+the pool; does the stateful Responses API re-bill history), is
+`docs/operations/ASKSAGE-TOKEN-TRIAL.md`, registered in `DOC-SOURCES.json`.
+
+---
+
+---
+
 ## 2026-08-28 — Casey Pellizzari via Claude
 
 ### The first real upload: send Blackboard only the columns we are posting

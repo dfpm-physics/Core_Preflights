@@ -113,6 +113,25 @@
     </a>
   </div>
 
+  <h2>Live API trials — real calls, real spend</h2>
+  <div class="links">
+    <a class="linkcard" href="browser/test-asksage-tokens.html">
+      <span class="ic">🧮</span>
+      <span class="t">Ask Sage token meter<span class="tag gated">Director sign-in</span></span>
+      <span class="d">What one iPREP session actually costs on the <b>Ask Sage</b> 10M-token
+        monthly pool — the route that would let cadets stop pasting their own API keys. Runs a
+        <b>real</b> lesson's tutor prompt (extracted from the published backup build by
+        <code>scripts/asksage/extract_prompts.py</code>, not a sample) through the
+        <code>asksage-proxy</code> edge function, and reads the <code>usage</code> object off
+        every reply. Pick any of the <b>47</b> built lessons — their system prompts run
+        <b>10k to 37k tokens</b>, and the prompt is re-sent on <i>every</i> turn — pick
+        <code>gemini-3.5-flash</code> or <code>claude-opus-4-6</code>, then send turns by hand or
+        simulate a full 14-request session. Totals project against the pool at your own cadet and
+        lesson counts, and a reply that arrives with no usage object is reported as
+        <b>missing</b> rather than counted as zero. <b>This one spends real tokens.</b></span>
+    </a>
+  </div>
+
   <h2>Automated suites — command line, not browser pages</h2>
   <div class="cli">
     <p><b>app-schema/</b> — Node test suites for the shipped ES modules and the <code>app</code>

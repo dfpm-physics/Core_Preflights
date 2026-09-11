@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-08-25",
+  "updated": "2026-09-11",
   "_comment": [
     "Dependency index for documents that MUST STAY CURRENT. Each entry names the authoritative",
     "sources a document was derived from, and the date it was last checked against them.",
@@ -458,6 +458,20 @@
         "_builder/preflight-kit/skill/preflight-factory-v2/SKILL.md"
       ],
       "note": "The runbook for porting one published Claude artifact to its Gemini backup build. to_gemini.py is the source it most directly describes -- the skill states which transforms run, which assertions refuse rather than warn, and what each refusal means, so a changed transform or a relaxed assertion makes the skill teach the wrong thing. backup.html is a source because the skill documents the router's slug contract and its deliberate lack of auth. The data contract governs the frozen submit surface and the per-offering slug rule (section 3.2) the skill's same-slug guarantee rests on. The factory SKILL.md is a source because it emits the BACKUP_ENDPOINT button the router receives -- if the factory stops emitting it, or emits a different URL shape, the two halves stop meeting and neither one errors."
+    },
+    {
+      "doc": "docs/operations/ASKSAGE-TOKEN-TRIAL.md",
+      "kind": "runbook",
+      "tier": "admin",
+      "reviewed": "2026-09-11",
+      "sources": [
+        "supabase/functions/asksage-proxy/index.ts",
+        "scripts/asksage/extract_prompts.py",
+        "tests/browser/test-asksage-tokens.html",
+        "tests/browser-harness/asksage-meter.mjs",
+        ".ai/instructions/CORE.md"
+      ],
+      "note": "Where the Ask Sage key is stored and what one iPREP session costs. The proxy is the source for the secret names, the allowlist and the staff gate; extract_prompts.py for the per-lesson prompt sizes the arithmetic in section 3 is built on. CORE.md section 2 is why the key cannot live in the static site at all. The token figures are ESTIMATES at 4 chars/token until a real run replaces them - when one does, section 3 is wrong until it is updated."
     }
   ]
 }

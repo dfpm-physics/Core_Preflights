@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ask Sage token meter · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <!-- Director-only gate (internal design sandboxes). -->
+  <script>document.documentElement.style.opacity='0'</script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../site/js/config.js"></script>
+  <script type="module" src="./guard.js"></script>
+  <link rel="stylesheet" href="../../site/css/styles.css">
+  <style>
+    /* Namespaced `tm-` so nothing collides with styles.css. Tokens only, no hardcoded
+       surfaces, so the page themes with the rest of the app. */
+    .tm-wrap { max-width: 1100px; margin: 0 auto; padding: 20px; }
+    .tm-strip { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      font-size: .8em; color: var(--muted); margin-bottom: 14px; }
+    .tm-strip .pill { font-weight: 700; color: var(--blue-lt); background: var(--surface-hover);
+      border-radius: 999px; padding: 2px 10px; }
+    .tm-grid { display: grid; grid-template-columns: 1fr 380px; gap: 18px; align-items: start; }
+    @media (max-width: 900px) { .tm-grid { grid-template-columns: 1fr; } }
+    .tm-card { background: var(--card, #fff); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+    .tm-card h2 { font-size: .78em; text-transform: uppercase; letter-spacing: .07em;
+      color: var(--muted); margin: 0 0 12px; }
+    .tm-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+    .tm-row label { font-size: .82em; color: var(--muted); min-width: 92px; }
+    select, input[type=text], input[type=number], textarea {
+      font: inherit; padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px;
+      background: var(--card, #fff); color: var(--text); }
+    select, input[type=text] { min-width: 210px; }
+    input[type=number] { width: 96px; }
+    textarea { width: 100%; min-height: 70px; resize: vertical; }
+    button { font: inherit; font-weight: 600; cursor: pointer; padding: 8px 14px;
+      border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface-hover); color: var(--text); }
+    button.primary { background: var(--blue-lt); border-color: var(--blue-lt); color: #fff; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .tm-log { max-height: 420px; overflow-y: auto; border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px; font-size: .88em; }
+    .tm-turn { border-bottom: 1px dashed var(--border); padding: 8px 2px; }
+    .tm-turn:last-child { border-bottom: 0; }
+    .tm-who { font-weight: 700; font-size: .78em; text-transform: uppercase;
+      letter-spacing: .05em; color: var(--muted); }
+    .tm-meta { font-size: .76em; color: var(--muted); margin-top: 4px; }
+    .tm-body { white-space: pre-wrap; margin-top: 3px; }
+    table.tm-tot { width: 100%; border-collapse: collapse; font-size: .88em; }
+    table.tm-tot td { padding: 5px 2px; border-bottom: 1px solid var(--border); }
+    table.tm-tot td:last-child { text-align: right; font-variant-numeric: tabular-nums;
+      font-weight: 700; }
+    .tm-big { font-size: 1.7em; font-weight: 800; font-variant-numeric: tabular-nums;
+      letter-spacing: -.02em; }
+    .tm-ok   { color: #1a7f37; } [data-theme="dark"] .tm-ok   { color: #3fb950; }
+    .tm-warn { color: #9a6700; } [data-theme="dark"] .tm-warn { color: #d29922; }
+    .tm-bad  { color: #cf222e; } [data-theme="dark"] .tm-bad  { color: #f85149; }
+    .tm-note { font-size: .8em; color: var(--muted); line-height: 1.5; }
+    .tm-err { border-left: 3px solid #cf222e; padding-left: 10px; }
+  </style>
+</head>
+<body>
+<div class="tm-wrap">
+  <div class="tm-strip">
+    <span class="pill">SANDBOX</span>
+    <span>Ask Sage token meter — measures what one real iPREP session costs. Live API calls;
+      no student data is read or written.</span>
+  </div>
+
+  <h1 style="font-size:1.5em;letter-spacing:-.02em;margin:0 0 4px">Ask Sage token meter</h1>
+  <p class="tm-note" style="margin-bottom:18px;max-width:70ch">
+    Runs a real lesson's tutor prompt through the <code>asksage-proxy</code> edge function and
+    reads the <code>usage</code> object off every reply. The system prompt is the one the
+    published backup build actually sends, extracted by
+    <code>scripts/asksage/extract_prompts.py</code> — not a sample and not a guess.
+  </p>
+
+  <div class="tm-grid">
+    <div>
+      <div class="tm-card">
+        <h2>Session</h2>
+        <div class="tm-row">
+          <label for="lesson">Lesson</label>
+          <select id="lesson"><option>loading…</option></select>
+        </div>
+        <div class="tm-row">
+          <label for="model">Model</label>
+          <select id="model">
+            <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+            <option value="claude-opus-4-6">claude-opus-4-6</option>
+          </select>
+          <label for="phase" style="min-width:auto">Phase</label>
+          <select id="phase" style="min-width:130px">
+            <option value="probe">probe</option>
+            <option value="report">report</option>
+            <option value="extension">extension</option>
+          </select>
+        </div>
+        <div class="tm-row">
+          <label for="maxtok">Max output</label>
+          <input type="number" id="maxtok" value="4096" min="64" max="32768" step="64">
+          <label for="temp" style="min-width:auto">Temp</label>
+          <input type="number" id="temp" value="0.7" min="0" max="2" step="0.1">
+        </div>
+        <p class="tm-note" id="preflight">Pick a lesson to see its prompt weight.</p>
+      </div>
+
+      <div class="tm-card">
+        <h2>Turns</h2>
+        <div class="tm-row">
+          <textarea id="msg" placeholder="Type what a cadet would say, then Send one turn."></textarea>
+        </div>
+        <div class="tm-row">
+          <button class="primary" id="send">Send one turn</button>
+          <button id="sim">Simulate a full session (14 turns)</button>
+          <button id="reset">Reset</button>
+          <button id="export">Export CSV</button>
+        </div>
+        <div class="tm-log" id="log"><p class="tm-note">Nothing sent yet.</p></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="tm-card">
+        <h2>Measured this session</h2>
+        <p class="tm-big" id="total">0</p>
+        <p class="tm-note" style="margin:-4px 0 12px">total tokens, measured</p>
+        <table class="tm-tot">
+          <tr><td>Turns sent</td><td id="t-turns">0</td></tr>
+          <tr><td>Input (prompt) tokens</td><td id="t-in">0</td></tr>
+          <tr><td>Output tokens</td><td id="t-out">0</td></tr>
+          <tr><td>Mean per turn</td><td id="t-mean">0</td></tr>
+          <tr><td>Slowest turn</td><td id="t-slow">—</td></tr>
+        </table>
+      </div>
+
+      <div class="tm-card">
+        <h2>Against the 10M monthly pool</h2>
+        <div class="tm-row">
+          <label for="cadets">Cadets</label>
+          <input type="number" id="cadets" value="300" min="1" step="10">
+        </div>
+        <div class="tm-row">
+          <label for="lessons">Lessons / term</label>
+          <input type="number" id="lessons" value="40" min="1">
+        </div>
+        <div class="tm-row">
+          <label for="pool">Pool / month</label>
+          <input type="number" id="pool" value="10000000" min="1" step="1000000">
+        </div>
+        <p class="tm-big" id="verdict">—</p>
+        <p class="tm-note" id="verdict-note">
+          Send at least one turn. A projection from zero measurements is the thing this page
+          exists to replace.
+        </p>
+      </div>
+
+      <div class="tm-card">
+        <h2>Before you trust a number</h2>
+        <p class="tm-note">
+          The system prompt is re-sent on <b>every</b> turn, so cost grows with turns
+          <i>and</i> with the conversation behind them. Watch the input column climb: that
+          shape, not the first turn, is the session cost.<br><br>
+          If a reply arrives with no <code>usage</code> object the page says
+          <b>usage missing</b> rather than counting it as zero. A silent zero would read as a
+          free turn.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+/* ── Ask Sage token meter ──────────────────────────────────────────────────────────────────
+ *
+ * WHAT IT MEASURES, AND WHY IT IS BUILT THIS WAY
+ * The question is "can the 10M/month Ask Sage pool carry iPREP?". The dominant term is the
+ * tutor system prompt, which is 10k-37k tokens depending on the lesson and is re-sent on every
+ * single turn. Nothing in the existing Gemini builds reports that number anywhere a person can
+ * read it, so this page reads `usage` off each reply and totals it.
+ *
+ * IT NEVER ESTIMATES WHAT IT CAN MEASURE. The character-count figure is shown only before the
+ * first call, and is labelled an estimate wherever it appears. Every total below comes from
+ * Ask Sage's own `prompt_tokens` / `completion_tokens`.
+ */
+
+const db = window.db;
+
+// guard.js runs first and REPLACES the whole body when it denies. Both scripts are modules, so
+// they run in document order and this one would then query elements that no longer exist,
+// filling the console of a denied page with TypeErrors that look like a broken sandbox rather
+// than a working gate. Bail quietly instead; the gate has already said what it needs to.
+if (!document.getElementById('lesson')) throw new Error('gated');
+
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => Number(n).toLocaleString();
+
+const PROMPT_DIR = './data/asksage-prompts/';
+
+// A generic cadet arc that works for ANY physics lesson. Deliberately not lesson-specific: the
+// trial measures TRANSPORT COST, and a cadet who answers well and a cadet who flounders send
+// messages of very similar length. Thirteen cadet turns plus the report request is fourteen
+// requests, which is the session length the published builds measured for themselves.
+const SCRIPT = [
+  "I read the assignment last night. I think I followed most of it but some parts were fuzzy.",
+  "I'd say it's about how the quantities relate to each other, but I'm not sure I could derive it.",
+  "Hmm. I think if you double that, the other one goes down by half?",
+  "Oh wait, is it squared? So a quarter instead of a half?",
+  "That makes more sense. I was just pattern-matching the formula.",
+  "Can you explain that part again? I don't think I actually understood the reasoning.",
+  "Okay, so the sign tells you the direction and the magnitude uses the absolute values.",
+  "I think I'd get this wrong on a test because I'd plug the negative straight in.",
+  "The reading had an example like that but I skimmed it honestly.",
+  "So they're separate steps — get the size first, then decide which way it points.",
+  "Yeah, that one I feel solid on now.",
+  "The part I'm still shaky on is when there are more than two things involved.",
+  "That helps. I think I'd want to practice a couple before class.",
+];
+
+let lessonData = null;   // the chosen lesson's extracted prompts
+let history = [];        // [{role, content}]
+let turns = [];          // [{n, in, out, total, ms, model, missing, err}]
+
+/* ── Lesson list ─────────────────────────────────────────────────────────────────────────── */
+async function loadIndex() {
+  const sel = $('lesson');
+  try {
+    const res = await fetch(PROMPT_DIR + 'index.json');
+    if (!res.ok) throw new Error('index.json ' + res.status);
+    const idx = await res.json();
+    idx.sort((a, b) => a.probe_chars - b.probe_chars);
+    sel.innerHTML = '';
+    for (const r of idx) {
+      const o = document.createElement('option');
+      o.value = r.slug;
+      o.dataset.course = r.course;
+      o.textContent = `${r.course} · ${r.slug} — ~${fmt(r.probe_approx_tokens)} tok`;
+      sel.appendChild(o);
+    }
+    // Default to the median lesson rather than the smallest, so the first number a reader
+    // sees is typical rather than flattering.
+    sel.selectedIndex = Math.floor(idx.length / 2);
+    await pickLesson();
+  } catch (e) {
+    sel.innerHTML = '<option>no index — run extract_prompts.py --all --commit</option>';
+    $('preflight').innerHTML =
+      '<span class="tm-bad">Prompt data not found.</span> Run '
+      + '<code>python scripts/asksage/extract_prompts.py --all --commit</code>, then serve the '
+      + 'repo root with <code>python -m http.server 8000</code>.';
+  }
+}
+
+async function pickLesson() {
+  const slug = $('lesson').value;
+  lessonData = null;
+  $('preflight').textContent = 'loading prompt…';
+  try {
+    const res = await fetch(PROMPT_DIR + slug + '.json');
+    if (!res.ok) throw new Error(String(res.status));
+    lessonData = await res.json();
+    showPreflight();
+  } catch (e) {
+    // Only a handful of lessons carry their full text in the repo; the rest are sizes only.
+    // Say so plainly instead of failing at Send time with a confusing empty prompt.
+    $('preflight').innerHTML =
+      '<span class="tm-warn">This lesson\'s prompt text is not in the repo</span> — only its '
+      + 'size is. Write it with <code>python scripts/asksage/extract_prompts.py --course '
+      + `${$('lesson').selectedOptions[0].dataset.course} --lesson &lt;NN&gt; --commit</code>, `
+      + 'or pick a lesson that already has it.';
+  }
+}
+
+function currentPrompt() {
+  if (!lessonData) return null;
+  return lessonData.phases[$('phase').value] || null;
+}
+
+function showPreflight() {
+  const p = currentPrompt();
+  if (!p) return;
+  $('preflight').innerHTML =
+    `System prompt: <b>${fmt(p.chars)}</b> characters, <b>~${fmt(p.approx_tokens)}</b> tokens `
+    + `<i>(estimated at 4 chars/token — replaced by the measured count on the first reply)</i>. `
+    + `This is re-sent on every turn.`;
+}
+
+/* ── One turn ────────────────────────────────────────────────────────────────────────────── */
+async function sendTurn(text) {
+  const p = currentPrompt();
+  if (!p) { alert('Pick a lesson whose prompt text is present.'); return false; }
+  if (!text.trim()) return false;
+
+  history.push({ role: 'user', content: text.trim() });
+  const n = turns.length + 1;
+  const model = $('model').value;
+
+  const { data, error } = await db.functions.invoke('asksage-proxy', {
+    body: {
+      model,
+      system: p.text,
+      messages: history,
+      max_tokens: Number($('maxtok').value) || 4096,
+      temperature: Number($('temp').value),
+    },
+  });
+
+  if (error || !data || data.error) {
+    const why = (data && (data.detail || data.error)) || (error && error.message) || 'unknown';
+    // The failed user turn is popped back off: leaving it in history would make every later
+    // turn carry a message the model never saw, and quietly inflate the input count.
+    history.pop();
+    turns.push({ n, err: String(why).slice(0, 300), model });
+    render();
+    return false;
+  }
+
+  history.push({ role: 'assistant', content: data.text || '' });
+  const u = data.usage || {};
+  turns.push({
+    n,
+    model: data.model || model,
+    in: u.prompt_tokens || 0,
+    out: u.completion_tokens || 0,
+    total: u.total_tokens || ((u.prompt_tokens || 0) + (u.completion_tokens || 0)),
+    ms: data.ms || 0,
+    missing: !!data.usage_missing,
+    reply: data.text || '',
+    said: text.trim(),
+  });
+  render();
+  return true;
+}
+
+/* ── Rendering ───────────────────────────────────────────────────────────────────────────── */
+function render() {
+  const good = turns.filter((t) => !t.err);
+  const tin = good.reduce((a, t) => a + t.in, 0);
+  const tout = good.reduce((a, t) => a + t.out, 0);
+  const tot = good.reduce((a, t) => a + t.total, 0);
+
+  $('total').textContent = fmt(tot);
+  $('t-turns').textContent = fmt(turns.length);
+  $('t-in').textContent = fmt(tin);
+  $('t-out').textContent = fmt(tout);
+  $('t-mean').textContent = good.length ? fmt(Math.round(tot / good.length)) : '0';
+  const slow = good.reduce((a, t) => (t.ms > (a ? a.ms : -1) ? t : a), null);
+  $('t-slow').textContent = slow ? `${(slow.ms / 1000).toFixed(1)} s` : '—';
+
+  const log = $('log');
+  if (!turns.length) { log.innerHTML = '<p class="tm-note">Nothing sent yet.</p>'; }
+  else {
+    log.innerHTML = turns.map((t) => {
+      if (t.err) {
+        return `<div class="tm-turn tm-err"><div class="tm-who">turn ${t.n} · failed</div>
+          <div class="tm-body">${esc(t.err)}</div></div>`;
+      }
+      const miss = t.missing
+        ? ' <b class="tm-bad">usage missing — not counted</b>' : '';
+      return `<div class="tm-turn">
+        <div class="tm-who">turn ${t.n} · ${esc(t.model)}</div>
+        <div class="tm-meta">in <b>${fmt(t.in)}</b> · out <b>${fmt(t.out)}</b> ·
+          total <b>${fmt(t.total)}</b> · ${(t.ms / 1000).toFixed(1)} s${miss}</div>
+        <div class="tm-body">${esc(t.reply.slice(0, 400))}${t.reply.length > 400 ? '…' : ''}</div>
+      </div>`;
+    }).join('');
+    log.scrollTop = log.scrollHeight;
+  }
+
+  project(tot, good.length);
+}
+
+function project(tot, count) {
+  const note = $('verdict-note');
+  if (!count) {
+    $('verdict').textContent = '—';
+    note.textContent = 'Send at least one turn. A projection from zero measurements is the '
+      + 'thing this page exists to replace.';
+    return;
+  }
+  const cadets = Number($('cadets').value) || 1;
+  const lessons = Number($('lessons').value) || 1;
+  const pool = Number($('pool').value) || 1;
+
+  // A partial run is scaled to a 14-request session, and the page SAYS it did that. Fourteen
+  // is the session length the published builds measured for themselves, not a guess here.
+  const perSession = count >= 14 ? tot : Math.round(tot / count * 14);
+  const termTotal = perSession * cadets * lessons;
+  const sessionsPerPool = Math.floor(pool / perSession);
+  const months = termTotal / pool;
+
+  const cls = months <= 1 ? 'tm-ok' : months <= 3 ? 'tm-warn' : 'tm-bad';
+  $('verdict').className = 'tm-big ' + cls;
+  $('verdict').textContent = `${months.toFixed(1)}× the pool`;
+  note.innerHTML =
+    `<b>${fmt(perSession)}</b> tokens per session`
+    + (count >= 14 ? ' (measured)' : ` (measured over ${count} turn(s), scaled to 14)`)
+    + `.<br><b>${fmt(sessionsPerPool)}</b> sessions fit in one month's pool.`
+    + `<br>One term at ${fmt(cadets)} cadets × ${fmt(lessons)} lessons = `
+    + `<b>${fmt(termTotal)}</b> tokens, i.e. <b>${months.toFixed(1)} months</b> of pool.`;
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+/* ── Controls ────────────────────────────────────────────────────────────────────────────── */
+async function busy(fn) {
+  const btns = [...document.querySelectorAll('button')];
+  btns.forEach((b) => (b.disabled = true));
+  try { await fn(); } finally { btns.forEach((b) => (b.disabled = false)); }
+}
+
+$('lesson').addEventListener('change', pickLesson);
+$('phase').addEventListener('change', showPreflight);
+['cadets', 'lessons', 'pool'].forEach((id) =>
+  $(id).addEventListener('input', () => render()));
+
+$('send').addEventListener('click', () => busy(async () => {
+  const t = $('msg').value;
+  if (await sendTurn(t)) $('msg').value = '';
+}));
+
+$('sim').addEventListener('click', () => busy(async () => {
+  for (const line of SCRIPT) {
+    const okTurn = await sendTurn(line);
+    if (!okTurn) break;   // stop on the first failure rather than burning the pool on retries
+  }
+  // The fourteenth request is the report — the one big generation, and the expensive one.
+  if (!turns.some((t) => t.err)) {
+    $('phase').value = 'report';
+    showPreflight();
+    await sendTurn('That\'s everything I wanted to cover. Please produce the report now.');
+  }
+}));
+
+$('reset').addEventListener('click', () => {
+  history = []; turns = []; $('msg').value = ''; render();
+});
+
+$('export').addEventListener('click', () => {
+  const rows = [['turn', 'model', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'ms', 'error']];
+  for (const t of turns) {
+    rows.push([t.n, t.model || '', t.in || 0, t.out || 0, t.total || 0, t.ms || 0,
+      (t.err || '').replace(/[\r\n,]+/g, ' ')]);
+  }
+  const csv = rows.map((r) => r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = 'asksage-tokens.csv';
+  a.click();
+});
+
+loadIndex();
+render();
+</script>
+</body>
+</html>
