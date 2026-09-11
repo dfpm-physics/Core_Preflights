@@ -10,6 +10,143 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-09-11 — Matthew Recker via Claude
 
+### The objectives now match the slides, and the half the deck spends on charged particles is finally probed
+
+**PHYS 310 lesson 13, Radiation Interactions with Materials.** recker's direction: *"adjust the
+objectives in Radiation Interactions with Materials iPREP to match the material covered in those
+slides."* The slides are `Instructor-Slides/lessons/lesson-11.json`, *Interactions and Range in
+Materials* — **deck 11, lesson 13**, per the renumbering this course already carries.
+
+**The deck spends its content on three things: heavy charged particles, light charged particles,
+and gamma rays.** The old topic list covered the third, framed the lesson with the
+range-versus-attenuation split, and gave the whole of the first two to a NEUTRON SHIELDING
+INVERSION that no deck in this course teaches.
+
+| # | was | is |
+|---|---|---|
+| 1 | `range-versus-attenuation` | **unchanged** — it is the deck's own closing takeaway and its practice question 5 |
+| 2 | `gamma-mechanisms-and-shielding` | `charged-particle-tracks-and-range` — **new** |
+| 3 | `neutron-inversion-and-aftermath` | `gamma-mechanisms-and-attenuation` — objective 2 in the deck's notation |
+
+**Objective 2 is the half that was never probed.** Two of the deck's five content slides and two of
+its three board problems are charged particles. The new topic asks what each kind actually collides
+with and gets the SHAPE OF THE TRACK out of that: a heavy particle hits electrons thousands of times
+lighter than itself, so it barely deflects and runs straight; a beta hits particles of its own mass,
+so it wanders. **The sentence to fish for is the mass ratio** — a cadet who explains the straight
+track by charge or by speed has the right conclusion from the wrong physics.
+
+**Objective 3 closes the vocabulary gap the alignment audit found.** *"Half-value layer" appears in
+no deck in this course* — this one writes `x = ln(10)/μ`, a tenth-value thickness, because its
+problem asks for a reduction to one tenth of the original flux. The artifact now leads with
+`x = ln(φ₀/φ)/μ`, names the tenth-value case as the course's, and keeps the half-value layer as the
+textbook's name for the same relation — **accept either from a cadet and connect the two**, which is
+better teaching than picking one. Added with it: the deck's two extra questions, *why does each
+mechanism own the energy range it does* and *what are the discontinuities* (electron binding
+energies).
+
+**What left the probe list stays in the reference.** The neutron inversion, the two-step
+moderate-then-absorb shield, the capture gammas, activation and the fast-displaces/thermal-activates
+split are all still in `TEXTBOOK_REFERENCE` in full and move to `scope_note` as engage-if-raised —
+the same way lesson 10 handled flux-versus-current on 2026-08-27. The deck names neutrons only as
+the far end of the penetrating-power ladder and as the particle that interacts with nuclei alone,
+and **both of those are now inside objective 1**. Sizing any shield is lesson 15's.
+
+**The range relations are carried from the DECK, not from the corpus, and that is a first for this
+course.** §5.2 gives two order-of-magnitude anchors and no formula. The deck gives `R_air = 0.56·E_α`
+with the Bragg-Kleeman scaling into another material, and `R_max = 0.412·E^(1.265−0.0954·ln E)` in
+g/cm² over ρ — and points the cadet at Murray's own Example 5.1 and Figure 5.3, so they are in the
+book even though they are not in the reconstruction. They carry a third provenance note and are
+tagged `[CARRIED FROM THE COURSE DECK]` at every appearance. **The tutor is told they are for
+READING, not arithmetic**: it has no densities and no molar masses, and a ten-minute pre-class
+conversation is not a calculation.
+
+**Fourteen anchored bytes-only edits**, every anchor asserted to appear exactly once.
+`check_artifact.py` **39/39**, LF preserved, 0 NUL, 147,249 → 159,590 bytes. **`INTERACTION_ID`
+byte-identical** — a revision into the same, not-yet-published offering keeps its slug, so
+`phys310-radiation-interactions-with-materials-1dd51596` still owns one lesson row.
+
+### Ported, registered, and left as a draft for review
+
+- **Gemini build** `site/gemini/phys-310/phys310-radiation-interactions-with-materials-1dd51596.html`,
+  261 KB, same slug, carrying the two new objective keys. `patch_autofill_guard.py` applied after
+  the port — **that step is not part of `to_gemini.py` and a fresh port does not have it**, which is
+  how the harness caught it. Verified in real Chrome: `gemini-build.mjs` **8/8**,
+  `gemini-model-ladder.mjs` **194/194**, `gemini-handoff.mjs` **12/12**, `check_jsx.js` parses.
+  **Not run against a live Gemini key** — CORE.md §2 says to say so. 48 builds in
+  `backup-builds.json`.
+- **Registered live as `lesson-13`**, 3 points, `grading_mode='points'`,
+  `switch_policy='lock_on_commit'`, position 13. Lesson 13 meets Mon 14 Sep, so the deadline is this
+  course's normal **1959 America/Denver the night before**: Sun 13 Sep 19:59:59 MDT, stored as
+  `2026-09-14 01:59:59+00`, the same `<lesson date> 01:59:59Z` shape as every other lesson in this
+  course. `due_by_day` and the one per-section row both written; still 0 empty day maps in this
+  course. `opens_at` NULL.
+- **`is_published` is FALSE. It is a draft and the director publishes it.** That was the
+  instruction: *"make sure it is all posted and ready to go but do not publish to the students yet."*
+- **Both paths carry credit** — the same `choice` shape as lessons 2, 3 and 4, and the shape the
+  2026-08-28 decision made course-wide. Written activity `content.access = 'open'`.
+
+### The written half, which lessons 8, 9 and 10 are still missing
+
+`phys-310-lesson-13-written-4b7c1e02`: Q1 reading time (0 points), Q2 reading reflection (1), and
+**one free-response Q3 (2)** — 3 points, matching the offering, the same split lesson 4 uses.
+
+Q3 is written against this deck and against the two objectives worth probing in writing: a 2 MeV
+alpha, beta and gamma all enter the same block of aluminum, (a) why do the alpha and the beta get a
+range and the gamma not, and (b) which of the two travels in a nearly straight line, and what about
+the collisions decides it. The `expected_response` carries the grading note that **a cadet who
+answers (b) with charge or speed has the right particle from the wrong physics — flag it, do not
+zero it.**
+
+### A name collision had silently broken every Gemini port
+
+`scripts/artifacts/patch_tutor_diagnostics.py` declares its fix sets as module-level constants, and
+**set 13 and set 14 reused two names set 9 and set 7 already had** — `OLD_WAITVIS`/`NEW_WAITVIS` and
+`OLD_REVIVE_TAIL`/`NEW_REVIVE_TAIL`. Python keeps the last binding, so set 7 ran looking for set 14's
+text, which by definition is not there yet:
+
+```
+patch_tutor_diagnostics.Refused: ladder-wait-per-turn: anchor matched 0 time(s), expected 1
+```
+
+**`to_gemini.py` therefore refused every artifact in every course**, not just this one — reproduced
+on lesson 10 before touching anything. The later pair is renamed to `*_WAITVIS13` and
+`*_REVIVE_TAIL14`; the earlier sets keep their own text and the shadowing is gone. Verified by
+re-deriving the duplicate-name list from the file, which is now empty.
+
+**Why nobody saw it on 2026-08-28.** `apply_rate_limit_backoff` opens with
+`if SET7_MARKER in raw: return raw, ["already"]`, and every shipped build already carried set 7 —
+so running `patch_tutor_diagnostics.py` STANDALONE over the fleet returns early and never reaches
+the shadowed constant. **Only a fresh port hits it**, and no lesson had been ported since. A fix set
+that lands on the builds and a fix set that lands on a new build are two different code paths, and
+the collision was invisible on the one that ran.
+
+**The fleet is NOT divided.** All 48 builds carry sets 7, 13, 14 and 15 — verified by grepping
+`QUOTA_WALK_RETRIES`, `timingSummary(`, `reviveLadder(` and `kind: "pause"` across the shipped
+bytes. **Only lesson 13 was regenerated here**; the other 17 phys-310 builds report `WOULD WRITE`
+rather than `unchanged` because a fresh port does not carry the post-port autofill guard, not
+because they are behind on a fix set.
+
+### Known open, and none of it blocks a cadet
+
+- **The revised `.jsx` was NOT pushed to the `artifact-sources` bucket.** This machine has no
+  `~/.claude/skills/preflight-analyze/config.json`, so `sync_artifacts.py` has no service key.
+  The cache is gitignored, so **the revision exists on one machine and inside the Gemini build
+  only**, and the faculty Artifacts page still serves the 2026-08-05 source. Fix:
+  `/setup-preflight`, then `python scripts/artifacts/sync_artifacts.py push`.
+- **The claude.ai build is stale and is deliberately not being republished**, by the standing
+  decision of 2026-08-26 — free-tier Claude times cadets out, and `lessons.html` takes the Claude
+  branch only where no Gemini build exists. The same trap applies: **do not null
+  `activities.content.artifact_url`**, because `isArtifactLaunchable()` only tests that the string
+  looks like a URL, so clearing it hides the Gemini button and makes the lesson unreachable while
+  the row still looks healthy.
+- **`tests/browser-harness/gemini-finish-bar.mjs` is stale on every build**, not just this one: it
+  types into `#cadet-id`, which `patch_autofill_guard.py` renamed on 2026-08-27. Reproduced against
+  lesson 10. Not fixed here.
+
+---
+
+## 2026-09-11 — Matthew Recker via Claude
+
 ### A meter for the Ask Sage pool, because the model choice is not the expensive decision
 
 **Asked by the course director:** build this in the test section, linked from the test view —

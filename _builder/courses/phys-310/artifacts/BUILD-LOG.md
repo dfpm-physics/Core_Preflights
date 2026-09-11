@@ -762,19 +762,97 @@ Recorded so it stays visible rather than becoming folklore.
 | **Registration slug** (`#i=` / `id=`) | `phys310-radiation-interactions-with-materials-1dd51596` |
 | **Published** | 2026-08-20 — https://claude.ai/public/artifacts/cefd54d7-e429-4972-85ac-4646eab622c9 |
 | **Component** | `Phys310RadiationInteractionsWithMaterialsPreflight` |
-| **Built** | 2026-08-05 · 2265 lines — **the longest artifact in this course** |
+| **Built** | 2026-08-05 · 2265 lines — **the longest artifact in this course** · **revised 2026-09-11**, 2578 lines |
 | **Grounding** | Murray corpus **§5.1–§5.5** — **all five `STATUS: PENDING`**. Two values tagged as carried: the 0.511 MeV electron rest energy and the 0.025 eV / 2200 m/s thermal reference |
 | **Cross-check** | DOE NP-01/02 cover range and gamma attenuation; **the corpus itself calls the cross-check thin for §5.5** |
 | **Cadets' reading** | Murray & Holbert 5.1–5.5 |
-| **Probe topics** | 3 · ~3 active min each · ~10 min — **§5.5 is grounded and almost entirely unprobed** |
-| **Checks** | `check_artifact.py` 46 passed / 0 failed (37 base + 9 `--forbid` scans covering the base's slug, suffix, title, component and **all three of its objective keys**, plus lesson 10's slug). Re-verified independently: 37/37, LF, 0 NUL, and the lesson-14 boundary confirmed by grep — the only mentions of *gray*, *sievert*, *rem* or *quality factor* are inside one prohibition block |
-| **Status** | **DRAFT** — not reviewed, not published, not registered |
+| **Probe topics** | 3 · ~3 active min each · ~10 min — **realigned 2026-09-11 to the course's own lesson deck** (below). §5.4 and §5.5 are now both grounded and unprobed |
+| **Checks** | `check_artifact.py` **39 passed / 0 failed** on the 2026-09-11 revision (37 base + 2 `--forbid` scans for the two retired objective keys). LF preserved, 0 NUL, `INTERACTION_ID` byte-identical, 147,249 → 159,590 bytes. Gemini build rendered in real Chrome: `gemini-build.mjs` **8/8**, `gemini-model-ladder.mjs` **194/194**, `gemini-handoff.mjs` **12/12**, `check_jsx.js` parses. **Not run against a live Gemini key** — CORE.md §2 says to say so. *(The 2026-08-05 build ran 46/0: 37 base + 9 `--forbid` scans covering the base's slug, suffix, title, component and all three of its objective keys, plus lesson 10's slug.)* |
+| **Status** | **REVISED 2026-09-11** — objectives 2 and 3 replaced on the course director's direction (below). Published build on claude.ai is 2026-08-20 and therefore **STALE**: it still runs the old objectives. **Registered 2026-09-11** as `lesson-13`, **unpublished draft**, due Sun 13 Sep 1959 MDT. Cadets reach it through the **Gemini build**, which is current |
+| **Gemini build** | `site/gemini/phys-310/phys310-radiation-interactions-with-materials-1dd51596.html` — ported 2026-09-11 from the revised source, same slug, autofill guard applied |
+| **Written half** | Attached 2026-09-11. Q1 reading time (0), Q2 reading reflection (1), and **one free-response Q3 (2)** written against this deck — (a) why the alpha and beta get a range and the gamma does not, (b) which of the two tracks straight and what decides it. 3 points, matching the offering |
 
 | # | key | label |
 |---|---|---|
 | 1 | `range-versus-attenuation` | Separates a definite range from exponential attenuation |
-| 2 | `gamma-mechanisms-and-shielding` | Picks the dominant photon mechanism; reads μ and the half-value layer |
-| 3 | `neutron-inversion-and-aftermath` | Explains why neutron shielding inverts, and what it leaves behind |
+| 2 | `charged-particle-tracks-and-range` | Says what a heavy and a light charged particle each collide with, and what sets the range |
+| 3 | `gamma-mechanisms-and-attenuation` | Picks the dominant photon mechanism; reads μ and a thickness from the attenuation law |
+
+#### Objectives realigned to the deck, 2026-09-11
+
+**recker's direction, given in session:** *"adjust the objectives in Radiation Interactions with Materials iPREP to match the material covered in those slides."* The slides are
+`Instructor-Slides/lessons/lesson-11.json`, *Interactions and Range in Materials* — **deck 11, lesson 13**, per the renumbering already recorded in this course.
+
+**What the deck actually spends its time on**, in order: heavy charged particles, light charged
+particles, gamma rays, a match-the-interaction exercise, five practice problems, and a closing
+discussion on penetrating power. Three board problems: a 2 MeV alpha against a sheet of paper, the dominant Cs-137 beta into plastic, and 0.8 MeV gammas into concrete to one tenth of the
+original flux.
+
+**Objective 1 was already the deck's own takeaway and is kept.** The deck closes on *"gammas do
+not have a range — they attenuate"* and asks it back as practice question 5. What was added is
+the deck's penetrating-power ordering, alpha < beta < gamma < neutron, with the *why* for each
+rung — including that the neutron's place depends on the material because it interacts only
+with nuclei.
+
+**Objective 2 is new, and it is the half of the deck that was never probed.** Two of the deck's
+five slides and two of its three board problems are charged particles, and the old topic list
+touched them only as background. The new topic asks what each kind of particle actually collides
+with and gets the SHAPE OF THE TRACK out of that: a heavy particle hits electrons thousands of
+times lighter than itself, so it barely deflects and runs straight; a beta hits particles of its
+own mass, so it wanders. **The sentence to fish for is the mass ratio** — a cadet who explains
+the straight track by charge or by speed has the right conclusion from the wrong physics.
+
+**Objective 3 is the old objective 2 with the deck's notation.** The audit
+(`phys310-preflight-alignment`) flagged that **“half-value layer” appears in no deck in this
+course** — this one writes `x = ln(10)/μ`, a tenth-value thickness, because its problem asks for
+a reduction to one tenth. The artifact now leads with `x = ln(φ₀/φ)/μ`, names the tenth-value
+case as the course's, and keeps the half-value layer as the textbook's name for the same
+relation — **accept either from a cadet and connect the two**. Added with it: the deck's two
+extra questions, *why does each mechanism own the energy range it does* and *what are the
+discontinuities* (electron binding energies).
+
+**What left the probe list: the neutron shielding inversion and its aftermath.** No deck in this
+course teaches it. It stays in `TEXTBOOK_REFERENCE` in full — the inversion, the two-step
+moderate-then-absorb shield, the capture gammas, activation, the energy classification, the
+fast-displaces/thermal-activates split — and moves to `scope_note` as engage-if-raised, the same
+way lesson 10 handled flux-versus-current. **Sizing any shield is lesson 15's.**
+
+> **⚠ The range relations are carried from the DECK, not from the corpus, and that is a first for
+> this course.** §5.2 gives two order-of-magnitude anchors and **no formula**. The deck gives
+> `R_air = 0.56·E_α` for E below 4 MeV with the Bragg-Kleeman scaling
+> `R₂ = R_air·(ρ_air/ρ₁)·√(M₁/M_air)`, and `R_max = 0.412·E^(1.265−0.0954·ln E)` in g/cm² divided
+> by ρ — and points the cadet at Murray's own Example 5.1 and Figure 5.3, so they are in the book
+> even though they are not in the reconstruction. They are tagged `[CARRIED FROM THE COURSE
+> DECK]` at every appearance and carry a third provenance note. **The tutor is told they are for
+> READING, not arithmetic** — it has no densities and no molar masses, and today is a ten-minute
+> conversation, not a calculation.
+
+> **⚠ The tutor still has no attenuation coefficient, and now it knows where the cadet will get
+> one.** The deck's gamma problem says *use table A.6 at the back of the equation sheet*. The
+> artifact now says plainly that the number is tabulated, that the cadet will look it up in
+> class, and that it does not have the table — which is a better refusal than the old one
+> because it names where the answer lives.
+
+**Extension problems were NOT touched.** Problems D and E still work the neutron inversion and
+the three-layer shield. They are offered only in the untimed post-report extension, they are
+still fully grounded, and the scope note now governs them as engage-if-raised — so a cadet who
+wants them still gets them, and no topic budget is spent there.
+
+**What moved.** Header comment · `OBJECTIVE_KEYS` · a third provenance note and the rewritten
+`KEY CONSTANTS` · the §5.2 and §5.3 reference blocks · `reading_assignment` · all three probe
+topics · misconceptions 1, 3 and 6 · one prerequisite (the mass-ratio collision is now
+load-bearing) · one lateral connection · four `scope_note` blocks. **Fourteen anchored
+bytes-only edits, every anchor asserted to appear exactly once.** 147,249 → 159,590 bytes.
+**`INTERACTION_ID` byte-identical** — a revision into the same, not-yet-published offering keeps
+its slug, so `phys310-radiation-interactions-with-materials-1dd51596` still owns one lesson row.
+
+> **⚠ The revised `.jsx` has NOT been pushed to the `artifact-sources` bucket.** This machine has
+> no `~/.claude/skills/preflight-analyze/config.json`, so `sync_artifacts.py` has no service key
+> to authenticate with. The local cache is gitignored, so **the revision exists on one machine
+> and in the Gemini build only**. Run `/setup-preflight` and then
+> `python scripts/artifacts/sync_artifacts.py push` to close it. Nothing a cadet reaches is
+> affected — they get the Gemini build — but the faculty Artifacts page still serves the
+> 2026-08-05 source.
 
 **Extension problems:** A ion pairs from a 5 MeV alpha (~1.5×10⁵, ~3.7×10⁴/cm) against a 1 MeV beta
 (~2.9×10⁴, ~290/cm) — **the 125× ratio is exactly 5 × 25 and is imported from nothing**

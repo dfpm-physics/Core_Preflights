@@ -865,6 +865,41 @@ same question with no DDL at all.
 > **First check after the next lesson night is that `kind = 'pause'` rows exist at all**; if the
 > count is zero on a night with quota rows, this set is not doing what this entry says it does.
 
+### 2.14 A postscript to §2.12 and §2.13 — the new sets shadowed the old ones, and only a fresh port could see it
+
+*(Found 2026-09-11, porting PHYS 310 lesson 13.)* This file's tool declares each fix set as
+module-level constants in `patch_tutor_diagnostics.py`, and **set 13 and set 14 reused two names
+set 9 and set 7 already held** — `OLD_WAITVIS`/`NEW_WAITVIS` and
+`OLD_REVIVE_TAIL`/`NEW_REVIVE_TAIL`. Python keeps the last binding, so set 7 ran looking for set
+14's replacement text, which by definition is not in the source yet:
+
+```
+patch_tutor_diagnostics.Refused: ladder-wait-per-turn: anchor matched 0 time(s), expected 1
+```
+
+**`to_gemini.py` refused every artifact in every course**, and had done since 2026-08-28.
+
+**Why the 2026-08-28 verification did not catch it, and this is the part worth keeping.** Each
+`apply_*` opens with an idempotency guard — `if SET7_MARKER in raw: return raw, ["already"]` — and
+every shipped build already carried set 7, so running this tool **standalone over the fleet returns
+early and never evaluates the shadowed constant**. Only a **fresh port** reaches it. A fix set
+applied to existing builds and the same fix set applied inside a new build are two different code
+paths, and the collision lives on the one that had not run since it was introduced. *47 builds
+patched, 0 failed* was true and proved nothing about the other path.
+
+**Fixed** by renaming the later pair to `*_WAITVIS13` and `*_REVIVE_TAIL14`. The check is one line
+and is worth running after any new set: re-derive the module-level constant names from the file and
+assert no duplicates. **The fleet was never divided** — all 48 builds carry sets 7, 13, 14 and 15,
+verified by grepping `QUOTA_WALK_RETRIES`, `timingSummary(`, `reviveLadder(` and `kind: "pause"`
+across the shipped bytes.
+
+**One other thing a fresh port does not carry, and it is the same shape of trap:**
+`patch_autofill_guard.py` runs AFTER `to_gemini.py` and is not called by it, so a newly ported build
+ships the 2026-08-27 login-form autofill bug unless the guard is run again.
+`tests/browser-harness/gemini-build.mjs` catches it — it asserts `#prep-gkey` and that the key box
+is not `type="password"` — which is the argument for running that harness on every port rather than
+only on a fleet roll.
+
 ---
 
 ---

@@ -2473,7 +2473,7 @@ function timingSummary() {
   };
 }"""
 
-OLD_WAITVIS = rb"""async function waitVisibly(model, ms) {
+OLD_WAITVIS13 = rb"""async function waitVisibly(model, ms) {
   if (ms <= QUIET_WAIT_MS) { await sleep(ms); return; }   // too short to be worth alarming over
   const tell = (n) => {
     if (!onModelSwitch.fn) return;
@@ -2482,7 +2482,7 @@ OLD_WAITVIS = rb"""async function waitVisibly(model, ms) {
     } catch (e) {}
   };"""
 
-NEW_WAITVIS = rb"""async function waitVisibly(model, ms) {
+NEW_WAITVIS13 = rb"""async function waitVisibly(model, ms) {
   noteWait(ms);
   if (ms <= QUIET_WAIT_MS) { await sleep(ms); return; }   // too short to be worth alarming over
   // WORDS, not mechanism. This said `<model> -- rate limited, retrying in 44s`, which renders
@@ -2610,7 +2610,7 @@ def apply_turn_timing(raw):
         return raw, ["already"]
     p = Patcher(raw, None)
     p.sub("timing-ledger", OLD_TIMING_DECL, NEW_TIMING_DECL)
-    p.sub("countdown-is-not-an-error", OLD_WAITVIS, NEW_WAITVIS)
+    p.sub("countdown-is-not-an-error", OLD_WAITVIS13, NEW_WAITVIS13)
     p.sub("time-the-request", OLD_APIT, NEW_APIT)
     p.sub("time-the-request-end", OLD_APIF, NEW_APIF)
     p.sub("time-the-turn", OLD_CT, NEW_CT)
@@ -2679,12 +2679,12 @@ def apply_turn_timing(raw):
 
 SET14_MARKER = b"function reviveLadder("
 
-OLD_REVIVE_TAIL = rb"""  Object.keys(waitedFor).forEach((k) => { delete waitedFor[k]; });
+OLD_REVIVE_TAIL14 = rb"""  Object.keys(waitedFor).forEach((k) => { delete waitedFor[k]; });
   ladderWaits = 0;    // the ladder-wait allowance is per TURN, like the revival it rides with
   return revived;
 }"""
 
-NEW_REVIVE_TAIL = rb"""  Object.keys(waitedFor).forEach((k) => { delete waitedFor[k]; });
+NEW_REVIVE_TAIL14 = rb"""  Object.keys(waitedFor).forEach((k) => { delete waitedFor[k]; });
   // `ladderWaits = 0` USED TO BE HERE, AND IT IS THE 2026-08-28 LOOP. This function is called
   // from three places and only ONE of them is a turn boundary: the 429 branch calls it after
   // taking the wait, and resetLadder calls it mid-walk. So spending the allowance immediately
@@ -2725,7 +2725,7 @@ def apply_wait_allowance(raw):
     if SET14_MARKER in raw:
         return raw, ["already"]
     p = Patcher(raw, None)
-    p.sub("wait-allowance-is-not-reviveds-job", OLD_REVIVE_TAIL, NEW_REVIVE_TAIL)
+    p.sub("wait-allowance-is-not-reviveds-job", OLD_REVIVE_TAIL14, NEW_REVIVE_TAIL14)
     p.sub("split-turn-boundary-from-midturn-revive", OLD_FRESHTURN, NEW_FRESHTURN)
     p.sub("429-wait-path-does-not-refill", OLD_WAITCALL14, NEW_WAITCALL14)
     return p.buf, p.applied

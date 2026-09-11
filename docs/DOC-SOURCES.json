@@ -20,7 +20,7 @@
       "doc": "site/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-08-28",
+      "reviewed": "2026-09-11",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -349,7 +349,7 @@
       "doc": "docs/operations/TUTOR-BEHAVIOR-PARITY.md",
       "kind": "operations",
       "tier": "staff",
-      "reviewed": "2026-08-28",
+      "reviewed": "2026-09-11",
       "sources": [
         "scripts/artifacts/to_gemini.py",
         "scripts/artifacts/patch_artifacts.py",
