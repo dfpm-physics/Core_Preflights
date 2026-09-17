@@ -218,6 +218,44 @@ so a second pass costs the same as the first.
 
 ---
 
+### P1.19 — Strip API keys out of `tutor_error_log.detail` · **S** · *raised 2026-08-27, deferred by the director same day*
+
+**29 cadets' complete Gemini API keys are stored in `app.tutor_error_log.detail`, and one staff
+page prints them.** Nobody logged a key deliberately: `detail` holds *Google's* error message
+capped at 300 characters (migration `020`), and Google's suspension notice quotes the key back —
+`Permission denied: Consumer 'api_key:AQ.Ab8…' has been suspended.` 34 rows carry one, all 53
+characters, all in the newer `AQ.` format. [`site/faculty/tutor-errors.html:108`](../site/faculty/tutor-errors.html#L108)
+renders `r.detail` verbatim, so any staff member who opens that page reads them.
+
+**What this is NOT, established 2026-08-27 and worth not re-deriving:**
+
+- **Not the cause of the 24 project suspensions.** Every key-bearing row *is* a suspension notice,
+  and the first key logged shares a timestamp with the first suspension to the microsecond
+  (`2026-08-26 20:59:47.735857`). The key is in the log *because* Google had already killed the
+  project. Effect, not cause.
+- **Not a repo leak.** Checked across tracked files and the full history of every branch: no real
+  key has ever been committed. The only match is the synthetic
+  `AIzaSyTESTKEYNOTREALDONOTUSE0000000000000` in `tests/browser-harness/`.
+- **Not public.** The table is behind login and RLS, staff-read only, and is not served by Pages.
+- **Not currently live credentials.** All 29 belong to suspended projects, so they are dead.
+
+**Why it is still worth doing.** Every one of those four mitigations is a property of *this*
+incident, not of the design. The write path has no opinion about key material at all — the day
+Google quotes a key in a message that is *not* a suspension, a working credential lands in the same
+column and on the same page, and nothing reports it.
+
+**Shape of the fix.** Scrub in `supabase/functions/log-tutor-error/index.ts` **before the insert**,
+not at display time: the function already builds its row from a whitelist, so this belongs with it,
+and a display-side redaction leaves the value in the table for anyone querying directly. Then a
+one-off cleanup of the 34 existing rows (DML tier, dry-run by default). Two patterns are needed,
+not one — `AIza…` and `AQ.…`, the latter containing a dot, which a naive character class stops at
+(the same near-miss `site/gemini/key-check.html` records in its `scrub()`).
+
+**Not started, at the course director's instruction** — raised while the autofill fix set was
+landing, and deliberately deferred so that change could settle on its own.
+
+---
+
 ## 3. P2 — Before end of term
 
 ### P2.1 — Blackboard grade export · **L** · **BUILT 2026-08-28, UNPROVEN**

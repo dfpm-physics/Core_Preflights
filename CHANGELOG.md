@@ -419,6 +419,87 @@ session. Roadmap P2.1 stays **built, unproven** until an upload succeeds.
 
 ## 2026-08-28 — Matthew Recker via Claude
 
+### The pause was not an error, so nothing counted it — now it writes a row
+
+**Asked by the course director immediately after the set-14 fix shipped:** *"Is there a way we can
+log students getting this sort of error? Obviously if the loop runs and runs they won't submit, so
+we won't see the cost per turn, and it wasn't identified as an error for them to wait."* Two blind
+spots in one sentence, and set 14 had closed only one of them.
+
+**What the error log actually recorded**, counted in `app.tutor_error_log` — the only instrument
+that does not require a cadet to finish:
+
+| Night | `quota` rows |
+|---|---|
+| 2026-08-25 (before the ladder wait existed) | **774** |
+| 2026-08-26 | 11 |
+| 2026-08-27 (cadets reporting endless countdowns) | **0** |
+
+Zero. Not few — none. The loop never terminated, so `mkError` never ran and nothing was written;
+and the session never finished, so no payload arrived either. Both instruments were blind to the
+same cadets, for the third time in four days.
+
+**Set 14 fixed the fatal half**: a turn that pauses now gives up after one wait and throws a real
+`quota`, which is logged. **Set 15 is the other half.** A cadet who pauses 45 s and then *succeeds*
+throws nothing and submits normally — no error, so no row — and their lesson was still bad. That
+population appears nowhere. So the countdown itself now writes a row, `kind = 'pause'`.
+
+- **Posted before the sleep, deliberately.** `logError` uses `keepalive`, so a row already in flight
+  survives the tab closing — and closing the tab **during** the countdown is exactly what the
+  give-up population does. Logging after the sleep would miss the cadets it exists to catch.
+- **One row per turn at most**, and only because set 14 made `ladderWaits` binding. Run set 15
+  against the pre-set-14 code and one stuck turn writes a row per pass — the same unbounded loop,
+  re-pointed at the database. The ordering is asserted in both tools, not assumed.
+- **No migration and no edge-function deploy.** `tutor_error_log.kind` is plain `text` with no CHECK
+  constraint (verified against `pg_constraint`: the only constraint on that table is its primary
+  key), and `log-tutor-error` passes it through as `str(p.kind, 40)`. Every other field a pause row
+  needs is an existing column `diagSnapshot` already fills. A client-only change, which is why it
+  shipped the night it was asked for.
+- **Same whitelist, so a pause row cannot carry more than an error row can** — no conversation text,
+  by construction rather than by discipline.
+- **Cost:** ~735 bytes per row, busiest night so far 942 rows. A heavy night roughly doubles, to
+  about 3 MB. If that matters across a term, prune by `logged_at`; do not stop logging.
+
+**A defect found while wiring it, and the more useful half of this entry.**
+`apply_wait_allowance` — the set-14 fix — was **imported by `scripts/artifacts/to_gemini.py` and
+never called.** Nothing on the site was wrong, because the 47 shipped builds are patched directly by
+`patch_tutor_diagnostics.py` and never went through the porter. But a **newly ported build would
+have been born with the unbounded-wait loop**, and the only symptom would have been one cadet, on
+one new lesson, in a countdown that never ends — the exact failure that had just taken two days to
+find, reintroduced silently on a surface nobody was watching. An unused import is not a no-op in
+that chain; it is a silently missing fix. Both tools' chains are now one call per line with a
+comment saying what each depends on.
+
+Also in `to_gemini.py`: the set-14 edit had left LF lines inside a CRLF file, which made `git diff`
+report the whole file changed. Normalised, and the real diff is 14 insertions.
+
+**Deliberately still not carried to the database: `timing`.** `diagSnapshot` has built the turn/wait
+summary since set 13 and the edge-function whitelist has no slot for it, so all 130 rows logged
+since carry none of it. It is on screen and in the clipboard copy, so a cadet's screenshot answers
+the question; the server copy does not. Closing it needs a column and a deploy, and was held back
+when the choice was put to the course director. The pause row's `turn` and `session_sec` answer most
+of the same question with no DDL.
+
+**What the log now says is the live problem**, quota being bounded: over 30 hours, by distinct
+cadets — `auth` 22, `suspended` 12, `timeout` 12, `deadproject` 9. That is ~43 cadets whose **Google
+key or project** is broken rather than exhausted. A different problem from everything fixed this
+week, and currently the largest one.
+
+Verification: `tests/browser-harness/gemini-model-ladder.mjs` — **194 passed, 0 failed** across
+phys-215, phys-110 and phys-310, five assertions new and covering this set (the row exists, is
+inside the allowance guard, is posted before the sleep, computes its duration once, and goes through
+the shared whitelist). All 47 builds render in real Chrome. Both harnesses are optional Node tooling
+(CORE.md §2); nothing on the deploy path changed. **No pause row has yet been written by a real
+cadet** — the shape is asserted, not observed. First check after the next lesson night is that
+`kind = 'pause'` rows exist at all; the queries are in
+`docs/operations/TUTOR-BEHAVIOR-PARITY.md` §7.
+
+Reasoning: `docs/operations/TUTOR-BEHAVIOR-PARITY.md` §2.13.
+
+---
+
+## 2026-08-28 — Matthew Recker via Claude
+
 ### The written preflight is the cadet's own choice now, so the site stopped asking them to ask
 
 **Course director's decision, 2026-08-28: every remaining assignment in Physics 110 and Physics
