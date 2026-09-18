@@ -8,6 +8,78 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-09-18 — Matthew Recker via Claude
+
+### The objective the artifact probed for an hour is not in the lesson being taught
+
+**Course director's request: read the Lesson 15 deck, make the interactive assignment's objectives
+match it, emit the Gemini build, and create the assignment unpublished for review.** The deck
+(`Physics-310-2026-Lesson-15-Dose-and-Shielding`, reading Murray 11.1-11.3) spends its board work on
+one chain — activity to source strength to flux to attenuation to dose rate — and never mentions
+internal dose. The artifact's third objective was `internal-dose-and-effective-half-life`, which had
+a full probe topic, two of the six misconceptions and a prerequisite bullet behind it. About a third
+of a graded ten-minute conversation was being spent off-syllabus.
+
+**What changed in `phys310_preflight_dose_and_shielding.jsx`** (objectives 1 and 2 are untouched —
+both are in the deck):
+
+- objective 3 is now `dose-rate-chain`, "Walks activity to source to flux to dose rate and says what
+  each step does", with a probe topic that opens by asking **which link each of the three controls
+  acts on** (distance only in the flux step, shielding only in attenuation, time not in the chain at
+  all) and lands on the step cadets collapse — **activity is not source strength**, a becquerel is a
+  decay and not a photon;
+- misconceptions 5 and 6 are re-aimed from internal dose to that collapse and to "every control acts
+  on the whole formula";
+- the prerequisites bullet about reciprocals that add (it existed only for the effective-half-life
+  formula) is replaced by activity-versus-emission-rate.
+
+**The last link is deliberately structural, because the grounding cannot support arithmetic.**
+Checked before writing: the inlined Murray excerpt carries `phi = S / (4 pi r^2)`, the three
+controls, HVL/TVL, buildup and `Ddot = Gamma A / r^2` — and carries **no** energy-absorption
+coefficient, **no** `S = fA`, no macroscopic cross section and no numerical `mu` or `Gamma` for any
+material. The deck's `Ddot = phi E mu_en / rho` is lecture material the reference does not hold. The
+new topic therefore walks the chain structurally and tells the tutor to stipulate out loud rather
+than invent, which is the same rule the reference already applies to shield thicknesses.
+`TEXTBOOK_REFERENCE` was not touched; `T_eff` survives there and in one extension problem, which is
+correct — the reference may hold more than the lesson probes.
+
+**A fresh port is NOT born equal to the fleet, and the browser is what said so.**
+`to_gemini.py` reported all 41 transforms matched and wrote a clean 243 KB build;
+`gemini-build.mjs` in real Chrome then failed it 2 of 8 — **no `#prep-gkey`, and the key box was
+`type="password"`**. Not a port bug: the autofill guard lives in
+`scripts/artifacts/patch_autofill_guard.py`, was applied to all 48 shipped builds, and **was never
+folded back into the porter**. So every future first port of a lesson is born with a key box that
+browsers read as a credential field and autofill a saved password into. Running that patcher took
+the build to 8/8. **This is the three-surface parity problem in
+[`TUTOR-BEHAVIOR-PARITY.md`](docs/operations/TUTOR-BEHAVIOR-PARITY.md) happening again**, and the
+carry-forward is recorded there: folding `patch_autofill_guard.py` into `to_gemini.py` is the fix,
+and until it lands **a new port must be followed by that patcher and re-verified**.
+
+**Lesson 15 created, deliberately unpublished** (`is_published = false`, `opens_at` NULL) for the
+director to review: 3 points, `grading_mode = 'points'`, position 15, due **2026-09-21 09:00:59
+America/Denver** on both `due_at` and `due_by_day.T`, with the matching `assignment_due_dates` row
+for T3A so the empty-map trap in CORE.md section 2 does not apply. Two activities — the written
+route (q1 reading time 0 pts, q2 reflection 1 pt, q3 free response 2 pts) and the interactive route
+under the already-published slug `phys310-dose-and-shielding-43f26ac6`. The proposed q3 asks why
+distance is a power law and shielding is an exponential, then why using activity where source
+strength belongs errs **low** — one part per updated objective, and both answerable from the
+reading. Written by `prep_app_dml`, dry-run first, read back through `prep_app_read`.
+
+**What is NOT done, and the one that will bite.** The objective edit lives in
+`_builder/courses/phys-310/artifacts/*.jsx`, which is a **gitignored local cache**. Pushing it back
+to the `artifact-sources` bucket needs the service-role config, which is not on this machine
+(`sync_artifacts.py push` refuses by name). **The next `sync_artifacts.py pull` will overwrite the
+edit**, and a later re-port would silently regenerate the old internal-dose objective. The shipped
+build and the database rows are durable; the source is not. The Claude artifact is also unchanged
+and still probes the old objective — out of scope by instruction, and it keeps its slug either way.
+
+Verified: `gemini-build.mjs` 8/8 in real Chrome, `gemini-model-ladder.mjs` 194/194, contract strings
+present in the shipped bytes (slug 1, `interaction-submit.html` 1, `generativelanguage` 1,
+`api.anthropic.com` **0**). Both harnesses are optional Node tooling (CORE.md section 2); **no real
+tutor turn was run on a live Gemini key.**
+
+---
+
 ## 2026-09-11 — Matthew Recker via Claude
 
 ### The objectives now match the slides, and the half the deck spends on charged particles is finally probed
