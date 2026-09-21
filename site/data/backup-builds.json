@@ -133,6 +133,12 @@
       "title": "Conservation of Energy",
       "path": "gemini/phys-110/lesson-17-conservation-of-energy-0fb9fc37.html"
     },
+    "lesson-18-changes-in-mechanical-energy-power-0db0a21b": {
+      "course": "phys-110",
+      "lesson_no": 18,
+      "title": "Changes in Mechanical Energy / Power",
+      "path": "gemini/phys-110/lesson-18-changes-in-mechanical-energy-power-0db0a21b.html"
+    },
     "lesson-18-moving-charged-particle-in-a-magnetic-field-cd95f8b3": {
       "course": "phys-215",
       "lesson_no": 18,
@@ -144,6 +150,12 @@
       "lesson_no": 19,
       "title": "Magnetic Force on Current-carrying Wires",
       "path": "gemini/phys-215/lesson-19-magnetic-force-on-current-carrying-wires-4a147cca.html"
+    },
+    "lesson-20-linear-momentum-1d-collisions-e64195e3": {
+      "course": "phys-110",
+      "lesson_no": 20,
+      "title": "Linear Momentum & 1-D Collisions",
+      "path": "gemini/phys-110/lesson-20-linear-momentum-1d-collisions-e64195e3.html"
     },
     "lesson-20-magnetic-dipoles-and-torque-3190fefe": {
       "course": "phys-215",
