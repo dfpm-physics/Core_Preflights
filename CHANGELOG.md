@@ -8,6 +8,194 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-09-22 — Matthew Recker via Claude
+
+### Lesson 15 was an empty assignment, and nothing said so
+
+**Same session, same instruction applied to lesson 15: objectives from the deck, Gemini build,
+assignment created for review.** Most of that was done on 2026-09-18 — and the lesson was
+**unreachable anyway**, for a reason no page reports.
+
+**The activities existed and were never ATTACHED.** `app.activities` held both rows, correctly
+shaped, with the written route's three questions on it; `app.offering_activities` held **zero** rows
+for the offering. An offering with no attached activity is a lesson with nothing in it: the cadet
+sees the assignment and no way to do it, the faculty lesson editor shows it as empty, and **no check
+anywhere flags the state.** The 2026-09-18 entry reports the activities as created, which they were.
+Attaching is a separate table and it did not happen.
+
+**Re-dated to Friday 25 Sep 11:59:59 MDT** (noon, stored as the last instant before it — the shape
+this course's rows carry), on `due_at`, `due_by_day.T` and the `assignment_due_dates` row together.
+The old date, Mon 21 Sep 0900, had already passed. The director's words: *"Lesson 15 will be due
+Friday at noon. It's essentially a makeup and my fault it wasn't ready in time."*
+
+**Switched to the Gemini route**, like Lab 2, at the director's instruction: the interactive
+activity's `artifact_url` now points at `backup.html?i=phys310-dose-and-shielding-43f26ac6&go=1`.
+The slug is untouched, so this is transport only. **The claude.ai artifact would have been the wrong
+lesson anyway** — claude.ai serves what was published, so it still probes the objectives this source
+carried before 2026-09-18, let alone before today.
+
+**Objective 2 did not match the deck, and the mismatch was a direct contradiction.** Objectives 1
+(`three-controls-and-inverse-square`) and 3 (`dose-rate-chain`) check out against
+`Instructor-Slides/lessons/lesson-15.json` and are unchanged. Objective 2 was
+`shield-arithmetic-and-buildup`, which made **buildup the priority of its topic** — *"if time runs
+short, spend it here"* — and taught B as 2 to 10 or more. **The deck says the opposite in as many
+words:** *"BUF for lead (our most common shield) is very close to 1. We will mostly ignore BUF
+unless specified."* A cadet was being drilled the night before on the correction their instructor
+was about to tell them to drop.
+
+It is now `shielding-choice-and-attenuation`, built on the deck's own two shielding questions —
+**what shields neutrons, what shields gammas, and WHY** (light nuclei take most of a fast neutron's
+energy per collision, then thermal capture; high-Z brings the atomic electrons a photon interacts
+with), plus the two questions from the deck's closing slide that nothing probed: **why alphas and
+betas are not shielded at all** (they have a range; they have already stopped) and **mu against
+mu_en** (removed from the beam versus deposited in the person). Half-value-layer arithmetic survives
+as a tool. Buildup keeps one question — the DIRECTION of the error, which still points at less dose
+— and loses the drill. Misconception 4 is re-aimed from buildup onto material choice, and the scope
+note that read *"GROUNDED BUT NOT PROBED — material choice"* now says the opposite, because it is
+topic 2.
+
+**The deck is now IN the grounding, tagged `[DECK]`, and outranks the corpus where they differ.**
+The reference gained the lesson's own board sequence — `A(t)`, **`S = fA`**, `phi_0 = S/4 pi r^2`,
+`phi = phi_0 exp(-mu x)`, dose rate — the shielded-flux forms for gammas and neutrons (note
+`Sigma_r` where gammas have `mu`), the reaction rates `R = phi mu` / `phi Sigma` / `phi / R_max`,
+both dose-rate expressions, the BUF practice above, and the framing of the three board problems so
+the tutor knows the level **without reproducing their numbers** (they need tabulated coefficients
+this course does not supply). Same rule as the labs: a primary course document beats the
+reconstruction. `S = fA` in particular was in the deck and nowhere in the reference, while being the
+step objective 3 says cadets collapse.
+
+Verified: `check_artifact.py` 37/37; re-ported under the **same slug**, autofill patch re-applied,
+`gemini-build.mjs` **8/8 in real Chrome**, `gemini-model-ladder.mjs` **194/194**; shipped bytes carry
+the new objective key, `Sigma_r`, `mu_en`, the slug, `interaction-submit.html` and
+`generativelanguage`, with `api.anthropic.com` at **0**. Read back through `prep_app_read`: 2
+activities attached, 1 section row, deadline identical in all three places. **No submissions existed
+under this slug** (checked before editing), so the objective-key change fragments no rollup.
+
+### register_lesson.py can now repair a lesson, not only create one
+
+Two fields, each **opt-in per PLAN entry**, because everything else in that script is
+create-if-absent and a re-run must never revert a director's edit in the lessons page:
+
+- `"reconcile_due": True` re-dates the offering in **all three** places a deadline lives. Moving one
+  **earlier** is refused outright unless `--allow-earlier` is passed, per CORE.md section 2 — the
+  phys-215 repair that took a day away from 138 cadets is why.
+- `"reconcile_artifact_url": True` re-points an interactive activity's launch target, merging into
+  `content` rather than replacing it. The slug is still asserted unchanged one branch above.
+
+The guard proved itself immediately: run without the opt-in, lesson 13 would have been silently
+re-dated **13 hours earlier**, because its PLAN entry carries the original 1959 policy date and the
+live row carries the 0900 one a human set later. Lessons 13 and 16 both report *"0 changes"* again.
+
+### Lab 2 exists now, and it is the first lesson in this system with no Claude artifact at all
+
+**Course director's request: build Lesson 16 (Lab 2) from the lab write-up — three objectives in the
+iPREP, one lab free-response question in the PREP written route, Gemini build only, assignment due
+tomorrow 0800 MDT and NOT published.** All of it is done and verified; what is not committed or
+pushed is listed at the end.
+
+**The lesson was BLOCKED and the write-up is what unblocked it.**
+[`_builder/courses/phys-310/labs/README.md`](_builder/courses/phys-310/labs/README.md) has listed
+Lab 2 as *"blocked: no write-up, no reading"* since Lab 1 was rebuilt — `PF = Y` in the schedule,
+an empty Reading column, and no corpus section, because the corpus only has sections the textbook
+has. Both source documents are now in the repo at `_builder/courses/phys-310/labs/lab-2/`
+(`Lab2_Alt.pdf`, 35 pts, and `Physics 310 - Lab 2 - Analysis (2024).xlsx`), filenames exactly as
+issued, and the README now describes the workbook cell by cell the way it does Lab 1's.
+
+**Read from the LaTeX and from the sheet XML, not from the PDF text layer.** PROJECT.md's sharp-edge
+table records that equations in a PDF come back as vector paths and vanish silently from every text
+extractor. `Lab2_Alt.tex` was read instead, so every equation is the author's; the workbook was
+parsed out of its own XML (no `openpyxl` on this machine, and none was installed — the scripts rule
+in CORE.md section 2 stands).
+
+**Three things the workbook overturned, none of which are guessable from the write-up alone:**
+
+- **The semi-log x-axis is `rho x` in g/cm^2, not `x` in cm.** Since `mu x = (mu/rho)(rho x)`, the
+  slope IS the **mass** attenuation coefficient — the tabulated quantity — with no division by
+  density. An artifact teaching "the slope is mu" sends the cadet to compare the wrong number
+  against their table. This is objective 1 and part (a) of the written question.
+- **The per-point uncertainty is ONE square root over both count totals**, background scaled to the
+  source's counting time. **Lab 1's sheet uses a linear sum of two separate roots.** The two labs
+  genuinely differ, and carrying Lab 1's form across would have contradicted the sheet the cadet is
+  looking at.
+- **This lab's source holds BOTH the Cs-137 and the Ba-137m**, which the write-up flags in its
+  opening paragraph and never explains. The 30-year parent keeps replacing the 2.552-minute
+  daughter, so the gamma output is **steady for the whole period** — which is exactly what lets
+  counts taken minutes apart be compared with no decay correction. In Lab 1 the fall-off *was* the
+  measurement. That contrast is the sharpest thing in objective 3.
+
+**The three iPREP objectives**, each written against a discussion question the cadet is graded on:
+
+| # | key | the write-up question behind it |
+|---|---|---|
+| 1 | `attenuation-semilog-mass-coefficient` | Part 1 Q1/Q2 — derive what to take off the plot, then judge it against the accepted value |
+| 2 | `inverse-square-loglog-power` | Part 2 Q1/Q2 — derive the log-log form, read the power of r off the slope |
+| 3 | `what-the-count-rate-depends-on` | Part 1 Q3/Q4/Q5 — gammas not betas, why 1/r^2 may be ignored, what a 50%-efficient detector does |
+
+**The one free-response question** (2 pts, beside the standard q1 reading-time and q2 reflection) is
+objective 1 and objective 3 in one: derive the slope, then say why neither the detector's efficiency
+nor the ignored 1/r^2 changes `mu/rho` — **and what a poor efficiency does cost.** The grading note
+says to credit the precision-versus-bias distinction warmly and not to require it, and to flag
+rather than zero the cadet who says Part 1 ignores 1/r^2 "because 5 cm is close" (it is **fixed**,
+not small — that is the whole argument).
+
+**NO ATTENUATION COEFFICIENT IS GIVEN TO THE TUTOR, and here that is not the corpus gap — it is the
+assignment.** The Lesson 15 build record established that this course supplies no `mu/rho` anywhere;
+in this lab, looking the accepted value up is the cadet's own graded task (Part 1 Q2). The reference
+therefore tells the tutor plainly that it has no table and to **stipulate out loud and label it**,
+and every coefficient in the four extension problems is labelled INVENTED.
+
+**No Claude artifact, by instruction, and that is a first.** The slug
+`phys310-lab-2-distance-and-shielding-a5909322` was minted here (`secrets.token_hex(4)`, never
+typed) rather than at a claude.ai publish, so `to_gemini.py` needed `--include-unpublished` and the
+index row carries no `published_url`. Everything the slug rule protects is unchanged — same
+receiver, same frozen submit contract, one slug per offering — but the thing that normally freezes
+it is publishing, and here it is the Gemini build plus the `activities` row. The interactive
+activity's `artifact_url` points at the **backup router**
+(`backup.html?i=<slug>&go=1`), because `isArtifactLaunchable` in `site/js/schema.js` refuses to show
+a Launch button without an http(s) URL. Cadets reach one tutor by one route.
+
+**The source is Lab 1's, byte for byte, apart from content.** Rebased rather than built fresh: only
+the header comment, the slug block, `OBJECTIVE_KEYS`, the three `String.raw` content blocks, the
+component name and the two UI titles differ. No transport, pacing or reporting line was touched.
+
+**The autofill patch had to be run by hand again, exactly as the 2026-09-18 entry predicted.**
+`to_gemini.py` matched all 44 transforms and wrote a clean build; `gemini-build.mjs` then failed it
+**2 of 8** in real Chrome — no `#prep-gkey`, key box still `type="password"`. Running
+`patch_autofill_guard.py --course phys-310 --commit` took it to 8/8. Folding that patcher into the
+porter is still the open carry-forward in
+[`TUTOR-BEHAVIOR-PARITY.md`](docs/operations/TUTOR-BEHAVIOR-PARITY.md); this is the second
+first-port in five days to be born without it, which is now evidence rather than a prediction.
+
+**`gemini-finish-bar.mjs` is stale and it is not this build's fault.** It types into `#cadet-id`,
+which the autofill patch renamed to `#prep-lastname`, so it now throws on **every patched build** —
+confirmed by running it against the shipped Lab 1 build, which fails identically. Not fixed here;
+recorded so the next operator does not read it as a regression in a new port.
+
+**Lesson 16 created, deliberately unpublished** (`is_published = false`, `opens_at` NULL): 3 points,
+`grading_mode = 'points'`, position 16, due **2026-09-23 07:59:59 America/Denver** — the last instant
+before 0800, which is the shape every other row in this course carries — on `due_at`, on
+`due_by_day.T`, and on the matching `assignment_due_dates` row for T3A, so the empty-map trap in
+CORE.md section 2 does not apply. Two activities, both `graded`: the written route
+(`phys-310-lesson-16-written-16e5bd05`) and the interactive one under the new slug. Registered by
+adding a `PLAN` entry to
+[`scripts/fall2026/register_lesson.py`](scripts/fall2026/register_lesson.py) — never a fork —
+run dry first, written by `prep_app_dml`, and read back independently through `prep_app_read`.
+
+**What is NOT done.** (1) Nothing is committed or pushed, so the build is not on the live site yet;
+the lesson is unpublished, so no cadet is waiting on it. (2) The `.jsx` and `index.json` are the
+**gitignored local cache** and `sync_artifacts.py push` was deliberately NOT run: its dry run showed
+it would also overwrite **five** objects in Storage that this session never touched, including two
+other phys-310 sources. Pushing this one source needs that to be sorted out first — the same
+durability gap the 2026-09-18 entry recorded, unchanged. (3) No real tutor turn was run: no Gemini
+key was used, and both harnesses are optional Node tooling (CORE.md section 2).
+
+Verified: `check_artifact.py` 37/37 on the source; `gemini-build.mjs` **8/8 in real Chrome**;
+`gemini-model-ladder.mjs` **194/194**; every extension-problem number re-derived twice; the offering
+read back through `prep_app_read` (1 section row, 2 activities, 3 written questions totalling 3
+points against a 3-point offering).
+
+---
+
 ## 2026-09-18 — Matthew Recker via Claude
 
 ### The objective the artifact probed for an hour is not in the lesson being taught

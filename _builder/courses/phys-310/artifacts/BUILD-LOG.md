@@ -1072,6 +1072,65 @@ prose reading as sufficient — but in this one case the reading is correct.
 *"right, and that is the principle; today is the technique. So which of the three would you reach for
 first?"*
 
+### Lesson 16 — Lab 2: Distance and Shielding
+
+> **BUILT 2026-09-22, AND THERE IS NO CLAUDE ARTIFACT.** recker asked for the Gemini build only, so
+> this lesson's slug was minted here rather than at a claude.ai publish, and `Published` below is
+> deliberately empty. Everything downstream is unchanged: same receiver, same submit contract, same
+> slug rule. The lesson is registered as an **unpublished draft** (lesson 16, due 2026-09-23 0800
+> MDT) and the interactive activity's `artifact_url` points at the backup router, because
+> `isArtifactLaunchable` (`site/js/schema.js`) refuses a Launch button without an http(s) URL.
+>
+> **This lesson was listed as BLOCKED** in [`../labs/README.md`](../labs/README.md) — `PF = Y` in the
+> schedule, no assigned reading, no corpus section. Dropping the write-up unblocked it, exactly as
+> Lab 1 predicted it would.
+
+| | |
+|---|---|
+| **File** | [`phys310_preflight_lab_2_distance_and_shielding.jsx`](phys310_preflight_lab_2_distance_and_shielding.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `phys310-lab-2-distance-and-shielding-a5909322` |
+| **Published** | **never — Gemini transport only.** The build is `site/gemini/phys-310/phys310-lab-2-distance-and-shielding-a5909322.html` |
+| **Component** | `Phys310Lab2DistanceAndShieldingPreflight` |
+| **Built** | 2026-09-22 · 2280 lines · rebased on the Lab 1 artifact |
+| **Grounding** | **PRIMARY:** `labs/lab-2/Lab2_Alt.pdf` (the graded write-up, 35 pts, transcribed from its LaTeX source) and `labs/lab-2/Physics 310 - Lab 2 - Analysis (2024).xlsx` (cell formulas read directly out of the sheet XML). **SECONDARY, tagged `[CORPUS]`:** §5.2 for charged-particle range, §5.3 for the gamma interactions, §11.1/§11.3 for the three controls and the half-value layer — all carried forward, none re-probed |
+| **Cadets' reading** | **none assigned.** The write-up is the reading |
+| **Probe topics** | 3 · ~3 active min each · ~10 min |
+| **Checks** | `check_artifact.py` 37 passed / 0 failed. LF throughout, 0 NUL. Diff against the Lab 1 file is confined to the header comment, the slug block, `OBJECTIVE_KEYS`, the three content blocks, the component name and the two UI titles — the component logic was not touched |
+| **Backup build** | rendered 8/8 in real Chrome (`tests/browser-harness/gemini-build.mjs`) and 194/194 on the model ladder. **No live tutor turn was run** — no Gemini key was used |
+| **Status** | **DRAFT, registered but not published.** Grounding is primary and needs no corpus review; the objectives have not been reviewed by a human |
+
+| # | key | label |
+|---|---|---|
+| 1 | `attenuation-semilog-mass-coefficient` | Linearizes φ = φ₀e^(−μx) and reads **μ/ρ** off the slope of ln(flux) against **ρx** |
+| 2 | `inverse-square-loglog-power` | Turns φ = S/4πr² into a log-log line and reads the power of r off its slope |
+| 3 | `what-the-count-rate-depends-on` | A steady Cs/Ba source, gammas not betas, and why a constant factor cannot move a slope |
+
+**Extension problems, all built on the cadet's own lab:** A **μ/ρ off the semi-log plot** — 8.00 and
+4.12 /s across ρx = 0.92 → 7.20 g/cm² gives 0.106 cm²/g, μ = 1.20 cm⁻¹, HVL = 0.58 cm, then the same
+number judged consistent at 0.67σ and inconsistent at 4σ (approachable) · B **what a bad detector
+does and does not do** — halving the efficiency moves the intercept by ln2 and leaves the slope
+identical, while relative uncertainty goes 6.5 % → 9.1 % (approachable) · C **the power of r** —
+n = 1.93 with background subtracted, **1.36 without**, and why the mistake bites at 40 cm and not at
+10 (standard) · D **time, distance and shielding in their own numbers** — a factor of 4 costs a
+quarter of the time, or 10 cm of backing away, or 1.2 cm of lead (approachable).
+
+> **⚠ NO ATTENUATION COEFFICIENT IS GIVEN TO THE TUTOR, and here that is not the corpus gap — it is
+> the assignment.** Lesson 15's entry above records that the course never supplies a μ/ρ anywhere.
+> In this lab, **looking the accepted value up is the cadet's own graded task** (Part 1 discussion
+> question 2, 3 pts). So the reference tells the tutor plainly that it has no table, and to
+> **stipulate out loud and label it** whenever a number is needed. Every coefficient in the
+> extension problems is labelled INVENTED for that reason.
+>
+> **What the workbook overturned, and it is the reason the sheet was parsed rather than assumed.**
+> The plot's x-axis is **ρx in g/cm², not x in cm** — so the slope is μ/ρ *directly*, with no
+> division by density, and an artifact that taught "slope = μ" would have had the cadet comparing
+> the wrong quantity to their table. Two other cells matter: the per-point uncertainty is **one
+> square root over source counts plus time-scaled background counts** (Lab 1's sheet used a linear
+> sum of two separate roots — do not carry Lab 1's form across), and the source in this lab holds
+> **both** the Cs-137 and the Ba-137m, so unlike Lab 1 the gamma output is **steady** for the whole
+> period. That last one is the cadet-facing insight in topic 3 and it comes from the write-up's own
+> opening paragraph.
+
 ### Lesson 18 — Detection Methods: Gas-Filled Detectors
 
 | | |

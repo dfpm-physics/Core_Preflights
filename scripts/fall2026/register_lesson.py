@@ -20,6 +20,18 @@ WHAT IT WRITES  (five tables, and nothing else)
     It NEVER deletes a row and never detaches an activity. Detaching one a student has committed
     to nulls their `chosen_activity_id` through the composite FK.
 
+RE-RUNNING NEVER REWRITES A LIVE ROW BY DEFAULT.  Every step is create-if-absent, so a second
+run reports zero changes even where the live row has since been edited by hand in the lessons
+page -- the common case, and not something a script may revert. Two fields CAN be reconciled,
+and only when the PLAN entry opts in by name:
+
+    "reconcile_due": True             re-dates the offering, rewriting all THREE places a
+                                      deadline lives. Moving one EARLIER additionally needs
+                                      --allow-earlier (CORE.md section 2).
+    "reconcile_artifact_url": True    re-points the interactive activity's launch target. The
+                                      slug is never touched, so this is a transport change and
+                                      nothing downstream can tell.
+
 A LESSON IS REGISTERED AS A DRAFT.  `is_published` is FALSE in every PLAN entry below and this
     script will not flip it. Publishing is a human decision made on the lessons page after the
     director has read the lesson back. Note that publishing is still not RELEASING: a published
@@ -160,6 +172,122 @@ PLAN = {
             },
         ],
     },
+    ("phys-310", 15): {
+        # ALREADY PARTLY REGISTERED on 2026-09-18: the assignment, the offering and both
+        # activities exist, but the offering_activities rows were never written, so the
+        # lesson rendered as an empty assignment. This entry attaches them and reconciles the
+        # two fields the course director changed on 2026-09-22 (a new deadline, and the
+        # Gemini route). The two slugs below are the EXISTING rows' slugs, read out of the
+        # database and out of the artifact source — changing either would orphan the lesson.
+        "assignment_slug": "lesson-15",
+        "kind_id": "preflight",
+        "title": "Lesson 15 Preflight -- Dose and Shielding",
+        "position": 15,
+        "points_possible": 3,
+        "grading_mode": "points",
+        "switch_policy": "lock_on_commit",
+        "is_published": False,          # draft; the director publishes from the lessons page
+        "opens_at": None,               # NULL selects the rolling 7-day release window
+        # MAKEUP DEADLINE, at the course director's instruction (2026-09-22): "Friday at noon.
+        # It's essentially a makeup and my fault it wasn't ready in time." Friday is 25 Sep.
+        # Stored as the last instant before noon, the shape this course's rows carry.
+        "due_at": "2026-09-25 17:59:59+00",   # Fri 25 Sep 11:59:59 MDT
+        "reconcile_due": True,          # it was 2026-09-21 09:00:59 MDT, already past. LATER.
+        "day_key": "T",                 # this course's one section is a T-day section
+        "interactive_title": "Dose and Shielding",
+        "interactive_slug": "phys310-dose-and-shielding-43f26ac6",
+        # GEMINI ROUTE, at the course director's instruction, same as Lab 2. The claude.ai
+        # artifact stays published and simply unused — and it would be the WRONG lesson now:
+        # a published artifact serves what was published, so it still probes the objectives
+        # this source carried before 2026-09-18 and before today's deck alignment.
+        "artifact_url": "https://dfpm-physics.github.io/Core_Preflights/site/student/"
+                        "backup.html?i=phys310-dose-and-shielding-43f26ac6&go=1",
+        "reconcile_artifact_url": True,
+        "written_slug": "phys-310-lesson-15-written-5c1af3d0",
+        "written_role": "graded",
+        "interactive_role": "graded",
+        "reference_pdf": None,
+        "reference_pages": None,
+        # NOT USED on this run — the written activity already exists with its q3, written on
+        # 2026-09-18, and this script never rewrites an existing activity's questions. Kept
+        # here so the entry reads as a complete description of the lesson.
+        "questions": [],
+    },
+    ("phys-310", 16): {
+        "assignment_slug": "lesson-16",
+        "kind_id": "preflight",
+        "title": "Lab 2: Distance and Shielding",
+        "position": 16,
+        "points_possible": 3,
+        "grading_mode": "points",
+        "switch_policy": "lock_on_commit",
+        "is_published": False,          # draft; the director publishes from the lessons page
+        "opens_at": None,               # NULL selects the rolling 7-day release window
+        # 0800 America/Denver on the lesson day itself, at the course director's instruction
+        # (2026-09-22) — not this course's usual 1959-the-night-before. Stored as the last
+        # instant BEFORE 0800, which is the shape every other row in this course carries
+        # (lesson 13's 0900 deadline is stored 14:59:59Z).
+        "due_at": "2026-09-23 13:59:59+00",   # Wed 23 Sep 07:59:59 MDT
+        "day_key": "T",                 # this course's one section is a T-day section
+        "interactive_title": "Lab 2: Distance and Shielding",
+        # Read from the artifact source's INTERACTION_ID, never retyped.
+        "interactive_slug": "phys310-lab-2-distance-and-shielding-a5909322",
+        # THERE IS NO CLAUDE ARTIFACT FOR THIS LESSON — it was built for the Gemini transport
+        # only. `artifact_url` is still required (isArtifactLaunchable in site/js/schema.js
+        # refuses to offer a Launch button without an http(s) URL), so it points at the same
+        # backup router the Gemini button uses. Cadets reach one tutor, by one route.
+        "artifact_url": "https://dfpm-physics.github.io/Core_Preflights/site/student/"
+                        "backup.html?i=phys310-lab-2-distance-and-shielding-a5909322&go=1",
+        "written_slug": "phys-310-lesson-16-written-16e5bd05",
+        "written_role": "graded",
+        "interactive_role": "graded",
+        "reference_pdf": None,
+        "reference_pages": None,
+        # One free-response question beyond the two defaults, worth the remaining 2 points.
+        # Written against the cadet's own Lab 2 write-up: part (a) is Part 1 discussion
+        # question 1 (the derivation behind the slope) and part (b) is Part 1 discussion
+        # questions 4 and 5 (a constant factor cannot move a slope).
+        "questions": [
+            {
+                "id": "q3",
+                "role": "free_response",
+                "text": "In Part 1 of Lab 2 you put four thicknesses of lead between a Cs-137 "
+                        "source and the GM tube, and the spreadsheet plots ln(flux) against "
+                        "rho*x — density times thickness, in g/cm^2. (a) Starting from "
+                        "phi = phi_0 e^(-mu x), show why the slope of that plot is the mass "
+                        "attenuation coefficient mu/rho. (b) Your tube counts only about 10% of "
+                        "the gammas that reach it, and Part 1 ignores the 1/r^2 law entirely. "
+                        "Explain why neither of those changes the mu/rho you get from the plot — "
+                        "and say what a poor detector efficiency does cost you.",
+                "type": "free_response",
+                "points": 2,
+                "figure_url": "",
+                "correct_answer": "",
+                "expected_response":
+                    "(a) Write mu x as (mu/rho)(rho x). Taking the natural log of "
+                    "phi = phi_0 e^(-mu x) gives ln(phi) = ln(phi_0) - (mu/rho)(rho x), which is "
+                    "a straight line in the plotted variable rho x with slope -(mu/rho) and "
+                    "intercept ln(phi_0). So the slope read off the semi-log plot IS the mass "
+                    "attenuation coefficient, with a minus sign — no division by the density is "
+                    "needed, which is the whole reason the x-axis is density thickness rather "
+                    "than centimetres. "
+                    "(b) Both are CONSTANT multipliers on every point. A detector of fixed "
+                    "efficiency e reports e times the flux; the fixed 5 cm geometry contributes "
+                    "the same 1/(4 pi r^2) to every count because the distance never changes "
+                    "while the shielding does. A constant multiplier becomes a constant ADDED to "
+                    "ln(phi), so it moves the INTERCEPT and cannot touch the slope. What a low "
+                    "efficiency does cost is counts: fewer counts means a larger sqrt(N) "
+                    "uncertainty on every point, so the slope is less PRECISE even though it is "
+                    "not BIASED. "
+                    "GRADING: full credit for the mu x = (mu/rho)(rho x) split and the slope in "
+                    "(a), and for 'constant factor moves the intercept, not the slope' in (b). "
+                    "Do not require the intercept's meaning or any number. A cadet who says "
+                    "Part 1 may ignore 1/r^2 'because 5 cm is close' has the wrong reason — it is "
+                    "fixed, not small — flag it, do not zero it. The precision-versus-bias point "
+                    "in (b) is the stretch; credit it warmly, do not require it.",
+            },
+        ],
+    },
 }
 
 
@@ -186,6 +314,9 @@ def main():
     ap.add_argument("--course", required=True)
     ap.add_argument("--lesson", required=True, type=int)
     ap.add_argument("--commit", action="store_true", help="write (default: dry run, rolled back)")
+    ap.add_argument("--allow-earlier", action="store_true",
+                    help="permit moving an existing deadline EARLIER (CORE.md section 2: "
+                         "that takes time away from cadets and is the human's call)")
     args = ap.parse_args()
 
     plan = PLAN.get((args.course, args.lesson))
@@ -222,9 +353,35 @@ def main():
     print(f"  assignment        {plan['assignment_slug']}  {assignment_id}")
 
     # 2. offering --------------------------------------------------------------------------
-    row = one(cur, """select id from app.assignment_offerings
+    row = one(cur, """select id, due_at from app.assignment_offerings
                       where course_offering_id=%s and assignment_id=%s""",
               (co["id"], assignment_id))
+    if (row is not None and plan.get("reconcile_due")
+            and str(row["due_at"]) != plan["due_at"].replace("+00", "+00:00")):
+        # RECONCILE A DEADLINE THAT HAS MOVED.  Added 2026-09-22, when lesson 15 had to be
+        # re-dated as a makeup. Everything else in this script is create-if-absent, and that
+        # is deliberate — but a deadline lives in THREE places (CORE.md section 2) and an
+        # editor-free path that can write only two of them is how the empty-`due_by_day` trap
+        # happened in the first place. So the date is reconciled as a unit or not at all.
+        #
+        # MOVING A DEADLINE EARLIER IS A HUMAN DECISION, NOT A SCRIPT'S (CORE.md section 2:
+        # the phys-215 repair took a day away from 138 cadets). It is refused here unless the
+        # human says so on the command line, and the refusal names both dates.
+        old, new = row["due_at"], plan["due_at"]
+        earlier = str(new) < str(old)
+        if earlier and not args.allow_earlier:
+            sys.exit(f"REFUSING to move the deadline EARLIER: {old} -> {new}\n"
+                     f"  Count what is already in flight (submissions, grades), put it to the\n"
+                     f"  course director, and re-run with --allow-earlier if they agree.")
+        cur.execute("""update app.assignment_offerings set due_at=%s, due_by_day=%s,
+                              updated_at=now() where id=%s""",
+                    (new, Json({plan["day_key"]: new.replace(" ", "T").replace("+00", ".000Z")}),
+                     row["id"]))
+        cur.execute("""update app.assignment_due_dates set due_at=%s
+                        where assignment_offering_id=%s""", (new, row["id"]))
+        changed.append(f"due date moved {'EARLIER' if earlier else 'later'}: {old} -> {new}")
+        print(f"  RE-DATED          {old}  ->  {new}"
+              f"{'   (EARLIER, authorized)' if earlier else ''}")
     if row is None:
         row = one(cur, """insert into app.assignment_offerings
                             (id, course_offering_id, assignment_id, points_possible, grading_mode,
@@ -267,7 +424,8 @@ def main():
          {"description": None, "artifact_url": plan["artifact_url"]}, plan["interactive_role"]),
     ]
     for modality, slug, title, pos, content, role in activities:
-        row = one(cur, "select id, slug from app.activities where assignment_id=%s and modality=%s",
+        row = one(cur, """select id, slug, content from app.activities
+                          where assignment_id=%s and modality=%s""",
                   (assignment_id, modality))
         if row is None:
             row = one(cur, """insert into app.activities
@@ -279,6 +437,20 @@ def main():
         elif row["slug"] != slug:
             sys.exit(f"activity {modality} already exists as {row['slug']}, PLAN says {slug} - "
                      "refusing to move a slug that reports already hang off")
+        elif (modality == "interactive" and plan.get("reconcile_artifact_url")
+                and row["content"].get("artifact_url") != content["artifact_url"]):
+            # RECONCILE THE LAUNCH TARGET, and ONLY that field. Added 2026-09-22, when
+            # lesson 15 was switched to the Gemini route. The slug is untouched (asserted
+            # above), so this is a transport change and nothing downstream can tell: same
+            # activities row, same reports, same rollup. `content` is merged rather than
+            # replaced, so a description written in the editor survives.
+            cur.execute("""update app.activities
+                              set content = content || %s::jsonb, updated_at = now()
+                            where id = %s""",
+                        (Json({"artifact_url": content["artifact_url"]}), row["id"]))
+            changed.append("artifact_url")
+            print(f"  RE-POINTED        {row['content'].get('artifact_url')}\n"
+                  f"               ->   {content['artifact_url']}")
         activity_id = row["id"]
         print(f"  activity {modality:<12} {slug}")
 

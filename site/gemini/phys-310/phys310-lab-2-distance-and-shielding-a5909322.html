@@ -7,7 +7,7 @@
 <!-- Not a security control. The exposure here is the same one the published Claude artifact
      already carries; this only keeps worked extension problems out of a search index. -->
 <meta name="robots" content="noindex, nofollow">
-<title>PHYS 310 Lesson 15 &mdash; Dose and Shielding &mdash; PREP</title>
+<title>PHYS 310 Lesson 16 &mdash; Lab 2: Distance and Shielding &mdash; PREP</title>
 
 <!-- React + in-browser JSX, served from OUR OWN ORIGIN rather than a CDN.
      Two reasons, and the second is the load-bearing one:
@@ -68,27 +68,45 @@ const { useState, useRef, useEffect } = React;
 // build -- asserted by the generator, which refuses rather than warns.
 // ============================================================================
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
 // PHYS 310 · Principles of Nuclear Science · Fall 2026
-// Preflight — Dose and Shielding
+// Preflight — Lab 2: Distance and Shielding
 //
-// Built by the preflight-factory-v2 skill from COURSE_PROFILE.md (phys-310).
-// Grounding: Murray & Holbert, Nuclear Energy (8th ed.), sections 11.1, 11.2
-// and 11.3, excerpted from texts/MURRAY-GROUNDING.md.
+// Rebased 2026-09-22 on the Lab 1 artifact, which is this course's worked
+// precedent for a lab preflight. Only the four content blocks, the slug, the
+// objective keys, the component name and the two UI titles differ; every line
+// of transport, pacing, reporting and prompt scaffolding is Lab 1's, byte for
+// byte.
 //
-// ALL THREE SECTIONS WERE STATUS: PENDING WHEN THIS ARTIFACT WAS BUILT —
-// reconstructed from model knowledge and NOT YET REVIEWED against the printed
-// book. recker lifted the build gate on 2026-08-05: "Assume the grounding for
-// 310 is correct and we can fix objectives and grounding later if we need to."
-// That is permission to build, not an attestation. The review is still owed and
-// is now owed against this draft. See docs/decisions/PHYS310-MURRAY-GROUNDING.md
-// and texts/MURRAY-GROUNDING.md -> "The review gate".
+// GROUNDED IN PRIMARY DOCUMENTS, like Lab 1 and for the same reason: the
+// cadet's own Lab 2 write-up (Distance and Shielding, 35 points) and the
+// analysis workbook it tells them to use. LAB 2 HAS NO ASSIGNED TEXTBOOK
+// READING -- the schedule's Reading column is empty and the course corpus has
+// no section for it, which is why this lesson was listed as blocked in
+// ../labs/README.md until the write-up arrived. The write-up IS the reading.
+//
+// THERE IS NO CLAUDE BUILD OF THIS LESSON. It was built at the course
+// director's instruction (2026-09-22) for the Gemini transport only, so the
+// slug below is minted here rather than at a claude.ai publish, and the index
+// row carries no published_url. Everything else about the slug rule is
+// unchanged -- see the block above the declaration.
+//
+// NO ATTENUATION COEFFICIENT IS SUPPLIED TO THE TUTOR, deliberately. No lesson
+// anywhere in this course supplies one (see the Lesson 15 artifact's reference,
+// which says so at length), and in this lab looking the accepted value up is
+// the cadet's own graded task -- Part 1 discussion question 2. The tutor
+// stipulates out loud when it needs a number.
+//
+// THIS IS A PREFLIGHT FOR A LAB, which changes what it is for. The cadet
+// completes it before walking into the lab period, so it probes whether they
+// understand what they are about to measure and why the procedure is shaped
+// the way it is — not whether they can rederive the attenuation law. The law is
+// a TOOL here; measuring mu/rho is the objective. See the scope_note.
 //
 // NO LESSON NUMBER APPEARS ANYWHERE IN THIS FILE, by design. The Fall 2026
-// schedule's lesson numbers and dates are expected to move — this lesson has
-// already been renumbered once, in 2026-08 — and its topics are not. See
-// COURSE_PROFILE.md -> "Slug namespacing - two decisions, recorded".
-// ═══════════════════════════════════════════════════════════════════════════
+// schedule's lesson numbers and dates are expected to move; its topics are
+// not. See COURSE_PROFILE.md -> "Slug namespacing - two decisions, recorded".
+// ════════════════════════════════════════════════════════════════════════════
 
 // ── Model resolution — DO NOT hard-pin a dated snapshot ──────────────────────
 // A dated snapshot can be deprecated or made unavailable to some account tiers,
@@ -748,7 +766,7 @@ const OPENING_QUESTION = "What did you find interesting or difficult in the read
 // prompt marks VERBATIM, and openerStage matches on it, so the greeting can be
 // reworded without touching stage detection.
 const OPENING_WELCOME =
-  "Welcome to " + "Dose and Shielding" + ".\n\n"
+  "Welcome to " + "Lab 2: Distance and Shielding" + ".\n\n"
   + "We are going to talk through today\u2019s reading together. I will ask"
   + " questions rather than hand you answers, and the goal is to see how you are"
   + " thinking \u2014 not to catch you out. At the end I will write a short report"
@@ -861,29 +879,34 @@ const SUBMIT_ENDPOINT =
 
 // Per-OFFERING slug. Two rules stack here and both are load-bearing:
 //
-//   stem   phys310-dose-and-shielding  COURSE_PROFILE.md: course prefix, topic
-//                                      text only, no lesson number (the Fall 2026
-//                                      numbers are expected to move, and this
-//                                      lesson's already did).
-//   suffix -43f26ac6                   INTERACTION-DATA-CONTRACT.md §3.2: eight
-//                                      random lowercase hex, generated ONCE per
-//                                      artifact build.
+//   stem   phys310-lab-2-distance-and-shielding
+//                                     COURSE_PROFILE.md: course prefix, topic
+//                                     text only, no lesson number (the Fall 2026
+//                                     numbers are expected to move).
+//                                     The "2" in "Lab 2" numbers the LAB, not
+//                                     the lesson.
+//                                     TOPIC STRING PROVENANCE: read from the
+//                                     write-up's own title block, "Distance and
+//                                     Shielding", not from the schedule, whose
+//                                     bare topic is the useless string "Lab 2".
+//   suffix -a5909322                  INTERACTION-DATA-CONTRACT.md 3.2: eight
+//                                     random lowercase hex, generated ONCE per
+//                                     artifact build. Minted 2026-09-22 with
+//                                     secrets.token_hex(4), never typed.
 //
 // The suffix is not decoration. activities.slug is globally UNIQUE, so without
-// it every term that ran this lesson would share one activities row — and a
-// director deleting a rebuilt Fall 2026 lesson would be one confirm away from
-// destroying another term's reports. Per-offering slugs make each term its own
-// row.
+// it every term that ran this lesson would share one activities row.
 //
-// CONSEQUENCE, and it is the opposite of the rest of this file's naming policy:
-// this slug is deliberately NOT reproducible. Rebuilding this artifact mints a
-// new suffix and therefore a NEW LESSON ROW — it does not update the old one.
-// A rebuild must be re-registered with the new slug. Never hand-copy an old
-// suffix forward to avoid that; reuse is the exact failure §3.2 exists to stop.
+// MINTED WITHOUT A CLAUDE PUBLISH, which is unusual and is the one thing to
+// know about this file. Normally the slug is minted at build time and fixed by
+// publishing on claude.ai; here there is no Claude build at all, so the slug is
+// fixed by the FIRST GEMINI BUILD and by the activities row that points at it.
+// It is just as immutable: once a cadet has submitted under it, minting a
+// second one splits the cohort and silently halves every rollup.
 //
 // Must equal the lesson's activities.slug byte-for-byte; the prefill link passes
 // this same value, so read it from this file rather than retyping it.
-const INTERACTION_ID = "phys310-dose-and-shielding-43f26ac6";
+const INTERACTION_ID = "phys310-lab-2-distance-and-shielding-a5909322";
 
 // Stamped into d.producer so a cohort-wide anomaly traces to the build.
 const ARTIFACT_VERSION = "2026-08";
@@ -901,9 +924,9 @@ const IDLE_PAUSE_MS = 5000;
 // against exactly these keys in the d payload — it may not invent, rename,
 // merge, or drop one, or the cohort rollup fragments across cadets.
 const OBJECTIVE_KEYS = [
-  { key: "three-controls-and-inverse-square", label: "Ranks time, distance and shielding; knows where 1/r^2 fails" },
-  { key: "shielding-choice-and-attenuation", label: "Chooses a shield by what the radiation interacts with, and says what mu, mu_en and buildup each account for" },
-  { key: "dose-rate-chain", label: "Walks activity to source to flux to dose rate and says what each step does" },
+  { key: "attenuation-semilog-mass-coefficient", label: "Linearizes the attenuation law and reads mu/rho off the slope of ln(flux) against rho-x" },
+  { key: "inverse-square-loglog-power", label: "Turns the inverse-square law into a log-log line and reads the power of r off its slope" },
+  { key: "what-the-count-rate-depends-on", label: "Says what the count rate does and does not depend on: a steady source, gammas not betas, and why a constant factor cannot move a slope" },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1388,489 +1411,345 @@ function useLzString() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const TEXTBOOK_REFERENCE = String.raw`
-TEXTBOOK_REFERENCE — authoritative Tier-1 grounding for today's content (internal reference only;
-never cite its section or page numbers to the cadet).
+TEXTBOOK_REFERENCE — authoritative Tier-1 grounding for today's content (internal reference only).
 
-Source: Murray & Holbert, "Nuclear Energy: An Introduction to Concepts, Systems, and Applications
-of Nuclear Processes," 8th ed. — sections 11.1 (Time, Distance, and Shielding), 11.2 (Dose-Rate
-Calculations), and 11.3 (Shielding Calculations and Buildup).
+Source: the PHYS 310 LAB 2 WRITE-UP the cadet has been issued (Distance and Shielding, Fall 2026, 35
+points) and the analysis workbook it tells them to use, "Physics 310 - Lab 2 - Analysis". Secondary,
+where noted: the course grounding corpus for Murray & Holbert, "Nuclear Energy," 8th ed.
 
-PROVENANCE — for the tutor, never for the cadet. This reference is excerpted from the course's
-grounding corpus for exactly those three sections. THE CORPUS ENTRIES WERE RECONSTRUCTED, AND HAD NOT
-YET BEEN REVIEWED AGAINST THE PRINTED BOOK WHEN THIS ARTIFACT WAS BUILT. Treat what is below as your
-source anyway — it is the only one you have — and do NOT extend it from your own recollection of
-this textbook. If the conversation needs something genuinely absent below, say your confidence is
-limited and reason from first principles out loud — do not manufacture a number, a section, or a
-worked example.
+PROVENANCE — for the tutor, never for the cadet. MOST OF WHAT FOLLOWS IS PRIMARY. It is transcribed
+from the cadet's own graded lab document and from the formulas in the workbook's cells; it is not
+reconstructed. Where a statement comes instead from the reconstructed Murray corpus it is tagged
+[CORPUS]. Where the two disagree, THE LAB DOCUMENT WINS. Do not extend any of this from your own
+recollection of the textbook. If the conversation needs something genuinely absent below, say your
+confidence is limited and reason from first principles out loud — do not manufacture a number, a
+section, or a worked example.
 
-A SECOND PROVENANCE NOTE, AND IT SHAPES THE WHOLE CONVERSATION. TODAY IS THE LESSON THAT FINALLY
-SIZES A SHIELD, AND YOU HAVE NO ATTENUATION COEFFICIENT TO SIZE IT WITH. You have the attenuation
-law, the half-value layer as ln2 over mu, the tenth-value layer, and the buildup factor — and you
-have NO NUMERICAL VALUE of mu, of mu over rho, or of a half-value layer for lead, for water, for
-concrete, or for any other material. That hole is not local to this reference. An earlier lesson of
-this course hit exactly the same wall and had to work around it, and NO LESSON ANYWHERE IN THIS
-COURSE SUPPLIES A SINGLE ATTENUATION COEFFICIENT. The same is true of the specific gamma-ray
-constant: you know that Gamma is tabulated per nuclide, and you have no table.
+THE CADET IS HOLDING THE SOURCE DOCUMENT. Elsewhere in this course you never cite the grounding text.
+THAT RULE IS UNCHANGED FOR THE TEXTBOOK. But the lab write-up and the spreadsheet are the cadet's own
+working documents for the period they are about to walk into, and referring to them plainly — "your
+write-up asks you to...", "the spreadsheet plots..." — is correct and wanted. NEVER cite a Murray
+section or page number. Lab 2 has NO assigned textbook reading; the write-up IS the reading.
 
-SO WORK IN HALF-VALUE LAYERS AS THE UNIT, not in centimetres. "How many half-value layers do you
-need for a factor of a thousand" is a question you can answer exactly and the cadet can check;
-"how thick does the lead have to be" is not. When a thickness is genuinely needed, STIPULATE the
-half-value layer out loud — "suppose one half-value layer of this material is 1.2 cm" — and say
-plainly that you are stipulating it because the number is a tabulated material property you have not
-been given. A number you invent is a number the cadet writes down.
+NO ATTENUATION COEFFICIENT IS GIVEN TO YOU, AND THAT IS DELIBERATE. The write-up tells the cadet to
+look up the accepted mass attenuation coefficient for their shielding material (it points them to
+their table of mass attenuation coefficients, and the workbook to their equation sheet). YOU DO NOT
+HAVE THAT TABLE. Do not quote a value of mu/rho for lead or anything else as a fact. When a number is
+genuinely needed, STIPULATE it out loud — "suppose your table gives 0.11 cm^2/g" — and say plainly
+that you are stipulating it. Finding the accepted value is the cadet's job in the lab, and a number
+you invent is a number the cadet writes down.
 
-KEY CONSTANTS
-- THE THREE CONTROLS AND THEIR MATHEMATICAL FORM, which is what sets their ranking:
-      TIME       dose is LINEAR in exposure time. Halve the time, halve the dose.
-      DISTANCE   INVERSE SQUARE for a point source. Dose rate goes as 1/r^2, so DOUBLING THE
-                 DISTANCE QUARTERS THE DOSE.
-      SHIELDING  EXPONENTIAL in thickness, and the most expensive of the three.
-- point source, uncollided flux:
-      phi = S / (4 pi r^2)                    [particles per cm^2 per second]
-- gamma dose rate from a point source, using the nuclide's SPECIFIC GAMMA-RAY CONSTANT Gamma:
-      Ddot = Gamma A / r^2
-  Gamma is tabulated per nuclide and folds photon yield and photon energy into one number.
-  YOU HAVE NO VALUE OF Gamma FOR ANY NUCLIDE.
-- THE ONE NUMERICAL DOSE-RATE ANCHOR IN THIS REFERENCE, and it is a rule of thumb rather than a
-  constant:
-      about 6 R/h per curie at 1 foot, per MeV of gamma energy
-- effective half-life, combining physical decay with biological clearance:
-      1/T_eff = 1/T_phys + 1/T_bio
-  T_EFF IS ALWAYS SHORTER THAN EITHER INPUT.
-- the only biological clearance figure you have: tritium distributes in body water and clears in
-  about 10 days
-- attenuation of an uncollided photon beam:
-      I = I_0 exp(-mu x)                                    [CARRIED FORWARD, earlier lesson]
-- half-value layer   HVL = ln2 / mu
-- tenth-value layer  TVL = ln10 / mu, which is about 3.32 times the HVL
-- n half-value layers leave a fraction (1/2)^n. THREE HALF-VALUE LAYERS LEAVE ONE EIGHTH.
-- buildup:
-      D = D_0 B exp(-mu x)
-  B is the BUILDUP FACTOR. For thick shields B can be 2 to 10 OR MORE. It grows with thickness
-  measured in mean free paths and falls with atomic number. YOU HAVE NO TABULATED B.
-- 1 curie = 3.7 x 10^10 becquerel                           [CARRIED FORWARD, earlier lesson]
-- ln2 is about 0.693                                        [CARRIED FORWARD, earlier lesson]
-- NOT IN YOUR REFERENCE AT ANY POINT, AND NOT AVAILABLE TO YOU: a numerical mu, mu over rho, or
-  half-value layer for any material; a Gamma value for any nuclide; a buildup factor for a stated
-  material and thickness; any biological half-life other than tritium's 10 days; any committed-dose
-  coefficient; any tissue weighting value. If an example needs one, stipulate it out loud and say
-  that you are stipulating it.
+KEY CONSTANTS — today's lab
+- source: a sealed Cs-137 source that contains BOTH the Cs-137 AND the Ba-137m (written Ba-137* in
+  the write-up) it decays into. The detector counts the 662 keV gamma from the Ba-137m.
+      Cs-137  -> Ba-137m + beta-minus        (30.08 years)      [write-up eq. 2]
+      Ba-137m -> Ba-137 + gamma (662 keV)    (2.552 minutes)    [write-up eq. 3]
+- attenuation law:  phi = phi_0 e^(-mu x)                        [write-up eq. 1]
+  mu is the LINEAR attenuation coefficient (per cm); mu/rho is the MASS attenuation coefficient
+  (cm^2 per g), which is the form that is tabulated.
+- inverse-square law for an isotropic point source:  phi = S / (4 pi r^2)   [write-up eq. 4]
+- counting: every measurement is a 30 s count; background is a 2-minute count with no source nearby
+- Part 1 geometry: source on the plastic tray at 5 cm (the fifth slot down), lead block in the slot
+  directly below the detector, 4 different block thicknesses
+- Part 2 geometry: GM tube laid flat beside a meter stick, source facing it, 4 distances between
+  10 and 100 cm (the workbook has room for 5)
+- the workbook's shielding density cell ships as 11.34 g/cm^3 (lead)
 
-TIME, DISTANCE, AND SHIELDING [internal tag: section 11.1]
-- THE THREE CONTROLS, IN ORDER OF HOW CHEAPLY THEY BUY PROTECTION. The ordering is the section's
-  organizing claim and it is not a matter of taste:
-    * TIME. Dose is LINEAR in exposure time — halve the time, halve the dose. Bought in practice by
-      REHEARSING A MAINTENANCE TASK ON A MOCKUP before entering the field, so that the time spent in
-      the radiation area is the time the job actually takes rather than the time the worker spends
-      working out what to do.
-    * DISTANCE. INVERSE SQUARE for a point source: the dose rate goes as 1/r^2, so DOUBLING THE
-      DISTANCE QUARTERS THE DOSE. That quadratic payoff is what makes distance THE CHEAPEST AND MOST
-      POWERFUL CONTROL AVAILABLE — a step backwards costs nothing and buys a factor of four — and it
-      is the reason remote handling tools exist at all.
-    * SHIELDING. EXPONENTIAL in thickness, and THE MOST EXPENSIVE OF THE THREE. It is what you reach
-      for once the first two have run out, not what you reach for first.
-- THE INVERSE-SQUARE LAW HOLDS ONLY FOR A POINT SOURCE IN A VACUUM. This is the section's real
-  physics content and not a footnote. It FAILS for line and plane sources — a pipe, a contaminated
-  floor — where the falloff is 1/r or nearly flat instead, and it fails wherever scatter or
-  attenuation in the intervening material matters.
-  THE DIRECTION OF THE ERROR IS THE PART THAT MATTERS. Applying 1/r^2 to an extended source is the
-  standard error, and IT ERRS OPTIMISTICALLY: it predicts less dose than the worker actually
-  receives. An error that flatters the answer is more dangerous than one that alarms, because
-  nobody goes looking for it.
-- CONTAMINATION CONTROL IS A FOURTH CONTROL IN DISGUISE: removing the source removes all three
-  problems at once. There is no time, distance or shielding question about a source that is not
-  there.
-- FOR YOUR ORIENTATION ONLY, NEVER FOR THE CADET: this section covers time, distance, shielding and
-  contamination control, and it does NOT mention ALARA anywhere. ALARA belongs to the previous
-  lesson of this course. The scope note says how to handle a cadet who reaches for the word.
+THE PHYSICS THE WRITE-UP STATES
 
-DOSE-RATE CALCULATIONS [internal tag: section 11.2]
-- POINT SOURCE, UNCOLLIDED FLUX:
-      phi = S / (4 pi r^2)                    [particles per cm^2 per second]
-  where S is the source strength in particles per second. The 4 pi r^2 is the surface area of the
-  sphere over which those particles are spread, so the inverse-square law of the previous section
-  and this formula are the same statement — one geometric, one algebraic.
-- GAMMA DOSE RATE from a point source, using the nuclide's SPECIFIC GAMMA-RAY CONSTANT Gamma:
-      Ddot = Gamma A / r^2
-  with A the activity of the source. Gamma is TABULATED PER NUCLIDE, and what it does is fold the
-  nuclide's photon YIELD and photon ENERGY into a single number, so that the dose rate can be
-  written in terms of activity alone. Two sources of EQUAL ACTIVITY do NOT give equal dose rates,
-  and Gamma is where that difference lives.
-- A USEFUL RULE OF THUMB, and the only numerical dose-rate anchor you have:
-      about 6 R/h per curie at 1 foot, per MeV of gamma energy.
-  So roughly 6 R/h at 1 foot from a 1 Ci source emitting one 1 MeV gamma per decay; roughly 12 at
-  2 MeV. It is quoted in traditional units because that is how it is carried in the field, and this
-  whole subject mixes SI and traditional units freely.
-- INTERNAL DOSE BEHAVES DIFFERENTLY AND IS THE HARDER HALF. Once a nuclide is inside a person there
-  is no distance to add, nothing to interpose, and no leaving the area — the source goes wherever
-  they go.
-    * COMMITTED DOSE is the TOTAL dose delivered over the years FOLLOWING an intake, and it is
-      ASSIGNED TO THE YEAR OF THE INTAKE. The accounting is deliberately front-loaded: the dose is
-      booked when the intake happened, not in the years the tissue actually receives it.
-    * EFFECTIVE HALF-LIFE combines physical decay with biological clearance:
-          1/T_eff = 1/T_phys + 1/T_bio
-      T_EFF IS ALWAYS SHORTER THAN EITHER, because it is reciprocals that add — and it is dominated
-      by whichever of the two is shorter. The practical consequence is the payoff of this section: a
-      LONG-LIVED nuclide that the body clears quickly can be FAR LESS HAZARDOUS than its physical
-      half-life alone suggests. This is where the earlier point that a long half-life and a
-      dangerous nuclide are not the same thing finally has teeth.
-    * ROUTE OF INTAKE AND CHEMISTRY DOMINATE — not nuclear properties. Strontium-90 follows CALCIUM
-      into bone and stays there. Iodine-131 goes to the THYROID. Tritium distributes in BODY WATER
-      and clears in about 10 days. Which organ receives the dose is decided by what the element does
-      chemically, which is why two nuclides of similar half-life and similar photon energy can carry
-      very different internal hazards.
+- ATTENUATION. When gamma rays pass through matter, the flux after a thickness x is
+      phi = phi_0 e^(-mu x)
+  where phi_0 is the flux before reaching the material and mu is the linear attenuation coefficient.
+  The lab measures the fall-off in detector count rate as the shield gets thicker and extracts the
+  MASS attenuation coefficient from it.
 
-SHIELDING CALCULATIONS AND BUILDUP [internal tag: section 11.3]
-- UNCOLLIDED ATTENUATION:
-      I = I_0 exp(-mu x)
-  with the HALF-VALUE LAYER
-      HVL = ln2 / mu
-  and the TENTH-VALUE LAYER
-      TVL = ln10 / mu, about 3.32 times the HVL.
-  HALF-VALUE LAYERS STACK MULTIPLICATIVELY: n of them leave a fraction (1/2)^n, so THREE HALF-VALUE
-  LAYERS LEAVE ONE EIGHTH — not one sixth. THICKNESSES ADD WHILE INTENSITIES MULTIPLY, and that is
-  the whole reason these units are worth having: the arithmetic can be done in your head, and mu
-  itself never has to be looked up.
-- THE BUILDUP FACTOR IS THE POINT OF THIS SECTION:
-      D = D_0 B exp(-mu x)
-  B ACCOUNTS FOR SCATTERED PHOTONS THAT REACH THE DETECTOR AFTER CHANGING DIRECTION. The exponential
-  counts only the photons that got through WITHOUT INTERACTING AT ALL. The ones that scattered are
-  still in the room — with less energy, arriving from a new direction — and they still deliver dose.
-  THE MAGNITUDE IS NOT A ROUNDING ERROR: for thick shields B can be 2 TO 10 OR MORE. That is a
-  FACTOR, not a percentage.
-  AND THE DIRECTION IS WHAT MAKES IT MANDATORY RATHER THAN A REFINEMENT: using exp(-mu x) alone
-  UNDERESTIMATES the dose, so the error falls ON THE UNSAFE SIDE. That is exactly why this
-  correction is taught rather than left as a nicety for later.
-  HOW B BEHAVES: it GROWS with thickness measured in mean free paths, and it FALLS with atomic
-  number. A thicker shield offers more material in which a photon can scatter and still get out; a
-  high-Z shield absorbs the scattered photons instead of passing them along.
-- MATERIAL CHOICE FOLLOWS THE INTERACTION PHYSICS OF THE PREVIOUS LESSON, AND THE TWO REQUIREMENTS
-  CONFLICT:
-    * GAMMAS want HIGH-Z, HIGH-DENSITY material — lead, depleted uranium, steel — because
-      photoelectric absorption scales as roughly Z^4 to Z^5.
-    * NEUTRONS want HYDROGENOUS material — water, polyethylene, concrete. Moderate first, then
-      absorb the thermalized neutrons with boron or cadmium.
-    * A LEAD SHIELD IS NEARLY TRANSPARENT TO FAST NEUTRONS, AND A WATER SHIELD IS POOR AGAINST
-      GAMMAS. A mixed field therefore needs a LAYERED OR COMPOSITE shield, and CONCRETE IS THE
-      PRACTICAL COMPROMISE, because it carries hydrogen, oxygen and heavy aggregate all at once.
-    * REMEMBER THE CAPTURE GAMMAS: absorbing thermal neutrons in boron or hydrogen CREATES new
-      gammas that the shield must then stop. It is the step most often forgotten.
-  THE MECHANISMS UNDERNEATH ALL OF THIS — photoelectric, Compton, pair production, the neutron
-  shielding inversion, bremsstrahlung — BELONG TO THE PREVIOUS LESSON OF THIS COURSE and are not
-  re-probed today. Use them freely as shared ground. See the scope note.
+- THE PLOT IS AGAINST rho x, NOT AGAINST x. The spreadsheet plots the count rate against DENSITY
+  TIMES THICKNESS, in g/cm^2 — the "density thickness" printed on the box each lead block is kept in.
+  Because mu x = (mu/rho)(rho x), taking the natural log of the attenuation law gives
+      ln(phi) = ln(phi_0) - (mu/rho)(rho x)
+  so ON THE SEMI-LOG PLOT AGAINST rho x THE SLOPE IS -(mu/rho) DIRECTLY. Discussion question 1 of
+  Part 1 asks the cadet to "show the full derivation for how you determined what value you should
+  take off of your plot" — this is that derivation, and it should be theirs.
+  To get mu itself, multiply by the density: mu = (mu/rho) rho.
 
-WHAT THE LESSON ITSELF TEACHES — [DECK], and where it disagrees with the section above, THE DECK
-WINS. Transcribed 2026-09-22 from the instructor's own Lesson 15 slides, which are a primary source
-in the way the corpus is not. The cadet has not seen these slides yet — this preflight comes first —
-so NEVER refer to "the slides" or to "class". Use this to know where the lesson is going.
+- WHY THIS SOURCE IS DIFFERENT FROM LAB 1, and the write-up flags it in its opening paragraph. In
+  Lab 1 the barium was chemically separated, so the sample held only Ba-137m and its activity fell
+  by half every 2.552 minutes — that fall WAS the measurement. Here the Cs-137 is still present and
+  keeps making Ba-137m as fast as it decays. [Reasoning from the two decay equations, not stated in
+  the write-up:] the 30-year parent sets the rate, so THE GAMMA OUTPUT IS STEADY FOR THE WHOLE LAB
+  PERIOD. That is what lets counts taken minutes apart, at different thicknesses or distances, be
+  compared directly with no decay correction.
 
-- THE DOSE-RATE CHAIN IS THE SPINE OF THE LESSON, written on the board in this order:
-      ACTIVITY      A(t) = lambda N_0 exp(-lambda t)   from the type and amount of material
-      SOURCE        S = f A                            f is the fraction of decays emitting the
-                                                       particle you are counting
-      FLUX          phi_0 = S / (4 pi r^2)             from how far away you are
-      ATTENUATION   phi = phi_0 exp(-mu x)             gammas and neutrons only
-      DOSE RATE     from reaction rate and energy per reaction
-  S = fA IS IN THE LESSON EXPLICITLY, and it is the step cadets collapse. A source emitting two
-  gammas per decay has f = 2.
-- SHIELDED FLUX, WRITTEN AS ONE EXPRESSION:
-      gammas    phi_uncollided = S exp(-mu x) / (4 pi r^2)
-      neutrons  phi            = S exp(-Sigma_r x) / (4 pi r^2)
-  and with buildup, phi = B phi_uncollided.
-- BUILDUP, AS THIS COURSE TREATS IT: "the buildup factor for lead — our most common shield — is
-  very close to 1. We will mostly ignore BUF unless specified." IT MATTERS for gammas crossing
-  WATER OR AIR, where more arrives than the exponential alone predicts. THIS IS A CHANGE OF
-  EMPHASIS FROM THE TEXTBOOK MATERIAL ABOVE, which presents B as 2 to 10 for a thick shield; both
-  are true of different materials and thicknesses, and THE COURSE'S PRACTICE IS THE ONE TO TEACH.
-  The DIRECTION of the error is unchanged and still worth one question: dropping B underestimates.
-- SHIELD MATERIAL, the lesson's two questions and its own answers:
-      neutrons, fast     light elements — large energy loss per collision
-      neutrons, thermal  easy to capture, large cross sections in many materials
-      gammas             high atomic number — the main interaction is with atomic electrons
-- REACTION RATE, carried in from the cross-section lesson and used here as the bridge to dose:
-      phi = n v          flux is particle density times speed
-      R = n v N sigma = phi Sigma
-      gammas R = phi mu    neutrons R = phi Sigma    alphas and betas R = phi / R_max
-- DOSE RATE, STRUCTURALLY (the coefficients are looked up in class; you have none of them):
-      gammas          Ddot = phi E_gamma (mu_en / rho)
-      alphas, betas   Ddot = phi E / (rho R_max)
-  mu AND mu_en ARE DIFFERENT JOBS and the lesson asks the cadet to say how: mu removes a photon
-  from the beam, mu_en says how much of the arriving energy is deposited in the material. R_max is
-  the charged particle's range.
-- WHY ALPHAS AND BETAS ARE NOT SHIELDED, which the lesson asks outright: they have a RANGE and stop
-  on their own. One of its worked problems computes a beta range of about 70 cm in air purely to
-  show the betas never reach the person.
-- WHAT THE BOARD WORK LOOKS LIKE, so you know the level: a 1.18 microcurie Cs-137 source at 1 m
-  (is the air worth including? under 1 percent — no); 3000 Ci of Co-60 at 2 m in a vehicle (how
-  long before a 4 Sv dose; what 20 cm of lead changes); 1 mg of Po-210 at 1 cm. DO NOT WORK THESE
-  IN THE TIMED PORTION and do not reproduce their numbers — they need tabulated coefficients you do
-  not have. They are here so you can see that the lesson is arithmetic end to end, which is why
-  this preflight probes the STRUCTURE the arithmetic runs on.
-- ALSO ON THE BOARD, and already owned by the previous lesson: dose in grays as energy per unit
-  MASS, dose equivalent in sieverts as dose times a quality factor, and dose rate as a rate. Use
-  them; do not re-probe them.
+- GAMMAS, NOT BETAS. The write-up says "we will be detecting the gamma decays from Ba-137*" and
+  Part 1 discussion question 3 asks the cadet how we know. The reasoning available:
+  * [CORPUS] betas are charged, lose energy continuously, and have a finite RANGE — a few mm of
+    aluminum, or about a meter of air, stops even a 1 MeV beta. Gammas have NO range; they are
+    attenuated exponentially, so some fraction always gets through.
+  * In Part 1 every count is taken with lead between the source and the tube, and lead is far denser
+    than aluminum. Betas do not survive that; the 662 keV gammas partly do.
+  * The data themselves are a check: if what was being counted were a mix of a short-range particle
+    and a gamma, the semi-log plot against thickness would not be a single straight line.
+  * [CORPUS, lateral only] betas stopping in lead make bremsstrahlung X-rays. That is a real
+    subtlety; do not build the topic on it.
+  * HONEST LIMIT: in Part 2 there is NO lead in the way, only air, and the corpus figure for beta
+    range in air is about a meter. Whether any betas reach the tube there depends on the source's
+    encapsulation, which neither document describes. If a cadet raises it, say that plainly — it is
+    a good question and you do not know the answer for this source.
 
-WHERE THIS GOES NEXT — for your orientation only, never as a citation to the cadet. How radiation is
-actually DETECTED, and how a person's accumulated dose is MEASURED rather than calculated —
-gas-filled detectors, scintillators, semiconductor detectors, personnel dosimetry — is later
-material in this course and is not in your reference.
+- THE INVERSE-SQUARE LAW. Most radioactive sources are isotropic — they emit equally in all
+  directions — so the flux from a point source falls off as
+      phi = S / (4 pi r^2)
+  because the same number of particles per second is spread over a sphere of area 4 pi r^2. Part 2
+  verifies that the power of r is 2.
+
+- THE LOG-LOG LINE, which Part 2 discussion question 1 asks the cadet to derive. Write the law with
+  a general power n, phi = (S/4 pi) r^(-n), and take the log of both sides:
+      ln(phi) = ln(S / 4 pi) - n ln(r)
+  so on a plot of ln(phi) against ln(r) THE SLOPE IS -n and the intercept is ln(S/4 pi). The lab
+  wants n close to 2. Discussion question 2 asks which variable in the fitted line represents the
+  power of r — it is the slope, with its sign flipped.
+
+- WHY PART 1 CAN IGNORE 1/r^2. The write-up says so outright and discussion question 4 asks why it
+  still works. In Part 1 the source-to-detector distance NEVER CHANGES — it sits at 5 cm for every
+  thickness. So the geometric factor 1/(4 pi r^2) is the SAME CONSTANT MULTIPLYING EVERY POINT. On
+  the semi-log plot a constant multiplier becomes a constant ADDED to ln(phi): it moves the
+  intercept and leaves the slope — which is all mu/rho depends on — untouched.
+
+- DETECTOR EFFICIENCY, which Part 1 discussion question 5 asks about ("it only counts 50% of the
+  gammas"). The workbook carries an estimated efficiency of 0.1 and uses it only to compute an
+  EXPECTED count. It is the same argument as the one above: a detector that counts a fixed fraction
+  of what reaches it multiplies every point by the same number, so it shifts the intercept by
+  ln(efficiency) and does not change the slope. THE CONCLUSION ABOUT mu/rho DOES NOT CHANGE.
+  What a low efficiency DOES cost is counts: fewer counts means a larger relative sqrt(N)
+  uncertainty on every point (carried forward from Lab 1), so the slope is less precisely known.
+  Biased, no; noisier, yes. That distinction is the good answer.
+
+WHAT THE SPREADSHEET COMPUTES — transcribed from the workbook's cells, not inferred
+
+- SECTION 1, reference information: source activity from its label and date, decayed to today with
+  the 30-year half-life; detector window area = pi (1.5 cm)^2 = 7.07 cm^2; estimated efficiency 0.1;
+  density and mass attenuation coefficient of the shield, which the cadet types in from their
+  equation sheet; and the Part 1 distance, expected to be 5 cm.
+- SECTION 2, background: counts over 120 s, divided to a rate in counts per second.
+- SECTION 3, shielding: for each block the cadet enters rho x (g/cm^2), the counts and the count
+  time. The sheet computes raw rate = counts / time, net rate S = raw rate - background rate, flux
+  = S / (window area), and ln(flux). It plots flux against rho x (the cadet adds an EXPONENTIAL
+  trendline) and ln(flux) against rho x (the cadet adds a LINEAR trendline), and the cadet types the
+  semi-log slope and R^2 into the boxes below the plot.
+- THE UNCERTAINTY ON EACH POINT is one square root over the source counts plus the background
+  counts scaled to the same counting time, divided by the counting time:
+      sigma = sqrt( N_source + N_background x (count time / background time) ) / count time
+  Both pieces are raw counts, which is where the sqrt(N) rule from Lab 1 applies.
+- THE SLOPE UNCERTAINTY is computed from the slope and the R^2 the cadet types in, with N - 2 = 2
+  degrees of freedom for four points. The cadet then reports the mass attenuation coefficient and
+  its uncertainty. If R^2 is poor, the sheet tells them to take more of the same data points and
+  report averages.
+- SECTION 4, distance: for each distance, net rate, flux, uncertainty, ln(r) and ln(flux), plus an
+  EXPECTED flux from the inverse-square law with the estimated efficiency; the sheet builds the
+  log-log plot and asks for the best-fit value of the power of distance, n.
+
+CONSISTENCY WITH THE ACCEPTED VALUE — Part 1 discussion question 2
+- "Given the uncertainty in your mu/rho, is your value consistent with the accepted value? Quantifiably
+  justify." Carried forward from Lab 1: consistency is a statement about the UNCERTAINTY, not about how
+  close the central values look. Compare the difference to the measured uncertainty: within about one
+  sigma is consistent, many sigma is not.
+
+A PRACTICAL POINT WORTH HAVING READY — reasoning from the cadet's own numbers, not a stated fact.
+The half-value layer is ln 2 / mu, or in density-thickness units ln 2 / (mu/rho). If the cadet's four
+blocks together span only about one half-value layer, the count rate falls by only about half across
+the whole data set — and a slope measured across a small change, from counts carrying sqrt(N) noise,
+is poorly determined. That is a legitimate reason a four-point fit can come out with a disappointing
+R^2, and why the sheet says to repeat points when it does.
+
+TIME, DISTANCE AND SHIELDING — the last Part 2 discussion question, and CARRIED FORWARD
+[CORPUS — the previous two lessons' grounding; the cadet HAS read this material]
+- TIME: dose is LINEAR in exposure time. Halve the time, halve the dose.
+- DISTANCE: INVERSE SQUARE for a point source. Doubling the distance quarters the dose. The cheapest
+  and most powerful of the three.
+- SHIELDING: EXPONENTIAL in thickness, and the most expensive of the three.
+- The inverse-square law holds for a POINT source and errs optimistically for an extended one.
+- Lab 1 connects here: that lab could NOT use shielding, because anything between the source and the
+  tube attenuates exactly the gammas being counted. In Lab 2 the shielding IS the measurement.
+- DO NOT RE-PROBE THESE AS AN OBJECTIVE. They were probed in the previous lesson and in Lab 1. Use
+  them freely; they are the natural place the two parts of this lab meet.
+
+CARRIED FORWARD FROM EARLIER LESSONS — not today's material, and tagged so you can tell
+- [Lab 1] sigma = sqrt(N) on RAW counts only; relative uncertainty 1/sqrt(N); background subtracted as
+  a RATE; reading a slope and an intercept off a semi-log plot.
+- [CORPUS, lesson 13] the three gamma interactions — photoelectric, Compton, pair production — and
+  that attenuation counts UNCOLLIDED photons; photoelectric absorption scales steeply with Z, which
+  is why lead is the gamma shield.
+- [CORPUS, lesson 15] half-value layer = ln 2 / mu; tenth-value layer = ln 10 / mu; buildup: scattered
+  photons that still reach the detector, so e^(-mu x) alone UNDERESTIMATES what arrives.
+- DO NOT RE-PROBE ANY OF THE ABOVE. Use them as tools, repair a wrong value in a sentence if it is
+  blocking progress, and note shakiness in the report.
 `;
 
 const LESSON_CONFIG = String.raw`
 LESSON_CONFIG
 
-lesson_id: Physics 310, Fall 2026 — Dose and Shielding
-  (No lesson number by design — this course's schedule renumbers, this lesson has already been
-  renumbered once, and the artifact must not carry a number that can go stale in front of a cadet.)
+lesson_id: Physics 310, Fall 2026 — Lab 2: Distance and Shielding
+  (No lesson number by design — this course's schedule renumbers, and the artifact must not carry a
+  number that can go stale in front of a cadet. The "2" in "Lab 2" numbers the lab, not the lesson.)
 
-reading_assignment: Murray & Holbert, "Nuclear Energy: An Introduction to Concepts, Systems, and
-  Applications of Nuclear Processes," 8th ed., sections 11.1, 11.2 and 11.3. INSTRUCTOR AUDIT ONLY —
-  never cited to the cadet, and never referred to as "the reading."
+reading_assignment: THE CADET'S OWN LAB WRITE-UP for this period — "Lab 2, Distance and Shielding,
+  35 points" — together with the analysis workbook it directs them to use. There is NO assigned
+  textbook reading for this lab. The LAB DOCUMENTS may be referred to plainly, because the cadet is
+  holding them; never cite a textbook section.
+
+THIS PREFLIGHT PRECEDES A LAB PERIOD, and that changes what it is for. The cadet walks from this
+  conversation into a room with a GM tube, a Cs-137 source, a tray of lead blocks and a meter stick,
+  and has to leave with two straight lines and an honest number off each. So the question behind
+  every probe below is practical: do they know what they are about to plot, what its slope means,
+  and why the procedure is allowed to ignore the things it ignores? Keep the discussion conceptual —
+  no numerical work in the timed portion — but keep it pointed at the bench.
 
 probe_topics (3 items, in priority order — this course sets 3 by profile)
 
-  1. Whether the cadet can rank TIME, DISTANCE and SHIELDING by the MATHEMATICAL FORM of each one
-     rather than by how technical each one sounds — linear, inverse square, exponential — and then
-     say where the inverse-square law stops being true.
-     THE FIRST HALF IS QUICK AND SHOULD BE. Dose is linear in time; dose rate goes as 1/r^2; shielding
-     is exponential in thickness and the most expensive of the three. THE QUESTION THAT SHOWS
-     UNDERSTANDING IS NOT "NAME THE THREE" — it is "you need a factor of four reduction and you may
-     use exactly one of these; which one, and how much of it?" A cadet who reaches for lead before
-     reaching for a step backwards has the ordering upside down, and this is the most common
-     instinct in the lesson.
-     THE SECOND HALF IS THE REAL OBJECTIVE AND MOST OF THE BUDGET SHOULD GO HERE. The inverse-square
-     law holds for a POINT SOURCE IN A VACUUM and for nothing else. Ask what happens when the source
-     is a long contaminated pipe, or a contaminated floor. The falloff becomes 1/r for a line and
-     nearly FLAT for a plane, and backing away from a contaminated floor buys almost nothing.
-     THEN THE PART THAT MATTERS MOST, AND DO NOT LET THE TOPIC END WITHOUT IT: WHICH WAY DOES THE
-     ERROR GO? Using 1/r^2 on an extended source predicts LESS dose than the worker actually gets.
-     The mistake is OPTIMISTIC, which is what makes it dangerous — a wrong answer that alarms you
-     gets checked, and a wrong answer that reassures you does not.
-       HOW TO TEASE IT OUT — do not hand over the chain. One question at a time, only as far as
-       needed:
-         a. "Why does the dose rate go as 1 over r squared in the first place — what is the r^2?"
-            (The area of the sphere the particles are spread over.)
-         b. "Now make the source a long pipe instead of a speck. Does that argument still work?"
-         c. "What is the geometry doing instead?" — a line spreads over a cylinder, so 1/r.
-         d. "Suppose you use 1/r^2 anyway. Is your predicted dose too high or too low?" THIS IS THE
-            QUESTION THE TOPIC IS FOR.
-     A cadet who gets to (d) without prompting has the whole objective; say so specifically in the
-     report. If the topic is moving well, the FOURTH CONTROL is worth thirty seconds: removing the
-     contamination removes the time, distance AND shielding problems at once.
-     Reports under objective key: three-controls-and-inverse-square
+  1. Whether the cadet can say HOW mu/rho COMES OUT OF PART 1 — the linearization, and why the
+     x-axis is rho x. Concretely: the count rate is measured behind four thicknesses of lead, the
+     spreadsheet plots ln(flux) against DENSITY THICKNESS rho x, and because mu x = (mu/rho)(rho x),
+         ln(phi) = ln(phi_0) - (mu/rho)(rho x)
+     so the SLOPE IS -(mu/rho) and the intercept is ln(phi_0). Push on each joint:
+       - Why the logarithm? What is being straightened, and what does a straight line on that plot
+         ASSERT? (A single exponential with one attenuation coefficient.)
+       - WHY rho x AND NOT x? Let them find that mu x can be split as (mu/rho) times (rho x), and
+         that this is what makes the slope the MASS attenuation coefficient — the tabulated
+         quantity — with no extra step. A cadet who plots against x in cm has measured mu, and then
+         has to divide by the density before comparing to a table.
+       - What exactly do they report? The slope is NEGATIVE; mu/rho is positive. A cadet who reports
+         a negative attenuation coefficient has not asked what the minus sign was doing.
+     THEN THE CONSISTENCY QUESTION, which their write-up asks outright: once they have mu/rho with an
+     uncertainty and look up the accepted value, what makes the two "consistent"? It is the
+     difference measured AGAINST THEIR UNCERTAINTY, not whether the numbers look close. Lab 1 asked
+     the same question; see whether it stuck.
+     REACHABLE IF THEY ARE MOVING: the half-value layer is ln 2 / (mu/rho) in g/cm^2. If their blocks
+     span only about one half-value layer, the rate only halves across the whole data set — ask what
+     that does to how well four noisy points pin down a slope.
+     IF THEY STALL ON THE LINEARIZATION, do not hand it over. Ask what happens if they take the log
+     of both sides of phi = phi_0 e^(-mu x); then ask how they could rewrite mu x so that rho x
+     appears. It is two lines of algebra and they should be theirs.
+     Reports under objective key: attenuation-semilog-mass-coefficient
 
-  2. Whether the cadet can CHOOSE A SHIELD FROM WHAT THE RADIATION INTERACTS WITH, and say what
-     each coefficient in the attenuation step is actually doing. THE LESSON'S OWN SHIELDING SLIDE
-     ASKS EXACTLY TWO QUESTIONS — "what are the best materials for shielding neutrons, and why?" and
-     "what are the best materials for shielding gammas, and why?" — so the WHY is the objective, not
-     the list.
-     START THERE, ONE SIDE AT A TIME:
-       - GAMMAS want HIGH-Z, dense material — lead is the course's default — because the photon
-         interacts with ATOMIC ELECTRONS, and a high-Z atom brings more of them, more tightly bound.
-             phi = S exp(-mu x) / (4 pi r^2)
-       - NEUTRONS are the inversion, and lead is nearly useless: a FAST neutron is slowed by LIGHT
-         nuclei, because a collision with a nucleus of its own mass can take most of its energy
-         while a collision with lead barely dents it. Once it is THERMAL it is easy to capture,
-         because capture cross sections are large there. MODERATE, THEN ABSORB.
-             phi = S exp(-Sigma_r x) / (4 pi r^2)
-         Note the exponent: the same shape with the macroscopic cross section in place of mu.
-     THEN THE QUESTION THE CADET IS ASKED IN CLASS AND MOST OFTEN CANNOT ANSWER: WHY DO WE SHIELD
-     GAMMAS AND NEUTRONS AND NOT ALPHAS AND BETAS? Because the charged particles have a RANGE — a
-     distance at which they simply stop — so the air, the source housing or a sheet of anything is
-     already the shield. There is nothing exponential to compute. Let them get there from the
-     earlier lesson's range-versus-attenuation split rather than telling them. A cadet who adds that
-     an alpha emitter is still dangerous INSIDE you has connected it to the previous lesson properly.
-     THEN mu AGAINST mu_en, WHICH IS THE OTHER QUESTION ON THAT SLIDE and is worth real budget. They
-     are two different jobs and cadets read them as one symbol with a subscript:
-       - mu decides what is REMOVED FROM THE BEAM on the way through the shield;
-       - mu_en decides how much of the arriving energy is DEPOSITED in the person.
-     Ask which one belongs in the exponential and which one belongs in the dose-rate step, and why
-     a photon can be removed from the beam without depositing its energy in you — or arrive at you
-     and pass straight through. A cadet who can place the two coefficients has the last link of
-     topic 3 already.
-     THE ARITHMETIC, AS A TOOL AND NOT AS THE POINT: n half-value layers leave (1/2)^n, so
-     thicknesses ADD while intensities MULTIPLY. Three half-value layers leave ONE EIGHTH — worth
-     asking for specifically, because a cadet who answers one sixth has been adding fractions rather
-     than multiplying them. A factor of a thousand needs about ten.
-     BUILDUP, HANDLED THE WAY THIS COURSE HANDLES IT — and this is a change of emphasis, so read it.
-     The exponential counts only the UNCOLLIDED photons: one that Compton scattered inside the
-     shield is still travelling, with less energy, in a new direction, and some of those arrive. B
-     collects them, phi = B phi_uncollided, and leaving it out therefore UNDERESTIMATES the dose.
-     BUT THE COURSE'S OWN PRACTICE IS TO NEGLECT IT FOR LEAD, where B is very close to 1, unless a
-     problem says otherwise; it is where gammas cross WATER OR AIR that it matters. So: one question
-     to check the DIRECTION of the error, confirm that lead is the case where it can be dropped, and
-     move on. DO NOT spend this topic's budget drilling buildup — the previous build of this lesson
-     did, and it is not where the class time goes.
-     Reports under objective key: shielding-choice-and-attenuation
+  2. Whether the cadet can TURN THE INVERSE-SQUARE LAW INTO A STRAIGHT LINE and say what its slope
+     is — Part 2's first two discussion questions. Concretely: write phi = S/(4 pi r^2) with a
+     general power, phi proportional to r^(-n), take logs:
+         ln(phi) = ln(S / 4 pi) - n ln(r)
+     so on a LOG-LOG plot the slope is -n and the lab wants n close to 2. Push on:
+       - WHY LOG-LOG HERE AND SEMI-LOG IN PART 1? An exponential becomes a line when you log ONE
+         axis; a power law needs BOTH. A cadet who can say which kind of function each part is
+         testing has understood why the two plots differ.
+       - WHERE THE 2 COMES FROM: the same particles per second spread over a sphere of area
+         4 pi r^2. It is geometry, not a property of Cs-137 or of gammas.
+       - WHAT WOULD PULL THEIR n AWAY FROM 2, predicted before they have data. Let them reason it:
+         (a) BACKGROUND. At large r the source rate is small and a constant background is a large
+         fraction of what the detector reports; forget to subtract it and the far points sit too
+         high, the line is too shallow, and n comes out LOW. (b) THE POINT-SOURCE ASSUMPTION at
+         small r: the tube has a window about 3 cm across, which is not small next to 10 cm. Do not
+         push (b) as settled physics — it is a reasonable concern, and saying which way it biases n
+         is harder than it looks. Say so if you go there.
+     IF THEY STALL, ask what happens to the flux when they double the distance, then when they
+     triple it, and let them see the pattern before writing any logarithm.
+     Reports under objective key: inverse-square-loglog-power
 
-  3. Whether the cadet can WALK THE DOSE-RATE CHAIN IN ORDER and say what each link is for —
-     activity, source strength, flux, attenuation, dose rate — rather than treating the dose-rate
-     formula as one opaque expression with blanks to fill in.
-     THE CHAIN IS THE SPINE OF THIS LESSON AND THE BOARD WORK AHEAD RUNS ENTIRELY ON IT:
-         ACTIVITY      how fast the material decays.
-         SOURCE        how many of the particles you care about leave the source per second —
-                       the activity times the fraction of decays that emit one.
-         FLUX          how many of those cross a square centimetre where the person is standing.
-                       phi = S / (4 pi r^2). THIS IS THE ONLY STEP DISTANCE ENTERS.
-         ATTENUATION   what a shield takes out on the way, exp(-mu x), with buildup putting back
-                       what the exponential over-removed.
-         DOSE RATE     how much of that arriving energy is deposited per kilogram of the person.
-     OPEN BY ASKING WHICH LINK EACH OF THE THREE CONTROLS ACTS ON. This is the question that ties
-     today's arithmetic back to the first topic, and it is cheap. Distance acts ONLY in the flux
-     step. Shielding acts ONLY in the attenuation step. Time is not in the chain at all — it
-     multiplies the answer at the very end, which is exactly why dose is linear in it. A cadet who
-     can place all three has the structure, and the algebra afterwards is bookkeeping.
-     THEN THE STEP CADETS COLLAPSE, AND IT IS ALWAYS THE SAME ONE: ACTIVITY IS NOT SOURCE STRENGTH.
-     A becquerel is one DECAY per second, not one gamma per second. Ask what happens to the dose
-     rate if a nuclide emits two gammas per decay, and what happens if only some fraction of decays
-     emit one at all. A cadet who doubles it in the first case and scales it down in the second has
-     the distinction. A cadet who feeds activity straight into the flux formula has silently assumed
-     that fraction is exactly one, and will be wrong by however far from one it really is.
-     THE LAST LINK IS THE ONE TO BE HONEST ABOUT. Turning a flux into a dose rate needs a
-     coefficient saying what fraction of the passing energy the tissue actually ABSORBS — which is
-     not the same coefficient as the one saying what fraction is removed from the beam. YOU HAVE NO
-     NUMERICAL VALUE of either, nor of the specific gamma-ray constant. So do this link
-     STRUCTURALLY: the flux, times the energy each particle carries, times the fraction deposited
-     per unit path, divided by the density of the material. Ask WHY density is on the bottom — dose
-     is energy per unit MASS, so the same energy spread through more mass is less dose. If a number
-     is genuinely needed, STIPULATE it out loud and say that you are stipulating it. A NUMBER YOU
-     INVENT IS A NUMBER THE CADET WRITES DOWN.
-     IF THERE IS ROOM: ask which links change while the person stands there. Activity falls by the
-     decay law, so a dose rate is not strictly constant — but over an hour beside a thirty-year
-     nuclide that change is far below every other uncertainty in the estimate, and knowing WHEN a
-     term is safe to neglect is the skill worth naming.
-     Reports under objective key: dose-rate-chain
+  3. Whether the cadet can say WHAT THE COUNT RATE DOES AND DOES NOT DEPEND ON — which is what
+     Part 1's last three discussion questions are really about. Four pieces, take them in whatever
+     order the conversation reaches them:
+       a. WHY THE 1/r^2 LAW CAN BE IGNORED IN PART 1. The source stays at 5 cm for every thickness,
+          so 1/(4 pi r^2) is the same number multiplying every point. On a semi-log plot a constant
+          multiplier is a constant added to ln(phi): it moves the INTERCEPT and cannot touch the
+          slope. A cadet who says "because 5 cm is close" has not got it — the distance being FIXED
+          is what matters, not its size.
+       b. DETECTOR EFFICIENCY — "it only counts 50% of the gammas; should that affect your
+          conclusion?" The same argument: a fixed fraction multiplies every point, shifts the
+          intercept by ln(efficiency), and leaves mu/rho alone. THEN THE SHARPER HALF: what DOES a
+          poor efficiency cost? Fewer counts, so a bigger sqrt(N) uncertainty on every point and a
+          less certain slope. NOT BIASED, BUT NOISIER — reward that distinction specifically.
+       c. GAMMAS, NOT BETAS. How do we know the tube is seeing the Ba-137m gammas and not the Cs-137
+          betas? Betas are charged, lose energy continuously and have a finite RANGE; there is lead
+          in the way of every Part 1 count, and betas do not get through it. Gammas have no range
+          and are attenuated exponentially, so a fraction always survives. The straight semi-log
+          line is itself evidence of one kind of radiation with one coefficient.
+       d. WHY THIS SOURCE IS STEADY. Their write-up points out that unlike Lab 1 the source holds
+          BOTH the Cs-137 and the Ba-137m. Ask why that matters for this lab. The 30-year parent keeps
+          replacing the Ba-137m, so the gamma output does not fall during the period — which is
+          EXACTLY what lets counts taken minutes apart be compared with no decay correction. If the
+          source still decayed with a 2.552-minute half-life, every point in Parts 1 and 2 would be
+          contaminated by the time at which it was taken.
+     THE THREAD THAT TIES (a), (b) AND (d) TOGETHER, worth drawing out if the cadet is strong: this
+     lab works because everything EXCEPT the one variable being changed is either constant or
+     subtracted. A constant factor is harmless on a log plot; a factor that CHANGES between points
+     (a decaying source, a moving source in Part 1) is not.
+     Reports under objective key: what-the-count-rate-depends-on
 
-common_misconceptions (6 items, each with the diagnostic signal to listen for)
+common_misconceptions (7 items, each with the diagnostic signal to listen for)
 
-  1. THE INVERSE-SQUARE LAW APPLIES TO ANY SOURCE. The central misconception of this lesson.
-     Signal: backs away from a contaminated floor and expects a factor of four; applies 1/r^2 to a
-     long pipe or a large tank without asking what shape the source is; never mentions "point
-     source" as a condition; is untroubled that the formula predicts an infinite dose rate as r goes
-     to zero. THE FOLLOW-UP THAT MATTERS is which way the error goes — a cadet who knows the law is
-     approximate but thinks the estimate is conservative has the more dangerous half of the error.
+  1. THE SLOPE IS mu, OR THE PLOT IS AGAINST x. Signal: says the slope gives the linear attenuation
+     coefficient when the axis is rho x; or plots against thickness in cm and compares straight to a
+     table of mu/rho; or cannot say what units the slope carries (cm^2 per g).
 
-  2. SHIELDING IS THE FIRST THING YOU REACH FOR. Ranking the three controls by how technical they
-     sound rather than by what they cost and what they buy. Signal: proposes lead before proposing a
-     step backwards; treats "stand further away" as a non-answer or a joke; cannot say which control
-     is cheapest; has no sense that distance pays quadratically while time pays linearly.
+  2. A NEGATIVE ATTENUATION COEFFICIENT, or a negative power of r. Signal: reports the slope as is —
+     "mu/rho = -0.1" or "n = -1.9" — without asking what the minus sign in the derived equation was
+     doing.
 
-  3. A THICK ENOUGH SHIELD STOPS THE BEAM, AND HALF-VALUE LAYERS ADD UP LIKE FRACTIONS. Signal: asks
-     what thickness gets the intensity to zero; says two half-value layers remove all of it; says
-     three half-value layers leave one sixth rather than one eighth; treats the half-value layer as a
-     range; is surprised that "how thick" depends on how much reduction you want.
+  3. SEMI-LOG AND LOG-LOG ARE INTERCHANGEABLE. Signal: proposes a semi-log plot for the distance data
+     or a log-log plot for the thickness data; or cannot say that an exponential is linearized by
+     logging one axis and a power law by logging both.
 
-  4. ONE SHIELD FITS EVERYTHING — LEAD FOR ALL OF IT, AND SOMETHING FOR THE ALPHAS TOO. Signal:
-     reaches for lead against neutrons; cannot say why a light nucleus slows a fast neutron and a
-     heavy one does not; proposes shielding an alpha or beta source rather than noticing the
-     charged particles have a RANGE and have already stopped; talks about "moderating" gammas or
-     "attenuating" alphas. A SECOND, QUIETER SIGN, on buildup: describes the plain exponential as
-     the conservative estimate, or divides by B instead of multiplying — the error points at LESS
-     dose, which is the unsafe direction.
+  4. A CONSTANT FACTOR CHANGES THE SLOPE. Signal: thinks a 50%-efficient detector would give half
+     the attenuation coefficient, or that ignoring 1/r^2 makes Part 1 wrong; or thinks it is ignored
+     because 5 cm is small rather than because it is fixed.
 
-  5. ACTIVITY IS THE NUMBER OF PARTICLES COMING AT YOU. Collapsing the first two links of the
-     chain into one. Signal: puts an activity straight into the flux formula; never asks how many
-     of the particle you care about a single decay actually emits; is untroubled that a nuclide
-     emitting two gammas per decay and one emitting none would come out the same; uses "becquerel"
-     and "photons per second" as though they were the same unit.
+  5. EFFICIENCY DOES NOT MATTER AT ALL. The opposite error, and the subtler one. Signal: correctly
+     says efficiency does not change mu/rho and stops — missing that fewer counts means a larger
+     uncertainty, so a poor detector gives a less precise answer even though not a biased one.
 
-  6. THE DOSE-RATE FORMULA IS ONE STEP, SO EVERY CONTROL ACTS ON ALL OF IT. Missing that each
-     control enters at exactly one link. Signal: cannot say which factor distance changes; talks as
-     though a shield reduces the source strength; applies the inverse square a second time after
-     attenuating; multiplies by exposure time somewhere in the middle of the chain rather than at
-     the end; cannot say whether the coefficient that removes a photon from the beam is the same one
-     that decides how much energy the tissue keeps.
+  6. THE TUBE IS SEEING BETAS TOO, or "gammas are stopped and betas get through." Signal: has the
+     penetration ordering backwards; or cannot say what "range" means and why a gamma has none.
+
+  7. CONSISTENCY MEANS THE NUMBERS MATCH. Carried from Lab 1. Signal: calls their mu/rho consistent
+     or inconsistent with the table by eye, with no reference to their uncertainty.
 
 prerequisites (reference freely, cite as "from your earlier coursework")
-  - Inverse-square geometry from earlier physics: a fixed number of particles per second spreading
-    over the surface of a sphere whose area is 4 pi r^2. Today needs this as the REASON for the
-    1/r^2, not merely as a formula.
-  - Activity as a property of the source, the becquerel and the curie, and 1 Ci = 3.7 x 10^10 Bq,
-    from the radioactivity lesson of this course. Today USES activity and does not re-derive it.
-  - The decay law and the half-life as ln2 over the decay constant, from the same lesson. Today's
-    half-value layer is the same exponential with distance where time used to be.
-  - Absorbed dose and equivalent dose, the gray and the sievert, and the fact that a dose RATE is a
-    dose per unit time — the immediately preceding lesson of this course. So is ALARA, and so are
-    the dose limits.
-  - Exponential attenuation, I = I_0 exp(-mu x), the half-value layer as ln2 over mu, the three
-    photon mechanisms, and the fact that attenuation is not absorption — from the radiation
-    interactions lesson of this course. Today computes with all of it and re-derives none of it.
-  - Activity, the becquerel and the curie as a rate of DECAYS, and the fact that a decay does not
-    have to emit the particle you are counting — from the radioactivity lesson of this course.
-    Today uses both ideas and re-derives neither.
-  - Reading (1/2)^n, and knowing that ln2 is about 0.693.
+  - The attenuation law phi = phi_0 e^(-mu x), half-value layer ln 2 / mu, and buildup, from the
+    previous lessons. Today MEASURES mu/rho; it does not re-derive the law.
+  - Time, distance and shielding as protective measures, from the previous lessons and Lab 1.
+  - From Lab 1: sigma = sqrt(N) on raw counts, background subtraction as a rate, reading a slope and
+    an intercept off a semi-log trendline, and what "consistent" means.
+  - Logarithms: ln(ab) = ln a + ln b, ln(a^n) = n ln a, and that a constant factor becomes a constant
+    offset.
+  - Range for charged particles versus attenuation for photons, from the lesson on radiation
+    interactions.
 
 lateral_connections (ENGAGE territory — pursue these, never redirect)
-  - REHEARSING ON A MOCKUP, AND REMOTE HANDLING TOOLS. Both are engineering built directly out of
-    the first two controls: rehearsal converts thinking time into time outside the area, and a long
-    tool buys the quadratic. A cadet who notices that most radiation protection is procedural rather
-    than physical has seen something real.
-  - CONTAMINATION CONTROL AS THE FOURTH CONTROL. Removing the source removes all three problems at
-    once, which is why so much effort goes into keeping material where it belongs rather than into
-    shielding it where it does not. Fully today's material — follow it.
-  - CONCRETE AS THE PRACTICAL COMPROMISE. Hydrogen for the neutrons, heavy aggregate for the gammas,
-    in one pour, at a price nobody objects to. A cadet who asks why reactor buildings are concrete
-    rather than lead has asked a good question and the answer is in your reference.
-  - THE HALF-VALUE LAYER AND THE HALF-LIFE ARE THE SAME EXPONENTIAL, one in distance and one in
-    time, with ln2 in the same place. If the cadet raises it, confirm it warmly. It was already made
-    in an earlier lesson of this course, so do not spend a topic's budget re-deriving it.
-  - WHAT A RULE OF THUMB IS FOR. The 6 R/h per curie at one foot per MeV figure is not a constant
-    and is not precise, and it is remembered anyway because it is usable in a corridor without a
-    handbook. A cadet who asks how anybody works without the tables has asked the question this rule
-    of thumb answers.
-  - WHY DOSIMETRY EXISTS AT ALL. Everything today is a CALCULATION about a dose somebody has not yet
-    received. What a person actually received is MEASURED, by a different instrument, and that is
-    later material in this course. Confirm the connection and say where it goes.
+  - WHY LEAD. Photoelectric absorption rises steeply with Z, so a dense, high-Z material buys the
+    most attenuation per centimetre. Connects directly to the previous lessons.
+  - BUILDUP. Scattered photons that still reach the tube are counted, so what the lab measures is not
+    purely the uncollided beam. Engage honestly: with a thin block right under the tube this is a
+    real effect whose size neither document gives. Do not assign it a number.
+  - Where inverse-square fails — extended sources, a detector too close to be treated as a point.
+    Good territory; say where you are reasoning beyond the documents.
+  - SECULAR EQUILIBRIUM as the name for the steady Cs/Ba source, if the cadet has met it. Engage,
+    and be honest that the equilibrium mathematics belongs to an earlier lesson.
+  - How the three controls trade off in real work — the last Part 2 discussion question. Use it as
+    the natural bridge between Part 1 and Part 2, but it is not an objective today.
 
 scope_note
-  ALREADY OWNED, EARLIER — THE INTERACTION MECHANISMS. The photoelectric effect, Compton scattering,
-  pair production and its threshold, the neutron shielding inversion, bremsstrahlung and why betas
-  are shielded with low-Z material all belong to an earlier lesson of this course. USE THEM FREELY
-  as shared ground — they are why high-Z shields gammas and why hydrogenous material shields
-  neutrons, and today's material choice is unintelligible without them. Do NOT re-probe any of them,
-  do not re-derive them, and do not spend budget checking whether the cadet still has them. TODAY
-  OWNS COMPUTING A SHIELD AND A DOSE RATE; the previous lesson owned why the interactions happen.
-  ALREADY OWNED, EARLIER — DOSE QUANTITIES, LIMITS, AND ALARA AS A PRINCIPLE. The gray and the
-  sievert, radiation weighting factors, deterministic versus stochastic effects, dose limits,
-  background, LNT, and ALARA ITSELF are all the immediately preceding lesson of this course. USE the
-  units and the quantities freely — today's dose rates are in them. Do not re-probe any of it.
-  ALARA IS THE LINE A CADET WILL CROSS, AND IT WILL BE THE CADET WHO CROSSES IT, NOT YOU. The
-  previous lesson ended on ALARA, so "how do you actually reduce a dose?" is the question they
-  arrive holding, and today is the answer. HANDLE IT GRACEFULLY: confirm the word, name it as the
-  principle they already met, and turn immediately to how it is achieved — "right, and that is the
-  principle; today is the technique. So which of the three would you reach for first, and why?"
-  Do NOT re-explain what ALARA stands for, do not re-probe why compliance is a floor rather than a
-  goal, and do not treat reaching for it as an error. It is the correct instinct arriving one lesson
-  early.
-  ALREADY OWNED, EARLIER — ACTIVITY AND THE DECAY LAW. The becquerel, the curie, half-life and the
-  decay law belong to an earlier lesson. USE ACTIVITY AS A TOOL — it is the source term in the
-  dose-rate formula and today would not work without it. Do not re-probe the decay law and do not
-  work a decay calculation for its own sake.
-  PROBED TODAY, AND THIS CHANGED — MATERIAL CHOICE. High-Z for gammas and light-then-absorbing for
-  neutrons are TOPIC 2, because the lesson's own shielding slide asks for both and asks WHY. What
-  stays out of the probe is the MECHANISM half — photoelectric, Compton, pair production, the
-  scattering kinematics behind moderation — which an earlier lesson owns. Use those freely as the
-  reason; do not test whether the cadet still holds them.
-  GROUNDED BUT NOT PROBED — COMPOSITE SHIELDS. The two-step neutron shield with boron or cadmium,
-  the capture gammas that step creates, layered shields, and concrete as the practical compromise
-  are in your reference and are fair to discuss. Engage warmly if the cadet raises any of it; do not
-  open it yourself, and do not spend a topic's budget there.
-  GROUNDED BUT NOT PROBED — CONTAMINATION CONTROL AS A FOURTH CONTROL, and the flux formula
-  phi = S / (4 pi r^2). Both are in your reference. The flux formula is worth showing if a cadet
-  asks where the 1/r^2 comes from, since the 4 pi r^2 IS the sphere; it is support for topic 1
-  rather than a probe of its own.
-  GROUNDED BUT NOT PROBED — THE 6 R/h RULE OF THUMB. It is the only numerical dose-rate anchor you
-  have and it is fine to use, including in the extension problems. It is not a recall target, and a
-  cadet who has never seen it has failed nothing.
-  YOU HAVE NO ATTENUATION COEFFICIENTS AND NO GAMMA-RAY CONSTANTS, repeated here because it is the
-  request most likely to arrive: no mu, no mu over rho, no half-value layer for lead or water or
-  concrete, no Gamma for any nuclide, and no buildup factor for any stated material and thickness.
-  Work in half-value layers. If a thickness is genuinely needed, stipulate the HVL out loud and say
-  that you are stipulating it. Do not produce a figure and call it tabulated.
-  NOT THIS LESSON — DETECTION AND DOSIMETRY. How a detector works and how a person's accumulated
-  dose is measured rather than calculated is later material in this course and is not in your
-  reference. If the cadet asks how anybody knows what dose they actually got, that is the right
-  question and the honest answer is that it is measured, by instruments that are coming later.
+  GROUNDED BUT NOT PROBED — the attenuation law, half-value layers, buildup, the three gamma
+  interactions, time/distance/shielding, and all of Lab 1's counting statistics. These belong to
+  earlier lessons. Use them freely as tools; do NOT probe them as objectives. Note shakiness in the
+  report.
+  NO TABULATED ATTENUATION COEFFICIENT. You have none. Finding the accepted value is part of the lab.
+  Stipulate any number you need, out loud, and label it as stipulated.
+  NOT THIS LESSON — HOW THE GM TUBE WORKS. Detectors are the next lessons in this course. If a cadet
+  asks what is physically happening in the tube, tell them it is the right question, that it is
+  coming, and return to the measurement.
+  NOT THIS LESSON — FITTING THEORY. What R^2 means, weighted fits and formal error propagation are
+  not today. The cadet will click a trendline button and type in its slope; they should know what
+  the slope MEANS.
+  NO NUMERICAL WORK IN THE TIMED PORTION. The cadet will do arithmetic for the whole lab period.
+  Today is about whether they know what they are about to plot and why. Numbers live in the
+  extension problems, after the report.
 
 time_budget (v2.0 per-topic model, set by this course's profile)
   - Each probe topic gets an INDEPENDENT soft budget of about 3 active minutes. Per topic, not
@@ -1886,154 +1765,107 @@ EXTENSION_PROBLEMS — offered ONLY during the untimed post-report extension, ne
 portion. Every numerical answer below was independently re-derived twice; both passes are shown so
 the tutor can check itself rather than trusting a single arithmetic run.
 
-A NOTE BEFORE THE SET: every half-value layer expressed in centimetres anywhere below is STIPULATED
-IN THE PROBLEM STATEMENT, not looked up. You have no tabulated attenuation coefficient for any
-material. Say so if a cadet asks where the number came from — the honest answer is that it was
-handed to them so the arithmetic could be done, and that in practice it is read from a table.
+EVERY PROBLEM HERE IS THE CADET'S OWN LAB, one step ahead of where they are. The 30 s counts, the
+2-minute background, the 5 cm Part 1 distance, the 11.34 g/cm^3 density and the 7.07 cm^2 window are
+taken from their documents. EVERY COUNT RATE AND EVERY "ACCEPTED" COEFFICIENT BELOW IS INVENTED for
+the problem and is labelled as such — do not present one as measured or as a real table value.
 
-A — Distance is the cheapest control
-Statement: A worker measures a dose rate of 40 mSv/h at 1.0 m from a small point source. (a) How far
-back must they stand for the dose rate to be 2.5 mSv/h? (b) The job takes 20 minutes at that new
-distance — what dose do they receive? (c) Suppose backing away were impossible and the same
-reduction had to come from shielding instead. How many half-value layers would it take?
+A — mu/rho off the semi-log plot, and whether it agrees
+Statement: Two of your Part 1 points (INVENTED rates): behind rho x = 0.92 g/cm^2 of lead the net
+count rate is 8.00 per second; behind rho x = 7.20 g/cm^2 it is 4.12 per second. (a) Using just these
+two points, find mu/rho. (b) Find mu for lead, and the half-value layer in cm. (c) SUPPOSE — this is
+invented — your table gives 0.114 cm^2/g. Your fit reports mu/rho = 0.106 with an uncertainty of
+0.012 cm^2/g. Consistent? (d) Same central value, but an uncertainty of 0.002. Consistent now?
 Worked answer (tutor reference only; reveal only after the cadet has worked to a conclusion):
-  Pass 1: the required reduction is 40 / 2.5 = 16.
-          dose rate goes as 1/r^2, so r^2 must grow by 16, so r grows by the square root of 16 = 4.
-          r = 4.0 m.
-          20 min = 1/3 h, so dose = 2.5 x (1/3) = 0.833 mSv.
-          shielding: 2^n = 16 gives n = 4 half-value layers.
-  Pass 2 (re-derived): check the distance by going forward instead of backward —
-          40 x (1.0 / 4.0)^2 = 40 x 0.0625 = 2.5 mSv/h, which is the target ok
-          20/60 = 0.33333; 2.5 x 0.33333 = 0.83333 mSv ok
-          2^4 = 16 exactly ok
-  Final answer: (a) 4.0 m. (b) about 0.83 mSv. (c) 4 half-value layers.
-Calibration: Exercises probe topic 1 and touches topic 2; difficulty approachable; expected solve
-time ~4 min. THE POINT IS THE COMPARISON, not the arithmetic: three metres of backwards walking and
-four half-value layers of lead buy exactly the same factor of sixteen. One of them is free.
+  Pass 1: (a) ln(S) = ln(S_0) - (mu/rho)(rho x), so
+              mu/rho = -ln(4.12/8.00) / (7.20 - 0.92) = -ln(0.515)/6.28 = 0.6636/6.28
+                     = 0.1057 cm^2/g
+          (b) mu = 0.106 x 11.34 = 1.202 per cm; HVL = 0.693/1.202 = 0.577 cm
+          (c) difference 0.114 - 0.106 = 0.008, which is 0.008/0.012 = 0.67 sigma. CONSISTENT.
+          (d) 0.008/0.002 = 4 sigma. NOT consistent — same numbers, different conclusion.
+  Pass 2 (re-derived): 4.12/8 = 0.5150; ln 0.515 = ln 0.5 + ln 1.03 = -0.69315 + 0.02956 = -0.66359
+          ok; 0.66359/6.28 = 0.105667 ok. 11.34 x 0.106 = 1.20204 ok; 0.693147/1.20204 = 0.57664 ok.
+          In density-thickness units HVL = 0.693/0.106 = 6.54 g/cm^2 — so the whole data range,
+          0.92 to 7.20, is only about one half-value layer, which is why the rate only roughly halved.
+  Final answer: mu/rho = 0.106 cm^2/g; mu = 1.20 per cm; HVL = 0.58 cm of lead; consistent at 0.67
+  sigma, inconsistent at 4 sigma.
+  TWO THINGS TO DRAW OUT. First, because the axis is rho x, the slope IS mu/rho — no division by the
+  density was needed until part (b). Second, (c) and (d) are the same measurement with different
+  error bars, and they reach opposite conclusions. Consistency lives in the uncertainty.
+Calibration: Exercises probe topic 1; difficulty approachable; ~5 min. Part 1 discussion
+questions 1 and 2, run end to end.
 
-B — Sizing a shield in half-value layers, and then paying for the scatter
-Statement: A gamma beam must be reduced by a factor of 1000. Suppose one half-value layer of the
-shielding material is 1.2 cm (stipulated for this problem). (a) How many half-value layers, and how
-thick is the shield? (b) Check the answer using tenth-value layers instead. (c) At that thickness the
-buildup factor is 5. What reduction do you ACTUALLY get? (d) How much more shielding is needed to
-reach a true factor of 1000?
+B — What a bad detector does and does not do
+Statement: Take problem A's two rates, 8.00 and 4.12 per second, measured with a detector of
+efficiency 0.10. (a) A classmate's detector has efficiency 0.05. What rates do they see? (b) What
+mu/rho do they get? (c) What changes on their semi-log plot? (d) In a 30 s count at the thinnest
+block, how many counts does each detector record, and what is the relative uncertainty of each?
 Worked answer (tutor reference only):
-  Pass 1: (a) 2^n = 1000, so n = ln1000 / ln2 = 6.9078 / 0.6931 = 9.97, call it 10 half-value
-              layers. 10 x 1.2 = 12 cm. Note 2^10 = 1024, a little better than 1000.
-          (b) a tenth-value layer is about 3.32 half-value layers, and a factor of 1000 is three
-              tenth-value layers: 3 x 3.32 x 1.2 = 11.95 cm. The two routes agree.
-          (c) uncollided reduction 1/1024; multiply by B = 5 and the dose behind the shield is
-              5/1024 = 1/205. A factor of about 205, not 1000.
-          (d) still needed: 1000 / 205 = 4.88. In half-value layers that is
-              ln4.88 / ln2 = 1.5858 / 0.6931 = 2.29, so about 2.3 more half-value layers, about
-              2.7 cm more, for roughly 14.7 cm in total.
-  Pass 2 (re-derived): ln1000 = 6.907755; 6.907755 / 0.693147 = 9.9658 ok
-          2^10 = 1024; 1024 / 5 = 204.8 ok
-          1000 / 204.8 = 4.8828; ln 4.8828 = 1.58579; 1.58579 / 0.693147 = 2.2878 ok
-          check the total: 10 + 2.288 = 12.288 half-value layers, and 2^12.288 = 4096 x 2^0.288
-          = 4096 x 1.2208 = 5000, so the uncollided reduction is 1/5000; times B = 5 gives
-          1/1000 exactly as required ok
-          2.288 x 1.2 = 2.75 cm; 12 + 2.75 = 14.75 cm ok
-  Final answer: (a) 10 half-value layers, 12 cm. (b) three tenth-value layers, 11.95 cm — agrees.
-  (c) about a factor of 205, not 1000. (d) about 2.3 more half-value layers, roughly 2.7 cm, for
-  about 14.7 cm total. Caveat worth stating to the cadet: B itself grows as the shield gets thicker,
-  so the real design iterates. Holding B fixed is a first pass, not the final number.
-Calibration: Exercises probe topic 2; difficulty challenging; expected solve time ~7 min. THIS IS THE
-PAYOFF PROBLEM OF THE LESSON. Part (c) is the one that lands — a shield designed carefully to a
-factor of 1000 delivers 205, and the error was in the direction of less dose. Ask the cadet what they
-would have concluded if they had stopped after part (a).
+  Pass 1: (a) half of each: 4.00 and 2.06 per second.
+          (b) ln(2.06/4.00) = ln(0.515) = -0.6636, the SAME as before, so mu/rho = 0.1057 cm^2/g.
+          (c) Every ln(S) drops by ln 2 = 0.693. The line moves DOWN; its slope does not change.
+          (d) 8.00 x 30 = 240 counts, relative uncertainty 1/sqrt(240) = 6.5 percent;
+              4.00 x 30 = 120 counts, 1/sqrt(120) = 9.1 percent — worse by sqrt(2).
+  Pass 2 (re-derived): 2.06/4.00 = 0.515 ok, identical ratio. ln(0.5) = -0.6931 ok.
+          sqrt(240) = 15.49, 1/15.49 = 0.0645 ok; sqrt(120) = 10.95, 1/10.95 = 0.0913 ok;
+          0.0913/0.0645 = 1.414 ok.
+  Final answer: same mu/rho; intercept down by 0.693; each point about 41 percent noisier.
+  THE POINT: efficiency is a constant factor, so it cannot bias the slope — but it costs counts, and
+  counts are precision. Not biased; noisier. The same reasoning is why Part 1 may ignore 1/r^2: the
+  5 cm geometry factor is a constant multiplier too.
+Calibration: Exercises probe topic 3; difficulty approachable; ~4 min. Part 1 discussion
+questions 4 and 5.
 
-C — What a rule of thumb buys you
-Statement: A point source has an activity of 2.0 Ci and emits one 1.5 MeV gamma per decay. Using the
-rule of thumb of about 6 R/h per curie at 1 foot per MeV: (a) estimate the exposure rate at 1 foot;
-(b) estimate it at 10 feet; (c) how long may someone stand at 10 feet before accumulating the same
-exposure as one minute at 1 foot?
+C — The power of r, and what background does to it
+Statement: Part 2 net rates (INVENTED): 6.40 per second at 10 cm, 1.70 at 20 cm, 0.44 at 40 cm. The
+background is 75 counts in 120 s. (a) Find n from the 10 cm and 40 cm points. (b) Suppose you forgot
+to subtract background. What n would the same two points give? (c) Why does the mistake hurt so much
+more at 40 cm than at 10 cm?
 Worked answer (tutor reference only):
-  Pass 1: (a) 6 x 1.5 MeV = 9 R/h per curie at 1 foot; x 2.0 Ci = 18 R/h.
-          (b) ten times the distance is one hundredth the rate: 18 / 100 = 0.18 R/h.
-          (c) one minute at 1 foot is 18 / 60 = 0.30 R. At 0.18 R/h that takes
-              0.30 / 0.18 = 1.667 h = 100 minutes.
-  Pass 2 (re-derived): 6 x 1.5 = 9; 9 x 2 = 18 ok
-          10^2 = 100; 18 / 100 = 0.18 ok
-          18 x (1/60) = 0.3 ok
-          0.3 / 0.18 = 1.66667 h; 1.66667 x 60 = 100.0 min ok
-          cross-check the whole thing in one step: moving out by a factor of 10 buys a factor of 100
-          in permitted time, and 1 min x 100 = 100 min ok
-  Final answer: (a) about 18 R/h. (b) about 0.18 R/h. (c) about 100 minutes.
-Calibration: Exercises probe topic 1; difficulty standard; expected solve time ~4 min. Two things
-worth drawing out. First, the answer to (c) is not a coincidence: a factor of ten in distance is a
-factor of a hundred in time, which is the inverse-square law stated as a work-planning rule. Second,
-this is a RULE OF THUMB in traditional units, not a constant — it is remembered because it works in
-a corridor without a handbook.
+  Pass 1: (a) ln(phi) = ln(S/4 pi) - n ln(r), so n = -ln(0.44/6.40)/ln(40/10)
+              = -ln(0.06875)/ln 4 = 2.6773/1.3863 = 1.93
+          (b) background rate = 75/120 = 0.625 per second. Gross rates: 7.025 and 1.065.
+              n = -ln(1.065/7.025)/1.3863 = -ln(0.1516)/1.3863 = 1.8866/1.3863 = 1.36
+          (c) At 10 cm the background is 0.625 of 7.03, about 9 percent. At 40 cm it is 0.625 of
+              1.07, well over half. Unsubtracted, the far points sit too high, the line is too
+              shallow, and n comes out far too low.
+  Pass 2 (re-derived): 0.44/6.40 = 0.06875; ln = -2.67732 ok; ln 4 = 1.386294; ratio 1.9312 ok.
+          A least-squares line through all three points also gives 1.931. 6.40 + 0.625 = 7.025 ok;
+          0.44 + 0.625 = 1.065 ok; 1.065/7.025 = 0.15160; ln = -1.88651; /1.386294 = 1.3608 ok.
+  Final answer: n = 1.93 with background subtracted; 1.36 without.
+  THE POINT: the lab's usual failure is not the physics, it is the background — and it bites
+  hardest exactly where the source signal is weakest. Also worth saying: 1.93 is close to 2, and
+  whether it is "consistent with 2" is again a question for the uncertainty.
+Calibration: Exercises probe topic 2; difficulty standard; ~5 min. Part 2 discussion questions 1
+and 2.
 
-D — Effective half-life
-Statement: Tritium has a physical half-life of 12.3 years, and the body clears it from body water in
-about 10 days. (a) What is its effective half-life? (b) Which input dominated, and why? (c) A
-different nuclide has a physical half-life of 8 days and a biological half-life of 80 days. What is
-its effective half-life? (d) State the general rule the two results share.
+D — Time, distance and shielding, in numbers from your own lab
+Statement: You are working 10 cm from the source. Using problem A's mu/rho = 0.106 cm^2/g for lead
+(an INVENTED value), compare three ways to cut your exposure by a factor of 4: (a) change the time;
+(b) change the distance; (c) add lead — how thick? (d) Which is easiest here, and when would you
+need the other two?
 Worked answer (tutor reference only):
-  Pass 1: (a) put both in days. 12.3 y x 365.25 = 4492.6 d.
-              1/T_eff = 1/4492.6 + 1/10 = 0.000223 + 0.100000 = 0.100223 per day
-              T_eff = 9.98 days.
-          (b) the 10-day biological clearance dominates completely — the shorter time is the larger
-              reciprocal, and 1/10 is about 450 times 1/4492.6.
-          (c) 1/T_eff = 1/8 + 1/80 = 0.125 + 0.0125 = 0.1375 per day, so T_eff = 7.27 days.
-          (d) T_eff is always SHORTER than either input, and it is dominated by whichever input is
-              shorter. Reciprocals add, exactly as for resistors in parallel.
-  Pass 2 (re-derived): 12 x 365.25 = 4383; 0.3 x 365.25 = 109.575; sum 4492.575 d ok
-          1 / 4492.575 = 0.00022259 ok  (check: 4492.575 x 0.00022259 = 1.00000)
-          0.1 + 0.00022259 = 0.10022259; 1 / 0.10022259 = 9.9778 ok
-              (check: 9.9778 x 0.10022259 = 1.00000)
-          1/8 = 0.125 and 1/80 = 0.0125; sum 0.1375; 1 / 0.1375 = 7.27273 ok
-              (check: 7.27273 x 0.1375 = 1.00000)
-  Final answer: (a) about 10.0 days — 9.98 d. (b) the biological clearance, overwhelmingly.
-  (c) about 7.3 days. (d) T_eff is shorter than either, and the shorter input wins.
-Calibration: Exercises probe topic 3; difficulty standard; expected solve time ~5 min. Part (a) is
-the one that teaches: a nuclide that lives twelve YEARS delivers its internal dose over about ten
-DAYS, because the body does not wait for the physics. Part (c) is the check that the rule is not an
-artefact of an extreme ratio — even with inputs only a factor of ten apart, the answer is below the
-smaller one.
+  Pass 1: (a) time is linear: a quarter of the time.
+          (b) inverse square: (10/r)^2 = 1/4, so r = 20 cm — one step back of 10 cm.
+          (c) e^(-mu x) = 1/4, x = ln 4 / mu = 1.386/1.202 = 1.15 cm of lead — two half-value
+              layers, 2 x 0.577 cm.
+          (d) Distance is cheapest here: 10 cm of space costs nothing. Time is next if the task can
+              be done faster. Shielding costs a centimetre of lead and must be placed and carried —
+              needed when you cannot back away (hands-on work) and cannot shorten the task.
+  Pass 2 (re-derived): (10/20)^2 = 0.25 ok. ln 4 = 1.3863; mu = 0.106 x 11.34 = 1.2020;
+          1.3863/1.2020 = 1.1533 ok; 2 x 0.57664 = 1.1533 ok, the same.
+  Final answer: quarter the time, or double the distance to 20 cm, or about 1.2 cm of lead.
+  THE POINT: Part 1 measured the shielding curve and Part 2 measured the distance curve, and this is
+  where they meet — the last Part 2 discussion question. Remind them of Lab 1 if it helps: there,
+  shielding was the one control the measurement could not use; here it is the measurement.
+  LABEL THE INVENTED COEFFICIENT. Do not present 0.106 as the true value for lead.
+Calibration: Exercises the bridge between topics 1 and 2; difficulty approachable; ~4 min.
 
-E — Three controls, one job
-Statement: A maintenance task must be done 0.5 m from a point source where the dose rate is
-120 mSv/h. The task takes 30 minutes and the dose budget for the job is 5 mSv. Find three separate
-ways to meet the budget using ONE control each: (a) time alone, (b) distance alone, (c) shielding
-alone, expressed in half-value layers. Then say which you would reach for first, and what the
-shielding answer is missing.
-Worked answer (tutor reference only):
-  Pass 1: unmitigated dose = 120 x 0.5 h = 60 mSv, so a factor of 60 / 5 = 12 is needed.
-          (a) time: 5 mSv / 120 mSv/h = 0.04167 h = 2.5 minutes. The 30-minute job would have to
-              become a 2.5-minute job — almost certainly impossible.
-          (b) distance: the rate must fall to 10 mSv/h, a factor of 12, so r grows by the square
-              root of 12 = 3.464; r = 0.5 x 3.464 = 1.73 m. Free, if the job can be done from there.
-          (c) shielding: 2^n = 12 gives n = ln12 / ln2 = 2.4849 / 0.6931 = 3.58 half-value layers.
-          What the shielding answer is missing is BUILDUP. If B is 2 at that thickness, the real
-          requirement is a factor of 24, which is ln24 / ln2 = 4.58 half-value layers — a whole
-          half-value layer more, for a buildup factor at the very bottom of the quoted range.
-  Pass 2 (re-derived): 120 x 0.5 = 60 ok; 60 / 5 = 12 ok
-          5 / 120 = 0.0416667 h; x 60 = 2.5 min ok
-          square root of 12 = 3.4641 (3.4641^2 = 11.9998) ok; 0.5 x 3.4641 = 1.732 m ok
-          check forward: 120 x (0.5 / 1.732)^2 = 120 x 0.083333 = 10.0 mSv/h; x 0.5 h = 5 mSv ok
-          ln12 = 2.484907; / 0.693147 = 3.5850 ok  (check: 2^3.585 = 12.00)
-          ln24 = 3.178054; / 0.693147 = 4.5850 ok
-  Final answer: (a) 2.5 minutes. (b) about 1.7 m. (c) about 3.6 half-value layers, and about 4.6
-  once a buildup factor of 2 is included. Reach for DISTANCE first: it costs nothing, it pays
-  quadratically, and one metre of walking replaces three and a half half-value layers of lead.
-Calibration: Exercises probe topics 1 and 2 together; difficulty challenging; expected solve time
-~7 min. THIS IS THE SYNTHESIS PROBLEM. The three answers are deliberately of very different
-practical cost — impossible, free, and expensive — which is the section's ordering of the controls
-arrived at by arithmetic instead of assertion. The buildup coda in (c) is the reminder that the
-expensive option is also the one whose naive answer is wrong in the unsafe direction.
-
-The tutor may also draft additional related problems on the fly if the cadet wants more variety than
-this set. Good directions: the same job with a line source instead of a point source, so 1/r^2 no
-longer applies and the distance control weakens; how many half-value layers a stated tenth-value
-count corresponds to; the reduction from a stated number of half-value layers with and without a
-stated buildup factor; an effective half-life where the two inputs are equal, which halves the
-result; the dose accumulated over a fixed time at a fixed distance from a stated activity using the
-rule of thumb. Do NOT invent an attenuation coefficient, a half-value layer for a named material, a
-gamma-ray constant, or a buildup value for a named material and thickness — stipulate any such
-number in the problem statement and say that you are stipulating it.
+The tutor may also draft additional related problems on the fly if the cadet wants more variety.
+Good directions: mu/rho from a different pair of points; how many half-value layers the cadet's
+blocks span; what an unsubtracted background does to the Part 1 slope; predicting a count rate at a
+new distance or thickness from a fitted line. Do NOT invent attenuation coefficients or beta ranges
+and present them as real values — stipulate and label any you use.
 `;
 
 // Verbatim OUTPUT_REPORT_FORMAT block from 04_OUTPUT_REPORT_SPEC.md, between the markers —
@@ -2243,7 +2075,8 @@ This applies especially to claims you might be tempted to confirm out of pleasan
 A WRONG PHYSICS CLAIM TO BE AGREEABLE. If a cadet says tritium has three protons, your job is to
 reject that clearly with reasoning, not nod along. Reasoning: the isotope label is the mass number
 A, not the proton count; tritium is hydrogen, so Z = 1 by definition of the element, and its three
-nucleons are one proton and two neutrons. The reference confirms this. Therefore: reject the claim,
+nucleons are one proton and two neutrons. This is definitional rather than
+looked up: it follows from tritium being hydrogen, so no reference has to carry it. Therefore: reject the claim,
 explain why — and turn the correction into a probe ("What in the notation tells you which number is
 which? Where would tritium sit on a chart with Z up and N across?").
 
@@ -3324,7 +3157,7 @@ function isExtensionMsg(text, idx, all) {
 // COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 
-function Phys310DoseAndShieldingPreflight() {
+function Phys310Lab2DistanceAndShieldingPreflight() {
   // ── State and refs ─────────────────────────────────────────────────────────
   const [mode, setMode] = useState(null);          // "graded" | "study" — set once, never reassigned
   const [started, setStarted] = useState(false);
@@ -3910,7 +3743,7 @@ function Phys310DoseAndShieldingPreflight() {
           <div className="header">
             <div>
               <div className="eyebrow">Physics 310 · Fall 2026 · JiTT Preflight</div>
-              <div className="title">Dose and Shielding</div>
+              <div className="title">Lab 2: Distance and Shielding</div>
               <div className="subtitle">A short Socratic conversation about today's topic.</div>
             </div>
           </div>
@@ -4069,7 +3902,7 @@ function Phys310DoseAndShieldingPreflight() {
         <div className="header">
           <div>
             <div className="eyebrow">Physics 310 · Fall 2026 · JiTT Preflight</div>
-            <div className="title">Dose and Shielding</div>
+            <div className="title">Lab 2: Distance and Shielding</div>
             <div className="subtitle">{cadetId}</div>
           </div>
           <div className="header-right">
@@ -4193,7 +4026,7 @@ function Phys310DoseAndShieldingPreflight() {
 
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(React.createElement(Phys310DoseAndShieldingPreflight));
+root.render(React.createElement(Phys310Lab2DistanceAndShieldingPreflight));
 </script>
 <script>
   // Babel parse errors land on window.onerror, not in the page. Surface them: publishing on
