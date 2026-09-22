@@ -288,6 +288,84 @@ PLAN = {
             },
         ],
     },
+    ("phys-310", 17): {
+        "assignment_slug": "lesson-17",
+        "kind_id": "preflight",
+        "title": "Lesson 17 Preflight -- Detection Methods I",
+        "position": 17,
+        "points_possible": 3,
+        "grading_mode": "points",
+        "switch_policy": "lock_on_commit",
+        "is_published": False,          # draft; the director publishes from the lessons page
+        "opens_at": None,               # NULL selects the rolling 7-day release window
+        # 0800 America/Denver on the lesson day, at the course director's instruction
+        # (2026-09-22). Stored as the last instant BEFORE 0800, the shape every row in this
+        # course carries. NOTE this lands four hours EARLIER than lesson 15's makeup deadline
+        # on the same day; that is deliberate and is what was asked for.
+        "due_at": "2026-09-25 13:59:59+00",   # Fri 25 Sep 07:59:59 MDT
+        "day_key": "T",                 # this course's one section is a T-day section
+        "interactive_title": "Detection Methods I: Efficiency and Gas-Filled Detectors",
+        # THE EXISTING ARTIFACT'S SLUG, read out of the source's INTERACTION_ID and never
+        # retyped. The source was re-aimed to the instructor's deck on 2026-09-22 and the slug
+        # deliberately did NOT move -- activities.slug is globally unique and a new one would
+        # split the cohort. The course is taught out of the workbook's order, so this is the
+        # FIRST detector lesson even though the artifact's slug says lesson 18's topic.
+        "interactive_slug": "phys310-detection-methods-gas-filled-detectors-edc3bbb5",
+        # GEMINI ROUTE, same as lessons 15 and 16. The claude.ai artifact published 2026-08-20
+        # still serves what was published, so it probes the OLD objectives -- it is the wrong
+        # lesson now, and pointing a cadet at it would be worse than having no Claude build.
+        "artifact_url": "https://dfpm-physics.github.io/Core_Preflights/site/student/"
+                        "backup.html?i=phys310-detection-methods-gas-filled-detectors-edc3bbb5&go=1",
+        "written_slug": "phys-310-lesson-17-written-7b3003f8",
+        "written_role": "graded",
+        "interactive_role": "graded",
+        "reference_pdf": None,
+        "reference_pages": None,
+        # One free-response question beyond the two defaults, worth the remaining 2 points.
+        # Both halves are reachable BEFORE the lesson from work the cadet has already done --
+        # (a) is the area of a sphere and (b) is the shielding lesson's attenuation law read
+        # the other way round -- which is what makes it a preflight rather than a quiz on
+        # material nobody has seen. Together they are the lesson's whole architecture.
+        "questions": [
+            {
+                "id": "q3",
+                "role": "free_response",
+                "text": "A small source emits S particles per second equally in all directions. "
+                        "A detector with a flat face of area A sits a distance r away. "
+                        "(a) Derive the fraction of the emitted particles that even reach the "
+                        "face, and say what happens to that fraction if you move the detector "
+                        "from r to 2r. (b) A gamma that reaches the face can still cross the "
+                        "whole detector without interacting. Using the attenuation law "
+                        "I = I_0 e^(-mu x) from the shielding lesson, write down the fraction "
+                        "that DOES interact within a detector of depth d, and explain why a "
+                        "large mu is what you want in a detector but not in a shield.",
+                "type": "free_response",
+                "points": 2,
+                "figure_url": "",
+                "correct_answer": "",
+                "expected_response":
+                    "(a) The emission spreads over a sphere of area 4 pi r^2, and the face "
+                    "intercepts only its own area's share, so the fraction is A / (4 pi r^2). "
+                    "Doubling r multiplies the sphere area by 4, so the fraction falls to a "
+                    "QUARTER of what it was -- and nothing about the detector changed. "
+                    "(b) e^(-mu d) is the fraction that passes straight through without "
+                    "interacting, so the fraction that interacts is 1 - e^(-mu d). A large mu "
+                    "means the material is more likely to interact with the radiation. In a "
+                    "shield that is a virtue because you want the radiation stopped before it "
+                    "reaches you; in a detector it is the SAME virtue for the opposite purpose, "
+                    "because an interaction is the only thing a detector can register -- a gamma "
+                    "that sails through is a gamma you never counted. "
+                    "GRADING: full credit for A/(4 pi r^2) and the factor of four in (a), and "
+                    "for 1 - e^(-mu d) with a reason for wanting mu large in (b). Do not require "
+                    "the words geometric or intrinsic -- the cadet has not met them yet. A cadet "
+                    "who writes e^(-mu d) instead of 1 - e^(-mu d) has the complement flipped, "
+                    "which is the single most useful thing this question can find: flag it, do "
+                    "not zero it. A cadet who says a detector should have a SMALL mu has imported "
+                    "the shielding lesson's preference -- flag it, and note it, because that is "
+                    "the misconception the lesson is built to catch.",
+            },
+        ],
+    },
 }
 
 

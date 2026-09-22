@@ -136,6 +136,50 @@ text.
 
 ## 2026-09-22 — Matthew Recker via Claude
 
+### Lesson 17 is the first detector lesson, and the artifact built for it was aimed elsewhere
+
+**Same instruction a third time — objectives from the deck, Gemini build, assignment created
+unpublished for review.** The director is teaching detectors out of the workbook's order: *"Do the
+same thing for lesson 17, using lesson 19 slides. I am doing it out of order. It should be the first
+set of slides on detectors."* Due **Fri 25 Sep 07:59:59 MDT**, at the director's choosing.
+
+**The deck carries a whole topic the grounding corpus does not have.**
+`Instructor-Slides/lessons/lesson-19.json` spends a third of the lesson on **detector efficiency** —
+`e = R/S = e_g · e_i`, the geometric factor from the sphere the source sprays into, the intrinsic
+factor `1 − e^(−μd)`, and two board problems (0.0199 and 0.968). Grepped the whole Murray corpus and
+every existing artifact: **the words do not appear anywhere.** The artifact built for this lesson on
+2026-08-05 spent all three of its probe topics inside the gas-filled voltage regions, which is what
+§12.1–12.3 covers and is roughly half of what the deck teaches.
+
+**So two of the three objectives are new and the third absorbed the old three.** Now
+`what-is-hard-to-detect` (an alpha, a gamma and a neutron are hard for three *different* reasons —
+getting in, interacting once in, and having no signal at all until a converter makes one),
+`geometric-intrinsic-efficiency`, and `gas-regions-and-dead-time`. The grounding gained a `[DECK]`
+block that **outranks the reconstructed corpus** where the two touch, as Lesson 15's did today. The
+extension set was rewritten around it: three new efficiency problems, three kept.
+
+**The slug did not move, and that was the decision worth making carefully.** `activities.slug` is
+globally `UNIQUE` and every cadet report hangs off that one row, so a re-aimed source republished
+into the same offering keeps its slug (PROJECT.md, builder rules). The **displayed** title widened to
+"Detection Methods I: Efficiency and Gas-Filled Detectors"; `INTERACTION_ID` is byte-identical.
+
+**Gemini route, like lessons 15 and 16 — and here the claude.ai copy is actively wrong.** It was
+published 2026-08-20 and claude.ai serves what was published, so it probes the three retired
+objectives. It is registered to nothing and pointing a cadet at it would be worse than having no
+Claude build at all. `artifact_url` points at
+`backup.html?i=phys310-detection-methods-gas-filled-detectors-edc3bbb5&go=1`.
+
+**Two hazards written into the build record rather than fixed.** The deck reads μ/ρ for CsI off a
+chart the artifact does not have, so the reference forbids producing an attenuation coefficient as a
+fact and the one extension problem that needs one *stipulates* it out loud (chosen to reproduce the
+deck's own 0.968). And one sentence in the deck's speaker notes — *"the number of ionizations is
+proportional to the voltage applied"* — is loose in the exact direction of a misconception this
+lesson exists to catch; the `[DECK]` block flags it and tells the tutor not to repeat that form.
+
+**Verified:** `check_artifact.py` 37/37, `gemini-build.mjs` 8/8 in real Chrome, LF throughout, and a
+read-back of the registration through the DML role. **No live tutor turn was run** — there is no
+Gemini key on this machine, so the conversation itself is unproven, exactly as for Lab 2.
+
 ### Lesson 15 was an empty assignment, and nothing said so
 
 **Same session, same instruction applied to lesson 15: objectives from the deck, Gemini build,

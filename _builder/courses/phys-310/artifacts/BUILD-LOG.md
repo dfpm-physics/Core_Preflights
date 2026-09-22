@@ -1131,40 +1131,63 @@ quarter of the time, or 10 cm of backing away, or 1.2 cm of lead (approachable).
 > period. That last one is the cadet-facing insight in topic 3 and it comes from the write-up's own
 > opening paragraph.
 
-### Lesson 18 — Detection Methods: Gas-Filled Detectors
+### Lesson 17 — Detection Methods I: Efficiency and Gas-Filled Detectors
 
 | | |
 |---|---|
 | **File** | [`phys310_preflight_detection_methods_gas_filled_detectors.jsx`](phys310_preflight_detection_methods_gas_filled_detectors.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-detection-methods-gas-filled-detectors-edc3bbb5` |
-| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/c38f7901-169c-4aaa-8481-b97ea100307e |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/c38f7901-169c-4aaa-8481-b97ea100307e — **STALE, and deliberately unused.** It serves the pre-2026-09-22 objectives |
+| **Backup build** | `site/gemini/phys-310/phys310-detection-methods-gas-filled-detectors-edc3bbb5.html` — **the only route cadets take** |
 | **Component** | `Phys310DetectionMethodsGasFilledDetectorsPreflight` |
-| **Built** | 2026-08-05 · 2120 lines |
-| **Grounding** | Murray corpus **§12.1** Principles of Gas-Filled Detectors, **§12.2** Ionization Chambers and Proportional Counters, **§12.3** Geiger–Müller Counters — **all three `STATUS: PENDING`** |
-| **Cross-check** | DOE NP-04 covers the regions, ion chambers, proportional counters, and GM operation/quenching/dead time — **corroboration available for all three** |
+| **Built** | 2026-08-05 · 2120 lines · **re-aimed 2026-09-22 · 2446 lines** |
+| **Grounding** | Murray corpus **§12.1** Principles of Gas-Filled Detectors, **§12.2** Ionization Chambers and Proportional Counters, **§12.3** Geiger–Müller Counters — **all three `STATUS: PENDING`** — **plus the instructor's own Lesson 19 deck, tagged `[DECK]`, which outranks the corpus and is the ONLY source for the efficiency material** |
+| **Cross-check** | DOE NP-04 covers the regions, ion chambers, proportional counters, and GM operation/quenching/dead time — **corroboration available for all three**. The efficiency chain has none: it is the deck's, and the deck is primary |
 | **Cadets' reading** | Murray & Holbert 12.1–12.3 |
 | **Probe topics** | 3 · ~3 active min each · ~10 min |
-| **Checks** | `check_artifact.py` 41 passed / 0 failed (37 base + 4 `--forbid`). Re-verified independently: 37/37, LF, 0 NUL |
-| **Status** | **DRAFT** — not reviewed, not published, not registered |
+| **Checks** | 2026-09-22: `check_artifact.py` 37/37 · `gemini-build.mjs` 8/8 in real Chrome · LF throughout. **No live tutor turn was run** — no Gemini key on this machine |
+| **Status** | **REGISTERED 2026-09-22** as `lesson-17`, unpublished draft, due Fri 25 Sep 07:59:59 MDT |
 
 | # | key | label |
 |---|---|---|
-| 1 | `ionization-signal-voltage-regions` | Ionization as the only signal; how applied voltage sets the operating region |
-| 2 | `chamber-vs-proportional` | What gas multiplication buys and what it costs |
-| 3 | `geiger-uniform-pulse-saturation` | One pulse size, no energy information, and the saturation hazard |
+| 1 | `what-is-hard-to-detect` | What a detector is asked to report, and why an alpha, a gamma and a neutron are each hard for a *different* reason |
+| 2 | `geometric-intrinsic-efficiency` | Efficiency as did-it-get-in × did-it-interact — `e_g` from geometry, `e_i = 1 − e^(−μd)` |
+| 3 | `gas-regions-and-dead-time` | One tube, three usable regions, and how dead time makes a survey meter fail *toward safe* |
 
-**Extension problems:** A 2.0 MeV deposited → ion pairs, then the same event in a chamber, a
-proportional counter and a G-M tube — deliberately about what happens to the pairs *after* they are
-made, so it does not repeat lesson 13's problem (approachable) · B dead time at 100 / 1000 / 5000
-counts·s⁻¹ with τ ≈ 100 µs, where the missed fraction turns out to be exactly `n_obs·τ` (standard) ·
-C three jobs, three instruments, and what disqualifies the other two each time — no arithmetic, and
-the reasoning must run both directions (challenging) · D read the curve backwards: five behaviours →
-five regions, plus which region you would never operate in on purpose (standard) · E alpha (5.5 MeV)
-against beta (1.0 MeV) pulse-height ratio in a proportional counter, where **the 34 eV and the gain
-both cancel** and the ratio is exactly 5.5 — against 1 in a G-M tube (challenging).
+**Re-aimed 2026-09-22 to the instructor's own deck, and the slug deliberately did not move.** The
+course director is teaching this as the **first** of two detector lessons, out of the workbook's
+order, from a deck (`Instructor-Slides/lessons/lesson-19.json`, "LESSON 19 · DETECTION METHODS I")
+that carries material the reconstructed corpus does not have **at all**: detector efficiency as
+geometric × intrinsic, and the easy-versus-hard-to-detect framing. Two of the three probe topics are
+new because of it, and the gas-region material that used to fill all three is now one topic. The
+**displayed** title widened; `INTERACTION_ID` did not, because `activities.slug` is globally unique.
 
-**Every problem is framed as *energy deposited in the gas*, not particle energy** — a 1 MeV beta does
-not stop in a gas volume, and the corpus gives no range data to say so.
+**Extension problems (rewritten 2026-09-22):** A geometric efficiency of a 5 cm cube at 10 cm, then
+at 20 cm, then with a 10 cm face — and what *doesn't* change it (approachable; it is the deck's own
+board problem with the reasoning extended) · B intrinsic efficiency of a 3 in CsI cube with a
+**stipulated** μ/ρ = 0.100 cm²/g, then at half the thickness, where 0.968 → 0.821 and **not** 0.484
+(standard) · C the two factors combined: 0.0462 × 0.968 = 0.0447, ~447 counts of 10 000, and whether
+to double the crystal or halve the distance — the answer is visible before any arithmetic, because
+one factor is losing 3 % and the other 95 % (challenging) · D dead time at 100 / 1000 / 5000
+counts·s⁻¹ with τ ≈ 100 µs, where the missed fraction is exactly `R_M·τ` (standard) · E read the
+curve backwards: five behaviours → five regions (standard) · F three jobs, three instruments, plus a
+fourth job — counting thermal neutrons — which needs a **converter** before any of the three works
+at all (challenging; it is where topics 1 and 3 meet).
+
+> **⚠ The deck prints a mass-attenuation chart that this artifact does not have.** The instructor's
+> second board problem reads μ/ρ for CsI off a chart in the deck; the corpus has no attenuation table
+> for anything. The reference says so outright and the scope note repeats it: **never produce a mass
+> attenuation coefficient as a fact.** Problem B stipulates one and labels the stipulation, chosen to
+> reproduce the deck's own 0.968 so the cadet meets the same number in class.
+
+> **⚠ One sentence in the deck's speaker notes is loose, and it is loose in exactly the direction of
+> a misconception this lesson exists to catch.** It says the number of ionizations is "proportional
+> to the voltage applied." Read against the rest of the deck that means the *gain* climbs with
+> voltage — which is why the supply must be stable — not that the pulse measures the voltage. The
+> `[DECK]` block flags the sentence and tells the tutor not to repeat the loose form.
+
+**Every gas-region problem is framed as *energy deposited in the gas*, not particle energy** — a 1
+MeV beta does not stop in a gas volume, and the corpus gives no range data to say so.
 
 > **⚠⚠ The mechanism of gas multiplication is completely absent.** The corpus names six regions and
 > their behaviours and says proportional gain grows with voltage — it **never says what an avalanche
