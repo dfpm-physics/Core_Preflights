@@ -8,6 +8,132 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-09-22 — Bryan Egner via Claude
+
+### PHYS 110 Lesson 19 (LAB 3) built and published; first artifact carrying the 2026-08-21 fix set, and the first to collide with the Gemini porter because of it
+
+**Built and published `lesson-19-lab-3-conservation-of-energy-290e6de1`** for PHYS 110 Fall 2026 —
+`https://claude.ai/public/artifacts/34dfff65-bb63-49d1-afab-0f09c0e648f5`. Lesson 19 had no
+interactive activity before, so the 8-hex suffix is fresh for this offering (contract §3.2) and it
+registers as a NEW lesson row. Grounded on the Lab 3 Instructions ("Calculating the Spring
+Constant", 01 Aug 2026) as primary, with the OpenStax Conservation of Energy chapter as
+supplemental theory, per the course director.
+
+**The grounding contradicted the handout in five load-bearing places on the first pass.** Caught by
+re-reading all four PDF pages as images — the equations are vector paths and text extraction drops
+them silently (PROJECT.md's sharp-edge table):
+
+| First draft | The handout |
+|---|---|
+| `k = m·v²/x²`, velocity from gate width | **Eq (1)** `k = mL²/(x²t²)`, L = the **fin length** |
+| incline = gravitational PE **+** KE | **Eq (2)** `k = 2mgd·sinθ/x²` — the glider **stops**, so KE = 0 |
+| plot t² vs x | plot **t vs 1/x** |
+| "historical value will be provided" | **250 ± 10 N/m**, stated in the instructions |
+| "precise = under 10%" (invented) | compare relative uncertainty against the historical **4%** |
+
+The `1/x` axis and the zero-KE reading of Eq (2) are now explicit probe topics with their own
+misconception entries. The two slope expressions the report asks for in bold are derived in the
+grounding (`L√(m/k)` and `k/(2mg sinθ)`) and both reproduce the handout's own sample trendlines
+(0.0038 and 946.95), which is an independent check that they are right. Extension problems were
+rebased from an invented k ≈ 80 N/m onto the real 250 N/m; problem C had shipped visible model
+self-correction ("Wait—this disagrees…") with two contradictory answers and is rewritten to one
+twice-verified result.
+
+**Tutor-behaviour parity — first Claude artifact to carry the 2026-08-21 fix set**
+(`docs/operations/TUTOR-BEHAVIOR-PARITY.md` §5, which records that none of it had reached the kit
+or any published source). Adopted: §5.1 request deadline (`AbortController`, 120 s, walks the
+ladder on abort — previously a request that never returned never returned); §5.2 a 5xx walks once
+its retries are spent; §5.3 an empty response walks while a `stop_reason` refusal does not; §5.5
+the finish bar the director asked for on 2026-08-21; §5.6 the lz-string loader retries 3×40 s and
+surfaces a failed state instead of silently leaving a finished report with no Submit button.
+**Deliberately not adopted:** §5.4's `MAX_TOKENS` raise (that file asks for evidence of real
+truncation, which nobody has gathered) and session persistence (needs someone to establish what a
+claude.ai artifact may actually persist first).
+
+**One defect found while wiring the finish bar.** "Keep talking" hands the conversation to the
+study prompt, and the obvious implementation — flipping `mode` to `"study"` — is wrong three ways:
+`submitUrl`, the payload leak guard and the report effects all gate on `mode === "graded"`, so it
+would have stripped the cadet's Submit button off the screen moments after they earned it. It is a
+separate flag, and `sysFor()` takes a `gradedOverride` that the two hidden system turns pass,
+because the payload repair asks for a jitt-data block the study prompt is under hard instructions
+to refuse.
+
+**Publishing took three attempts, and the two failures are worth recording because both looked
+fine.** The first published as an HTML artifact backed by the `sample` runtime capability —
+`rawCall` rewritten to `window.claude.use("sample")`, correct physics, but the ladder inert and
+`model` / `model_downgraded` in the submitted payload would have been fabricated (contract §5.9).
+The second wrapped the JSX in an HTML page loading React and Babel from cdnjs — which cannot work,
+because the claude-in-claude `fetch` depends on the **React artifact runtime** injecting
+credentials; in a plain HTML artifact the connection check fails and the tutor reads as
+unavailable. The third is a native React artifact whose source is byte-identical to the local file
+(md5 `f7306c94210a01236a3ffc8ec4d5911b`), verified by reading the published bytes back.
+
+**`check_artifact.py`: 31 passed, 1 failed** — the `[] balanced` off-by-one, which fails identically
+on lessons 10, 18 and 20, so it is the known false positive. The component was ported from lesson
+10 rather than 18 because 18 is CRLF and this file is LF; the two tails were verified byte-identical
+apart from the rendered title. Its six pacing strings all agree at 2.0, so this build does not
+inherit the drift PROJECT.md warns about in the lessons 4–20 band.
+
+### The Gemini porter now collides with the fix set, and Lesson 19 has no backup build yet
+
+`to_gemini.py` exists to **add** the 2026-08-21 fixes. Lesson 19 already **has** them, so every
+transform that installs one refuses. Four anchors were fixed and are in this commit:
+
+- **constants** — tolerate a comment block above `MAX_TOKENS`, and consume an optional
+  `REQUEST_DEADLINE_MS` so the emitted build does not carry two differently-named deadline
+  constants with one of them dead;
+- **`callTutor`** — a third shape, wrapped in `while (true)` with the refusal-vs-empty split;
+- **the lz-string hook** — swallow the source's own `LZ_ATTEMPTS` / `LZ_ATTEMPT_MS`, which would
+  otherwise be declared twice in one scope, i.e. a SyntaxError before React mounts;
+- **`lzReady`** — accept the already-three-state pair as well as the old boolean.
+
+> **The lz-hook fix had to be gated on there being something to consume.** The first version also
+> matched an empty run and swallowed the blank line above the hook on all 50 unpatched sources,
+> turning `unchanged` into `WOULD WRITE` fleet-wide — a one-line whitespace rewrite of every
+> existing build. Verified after the gate: lesson 18 ports byte-identically. Lessons 10–17 still
+> report `WOULD WRITE`, and that is **pre-existing** — confirmed by running the original tool from
+> `git stash` — because those builds were patched in place by `patch_tutor_diagnostics.py` and never
+> re-ported (parity §2.13).
+
+**Stopped there, deliberately.** The next collision is the finish bar, where the porter has its own
+implementation (`continueInStudy`, `stampSubmitted`, wired to the Gemini session snapshot) against
+the artifact's (`keepTalking`, inline two-step confirm). Reconciling those through byte anchors
+means merging two designs of the same UI in JSX, and `rawCall` and `errorMessage` collide the same
+way behind it — the shape of failure PROJECT.md warns about, where a build parses, renders, serves
+and then throws on a cadet. **The course director chose to register Lesson 19 on the Claude path now
+and reconcile the porter as its own piece of work.** Until then Lesson 19 has no Gemini build, so
+`site/student/lessons.html` falls back to the Claude launch button — a branch the `gemini-port`
+skill calls load-bearing rather than a leftover. A cadet whose free Claude account is exhausted has
+no backup for this one lesson.
+
+This is the case `TUTOR-BEHAVIOR-PARITY.md` was written to anticipate: **A produces B produces C**,
+and when B gains a fix that C's tool performs, the two tools have to agree about which of them
+performs it. Lesson 19 is the first artifact where that has actually bitten.
+
+**Two indexed documents updated, because `check_doc_sources.py` flagged them and they were
+genuinely incomplete rather than merely stale.** `gemini-port/SKILL.md` gains a **fourth shape** —
+it documented a source *behind* the porter (unpatched, refused by name since 2026-08-20) and had
+nothing for one *ahead* of it, which is the case here; the note carries the two traps paid for
+today, the duplicate-`const` SyntaxError and the ungated prefix group that would have rewritten 50
+builds by a blank line. `TUTOR-BEHAVIOR-PARITY.md` gains **§5.0**, recording that one artifact now
+carries the set, which four anchors were fixed, which three collisions are open, and the cheaper
+lesson that a Claude artifact published as an **HTML** artifact cannot reach the tutor at all
+because the claude-in-claude `fetch` depends on the React artifact runtime injecting credentials.
+`ONBOARD-ARTIFACTS.md` was re-read and is still correct; its `reviewed` date is bumped, not its
+text.
+
+> **Verified, and not.** `check_artifact.py` (31/1), the published bytes read back and md5-compared,
+> the porter dry-run across all three courses, and the artifact loaded in a real browser — it
+> renders, and the login wall it shows an unauthenticated viewer is the expected
+> `ProxyFetch` behaviour, not a defect. **No real tutor turn has been run**, and the connection
+> light has not been confirmed green by a signed-in viewer. `name_scan.py` PASS,
+> `check_doc_sources.py` exit 0. Nothing is registered: no `app.activities` row carries this slug
+> until the director saves the prefill link, so no cadet can reach it yet.
+> **`_builder/courses/phys-110/index.json` and the `.jsx` are gitignored caches** — the Lesson 19
+> row is local until `sync_artifacts.py push` uploads it to the `artifact-sources` bucket.
+
+---
+
 ## 2026-09-22 — Matthew Recker via Claude
 
 ### Lesson 15 was an empty assignment, and nothing said so

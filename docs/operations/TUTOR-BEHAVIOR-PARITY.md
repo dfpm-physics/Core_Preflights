@@ -1057,6 +1057,42 @@ not a necessity — see §6.
 **In priority order.** Each is a change to **A** (the kit) *and* a `patch_artifacts.py` step for
 **B**, and each republish of **B** costs a human doing it by hand on claude.ai.
 
+> ### 5.0 One artifact now carries this set, and porting it to **C** does not work
+>
+> *(2026-09-22.)* **PHYS 110 lesson 19** (`lesson-19-lab-3-conservation-of-energy-290e6de1`) was
+> built and published carrying **§5.1, §5.2, §5.3, §5.5 and §5.6**. It is the first anywhere: the
+> kit still emits none of them, and no other published source has them. §5.4 was left at 4096 for
+> the reason §5.4 gives, and session persistence was left alone for the reason §6 gives.
+>
+> **The consequence nobody had hit yet: `to_gemini.py` exists to ADD this set, so a source that
+> already has it makes those transforms refuse.** This is not the usual anchor drift. There is no
+> layout to loosen — both files are correct and merely disagree about which of them performs the
+> work, which is the `A → B → C` hazard this whole file was written about, arriving from the
+> direction nobody was watching.
+>
+> Four anchors were made tolerant and are in the tool: **constants**, **`callTutor`**, the
+> **lz-string hook**, **`lzReady`**. Three collisions are **open** — the **finish bar**, **`rawCall`**
+> and **`errorMessage`** — where the porter and the artifact each carry a whole implementation of
+> the same feature (`continueInStudy` + `stampSubmitted` against `keepTalking` + an inline confirm).
+> Merging those through byte anchors means reconciling two designs in JSX, i.e. §7's second
+> verification trap. **So lesson 19 ships with no Gemini build** and the lessons page falls back to
+> its Claude button.
+>
+> **The fix is for the porter to INHERIT this set the way it already inherits 2026-08-20** (§2.1,
+> "invented in C, moved to B, then adopted by A") — detect what the source carries, skip that
+> transform. Until then, every future artifact built from a §5-carrying source hits the same wall.
+> The two traps found doing the four, and how to not re-pay for them, are in
+> [`gemini-port/SKILL.md`](../../.ai/skills/gemini-port/SKILL.md) under the fourth shape.
+>
+> **A cheaper lesson from the same day, worth its own line:** a Claude artifact published as an
+> **HTML** artifact — even one loading React from a CDN, even byte-identical source — cannot reach
+> the tutor at all. The claude-in-claude `fetch` depends on the **React artifact runtime** injecting
+> credentials; in a plain HTML artifact the connection check fails and the cadet reads "Tutor
+> unavailable". A build published against the `sample` runtime capability runs, but its ladder is
+> inert and `model` / `model_downgraded` in the submitted payload are then **fabricated** (contract
+> §5.9). Both were produced and rejected before the third attempt was correct. **Verify a republish
+> by reading its bytes back**, not by watching it render.
+
 > **Republishing keeps the slug.** `activities.slug` is globally `UNIQUE` and every student report
 > hangs off that one row, so minting a new one mid-term would orphan the work of every cadet who
 > has already finished. Contract §3.2's "never reuse a slug" is a rule about a **new offering**,

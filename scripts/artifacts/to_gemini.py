@@ -372,9 +372,20 @@ def port(src: bytes, slug: str, verbose: bool = False, ladder: str = "teaching")
         rb'  "claude-.*?\r\n'
         rb'  "claude-.*?\r\n'
         rb"\];\r\n"
-        rb"(?:\r\n)?"
+        # A run of blank or //-comment lines is allowed here. Lesson 19 (2026-09-22) carries a
+        # five-line note above MAX_TOKENS recording why it stays 4096 rather than taking the
+        # Gemini builds' 8192; earlier sources carry one blank line, or nothing. Layout only --
+        # every token either side is unchanged, which is the line rule 9 of the skill draws.
+        rb"(?:[^\S\r\n]*(?://[^\r\n]*)?\r\n)*"
         rb"const MAX_TOKENS = 4096;[^\r\n]*\r\n"
-        rb'const ENDPOINT = "https://api\.anthropic\.com/v1/messages";[^\r\n]*',
+        rb'const ENDPOINT = "https://api\.anthropic\.com/v1/messages";[^\r\n]*'
+        # Optional tail: the 2026-08-21 request deadline, present only on a source carrying
+        # that fix set (lesson 19 is the first). CONSUMED rather than left behind, because the
+        # replacement below declares its own REQUEST_TIMEOUT_MS -- shipping a build with two
+        # differently-named deadline constants, one of them dead, is exactly the which-surface-
+        # has-what confusion TUTOR-BEHAVIOR-PARITY.md exists to prevent.
+        rb"(?:\r\n(?:[^\S\r\n]*(?://[^\r\n]*)?\r\n)*"
+        rb"const REQUEST_DEADLINE_MS = \d+;[^\r\n]*)?",
         b"""// GEMINI BACKUP BUILD. Two things decide which model a turn uses, and they pull opposite ways.
 //
 //   1. Names churn. gemini-1.5-pro and gemini-1.5-flash were the obvious picks a year ago and
@@ -810,11 +821,33 @@ async function discoverModel(activeModelRef) {
         # newline plus its indent, so one pattern covers both without a second copy. The tokens
         # themselves are still matched exactly -- this loosens the LAYOUT, never the CONTENT,
         # and the grounding-block assertion after the transforms still has to pass.
-        rb"  const res = await rawCall\(activeModelRef, \{\s*max_tokens: MAX_TOKENS, system: sys, messages: sendHistory,?\s*\}\);\r\n"
-        rb"  const data = await res\.json\(\);\r\n"
-        rb'  const text = \(data\.content \|\| \[\]\)\s*\.filter\(\(b\) => b\.type === "text"\)\s*\.map\(\(b\) => b\.text\)\s*\.join\("\\n"\)\s*\.trim\(\);\r\n'
-        rb"  if \(!text\) throw \{ kind: \"request\", status: 0 \};\r\n"
-        rb"  return text;",
+        # THREE shapes now, not two. The 2026-08-21 fix set (TUTOR-BEHAVIOR-PARITY.md §5.3)
+        # wraps this body in `while (true)` so an empty response can walk the ladder, and
+        # indents it by two more spaces. Indentation is therefore horizontal-whitespace-
+        # tolerant (`[^\S\r\n]*`, never bare `\s*`, which would span lines and swallow the
+        # statement above), the loop opener and its comment block are optional, and the TAIL
+        # is an alternation: old `if (!text) throw request` / new `if (text) return text` plus
+        # the refusal-vs-empty split. Layout is loosened; every token is still matched exactly.
+        #
+        # The Gemini replacement below already does everything §5.3 does and more -- it
+        # separates a SAFETY block (the cadet's to act on) from a model returning nothing --
+        # so the whole body is replaced wholesale either way.
+        rb"(?:[^\S\r\n]*//[^\r\n]*\r\n)*"
+        rb"(?:[^\S\r\n]*while \(true\) \{\r\n)?"
+        rb"[^\S\r\n]*const res = await rawCall\(activeModelRef, \{\s*max_tokens: MAX_TOKENS, system: sys, messages: sendHistory,?\s*\}\);\r\n"
+        rb"[^\S\r\n]*const data = await res\.json\(\);\r\n"
+        rb'[^\S\r\n]*const text = \(data\.content \|\| \[\]\)\s*\.filter\(\(b\) => b\.type === "text"\)\s*\.map\(\(b\) => b\.text\)\s*\.join\("\\n"\)\s*\.trim\(\);\r\n'
+        rb"(?:"
+        rb"[^\S\r\n]*if \(!text\) throw \{ kind: \"request\", status: 0 \};\r\n"
+        rb"[^\S\r\n]*return text;"
+        rb"|"
+        rb"[^\S\r\n]*if \(text\) return text;\r\n"
+        rb"(?:[^\S\r\n]*//[^\r\n]*\r\n)*"
+        rb"[^\S\r\n]*if \(data\.stop_reason === \"refusal\"\) throw \{ kind: \"refusal\", status: 0 \};\r\n"
+        rb"[^\S\r\n]*if \(stepModel\(activeModelRef\)\) continue;\r\n"
+        rb"[^\S\r\n]*throw \{ kind: \"empty\", status: 0 \};\r\n"
+        rb"[^\S\r\n]*\}"
+        rb")",
         b"""  // Gemini's shape: roles are user|model (not user|assistant), each turn's text nests
   // under parts[], and the system prompt is its own top-level object.
   const contents = sendHistory.map((m) => ({
@@ -1224,7 +1257,21 @@ async function discoverModel(activeModelRef) {
     # silent give-up renders a finished report the cadet cannot submit, with no error, and
     # discards any `#h=` handoff for the same reason. A resource 404 does not bubble, so the
     # wrapper's window.onerror trap never sees it either.
+    # A source carrying the 2026-08-21 fix set (§5.6) already declares LZ_ATTEMPTS and
+    # LZ_ATTEMPT_MS above its own three-state hook, and the replacement below declares BOTH
+    # again. Leaving the source's pair behind emits two `const LZ_ATTEMPTS` in one scope --
+    # a SyntaxError thrown before React mounts, i.e. a blank page rather than a green check.
+    # So the anchor optionally eats any run of const/comment/blank lines immediately above
+    # `function useLzString`, and the replacement re-declares them once.
     p.sub1(
+        # The prefix group is gated on there being at least one `const LZ_*` to eat. Without
+        # that gate it also matches an empty run and swallows the blank line above the hook on
+        # all 50 unpatched sources -- which rewrites every existing build by one line of
+        # whitespace and turns `unchanged` into `WOULD WRITE` fleet-wide.
+        rb"(?:"
+        rb"(?:const LZ_[A-Z_]+ = [^\r\n]*\r\n)+"
+        rb"(?:[^\S\r\n]*(?://[^\r\n]*)?\r\n)*"
+        rb")?"
         rb"function useLzString\(\) \{.*?\r\n\}\r\n",
         b"""// Per attempt, not in total. The old hook allowed 10s for everything; this page also
 // pulls ~2.9 MB of Babel from the same origin at load, and a 4.8 KB async script losing that
@@ -1275,8 +1322,15 @@ function useLzString() {
     # `lzReady` stays a BOOLEAN at every one of its call sites -- submitReady, the handoff
     # reader, the handoffUrl memo. Only the new `lzState` carries the third value, so nothing
     # downstream can accidentally treat a truthy state string as "ready".
+    # Two shapes: the old single boolean, and the §5.6 pair a patched source already carries.
+    # Both normalise to the porter's own form, so the call sites below are identical either way.
     p.sub1(
-        rb"  const lzReady = useLzString\(\);\r\n",
+        rb"(?:"
+        rb"  const lzReady = useLzString\(\);\r\n"
+        rb"|"
+        rb"  const lzState = useLzString\(\);[^\r\n]*\r\n"
+        rb'  const lzReady = lzState === "ready";\r\n'
+        rb")",
         b"""  const lzState = useLzString();          // "loading" | "ready" | "failed"
   const lzReady = lzState === "ready";
 """,
@@ -1457,9 +1511,34 @@ function useLzString() {
 """,
         "footer reduced to the compose hint")
 
+    # -- 12b-bis. Strip a §5.5 source's OWN finish bar ---------------------------
+    # The transform above INSERTS the Gemini finish bar; it does not replace one. On an
+    # unpatched source there is nothing to replace, so that was fine for 50 artifacts. A
+    # source carrying §5.5 already has its own bar, and the result renders BOTH stacked above
+    # the composer -- two Submit buttons and two Keep-talking buttons with different
+    # behaviour, at the exact moment a cadet is trying to hand work in. It parses, renders and
+    # serves, which is how it got as far as a byte check before anyone saw it.
+    #
+    # One strip for both adjacent blocks (the bar and the `.finish-slim` reminder beside it).
+    # Anchored on the §5.5 marker comment and closed on the blank line after the LAST `)}`,
+    # because a lazy `.*?` to the first one stops inside the confirm ternary and orphans a
+    # `</div>`. The `keepTalking` / `confirmContinue` state is deliberately LEFT: nothing sets
+    # it once the JSX is gone, so it is inert, and removing it would mean editing `sysFor`
+    # too for no gain.
+    p.strip_optional(
+        rb" +\{/\* Finish bar -- TUTOR-BEHAVIOR-PARITY\.md section 5\.5\.[\s\S]*?"
+        rb"className=\"finish-slim\"[\s\S]*?\r\n        \)\}\r\n\r\n",
+        b"", "source's own finish bar stripped (§5.5)")
+
     # -- 12c. Finish-bar styling ------------------------------------------------
+    # Two shapes. Unpatched sources still carry the footer's `.report-actions` / `.submit-btn`
+    # / `.submit-hint` rules. A §5.5 source has DELETED those and carries its own finish-bar
+    # block instead -- so match either and hand both to the same replacement, which is the
+    # Gemini finish bar the JSX transform above emits. This is a wholesale swap, not a merge:
+    # whatever styling is there is discarded, so the two designs never have to be reconciled.
     p.sub1(
-        rb"  \.report-actions \{.*?\.submit-hint[^\r\n]*\r\n",
+        rb"  \.finish-bar \{.*?\.finish-slim-btn:hover[^\r\n]*\r\n"
+        rb"|  \.report-actions \{.*?\.submit-hint[^\r\n]*\r\n",
         b"""  /* The finish bar. Full width above the composer, because submitting is the only
      thing left to do and it used to be a 12px link in the footer strip. */
   .finish-bar { flex-shrink: 0; border-top: 2px solid var(--navy); background: #f1f5f9;
