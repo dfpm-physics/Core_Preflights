@@ -255,12 +255,27 @@ export function fmtDateTime(d) {
  * extension and reports which of the three sources won.
  */
 
-/** Human "Due in 3 days" / "Due today" / "2 days overdue" string. */
+/** Local midnight of the day `d` falls on, as ms. DST-safe: the constructor is local-time. */
+function startOfLocalDay(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/**
+ * Human "Due in 3 days" / "Due today" / "2 days overdue" string.
+ *
+ * Counts whole CALENDAR days apart, not elapsed hours. Deadlines here are 2359 local
+ * (CORE.md §2), so at any hour before noon a deadline TONIGHT is more than 12 hours
+ * out — and `Math.round(ms / 86400000)` rounded that up to 1 and said "Due tomorrow"
+ * every morning of the day the work was actually due. The assignment card next to it
+ * showed the real timestamp via `fmtDateTime`, so the two surfaces disagreed in
+ * writing and students trusted the softer one. Reported 2026-09-23 by a cadet who
+ * missed an assignment to it.
+ */
 export function relativeDue(due) {
   if (!due) return 'No due date';
-  const ms = due - new Date();
-  const days = Math.round(ms / 86400000);
-  if (ms < 0) {
+  const now = new Date();
+  const days = Math.round((startOfLocalDay(due) - startOfLocalDay(now)) / 86400000);
+  if (due < now) {
     const d = Math.abs(days);
     return d === 0 ? 'Due earlier today' : `${d} day${d === 1 ? '' : 's'} overdue`;
   }

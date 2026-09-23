@@ -8,6 +8,49 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-09-23 — Matthew Recker via Claude
+
+### The dashboard said "Due tomorrow" all morning on the day the work was due
+
+**Fixed `relativeDue()` in `site/js/util.js` to count calendar days, not elapsed hours.**
+A cadet reported (through her instructor) that her Dashboard showed the lesson 17 preflight as
+due tomorrow while the assignment card showed it due tonight. She had already missed one other
+assignment trusting the Dashboard.
+
+The label was computed as `Math.round((due - now) / 86400000)`. Deadlines are **2359 local**
+(CORE.md section 2), so from midnight until 11:59 a.m. on the due date the deadline is more than
+12 hours out, rounds up to 1, and reads **"Due tomorrow"** — for the whole morning of the day the
+work is due. The fix takes the difference between the two local midnights instead, so the label
+answers the question the student is actually asking.
+
+**It was off by one in every direction, not just the reported one**, and the overdue side was the
+more dangerous half:
+
+| Situation (8 a.m., 2359 deadlines) | Was | Now |
+|---|---|---|
+| Due tonight | Due tomorrow | Due today |
+| Due tomorrow | Due in 2 days | Due tomorrow |
+| Due in 3 days | Due in 4 days | Due in 3 days |
+| **Missed yesterday** | **Due earlier today** | **1 day overdue** |
+
+That last row is why this is a student-impact bug and not a cosmetic one: work whose deadline had
+already passed was labelled as still open, on the one surface students use to decide what to do
+next. The two surfaces disagreed **in writing** — `fmtDateTime` on the assignment card was right
+the whole time — so a student who noticed had no way to tell which one to believe.
+
+Affects `site/student/dashboard.html` and `site/student/lessons.html`, the only two callers.
+`deadlineClass()` is untouched: its 48-hour "soon" window is a threshold, not a label, and
+rounding was never involved.
+
+**Verified with Node only** (the shipped site has no Node dependency — CORE.md section 2): the
+function was exercised against a frozen clock over the seven cases above, plus a `node --check`
+parse of the real module. **Not yet clicked through in a browser**, and not yet pushed.
+
+**Still open, and a human decision:** the cadet's missed assignment. Whether to reopen or excuse
+it is the course director's call, not an agent's; nothing in the gradebook was touched.
+
+---
+
 ## 2026-09-22 — Bryan Egner via Claude
 
 ### PHYS 110 Lesson 19 (LAB 3) built and published; first artifact carrying the 2026-08-21 fix set, and the first to collide with the Gemini porter because of it
