@@ -157,17 +157,23 @@
       "title": "Magnetic Force on Current-carrying Wires",
       "path": "gemini/phys-215/lesson-19-magnetic-force-on-current-carrying-wires-4a147cca.html"
     },
-    "lesson-20-linear-momentum-1d-collisions-e64195e3": {
+    "lesson-20-linear-momentum-1-d-collisions-e64195e3": {
       "course": "phys-110",
       "lesson_no": 20,
       "title": "Linear Momentum & 1-D Collisions",
-      "path": "gemini/phys-110/lesson-20-linear-momentum-1d-collisions-e64195e3.html"
+      "path": "gemini/phys-110/lesson-20-linear-momentum-1-d-collisions-e64195e3.html"
     },
     "lesson-20-magnetic-dipoles-and-torque-3190fefe": {
       "course": "phys-215",
       "lesson_no": 20,
       "title": "Magnetic Dipoles and Torque",
       "path": "gemini/phys-215/lesson-20-magnetic-dipoles-and-torque-3190fefe.html"
+    },
+    "lesson-21-2-d-collisions-bbf388ba": {
+      "course": "phys-110",
+      "lesson_no": 21,
+      "title": "2-D Collisions",
+      "path": "gemini/phys-110/lesson-21-2-d-collisions-bbf388ba.html"
     },
     "lesson-21-sources-of-magnetic-fields-85e63bf8": {
       "course": "phys-215",
@@ -180,6 +186,18 @@
       "lesson_no": 22,
       "title": "Ampère's Law, Gauss's Law in Magnetism",
       "path": "gemini/phys-215/lesson-22-amperes-law-gausss-law-in-magnetism-bd81d7d5.html"
+    },
+    "lesson-22-center-of-mass-systems-of-particles-b554fa74": {
+      "course": "phys-110",
+      "lesson_no": 22,
+      "title": "Center of Mass / Systems of Particles",
+      "path": "gemini/phys-110/lesson-22-center-of-mass-systems-of-particles-b554fa74.html"
+    },
+    "lesson-23-lab-4-conservation-of-momentum-8004558e": {
+      "course": "phys-110",
+      "lesson_no": 23,
+      "title": "LAB 4: Conservation of Momentum",
+      "path": "gemini/phys-110/lesson-23-lab-4-conservation-of-momentum-8004558e.html"
     },
     "lesson-24-faradays-law-of-induction-motional-emf-8cbe647d": {
       "course": "phys-215",

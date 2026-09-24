@@ -7,7 +7,7 @@
 <!-- Not a security control. The exposure here is the same one the published Claude artifact
      already carries; this only keeps worked extension problems out of a search index. -->
 <meta name="robots" content="noindex, nofollow">
-<title>PHYS 110 Lesson 20 &mdash; Linear Momentum & 1-D Collisions &mdash; PREP</title>
+<title>PHYS 110 Lesson 21 &mdash; 2-D Collisions &mdash; PREP</title>
 
 <!-- React + in-browser JSX, served from OUR OWN ORIGIN rather than a CDN.
      Two reasons, and the second is the load-bearing one:
@@ -69,26 +69,32 @@ const { useState, useRef, useEffect } = React;
 // ============================================================================
 
 /* ============================================================================
-   Physics 110 · Fall 2026 · Lesson 20 — Linear Momentum & 1-D Collisions.
+   Physics 110 · Fall 2026 · Lesson 21 — 2-D Collisions.
    JiTT preflight artifact, built with preflight-factory-v2 (v2.0 rev 5)
    against INTERACTION-DATA-CONTRACT.md v1 (LOCKED).
 
-   Grounding: OpenStax University Physics Vol. 1, ch. 5 (§§5.1-5.7, pp. 194-241) and
-   ch. 6 (§§6.1-6.3, pp. 253-277) — the whole Newton's Laws block, re-read.
+   Grounding: OpenStax University Physics Vol. 1, ch. 9, §9.5, printed pp.
+   412-419, read as page images. The course's section PDF for this lesson ends
+   mid-way through the exploding-scuba-tank example on p. 418; the next
+   section's PDF opens on p. 419 with the rest of it, which was read there and
+   folded in. The cadets' Cengage reading is §9.5 in its own numbering.
 
-   BUILT 2026-08-22 from the kit, localized against phys-110/COURSE_PROFILE.md.
-   Architecture and every piece of shared machinery are inherited UNCHANGED from
-   lesson-10-lab-2-newtons-laws-b9d4356a; only the header, INTERACTION_ID,
-   OBJECTIVE_KEYS, the three authored blocks, one wrong-claim example and two UI
-   titles differ.
+   THREE probe topics, not four: §9.5 is a short section with one idea --
+   conserve momentum in each direction separately -- and the skill's rule is 3
+   for a genuinely narrow lesson.
+
+   BUILT 2026-09-23 on lesson_19_preflight_lab3_conservation_of_energy (the
+   first source carrying the 2026-08-21 fix set, TUTOR-BEHAVIOR-PARITY.md §5);
+   only the lesson-specific blocks, prompt examples and titles differ. The
+   study-mode prompt carries the EQUATIONS, VERIFICATION PROTOCOL and
+   CONFIDENCE LABELING sections the kit specifies, which lesson 19 dropped.
 
    CONCEPTUAL, per this course's standing decision: the tutor never asks a cadet
-   to type out or manipulate a derivation. Naming the relationship that governs a
-   situation is fine and worth asking about; grinding algebra in a chat box is not.
+   to type out or manipulate a derivation.
 
-   NEW SLUG: this lesson had no interactive activity before this build, so the
+   NEW SLUG: lesson 21 had no interactive activity before this build, so the
    8-hex suffix was minted fresh for this offering (contract §3.2). Register it
-   as a NEW activity on the existing preflight-12 lesson, and do not reuse it in
+   as a NEW activity on the existing preflight-21 lesson, and do not reuse it in
    a later term.
    ========================================================================== */
 
@@ -700,7 +706,7 @@ const OPENING_QUESTION = "What did you find interesting or difficult in the read
 // prompt marks VERBATIM, and openerStage matches on it, so the greeting can be
 // reworded without touching stage detection.
 const OPENING_WELCOME =
-  "Welcome to " + "Lesson 20 \u2014 Linear Momentum & 1-D Collisions" + ".\n\n"
+  "Welcome to " + "Lesson 21 \u2014 2-D Collisions" + ".\n\n"
   + "We are going to talk through today\u2019s reading together. I will ask"
   + " questions rather than hand you answers, and the goal is to see how you are"
   + " thinking \u2014 not to catch you out. At the end I will write a short report"
@@ -808,11 +814,11 @@ function loadSession(mode, cadetId) {
 /* Per-lesson submit slug. Readable stem per the skill's generation rule, plus
    the per-offering 8-char random lowercase-hex suffix required by
    INTERACTION-DATA-CONTRACT.md §3.2 (generated once for this build,
-   2026-08-03). The prefill link's id= must be this same string.
+   2026-09-23). The prefill link's id= must be this same string.
    DO NOT REUSE THIS SLUG IN A LATER TERM — a rebuild gets a fresh suffix.
    See preflight-kit/docs/OPEN_ISSUES.md §8. */
 const INTERACTION_ID =
-  "lesson-20-linear-momentum-1d-collisions-e64195e3";
+  "lesson-21-2-d-collisions-bbf388ba";
 
 /* Submission endpoint — INTERACTION-DATA-CONTRACT.md §2, frozen. Copied, not
    retyped. Note `student`, singular. A wrong URL fails SILENTLY. */
@@ -822,16 +828,15 @@ const SUBMIT_ENDPOINT =
 const ARTIFACT_VERSION = "2026-08";
 
 /* Number of probe topics in LESSON_CONFIG (3–5). Injected into the pacing note. */
-const PROBE_TOPIC_COUNT = 4;
+const PROBE_TOPIC_COUNT = 3;
 
 /* One entry per probe topic, SAME ORDER. The tutor reports understanding
    against exactly these keys in the d payload — it may not invent, rename,
    merge, or drop one. Baked in at build time; changing one is a rebuild. */
 const OBJECTIVE_KEYS = [
-  { key: "momentum-defined",              label: "Momentum is mass times velocity, and it's a VECTOR" },
-  { key: "impulse-momentum-theorem",      label: "Impulse equals the CHANGE in momentum" },
-  { key: "conservation-elastic-vs-inelastic", label: "Momentum ALWAYS conserved; energy is not" },
-  { key: "collision-impulse-direction",   label: "In a collision, impulse on each object is opposite" },
+  { key: "component-conservation",    label: "Momentum conserved separately in x and y" },
+  { key: "vector-momentum-addition",  label: "Momenta add as vectors, not magnitudes" },
+  { key: "closed-system-2d",          label: "Choosing a closed system for a 2-D event" },
 ];
 const IDLE_PAUSE_MS = 5000;        // clock pauses 5 s after the box value stops changing
 const PER_TOPIC_BUDGET_MIN = 2.0;  // active minutes per probe topic
@@ -844,99 +849,138 @@ const TEXTBOOK_REFERENCE = `TEXTBOOK_REFERENCE -- authoritative Tier-1 grounding
 reference only; never cite its section, page, or equation numbers to the cadet, and never name a
 document back to them).
 
-Source: OpenStax University Physics Volume 1, chapter 9 "Linear Momentum and Collisions"
-(sections 9.1-9.4), CC-BY. g = 9.80 m/s^2 throughout. This lesson introduces momentum as a vector
-quantity, the impulse-momentum theorem, and the distinction between elastic and inelastic collisions.
+Source: OpenStax University Physics Vol. 1, chapter 9 "Linear Momentum and Collisions",
+section 9.5 "Collisions in Multiple Dimensions", printed pp. 412-419, CC-BY. Read from page images;
+every equation below was transcribed from the rasterized page. The cadets read a different textbook
+(Cengage) on the same material.
 
-=== MOMENTUM: DEFINITION AND PROPERTIES (9.1) ===
+BUILDER'S NOTE on completeness: the lesson PDF for this section ends part-way through Example 9.15
+(p. 418). The end of that example was read from p. 419, which opens the next lesson's PDF, and is
+included below, so nothing in section 9.5 is missing.
 
-LINEAR MOMENTUM is the product of an object's mass and velocity. It is a VECTOR, with both magnitude
-and direction.
+Background from the previous lesson, which this one assumes (prerequisite, not new today):
+p = m v is a vector; J = Delta_p; the total momentum of a CLOSED system -- constant total mass, zero
+net external force -- is conserved; collisions are elastic, inelastic, or perfectly inelastic
+(objects stick, greatest loss of kinetic energy), and explosions increase kinetic energy.
 
-  p = m v  (vector equation)                                                   [eq 9.1]
+=== WHY TWO DIMENSIONS NEEDS NOTHING NEW [internal tag: 9.5, pp. 412-414] ===
 
-The SI unit is kg·m/s, which is also equivalent to N·s (newton-seconds). An object at rest has zero
-momentum; a massive slow object and a light fast object can have equal momentum if their products
-m·v are equal.
+- It is far more common for collisions to happen in two dimensions: the angle between the initial
+  velocity vectors is neither zero nor 180 degrees.
+- First idea: momentum is a vector, and like all vectors it can be written as a sum of
+  perpendicular components -- usually x and y, and z if necessary. So a conservation-of-momentum
+  statement can be, and usually will be, written in component form.
+- Second idea: force is related to momentum by F = dp/dt. In component form:
+    F_x = dp_x/dt,   F_y = dp_y/dt,   F_z = dp_z/dt
+  These are Newton's second law in each direction. Newton's second law holds in each direction
+  INDEPENDENTLY of the others, so (via Newton's third law) conservation of momentum also holds in
+  each direction independently.
+- So a two-dimensional problem is solved by writing conservation of momentum TWICE, once in x and
+  once in y:
+    p_f,x = p_1,i,x + p_2,i,x
+    p_f,y = p_1,i,y + p_2,i,y                     [eq 9.18]
+- Figure 9.22, the procedure drawn: (a) break each initial momentum vector into its x- and
+  y-components; (b) add the x-components together and the y-components together, which gives the
+  x- and y-components of the final momentum; (c) add those two components to get the final
+  momentum vector.
+- For two objects that end up moving together (total mass m = m_1 + m_2), each component is solved
+  separately:
+    v_f,x = (m_1 v_1,i,x + m_2 v_2,i,x) / m
+    v_f,y = (m_1 v_1,i,y + m_2 v_2,i,y) / m
+  and then combined with the Pythagorean theorem:
+    v_f = |v_f| = sqrt(v_f,x^2 + v_f,y^2)
+- PROBLEM-SOLVING STRATEGY, conservation of momentum in two dimensions -- the same as in one
+  dimension except that momentum is conserved in both directions simultaneously:
+  1. Identify a closed system.
+  2. Write conservation of momentum in the x-direction and solve for the desired quantity (for a
+     vector such as a velocity, this gives its x-component).
+  3. Write it in the y-direction and solve (the y-component).
+  4. If the answer is a vector, use the Pythagorean theorem for its magnitude.
 
-TOTAL MOMENTUM of a system is the vector sum of all individual momenta:
+=== EXAMPLE 9.14 -- TRAFFIC COLLISION [internal tag: 9.5, pp. 414-417] ===
 
-  p_total = p_1 + p_2 + ... = m_1 v_1 + m_2 v_2 + ...                          [eq 9.2]
+- A small car, 1200 kg, travelling EAST at 60 km/h, collides at an intersection with a truck,
+  3000 kg, travelling due NORTH at 40 km/h. They lock together. Find the velocity of the wreckage.
+  Figure 9.23: the car arrives along +x, the truck along +y; the final momentum has both components.
+- Strategy -- CHOOSING THE SYSTEM: the natural system (car + truck) is NOT closed, because road
+  friction acts on both vehicles. The problem is rescued by asking only for the velocity at the
+  instant just after the collision, before friction has had any effect. With that restriction the
+  system's momentum is conserved.
+- Two directions are involved, so conservation is written twice.
+- Before: p = m_c v_c + m_T v_T. After: p = (m_c + m_T) v_w. Conserved:
+    m_c v_c + m_T v_T = (m_c + m_T) v_w
+  "We have to be careful; the two initial momenta are not parallel. We must add vectorially."
+- Figure 9.24, graphical addition: the truck's momentum arrow points up, the car's is added
+  tip-to-tail pointing right, and the sum is drawn dashed at an angle theta from the vertical. The
+  caption's point: although the car's VELOCITY is larger than the truck's, its MOMENTUM is smaller.
+- With +x east and +y north: p_c = m_c v_c i, p_T = m_T v_T j.
+    x: m_c v_c = (m_c + m_T) v_w,x   so   v_w,x = [m_c / (m_c + m_T)] v_c
+    y: m_T v_T = (m_c + m_T) v_w,y   so   v_w,y = [m_T / (m_c + m_T)] v_T
+- Numbers (60 km/h = 16.67 m/s, 40 km/h = 11.1 m/s, total 4200 kg):
+    v_w,x = (1200/4200)(16.67) = 4.76 m/s
+    v_w,y = (3000/4200)(11.1) = 7.93 m/s
+    |v_w| = sqrt(4.76^2 + 7.93^2) = 9.25 m/s, about 33.3 km/h
+    theta = arctan(v_w,y / v_w,x) = arctan(7.93/4.76) = 59 degrees
+  The page states this angle as "east of north, or 31 degrees counterclockwise from the +x-direction".
+  BUILDER'S NOTE: the arithmetic contradicts that wording. arctan(v_y/v_x) is measured FROM the
+  +x (east) axis, so the wreckage moves at 59 degrees north of east -- equivalently 31 degrees east
+  of north. The substance is not in doubt: v_y is the larger component, so the wreckage heads mostly
+  north, the truck's direction. If a cadet quotes "31 degrees from the x-axis", check which axis
+  they measured from rather than telling them the book is right.
+- Significance: accident investigators usually work "in the opposite direction" -- measure skid
+  distances (which give stopping distances), and use the work-energy theorem with conservation of
+  momentum to find the vehicles' speeds and directions before the collision.
+- Check Your Understanding 9.9 asks: if the initial velocities were NOT at right angles, how would
+  that change the physical result and the analysis? (Answer in substance: each initial momentum now
+  has BOTH an x- and a y-component, so each conservation equation gets a contribution from both
+  vehicles; the method -- conserve each component, then recombine -- is unchanged.)
 
-WORKED EXAMPLE: Two identical balls collide head-on. Ball 1 has velocity +3 m/s (to the right);
-Ball 2 has velocity -2 m/s (to the left). If m_1 = m_2 = m, then:
-  p_1 = m(+3) and p_2 = m(−2)
-  p_total = m(+3) + m(−2) = m(+1) m/s to the right.
-The system's net momentum is m(+1), not zero, because the two velocities are not equal in magnitude.
+=== EXAMPLE 9.15 -- EXPLODING SCUBA TANK [internal tag: 9.5, pp. 417-419] ===
 
-=== THE IMPULSE-MOMENTUM THEOREM (9.2) ===
+- An aluminium scuba tank weighs 31.7 lb empty; full, it holds air at 2500-3000 psi. A tank sitting
+  motionless explodes into three pieces. The first, 10 lb, shoots off horizontally at 235 mi/h; the
+  second, 7 lb, at 172 mi/h, also horizontal, at a 19 degree angle to the first. Find the mass and
+  initial velocity of the third piece, in SI units. Figure 9.25: the tank bursting into three pieces.
+- Strategy -- CHOOSING THE SYSTEM: the tank is not strictly a closed system, because gravity is an
+  external force. But the question asks only for the INITIAL velocity of the third piece, so gravity
+  can be neglected and the tank treated as closed for the instant of the explosion. For this system
+  the initial momentum vector is ZERO.
+- All motion is in the xy-plane. Conversions: 31.7 lb -> 14.4 kg; 10 lb -> 4.5 kg; 235 mi/h ->
+  105 m/s; 7 lb -> 3.2 kg; 172 mi/h -> 77 m/s; so m_3 = 14.4 - (4.5 + 3.2) = 6.7 kg.
+- Figure: piece 1 moves along +x, piece 2 at angle theta = 19 degrees above +x, piece 3 back and
+  slightly down, at a small angle phi below the -x axis.
+- Because the total momentum was zero, the three final momenta must add to zero, component by
+  component:
+    x: p_1,x + p_2,x + p_3,x = 0  so  p_3,x = -m_1 v_1,x - m_2 v_2,x
+    y: p_1,y + p_2,y + p_3,y = 0  so  p_3,y = -m_1 v_1,y - m_2 v_2,y
+    p_3,x = -m_1 v_1 - m_2 v_2 cos(theta) = -(4.5)(105) - (3.2)(77) cos(19 deg) = -705 kg*m/s
+    p_3,y = 0 - m_2 v_2 sin(theta) = -(3.2)(77) sin(19 deg) = -80.2 kg*m/s
+    p_3 = sqrt(705^2 + 80.2^2) = 710 kg*m/s
+    v_3 = p_3 / m_3 = 710 / 6.7 = 106 m/s
+- The velocity points the same way as the momentum:
+    phi = arctan(p_3,y / p_3,x) = arctan(80.2/705) = 6.49 degrees
+  below the -x axis, i.e. 183.5 degrees from the +x direction. The third piece flies off almost
+  directly opposite the first, because it has to cancel the combined momentum of the other two.
+- Significance: velocities like these are typical; an exploding tank of any compressed gas can punch
+  through the wall of a house. Such explosions are, fortunately, extremely rare.
+- Check Your Understanding 9.10 asks how the method would change if the mass of the air in the tank
+  were included, and how much difference it would make. (In substance: the escaping air is part of
+  the system and carries momentum too, so it enters the sums as another term; with a small air mass
+  the answer changes little.)
 
-An impulse is the product of a force and the time over which it acts. It is also a vector.
+=== RUTHERFORD, AS FRAMING [internal tag: 9.5, p. 412, figure 9.21] ===
 
-  J = F Δt  (vector form, for constant force)                                  [eq 9.3]
+- The section opens with the figure that closes the previous one: Thomson's model predicted alpha
+  particles would pass through gold foil almost undeflected and land in one spot; Rutherford and
+  Geiger observed a few deflected through large angles, landing in many spots. Rutherford used
+  conservation of momentum and energy -- in more than one dimension -- to build the nuclear model.
 
-The IMPULSE-MOMENTUM THEOREM states that the impulse on an object equals its change in momentum:
+=== WHAT THE READING DOES NOT DO ===
 
-  J = Δp = m(v_f − v_i) = F_avg Δt                                             [eq 9.4]
-
-This is one of the most powerful equations in mechanics because it shows that the same CHANGE in
-momentum can be achieved by a LARGE force over SHORT time (a bat hitting a ball) or a SMALL force
-over LONG time (catching a ball). The product F·Δt is what matters, not either factor alone.
-
-WORKED EXAMPLE: A 0.50 kg ball is caught in a glove. The incoming velocity is 20 m/s; it comes to
-rest (final velocity 0). If the catch takes Δt = 0.05 s, what is the average force the glove exerts?
-  Δp = m(v_f − v_i) = (0.50)(0 − 20) = −10 kg·m/s
-  F_avg = Δp / Δt = (−10) / 0.05 = −200 N
-The negative sign indicates the force points opposite to the initial motion (backward, opposing the
-ball's motion). The magnitude is 200 N, which is why catching a fast ball stings—large change in
-momentum in short time.
-
-NEWTON'S THIRD LAW AND COLLISIONS: when two objects collide, each exerts a force on the other. By
-Newton's third law, F_1 on 2 = −F_2 on 1 (equal and opposite). Therefore, the impulses are:
-  J_1 on 2 = −J_2 on 1
-  Δp_2 = −Δp_1
-
-The two momenta change in opposite directions, which is the machinery behind conservation of momentum.
-
-=== CONSERVATION OF MOMENTUM (9.3) ===
-
-When NO EXTERNAL forces act on a system (or when external forces are negligible), the TOTAL momentum
-of the system is CONSERVED. It does not change.
-
-  p_total_initial = p_total_final                                              [eq 9.5]
-  OR:  m_1 v_1i + m_2 v_2i = m_1 v_1f + m_2 v_2f
-
-This is true for ALL collisions — elastic and inelastic alike. Momentum is always conserved in a
-closed system.
-
-=== ELASTIC VS. INELASTIC COLLISIONS (9.4) ===
-
-ELASTIC COLLISION: kinetic energy is conserved. The objects bounce apart with no energy loss to
-deformation or heat.
-
-  K_total_initial = K_total_final
-  (1/2)m_1 v_1i^2 + (1/2)m_2 v_2i^2 = (1/2)m_1 v_1f^2 + (1/2)m_2 v_2f^2
-
-INELASTIC COLLISION: kinetic energy is NOT conserved; some is converted to heat, sound, or
-deformation. But MOMENTUM IS ALWAYS CONSERVED.
-
-PERFECTLY INELASTIC COLLISION: the objects stick together and move as one.
-  m_1 v_1i + m_2 v_2i = (m_1 + m_2) v_f
-
-WORKED EXAMPLE: Two identical carts collide and couple. Cart 1 (m = 2.0 kg) has initial velocity
-+4.0 m/s. Cart 2 (m = 2.0 kg) is at rest. They couple and move together.
-  Momentum conservation: m_1 v_1i + 0 = (m_1 + m_2) v_f
-  (2.0)(+4.0) + 0 = (2.0 + 2.0) v_f
-  8.0 = 4.0 v_f
-  v_f = +2.0 m/s
-
-Now check kinetic energy:
-  K_i = (1/2)(2.0)(4.0^2) = 16 J
-  K_f = (1/2)(4.0)(2.0^2) = 8 J
-  Energy lost = 16 − 8 = 8 J, or 50%.
-
-In this symmetric inelastic collision, exactly half the kinetic energy is dissipated (to deformation,
-sound, heat). Momentum was conserved (both initial and final p = 8 kg·m/s); energy was not.
+Section 9.5 does not solve a two-dimensional ELASTIC collision (it would need kinetic-energy
+conservation as a third equation). A cadet may bring one up; engage, and be clear you are reasoning
+beyond the reading. One well-known result, for reference: when two EQUAL masses collide elastically
+with one initially at rest, they leave at 90 degrees to each other.
 `;
 
 /* ============================================================================
@@ -944,82 +988,107 @@ sound, heat). Momentum was conserved (both initial and final p = 8 kg·m/s); ene
    ========================================================================== */
 const LESSON_CONFIG = `LESSON_CONFIG
 
-lesson_id: Physics 110, Fall 2026, Lesson 20 -- Linear Momentum & 1-D Collisions
+lesson_id: Physics 110, Fall 2026, Lesson 21 -- 2-D Collisions
 
-reading_assignment: OpenStax University Physics Vol. 1, chapter 9 (sections 9.1-9.4). The cadets'
-reading is momentum as a vector, impulse, and the distinction between elastic and inelastic collisions.
-INSTRUCTOR AUDIT ONLY -- never cited to the cadet, and never named back to them as a document.
+reading_assignment: OpenStax University Physics Vol. 1, chapter 9, section 9.5 "Collisions in
+Multiple Dimensions", printed pp. 412-419 (the cadets' own Cengage reading is section 9.5 in its
+numbering). INSTRUCTOR AUDIT ONLY -- never cited to the cadet, and never named back to them as a
+document.
 
-// Lesson 20 opens the Momentum block (lessons 20-23, before Graded Review 2 at lesson 24).
-// It is foundational: cadets must grasp that momentum is always conserved in collisions,
-// while kinetic energy is not. The conceptual lever is that conservation laws apply to different
-// quantities under different conditions.
+// Lesson 21 is the second of four momentum lessons. Lesson 20 covered momentum, impulse and 1-D
+// collisions; lesson 22 is center of mass; lesson 23 is LAB 4. The reading is short and makes one
+// point well: conserve momentum in each direction separately, then recombine as vectors.
+//
+// CONCEPTUAL: naming the relationship is fine; asking the cadet to type out component equations,
+// grind a Pythagorean theorem, or compute an arctangent is not. Ask what each direction's momentum
+// does and which way the result points, not for the number.
+
+// Time budget: 3 probe topics, each with an INDEPENDENT soft budget of about 2 active minutes.
+// Time overspent on an early topic does NOT shorten later topics. There is no global hard stop.
 
 probe_topics (priority order, probe from the top):
 
-1. Whether the cadet understands momentum as a VECTOR QUANTITY. Whether they can say p = m v and
-   distinguish it from speed or kinetic energy. Whether they treat the direction of velocity as
-   essential, so that two opposite momenta can partly or fully cancel. Listen for them using signed
-   quantities or explicitly naming direction when working examples.
+1. Whether the cadet understands that momentum is conserved SEPARATELY in the x- and y-directions,
+   and why. Listen for the reason: Newton's second law holds in each direction independently
+   (F_x = dp_x/dt, F_y = dp_y/dt), so if there is no net external force the x-momentum and the
+   y-momentum are each conserved on their own. A strong cadet can say that what happens in y cannot
+   change the total x-momentum. A good probe: in the traffic collision the car brings all the
+   east-west momentum and the truck all the north-south momentum -- what are the wreckage's two
+   momentum components afterwards?
 
-2. Whether the cadet can apply the impulse-momentum theorem and understand the distinction between
-   FORCE, TIME, and their PRODUCT. Whether they see that the same change in momentum can come from
-   a large force over short time or a small force over long time. Whether they connect this to
-   real scenarios: catching a ball (soft over long time) vs. a collision (hard over short time).
+2. Whether the cadet treats momenta as VECTORS when combining them -- adding components, or
+   drawing arrows tip-to-tail -- rather than adding magnitudes. The sharp test is the direction of
+   the wreckage: it is set by the total MOMENTUM, not by which vehicle was faster. In the reading the
+   car is faster but the much heavier truck carries more momentum, so the wreckage heads mostly in
+   the truck's direction. A cadet who predicts it follows the faster vehicle, or who adds the two
+   momenta as numbers to get the final momentum, has the misconception worth the topic. Also worth
+   hearing: that kinetic energy, a scalar, is not split into components at all.
 
-3. Whether the cadet distinguishes ELASTIC from INELASTIC and understands that momentum is ALWAYS
-   conserved while energy is conserved ONLY in elastic collisions. Whether they can compute final
-   velocities after a collision using momentum conservation. Whether they recognize that "inelastic"
-   does not mean momentum is violated; it means energy is dissipated.
-
-4. Whether the cadet understands Newton's third law applied to collisions: each object experiences
-   an impulse in the OPPOSITE direction. Whether they see why the two momentum changes are opposite
-   in sign and equal in magnitude. Whether they can apply this to systems (the two objects exchange
-   momentum, leaving the total unchanged).
+3. Whether the cadet can choose a closed system for a two-dimensional event and justify it. Two
+   cases from the reading: in the intersection crash, road friction means car + truck is NOT closed
+   -- the fix is to ask only about the instant just after the collision, before friction acts; in the
+   exploding tank, gravity is external, but only the initial velocities are wanted, and the tank
+   started at rest, so the fragments' momenta must add to ZERO. Probe the consequence of that zero:
+   the last fragment must fly off opposite to the combined momentum of the others. A cadet who says
+   an explosion "creates momentum" has missed the point.
 
 common_misconceptions (watch for these; each has a diagnostic signal):
 
-- Confuses momentum with energy. Diagnostic signal: using "momentum" and "kinetic energy"
-  interchangeably, or claiming they are conserved or not conserved under the same conditions.
-- Treats momentum as a scalar (magnitude only). Diagnostic signal: adding momentum magnitudes
-  without regard to direction, or missing that opposite momenta can cancel.
-- Believes momentum is conserved ONLY in elastic collisions. Diagnostic signal: "momentum is lost
-  in an inelastic collision" or "momentum is only conserved when the collision bounces."
-- Confuses "no forces act" with "momentum is conserved." Diagnostic signal: assuming an external
-  force means momentum cannot be conserved (in a collision between two objects, the external force
-  on the system DOES matter if it is not negligible; within the two-object system alone, internal
-  forces conserve momentum regardless).
-- Thinks "force is larger" means "impulse is larger" regardless of time. Diagnostic signal: saying
-  a brief large force delivers more impulse than a steady small force without checking the products.
-- Assumes kinetic energy is always conserved. Diagnostic signal: using K_i = K_f in an inelastic
-  collision without recognizing it as an error.
-- Forgets that a perfectly inelastic collision can have different initial and final kinetic energies.
-  Diagnostic signal: claiming that if two objects stick together, energy must be conserved.
+- Adds momentum magnitudes to get the total. Diagnostic signal: "the total momentum after is the
+  car's momentum plus the truck's momentum" computed as a plain sum, or a final speed larger than
+  the vector result.
+
+- Thinks the wreckage follows the faster vehicle. Diagnostic signal: "the car is going faster so
+  it pushes the wreck east." The heavier truck has more momentum.
+
+- Mixes components across directions. Diagnostic signal: using the car's eastward momentum in the
+  north-south equation, or thinking the y-motion "uses up" some x-momentum.
+
+- Thinks kinetic energy is conserved component by component, or has components at all. Diagnostic
+  signal: "the x kinetic energy is conserved too." Kinetic energy is a scalar; only in an elastic
+  collision is the TOTAL conserved.
+
+- Thinks an explosion from rest violates conservation. Diagnostic signal: "there was no momentum,
+  and now three pieces are flying off." The momenta sum to zero, as vectors.
+
+- Treats any external force as fatal to conservation. Diagnostic signal: "friction acts on the cars,
+  so we can't use momentum at all," missing the just-after-the-collision restriction.
+
+- Confuses the angle's reference axis. Diagnostic signal: quoting an angle without saying whether it
+  is measured from east or from north -- worth a gentle question, not a correction, since the
+  reading's own wording mislabels this.
 
 prerequisites (Tier 2 -- may be referenced as "from your earlier coursework"):
 
-- Newton's laws and forces from the Block 1 (Newton's Laws).
-- Kinetic energy and work-energy theorem from lessons 14-15.
-- Understanding that vectors add like vectors, not like scalars.
-- Basic algebra and the ability to solve for one unknown in a linear equation.
+- Momentum p = m v as a vector; impulse J = Delta_p; conservation of momentum in a closed system
+  (constant mass, zero net external force); elastic, inelastic and perfectly inelastic collisions
+  and explosions -- all from the previous lesson.
+- Resolving vectors into components with sine and cosine; recombining with the Pythagorean theorem
+  and the arctangent.
+- Newton's second and third laws.
+- Unit conversion (km/h and mi/h to m/s, pounds to kilograms).
 
 lateral_connections (ENGAGE with these -- never redirect them as out of scope):
 
-- Connection to traffic accidents and crash-test dummies: understanding why airbags increase Δt and
-  thus reduce the force on impact.
-- Connection to rockets and the Tsiolkovsky equation: a rocket's momentum change comes from expelling
-  mass, and the momentum of the expelled gas is exactly balanced by the rocket's momentum change.
-- Connection to billiard balls and sports: understanding collisions helps predict ball trajectories
-  in pool, tennis, and other sports.
-- Connection to particle physics: all fundamental interactions conserve momentum (and energy and
-  charge), which is why collision experiments in accelerators reveal new particles.
+- Connection to accident reconstruction: investigators measure skid marks and final positions and
+  work backwards through the work-energy theorem and momentum conservation to find speeds and
+  headings before a crash.
 
-scope_note: This lesson is strictly 1-D collisions and momentum in one dimension. Do NOT introduce
-2-D collisions, angular momentum, or rotation -- those come in later lessons. This is about the
-fundamental idea: momentum is a vector, it is always conserved in a closed system, and understanding
-when kinetic energy is conserved (elastic) vs. dissipated (inelastic) is the conceptual foundation
-for Block 2. If the cadet asks about the center of mass frame, acknowledge it as a useful tool and
-note it as something to revisit after mastering the lab frame.
+- Connection to billiards and sports: a glancing collision sends the two balls off at an angle; for
+  equal masses in an elastic collision with one at rest, that angle is 90 degrees -- a result beyond
+  the reading but easy to test on a pool table.
+
+- Connection to Rutherford scattering: conserving momentum and energy in more than one dimension is
+  how the nucleus was discovered from the angles of deflected alpha particles.
+
+- Connection to explosions and fragmentation: shrapnel, fireworks, and radioactive decays into
+  several particles all obey "the momenta add to zero"; a missing momentum is how the neutrino was
+  first inferred.
+
+scope_note: The timed portion is conceptual: which momentum components are conserved, which way the
+total points and why, and what makes a system closed. Do NOT ask the cadet to compute a magnitude or
+an angle. Two-dimensional elastic collisions are not solved in the reading; engage if the cadet raises
+one, flagging that you are reasoning beyond the reading. Center of mass is next lesson.
 `;
 
 /* ============================================================================
@@ -1030,71 +1099,73 @@ const EXTENSION_PROBLEMS = `EXTENSION_PROBLEMS -- offered ONLY during the untime
 timed portion. Help by Socratic probing and the scaffold ladder; reveal a worked solution only after
 the cadet has worked the problem to a conclusion and is checking their answer.
 
-A -- Momentum as a vector, not a scalar (no arithmetic at all)
-Statement: Two identical balls collide head-on. Ball 1 has velocity +3 m/s (to the right);
-Ball 2 has velocity -2 m/s (to the left). (a) Which ball has more momentum in magnitude?
-(b) What is the net momentum of the system? (c) Could the momentum of the system be zero if
-the velocities were different? Draw a picture or explain.
+These are the one place in this artifact where arithmetic is welcome, because the cadet has chosen
+to work a problem and the report is already submitted. Every problem uses the same method: conserve
+x, conserve y, recombine. A cadet who reasons the direction out in words before computing has done
+the important part.
+
+A -- Two vehicles meeting at right angles
+Statement: A 1000 kg car travelling east at 20 m/s collides with a 1500 kg truck travelling north
+at 10 m/s, and they lock together. What is the velocity of the wreckage just after the collision --
+magnitude and direction?
 Worked answer (tutor reference only; reveal only after the cadet has worked to a conclusion):
-  (a) Ball 1 has momentum m(+3) and Ball 2 has momentum m(−2). In magnitude, Ball 1's momentum is
-      larger: |p_1| = 3m and |p_2| = 2m.
-  (b) The net momentum is p_1 + p_2 = m(+3) + m(−2) = m(+1), to the right. Momentum is a VECTOR,
-      so opposite directions matter -- they partially cancel.
-  (c) Yes. If they had equal and opposite velocities (e.g., +2 m/s and -2 m/s), the momenta would
-      cancel: m(+2) + m(−2) = 0. This is why a perfectly symmetric head-on collision has zero net
-      momentum.
-Calibration: Exercises probe topic 1; difficulty approachable; about 5 min. Part (c) is the lever.
+  Pass 1: p_x = (1000)(20) = 20,000 kg*m/s (all from the car); p_y = (1500)(10) = 15,000 kg*m/s (all
+    from the truck). Total mass 2500 kg. v_x = 20,000/2500 = 8.0 m/s; v_y = 15,000/2500 = 6.0 m/s.
+    |v| = sqrt(8.0^2 + 6.0^2) = 10.0 m/s. Angle from east: arctan(6.0/8.0) = 36.9 degrees north of
+    east.
+  Pass 2 (re-derived through the total momentum): |p| = sqrt(20,000^2 + 15,000^2) = 25,000 kg*m/s;
+    |v| = 25,000/2500 = 10.0 m/s; the direction of p is arctan(15,000/20,000) = 36.9 degrees north
+    of east. Consistent.
+  Final answer: 10.0 m/s at 36.9 degrees north of east. Here the car has more momentum, so the wreck
+  leans east -- the opposite of the reading's example, and worth asking why.
+Calibration: Exercises probe topics 1 and 2; difficulty approachable; about 4 min.
 
-B -- Impulse-momentum theorem: force vs. time
-Statement: A 0.20 kg ball is caught in a glove. Its incoming speed is 15 m/s; it comes to rest.
-Two scenarios: (A) the catch takes 0.10 s; (B) the catch takes 0.01 s (a much harder impact).
-(a) What is the change in momentum? (b) What is the average force in each scenario?
-(c) Why does the hard impact hurt more?
+B -- An explosion from rest
+Statement: A 3.0 kg object at rest explodes into three 1.0 kg pieces. One moves east at 6.0 m/s;
+another moves north at 8.0 m/s. Find the velocity of the third piece.
 Worked answer (tutor reference only):
-  (a) Δp = m(v_f − v_i) = (0.20)(0 − 15) = −3.0 kg·m/s. This is the same in both scenarios.
-  (b) Scenario A: F_avg = Δp / Δt = (−3.0) / 0.10 = −30 N. Magnitude 30 N.
-      Scenario B: F_avg = (−3.0) / 0.01 = −300 N. Magnitude 300 N.
-  (c) Scenario B delivers the SAME momentum change but in 1/10 the time, so the force is 10 times
-      larger. That is why hard impacts hurt: large force over short time. Soft catches work the
-      opposite way: small force over long time.
-Calibration: Exercises probe topic 2; difficulty moderate; about 5 min. The insight is connecting
-force, time, and impulse.
+  Pass 1: total momentum before is zero. x: (1.0)(6.0) + 0 + p_3,x = 0, so p_3,x = -6.0 kg*m/s.
+    y: 0 + (1.0)(8.0) + p_3,y = 0, so p_3,y = -8.0 kg*m/s. |p_3| = sqrt(36 + 64) = 10.0 kg*m/s;
+    v_3 = 10.0/1.0 = 10.0 m/s. It points west and south, at arctan(8.0/6.0) = 53.1 degrees south
+    of west.
+  Pass 2 (re-derived graphically): the first two momenta, 6 east and 8 north, add tip-to-tail to a
+    10 kg*m/s arrow at 53.1 degrees north of east (a 6-8-10 right triangle). The third must be the
+    exact opposite: 10 kg*m/s at 53.1 degrees south of west. Consistent.
+  Final answer: 10.0 m/s at 53.1 degrees south of west.
+Calibration: Exercises probe topics 2 and 3; difficulty standard; about 4 min.
 
-C -- Momentum conservation in an inelastic collision
-Statement: Two carts collide and couple. Cart A (m_A = 2.0 kg) has velocity +4.0 m/s.
-Cart B (m_B = 3.0 kg) has velocity 0. After coupling, they move together.
-(a) What is the total momentum before collision?
-(b) What is the velocity after collision?
-(c) Is kinetic energy conserved? Calculate before and after.
-Take g = 10 m/s^2.
+C -- A glancing collision of equal pucks
+Statement: A hockey puck sliding east at 4.0 m/s strikes an identical puck at rest on frictionless
+ice. Afterwards the first puck moves at 2.0 m/s at 60 degrees north of east. Find the second puck's
+velocity. Then: was the collision elastic, and what angle separates the two pucks' paths?
 Worked answer (tutor reference only):
-  (a) p_total = m_A v_A + m_B v_B = (2.0)(+4.0) + (3.0)(0) = +8.0 kg·m/s.
-  (b) After coupling: p_total = (m_A + m_B) v_f
-      8.0 = (5.0) v_f
-      v_f = +1.6 m/s
-  (c) K_before = (1/2)(2.0)(4.0^2) + 0 = 16 J
-      K_after = (1/2)(5.0)(1.6^2) = 6.4 J
-      K is NOT conserved. Energy dissipated = 16 − 6.4 = 9.6 J. This energy went into
-      deformation, sound, and heat. MOMENTUM WAS CONSERVED (+8.0 before, +8.0 after); energy was not.
-Calibration: Exercises probe topics 2 and 3; difficulty standard; about 6 min.
+  Masses are equal, so they cancel from every momentum equation.
+  Pass 1: x: 4.0 = 2.0 cos(60) + v_2x = 1.0 + v_2x, so v_2x = 3.0 m/s.
+    y: 0 = 2.0 sin(60) + v_2y = 1.732 + v_2y, so v_2y = -1.732 m/s.
+    |v_2| = sqrt(3.0^2 + 1.732^2) = sqrt(9.0 + 3.0) = sqrt(12) = 3.46 m/s, at
+    arctan(1.732/3.0) = 30.0 degrees south of east.
+  Pass 2 (checks): kinetic energy per unit mass, (1/2)v^2: before (1/2)(16) = 8.0; after
+    (1/2)(4.0) + (1/2)(12.0) = 2.0 + 6.0 = 8.0. Equal, so the collision was elastic. The angle between
+    the paths is 60 + 30 = 90 degrees.
+  Final answer: 3.46 m/s at 30.0 degrees south of east; elastic; the pucks separate at 90 degrees.
+  (That right angle is the general result for an elastic collision between equal masses with one at
+  rest -- beyond the reading, and a nice thing to discover.)
+Calibration: Exercises probe topics 1 and 2; difficulty challenging; about 7 min.
 
-D -- Momentum conservation and Newton's third law
-Statement: A 1500 kg car traveling at +20 m/s collides with a stationary wall (treat the wall as
-part of an infinitely massive Earth). The collision lasts 0.2 s and the car comes to rest.
-(a) What is the impulse on the car? (b) What is the average force the wall exerts on the car?
-(c) By Newton's third law, what force does the car exert on the wall?
+D -- Working backwards, as an investigator would
+Statement: After a collision at an intersection, the locked-together wreck of a 1000 kg car
+(originally heading east) and a 2000 kg car (originally heading north) moves at 12 m/s at 30 degrees
+north of east. How fast was each car going just before the collision?
 Worked answer (tutor reference only):
-  (a) Δp_car = m(v_f − v_i) = (1500)(0 − 20) = −30,000 kg·m/s.
-      J = Δp = −30,000 kg·m/s (opposite to the car's motion).
-  (b) F_avg = J / Δt = (−30,000) / 0.2 = −150,000 N. The wall pushes on the car with a force of
-      150 kN backward (out of the wall).
-  (c) By Newton's third law, the car pushes on the wall with a force of +150 kN (into the wall).
-      The car and wall exchange equal and opposite forces. The wall's momentum does not change
-      because it is essentially infinite (connected to the Earth); the car's momentum changes
-      completely to zero.
-Calibration: Exercises probe topics 2, 3, and 4; difficulty challenging; about 7 min.
-The key insight: Newton's third law means the two forces are equal and opposite, but the
-momentum changes are different because the masses are vastly different.
+  Pass 1: total momentum afterwards = (3000)(12) = 36,000 kg*m/s.
+    p_x = 36,000 cos(30) = 31,177 kg*m/s, all from the eastbound car: v_1 = 31,177/1000 = 31.2 m/s.
+    p_y = 36,000 sin(30) = 18,000 kg*m/s, all from the northbound car: v_2 = 18,000/2000 = 9.0 m/s.
+  Pass 2 (re-derived forwards): x: (1000)(31.18)/3000 = 10.39 m/s; y: (2000)(9.0)/3000 = 6.0 m/s;
+    |v| = sqrt(10.39^2 + 6.0^2) = sqrt(108.0 + 36.0) = 12.0 m/s; arctan(6.0/10.39) = 30.0 degrees.
+    Consistent.
+  Final answer: the eastbound car at 31.2 m/s, the northbound car at 9.0 m/s.
+Calibration: Exercises probe topics 1 and 3 (the just-after-collision restriction is what makes it
+legitimate); difficulty standard; about 5 min.
 `;
 
 /* ============================================================================
@@ -1181,22 +1252,14 @@ A 2–4 sentence narrative summary in the AI's voice — what the conversation w
 // phase: "probe" (default) | "report" | "extension" -- see sysFor() in the component.
 function buildSystemPrompt(cadetId, localTime, phase) {
   return `You are a physics tutor for a USAFA cadet who has just completed the assigned reading for an
-upcoming Physics 110 LABORATORY session. Run a focused Socratic conversation — paced by independent
-per-topic budgets (see PACING below), typically on the order of 10–15 minutes of active discussion
-but with no hard cutoff — that surfaces what the cadet understands, identifies gaps and
-misconceptions, and prepares them to walk in and run the experiment. At the end, produce a
-structured report.
+upcoming Physics 110 class on collisions in two dimensions. Run a focused Socratic conversation —
+paced by independent per-topic budgets (see PACING below), typically on the order of 10–15 minutes
+of active discussion but with no hard cutoff — that surfaces what the cadet understands, identifies
+gaps and misconceptions, and prepares them for class. At the end, produce a structured report.
 
-Their assigned reading for this session is three documents together: the lab instructions, their
-course laboratory manual, and a textbook chapter on two-dimensional motion. All three are inlined
-below in TEXTBOOK_REFERENCE. When the cadet says "the reading," they may mean any of them — take it
-in stride, and never name a document back to them.
-
-Because this is a lab preflight, the useful questions are the ones that matter BEFORE they touch the
-apparatus: do they understand why this experiment can find a speed without ever timing anything, do
-they understand why the two directions of motion do not interfere, do they know what their graph is
-going to do and why, and do they understand what the uncertainty is for. Do not walk them through
-the procedure step by step — they have the instructions.
+The cadet already met momentum, impulse and one-dimensional collisions in the previous lesson. The
+new idea today is small and powerful: momentum is a vector, so conservation holds separately in
+each direction, and the pieces are recombined as vectors at the end.
 
 === EQUATIONS — WHAT TO ASK FOR, AND WHAT NOT TO ===
 Essential equations are fair game and genuinely important. A cadet should be able to name the
@@ -1210,11 +1273,11 @@ written work, not in a chat box, and asking for it here measures typing stamina 
 understanding.
 
 The practical line:
-  FINE — "What relationship connects net force, mass, and acceleration?"
-  FINE — "If the mass doubles and the net force stays the same, what happens to the acceleration?"
+  FINE — "If the car moves east and the truck moves north, which direction of momentum does the car contribute to?"
+  FINE — "Why do we write the conservation equation twice?"
   FINE — a cadet typing a short relationship, a single substitution, or one line of symbols.
-  NOT  — "Derive the expression for the acceleration down the incline."
-  NOT  — "Start from the kinematic equations and show how the final formula follows."
+  NOT  — "Solve for the magnitude and direction of the wreckage velocity."
+  NOT  — "Write out both component equations and eliminate the unknown angle."
   NOT  — anything whose answer runs beyond roughly one line of symbols.
 
 Prefer an explanation over a manipulation whenever both would do the job. If a cadet volunteers a
@@ -1239,30 +1302,6 @@ directly and confidently, having checked yourself against the reference.
 FORMATTING: Write every mathematical expression in LaTeX delimiters — $...$ for inline math and
 $$...$$ for displayed equations. Do not write equations in plain ASCII, Unicode symbols, or code
 spans; the app renders LaTeX directly.
-
-=== EQUATIONS — WHAT TO ASK FOR, AND WHAT NOT TO ===
-Essential equations are fair game and genuinely important. A cadet should be able to name the
-relationship that governs a situation, say what each symbol means, and reason with it. Ask for that
-freely — it is part of understanding the physics, not a distraction from it.
-
-What to avoid is making the cadet TYPE OUT EXTENDED ALGEBRA. Do not ask them to derive a result
-from first principles, carry out a multi-step rearrangement, "show that" one expression follows
-from another, or substitute their way to a final formula. That work belongs on paper and in their
-written work, not in a chat box, and asking for it here measures typing stamina rather than
-understanding.
-
-The practical line:
-  FINE — "What relationship connects net force, mass, and acceleration?"
-  FINE — "If the mass doubles and the net force stays the same, what happens to the acceleration?"
-  FINE — a cadet typing a short relationship, a single substitution, or one line of symbols.
-  NOT  — "Derive the expression for the acceleration down the incline."
-  NOT  — "Start from the kinematic equations and show how the final formula follows."
-  NOT  — anything whose answer runs beyond roughly one line of symbols.
-
-Prefer an explanation over a manipulation whenever both would do the job. If a cadet volunteers a
-longer derivation, engage with it fully and confirm whether it is right — never discourage that —
-but never require one, never re-ask for one, and never treat a correct plain-language explanation
-as incomplete.
 
 === HONOR CODE ===
 Begin the conversation by reminding the cadet:
@@ -1358,14 +1397,14 @@ agreeing with the cadet, or pushing back — run this check:
 5. Respond with calibrated confidence, not a flat yes/no.
 
 This applies especially to claims you might be tempted to confirm out of pleasantness. NEVER CONFIRM
-A WRONG PHYSICS CLAIM TO BE AGREEABLE. If a cadet says "an object moving at constant speed has no net force on it,"
-your job is to reject that clearly with reasoning, not nod along. Reasoning from the
-definition: the first law is about constant VELOCITY, and velocity is a vector. A car going
-round a bend at a steady 25 m/s is changing direction every instant, so it is accelerating,
-and something -- friction, here -- must be supplying that net force. Constant SPEED is not
-the same claim as constant velocity.
-Therefore: reject the claim, explain why -- and turn the correction into a probe ("Which part
-of the velocity is changing, if not its size?").
+A WRONG PHYSICS CLAIM TO BE AGREEABLE. If a cadet says "the car is going faster than the truck, so
+the wreckage heads mostly in the car's direction," correct that clearly with reasoning, not nod along.
+Reasoning from the physics: the direction of the wreckage is the direction of the TOTAL MOMENTUM, and
+momentum is mass times velocity, not velocity alone. In the reading's example the car is faster
+(60 km/h against 40 km/h) but the truck is 2.5 times as massive, so the truck carries more momentum
+and the wreckage leaves 59 degrees from the car's direction -- closer to the truck's. Therefore:
+reject the claim, explain why -- and turn it into a probe ("What would you need to compare, if not
+the speeds?").
 
 === CONFIDENCE LABELING ===
 Out-of-scope and extrapolated statements carry a label so the cadet can read your certainty:
@@ -1388,8 +1427,8 @@ Do not waste five minutes Socratically leading a cadet whose starting model is b
 back to ground truth, then resume probing from a corrected starting point.
 
 Minor misunderstanding — right framework, wrong detail or missing nuance. Use leading questions:
-  "Walk me through the units there."
-  "What happens to that term if the mass doubles?"
+  "What happens to the x-momentum in that collision?"
+  "Draw the two momentum arrows — what does adding them tip-to-tail give you?"
   "Where does the negative sign come from?"
 
 Stuck but not wrong — they don't know how to start. Use the scaffold ladder, escalating support
@@ -1409,7 +1448,7 @@ customer-service bot. Treat the cadet as a capable peer who simply hasn't seen t
     not on how impressive the cadet is.
   - Praise is information; spend it only when it's earned by something genuinely non-trivial: a
     sharp insight, a hard connection drawn unprompted, a misconception the cadet catches and fixes
-    through real reasoning. When you do praise, name WHAT was good ("that's the right symmetry
+    through real reasoning. When you do praise, name WHAT was good ("that's the right vector
     argument"), never generic ("great job!").
   - Do NOT praise ordinary or expected answers. Stating a definition or doing a one-step
     manipulation is the baseline, not an achievement — acknowledge it plainly ("Right.") and move
@@ -1429,7 +1468,7 @@ customer-service bot. Treat the cadet as a capable peer who simply hasn't seen t
 The cadet must demonstrate understanding through articulation. Reject these patterns:
   - Compliance noises ("Yes" / "Got it" / "Makes sense") in response to conceptual questions →
     re-ask: "Then walk me through it."
-  - Generic answers ("It's about motion" / "You use the equations") → press for specifics.
+  - Generic answers ("It's about momentum" / "You use the equations") → press for specifics.
   - Textbook paraphrase that does not show understanding → ask them to apply the idea, not restate
     it.
   - One-word answers to open questions → re-prompt for explanation.
@@ -1621,11 +1660,11 @@ written work, not in a chat box, and asking for it here measures typing stamina 
 understanding.
 
 The practical line:
-  FINE — "What relationship connects net force, mass, and acceleration?"
-  FINE — "If the mass doubles and the net force stays the same, what happens to the acceleration?"
+  FINE — "If the car moves east and the truck moves north, which direction of momentum does the car contribute to?"
+  FINE — "Why do we write the conservation equation twice?"
   FINE — a cadet typing a short relationship, a single substitution, or one line of symbols.
-  NOT  — "Derive the expression for the acceleration down the incline."
-  NOT  — "Start from the kinematic equations and show how the final formula follows."
+  NOT  — "Solve for the magnitude and direction of the wreckage velocity."
+  NOT  — "Write out both component equations and eliminate the unknown angle."
   NOT  — anything whose answer runs beyond roughly one line of symbols.
 
 Prefer an explanation over a manipulation whenever both would do the job. If a cadet volunteers a
@@ -2206,6 +2245,16 @@ function errorMessage(err, { afterRetries = false } = {}) {
       return "That model returned an empty answer. It happens when the summary runs long or the model is overloaded. Retry will use a different one.";
     case "badrequest":
       return "Google rejected that request \u2014 most likely the conversation has grown too long, which happens sooner when it was carried over from Claude. Your key is fine. Press Retry, and tell your instructor if it keeps happening.";
+    case "timeout":
+      return "The tutor stopped responding partway through and the lighter backup model did"
+        + " too. Nothing you typed is lost — Retry picks up where you left off, or continue"
+        + " on Gemini below.";
+    case "empty":
+      return "The tutor returned an empty reply on every available model. Retry, or continue"
+        + " on Gemini below — it runs the same lesson and keeps what you have done so far.";
+    case "refusal":
+      return "The tutor declined to answer that one. Rephrase your last message and send it"
+        + " again — the rest of your conversation is unaffected.";
     case "network":
       return "Couldn't reach the tutor — check your connection and Retry.";
     default:
@@ -2646,6 +2695,30 @@ const STYLE = `
                  background: var(--white); color: #dc2626; border: 1px solid #fecaca;
                  border-radius: var(--radius-sm); cursor: pointer; }
 
+  /* ── Finish bar ──
+     The director's 2026-08-21 ask, replacing a 12px link in the footer strip: a large
+     centred Submit with a "Keep talking" continue beside it. Navy fill on the primary,
+     outline on the secondary -- the same pairing as .start-btn / .study-btn, and
+     deliberately NOT amber, which THEME_REFERENCE reserves. */
+  /* The finish bar. Full width above the composer, because submitting is the only
+     thing left to do and it used to be a 12px link in the footer strip. */
+  .finish-bar { flex-shrink: 0; border-top: 2px solid var(--navy); background: #f1f5f9;
+                padding: 16px; text-align: center; }
+  .finish-note { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+  .finish-actions { display: flex; gap: 12px; justify-content: center; align-items: center;
+                    flex-wrap: wrap; }
+  .finish-submit { display: inline-block; padding: 14px 36px; background: var(--navy);
+                   color: var(--white); border: none; border-radius: var(--radius-sm);
+                   font-size: 16px; font-weight: 700; text-decoration: none; cursor: pointer;
+                   transition: background .15s; }
+  .finish-submit:hover { background: var(--navy-light); }
+  .finish-continue { padding: 13px 22px; background: var(--white); color: var(--navy);
+                     border: 2px solid var(--navy); border-radius: var(--radius-sm);
+                     font-size: 14px; font-weight: 600; cursor: pointer;
+                     transition: background .15s; }
+  .finish-continue:hover { background: #e2e8f0; }
+  .finish-wait { font-size: 13px; color: var(--text-muted); }
+
   /* ── Composer ── */
   .composer { border-top: 1px solid #e2e8f0; padding: 12px 16px;
               display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0;
@@ -2668,24 +2741,9 @@ const STYLE = `
             align-items: center; justify-content: space-between; flex-shrink: 0;
             background: var(--white); }
   .footer-note { font-size: 11px; color: var(--text-muted); }
-  /* The finish bar. Full width above the composer, because submitting is the only
-     thing left to do and it used to be a 12px link in the footer strip. */
-  .finish-bar { flex-shrink: 0; border-top: 2px solid var(--navy); background: #f1f5f9;
-                padding: 16px; text-align: center; }
-  .finish-note { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
-  .finish-actions { display: flex; gap: 12px; justify-content: center; align-items: center;
-                    flex-wrap: wrap; }
-  .finish-submit { display: inline-block; padding: 14px 36px; background: var(--navy);
-                   color: var(--white); border: none; border-radius: var(--radius-sm);
-                   font-size: 16px; font-weight: 700; text-decoration: none; cursor: pointer;
-                   transition: background .15s; }
-  .finish-submit:hover { background: var(--navy-light); }
-  .finish-continue { padding: 13px 22px; background: var(--white); color: var(--navy);
-                     border: 2px solid var(--navy); border-radius: var(--radius-sm);
-                     font-size: 14px; font-weight: 600; cursor: pointer;
-                     transition: background .15s; }
-  .finish-continue:hover { background: #e2e8f0; }
-  .finish-wait { font-size: 13px; color: var(--text-muted); }
+  /* .report-actions / .submit-btn / .submit-hint were removed with the footer Submit link
+     they styled -- see .finish-bar above. Left as dead rules they would be a live-looking
+     landing pad for the next person rebasing off this file. */
 `;
 
 /* ============================================================================
@@ -2927,7 +2985,7 @@ function RichText({ text }) {
    Component
    ========================================================================== */
 
-function Lesson07Preflight() {
+function Lesson21Preflight() {
   const [mode, setMode]       = useState(null);   // "graded" | "study" — set once, never reassigned
   const [started, setStarted] = useState(false);
   const [cadetId, setCadetId] = useState("");      // holds the last name; do NOT rename
@@ -2990,10 +3048,33 @@ function Lesson07Preflight() {
   const lzState = useLzString();          // "loading" | "ready" | "failed"
   const lzReady = lzState === "ready";
 
+  // "Keep talking" -- the finish bar's continue. See sysFor() for why this is its own flag
+  // rather than a flip of `mode`.
+  const [keepTalking, setKeepTalking] = useState(false);
+  const [confirmContinue, setConfirmContinue] = useState(false);
+  const studySysRef = useRef("");
+
   // Compose the system prompt for the CURRENT phase instead of reusing one built at start.
   // Study mode is untouched: it needs its practice problems from turn one and never
   // produces a report, so it keeps the prompt built in startSession.
-  function sysFor() {
+  // `gradedOverride` forces the graded prompt regardless of "Keep talking". Two hidden
+  // system turns need it, and both fire while the finish bar is already on screen with its
+  // Keep-talking button live: the payload repair asks for a jitt-data block, which the study
+  // prompt is under hard instructions to refuse, and the extension trigger cites a section
+  // the study prompt does not contain. Neither is the cadet's turn, so neither is theirs to
+  // switch.
+  function sysFor(gradedOverride) {
+    // After "Keep talking" the conversation continues under the STUDY prompt while the
+    // session STAYS in graded mode. Flipping `mode` to "study" is the obvious move and it
+    // is wrong three times over: submitUrl, the payload leak guard and the report effects
+    // all gate on mode === "graded", so it would strip the cadet's own Submit button off
+    // the screen moments after they earned it, and stop scrubbing jitt-data from anything
+    // the tutor says next. The study prompt also refuses to emit a second report or a
+    // second payload, which is exactly the behaviour wanted here.
+    if (keepTalking && !gradedOverride) {
+      if (!studySysRef.current) studySysRef.current = buildStudySystemPrompt();
+      return studySysRef.current;
+    }
     const a = sysArgsRef.current;
     // Belt and braces on the primary trigger: once the report exists we are in the
     // extension, and once active time passes the whole planned budget the close can arrive
@@ -3436,7 +3517,7 @@ function Lesson07Preflight() {
     setMessages((prev) => [...prev, repair]);
     (async () => {
       try {
-        const reply = await callTutor(activeModelRef, history, sysFor(), null);
+        const reply = await callTutor(activeModelRef, history, sysFor(true), null);
         setMessages((prev) => [...prev, { role: "assistant", hidden: true, content: reply }]);
         const { data } = extractPayload(reply);
         if (data) {
@@ -3467,7 +3548,7 @@ function Lesson07Preflight() {
     (async () => {
       setLoading(true);
       try {
-        const reply = await callTutor(activeModelRef, history, sysFor(), null);
+        const reply = await callTutor(activeModelRef, history, sysFor(true), null);
         setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
       } catch (err) {
         setError(mkError(err, () => {
@@ -3505,7 +3586,7 @@ function Lesson07Preflight() {
           <div className="header">
             <div>
               <div className="eyebrow">Physics 110 · Fall 2026 · JiTT Preflight</div>
-              <div className="title">Lesson 20 — Linear Momentum & 1-D Collisions</div>
+              <div className="title">Lesson 21 — 2-D Collisions</div>
             </div>
           </div>
 
@@ -3640,7 +3721,7 @@ function Lesson07Preflight() {
         <div className="header">
           <div>
             <div className="eyebrow">Physics 110 · Fall 2026 · JiTT Preflight</div>
-            <div className="title">Lesson 20 — Linear Momentum & 1-D Collisions</div>
+            <div className="title">Lesson 21 — 2-D Collisions</div>
             {mode === "graded" && cadetId.trim() && (
               <div className="subtitle">{cadetId.trim()}</div>
             )}
@@ -3761,6 +3842,8 @@ function Lesson07Preflight() {
           </button>
         </div>
 
+        {/* The Submit link that used to live here is now the finish bar above. The footer
+            goes back to being a hint strip, which is all it was ever good at. */}
         <div className="footer">
           <span className="footer-note">Enter to send &middot; Shift+Enter for new line</span>
         </div>
@@ -3771,7 +3854,7 @@ function Lesson07Preflight() {
 
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(React.createElement(Lesson07Preflight));
+root.render(React.createElement(Lesson21Preflight));
 </script>
 <script>
   // Babel parse errors land on window.onerror, not in the page. Surface them: publishing on

@@ -57,7 +57,7 @@ Write down the **line count** and the **exact `INTERACTION_ID`**. You need both 
 
 ## 2. Publish
 
-Start a session and attach the `.jsx`. Paste the prompt below with it, unchanged.
+Start a session and attach the `.jsx` — **one file per session**. Paste the prompt below with it, unchanged.
 
 > **If you use the course's Claude Project, the first line is the one that matters.** The
 > `preflight-factory-v2` skill is in that project's knowledge and is written to *build* an artifact.
@@ -66,7 +66,8 @@ Start a session and attach the `.jsx`. Paste the prompt below with it, unchanged
 > slug**, which is the silent failure this whole runbook exists to prevent.
 
 ```
-Publish the attached .jsx as a React artifact, byte-for-byte as written.
+Render the attached .jsx as a React artifact, byte-for-byte as written; I will
+publish it myself afterwards.
 
 DO NOT run the preflight-factory-v2 skill. This file is already a finished,
 verified build. There is nothing to generate.
@@ -106,13 +107,20 @@ Specifically, do NOT:
 If any part of the file is unclear or looks wrong, say so and stop. Do not
 fix it.
 
-After publishing, confirm to me:
-  1. total line count of what you published
+After rendering, confirm to me:
+  1. total line count of what you rendered
   2. the exact value of INTERACTION_ID
   3. that the last line of the file is a single closing brace
 ```
 
 Then **Share → Publish** and copy the public URL (`https://claude.ai/public/artifacts/…`).
+
+> **The prompt says *Render*, not *Publish*, on purpose** *(changed 2026-09-23)*. A Claude session
+> cannot publish — only you can, from the artifact panel — so the old wording asked it for
+> something it could not do. And a session handed **several** files at once asks which to render and
+> may offer to "copy it into the output folder": that produces a file card, not a live preview, and
+> a file card has no Publish button. What you want to see before publishing is the start screen
+> running in the side panel.
 
 ---
 

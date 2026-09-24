@@ -8,6 +8,90 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-09-23 — Bryan Egner via Claude
+
+### PHYS 110 Lessons 20–23 built and published; Lesson 20's unpublished first build replaced wholesale, and Lesson 19 finally has a build-log section
+
+**Built and published four preflights** for PHYS 110 Fall 2026, each **NOT YET REGISTERED** (no
+`app.activities` row carries the slug, so no cadet can reach one until a director attaches it to the
+existing `preflight-NN` lesson — prefill link, **Existing assignment**, `policy=choice`):
+
+| Lsn | Slug | Published |
+|---|---|---|
+| 20 | `lesson-20-linear-momentum-1-d-collisions-e64195e3` | `https://claude.ai/public/artifacts/1f883bde-e02c-4bf3-8e64-836260ecb884` |
+| 21 | `lesson-21-2-d-collisions-bbf388ba` | `https://claude.ai/public/artifacts/1707781c-669b-4d86-b5b3-c83a56d8002f` |
+| 22 | `lesson-22-center-of-mass-systems-of-particles-b554fa74` | `https://claude.ai/public/artifacts/7b37a4a5-0c58-4f1d-9267-e07368f60696` |
+| 23 | `lesson-23-lab-4-conservation-of-momentum-8004558e` | `https://claude.ai/public/artifacts/216e1e26-15e9-46e5-8b08-00d68b7652e8` |
+
+Each URL was verified by loading it and reading the page title, not by trusting paste order.
+
+**All four are built on Lesson 19's source**, the only one carrying the 2026-08-21 fix set
+(`TUTOR-BEHAVIOR-PARITY.md` §5), by asserted once-only byte substitutions. Only the header, the slug,
+the topic count, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its
+examples, and the two UI titles differ. **The study-mode prompt gets back the EQUATIONS,
+VERIFICATION PROTOCOL and CONFIDENCE LABELING sections the kit specifies.** Lessons 10–18 have them;
+Lesson 19 dropped them, so every build copied from it would have too. They were restored from
+Lesson 14. Each source parses clean under the site's vendored Babel. `check_artifact.py` reports
+31/1 on each (the known `[]` false positive), and the `BACKUP_ENDPOINT` count is 3.
+
+**Lesson 20 was rebuilt, not patched.** A 2026-09-18 build existed and was never published or
+registered. It had these defects:
+
+- invented worked examples in place of the reading's thirteen
+- a header copied from the Newton's Laws block
+- an extension problem teaching that the Earth's momentum does not change in a collision, the
+  opposite of the reading's bouncing-superball example
+
+Its slug stem was also corrected from `1d` to `1-d` per the generation rule, keeping the
+`e64195e3` suffix. **The old build's Gemini page had been committed and was publicly served**
+(`site/gemini/phys-110/lesson-20-linear-momentum-1d-collisions-e64195e3.html`, commit `d4cb2e5`).
+It is removed here, along with its `backup-builds.json` entry. No activity ever carried that slug.
+
+**Grounding findings the tutors now carry**, all read from page images:
+
+- **Example 9.14:** the page labels a 59° angle that is actually north of east, i.e. 31° east of
+  north.
+- **§9.5 / Example 9.15:** the course's section PDF ends mid-example. The rest was read from p. 419
+  of the next PDF (v₃ = 106 m/s at 6.49°, 183.5°).
+- **§9.6:** the PDF ends mid-sentence on p. 433. The grounding says so rather than reconstructing
+  the missing text.
+- **Example 9.13:** the car's speed is labelled `v_T,i` on the page; it is 27.5 m/s.
+- **Lesson 22's scope:** the syllabus's "9.6–9.7" is Cengage numbering, and both sections map
+  wholly onto OpenStax §9.6. So the absence of rocket propulsion is correct.
+
+Lesson 21 has **three** probe topics, because §9.5 carries one idea. Lesson 23 is a LAB preflight
+grounded on the Lab 4 Instructions ("Conservation Laws During Collisions", 1 Aug 2026) as primary,
+with the LAB 1–3 scope decisions carried forward.
+
+**Gemini builds** were ported with `to_gemini.py` for all four. Each was rendered to its start
+screen from a local static server, with every script returning 200. `site/data/backup-builds.json`
+is updated. The porter holds unpublished rows, so the local `index.json` was stamped with the four
+URLs first. That file is gitignored and regenerated on push, so `BUILD-LOG.md` carries the same
+facts.
+
+**`BUILD-LOG.md` now has sections for Lessons 19–23.** Lesson 19 was built and published on
+2026-09-22 without one, and `sync_artifacts.py push` catalogues from the log. Without the section,
+the next push would have served Lesson 19 with no published URL. Its section records only what is
+sourced. Lesson 18 still has no section; it is unpublished, and its content is under review.
+
+**`PUBLISH-ARTIFACT.md` §2 now says *Render*, not *Publish*.** A Claude session cannot publish;
+only the director can, from the artifact panel. Two further findings from tonight are now in the
+runbook as one file per session:
+
+- A session handed several files at once asks which to render.
+- It offers to "copy it into the output folder", which yields a file card with no Publish button.
+
+**Still open:**
+
+- Registration of all five (19–23) is a director's Save on the site.
+- Lesson 19 still lacks the three study-mode sections.
+- Lessons 10–17 (published) and 18 (unpublished) carry Lab 1's projectile-motion framing in their
+  system prompts.
+
+The Lesson 19 and Lessons 10–18 items are for the course director on Friday.
+
+---
+
 ## 2026-09-23 — Matthew Recker via Claude
 
 ### The dashboard said "Due tomorrow" all morning on the day the work was due

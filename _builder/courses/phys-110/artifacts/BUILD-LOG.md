@@ -207,3 +207,78 @@ pointer from a lesson back to the exact build a cadet is running.
 | **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`; bracket delta is +1, identical to the template, so nothing was introduced |
 | **Scope decisions** | CONCEPTUAL, per this course's standing decision: the tutor never asks a cadet to type out or manipulate a derivation. Cadets take this **before** the lesson, so probe preparation, never results |
 | **Status** | **PUBLISHED 2026-08-22.** Registered on the existing `preflight-17` lesson as its second activity beside `phys-110-preflight-17-written`, `policy=choice` |
+
+### Lesson 19 — LAB 3: Conservation of Energy
+
+| | |
+|---|---|
+| **File** | [`lesson_19_preflight_lab3_conservation_of_energy.jsx`](lesson_19_preflight_lab3_conservation_of_energy.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-19-lab-3-conservation-of-energy-290e6de1` |
+| **Published** | 2026-09-22 — https://claude.ai/public/artifacts/34dfff65-bb63-49d1-afab-0f09c0e648f5 — published by the course director |
+| **Built** | 2026-09-22, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Note** | **Section added 2026-09-23, after the fact.** Lesson 19 was built and published without a section here, so the next `sync_artifacts.py push` would have catalogued it with no published URL. This section records only what is sourced (the file, its slug, the URL recorded on 2026-09-22); the build's detail is in `CHANGELOG.md` under 2026-09-22. Its study-mode prompt lacks the EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections the kit specifies — lessons 20–23 restore them; lesson 19 has not been patched |
+| **Status** | **PUBLISHED 2026-09-22.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-19` lesson |
+
+### Lesson 20 — Linear Momentum & 1-D Collisions
+
+| | |
+|---|---|
+| **File** | [`lesson_20_preflight_linear_momentum_collisions.jsx`](lesson_20_preflight_linear_momentum_collisions.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-20-linear-momentum-1-d-collisions-e64195e3` |
+| **Published** | 2026-09-23 — https://claude.ai/public/artifacts/1f883bde-e02c-4bf3-8e64-836260ecb884 — published by the course director; URL pasted back and then VERIFIED by loading the page and reading its title, rather than trusting list order |
+| **Built** | 2026-09-23, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-19-lab-3-conservation-of-energy-290e6de1` (the first source carrying the 2026-08-21 fix set, `TUTOR-BEHAVIOR-PARITY.md` §5) by asserted once-only substitutions; only the header, `INTERACTION_ID`, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. The study-mode prompt carries the EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections the kit specifies — lesson 19 dropped them — restored from `lesson-14-energy-of-a-system-work-23ff79ca`. Spliced in **bytes**, LF preserved (2504 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 ch. 9 §§9.1–9.4, pp. 380–411, read as page images; all thirteen worked examples reproduced. The cadets' Cengage §§9.1–9.4 cover the same four topics. Example 9.13's page labels the car's speed `v_T,i`; it is the car's, 27.5 m/s |
+| **Probe topics** | 4 — `momentum-vector`, `impulse-momentum`, `closed-system-conservation`, `collision-types-energy`. Prose bound to keys |
+| **Extensions** | 4 (A–D): stopping versus bouncing (impulse is a change in momentum), a perfectly inelastic collision, an elastic collision with unequal masses, an explosion from rest. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3. Gemini build ported the same day and rendered to its start screen from a local static server |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. **REBUILT.** A first build dated 2026-09-18 was never published or registered and was replaced wholesale: invented worked examples in place of the reading's, a header copied from the Newton's Laws block, and an extension teaching that the Earth's momentum does not change. Slug stem corrected from `1d` to `1-d` per the generation rule, suffix `e64195e3` kept; that build's Gemini page (`lesson-20-linear-momentum-1d-collisions-e64195e3.html`) was removed from `site/gemini/` and `backup-builds.json` the same day |
+| **Status** | **PUBLISHED 2026-09-23.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-20` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 21 — 2-D Collisions
+
+| | |
+|---|---|
+| **File** | [`lesson_21_preflight_2d_collisions.jsx`](lesson_21_preflight_2d_collisions.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-21-2-d-collisions-bbf388ba` |
+| **Published** | 2026-09-23 — https://claude.ai/public/artifacts/1707781c-669b-4d86-b5b3-c83a56d8002f — published by the course director; URL pasted back and then VERIFIED by loading the page and reading its title, rather than trusting list order |
+| **Built** | 2026-09-23, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-19-lab-3-conservation-of-energy-290e6de1` (the first source carrying the 2026-08-21 fix set, `TUTOR-BEHAVIOR-PARITY.md` §5) by asserted once-only substitutions; only the header, `INTERACTION_ID`, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. The study-mode prompt carries the EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections the kit specifies — lesson 19 dropped them — restored from `lesson-14-energy-of-a-system-work-23ff79ca`. Spliced in **bytes**, LF preserved (2349 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 ch. 9 §9.5, pp. 412–419, read as page images. The lesson PDF ends mid-Example 9.15; the rest was read from p. 419 of the next section's PDF (v₃ = 106 m/s at 6.49°, 183.5°). Example 9.14's 59° is north of east — 31° east of north — whatever the page's label says |
+| **Probe topics** | 3 — `component-conservation`, `vector-momentum-addition`, `closed-system-2d`. Prose bound to keys |
+| **Extensions** | 4 (A–D): two vehicles meeting at right angles, an explosion from rest, a glancing collision of equal pucks, working backwards as an investigator would. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3. Gemini build ported the same day and rendered to its start screen from a local static server |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. **Three** probe topics, not four: §9.5 carries one idea — conserve momentum in each direction separately — and the skill's rule is 3 for a genuinely narrow lesson |
+| **Status** | **PUBLISHED 2026-09-23.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-21` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 22 — Center of Mass / Systems of Particles
+
+| | |
+|---|---|
+| **File** | [`lesson_22_preflight_center_of_mass_systems_of_particles.jsx`](lesson_22_preflight_center_of_mass_systems_of_particles.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-22-center-of-mass-systems-of-particles-b554fa74` |
+| **Published** | 2026-09-23 — https://claude.ai/public/artifacts/7b37a4a5-0c58-4f1d-9267-e07368f60696 — published by the course director; URL pasted back and then VERIFIED by loading the page and reading its title, rather than trusting list order |
+| **Built** | 2026-09-23, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-19-lab-3-conservation-of-energy-290e6de1` (the first source carrying the 2026-08-21 fix set, `TUTOR-BEHAVIOR-PARITY.md` §5) by asserted once-only substitutions; only the header, `INTERACTION_ID`, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. The study-mode prompt carries the EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections the kit specifies — lesson 19 dropped them — restored from `lesson-14-energy-of-a-system-work-23ff79ca`. Spliced in **bytes**, LF preserved (2405 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 ch. 9 §9.6, pp. 419–433, read as page images. The syllabus's "9.6–9.7" is Cengage numbering (Center of Mass; Systems of Many Particles), and both map wholly onto OpenStax §9.6, so the absence of rocket propulsion is correct. The PDF ends mid-sentence on p. 433; the grounding says so rather than reconstructing it |
+| **Probe topics** | 4 — `cm-weighted-average`, `internal-forces-cancel`, `cm-follows-external-force`, `cm-velocity-constant`. Prose bound to keys |
+| **Extensions** | 4 (A–D): two masses on a line, three masses with a center of mass where nothing is, two skaters pushing apart, a shell that explodes at the top. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3. Gemini build ported the same day and rendered to its start screen from a local static server |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision — which matters more than usual here, because the reading derives F_ext = M a_CM through a page of summations |
+| **Status** | **PUBLISHED 2026-09-23.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-22` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 23 — LAB 4: Conservation of Momentum
+
+| | |
+|---|---|
+| **File** | [`lesson_23_preflight_lab4_conservation_of_momentum.jsx`](lesson_23_preflight_lab4_conservation_of_momentum.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-23-lab-4-conservation-of-momentum-8004558e` |
+| **Published** | 2026-09-23 — https://claude.ai/public/artifacts/216e1e26-15e9-46e5-8b08-00d68b7652e8 — published by the course director; URL pasted back and then VERIFIED by loading the page and reading its title, rather than trusting list order |
+| **Built** | 2026-09-23, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-19-lab-3-conservation-of-energy-290e6de1` (the first source carrying the 2026-08-21 fix set, `TUTOR-BEHAVIOR-PARITY.md` §5) by asserted once-only substitutions; only the header, `INTERACTION_ID`, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. The study-mode prompt carries the EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections the kit specifies — lesson 19 dropped them — restored from `lesson-14-energy-of-a-system-work-23ff79ca`. Spliced in **bytes**, LF preserved (2401 lines) |
+| **Grounding** | PHYS 110 Fall 2026 Lab 4 Instructions ("Conservation Laws During Collisions", 1 Aug 2026, 3 pp. including the rubric) as PRIMARY; OpenStax Univ. Physics Vol. 1 §§9.3–9.4 (the lesson 20 reading) as supplemental theory. Both read as page images |
+| **Probe topics** | 4 — `lab4-closed-system`, `lab4-kinetic-energy-change`, `lab4-equal-mass-assumption`, `lab4-measurement-uncertainty`. Prose bound to keys |
+| **Extensions** | 4 (A–D): one elastic trial and why kinetic energy is the touchier result, the ideal magnet collision, what if the masses are not quite equal, reporting a result and judging agreement. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3. Gemini build ported the same day and rendered to its start screen from a local static server |
+| **Scope decisions** | LAB preflight, decisions carried forward from LABs 1–3: CONCEPTUAL (the report's Theory section is where derivation belongs); the reported uncertainty is the STANDARD DEVIATION OF THE MEAN, which the supplied Excel template computes; cadets take it BEFORE running the experiment, so probe preparation, never results. This lab has no bonus |
+| **Status** | **PUBLISHED 2026-09-23.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-23` lesson (prefill link, **Existing assignment**, `policy=choice`) |
