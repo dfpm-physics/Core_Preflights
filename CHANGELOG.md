@@ -90,6 +90,24 @@ runbook as one file per session:
 
 The Lesson 19 and Lessons 10–18 items are for the course director on Friday.
 
+**Storage push (`artifact-sources`), done after the commit — phys-110 only, on purpose.** The bucket's
+phys-110 catalogue held only Lessons 2, 7, 8, 9 and 11, so the faculty Artifacts page had never
+shown 10–19. It now holds all 17 (2–23, less 13), each source byte-identical to the local cache and
+Lessons 19–23 carrying their URLs, verified by pulling it back. A plain `push --commit` from this
+machine would have been destructive: the local cache held only phys-110's twelve newest sources, and
+the push rebuilds every course's `index.json` from whatever is local, which would have emptied the
+phys-215 and phys-310 catalogues. The cache was first filled from the bucket (`pull`, then each
+source placed under its recorded filename), and only `phys-110/` objects were uploaded.
+
+**Held back for Matt: phys-310's log is ahead of its sources.** `BUILD-LOG.md` records
+`phys310-detection-methods-gas-filled-detectors-edc3bbb5` as re-aimed 2026-09-22 (2446 lines) and
+`phys310-radiation-interactions-with-materials-1dd51596` as revised 2026-09-11 (2578 lines), but
+the bucket still holds their 2120- and 2265-line sources. Pushing phys-310 from here would pair
+the new log text with the old files, so its three changed objects were not uploaded. Push them
+from the machine that holds the revised `.jsx`. Separately, the bucket carries a second,
+uncatalogued half-life source (`phys310-lab-1-measurement-of-half-life-1f096984`) that shares
+its filename with the catalogued `…-11c49dbc`.
+
 ---
 
 ## 2026-09-23 — Matthew Recker via Claude
