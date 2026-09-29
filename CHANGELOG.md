@@ -10,6 +10,36 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-09-29 — Casey Pellizzari via Claude
 
+### Five published no-submission zeros that sat over real work were regraded (phys-110)
+
+**What.** The new Publish card listed five phys-110 grades as *published as a zero, but the cadet
+handed in*. At the course director's request each was **reopened** (a `reopened` grade event under
+the director, `detail.via = 'regrade-stale-zero'`) and **regraded by the `/preflight-analyze` rules**
+— three-state grading, tailored feedback, the full `schema: 1` diagnostic, textbook grounding read
+for the two lessons whose answers carried physics. They are now **unpublished `ai_suggested`
+suggestions**; the director publishes them from Course Admin → Export, where they appear as ready.
+
+| Lesson | Cadet | Section | Was | Now |
+|---|---|---|---|---|
+| `preflight-02` | 3000139695 | M5A | 0/2 published | 1/2 — Q2 red (no reflection), Q3 yellow (`accel-sign-alone`) |
+| `preflight-02` | 3000139431 | T5A | 0/2 published | 2/2 |
+| `preflight-02` | 3000139076 | T5B | 0/2 published | 1/2 — Q2 red (reported no Cengage access; the 2026-08-11 obstacle rule), Q3 yellow (no example) |
+| `preflight-08` | 3000141022 | M5C | 0/2 published | 2/2 |
+| `preflight-09` | 3000130308 | T1B | 0/2 published | 0/2 — a **draft** that answers only the 0-point Q1; Q2/Q3 blank, now "No answer provided." |
+
+**Why.** Each held the AI's "No submission received." zero, written before the cadet handed in under
+an extension (or, for the draft, saved answers) and later published by a Finalize that could not
+tell — the defect fixed in the entry below. The sixth such grade, phys-215 `preflight-05`
+3000129690, the director had already regraded by hand at 07:53.
+
+**Verified.** The five rows were snapshotted and re-checked against live immediately before the
+write (still finalized zeros, `updated_at` unchanged). Read back exactly: one row each,
+`is_finalized = false`, `source = 'ai_suggested'`, `graded_by` null, `question_scores` and the whole
+`diagnostic` byte-equal to what was written, no `no_submission` key left. Three `analysis_runs`
+rows (`73d50045…` preflight-02, `0185a5e6…` preflight-08, `104275cc…` preflight-09) closed
+`success`. A dry run of the publish rule afterwards shows phys-110 with 0 published-but-wrong and all
+five ready to publish.
+
 ### Publishing is complete now: a director's "Publish everything that is due", a Finalize that reaches every card, and a Save draft that can no longer un-publish
 
 **Why.** Directors were finding blank cells in every Blackboard export — the Blackboard fill writes a
