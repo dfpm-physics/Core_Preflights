@@ -45,8 +45,13 @@ WHO GETS A ZERO  (all six, or nothing is written)
     A DRAFT WITH REAL CONTENT IS NOT A ZERO. Somebody who wrote answers and never pressed Submit is
     graded on what they wrote (SKILL.md Step 5). They are reported here, and skipped.
 
-    THE SAME SIX CONDITIONS LIVE IN `.ai/skills/preflight-analyze/SKILL.md` Step 9, which is where
-    the live path implements them. CHANGE ONE, CHANGE BOTH — they are one decision written twice.
+    THE SAME SIX CONDITIONS LIVE IN TWO OTHER PLACES: `.ai/skills/preflight-analyze/SKILL.md` Step 9,
+    which is where the live path implements them, and `planPublish()` in `site/js/faculty-grade.js`
+    (added 2026-09-29), which creates the zero when a director's "Publish everything that is due" or
+    an instructor's Finalize & publish finds a cadet with no grade at all. CHANGE ONE, CHANGE ALL
+    THREE — they are one decision written three times. The browser copy differs in who writes the row
+    (`source: 'instructor'`, published at once) and in one refusal the others do not need: a viewer
+    who cannot see every section cannot check condition 6, so it holds the zero instead.
 
 WHAT IT DOES NOT CHANGE
     Any cohort number. `/lesson-aggregate` and the rollup read students who have a submission

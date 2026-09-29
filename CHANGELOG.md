@@ -8,6 +8,83 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-09-29 — Casey Pellizzari via Claude
+
+### Publishing is complete now: a director's "Publish everything that is due", a Finalize that reaches every card, and a Save draft that can no longer un-publish
+
+**Why.** Directors were finding blank cells in every Blackboard export — the Blackboard fill writes a
+blank, never a zero, for anything unpublished (`blackboard-fill.js` rule 2, which is right) — and
+instructors had taken to typing "no submission" into each no-submission card to force a zero
+through. The course director asked for a mass publish that only a director can run, that gives a
+non-submitter a zero, and for the instructors' own Finalize to be fixed too. Four causes, all on the
+Grade page, measured read-only on the live database:
+
+| Cause | Size today |
+|---|---|
+| Finalize sent only **edited** rows from no-submission and interactive cards (`effortRows()` rule 2), so on any lesson with an iPREP option the AI's zero for a cadet who handed in nothing was never published | phys-110 351, phys-215 212 unpublished zeros |
+| Past-due non-submitters with **no grade row at all** — every Lesson 7 non-submitter in both courses (the first iPREP lesson; no zero was ever written for it), plus any night the scheduled run missed | phys-110 24, phys-215 27 |
+| **Save draft un-published grades.** `gradeRows()` rule 1 re-sent every untouched card with a prior grade — published ones included — carrying `is_finalized: false`. One Save draft on "All sections" at 06:53:05 today took 117 published phys-110 `preflight-18` grades back down across eight sections and six instructors' work, and nothing on screen said so (83 were still down when this landed) | 117 today, 1 on 2026-08-13 |
+| A zero written before a cadet handed in under an extension stayed on the card looking like a grade, and the next Finalize re-published it over their work. Two help pages promised the next run would replace it; the scheduled run never goes back to an old lesson | 6 cadets |
+
+**What changed.**
+
+- **One rule, `planPublish()`** in `site/js/faculty-grade.js`, decides per cadet per lesson: publish a
+  saved grade that is due; create a zero for a cadet with no grade and no work; or **hold** it for a
+  person — still has time, a stale zero, handed in after grading, work nobody graded, work on another
+  of their enrollments, no score, or a viewer who cannot see every section. Its zero test is
+  conditions 1–6 of `scripts/fall2026/zero_non_submitters.py`. **That makes three copies of the zero
+  rule**; the script and `preflight-analyze` SKILL.md now say "change one, change all three".
+- **Course Admin → Export → Publish everything that is due** (director-only, as the whole page is):
+  Check → a per-lesson table, the held list and a "published, but wrong" list → Publish, which checks
+  again before writing → a third check showing what is left.
+- **Finalize & publish** on the Grade page runs the same rule over the lesson and sections on screen:
+  it publishes no-submission zeros and interactive grades nobody edited, creates the missing zeros,
+  and names in the prompt what it held. An instructor who staffs only some sections (one in phys-110
+  today) cannot see a cadet's other enrollment, so condition 6 cannot be checked and their zeros are
+  held as "a director can publish this".
+- **`gradeRows()` rules 3 and 4**: a published grade is never re-sent, so Save draft cannot un-publish;
+  a held or stale row is not re-sent unless edited.
+- **Stale zeros** (`staleZeroIds()`, `isStaleZero()`): a `no_submission` zero worth 0, with work behind
+  it, that is still the AI's row or is a person's row older than the work. The card drops it, says
+  why, and neither button touches it until someone grades. Neither the flag nor the clock is trusted
+  alone: 48 phys-110 grades still carry `no_submission` after an instructor gave the work credit, and
+  one phys-215 AI zero's `graded_at` was stamped at publish time, after the work it denies.
+- Publishing is a flag flip — `is_finalized` only, guarded by `= false`, so no score or authorship
+  moves. A zero is inserted with `ignoreDuplicates`, `source: 'instructor'`,
+  `diagnostic.source: 'publish'`. Audit rows carry `detail.via` (`publish-all` / `grade-page`).
+  `confirmEffortRows()` is deliberately not applied in bulk.
+- No DDL, no RLS change. Director-only is a page rule; course-level staff can already write these
+  rows through RLS, so the button adds no database power.
+
+**Docs.** `site/help/instructor-grading.md` (the false promise, the new Finalize, Save draft, a
+director section), `director-ai-rules.md` (the same false promise), `director-schema-reference.md`
+(`graded_by` is who wrote a score, not who published it; `no_submission` / `source: 'publish'`;
+`detail.via`). `admin.html` is now a source of `instructor-grading.md`. `ai-and-your-work.md` and
+`instructor-accounts.md` re-read and still correct. `DOC-STATUS.json` regenerated (it dated from
+2026-08-27); it now truthfully flags `student-getting-started.md`, stale since `backup-builds.json`
+changed on 2026-09-23 — not reviewed here.
+
+**Verified.** New `tests/app-schema/test-publish-plan.mjs` (68 checks, offline, recording stub) and
+the existing grade suites all pass. **The shipped `planPublish()` was dry-run on live data** — a
+read-only export over `prep_app_read`, answers reduced to has-answer/blank, run in Node — and
+cross-checked against independent SQL: phys-110 571 to publish / 24 zeros / 1 held / 5 published
+wrong, an exact match; phys-215 480 / 38 / 0 / 1, matching except one `derived` row with a null
+`graded_at` that SQL's NULL comparison drops and the rule rightly publishes. The dry run caught two
+errors in the first stale-zero test (flag alone; then clock alone), both fixed before this entry.
+
+**Not verified: either page in a browser, and no live Publish.** Both pages need a signed-in director
+or instructor. Beyond Node, the UI code has had only `node --check` and the import-integrity suite.
+
+**Left for people.**
+- Six published zeros sit over work and need an instructor to Reopen and grade: phys-110
+  `preflight-02` 3000139695 (M5A), 3000139431 (T5A), 3000139076 (T5B); `preflight-08` 3000141022
+  (M5C); `preflight-09` 3000130308 (T1B, answers in a draft); phys-215 `preflight-05` 3000129690 (T5C).
+  Held today: phys-110 `preflight-18` 3000139662 (M1A), a stale zero.
+- Test account 3009999999 is still enrolled in live phys-215 M3A; the first Publish would give it 11
+  of the 38 phys-215 zeros. Remove that enrollment first.
+
+---
+
 ## 2026-09-23 — Bryan Egner via Claude
 
 ### PHYS 110 Lessons 20–23 built and published; Lesson 20's unpublished first build replaced wholesale, and Lesson 19 finally has a build-log section

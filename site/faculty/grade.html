@@ -127,6 +127,8 @@
     // from the same cardKindFor() call, so a student is in exactly one and no Save can write them
     // twice. currentStudents is now the WHOLE roster again: nobody is dropped from this page.
     let currentStudents = [], enrollmentOf = {}, questions = [], submissionMap = {}, effortData = {};
+    // Cadets whose saved grade is a zero written before they handed in (G.staleZeroIds).
+    let staleIds = new Set();
     let maxTotal = 0, extSid = null;
     let cachedMy = [], cachedAll = [];
     // ?a=<assignment offering uuid> — how the dashboard's per-lesson due-out boxes and the
@@ -285,7 +287,11 @@
       // The two models. Both call cardKindFor() over the same inputs, so every student lands in
       // exactly one — see buildGradeData()'s header on why a student in both would be written
       // twice by one Save, in two upserts, with the second silently overwriting the first.
-      gradeData = G.buildGradeData(current, currentStudents, responseMap, scoreMap, submissionMap);
+      // A zero written before the cadet handed in (G.staleZeroIds) is not a grade of what is on
+      // screen: the card starts from the answers, says why, and neither Save nor Finalize re-sends
+      // it until someone changes something on it.
+      staleIds = G.staleZeroIds(current, currentStudents, scoreMap, submissionMap, responseMap);
+      gradeData = G.buildGradeData(current, currentStudents, responseMap, scoreMap, submissionMap, staleIds);
       effortData = G.buildEffortData(current, currentStudents, scoreMap, submissionMap, responseMap);
       render(currentStudents);
       // A fresh model has nothing modified in it, so this clears the banner AND re-baselines every
@@ -311,6 +317,21 @@
 
     const totalText = t =>
       `${t == null ? '—' : Number(t).toFixed(2)} / ${maxTotal.toFixed(2)} pts`;
+
+    /* A zero written before the cadet handed in (G.staleZeroIds). Unpublished, the card has already
+       dropped it and starts from the answers; published, the card shows what the cadet sees, and
+       the only way to change it is Reopen. Either way the reader is told, because the card on its
+       own looks like an ordinary grade — which is how six of these got published. */
+    function staleNote(sid, finalized) {
+      if (!staleIds.has(sid)) return '';
+      return finalized
+        ? `<div class="alert alert-warn" style="margin-bottom:10px">This zero was published
+             <b>before this cadet handed in</b>. Their answers are below. Use <b>Reopen</b> above,
+             then grade them.</div>`
+        : `<div class="alert alert-warn" style="margin-bottom:10px">The saved zero was written
+             <b>before this cadet handed in</b>, so it is not shown. Grade the answers below —
+             <b>Finalize &amp; publish</b> skips this card until you change something on it.</div>`;
+    }
 
     /* Say how the roster splits between the two kinds of card, so the numbers on screen can be
        reconciled against the roster and the dashboard without counting cards by eye. This used to
@@ -449,7 +470,7 @@
             ${headExtras}
             <span class="gc-total" id="tot-${sid}">${esc(totalText(total))}</span>
           </div>
-          <div class="gc-body">${rows}</div>
+          <div class="gc-body">${staleNote(sid, finalized)}${rows}</div>
         </div>`;
       }).join('');
       applyFilters();
@@ -656,9 +677,10 @@
     // ── Save / finalize / reopen ──
     async function doSave() {
       const st = document.getElementById('save-status'); st.textContent = 'Saving…';
-      const { error, skipped } = await G.saveScores(ctx, current, currentStudents, gradeData, scoreMap, effortData);
+      const { error, skipped } = await G.saveScores(ctx, current, currentStudents, gradeData, scoreMap, effortData,
+        { skipIds: staleIds });
       st.textContent = error ? '⚠ Save failed: ' + error.message
-        : skipped ? 'Nothing to save — no grades exist yet and nothing was edited.'
+        : skipped ? 'Nothing to save — nothing unpublished was edited.'
         : '✓ Saved draft';
       setTimeout(() => { st.textContent = ''; }, 4000);
       if (!error && !skipped) loadView();
@@ -669,19 +691,49 @@
      * blast radius: how many rows, and across which sections. It used to say neither, while
      * writing every student in the loaded scope — which for a director who had selected
      * "All sections (entire course)" meant the whole course in one click.
+     *
+     * Since 2026-09-29 it also publishes what the cards alone never reached — the no-submission
+     * zeros on a lesson with an iPREP option, and a zero for a cadet with no grade at all — under
+     * G.planPublish(), the same rule the director's Publish-all runs. Whatever that rule holds back
+     * (a cadet who still has time, work that came in after its zero) is named in the prompt, and
+     * not published.
      */
     async function doFinalize() {
-      const n = G.writableCount(ctx, current, currentStudents, gradeData, scoreMap, effortData);
-      if (!n) { flash('Nothing to publish — no grades exist yet and nothing was edited.'); return; }
+      const st = document.getElementById('save-status');
+      st.textContent = 'Checking what is due…';
+      const plan = await G.viewPublishPlan(ctx, {
+        offering: current, students: currentStudents, gradeMap: scoreMap, submissionMap, extensionMap });
+      st.textContent = '';
+      if (plan.error) { flash('⚠ Could not check what is due: ' + plan.error.message); return; }
+      const extras = G.finalizeExtras(plan.items, gradeData, effortData, staleIds);
+      const n = G.writableCount(ctx, current, currentStudents, gradeData, scoreMap, effortData, extras);
+      const held = heldSummary(extras.held);
+      if (!n) {
+        flash('Nothing to publish.' + (extras.held.length ? ` ${extras.held.length} held back — see the cards.` : ''));
+        return;
+      }
       const secs = [...new Set(currentStudents.map(s => ctx.sectionCodeOf(s.section_id)))].sort();
       const scope = secs.length === 1 ? `section ${secs[0]}` : `${secs.length} sections (${secs.join(', ')})`;
+      const z = extras.zeroItems.length;
       if (!confirm(
-        `Publish ${n} grade${n === 1 ? '' : 's'} across ${scope}?\n\n` +
-        `Students will see their scores and feedback immediately.`)) return;
-      const st = document.getElementById('save-status'); st.textContent = 'Publishing…';
-      const { error } = await G.finalizeScores(ctx, current, currentStudents, gradeData, scoreMap, effortData);
-      st.textContent = error ? '⚠ Finalize failed: ' + error.message : `✅ Published ${n} to students`;
+        `Publish ${n} grade${n === 1 ? '' : 's'} across ${scope}?` +
+        (z ? `\n\nThis includes ${z} zero${z === 1 ? '' : 's'} for cadets who handed in nothing by their deadline.` : '') +
+        (held ? `\n\n${held}` : '') +
+        `\n\nStudents will see their scores and feedback immediately.`)) return;
+      st.textContent = 'Publishing…';
+      const { error } = await G.finalizeScores(ctx, current, currentStudents, gradeData, scoreMap, effortData, extras);
+      st.textContent = error ? '⚠ Finalize failed: ' + error.message
+        : `✅ Published ${n} to students` + (extras.held.length ? ` · ${extras.held.length} held back` : '');
       setTimeout(loadView, 1200);
+    }
+
+    /** The held-back part of the publish prompt: one line per reason, with its count. */
+    function heldSummary(held) {
+      if (!held.length) return '';
+      const by = {};
+      held.forEach(h => { by[h.reason] = (by[h.reason] || 0) + 1; });
+      return `${held.length} held back, not published:\n` + Object.entries(by)
+        .map(([r, c]) => `  • ${c} — ${G.PUBLISH_HOLDS[r] || r}`).join('\n');
     }
 
     function flash(msg) {

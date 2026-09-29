@@ -102,8 +102,10 @@ A card tagged **AI suggested** has not been edited by anyone. Editing any questi
 marks it as yours; cards you never touch keep the AI's authorship, which is what lets your director
 see how much of a section has actually been reviewed.
 
-A card tagged **Not yet graded** has no grade at all, and saving will not create one for them. To
-grade them, set their questions yourself.
+A card tagged **Not yet graded** has no grade at all, and **Save draft** will not create one for
+them. **Finalize & publish** creates one in exactly one case: a cadet who handed in nothing by their
+own deadline gets a zero (see *Saving and publishing*). Anyone else — answers in a draft, work
+handed in and not graded — you grade by setting their questions yourself.
 
 **A student who submitted nothing is scored zero, not left blank.** Since 2026-07-30 the analysis
 run writes a zero — no points, understanding 0, feedback *No submission received.* — for anyone
@@ -112,9 +114,18 @@ score it arrives unfinalized, so you can change it, and the student sees nothing
 Before that change those students had no row at all, so the gradebook showed a dash while already
 counting them as a zero in the total — a number nobody could reconcile.
 
-**A student holding a live extension is never zeroed**, which is what makes the extension work: if
-they submit later, the next run replaces the zero with a real grade. If you have already published
-the column, reopen their grade first — from this page, or from the Grade button on their own page.
+**A student holding a live extension is never zeroed** while it runs, and granting one takes an
+already-published zero back down so they can work. **Nothing re-grades their work afterwards.** The
+nightly run grades only the lesson whose deadline just passed and never goes back, so when they hand
+in, the work waits for you. Their card says so in a yellow box — *the saved zero was written before
+this cadet handed in* — and starts from their answers instead of the old zero. Grade it yourself.
+Until you change something on that card, neither Save draft nor Finalize & publish touches it, so the
+old zero cannot be published over their work. If it was already published, the box says that too;
+**Reopen** it, then grade.
+
+*(Until 29 September 2026 this page said the next run would replace the zero. It never did: the old
+zero stayed on the card, looking like a grade, and Finalize published it over the cadet's work — six
+cadets across both courses.)*
 
 ## Three kinds of card
 
@@ -180,6 +191,44 @@ if you have the section filter set wide, because "All sections" means the whole 
 
 **You publish your own sections.** You do not need a director to release grades; Finalize & publish
 writes exactly the students currently loaded, which is the sections you staff.
+
+**Finalize & publish releases everything that is due on screen** — not only the cards you graded:
+
+- every saved grade whose cadet's deadline has passed, including interactive grades and the AI's
+  zeros for cadets who handed in nothing. *(Until 29 September 2026 those zeros were skipped on any
+  lesson with an iPREP option unless you typed in each cadet's box, and they reached Blackboard as
+  blanks.)*
+- a **zero** for a cadet who handed in nothing by their own deadline and has no grade at all — the
+  same zero the analysis run writes, *No submission received.* The prompt says how many.
+
+It **holds back**, and names in the prompt, anything a person should look at first: a cadet who
+still has time on an extension, a zero written before the work came in, work handed in after it
+was graded, and work nobody has graded yet. A held card is left exactly as it is.
+
+One case needs your director: if you staff only some sections of the course, the page cannot see a
+cadet's enrollment in another section, where their work might be. So it will not create a zero for
+a cadet with no grade at all — it holds them as *a director can publish this*.
+
+**Save draft never un-publishes anything.** *(Until 29 September 2026 it did: it re-sent every graded
+card on screen as unpublished, so one Save draft on "All sections" that morning took 117 published
+Lesson 18 grades back down across six instructors' sections, and nothing said so.)* A published
+card is locked; **Reopen** is still the only way to change one.
+
+### For directors: publish everything that is due
+
+**Course Admin → Export → Publish everything that is due** runs the same rule over the whole course,
+every lesson and every section, in one go. Use it **before you fill a Blackboard file** — the
+Blackboard fill writes a blank for anything unpublished, never a zero.
+
+1. **Check what is waiting** shows a table: per lesson, how many grades it will publish, how many
+   zeros it will create, how many it holds back, and any zero that was **published before the work
+   came in**. The held list and that list name each cadet, with the reason.
+2. **Publish** checks again, asks you to confirm the counts, then publishes. Nothing already
+   published is changed, and nothing held back is published.
+3. It checks a third time and shows what is left — normally only the held list.
+
+A published zero that the work came in after is **listed, never changed**: ask the instructor to
+Reopen and grade it.
 
 **Publishing full credit also settles the effort question.** The AI caps a student's effort rating
 at 2 when it judges their reading reflection wasn't a real attempt — but on a written preflight

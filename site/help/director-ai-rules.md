@@ -23,11 +23,22 @@ AI-sourced. Before that they had no grade row at all, which was a weaker claim t
 was already making: it counted a past-due non-submission as zero in the running total while showing
 a dash in the cell, so the percentage could not be reconciled against the row it came from.
 
-Two consequences worth knowing. **The extension case needs no special handling** — an unfinalized
-AI-sourced row is what a later run overwrites, so granting an extension and letting the cadet
-submit replaces the zero by itself; once you have *published* the column, reopen the grade first.
-And **it changes no class-level number**: aggregation reads students who have a submission, and a
-non-submitter has none, so the effort distribution and readiness prose are untouched.
+Two consequences worth knowing. **The extension case is not handled by the run.** A later run
+*would* overwrite an unfinalized AI zero — but the scheduled run grades only the lesson whose
+deadline just passed and never goes back, so a cadet who submits under an extension is graded by a
+person. Their card says the saved zero was written before they handed in, and neither Save draft
+nor Finalize & publish touches it until someone grades the work. *(Until 29 September 2026 this page
+said granting the extension replaced the zero by itself. It did not, and six of those zeros were
+published over the cadets' work.)* And **it changes no class-level number**: aggregation reads
+students who have a submission, and a non-submitter has none, so the effort distribution and
+readiness prose are untouched.
+
+**Publishing these zeros is not a chore any more** (since 2026-09-29). Finalize & publish now
+releases them with everything else due in the sections on screen, and writes the zero itself for a
+cadet the run missed — a night the scheduled job did not run, say. **Course Admin → Export →
+Publish everything that is due** does the same for the whole course; use it before a Blackboard
+fill, which writes a blank for anything unpublished. Both hold back, and list, anything a person
+should look at first. See *Grading* → *Saving and publishing*.
 
 **One case where it refuses to zero, and tells you instead** (added 2026-08-13). A cadet who
 changes section can end up on two enrollment records — the old one closed, the new one current —

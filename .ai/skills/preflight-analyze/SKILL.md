@@ -863,9 +863,12 @@ This condition is deliberately wider than the defect that produced it. It asks "
 have work?", which is the question the zero rule was always trying to answer — so it also covers
 entry paths nobody has enumerated, including any that survive the RLS fix.
 
-> **The same rule lives in a second place.** `scripts/fall2026/zero_non_submitters.py` implements
+> **The same rule lives in two other places.** `scripts/fall2026/zero_non_submitters.py` implements
 > conditions 1–5 independently, for the assignments graded before the rule existed. It carries
-> condition 6 too. **Change one, change both** — they are the same decision written twice.
+> condition 6 too. And since 2026-09-29 `planPublish()` in `site/js/faculty-grade.js` creates the
+> zero in the browser, when a director's **Publish everything that is due** or an instructor's
+> **Finalize & publish** finds a cadet with no grade at all. **Change one, change all three** —
+> they are the same decision written three times.
 
 The payload is an ordinary grade row, so nothing downstream needs a special case:
 

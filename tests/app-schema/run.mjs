@@ -102,6 +102,10 @@ for (const s of OFFLINE) {
 //                 schema.js, but the half that matters imports student-data.js behind a RECORDING
 //                 stub — the assertions are about the queries and writes commitSubmission() and
 //                 submitInteractionReport() actually issue, including the ones a refusal must not
+//   test-publish-plan  imports faculty-grade.js behind a RECORDING stub for planPublish() — the one
+//                 rule both publish buttons run — and the writes it leads to: that a published grade
+//                 is never re-sent, a stale zero never published, a held row never written, and a
+//                 zero never lands on a row that exists
 //   test-paging  imports schema.js's fetchAll() and reads phys-110 as the test faculty. The
 //                 one suite here whose subject is a QUANTITY rather than a shape: that a
 //                 whole-course read returns the whole course, which is not what PostgREST
@@ -113,7 +117,8 @@ for (const suite of ['test-imports.mjs', 'test-rollup.mjs', 'test-system-prefs.m
                      'test-dashboard-rows.mjs', 'test-student-detail.mjs', 'test-feedback.mjs',
                      'test-feedback-admin.mjs', 'test-lesson-due.mjs',
                      'test-lesson-isolation.mjs', 'test-student-completion.mjs',
-                     'test-extension-reopen.mjs', 'test-grace.mjs', 'test-paging.mjs']) {
+                     'test-extension-reopen.mjs', 'test-grace.mjs', 'test-publish-plan.mjs',
+                     'test-paging.mjs']) {
   const r = spawnSync(process.execPath, [resolve(import.meta.dirname, suite)],
                       { encoding: 'utf8' });
   process.stdout.write(r.stdout || '');

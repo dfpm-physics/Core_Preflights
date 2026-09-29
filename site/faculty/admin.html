@@ -130,7 +130,8 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { esc, lastFirst, fmtDate, fmtDateTime, runPage, showFatal, triggerDownload, wireModalDismiss } from '../js/util.js';
-    import { allSectionIds, courseExtensions, revokeExtension, reinstateExtension }
+    import { allSectionIds, courseExtensions, revokeExtension, reinstateExtension,
+             loadPublishPlan, applyPublishPlan, summarizePublishPlan, PUBLISH_HOLDS }
       from '../js/faculty-grade.js';
     import * as A from '../js/faculty-admin.js';
     import * as R from '../js/faculty-roster.js';
@@ -2002,6 +2003,24 @@
         [s.id, (s.meeting_days && s.meeting_days[0]) || String(s.code || '')[0] || '?']));
 
       panel.innerHTML = `
+        <div class="card" id="pub-card">
+          <div class="card-title">Publish everything that is due</div>
+          <div class="card-meta">Publishes every saved grade whose deadline has passed, in every
+            section, and gives a <strong>zero</strong> to every cadet who handed in nothing by
+            their deadline. Cadets see these at once. Do this <strong>before</strong> you fill a
+            Blackboard file: anything unpublished reaches Blackboard as a blank.</div>
+          <div class="card-meta">Anything that needs a person is <strong>held back and
+            listed</strong>, never published — a cadet who still has time on an extension, work
+            that came in after its zero, work nobody has graded yet. Nothing already published is
+            changed.</div>
+          <div class="row wrap" style="gap:14px;align-items:center;margin-top:10px">
+            <button class="btn btn-secondary" id="pub-check">Check what is waiting</button>
+            <button class="btn btn-primary" id="pub-go" style="display:none"></button>
+            <span id="pub-status" style="font-size:0.85em"></span>
+          </div>
+          <div id="pub-preview" style="margin-top:14px"></div>
+        </div>
+
         <div class="card">
           <div class="card-title">Blackboard grades CSV</div>
           <div class="card-meta">Finalized grades only. A student with no finalized grade exports
@@ -2083,6 +2102,119 @@
           A.exportFilename('Backup', 'json'), 'application/json');
         st.style.color = 'var(--green)';
         st.textContent = `✓ ${backup.enrollments.length} enrollments, ${backup.grades.length} grades`;
+      });
+
+      /* ── Publish everything that is due ────────────────────────────────────────
+       * Check, then publish. Nothing is written until the director has seen the table and pressed
+       * the second button, and that button checks AGAIN before it writes: a plan read an hour ago
+       * could zero a cadet who has since been given an extension. The rule is faculty-grade.js
+       * planPublish() — the same one the Grade page's Finalize & publish runs, over the course.
+       */
+      let pubPlan = null;
+
+      const pubRows = (items, kind) => items.filter(i => i.kind === kind)
+        .sort((a, b) => (a.position - b.position) || lastFirst(a.name).localeCompare(lastFirst(b.name)));
+      const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+      function pubList(title, rows, note) {
+        return `<details style="margin-top:14px"${rows.length <= 12 ? ' open' : ''}>
+          <summary style="cursor:pointer"><strong>${esc(title)}</strong></summary>
+          <div class="card-meta" style="margin:6px 0">${esc(note)}</div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Cadet ID</th><th>Name</th><th>Section</th><th>Lesson</th><th>Why</th></tr></thead>
+            <tbody>${rows.map(r => `<tr>
+              <td>${esc(r.studentId)}</td>
+              <td><a href="student.html?e=${encodeURIComponent(r.enrollmentId)}">${esc(lastFirst(r.name))}</a></td>
+              <td>${esc(codeOf[r.sectionId] || '')}</td>
+              <td>${esc(r.slug)}</td>
+              <td>${esc(r.kind === 'wrong-published' ? 'Published zero — their work is in'
+                                                     : (PUBLISH_HOLDS[r.reason] || r.reason))}</td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+        </details>`;
+      }
+
+      function renderPublishPreview() {
+        const box = document.getElementById('pub-preview');
+        const go = document.getElementById('pub-go');
+        const items = pubPlan?.items || [];
+        const p = items.filter(i => i.kind === 'publish').length;
+        const z = items.filter(i => i.kind === 'zero').length;
+        const held = pubRows(items, 'hold');
+        const wrong = pubRows(items, 'wrong-published');
+        const lessons = summarizePublishPlan(items);
+
+        go.style.display = (p + z) ? '' : 'none';
+        go.textContent = `Publish ${plural(p, 'grade')}` + (z ? ` and ${plural(z, 'zero')}` : '');
+
+        if (!lessons.length) {
+          box.innerHTML = `<div class="alert alert-success">Nothing is waiting. Every grade that is due
+            is published.</div>`;
+          return;
+        }
+        box.innerHTML = `
+          <div class="table-wrap"><table>
+            <thead><tr><th>Lesson</th><th style="text-align:right">Will publish</th>
+              <th style="text-align:right">Zeros to create</th><th style="text-align:right">Held back</th>
+              <th style="text-align:right">Published, but wrong</th></tr></thead>
+            <tbody>${lessons.map(l => `<tr>
+              <td>${esc(l.title)}</td>
+              <td style="text-align:right">${l.publish || '—'}</td>
+              <td style="text-align:right">${l.zero || '—'}</td>
+              <td style="text-align:right">${l.hold || '—'}</td>
+              <td style="text-align:right">${l.wrong ? `<b style="color:var(--red)">${l.wrong}</b>` : '—'}</td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+          ${wrong.length ? pubList(`Published as a zero, but the cadet handed in (${wrong.length})`, wrong,
+            'These zeros were published before the work came in. Ask the instructor to Reopen and grade each one. This button does not change them.') : ''}
+          ${held.length ? pubList(`Held back (${held.length})`, held,
+            'Not published. Each one needs a person first — the reason is on the right.') : ''}`;
+      }
+
+      async function checkPublish(label) {
+        const st = document.getElementById('pub-status');
+        st.style.color = 'var(--muted)'; st.textContent = label;
+        const res = await loadPublishPlan(ctx);
+        if (res.error) {
+          pubPlan = null;
+          document.getElementById('pub-go').style.display = 'none';
+          st.style.color = 'var(--red)'; st.textContent = '⚠ Could not read the course: ' + res.error.message;
+          return false;
+        }
+        pubPlan = res;
+        st.textContent = '';
+        renderPublishPreview();
+        return true;
+      }
+
+      document.getElementById('pub-check').addEventListener('click', async (e) => {
+        e.currentTarget.disabled = true;
+        try { await checkPublish('Checking every lesson…'); }
+        finally { document.getElementById('pub-check').disabled = false; }
+      });
+
+      document.getElementById('pub-go').addEventListener('click', async () => {
+        const go = document.getElementById('pub-go');
+        const st = document.getElementById('pub-status');
+        go.disabled = true;
+        try {
+          if (!(await checkPublish('Checking again before publishing…'))) return;
+          const items = pubPlan.items.filter(i => i.kind === 'publish' || i.kind === 'zero');
+          if (!items.length) { st.textContent = 'Nothing is waiting any more.'; return; }
+          const p = items.filter(i => i.kind === 'publish').length, z = items.length - p;
+          const n = new Set(items.map(i => i.offeringId)).size;
+          if (!confirm(`Publish ${plural(p, 'grade')}` + (z ? ` and create ${plural(z, 'zero')}` : '') +
+              ` across ${plural(n, 'lesson')}?\n\nCadets see them immediately. Nothing already ` +
+              `published is changed, and nothing held back is published.`)) return;
+          st.style.color = 'var(--muted)'; st.textContent = 'Publishing…';
+          const out = await applyPublishPlan(ctx, items, pubPlan.offerings, { via: 'publish-all' });
+          bbData = null;              // the Blackboard fill reads published grades — make it re-read
+          const done = `${plural(out.published, 'grade')} published` +
+            (out.created ? `, ${plural(out.created, 'zero')} created` : '');
+          await checkPublish('Checking what is left…');
+          st.style.color = out.error ? 'var(--red)' : 'var(--green)';
+          st.textContent = out.error ? `⚠ Stopped after ${done}: ${out.error.message}` : `✓ ${done}.`;
+        } finally { go.disabled = false; }
       });
 
       /* ── Fill a Blackboard file ──────────────────────────────────────────────

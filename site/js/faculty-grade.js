@@ -24,7 +24,7 @@ import {
   OFFERING_SELECT, GRADE_SELECT, SUBMISSION_SELECT, EXTENSION_SELECT,
   shapeOffering, withResolvedDue, offeringSections,
   shapeSubmission, questionsOf, effectiveDue, submissionLateness,
-  actionableSections, fetchAll, cardKindFor,
+  actionableSections, fetchAll, cardKindFor, hasAnyAnswer,
 } from './schema.js';
 
 /** Scheduled assignments for the current offering, for the picker. */
@@ -221,7 +221,7 @@ export function isEffortGraded(offering, submission) {
  * interaction-required offering is nobody until the deadline nears — so it left the whole roster in
  * this model, holding a full set of red zeros for questions that carry no credit for them.
  */
-export function buildGradeData(offering, students, responseMap, gradeMap, submissionMap = {}) {
+export function buildGradeData(offering, students, responseMap, gradeMap, submissionMap = {}, staleIds = null) {
   const questions = questionsOf(offering.written);
   const gradeData = {};
   (students || []).forEach(st => {
@@ -233,7 +233,13 @@ export function buildGradeData(offering, students, responseMap, gradeMap, submis
     if (kind !== 'written') return;
     gradeData[st.student_id] = {};
     questions.forEach(q => {
-      const saved = gradeMap[st.student_id]?.qs[q.id];
+      // An UNPUBLISHED STALE ZERO is not this card's starting point. It says "No submission
+      // received." about a cadet whose answers are now on screen (staleZeroIds()), so its red chips
+      // and its feedback describe an absence that stopped being true. Loading them is how the
+      // 2026-09 re-published zeros happened: the card looked graded, and Finalize published it.
+      // A PUBLISHED one still loads — a locked card must show what the cadet is actually seeing.
+      const prior = gradeMap[st.student_id];
+      const saved = staleIds?.has(st.student_id) && !prior?.finalized ? undefined : prior?.qs[q.id];
       const hasAnswer = String(responseMap[st.student_id]?.[q.id] ?? '').trim().length > 0;
       const savedScore = saved?.score !== undefined ? Number(saved.score) : null;
       const hasFeedback = !!(saved?.feedback && saved.feedback.trim());
@@ -402,8 +408,22 @@ function wasEdited(qMap, questions) {
  *    credit to every student the AI never scored — and a director who had picked "All
  *    sections" did it course-wide. A student with no existing grade AND no edit is now
  *    skipped entirely, which is also what makes the "past due, not graded" queue truthful.
+ *
+ * 3. A PUBLISHED GRADE IS NEVER RE-SENT. Rule 1 re-sends every untouched row so its provenance
+ *    survives, and until 2026-09-29 that included rows already finalized — carrying `is_finalized`
+ *    set to whatever the button meant. So a Save draft took every published grade in scope back
+ *    down, silently: one Save draft on "All sections" that morning un-published 117 phys-110
+ *    preflight-18 grades across six instructors' sections, a day after those instructors had
+ *    published them, and nothing on screen said so. A published card cannot be edited (its
+ *    controls are disabled; Reopen is the way back in), so there is never anything to send for one.
+ *
+ * 4. A HELD ROW IS NOT RE-SENT UNLESS IT WAS EDITED. `skipIds` carries the stale zeros
+ *    (staleZeroIds()) on every save, and on Finalize also whatever planPublish() holds back — a
+ *    cadet who still has time, work handed in after its grade. Re-sending a stale zero would write
+ *    the card's fresh defaults over it on a draft save and publish it on Finalize; re-sending a held
+ *    row on Finalize publishes what the rule has just decided a person must look at first.
  */
-function gradeRows(ctx, offering, students, gradeData, isFinalized, gradeMap = {}) {
+function gradeRows(ctx, offering, students, gradeData, isFinalized, gradeMap = {}, skipIds = null) {
   const questions = questionsOf(offering.written);
   const enrollmentOf = Object.fromEntries(students.map(s => [s.student_id, s.enrollment_id]));
   const now = new Date().toISOString();
@@ -413,6 +433,10 @@ function gradeRows(ctx, offering, students, gradeData, isFinalized, gradeMap = {
     const edited = wasEdited(qMap, questions);
     // Rule 2 — nothing to say about this student, so say nothing.
     if (!prior && !edited) return null;
+    // Rule 3 — a published grade stays exactly as it was published.
+    if (prior?.finalized) return null;
+    // Rule 4 — held back, and nobody changed it. (gradeData is keyed by the numeric cadet id.)
+    if (!edited && skipIds?.has(Number(sid))) return null;
 
     const questionScores = {};
     let total = 0;
@@ -533,8 +557,8 @@ export function confirmEffortRows(ctx, offering, students, gradeData, gradeMap =
  *
  * Either array may be empty; an empty one is skipped rather than sent.
  */
-async function writeGrades(ctx, offering, students, gradeData, gradeMap, effortData, isFinalized) {
-  const written = gradeRows(ctx, offering, students, gradeData, isFinalized, gradeMap);
+async function writeGrades(ctx, offering, students, gradeData, gradeMap, effortData, isFinalized, skipIds = null) {
+  const written = gradeRows(ctx, offering, students, gradeData, isFinalized, gradeMap, skipIds);
   const effort = effortRows(ctx, offering, students, effortData, isFinalized, gradeMap);
   if (!written.length && !effort.length) return { data: [], error: null, skipped: true };
 
@@ -549,48 +573,69 @@ async function writeGrades(ctx, offering, students, gradeData, gradeMap, effortD
   return { data: ids, error: null };
 }
 
-/** How many rows a save/finalize would actually write — for an honest confirm prompt. */
-export function writableCount(ctx, offering, students, gradeData, gradeMap = {}, effortData = {}) {
-  return gradeRows(ctx, offering, students, gradeData, false, gradeMap).length
-       + effortRows(ctx, offering, students, effortData, false, gradeMap).length;
+/**
+ * How many rows a save/finalize would actually write — for an honest confirm prompt.
+ *
+ * `extras` is finalizeExtras()'s result on Finalize: the held-back ids the upserts must skip, and
+ * the rows the upserts never reach — untouched no-submission and interactive cards the rule says
+ * are due (published by flag), and the zeros it creates. A draft save passes only `skipIds`.
+ */
+export function writableCount(ctx, offering, students, gradeData, gradeMap = {}, effortData = {}, extras = {}) {
+  return gradeRows(ctx, offering, students, gradeData, false, gradeMap, extras.skipIds).length
+       + effortRows(ctx, offering, students, effortData, false, gradeMap).length
+       + (extras.flipItems?.length || 0) + (extras.zeroItems?.length || 0);
 }
 
-/** Upsert all scores as a draft (is_finalized:false). */
-export function saveScores(ctx, offering, students, gradeData, gradeMap = {}, effortData = {}) {
-  return writeGrades(ctx, offering, students, gradeData, gradeMap, effortData, false);
+/** Upsert all scores as a draft (is_finalized:false). `opts.skipIds`: see gradeRows() rule 4. */
+export function saveScores(ctx, offering, students, gradeData, gradeMap = {}, effortData = {}, opts = {}) {
+  return writeGrades(ctx, offering, students, gradeData, gradeMap, effortData, false, opts.skipIds);
 }
 
 /**
  * Save then publish. Finalizing is what makes a grade visible to the student
  * (grades_own_finalized), so it is also the moment worth recording in the audit log.
+ *
+ * `extras` (finalizeExtras()) is what makes it complete. Until 2026-09-29 this published only what
+ * the two upserts send, and effortRows() sends edited rows only — so on every lesson with an iPREP
+ * option the AI's zero for a cadet who handed in nothing was never published, and reached
+ * Blackboard as a blank. Instructors had taken to typing "no submission" into each of those boxes
+ * to force it through. Those rows, and a zero for a cadet who has no grade at all, now go out here
+ * through applyPublishPlan(), under the same rule the director's Publish-all uses.
  */
-export async function finalizeScores(ctx, offering, students, gradeData, gradeMap = {}, effortData = {}) {
-  const res = await writeGrades(ctx, offering, students, gradeData, gradeMap, effortData, true);
-  if (res.error || res.skipped) return res;
+export async function finalizeScores(ctx, offering, students, gradeData, gradeMap = {}, effortData = {}, extras = {}) {
+  const res = await writeGrades(ctx, offering, students, gradeData, gradeMap, effortData, true, extras.skipIds);
+  if (res.error) return res;
 
-  // Publishing full credit confirms a capped effort. Best-effort and deliberately after the
-  // upsert: this amends a diagnostic, and failing to raise it must never cost the grades that
-  // were just published. See confirmEffortRows().
-  //
-  // Written rows only — it is passed `gradeData`, and an effort row has no effort left to raise.
-  for (const u of confirmEffortRows(ctx, offering, students, gradeData, gradeMap)) {
-    const { error } = await db.from('grades').update({ diagnostic: u.diagnostic })
-      .eq('enrollment_id', u.enrollment_id)
-      .eq('assignment_offering_id', offering.offeringId);
-    if (error) console.warn('[grade] published, but confirming effort failed:', error.message);
+  if (!res.skipped) {
+    // Publishing full credit confirms a capped effort. Best-effort and deliberately after the
+    // upsert: this amends a diagnostic, and failing to raise it must never cost the grades that
+    // were just published. See confirmEffortRows().
+    //
+    // Written rows only — it is passed `gradeData`, and an effort row has no effort left to raise.
+    for (const u of confirmEffortRows(ctx, offering, students, gradeData, gradeMap)) {
+      const { error } = await db.from('grades').update({ diagnostic: u.diagnostic })
+        .eq('enrollment_id', u.enrollment_id)
+        .eq('assignment_offering_id', offering.offeringId);
+      if (error) console.warn('[grade] published, but confirming effort failed:', error.message);
+    }
+
+    // Append-only audit. Best-effort: a failed log entry must not lose the grades that were
+    // just published, so the error is reported but not thrown.
+    const events = (res.data || []).map(g => ({
+      grade_id: g.id, event: 'finalized', actor: ctx.user.id,
+      detail: { offering: offering.offeringId, slug: offering.slug },
+    }));
+    if (events.length) {
+      const { error } = await db.from('grade_events').insert(events);
+      if (error) console.warn('[grade] finalized, but the audit event failed:', error.message);
+    }
   }
 
-  // Append-only audit. Best-effort: a failed log entry must not lose the grades that were
-  // just published, so the error is reported but not thrown.
-  const events = (res.data || []).map(g => ({
-    grade_id: g.id, event: 'finalized', actor: ctx.user.id,
-    detail: { offering: offering.offeringId, slug: offering.slug },
-  }));
-  if (events.length) {
-    const { error } = await db.from('grade_events').insert(events);
-    if (error) console.warn('[grade] finalized, but the audit event failed:', error.message);
-  }
-  return res;
+  const more = [...(extras.flipItems || []), ...(extras.zeroItems || [])];
+  if (!more.length) return res;
+  const out = await applyPublishPlan(ctx, more, [planOffering(offering)], { via: 'grade-page' });
+  return { data: res.data || [], error: out.error, skipped: false,
+           published: out.published, created: out.created };
 }
 
 /** Re-open one student's grade so it leaves the student's view again. */
@@ -1111,4 +1156,554 @@ export async function unlockSubmission(ctx, submissionId) {
     unlocked_by: ctx.user.id,
     unlocked_at: new Date().toISOString(),
   }).eq('id', submissionId);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════
+ * Publishing everything that is due  (2026-09-29)
+ * ════════════════════════════════════════════════════════════════════════════════════
+ *
+ * WHY THIS EXISTS
+ *   Blackboard gets a blank for any grade that is not published (blackboard-fill.js rule 2, and
+ *   rightly: a blank is honest, a zero nobody gave is not). Directors were finding blanks in every
+ *   export, and each one traced back to this page:
+ *
+ *     - On a lesson with an iPREP option a cadet who handed in nothing gets the no-submission card,
+ *       and Finalize sent only EDITED rows from those cards (effortRows() rule 2). The AI's zero for
+ *       them was never published — 351 in phys-110 and 212 in phys-215 on the day this landed.
+ *     - A cadet with no grade row at all stayed blank for good: all of Lesson 7 in both courses (the
+ *       first iPREP lesson, which the zero rule never reached), and any night the scheduled run missed.
+ *     - Save draft un-published whatever it re-sent (gradeRows() rule 3).
+ *
+ *   One failure ran the other way. A cadet who got a zero, then an extension, then did the work had
+ *   the stale zero re-published over it by the next Finalize — six cadets across both courses, found
+ *   the same day. The help page promised "the next run replaces the zero"; the scheduled run never
+ *   goes back to an old lesson, so nothing did.
+ *
+ * ONE RULE, TWO BUTTONS
+ *   planPublish() decides, per cadet per lesson, whether a saved grade is due to be published,
+ *   whether a zero is owed, or whether a person must look first. The director's "Publish everything
+ *   that is due" (admin.html → Export) runs it over the whole course; the Grade page's Finalize &
+ *   publish runs it over the lesson and sections on screen. Neither decides anything the other does not.
+ *
+ * THE ZERO RULE HAS THREE COPIES, AND THEY MUST AGREE
+ *   planPublish() here, `scripts/fall2026/zero_non_submitters.py` (conditions 1-6), and the zero
+ *   section of `.ai/skills/preflight-analyze/SKILL.md`. Change one, change all three. zeroRow() is
+ *   the script's zero_row() except for who wrote it: a person pressed a button here, so the row is
+ *   `source: 'instructor'`, published, and `diagnostic.source: 'publish'`.
+ *
+ * WHAT IT NEVER DOES
+ *   Re-publish a finalized grade, write over a grade that exists, publish for a cadet whose deadline
+ *   or extension has not passed, or zero a cadet whose other enrollments it cannot see. A row it will
+ *   not decide is HELD with a reason and listed, never dropped in silence.
+ */
+
+export const NO_SUBMISSION_FEEDBACK = 'No submission received.';
+
+/** Why planPublish() held a row back — the words a director reads beside it. */
+export const PUBLISH_HOLDS = {
+  'still-open':         'Still has time — deadline or extension not passed',
+  'stale-zero':         'Zero was written before they handed in — grade the work',
+  'after-grading':      'Handed in again after it was graded — review it',
+  'draft-answers':      'Started but never submitted — grade it by hand',
+  'submitted-ungraded': 'Handed in, not graded yet',
+  'stranded':           'Their work is on another enrollment — check their sections',
+  'no-score':           'Saved draft has no score',
+  'cannot-check':       'Cannot see all of their sections — a director can publish this',
+};
+
+const chunks = (xs, n) => {
+  const out = [];
+  for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n));
+  return out;
+};
+
+/**
+ * Can this viewer see every section of the offering? The zero rule's condition 6 — work on another
+ * of the cadet's enrollments — cannot be checked otherwise: an instructor staffed to two sections
+ * cannot read an enrollment or a submission in a third (enrollments_read_staff,
+ * submissions_staff_read), so the absence would look like no work at all.
+ */
+export function seesWholeOffering(ctx) {
+  const all = Object.keys(ctx?.sectionsById || {});
+  const mine = new Set(ctx?.sectionIds || []);
+  return all.length > 0 && all.every(id => mine.has(id));
+}
+
+/** A shapeOffering() result (deadlines resolved) → the fields planPublish() and zeroRow() read. */
+export function planOffering(o) {
+  return {
+    id: o.offeringId ?? o.id,
+    slug: o.slug || '',
+    title: o.title || o.slug || '—',
+    position: o.position ?? 0,
+    dueAt: o.dueAt ?? null,
+    dueBySection: o.dueBySection || {},
+    dueDerivedFor: o.dueDerivedFor,
+    writtenActivityId: o.written?.id ?? o.writtenActivityId ?? null,
+    questions: o.written ? questionsOf(o.written) : (o.questions || []),
+    pointsPossible: Number(o.pointsPossible ?? 0),
+  };
+}
+
+/**
+ * Was a grade written before the work it describes? True when the work's time is later than the
+ * grade's, and — deliberately — when either time is missing: an answer nobody can date is a
+ * question for a person, and every caller turns `true` into "hold it" or "show a warning".
+ *
+ * This is what separates a STALE no-submission zero from one a person has already dealt with.
+ * `diagnostic.no_submission` is never cleared — gradeRows() does not send `diagnostic`, on purpose
+ * — so it outlives a re-grade: on 2026-09-29, 48 phys-110 grades still carried it after an
+ * instructor had opened the work and given it credit. The flag says who wrote the zero; only the
+ * clock says whether anyone has looked since.
+ */
+function predates(gradedAt, workAt) {
+  const g = Date.parse(gradedAt || ''), w = Date.parse(workAt || '');
+  return !Number.isFinite(g) || !Number.isFinite(w) || w > g;
+}
+
+/**
+ * Is this saved grade a no-submission ZERO denying work that nobody has looked at? The caller has
+ * already established that work is behind it. Three conditions:
+ *
+ *   - it is worth 0 and carries `diagnostic.no_submission`. Credit given before the work arrived
+ *     is not a zero, whatever the flag says (one phys-110 cadet holds 2/2 under it);
+ *   - and EITHER it is still the AI's row — no person has touched it, so it cannot be a decision.
+ *     The clock is not trusted here: when a writer left `graded_at` null, the next Finalize
+ *     stamped it with the publish time, and one phys-215 zero reads 6 Sep over work handed in on
+ *     20 Aug;
+ *   - OR a person saved it (an edited card, or a zero this page created) before the work came in
+ *     (predates()). A person's zero dated after the work is their decision — a late submission
+ *     refused, say — and stands.
+ */
+function isStaleZero({ nosub, points, source, gradedAt }, workAt) {
+  if (!nosub || points == null || Number(points) !== 0) return false;
+  return source === 'ai_suggested' || predates(gradedAt, workAt);
+}
+
+/**
+ * The cadets whose saved grade is a no-submission zero although their work is now in.
+ *
+ * `/preflight-analyze` and zero_non_submitters.py mark every zero they write with
+ * `diagnostic.no_submission`. A cadet granted an extension who then hands in keeps that row until a
+ * person grades the work — the scheduled run never revisits an old lesson — so the card looked
+ * graded (red chips, "No submission received.") and Finalize published it. That is how six cadets
+ * came to hold a published zero for work they had done under an extension.
+ *
+ * "Work is in" is the exact complement of the zero rule's condition 4: committed to the interactive
+ * path, or any non-empty written answer, submitted or not. Whether the zero still stands is
+ * isStaleZero()'s question — a zero an instructor has re-graded since is theirs, not stale.
+ */
+export function staleZeroIds(offering, students, gradeMap = {}, submissionMap = {}, responseMap = {}) {
+  const writtenId = offering?.written?.id ?? null;
+  const out = new Set();
+  (students || []).forEach(st => {
+    const sid = st.student_id;
+    const prior = gradeMap[sid];
+    if (prior?.diagnostic?.no_submission !== true) return;
+    const sub = submissionMap[sid];
+    const chosen = sub?.chosenActivityId;
+    if (!((chosen && chosen !== writtenId) || hasAnyAnswer(responseMap[sid]))) return;
+    const workAt = sub?.status === 'committed' ? sub?.committedAt : sub?.updatedAt;
+    if (isStaleZero({ nosub: true, points: prior.pointsEarned, source: prior.source,
+                      gradedAt: prior.gradedAt }, workAt)) out.add(sid);
+  });
+  return out;
+}
+
+/**
+ * The rule. Pure — every row it needs is passed in — so it is unit-tested without a network, and
+ * both buttons run exactly this.
+ *
+ * @param {object} data
+ *   offerings    planOffering() shapes
+ *   students     [{ student_id, name, enrollment_id, section_id }] — ACTIVE enrollments in scope
+ *   submissions  [{ id, enrollment_id, assignment_offering_id, chosen_activity_id, status,
+ *                   committed_at, updated_at }], including any on the `siblings` enrollments
+ *   grades       [{ id, enrollment_id, assignment_offering_id, is_finalized, points_earned,
+ *                   source, graded_at, nosub }] — nosub is `diagnostic.no_submission === true`
+ *   extensions   [{ enrollment_id, assignment_offering_id, extended_due_at }] — ACTIVE only
+ *   writtenContent  { [submission id]: the written activity's answers }. Needed for every
+ *                submission that has no grade row or a no-submission grade; one that is missing is
+ *                held as `cannot-check`, never read as blank.
+ *   siblings     [{ id, student_id }] — every enrollment these cadets hold in the offering, any
+ *                status (condition 6). Enrollments in scope are ignored if included.
+ *   canZero      false when the viewer cannot see every section (seesWholeOffering())
+ * @param {Date} [now]
+ * @returns {object[]} one item per cadet-lesson that has something to say:
+ *   kind 'publish' | 'zero' | 'hold' (with `reason`, a PUBLISH_HOLDS key) | 'wrong-published'
+ */
+export function planPublish({ offerings, students, submissions, grades, extensions,
+                              writtenContent = {}, siblings = [], canZero = true }, now = new Date()) {
+  const key = (e, o) => `${e}|${o}`;
+  const subBy = {}, gradeBy = {}, extBy = {};
+  (submissions || []).forEach(s => { subBy[key(s.enrollment_id, s.assignment_offering_id)] = s; });
+  (grades || []).forEach(g => { gradeBy[key(g.enrollment_id, g.assignment_offering_id)] = g; });
+  (extensions || []).forEach(x => { extBy[key(x.enrollment_id, x.assignment_offering_id)] = x; });
+
+  const inScope = new Set((students || []).map(s => s.enrollment_id));
+  const otherEnrollments = {};
+  (siblings || []).forEach(e => {
+    if (inScope.has(e.id)) return;
+    (otherEnrollments[e.student_id] ||= []).push(e.id);
+  });
+
+  const items = [];
+  for (const off of offerings || []) {
+    for (const st of students || []) {
+      const k = key(st.enrollment_id, off.id);
+      const g = gradeBy[k] || null;
+      const sub = subBy[k] || null;
+      const item = (kind, reason = null) => items.push({
+        kind, reason,
+        offeringId: off.id, slug: off.slug, title: off.title, position: off.position ?? 0,
+        studentId: st.student_id, name: st.name, sectionId: st.section_id,
+        enrollmentId: st.enrollment_id, gradeId: g?.id || null,
+      });
+
+      const committed = sub?.status === 'committed';
+      const interactive = !!(sub?.chosen_activity_id && sub.chosen_activity_id !== off.writtenActivityId);
+      // Is there work? true / false, or null when the answers were needed and not loaded.
+      const content = sub ? writtenContent[sub.id] : undefined;
+      const work = !sub ? false : interactive ? true : content === undefined ? null : hasAnyAnswer(content);
+      // A no-submission zero denying work nobody has looked at — see isStaleZero().
+      const staleZero = !!g && work === true && isStaleZero(
+        { nosub: g.nosub, points: g.points_earned, source: g.source, gradedAt: g.graded_at },
+        committed ? sub.committed_at : sub.updated_at);
+
+      if (g?.is_finalized) {
+        // Published already. Nothing to do — unless it is a zero sitting on work that came in.
+        if (staleZero) item('wrong-published');
+        continue;
+      }
+
+      const extISO = extBy[k]?.extended_due_at || null;
+      const { isPast } = effectiveDue(off, st.section_id, extISO, now);
+
+      if (g) {
+        // A saved, unpublished grade: publish it, unless a person has to look first.
+        if (!isPast && !committed) item('hold', 'still-open');
+        else if (g.nosub && work === null) item('hold', 'cannot-check');
+        else if (staleZero) item('hold', 'stale-zero');
+        else if (committed && g.graded_at && sub.committed_at
+                 && new Date(sub.committed_at) > new Date(g.graded_at)) item('hold', 'after-grading');
+        else if (g.points_earned == null) item('hold', 'no-score');
+        else item('publish');
+        continue;
+      }
+
+      // No grade at all.
+      if (interactive) {
+        // Migration 015 grades an interactive commit the moment it lands. One with no grade is a
+        // report that arrived without the data it is graded from (contract §3.1): a person's job.
+        if (committed) item('hold', 'submitted-ungraded');
+        else if (isPast) item('hold', 'draft-answers');
+        continue;
+      }
+      if (!isPast) continue;                                    // nothing is owed yet
+      if (work === null) { item('hold', 'cannot-check'); continue; }
+      if (work) { item('hold', committed ? 'submitted-ungraded' : 'draft-answers'); continue; }
+
+      // Conditions 1-5 hold: active, past their own deadline plus the grace, no live extension, no
+      // work, no grade row. Condition 6 is the refusal — work on another of their own enrollments.
+      if (!canZero) { item('hold', 'cannot-check'); continue; }
+      if ((otherEnrollments[st.student_id] || []).some(eid => subBy[key(eid, off.id)])) {
+        item('hold', 'stranded'); continue;
+      }
+      item('zero');
+    }
+  }
+  return items;
+}
+
+/** The zero for a cadet who handed in nothing — zero_non_submitters.py's zero_row(), except for who wrote it. */
+export function zeroRow(off, enrollmentId, actorId, nowIso = new Date().toISOString()) {
+  const question_scores = {};
+  (off.questions || []).forEach(q => {
+    if (!q?.id) return;
+    const max = Number(q.points) || 0;
+    question_scores[q.id] = {
+      score: 0, max,
+      // A zero-point question deducts nothing, so it carries no feedback (CORE.md §2, Q1 privacy).
+      feedback: max ? NO_SUBMISSION_FEEDBACK : '',
+      status: 'zero',
+    };
+  });
+  return {
+    enrollment_id: enrollmentId,
+    assignment_offering_id: off.id,
+    submission_id: null,
+    points_earned: 0,
+    points_possible: off.pointsPossible,
+    question_scores,
+    diagnostic: {
+      q2_effort: 0, q3_understanding: 0, schema: 1,
+      source: 'publish',
+      // What separates this from a submission of gibberish, which scores identically.
+      no_submission: true,
+      effort: 0, overall_understanding: 0, objectives: [], misconceptions: [],
+      reading_reflection: { meaningful: false, engagement: 0 },
+      flags: { needs_follow_up: true, notable: false },
+    },
+    source: 'instructor',
+    is_finalized: true,
+    graded_by: actorId,
+    graded_at: nowIso,
+  };
+}
+
+/**
+ * Carry out a plan: publish the `publish` items and create the `zero` items. Nothing else is written.
+ *
+ * PUBLISHING IS A FLAG, NEVER A REWRITE. grades_points_from_effort() (migration 019) recomputes
+ * points on any UPDATE of a row that carries an effort — to the value it already holds — and leaves
+ * every other row alone, so no score moves. Provenance (`source`, `graded_by`, `graded_at`) is kept,
+ * as gradeRows() rule 1 keeps it: publishing records who RELEASED a grade, not who wrote it, and
+ * grade_events is where that goes.
+ *
+ * `.eq('is_finalized', false)` makes a second press a no-op, and `ignoreDuplicates` means a zero
+ * never lands on a row something else wrote in the meantime (a scheduled run, a colleague's Finalize).
+ *
+ * confirmEffortRows() is deliberately NOT applied. Finalize raises a capped effort because an
+ * instructor looking at the card asserted the work was worth full marks; a bulk publish releases
+ * what is saved and asserts nothing about work nobody opened.
+ *
+ * @returns {Promise<{ published: number, created: number, error: object|null }>}
+ */
+export async function applyPublishPlan(ctx, items, offerings, { via = 'publish-all' } = {}) {
+  const offById = {};
+  (offerings || []).forEach(o => { const p = planOffering(o); offById[p.id] = p; });
+  const nowIso = new Date().toISOString();
+  const flips = [...new Set((items || [])
+    .filter(i => i.kind === 'publish' && i.gradeId).map(i => i.gradeId))];
+  const zeros = (items || []).filter(i => i.kind === 'zero' && offById[i.offeringId]);
+
+  const published = [], created = [];
+  let error = null;
+
+  for (const ids of chunks(flips, 100)) {
+    const res = await db.from('grades').update({ is_finalized: true })
+      .in('id', ids).eq('is_finalized', false).select('id, assignment_offering_id');
+    if (res.error) { error = res.error; break; }
+    published.push(...(res.data || []));
+  }
+  if (!error) {
+    const rows = zeros.map(i => zeroRow(offById[i.offeringId], i.enrollmentId, ctx.user.id, nowIso));
+    for (const batch of chunks(rows, 100)) {
+      const res = await db.from('grades')
+        .upsert(batch, { onConflict: 'enrollment_id,assignment_offering_id', ignoreDuplicates: true })
+        .select('id, assignment_offering_id');
+      if (res.error) { error = res.error; break; }
+      created.push(...(res.data || []));
+    }
+  }
+
+  // Append-only audit, best-effort — the same bargain as finalizeScores(): a failed log entry must
+  // not cost the grades that were just published.
+  const detail = (g, extra = {}) => ({
+    offering: g.assignment_offering_id, slug: offById[g.assignment_offering_id]?.slug || '',
+    via, bulk: true, ...extra,
+  });
+  const events = [
+    ...created.map(g => ({ grade_id: g.id, event: 'created', actor: ctx.user.id,
+                           detail: detail(g, { no_submission: true }) })),
+    ...[...published, ...created].map(g => ({ grade_id: g.id, event: 'finalized', actor: ctx.user.id,
+                                              detail: detail(g) })),
+  ];
+  for (const batch of chunks(events, 200)) {
+    const { error: e } = await db.from('grade_events').insert(batch);
+    if (e) { console.warn('[publish] published, but the audit event failed:', e.message); break; }
+  }
+
+  return { published: published.length, created: created.length, error };
+}
+
+/**
+ * Split a plan for the Grade page: which rows the two upserts already send, which they must skip,
+ * and which only applyPublishPlan() can reach.
+ *
+ *   - An EDITED card is the instructor's decision. The upserts write it, whatever the plan says.
+ *   - A held WRITTEN card goes into `skipIds`, so gradeRows() does not re-send it (its rule 4).
+ *   - `publish` on a no-submission or interactive card is a flag flip here: effortRows() never
+ *     sends an untouched row, and must not (its rule 2).
+ *   - `publish` on a written card needs nothing here — gradeRows() re-sends it, published.
+ *   - `zero` is created here, on either kind of card.
+ *
+ * @returns {{ skipIds: Set<number>, flipItems: object[], zeroItems: object[], held: object[] }}
+ */
+export function finalizeExtras(items, gradeData = {}, effortData = {}, staleIds = null) {
+  const skipIds = new Set(staleIds || []);
+  const flipItems = [], zeroItems = [], held = [];
+  for (const it of items || []) {
+    const sid = it.studentId;
+    const ed = effortData[sid];
+    const edited = ed ? !!ed.modified : Object.values(gradeData[sid] || {}).some(q => q?.modified);
+    if (edited) continue;
+    if (it.kind === 'hold') { held.push(it); if (!ed) skipIds.add(sid); continue; }
+    if (it.kind === 'publish' && ed) flipItems.push(it);
+    else if (it.kind === 'zero') zeroItems.push(it);
+  }
+  return { skipIds, flipItems, zeroItems, held };
+}
+
+/**
+ * planPublish() over what the Grade page already holds, plus the one thing it does not: the
+ * cadets' other enrollments, for condition 6. Nothing else is re-read, so the plan describes
+ * exactly the cards on screen.
+ *
+ * @returns {Promise<{ items: object[], error: object|null }>}
+ */
+export async function viewPublishPlan(ctx, { offering, students, gradeMap = {}, submissionMap = {},
+                                             extensionMap = {} }, now = new Date()) {
+  const off = planOffering(offering);
+  const byStudent = Object.fromEntries((students || []).map(s => [s.student_id, s]));
+  const submissions = [], grades = [], extensions = [], writtenContent = {};
+
+  Object.entries(submissionMap).forEach(([sid, s]) => {
+    const st = byStudent[sid];
+    if (!st || !s) return;
+    submissions.push({ id: s.id, enrollment_id: st.enrollment_id, assignment_offering_id: off.id,
+      chosen_activity_id: s.chosenActivityId || null, status: s.status, committed_at: s.committedAt || null,
+      updated_at: s.updatedAt || null });
+    // The page loaded every submission with its activities, so nothing here is ever "unknown".
+    writtenContent[s.id] = (off.writtenActivityId && s.activities?.[off.writtenActivityId]?.content) || {};
+  });
+  Object.entries(gradeMap).forEach(([sid, g]) => {
+    const st = byStudent[sid];
+    if (!st || !g) return;
+    grades.push({ id: g.gradeId, enrollment_id: st.enrollment_id, assignment_offering_id: off.id,
+      is_finalized: !!g.finalized, points_earned: g.pointsEarned, source: g.source || null,
+      graded_at: g.gradedAt || null, nosub: g.diagnostic?.no_submission === true });
+  });
+  Object.entries(extensionMap).forEach(([sid, x]) => {
+    const st = byStudent[sid];
+    if (!st || !x?.due || x.isRevoked) return;
+    extensions.push({ enrollment_id: st.enrollment_id, assignment_offering_id: off.id, extended_due_at: x.due });
+  });
+
+  const canZero = seesWholeOffering(ctx);
+  let siblings = [];
+  if (canZero && (students || []).length) {
+    const wanted = new Set(students.map(s => s.student_id));
+    const enr = await fetchAll(() => db.from('enrollments').select('id, student_id, status')
+      .in('section_id', Object.keys(ctx.sectionsById || {})));
+    if (enr.error) return { items: [], error: enr.error };
+    siblings = (enr.data || []).filter(e => wanted.has(e.student_id));
+    const others = siblings.filter(e => !byStudent[e.student_id] || byStudent[e.student_id].enrollment_id !== e.id);
+    if (others.length) {
+      const sib = await fetchAll(() => db.from('submissions')
+        .select('id, enrollment_id, assignment_offering_id, chosen_activity_id, status, committed_at, updated_at')
+        .eq('assignment_offering_id', off.id).in('enrollment_id', others.map(e => e.id)));
+      if (sib.error) return { items: [], error: sib.error };
+      submissions.push(...(sib.data || []));
+    }
+  }
+
+  return {
+    items: planPublish({ offerings: [off], students, submissions, grades, extensions,
+                         writtenContent, siblings, canZero }, now),
+    error: null,
+  };
+}
+
+/**
+ * The whole course's plan, for the director's Publish-all (admin.html → Export).
+ *
+ * Reads by OFFERING, never by a list of enrollment ids: a whole course is ~500 of them, and a URL
+ * carrying 500 uuids is ~18 KB — past what some proxies accept, with nothing to say so. RLS already
+ * confines every read to the caller's sections, and a director's are all of them. Any failed read
+ * aborts the whole plan: a plan built from part of the data would zero cadets whose work it missed.
+ *
+ * @returns {Promise<{ items: object[], offerings: object[], error: object|null }>}
+ */
+export async function loadPublishPlan(ctx, now = new Date()) {
+  const empty = { items: [], offerings: [], error: null };
+  if (!ctx.currentOffering) return empty;
+  const sectionIds = Object.keys(ctx.sectionsById || {});
+  if (!sectionIds.length) return empty;
+  const scope = new Set(ctx.sectionIds || []);
+
+  const [offRes, enrRes] = await Promise.all([
+    db.from('assignment_offerings').select(OFFERING_SELECT)
+      .eq('course_offering_id', ctx.currentOffering).eq('is_published', true),
+    fetchAll(() => db.from('enrollments')
+      .select('id, student_id, section_id, status, students!inner(student_id, name)')
+      .in('section_id', sectionIds)),
+  ]);
+  if (offRes.error) return { ...empty, error: offRes.error };
+  if (enrRes.error) return { ...empty, error: enrRes.error };
+
+  const offerings = (offRes.data || [])
+    .map(r => withResolvedDue(shapeOffering(r), offeringSections(ctx)))
+    .filter(Boolean)
+    .map(planOffering);
+  const offeringIds = offerings.map(o => o.id);
+  if (!offeringIds.length) return { ...empty, offerings };
+
+  const all = enrRes.data || [];
+  const students = all
+    .filter(e => e.status === 'active' && scope.has(e.section_id))
+    .map(e => ({ student_id: e.student_id, name: e.students?.name || String(e.student_id),
+                 enrollment_id: e.id, section_id: e.section_id }));
+  const siblings = all.map(e => ({ id: e.id, student_id: e.student_id }));
+
+  const [subs, grds, exts] = await Promise.all([
+    fetchAll(() => db.from('submissions')
+      .select('id, enrollment_id, assignment_offering_id, chosen_activity_id, status, committed_at, updated_at')
+      .in('assignment_offering_id', offeringIds)),
+    fetchAll(() => db.from('grades')
+      .select('id, enrollment_id, assignment_offering_id, is_finalized, points_earned, source, graded_at,' +
+              'nosub:diagnostic->>no_submission')
+      .in('assignment_offering_id', offeringIds)),
+    fetchAll(() => db.from('extensions')
+      .select('id, enrollment_id, assignment_offering_id, extended_due_at')
+      .in('assignment_offering_id', offeringIds).is('revoked_at', null)),
+  ]);
+  for (const r of [subs, grds, exts]) if (r.error) return { ...empty, offerings, error: r.error };
+
+  // `->>` returns text, so the flag arrives as the string 'true'.
+  const grades = (grds.data || []).map(g => ({ ...g, nosub: g.nosub === true || g.nosub === 'true' }));
+
+  // Answers are read only where the rule needs them: a submission with no grade (zero, or work
+  // nobody graded?) and one whose grade is a no-submission zero (stale?). Everything else is graded.
+  const key = (e, o) => `${e}|${o}`;
+  const gradeBy = Object.fromEntries(grades.map(g => [key(g.enrollment_id, g.assignment_offering_id), g]));
+  const need = (subs.data || []).filter(s => {
+    const g = gradeBy[key(s.enrollment_id, s.assignment_offering_id)];
+    return !g || g.nosub;
+  });
+  const writtenOf = Object.fromEntries(offerings.map(o => [o.id, o.writtenActivityId]));
+  const offeringOfSub = Object.fromEntries(need.map(s => [s.id, s.assignment_offering_id]));
+  const writtenContent = {};
+  need.forEach(s => { writtenContent[s.id] = {}; });        // read ⇒ known; no written row ⇒ blank
+  for (const ids of chunks(need.map(s => s.id), 100)) {
+    const res = await db.from('submission_activities')
+      .select('submission_id, activity_id, content').in('submission_id', ids);
+    if (res.error) return { ...empty, offerings, error: res.error };
+    (res.data || []).forEach(sa => {
+      if (sa.activity_id === writtenOf[offeringOfSub[sa.submission_id]]) {
+        writtenContent[sa.submission_id] = sa.content || {};
+      }
+    });
+  }
+
+  const items = planPublish({
+    offerings, students, submissions: subs.data || [], grades, extensions: exts.data || [],
+    writtenContent, siblings, canZero: seesWholeOffering(ctx),
+  }, now);
+  return { items, offerings, error: null };
+}
+
+/** Per-lesson counts for the director's table, in lesson order. */
+export function summarizePublishPlan(items) {
+  const by = {};
+  for (const it of items || []) {
+    const r = (by[it.offeringId] ||= { offeringId: it.offeringId, slug: it.slug, title: it.title,
+      position: it.position ?? 0, publish: 0, zero: 0, hold: 0, wrong: 0 });
+    if (it.kind === 'publish') r.publish++;
+    else if (it.kind === 'zero') r.zero++;
+    else if (it.kind === 'hold') r.hold++;
+    else if (it.kind === 'wrong-published') r.wrong++;
+  }
+  return Object.values(by).sort((a, b) =>
+    (a.position - b.position) || String(a.slug).localeCompare(String(b.slug)));
 }

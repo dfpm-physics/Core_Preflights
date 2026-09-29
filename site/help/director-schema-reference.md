@@ -416,10 +416,10 @@ An unlock must record who performed it. The database refuses an anonymous one.
 | `points_earned`, `points_possible` | The score, and the maximum |
 | `effort` | 0–5 rating. Present on a grade earned through the interactive path, empty on a written one — and its presence is what selects the effort conversion. **An instructor overriding the points on an interactive card clears it**, which is what hands ownership of `points_earned` to them: while it is set, the conversion recomputes the score on every write and no override can survive. The rating itself is not lost — it stays in `diagnostic`, where every chart already reads it from on the written path |
 | `question_scores` | Per-question score, status, and feedback. The written path's mechanism |
-| `diagnostic` | Understanding, misconceptions, and flags. **Never affects points.** Also holds the instructor's overrides of what the AI concluded — `effort_override` when publishing full credit lifts a capped effort, and `flag_overrides` when someone clears an integrity or follow-up flag as inapplicable. Both record what it was, who decided, and when; neither rewrites the AI's own reading. Since 2026-08-21 it also holds `instructor_note` (`{text, by, at}`) — the reason for a score on an interactive or no-submission card, which has no `question_scores` to carry feedback in. **This is the one key in this column a student can read**, projected on its own; the rest of the column is staff-only |
+| `diagnostic` | Understanding, misconceptions, and flags. **Never affects points.** Also holds the instructor's overrides of what the AI concluded — `effort_override` when publishing full credit lifts a capped effort, and `flag_overrides` when someone clears an integrity or follow-up flag as inapplicable. Both record what it was, who decided, and when; neither rewrites the AI's own reading. Since 2026-08-21 it also holds `instructor_note` (`{text, by, at}`) — the reason for a score on an interactive or no-submission card, which has no `question_scores` to carry feedback in. **This is the one key in this column a student can read**, projected on its own; the rest of the column is staff-only. `no_submission: true` marks a zero written for a cadet who handed in nothing — by the analysis run, or since 2026-09-29 by publishing, which also sets `source: 'publish'` inside the column. Nothing clears it, so it outlives a later re-grade; the Grade page decides whether such a zero is stale from who saved it and when, never from the flag alone |
 | `source` | `instructor`, `ai_suggested`, `derived`, or `imported`. `derived` is a grade the database computed for itself, which today means an interactive lesson's effort grade |
 | `is_finalized` | Whether the student can see it |
-| `graded_by`, `graded_at` | Who finalized it. Empty on a `derived` grade — nobody did |
+| `graded_by`, `graded_at` | Who wrote the score, and when — not who published it, which `grade_events` records. Empty on a `derived` grade — nobody did |
 
 **A grade carries one mechanism or the other, never both.** A row holding an effort rating *and*
 question scores is rejected by the database rather than silently scored twice. This is what lets a
@@ -463,6 +463,10 @@ user can append to is not an audit trail.
 
 Every change to a grade appends a row here — created, rescored, finalized, reopened, unlocked —
 with who did it and when. Nothing updates or deletes these rows.
+
+Grades released by the publish rule carry `detail.via` and `bulk: true` — `publish-all` from the
+director's *Publish everything that is due*, `grade-page` from the part of Finalize & publish that
+reaches cards nobody edited. A zero that rule created has a `created` row as well as a `finalized` one.
 
 It exists because a retroactive rescore once corrupted totals silently in the previous system. When
 a score is disputed, or a total looks wrong, this is where the history is. Staff can read the events
