@@ -8,6 +8,73 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-09-30 — Matthew Recker via Claude
+
+### phys-310 lessons 01–10: no-submission zeros waived to full credit, and a script that does it
+
+**What.** Twenty phys-310 grade rows that read `0.00 / 3.00` because the cadet handed nothing in
+now read `3.00 / 3.00`, finalized, `source = 'instructor'`. Course director's instruction: *"for
+310 and 310 only … give full credit to anyone that did not make a submission for lesson 10 and
+earlier. There were issues with the system up to that point."*
+
+| Lesson | Rows waived | Lesson | Rows waived |
+|---|---|---|---|
+| `lesson-03` | 2 | `lesson-08` | 4 |
+| `lesson-04` | 1 | `lesson-09` | 4 |
+| `lesson-06` | 6 | `lesson-10` | 3 |
+
+**Why a script and not twenty hand-edits.** `scripts/fall2026/credit_waiver.py` is new, and it is
+the deliberate inverse of `zero_non_submitters.py`: a zero is only honest when the cadet could have
+submitted, and this is the operation for when they could not. It is dry-run by default, snapshots
+every targeted row's full before-state and re-checks that snapshot against live before writing, and
+is idempotent — a re-run immediately afterwards reported *0 in scope, 23 already waived, nothing to
+write*.
+
+**It writes the shape the director already produces by hand**, copied from three rows they made in
+`site/faculty/grade.html` in August (phys-310 `lesson-02` and `lesson-03`) rather than invented:
+`points_earned = points_possible`, **`effort` left NULL** — `app.grades_points_from_effort`
+(migration `app/019`) returns early on a NULL effort, so the literal points survive a re-save, where
+setting an effort would hand the number back to the trigger — `source = 'instructor'`,
+`is_finalized = true`, and a `diagnostic.effort_override` block carrying
+`rule: 'finalized-full-credit'`, the same string `confirmEffortRows` in `site/js/faculty-grade.js`
+and `raise_confirmed_effort.py` use. **`diagnostic.no_submission` stays `true`.** The record that
+they submitted nothing is true and survives the waiver; what changed is the consequence, and the
+row now names who decided it.
+
+**What it deliberately did not touch.** Six rows on `lesson-02`/`lesson-03` belonging to **dropped**
+enrollments — reported, not rewritten. Three rows already at full credit — the director's own, left
+alone. Eleven rows on `lesson-13`/`14`/`15`/`17`, outside the range. Setting `is_finalized` is
+what makes the waiver visible to the cadet: on every one of these offerings the rest of the column
+was already published and these rows were the only unpublished ones left.
+
+**Verified.** Snapshot 20/20 still at zero immediately before the write; each `UPDATE` asserted
+`rowcount == 1` or the whole transaction aborts; read back on a fresh `prep_app_read` connection —
+20 of 20 at full credit, finalized, instructor-sourced, and **0 rows still at zero** across lessons
+01–10. No cohort number moved: a non-submitter has no submission row, so they were never in the
+effort distribution or the understanding means that `/lesson-aggregate` reads.
+
+**Two things found along the way, neither fixed.**
+
+- **`lesson-06`'s written activity sums to 1 point against a 3-point offering** (`q1` 0 + `q2` 1;
+  every other written lesson is `q1` 0 + `q2` 1 + `q3` 2). Nobody has ever taken `lesson-06` in
+  written mode, so it has cost nothing, but a written taker there could not reach full marks. The
+  waiver sets `points_earned` from `points_possible` and is unaffected; the script prints the
+  mismatch per row rather than papering over it.
+- **`lesson-17`'s written Q2 asks cadets to justify a claim its own answer key contradicts** — the
+  prompt says a large μ is what you want in a detector *but not in a shield*, while the
+  `expected_response` calls it "the SAME virtue for the opposite purpose". Cadet 3000127567
+  resisted the premise and was right; they were given credit. Worth fixing before the next
+  offering.
+
+**Also in this session, recorded in `app.analysis_runs` rather than here** (CORE.md §0 — routine
+analysis runs log themselves): `/lesson-cycle` closed out all eight outstanding phys-310 lessons
+(08, 09, 10, 13, 14, 15, 16, 17) — 12 written submissions graded, 24 rollup scopes written and read
+back with 0 mismatches, and 23 no-submission zeros written course-wide, six of them on `lesson-06`,
+which had been analyzed on 2026-08-24 and never zeroed. Six of those six were waived to full credit
+an hour later by the change above.
+
+---
+
 ## 2026-09-29 — Casey Pellizzari via Claude
 
 ### Five published no-submission zeros that sat over real work were regraded (phys-110)
