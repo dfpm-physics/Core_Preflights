@@ -114,6 +114,48 @@ or instructor. Beyond Node, the UI code has had only `node --check` and the impo
   of the 38 phys-215 zeros. Remove that enrollment first.
 
 ---
+## 2026-09-23 — Matthew Recker via Claude
+
+### `lesson_aggregate.py write-analysis` reported a spurious error and rolled back on every real commit
+
+**`cmd_write` used the name `written` for two different things.** It is the per-offering success
+counter, an `int`, and at the top of the `if not args.dry_run:` block it was rebound to a **list**
+of scope names for the `analysis_runs` detail row. Twenty lines later `written += 1` ran against
+that list and raised `TypeError: 'int' object is not iterable`, which the enclosing `except`
+caught, printed as `[err ] offering <uuid>: TypeError`, and answered with `conn.rollback()`.
+
+Renamed the list to `written_names`. Two lines, no behaviour change beyond the bug.
+
+**It only fired on a real write**, never on `--dry-run`, because the whole block is inside
+`if not args.dry_run`. So the failing path was the one nobody rehearsed, and a green dry run said
+nothing about it.
+
+**Three things it had been doing, in order of how bad they are:**
+
+- **The offering's success counter never incremented**, so a successful run ended
+  `wrote=1 row(s) err=1` — it reported an error and undercounted its own work. Both numbers were
+  wrong and they disagreed with the `[ok ]` lines printed directly above them.
+- **`conn.rollback()` ran after the scope write.** The data survived in practice — verified by
+  reading `analysis_reports.payload.scopes` back on a fresh connection after both the M-day and
+  T-day commits of phys-110 preflight-16 — because `_run_start` commits before the rollback can
+  reach the payload. That is incidental, not designed, and it is not a property to keep relying on.
+- **The `lesson-aggregate` audit row was written anyway**, with `status=success`, beside a printed
+  error. An operator reading either one alone got a consistent story; reading both got a
+  contradiction with nothing to resolve it.
+
+**Verified by re-running the real commit**, which is idempotent (the writer merges scopes, so the
+same input produces the same 33 stored scopes). Before: `wrote=1 row(s) err=1`. After:
+`wrote=1 row(s) err=0`, same 33 scopes, no STALE flags.
+
+**Two indexed documents are flagged by this change and were deliberately NOT date-bumped** —
+`docs/operations/ONBOARD-AGGREGATION.md` and `docs/operations/SCHEDULED-LESSON-CYCLE.md`, both of
+which name `lesson_aggregate.py` as a source. Neither describes `detail.scopes_written`, the error
+path, or the run-row counters, so neither is made wrong by this fix. `reviewed` attests that
+somebody checked the whole document against all of its sources, and that is not what happened here,
+so bumping the date would have been a false attestation for the sake of a clean check.
+
+---
+
 
 ## 2026-09-23 — Bryan Egner via Claude
 

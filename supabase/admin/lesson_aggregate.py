@@ -1845,7 +1845,7 @@ def cmd_write(args, conn):
                 # Readable in `detail` too: 'instr:<uuid>' is no more use to someone reading the
                 # audit trail than to a director. `scope_keys` keeps the literal payload keys, so
                 # a key can still be matched straight against analysis_reports.payload.scopes.
-                written = sorted(
+                written_names = sorted(
                     (f"{INSTR}{s.get('instructor_name') or k[len(INSTR):]}" if k.startswith(INSTR)
                      else (s.get("section_code") or k))
                     for k, s in bucket["scopes"].items())
@@ -1854,7 +1854,7 @@ def cmd_write(args, conn):
                     _run_start(conn, c["meta"], "lesson-aggregate", args.invoked_by, day),
                     "success" if wrote_all or state["reason"] == "awaiting-track" else "partial",
                     summary=_run_summary(bucket["scopes"], wrote_all, state),
-                    detail={"scopes_written": written,
+                    detail={"scopes_written": written_names,
                             "scope_keys": sorted(bucket["scopes"]),
                             "all_scope": "written" if wrote_all else "deferred",
                             **({} if wrote_all else {"all_scope_reason": state["reason"]}),
