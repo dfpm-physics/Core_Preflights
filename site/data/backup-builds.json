@@ -301,6 +301,12 @@
       "title": "Detection Methods I: Efficiency and Gas-Filled Detectors",
       "path": "gemini/phys-310/phys310-detection-methods-gas-filled-detectors-edc3bbb5.html"
     },
+    "phys310-detection-methods-scintillation-semiconductor-and-dosimetry-f5e95d35": {
+      "course": "phys-310",
+      "lesson_no": 20,
+      "title": "Detection Methods II: Scintillation, Solid State, and Reading a Spectrum",
+      "path": "gemini/phys-310/phys310-detection-methods-scintillation-semiconductor-and-dosimetry-f5e95d35.html"
+    },
     "phys310-dose-and-shielding-43f26ac6": {
       "course": "phys-310",
       "lesson_no": 15,
@@ -318,6 +324,12 @@
       "lesson_no": 16,
       "title": "Lab 2: Distance and Shielding",
       "path": "gemini/phys-310/phys310-lab-2-distance-and-shielding-a5909322.html"
+    },
+    "phys310-lab-3-radiation-detectors-and-gamma-spectra-b4abd951": {
+      "course": "phys-310",
+      "lesson_no": 21,
+      "title": "Lab 3: Radiation Detectors and Gamma Spectra",
+      "path": "gemini/phys-310/phys310-lab-3-radiation-detectors-and-gamma-spectra-b4abd951.html"
     },
     "phys310-neutron-transport-4ecf35e0": {
       "course": "phys-310",

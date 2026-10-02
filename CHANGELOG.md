@@ -8,6 +8,83 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-10-02 — Matthew Recker via Claude
+
+### Lessons 20 and 21 built from the decks, and Lab 3 stops being blocked
+
+**The same instruction a fourth and fifth time** — objectives from the instructor's own deck, Gemini
+build, assignment registered unpublished for review. Lesson 20 is Detectors II, due **Mon 5 Oct
+07:59:59 MDT**; lesson 21 is Lab 3, due **Wed 7 Oct 07:59:59 MDT**. Both dates were confirmed against
+`site/data/academic-calendar.json`, which names them T20 and T21, and this course's one section (T3A)
+is a T-day section.
+
+**Lessons 18 and 19 have no preflight and that is not a defect.** Their teaching days passed with
+nothing registered because **lesson 18 was a field trip to Sandia and lesson 19 was a comp day** for
+cadets to make up missed work (course director, 2026-10-02). Recorded in the `register_lesson.py`
+PLAN as well, because the next operator reading 17 → 20 will otherwise go looking.
+
+**Lesson 20 — the deck supplies six things the corpus does not have at all.** The photomultiplier's
+**dynode chain** (the corpus gives only a gain of 10⁶), the semiconductor's **doping, depletion
+region and reverse bias** (the corpus says only "a reverse-biased diode"), the **annihilation peak**,
+a **K X-ray peak thrown by the detector's own lead shield**, the **three-family pros-and-cons table**,
+and a whole second half on **Cherenkov radiation, IceCube, Super-Kamiokande, Sudbury, cosmic-ray
+arrays and a cloud-chamber demo**. All of it is now grounded in a `[DECK]` block that outranks the
+reconstructed sections where the two touch.
+
+**The substantive change there is that neutron detection was DROPPED as an objective.** §12.6 is
+still in the assigned reading and its converter material is still grounded in full — but **the deck
+does not cover neutron detection on any slide**, and lesson 17 already hands the cadet the
+one-sentence version. It is now engage-if-raised, never probed. The three objectives are the deck's:
+the scintillation chain, reading a gamma spectrum, and resolution-then-choosing across all three
+families. Two of five extension problems were neutron-only and were replaced.
+
+**That lesson also retires a standing uncertainty.** The artifact's second provenance note said the
+reference was **not sure what §12.8 contained**, because the subject had been inferred from the
+lesson title, and told the tutor never to assert the cadet had read dosimetry. **The deck has a
+personnel-dosimetry slide.** Subject confirmed. The old note is left in place as a record of what was
+not known, and the `[DECK]` block says it is superseded on that one point.
+
+**Lesson 21 — Lab 3 was listed as blocked and the block was never about a reading.** It was about the
+write-up not being in the repository. It arrived, so Lab 3 is built the way Labs 1 and 2 were: from
+the cadet's own write-up, read from its **LaTeX source** rather than from the PDF, because a text
+layer drops equations silently. **This time the `.tex` is committed beside the PDF**, so the claim is
+checkable — neither earlier lab kept its source. New slug
+`phys310-lab-3-radiation-detectors-and-gamma-spectra-b4abd951`, new file, new component name, rebased
+byte-for-byte on Lab 2's transport. Unlike Labs 1 and 2 there is **no analysis workbook**: every
+number is computed by hand from one equation, which is why the first probe topic is the calibration.
+
+**Three things in that lab are load-bearing and were nearly easy to get wrong.** Its calibration
+equation has **no intercept** — the line is forced through the origin, legitimate only because the
+lab's own table anchors `0 keV` at `channel 0` — so the artifact is told neither to add a term nor to
+call the equation wrong. The lab asks for the **Compton edge twice by two different routes** and never
+says that comparing them checks the calibration; that is now the artifact's headline lateral
+connection. And **the isotope equation sheet is not in this repository**, so the tutor is barred from
+producing a gamma energy for any of the eight candidates — a fabricated fingerprint would send a cadet
+into a 10-point task wrong. The one exception is Co-60, which the lab itself reveals.
+
+**Every graded number is kept out of both artifacts' timed portions.** Between them, step 1 and
+discussion questions 1 and 2 are 16 points of channel-to-energy and Compton-edge arithmetic. The
+extension problems run the same methods on deliberately different numbers, and so does the written
+free-response question.
+
+**Neither slug moved.** Lesson 20's artifact kept `...-f5e95d35` because `activities.slug` is globally
+`UNIQUE`; it had no activities row and no submissions, so nothing was at risk either way, but the rule
+is the rule. Both lessons take the **Gemini route** — and for lesson 20 the claude.ai copy is actively
+wrong, since it was published 2026-08-20 and still probes the retired objectives, including the
+neutron topic the deck does not teach.
+
+**Verified:** `check_artifact.py` 37/37 on both · `gemini-build.mjs` 8/8 in real Chrome on both · LF
+and zero NUL bytes · every extension-problem figure recomputed by an independent route · both
+registrations read back through the DML role, each with 2 attached activities, correct `due_at`,
+`due_by_day` and per-section row. **No live tutor turn on either** — there is no Gemini key on this
+machine, so the conversations themselves are unproven, as for Lab 2 and lesson 17.
+
+**Also corrected:** the phys-310 BUILD-LOG's summary table is an August snapshot whose counts the term
+has moved past, and it now says so and points at the query that answers "what is registered" instead
+of a document that cannot.
+
+---
+
 ## 2026-09-30 — Matthew Recker via Claude
 
 ### phys-310 lessons 01–10: no-submission zeros waived to full credit, and a script that does it

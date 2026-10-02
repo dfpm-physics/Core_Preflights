@@ -366,6 +366,179 @@ PLAN = {
             },
         ],
     },
+    # LESSONS 18 AND 19 HAVE NO PREFLIGHT ON PURPOSE, and the gap is not a defect. Their teaching
+    # days passed with nothing registered because lesson 18 was a field trip to Sandia and lesson 19
+    # was a comp day for cadets to make up missed work (course director, 2026-10-02). Recorded here
+    # because the next operator reading this PLAN will otherwise see 17 -> 20 and go looking.
+    ("phys-310", 20): {
+        "assignment_slug": "lesson-20",
+        "kind_id": "preflight",
+        "title": "Lesson 20 Preflight -- Detection Methods II",
+        "position": 20,
+        "points_possible": 3,
+        "grading_mode": "points",
+        "switch_policy": "lock_on_commit",
+        "is_published": False,          # draft; the director publishes from the lessons page
+        "opens_at": None,               # NULL selects the rolling 7-day release window
+        # 0800 America/Denver on the lesson day, at the course director's choosing (2026-10-02).
+        # Mon 5 Oct is "T20" on site/data/academic-calendar.json and this course's one section
+        # (T3A) is a T-day section, so this is the morning of the lesson -- the same shape as
+        # lessons 16 and 17. Stored as the last instant BEFORE 0800. Still MDT: DST ends 1 Nov.
+        "due_at": "2026-10-05 13:59:59+00",   # Mon 5 Oct 07:59:59 MDT
+        "day_key": "T",                 # this course's one section is a T-day section
+        "interactive_title": "Detection Methods II: Scintillation, Solid State, and Reading a Spectrum",
+        # THE EXISTING ARTIFACT'S SLUG, read out of the source's INTERACTION_ID and never retyped.
+        # The source was re-aimed to the instructor's Lesson 20 deck on 2026-10-02 and the slug
+        # deliberately did NOT move. It had no activities row and no submissions before this run,
+        # so nothing was at risk either way -- but the rule is the rule.
+        "interactive_slug": "phys310-detection-methods-scintillation-semiconductor-and-dosimetry-f5e95d35",
+        # GEMINI ROUTE, as for lessons 15, 16 and 17. The claude.ai artifact published 2026-08-20
+        # serves what was published, so it probes the three retired objectives -- including a
+        # neutron-detection topic this lesson's deck does not teach at all.
+        "artifact_url": "https://dfpm-physics.github.io/Core_Preflights/site/student/"
+                        "backup.html?i=phys310-detection-methods-scintillation-semiconductor-"
+                        "and-dosimetry-f5e95d35&go=1",
+        "written_slug": "phys-310-lesson-20-written-4629bb8b",
+        "written_role": "graded",
+        "interactive_role": "graded",
+        "reference_pdf": None,
+        "reference_pages": None,
+        # One free-response question beyond the two defaults, worth the remaining 2 points. Both
+        # halves are answerable BEFORE the lesson from material the cadet already has: (a) is the
+        # earlier interactions lesson's three gamma mechanisms, and (b) is lesson 17's 34 eV per ion
+        # pair plus the square-root law from earlier coursework. Together they are the two halves of
+        # this lesson -- what a spectrum IS, and where resolution comes from.
+        "questions": [
+            {
+                "id": "q3",
+                "role": "free_response",
+                "text": "(a) A source emits gammas at a SINGLE energy into a sodium-iodide "
+                        "detector, and yet the pulse-height spectrum comes back with several "
+                        "distinct features rather than one line. Using the three gamma interaction "
+                        "mechanisms from the interactions lesson, explain why that happens, and say "
+                        "which single feature actually reports the gamma's energy. (b) A gas-filled "
+                        "detector needs about 34 eV of deposited energy to make one ion pair; a "
+                        "germanium detector needs about 3 eV to make one electron-hole pair. For the "
+                        "same 1 MeV gamma fully absorbed in each, which produces more charge "
+                        "carriers? Then explain why having more carriers makes the measurement of "
+                        "the energy more PRECISE, rather than just making the pulse bigger.",
+                "type": "free_response",
+                "points": 2,
+                "figure_url": "",
+                "correct_answer": "",
+                "expected_response":
+                    "(a) The spectrum records what happened INSIDE the detector, not what the "
+                    "source emitted, and the gamma can interact in three different ways. "
+                    "Photoelectric absorption deposits the whole energy and gives the PHOTOPEAK -- "
+                    "which is the one and only feature that reports the gamma's energy. Compton "
+                    "scattering deposits only part of the energy and then the scattered photon can "
+                    "leave the detector; how much stays behind depends on the scattering angle, so "
+                    "a single gamma energy smears into a whole CONTINUUM, ending at an EDGE set by "
+                    "the maximum (180 degree) scatter. Above 1.022 MeV pair production adds escape "
+                    "peaks, 511 keV or 1.022 MeV below the photopeak, when the positron or electron "
+                    "leaves. "
+                    "(b) 1 MeV / 34 eV is about 2.9 x 10^4 ion pairs; 1 MeV / 3 eV is about "
+                    "3.3 x 10^5 electron-hole pairs -- roughly ten times as many in the germanium. "
+                    "The reason that improves PRECISION is statistical, not amplitude: the number "
+                    "of carriers fluctuates from event to event, and for a count of N the RELATIVE "
+                    "fluctuation goes as 1/sqrt(N). Ten times the carriers makes the pulse height "
+                    "about sqrt(10) times more reproducible, so two nearby energies can be told "
+                    "apart. A bigger pulse alone would not help, because amplifying a pulse "
+                    "amplifies its fluctuation with it. "
+                    "GRADING: full credit in (a) for naming at least two mechanisms and tying them "
+                    "to features, plus identifying the photopeak as the energy-reporting one. Do "
+                    "not require the backscatter peak, the annihilation peak, or any numerical "
+                    "position -- those energies are not available to the cadet. Full credit in (b) "
+                    "for the two carrier counts (order of magnitude is enough) AND some version of "
+                    "the counting-statistics argument. A cadet who says more carriers gives a "
+                    "bigger signal and stops there has the half this lesson is built to fix: flag "
+                    "it, do not zero it. A cadet who reads the Compton continuum as background to "
+                    "be subtracted, or as a second gamma energy, has the other misconception worth "
+                    "catching -- flag it and note it.",
+            },
+        ],
+    },
+    ("phys-310", 21): {
+        "assignment_slug": "lesson-21",
+        "kind_id": "preflight",
+        "title": "Lab 3: Radiation Detectors and Gamma Spectra",
+        "position": 21,
+        "points_possible": 3,
+        "grading_mode": "points",
+        "switch_policy": "lock_on_commit",
+        "is_published": False,          # draft; the director publishes from the lessons page
+        "opens_at": None,               # NULL selects the rolling 7-day release window
+        # 0800 America/Denver on the lesson day, at the course director's choosing (2026-10-02).
+        # Wed 7 Oct is "T21" on site/data/academic-calendar.json and this course's one section
+        # (T3A) is a T-day section. Same shape as lessons 16, 17 and 20. Still MDT.
+        "due_at": "2026-10-07 13:59:59+00",   # Wed 7 Oct 07:59:59 MDT
+        "day_key": "T",                 # this course's one section is a T-day section
+        "interactive_title": "Lab 3: Radiation Detectors and Gamma Spectra",
+        # Read from the artifact source's INTERACTION_ID, never retyped. Minted 2026-10-02 for a
+        # build that has no claude.ai publish at all, so this row and the Gemini build are what
+        # fix the slug -- see the comment above the declaration in the .jsx.
+        "interactive_slug": "phys310-lab-3-radiation-detectors-and-gamma-spectra-b4abd951",
+        # THERE IS NO CLAUDE ARTIFACT FOR THIS LESSON -- built for the Gemini transport only, like
+        # Lab 2. `artifact_url` is still required (isArtifactLaunchable in site/js/schema.js refuses
+        # to offer a Launch button without an http(s) URL), so it points at the same backup router
+        # the Gemini button uses. Cadets reach one tutor, by one route.
+        "artifact_url": "https://dfpm-physics.github.io/Core_Preflights/site/student/"
+                        "backup.html?i=phys310-lab-3-radiation-detectors-and-gamma-spectra-"
+                        "b4abd951&go=1",
+        "written_slug": "phys-310-lesson-21-written-0d809118",
+        "written_role": "graded",
+        "interactive_role": "graded",
+        "reference_pdf": None,
+        "reference_pages": None,
+        # One free-response question beyond the two defaults, worth the remaining 2 points. It is
+        # the lab's own section I.D (Energy Spectrum Calibration), which the cadet reads as prep.
+        # THE NUMBERS ARE DELIBERATELY NOT THE LAB'S. The write-up's step 1 calibrates 662 keV in
+        # channel 220 and asks for the Compton edge in channel 160, and that is worth 6 graded
+        # points -- so this question uses a 1000 keV line in channel 250 instead. Same method,
+        # nothing handed over.
+        "questions": [
+            {
+                "id": "q3",
+                "role": "free_response",
+                "text": "A scintillation detector does not hand you an energy spectrum. It hands "
+                        "you a histogram whose horizontal axis is CHANNEL number. (a) Explain what "
+                        "a channel actually is, why the detector can only report channels, and what "
+                        "you have to measure before those channels can be turned into energies. "
+                        "(b) Suppose a calibration source with a known 1000 keV gamma puts its full "
+                        "energy peak in channel 250, and the instrument reads 0 keV in channel 0. "
+                        "What energy does a feature in channel 90 correspond to? (c) Somebody "
+                        "changes the detector's gain after you calibrate but before you measure "
+                        "your unknown. What does that do to your answer, and why?",
+                "type": "free_response",
+                "points": 2,
+                "figure_url": "",
+                "correct_answer": "",
+                "expected_response":
+                    "(a) A channel is a BIN of pulse height. The detector measures the size of each "
+                    "current pulse and drops it into a bin; it has no way of knowing what energy "
+                    "that size corresponds to. The conversion exists at all only because the light "
+                    "output, and therefore the pulse, is PROPORTIONAL to the energy deposited -- so "
+                    "channel is a linear function of energy. To find the constant you measure a "
+                    "source whose energies you already KNOW, see which channels its features land "
+                    "in, and fit a line through those (channel, energy) points. "
+                    "(b) The slope is 1000 keV / 250 channels = 4.00 keV per channel, so channel 90 "
+                    "corresponds to 90 x 4.00 = 360 keV. "
+                    "(c) It invalidates it. The calibration is a property of THE INSTRUMENT AT THAT "
+                    "SETTING, not of the source -- change the gain and the same gamma produces a "
+                    "different pulse height and lands in a different channel, so the old slope no "
+                    "longer applies and every energy computed from it is wrong. You would have to "
+                    "recalibrate. "
+                    "GRADING: full credit in (a) for 'a channel is a pulse-height bin' plus 'you "
+                    "measure a known source'. Do not require the word linear or any mention of a "
+                    "fit. Full credit in (b) for 360 keV; accept the slope alone if the arithmetic "
+                    "is right. Full credit in (c) for 'the calibration no longer applies, "
+                    "recalibrate'. A cadet who says the detector reports energy directly has the "
+                    "misconception this question exists to find -- flag it, do not zero it. A cadet "
+                    "who treats the gain change as a small error rather than as invalidating the "
+                    "conversion has the second one; flag that too.",
+            },
+        ],
+    },
 }
 
 

@@ -1,0 +1,230 @@
+% Physics 310 -- Lab 3, themed alternative of "Phys310 - Lab 3 (2024)_redo.pdf".
+%
+% Same background, procedure and questions as the 2024 worksheet; only the
+% presentation differs. Figures were extracted from that PDF into figures\.
+% See ..\physics310.sty. REQUIRES LuaLaTeX:
+%
+%   powershell -ExecutionPolicy Bypass -File build-handout.ps1 -Tex labs\Lab3_Alt.tex -Engine lualatex
+
+\documentclass[11pt]{article}
+\usepackage[compact]{physics310}
+
+% ---------------------------------------------------------------------------
+% Lab metadata -- the only things that change from one lab to the next
+% ---------------------------------------------------------------------------
+\newcommand{\longname}{Lab 3}
+\newcommand{\shortname}{Lab 3}
+\newcommand{\term}{Fall 2026}
+\newcommand{\totalpoints}{35}
+
+\physicsheaders
+
+% A gamma spectrum to identify, with a rule to write the isotope on.
+\newcommand{\spectrum}[1]{%
+    \par\addvspace{6pt}\needspace{2.9in}%
+    \noindent\includegraphics[width=\linewidth]{figures/#1}\par
+    \vspace{2pt}
+    \noindent\hspace*{0.35in}\textbf{Isotope:}\ \fillin[2.2in]\par
+    \addvspace{9pt}}
+
+\begin{document}
+
+\titleblock{Laboratory}
+    {Radiation Detectors and Gamma Spectra \textperiodcentered\ United States Air Force Academy,
+     Department of Physics and Meteorology}
+    {\chip{\totalpoints\ Points}}
+
+\labnames{3}
+
+The purpose of this lab is to use detectors to determine various things about unknown radioactive
+sources. You will first use a Geiger counter to locate a source, and then you will use a
+scintillation detector to identify it.
+
+\labsection{I}{Background}
+
+\labsub{A}{Gamma-Ray Interactions with Matter}
+
+The three dominant methods gamma-rays interact with material are the photoelectric effect, Compton
+scattering, and electron-positron pair production.
+
+In the photoelectric effect, the photon deposits 100\% of its energy into an electron, freeing it
+from its bound state in an atom. When this occurs inside a detector, the output pulse produced will
+be proportional to the initial energy since all of the energy is transferred to the material.
+
+In Compton scattering, the photon can scatter off of an electron transferring only a portion of its
+energy to the electron and retaining the rest. The amount of energy transferred depends on the
+scattering angle where the maximum energy occurs at 180\textdegree. If the photon does not go on to
+interact further with the detector, only a portion of the initial energy is measured by the
+detector. However, this maximum energy can produce a noticeable feature in scintillation detectors,
+known as the Compton edge, and can be calculated from the incident gamma ray energy. In pair
+production, an electron-positron pair are created when a gamma-ray interacts with a nucleus of an
+atom. These newly formed elementary particles slow down through scattering interactions, and, as
+the positron comes to rest, it annihilates with an electron producing a pair of back-to-back
+511 keV gamma-rays. All of these interactions have the possibility of being measured by the
+detector. However, pair production can only occur if the photon has an energy greater than
+1.022 MeV (the mass-energy of the electron-positron pair).
+
+\labsub{B}{Scintillation Detectors}
+
+You have already worked with Geiger counters in previous labs. In this lab, we will also be working
+with a new type of detector --- a scintillation detector. Scintillation detectors are created using
+materials that will scintillate, or produce light, when radiation deposits energy. They are one of
+the oldest types of radiation detectors, since measurements could be made with photographic film or
+the human eye. In modern scintillation detectors, light output is converted into current pulses
+using a photomultiplier tube as shown in the figure. The most common type of modern scintillators
+are made from thallium doped sodium iodide [NaI(Tl)] crystals which have ideal scintillation
+properties. That is what we'll be using today.
+
+\begin{center}
+    \includegraphics[width=4.1in]{figures/lab3-p1-1.png}
+\end{center}
+
+One of the most useful features of modern scintillation detectors is their ability to produce a
+light yield, and thus a current pulse, proportional to the energy deposited in the material by the
+radiation at a high efficiency. This proportionality provides the user with valuable information
+about the incident radiation's energy and therefore its source.
+
+\labsub{C}{Gamma Spectra}
+
+\noindent\begin{minipage}[c]{0.42\linewidth}
+    \includegraphics[width=\linewidth]{figures/lab3-p2-1.png}
+\end{minipage}\hfill
+\begin{minipage}[c]{0.54\linewidth}
+    \setlength{\parskip}{0pt}
+    \begin{tabularx}{\linewidth}{@{}c >{\raggedright\arraybackslash}X l@{}}
+        \rowcolor{teal}
+        \thead{Feature} & \thead{Cs-137 Signature} & \thead{Energy} \\
+        \rowcolor{card} \datarow a & Gamma Decay Peak & 662 keV \\
+        \datarow b & Compton Edge & ?? \\
+        \rowcolor{card} \datarow c & Backscatter & 184 keV \\
+        \datarow d & X-ray Peak & 32 keV \\
+    \end{tabularx}
+\end{minipage}
+
+\vspace{8pt}
+In order to deduce meaningful information about a radiation source using a scintillation detector,
+many individual measurements are required. If each current pulse is measured, binned, and plotted
+as a histogram, features begin to emerge which can be very useful. For example, when we examine the
+figure above --- if many current pulses are measured with the same magnitude, a large peak (a) is
+produced in the histogram. This tells us that one particular energy has been deposited in the
+scintillating material repeatedly, and likely indicates a radioactive source is present and
+producing radioactive particles with that very specific energy. Because every radioactive isotope
+has a unique decay mechanism, they each produce a unique energy signature. These signatures act as
+an identifiable fingerprint for each isotope. By correlating the features revealed in the histogram
+from the scintillation detector with known energy signatures, unknown isotopes can be identified.
+
+\labsub{D}{Energy Spectrum Calibration}
+
+The ability of scintillation detectors to produce these energy spectra are the primary
+characteristic that makes them one of the most useful detectors available. However, the spectra
+directly produced by the scintillation detectors are histograms of binned current pulse magnitudes
+(also known as channels), and they must be converted to energy spectra before they can be used. In
+order to convert the histogram from channels to energy, a calibration equation must be determined.
+
+To accomplish this, a known source is measured with the detector first. We will use the Cs-137
+source from the previous section as an example. Once a spectrum is gathered from the detector with
+the known source, a correlation can be drawn from the corresponding channels of each peak to the
+energies that are known to be produced by the known source. If channels for two features can be
+gathered from the histogram and correlated to the same features of the energy signatures from the
+isotope, the equation of a line can be found and used to convert any channel to its corresponding
+energy for future isotopes.
+
+\begin{equation}
+    Energy = \frac{E_1 - E_2}{C_1 - C_2} * channel
+\end{equation}
+
+\labsub{E}{Equipment}
+
+\begin{itemize}
+    \item Pancake counter (Geiger-Mueller detector)
+    \item FLIR Identifinder (scintillation detector)
+    \item FLIR Spectrum: \url{http://422278800004.local/App/Spectrum}
+\end{itemize}
+
+\labsub{F}{Procedure and Data}
+
+\begin{steps}
+    \item Cs-137 is a common calibration source for field detectors. A sample Cs-137 spectrum will
+          be shown at the beginning of class.
+
+          \vspace{4pt}
+          \begin{minipage}{\linewidth}
+          \setlength{\parskip}{0pt}
+          \noindent\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{1.8in} X X@{}}
+              \rowcolor{teal}
+              \thead{Known Feature} & \thead{Energy} & \thead{Channel Number} \\
+              \rowcolor{card} \datarow --- & 0 keV & 0 \\
+              \datarow X-ray Peak & 32 keV & \\
+              \rowcolor{card} \datarow Compton Edge & & 160 \\
+              \datarow Primary Decay Peak & 662 keV & 220 \\
+          \end{tabularx}
+          \end{minipage}
+
+          \vspace{6pt}
+          Use the channel number of the primary peak as given and the channel number of the Compton
+          edge along with Eq (1) to estimate the channel number of the 32 keV X-ray peak and the
+          energy of the Compton edge.
+          \ptsbox{6}{1.9in}
+
+    \item Get a pancake probe. Use it to survey the closed containers around the classroom and
+          record the dose rate you measure at each. Do this until you find one that you believe
+          contains a source (give a dose rate for at least 4 of the containers regardless of how
+          quickly you find a source).
+
+          Once you have picked one that you believe contains a source, alert your instructor who
+          will open the box.
+
+          \vspace{4pt}
+          \llap{\chip[accent]{3 pts}\hspace{9pt}}%
+          \begin{minipage}{\linewidth}
+          \setlength{\parskip}{0pt}
+          \noindent\begin{tabularx}{\linewidth}{@{}X X@{}}
+              \rowcolor{teal}
+              \thead{Container Description} & \thead{Measured Dose Rate} \\
+              \rowcolor{card} \datarow & \\
+              \datarow & \\
+              \rowcolor{card} \datarow & \\
+              \datarow & \\
+              \rowcolor{card} \datarow & \\
+              \datarow & \\
+          \end{tabularx}
+          \end{minipage}
+
+    \item Analyze the spectra shown below for 5 different isotopes. Use your equation sheet to
+          determine what spectra corresponds to what isotope.
+          \ptsnote{10 pts}
+
+          \vspace{2pt}
+          \textit{Isotopes to consider: Na-24, K-40, Co-60, Mo-99, I-131, Xe-135, Cs-137, Am-241.}
+\end{steps}
+
+\spectrum{lab3-p4-1.png}
+\spectrum{lab3-p4-2.png}
+\spectrum{lab3-p4-3.png}
+\spectrum{lab3-p5-1.png}
+\spectrum{lab3-p5-2.png}
+
+\labsection{G}{Discussion Questions}
+
+\question[5] For the final spectrum, the two primary decay peaks were found at channels 390 and
+    442. Use Eq (1) to numerically determine the energies of these peaks.
+\writingbox{1.8in}
+
+\question[5] The equation normally used to calculate the energy of the Compton edge is
+\begin{equation*}
+    E_{compton} = \frac{2E^2}{m_e c^2 + 2E}
+\end{equation*}
+where \(E\) is the energy of the initial gamma, and \(m_e c^2\) is the rest energy of the electron.
+Calculate the Compton edge energy using the energy calculated above for the primary peak.
+\writingbox{1.8in}
+
+\question[3] Discuss the importance of scintillation detectors in radiation safety and nuclear
+    science. What benefits do these detectors have over the Geiger-Mueller tubes?
+\writingbox{1.6in}
+
+\question[3] That said, your pancake counter (a gas-filled detector) was also useful in this lab.
+    What are some advantages of gas counters? Identify a situation in which you might prefer one of
+    these detectors over a scintillator or solid-state detector.
+\writingbox{1.6in}
+
+\end{document}

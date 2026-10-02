@@ -60,10 +60,20 @@ moment to catch a reconstruction error is before any of these is published.**
 |---|---|
 | **Built** | **all seventeen.** 2 (published 2026-07-31), plus **3, 4, 6, 8, 9, 10, 13, 14, 15, 18, 19, 24, 25, 26, 31, 32 — all sixteen built 2026-08-05**, one subagent at a time. **Lesson 6 (Lab 1) was REBUILT 2026-08-19** against the real lab documents |
 | **Queued** | **nothing. The queue is empty** — every PHYS 310 lesson that has a Murray reading now has an artifact |
-| **Blocked — no reading assigned** | **1** (Admin Overview — the reading is the syllabus), **16** (Lab 2), **20** (Lab 3). All three are `PF = Y` in the schedule, so none is a deliberate skip. Blocked on recker to say what they should cover, or to mark them `PF = N` |
+| **Blocked — no reading assigned** | **1 only** (Admin Overview — the reading is the syllabus). It is `PF = Y` in the schedule, so it is not a deliberate skip. Blocked on recker to say what it should cover, or to mark it `PF = N`. *(This row also listed **16** (Lab 2) and **20** (Lab 3) until their write-ups arrived — Lab 2 on 2026-09-22 and Lab 3 on 2026-10-02. Neither needed a reading in the end: **the lab document is the reading**, and it is a primary source rather than a reconstruction. Lab 3 is taught as lesson **21**, not 20.)* |
 | **Not a preflight** | 5, 7, 11, 12, 17, 21, 22, 23, 27, 28, 29, 30, 33–41 — lectures, field trips, Graded Reviews, case-study days, the final |
 | **Published** | **4 of 17.** Lessons 2, 3, 4 and **6 (Lab 1, published 2026-08-19)**. The first three were REPUBLISHED on 2026-08-14 carrying the backup-version button, and their `artifact_url` repointed the same day. *(This row said "1 of 17, lesson 2 only" until 2026-08-14: lessons 3 and 4 had been published and registered in the database, and nothing updated this log. `index.json` is DERIVED from this file, so the staleness propagated into Storage on the next push.)* |
 | **Registered on the DFPM site** | **8 of 17** — lessons 1, 2, 3, 4, 6, plus **8 and 9** on 2026-08-26 and **10** on 2026-08-27. *(This row said "none. Not one lesson row exists for this course, and `course_id: phys-310` has never been confirmed to exist on the receiver at all" until 2026-08-26. Both halves were wrong by then: the course offering `5d8d5b43-9b84-40ce-a288-71a4880518f1` exists, carries one section `T3A`, and lessons 1—6 were already registered and published. Nothing updated this row when they were.)* |
+
+> **The four rows above are an August snapshot and the course has moved past them. Do not trust them
+> for counts.** *(Noted 2026-10-02.)* Since then lessons **15, 16, 17, 20 and 21** have been
+> registered, several artifacts have been **re-aimed to the instructor's own decks**, and the term is
+> running on **Gemini builds** rather than on claude.ai publishes — so "published" has stopped being
+> the number that says what a cadet can reach. **Each lesson's own section below is current; this
+> table is not.** The live answer to "what is registered" is a query, never a document: count
+> `app.assignment_offerings` for this course offering over `prep_app_read`, because RLS answers *what
+> may you see* and never says so (CORE.md §3). The two rows kept above are left as written, with their
+> own corrections, because the file's convention is to record what was believed and when.
 
 **Seventeen lessons in this course can hold a preflight**, not twenty. The schedule marks twenty
 `PF = Y`; three of those assign no reading and have no corpus entry.
@@ -1232,38 +1242,87 @@ split the reference reproduces may not exist in the printed book; harmless to a 
 events, **and never connects them** — so a cadet asking *why* gets a first-principles answer with a
 confidence label rather than a grounded one.
 
-### Lesson 19 — Detection Methods: Scintillation, Semiconductor, and Dosimetry
+### Lesson 20 — Detection Methods II: Scintillation, Solid State, and Reading a Spectrum
 
 | | |
 |---|---|
 | **File** | [`phys310_preflight_detection_methods_scintillation_semiconductor_and_dosimetry.jsx`](phys310_preflight_detection_methods_scintillation_semiconductor_and_dosimetry.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-detection-methods-scintillation-semiconductor-and-dosimetry-f5e95d35` |
-| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/26f8a389-0509-4dc0-9c09-b7a4c7801895 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/26f8a389-0509-4dc0-9c09-b7a4c7801895 — **STALE, and deliberately unused.** It serves the pre-2026-10-02 objectives, one of which this lesson's deck does not teach at all |
+| **Backup build** | `site/gemini/phys-310/phys310-detection-methods-scintillation-semiconductor-and-dosimetry-f5e95d35.html` — **the only route cadets take** |
 | **Component** | `Phys310DetectionMethodsScintillationSemiconductorAndDosimetryPreflight` |
-| **Built** | 2026-08-05 · 2206 lines |
-| **Grounding** | Murray corpus **§12.4** Scintillation, **§12.5** Semiconductor, **§12.6** Neutron Detection, **§12.8** Personnel Dosimetry — **all four `STATUS: PENDING`**. §12.7 is not assigned and is not in the reference |
-| **Cross-check** | DOE covers scintillators/PMTs and BF₃/³He/fission chambers well; **semiconductors more briefly (moderate)**; **low confidence on §12.8** |
+| **Built** | 2026-08-05 · 2206 lines · **re-aimed 2026-10-02 · 2594 lines** |
+| **Grounding** | Murray corpus **§12.4** Scintillation, **§12.5** Semiconductor, **§12.6** Neutron Detection, **§12.8** Personnel Dosimetry — **all four `STATUS: PENDING`**. §12.7 is not assigned and is not in the reference — **plus the instructor's own Lesson 20 deck, tagged `[DECK]`, which outranks the corpus and is the only source for the dynode chain, the doping/depletion mechanism, the annihilation peak, the lead-shield X-ray peak, the three-family comparison and the whole Cherenkov half** |
+| **Cross-check** | DOE covers scintillators/PMTs and BF₃/³He/fission chambers well; **semiconductors more briefly (moderate)**; **low confidence on §12.8** — but see below: the deck settles what §12.8 *is* |
 | **Cadets' reading** | Murray & Holbert 12.4–12.6, 12.8 |
-| **Probe topics** | 3 · ~3 active min each · ~10 min — **§12.8 is grounded and deliberately unprobed** |
-| **Checks** | `check_artifact.py` 37/37. Re-verified independently: 37/37, LF, 0 NUL, **all five extension-problem figures recomputed** — √(34/3) = 3.3665, 160/2.79 = 57.35, and NaI's two resolution quotes are mutually consistent (6.95 % at 662 keV, 5.26 % at 1330 keV) |
-| **Status** | **DRAFT** — not reviewed, not published, not registered |
+| **Probe topics** | 3 · ~3 active min each · ~10 min — **§12.6 and §12.8 are both grounded and deliberately unprobed** |
+| **Checks** | 2026-10-02: `check_artifact.py` 37/37 · `gemini-build.mjs` 8/8 in real Chrome · LF, 0 NUL. **No live tutor turn** — no Gemini key on this machine |
+| **Status** | **REGISTERED 2026-10-02** as `lesson-20`, unpublished draft, due Mon 5 Oct 07:59:59 MDT |
 
 | # | key | label |
 |---|---|---|
-| 1 | `scintillation-chain-and-spectrum` | Traces the conversion chain and reads a gamma spectrum's structure |
-| 2 | `resolution-from-carrier-statistics` | Derives energy resolution from carrier count — **the cross-family comparison** |
-| 3 | `neutron-converter-and-discrimination` | Explains why a neutral particle needs a charged-particle converter |
+| 1 | `scintillator-pmt-chain` | The scintillator → photocathode → photomultiplier chain, and why the gain is *not* where the energy information comes from |
+| 2 | `reading-a-gamma-spectrum` | Why one gamma energy makes a structured spectrum — photopeak, Compton continuum and edge, escape and annihilation peaks |
+| 3 | `resolution-and-choosing-a-detector` | Carriers per unit energy as the source of resolution, then choosing across all three families |
 
-**Extension problems:** A carriers and fluctuations — 2.94×10⁴ ion pairs against 3.33×10⁵ e–h pairs,
+**Re-aimed 2026-10-02 to the instructor's own deck, and the slug deliberately did not move.** The
+deck (`Instructor-Slides/lessons/lesson-20.json`, "LESSON 20 · DETECTION METHODS II") carries six
+things the reconstructed corpus does not have at all: the photomultiplier's **dynode chain** (the
+corpus gives only a gain of 10⁶), the semiconductor's **doping, depletion region and reverse bias**
+(the corpus says only "a reverse-biased diode"), the **annihilation peak**, a **K X-ray peak thrown
+by the detector's own lead shield**, the **three-family pros-and-cons table**, and a whole second
+half on **Cherenkov radiation, IceCube, Super-Kamiokande, Sudbury, cosmic-ray arrays and the cloud
+chamber demo**. The displayed title widened; `INTERACTION_ID` is byte-identical, because
+`activities.slug` is globally `UNIQUE`.
+
+**Neutron detection was dropped as an objective, and that is the substantive change.** §12.6 is still
+in the assigned reading and its converter material — the three Q values, the fission chamber, the two
+gamma-discrimination routes — is still grounded in full. **But the deck does not cover neutron
+detection on any slide**, and the previous lesson already hands the cadet the one-sentence version.
+It is now engage-if-raised, never probed. Two of the five extension problems went with it.
+
+> **The deck retires a standing uncertainty, and the note it retires is left in place on purpose.**
+> `TEXTBOOK_REFERENCE`'s second PROVENANCE note says the reference is **not certain what §12.8
+> contains**, because the subject was inferred from this lesson's title rather than recalled — and
+> tells the tutor never to assert that the cadet read dosimetry. **The deck has a personnel-dosimetry
+> slide**, with the TLD trapping mechanism, the filter windows, and the real-time-versus-not split.
+> The subject is confirmed. The old note stays as a record of what was not known; the `[DECK]` block
+> and the scope note both say it is superseded on that one point.
+
+> **⚠ One sentence in the deck's speaker notes is loose, in exactly the direction of a misconception
+> this lesson exists to catch** — it says the number of ionizations is "proportional to the voltage
+> applied". Read against the rest of the deck that means the *gain* climbs with voltage, which is why
+> the supply must be stable, not that the pulse measures the voltage. Flagged in the `[DECK]` block
+> with instructions not to repeat the loose form.
+
+> **⚠ The deck's own two slides disagree about whether scintillators see alphas and betas** — the
+> comparison table says most will not, while the types slide gives ZnS for alphas and CsI for protons
+> and alphas. **Both are true and the resolution is packaging, not material**: a NaI gamma counter is
+> hygroscopic and sealed inside a housing an alpha cannot cross, while an alpha scintillator is a thin
+> layer behind a thin window. The `[DECK]` block says so and tells the tutor to credit a cadet who
+> spots it rather than picking a side. Extension problem E is built on exactly this.
+
+**Extension problems (re-keyed and partly rewritten 2026-10-02).** A, B and C are kept and re-keyed
+to the new topic numbering; D and E were neutron-only and were replaced. A carriers and fluctuations —
+2.94×10⁴ ion pairs against 3.33×10⁵ e–h pairs,
 0.58 % against 0.17 %, ratio 3.37, **and the gamma energy cancels** because the ratio is √(34/3)
 whatever it was (standard) · B 0.662 MeV against 1.33 MeV into the same NaI: which spectrum is richer
 and why it is a **threshold** at 1.022 MeV rather than a matter of degree — no arithmetic, by design
 (approachable) · C two gammas 20 keV apart, merged by NaI's 70 keV and separated tenfold by HPGe's
-2 keV, then what the better answer costs and when you take the worse one (standard) · D rank three
-converters by pulse size, then **use the reference against itself** — ³He is the higher-efficiency
-choice *and* has the smallest Q, which disproves Q-means-efficiency (challenging) · E a fission
-chamber's 160 MeV / 2.79 MeV ≈ 57×, and why that factor is what lets the instrument work in-core
-(approachable).
+2 keV, then what the better answer costs and when you take the worse one (standard) · **D (new)** the
+same crystal fed 1.33 MeV and 0.662 MeV, so the light ratio is 2.009 — then *double the
+photomultiplier gain* and find that both pulses double while **the ratio, and therefore every
+conclusion, is unchanged** (standard; it is misconception 4 posed as arithmetic), closing on what
+breaks if you swap the crystal for one that emits a different colour and leave the photocathode alone
+· **E (new)** four jobs, three families — corridor survey, portable field ID, a laboratory report
+separating two lines 20 keV apart, and alpha contamination on a bench — where **part (a) and part (c)
+have opposite answers for the same instrument**, and part (d) deliberately walks into the
+ZnS-versus-sealed-NaI tension above (challenging).
+
+**Problem D carries no light yield, on purpose.** Nothing in any source gives photons per MeV for any
+scintillator, so every quantity in it is a RATIO — which is all the proportionality statement
+supports. The two retired problems are recoverable from this repository's history if §12.6 is ever
+probed again.
 
 **The handoff from lesson 18 was made real rather than assumed.** Lesson 18 was forbidden to compare
 energy resolution across detector families and told to leave it here; that artifact was **read**
@@ -1314,6 +1373,97 @@ improving with energy, which is exactly what more carriers per event should do. 
 
 **Course-wide audit run at this point:** 36 objective keys across 12 artifacts, **36 distinct, zero
 collisions.**
+
+### Lesson 21 — Lab 3: Radiation Detectors and Gamma Spectra
+
+| | |
+|---|---|
+| **File** | [`phys310_preflight_lab_3_radiation_detectors_and_gamma_spectra.jsx`](phys310_preflight_lab_3_radiation_detectors_and_gamma_spectra.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `phys310-lab-3-radiation-detectors-and-gamma-spectra-b4abd951` — minted 2026-10-02 with `secrets.token_hex(4)` |
+| **Published** | **never, and there is no Claude build at all.** Built for the Gemini transport only, at the course director's instruction |
+| **Backup build** | `site/gemini/phys-310/phys310-lab-3-radiation-detectors-and-gamma-spectra-b4abd951.html` — the only route cadets take |
+| **Component** | `Phys310Lab3RadiationDetectorsAndGammaSpectraPreflight` |
+| **Built** | 2026-10-02 · 2333 lines · rebased on Lab 2, which was rebased on Lab 1 |
+| **Grounding** | **PRIMARY: the cadet's own Lab 3 write-up** (Radiation Detectors and Gamma Spectra, 35 points), read from its **LaTeX source** rather than the PDF. **No assigned textbook reading, no corpus section, and — unlike Labs 1 and 2 — no analysis workbook** |
+| **Cross-check** | not applicable. The write-up is a primary source from the course director; there is nothing above it to check it against |
+| **Cadets' reading** | none assigned. **The write-up is the reading** |
+| **Probe topics** | 3 · ~3 active min each · ~10 min |
+| **Checks** | 2026-10-02: `check_artifact.py` 37/37 · `gemini-build.mjs` 8/8 in real Chrome · LF, 0 NUL · one leftover "Lab 2" string, which is the intentional provenance line. **Every number in the extension problems recomputed twice** — see below. **No live tutor turn** — no Gemini key on this machine |
+| **Status** | **REGISTERED 2026-10-02** as `lesson-21`, unpublished draft, due Wed 7 Oct 07:59:59 MDT |
+
+| # | key | label |
+|---|---|---|
+| 1 | `channel-to-energy-calibration` | Knows the detector outputs **channels, not energies**, and can set up the calibration line |
+| 2 | `features-and-fingerprints` | Explains each spectral feature by its interaction mechanism, then uses the pattern as an isotope fingerprint |
+| 3 | `two-detectors-two-jobs` | Why a GM pancake probe *finds* a source and a scintillator *identifies* it — **in terms of what each pulse carries** |
+
+**This lesson was BLOCKED until 2026-10-02**, listed in the summary table above as *no reading
+assigned*, and the block was never about a reading at all: it was about the write-up not being in the
+repository. It arrived, and the pattern Labs 1 and 2 established applied unchanged — **the lab
+document is a better preflight source than a textbook section.** The lesson number moved as well:
+Lab 3 is lesson **20** in the workbook and is being taught as **21**, because the two detector
+lessons ahead of it are being taught out of order.
+
+**The `.tex` source is now in the repository and the other two labs' is not.** All three labs were
+grounded by reading LaTeX rather than extracting PDF text — because a text layer drops equations
+silently (PROJECT.md's sharp-edge table) — but neither earlier lab kept the source, so nobody can
+check that reading afterwards. Lab 3's two equations *are* its whole arithmetic, so
+[`../labs/lab-3/Lab3_Alt.tex`](../labs/lab-3/Lab3_Alt.tex) sits beside the PDF and the claim is
+verifiable.
+
+**What the lab does, and why topic 3 exists:** a **pancake probe** (Geiger-Müller) to survey the
+closed containers and *find* a source, then a **FLIR Identifinder** (NaI(Tl)) to *identify* it, then
+five unknown spectra to identify from their signatures. **The pancake probe cannot tell you what the
+source is, and the Identifinder is not what you want to walk a room with.** That is the lab's own
+structure and it is discussion questions 3 and 4, worth 6 points.
+
+> **⚠ The lab's calibration equation has no intercept, and that is load-bearing rather than a typo.**
+> `Energy = (E₁−E₂)/(C₁−C₂) × channel` is a slope times a channel and nothing else — the line is
+> forced **through the origin**, which is legitimate only because the lab's own table supplies `0 keV`
+> at `channel 0` as one of its two points. With that anchor the whole calibration collapses to
+> `662/220 = 3.009 keV per channel`. The reference says so explicitly and tells the tutor **neither to
+> add an intercept nor to call the equation wrong** — it is what the cadet is graded against.
+
+> **The lab asks for the Compton edge TWICE, by two different routes, and never says that is the
+> point.** Step 1 gets it from channel 160 through the calibration line (≈ 481 keV); discussion
+> question 2 gets it from the gamma energy through `E_c = 2E²/(m_ec²+2E)` (≈ 478 keV for 662 keV).
+> **Those two agreeing is a check on the calibration itself.** It is the best thing in the lab, it is
+> unmarked, and it is written into the artifact's lateral connections as the one to reach for.
+
+> **⚠⚠ The isotope equation sheet is NOT in this repository, and the tutor is forbidden to guess at
+> it.** The 10-point task is identifying five unknown spectra for candidates Na-24, K-40, Co-60,
+> Mo-99, I-131, Xe-135, Cs-137 and Am-241. The artifact knows the eight names and knows Cs-137's four
+> features, because the write-up tabulates them (662 keV decay peak, 184 keV backscatter, 32 keV
+> X-ray, Compton edge left for the cadet). **A fabricated fingerprint would send a cadet into a graded
+> task wrong**, so the reference and the scope note both bar it in those words. The single exception is
+> **Co-60**, and only because discussion question 1 reveals it — channels 390 and 442 calibrate to
+> ≈ 1174 keV and ≈ 1330 keV — and the reference frames that as *something the lab told you*, not as
+> nuclear data.
+
+> **⚠ The write-up tabulates the backscatter and X-ray peaks and explains neither.** The tutor may say
+> where they sit; if a cadet asks where they come from it must say plainly that it is reasoning rather
+> than reading, label its confidence, and keep it short.
+
+**Extension problems — every number is deliberately NOT the lab's.** Step 1 and discussion questions
+1 and 2 are worth 16 graded points between them, so the lab's own calibration (662 keV in channel
+220) and its own discussion peaks (channels 390 and 442) are kept out of the problem set entirely.
+A a calibration anchored at **1332 keV in channel 400** → 3.33 keV/channel, channel 150 → 499.5 keV,
+511 keV → channel 153–154, then **the gain is changed and the same gamma lands in channel 600**, so
+every previously recorded channel number is meaningless (approachable; part (d) is misconception 4
+posed as arithmetic) · B the Compton edge for **800 keV** (606.3 keV, 76 %) and **200 keV** (87.8 keV,
+44 %), then the limit — rearranged as `E/(1 + m_ec²/2E)`, it **approaches E and never reaches it**, so
+the edge creeps toward the photopeak as energy rises and resolution starts to matter (standard) ·
+C which of 511, 662, 1173 and 1332 keV can pair-produce, **where 1.022 MeV comes from** (2 × 511), the
+1332 keV escape peaks at **821 and 310 keV** — and why Cs-137's spectrum can show none of it
+(standard; part (d) turns a threshold into a prediction) · D the two instruments, answered **in terms
+of what each pulse carries**: the GM avalanche makes every pulse the same size so there is no energy
+information to build a spectrum from, while the scintillator's pulse stays proportional (approachable,
+but it must be answered by mechanism rather than by quality).
+
+**Arithmetic verified twice, by independent routes rather than by repeating the division.** 3.33 ×
+400 = 1332; raising a fixed energy's channel by 600/400 = 1.5 must divide the slope by 1.5, and
+3.33/1.5 = 2.22; 2111 × 606.3 = 1,279,900 against 1,280,000; 911 × 87.8 = 79,986 against 80,000;
+821 + 511 = 1332 and 310 + 1022 = 1332, and the two escape peaks are themselves 511 keV apart.
 
 ### Lesson 24 — Fission: Neutron Multiplication
 

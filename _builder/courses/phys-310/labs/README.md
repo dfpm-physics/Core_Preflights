@@ -9,13 +9,16 @@ course director, so where the two disagree, **these win**.
 |---|---|---:|---|
 | Lab 1 — Measurement of Half-Life | [`lab-1/`](lab-1/) | 6 | yes — rebuilt 2026-08-19 against these files |
 | Lab 2 — Distance and Shielding | [`lab-2/`](lab-2/) | 16 | yes — built 2026-09-22 against these files |
-| Lab 3 | — | 20 | blocked: no write-up, no reading |
+| Lab 3 — Radiation Detectors and Gamma Spectra | [`lab-3/`](lab-3/) | 21 | yes — built 2026-10-02 against these files |
 
-Lab 3 is `PF = Y` in the schedule and carries **no** assigned reading, which is why
-[`../artifacts/BUILD-LOG.md`](../artifacts/BUILD-LOG.md) lists it as blocked rather than skipped.
-Dropping its write-up here is what unblocks it, and Labs 1 and 2 are now the worked precedent for
-how: **the lab document is a better preflight source than a textbook section**, because it is what
-the cadet will actually be holding.
+**All three labs are now built.** Lab 3 was listed as *blocked: no write-up, no reading* here and in
+[`../artifacts/BUILD-LOG.md`](../artifacts/BUILD-LOG.md) until its write-up arrived on 2026-10-02;
+dropping the document in is what unblocked it. The lesson number moved too — Lab 3 was 20 in the
+workbook and is taught as **21**, because the detector lessons are being taught out of order.
+
+All three confirm the same thing: **the lab document is a better preflight source than a textbook
+section**, because it is what the cadet will actually be holding, and because it is a primary source
+rather than a reconstruction.
 
 ---
 
@@ -173,3 +176,93 @@ time-distance-shielding and the half-value layer. None of it is re-probed.
 tells the cadet to look up the accepted μ/ρ for their shielding material. No lesson in this course
 provides one (see the Lesson 15 entry in [`../artifacts/BUILD-LOG.md`](../artifacts/BUILD-LOG.md)),
 and here that is correct rather than a gap: finding it is the graded task.
+
+---
+
+## Lab 3
+
+| file | what it is |
+|---|---|
+| `Lab3_Alt.pdf` | the graded write-up, 35 points. Added to the repo 2026-10-02 |
+| `Lab3_Alt.tex` | **the LaTeX source of that PDF, kept here on purpose** |
+
+**Filenames are kept exactly as issued**, for the reason Lab 1's section gives.
+
+**The `.tex` is in this folder and the other two labs' is not, and that is deliberate.** Both earlier
+labs were grounded by reading the LaTeX rather than extracting text from the PDF — because an
+OpenStax-style text layer drops equations silently (PROJECT.md's sharp-edge table) — but neither
+kept the source, so nobody can check that reading afterwards. Lab 3's two equations are the whole of
+its arithmetic, so the source is here and the claim is verifiable.
+
+**There is NO analysis workbook for Lab 3**, unlike Labs 1 and 2. Every number is computed by hand
+from one equation. That is why the arithmetic in this lab carries more weight than in a lab where a
+spreadsheet does it, and it is why the preflight's first probe topic is the calibration.
+
+### What the lab actually does
+
+**Two detectors, two different jobs, and that split *is* the lab.** First a **pancake probe** (a
+Geiger-Müller detector) to survey the closed containers around the classroom and *find* a source —
+at least four dose-rate readings, whether or not the source turns up sooner — then the instructor
+opens the box. Then a **FLIR Identifinder** (a NaI(Tl) scintillation detector, read out through a
+spectrum web app on the local network) to *identify* it, and then five unknown spectra to identify
+from their signatures.
+
+The pancake probe cannot tell you what the source is, and the Identifinder is not what you want to
+walk a room with. A cadet who can say why is ready for this lab.
+
+**Points:** calibration 6 · survey 3 · five spectra 10 · four discussion questions 5 + 5 + 3 + 3 = 35.
+
+### The two equations — read this before grounding anything in it
+
+**1. Channel-to-energy calibration**, exactly as the write-up prints it:
+
+```
+Energy = (E_1 - E_2) / (C_1 - C_2) * channel
+```
+
+**What is missing from that is load-bearing: there is no intercept.** The line is forced *through the
+origin*, which is legitimate only because the lab's own calibration table supplies `0 keV` at
+`channel 0` as one of its two points. With that anchor the whole calibration collapses to one ratio,
+`662 / 220 = 3.009 keV per channel`. An artifact that quietly adds an intercept is teaching something
+other than what the cadet is graded against; one that calls the equation wrong is worse.
+
+**2. The Compton edge**, given in discussion question 2:
+
+```
+E_compton = 2 E^2 / (m_e c^2 + 2 E)        m_e c^2 = 511 keV
+```
+
+**The lab asks for the Compton edge twice, by two different routes, and never says that is the
+point.** Step 1 gets it from channel 160 through the calibration line (≈ 481 keV); discussion
+question 2 gets it from the gamma energy through physics (≈ 478 keV for 662 keV). **Those two
+answers agreeing is a check on the calibration itself.** It is the best thing in the lab and it is
+unmarked.
+
+### The Cs-137 fingerprint, as the write-up tabulates it
+
+| feature | energy |
+|---|---|
+| gamma decay peak | 662 keV (channel 220) |
+| Compton edge | *not given — the cadet computes it* (channel 160) |
+| backscatter | 184 keV |
+| X-ray peak | 32 keV |
+
+**The write-up tabulates the backscatter and X-ray peaks and explains neither.** The preflight may
+say where they sit; it may not explain where they come from as though it read it somewhere.
+
+### The one thing the course cannot supply
+
+**The isotope equation sheet.** The 10-point task is identifying five unknown spectra against a
+sheet of signatures that is not in this repository, for candidates Na-24, K-40, Co-60, Mo-99, I-131,
+Xe-135, Cs-137 and Am-241. Nothing here carries gamma energies for those, and the preflight is
+instructed never to invent one — a fabricated fingerprint would send a cadet into a graded task
+wrong. **The single exception is Co-60, and only because the lab reveals it**: discussion question 1
+gives two peaks at channels 390 and 442, which calibrate to ≈ 1174 keV and ≈ 1330 keV.
+
+### Where it meets the corpus
+
+Nowhere directly, and it does not need to. Lab 3 has **no assigned reading** and the corpus has no
+section for it. What the course supplies is all carried forward from the two detector lessons either
+side of it — §12.1–12.3 for the gas-filled family and the Geiger-Müller tube's uniform pulse,
+§12.4–12.5 for the scintillation chain and solid-state resolution. **This lab is their practical
+exercise**, and the first time a GM tube is the *wrong* instrument for part of the task.
