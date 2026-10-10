@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemini implicit-cache probe</title>
+<!--
+  test-gemini-implicit-cache.html -- does a FREE-TIER Gemini key get implicit context caching,
+  and does the tutor prompt's own layout throw the discount away?
+
+  WHY THIS EXISTS. Google's docs say implicit caching is on by default and discounts a repeated
+  prompt prefix by ~90%. They describe it for PAID projects. Every cadet running an iPREP backup
+  lesson today pastes their own FREE key, and nobody has ever checked whether those keys get it.
+  That is a measurement, not a debate, and this page is the measurement.
+
+  It also settles a second thing, which matters whichever way the first goes. Caching is a PREFIX
+  match: the vendor compares the prompt from byte 0 and stops at the first difference. The shipped
+  tutor prompt interpolates the cadet's last name and local time at character 858 of a 24,065-
+  character preamble -- so 23,145 characters of rules, plus the whole 31k-100k TEXTBOOK_REFERENCE
+  behind them, sit AFTER the first per-cadet byte. If implicit caching works at all, that layout is
+  what stops one cadet's session from ever reading another's cache.
+
+  WHAT IT ANSWERS. Each is a separate, separately-runnable experiment:
+
+    1  COLD WRITE      Send a big stable prefix once. Baseline: no hit expected.
+    2  WARM READ       Send the SAME prefix, different question. A hit here is the answer:
+                       free-tier keys get implicit caching.  <-- the headline
+    3  NEGATIVE CTRL   Send a DIFFERENT prefix. A hit here would mean the field is meaningless
+                       and experiment 2 proved nothing. This is what makes 2 trustworthy.
+    4  NAME AT FRONT   Two calls, unique id near the FRONT of an identical prefix. This is the
+                       shipped layout. Expect NO hit on the second call.
+    5  NAME AT END     Two calls, unique id at the very END. This is the proposed fix. Expect a
+                       hit on the second call.
+
+  Experiments 4 and 5 are only meaningful if 2 says yes. Run 1-3 first.
+
+  IT SPENDS REAL REQUESTS. A full run is 7 requests. Measured free-tier caps are 20 requests/day
+  on flash and 15/minute on lite (tests/browser/test-gemini-api-truth.html, 2026-08-26), so a full
+  run costs about a third of a day's flash allowance. Token spend is trivial; the REQUEST count is
+  the scarce thing. Use a disposable key if you plan to re-run.
+
+  THE KEY IS NEVER STORED. It is held in one variable for the life of the page, never written to
+  localStorage, never sent anywhere but Google, never logged. The input is autocomplete="off"
+  because on 2026-08-27 the browser filled a key box on 47 shipped builds and 52 cadets never knew.
+
+  HOUSE RULE, INHERITED: never estimate what you can measure, and never count a missing number as
+  zero. A reply with no usageMetadata is reported as MISSING. Google OMITS
+  cachedContentTokenCount when it is zero, so an absent field is reported as ABSENT and read as
+  "no hit" -- that one is a documented absence, not an unknown, and the page says which it is.
+
+  RUN IT. file:// will not work -- Google's endpoint needs a real origin. From the repo root:
+      python -m http.server 8000
+  then open  http://localhost:8000/tests/browser/test-gemini-implicit-cache.html
+-->
+<style>
+  :root {
+    --bg: #10131a; --panel: #181c26; --line: #2b3242; --ink: #e6e9f0; --dim: #97a0b5;
+    --ok: #4ade80; --bad: #f87171; --warn: #fbbf24; --accent: #60a5fa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--bg); color: var(--ink);
+    font: 14px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1140px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 24px 0 8px; color: var(--accent); }
+  .sub { color: var(--dim); margin: 0 0 18px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+           padding: 16px; margin-bottom: 16px; }
+  label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+  input[type=password], input[type=text], input[type=number], select {
+    width: 100%; padding: 8px 10px; background: #0c0f15; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px; font: 13px ui-monospace, monospace;
+  }
+  input[type=number] { width: 120px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+  .row > div { flex: 1 1 200px; }
+  button {
+    padding: 9px 16px; border-radius: 6px; border: 1px solid var(--line);
+    background: #222839; color: var(--ink); font: 600 13px ui-sans-serif, system-ui;
+    cursor: pointer;
+  }
+  button.go { background: var(--accent); color: #08101d; border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .exps { display: grid; gap: 8px; }
+  .exp { display: flex; gap: 11px; align-items: flex-start; padding: 11px 13px;
+         background: #0c0f15; border: 1px solid var(--line); border-radius: 6px; }
+  .exp .n { font: 700 13px ui-monospace, monospace; color: var(--accent); min-width: 18px; }
+  .exp .body { flex: 1; }
+  .exp b { display: block; font-size: 13px; }
+  .exp span.d { display: block; font-size: 11.5px; color: var(--dim); margin-top: 2px; }
+  .exp button { padding: 6px 12px; font-size: 12px; white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; font: 12.5px ui-monospace, monospace; }
+  th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 600; font-size: 11.5px; text-transform: uppercase;
+       letter-spacing: .04em; }
+  td.num { text-align: right; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  .warn { color: var(--warn); } .dim { color: var(--dim); }
+  .verdict { padding: 14px 16px; border-radius: 8px; border: 1px solid var(--line);
+             background: #0c0f15; font-size: 14px; line-height: 1.6; }
+  .verdict.hit { border-color: var(--ok); }
+  .verdict.miss { border-color: var(--bad); }
+  .verdict.unknown { border-color: var(--warn); }
+  .verdict b { font-size: 15px; }
+  .counter { font: 12px ui-monospace, monospace; color: var(--dim); }
+  .counter.hot { color: var(--warn); }
+  .counter.over { color: var(--bad); }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; font-size: 12px; color: var(--dim); }
+  pre { background: #0c0f15; border: 1px solid var(--line); border-radius: 6px;
+        padding: 11px; overflow: auto; max-height: 340px; font-size: 11.5px; margin: 8px 0 0; }
+  .note { font-size: 12px; color: var(--dim); margin-top: 10px; }
+  .note b { color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Gemini implicit-cache probe</h1>
+  <p class="sub">
+    Does a <b>free-tier</b> Gemini key get implicit context caching &mdash; and does the tutor
+    prompt's own layout throw the discount away? Seven real requests. Nothing is stored.
+  </p>
+
+  <div class="panel">
+    <div class="row">
+      <div style="flex:2 1 340px">
+        <label for="key">Gemini API key &mdash; held in memory only, never saved</label>
+        <input id="key" type="password" placeholder="AIza..." autocomplete="off" spellcheck="false">
+      </div>
+      <div>
+        <label for="model">Model</label>
+        <select id="model">
+          <option value="gemini-3.6-flash">gemini-3.6-flash</option>
+          <option value="gemini-3.5-flash" selected>gemini-3.5-flash</option>
+          <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite</option>
+          <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
+          <option value="__other">other (type below)</option>
+        </select>
+      </div>
+      <div>
+        <label for="other">Other model id</label>
+        <input id="other" type="text" placeholder="gemini-..." spellcheck="false" disabled>
+      </div>
+      <div style="flex:0 0 auto">
+        <label for="size">Prefix size (tokens)</label>
+        <input id="size" type="number" value="8000" min="1200" max="60000" step="500">
+      </div>
+      <div style="flex:0 0 auto">
+        <label for="gap">Gap (sec)</label>
+        <input id="gap" type="number" value="15" min="0" max="120" step="1">
+      </div>
+      <div style="flex:0 0 auto">
+        <label for="walk">Walk-to model (exp 9)</label>
+        <input id="walk" type="text" value="gemini-3.5-flash-lite" size="22">
+      </div>
+    </div>
+    <div class="note">
+      Minimum cacheable prefix is <b>1,024 tokens on Flash</b> and <b>4,096 on Pro</b>. Below it,
+      nothing caches and no error is raised. 8,000 is comfortably clear of both and is about half
+      a real median lesson prompt (~17,400 tokens).
+      <br><br>
+      <b>THE CACHED COUNT IS THE VENDOR GRADING ITS OWN HOMEWORK.</b>
+      <code>cachedContentTokenCount</code> is Google reporting on Google's billing. It is
+      reproducible and it passes the negative control, which is why it is trusted here &mdash; but
+      <b>no saving derived from it has been checked against a bill</b>, because a free key produces
+      no bill. The <b>Time</b> column is the one number here Google does not self-report: a real
+      hit skips prefill, so at 36,900 tokens it should be visibly faster than the write before it.
+      <b>A "hit" that takes as long as its write is a reason to doubt the field.</b>
+      <br><br>
+      <b>RECORD THE MODEL BESIDE EVERY NUMBER.</b> <code>modelVersion</code> is on every reply and
+      it was being thrown away. <b>gemini-3.5-flash</b> hit on the second call every time
+      (2026-09-17, 7,733&ndash;36,292 tokens). <b>gemini-3.6-flash</b> returned no cache field on
+      8 consecutive same-prefix calls (2026-09-18, 7,734&ndash;8,007 tokens).
+      <br><br>
+      <b>That comparison is CONFOUNDED &mdash; different models on different days</b>, because 3.5
+      had run out of free quota. The 18th also threw repeated 503s, so a platform-wide degradation
+      fits the data as well as the model does. <b>To settle it, run experiment 6 on one model and
+      then immediately on the other, same day.</b> Anything else reproduces the confound.
+      <br><br>
+      <b>Free-tier rate limit is 5 requests per MINUTE</b> on gemini-3.6-flash, measured from the
+      429 body on 2026-09-18 &mdash; not 15. The gap now defaults to <b>15 seconds</b>. Lower it and
+      any run of four or more calls will trip the limit partway through.
+    </div>
+  </div>
+
+  <h2>Experiments</h2>
+  <div class="panel">
+    <div class="exps">
+      <div class="exp">
+        <span class="n">1&ndash;3</span>
+        <div class="body">
+          <b>Does free tier cache at all?</b>
+          <span class="d">Cold write, then the same prefix again with a different question, then
+            a deliberately different prefix as a control. <b>Three requests.</b> This is the one
+            that answers the question &mdash; run it first.</span>
+        </div>
+        <button class="go" id="runA">Run 1&ndash;3</button>
+      </div>
+      <div class="exp">
+        <span class="n">4</span>
+        <div class="body">
+          <b>Name at the front &mdash; the shipped layout</b>
+          <span class="d">Two calls. A unique cadet id sits ~850 characters in, exactly where
+            <code>buildSystemPrompt</code> puts it today. Expect <b>no hit</b> on call 2.</span>
+        </div>
+        <button id="runB">Run 4</button>
+      </div>
+      <div class="exp">
+        <span class="n">5</span>
+        <div class="body">
+          <b>Name at the end &mdash; the proposed fix</b>
+          <span class="d">Two calls. Same prefix, same unique ids, but placed after all the stable
+            text. Expect a <b>hit</b> on call 2.</span>
+        </div>
+        <button id="runC">Run 5</button>
+      </div>
+      <div class="exp">
+        <span class="n">6</span>
+        <div class="body">
+          <b>Does the hit grow with the prompt?</b>
+          <span class="d">A cold write and a warm read at <b>three sizes</b> &mdash; 8,000,
+            17,400 and 36,900 tokens, the smallest, median and largest real lesson prompts.
+            <b>Six requests.</b> The 7,730-token run cached 4,076 (53%). If that number is the
+            same at 36,900 the saving is small; if it tracks the size, the saving is large.
+            This is the difference between a modest win and a big one.</span>
+        </div>
+        <button class="go" id="runD">Run 6</button>
+      </div>
+      <div class="exp">
+        <span class="n">8</span>
+        <div class="body">
+          <b>Did within-session caching ever work?</b>
+          <span class="d">A real session, simulated: <b>one</b> cadet name, <b>one</b> model, and a
+            conversation that grows turn by turn &mdash; the shipped layout, name at the front,
+            which is fine within a session because it never changes. <b>Five requests.</b>
+            Every earlier experiment used a single turn and so never asked this.
+            <b>Expect a hit from turn 2 onward.</b> If that is what happens, a stable prefix was
+            already worth ~60% and the name was never the problem it looked like.</span>
+        </div>
+        <button class="go" id="runF">Run 8</button>
+      </div>
+      <div class="exp">
+        <span class="n">9</span>
+        <div class="body">
+          <b>Does switching model throw the cache away?</b>
+          <span class="d">Warm a prefix on the chosen model, switch to the <b>walk-to</b> model,
+            then come back. <b>Four requests.</b> PREP walked a rung on every 429 or 5xx against a
+            20/day cap &mdash; so if a walk is a cold start, that alone explains paying full price
+            with a perfectly good prefix. <b>Expect the walk-to call to miss</b>; the question is
+            whether the original model still hits when you return.</span>
+        </div>
+        <button class="go" id="runG">Run 9</button>
+      </div>
+      <div class="exp">
+        <span class="n">7</span>
+        <div class="body">
+          <b>No name anywhere</b>
+          <span class="d">Two calls with a <b>byte-identical</b> prompt &mdash; no cadet id at the
+            front, the end, or at all. Only the trailing question differs. This is the best case
+            caching can have. Compare its cached count against row <b>5b</b>: if 7 beats 5, the
+            name costs something even at the end and should be kept out of the prompt entirely.</span>
+        </div>
+        <button id="runE">Run 7</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <div style="flex:0 0 auto"><button class="go" id="runAll">Run all twenty-four</button></div>
+      <div style="flex:0 0 auto"><button id="clear">Clear results</button></div>
+      <div style="flex:1 1 auto; text-align:right">
+        <span class="counter" id="counter">0 requests sent this page-load</span>
+      </div>
+    </div>
+    <div class="note">
+      Measured free-tier caps, 2026-08-26: <b>20 requests/day on flash</b>, 15/minute on lite.
+      A full run is now <b>24</b>, which is more than a day's flash budget in one go. Prefer running
+      <b>6</b> and <b>7</b> on their own; experiments 1&ndash;5 already answered their questions on
+      2026-09-17 and do not need repeating.
+      <br><br>
+      Experiment 6 also sends about <b>62,000 prompt tokens</b> in six requests. That is a lot for a
+      free key. If the large size returns a 429, the size is the cause, not the layout.
+    </div>
+  </div>
+
+  <h2>Results</h2>
+  <div class="panel">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>Experiment</th><th class="num">Prompt tokens</th>
+          <th class="num">Cached</th><th class="num">Output</th><th class="num">Time</th><th>Reading</th>
+        </tr>
+      </thead>
+      <tbody id="rows">
+        <tr><td colspan="7" class="dim">Nothing run yet.</td></tr>
+      </tbody>
+    </table>
+    <div id="sweepWrap" hidden style="margin-top:16px">
+      <h3 style="margin:0 0 8px 0;font-size:14px">Experiment 6 &mdash; does the hit scale?</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Prompt size</th><th class="num">Prompt tokens</th><th class="num">Cached on read</th>
+            <th class="num">% cached</th><th>Reading</th>
+          </tr>
+        </thead>
+        <tbody id="sweepRows"></tbody>
+      </table>
+    </div>
+    <details id="rawWrap" hidden>
+      <summary>Raw responses</summary>
+      <pre id="raw"></pre>
+    </details>
+  </div>
+
+  <h2>Verdict</h2>
+  <div class="verdict unknown" id="verdict">
+    <b>Not established.</b><br>
+    Run experiments 1&ndash;3. Nothing is claimed until they have run.
+  </div>
+
+</div>
+
+<script>
+"use strict";
+
+// ── Config ────────────────────────────────────────────────────────────────────────────────────
+var BASE = "https://generativelanguage.googleapis.com/v1beta";
+var MAX_OUT = 256;
+
+// ── Deterministic prefix builder ──────────────────────────────────────────────────────────────
+// Byte-identical across calls is the whole point, so no randomness, no timestamps, no Math.random.
+// Sentences are drawn from a fixed bank by index, which gives varied text that is still a pure
+// function of (seed, length). Roughly 4 characters per token.
+var BANK = [
+  "The electric field of a point charge falls off as the inverse square of the distance.",
+  "Work done by a magnetic force on a moving charge is always zero, because the force is perpendicular to the velocity.",
+  "Conductors permit electrons to move freely through the bulk of the material.",
+  "In an insulator the electrons remain bound to individual atoms and only shift slightly.",
+  "Superposition means the total force is the vector sum of the individual forces, not the sum of magnitudes.",
+  "The cyclotron radius is r equals m v over the product of the charge magnitude and the field.",
+  "Gauss's law relates the flux through a closed surface to the enclosed charge.",
+  "Electric potential is a scalar and is defined only up to a choice of reference.",
+  "Kirchhoff's junction rule follows from conservation of charge at a node.",
+  "Kirchhoff's loop rule follows from the path independence of the electrostatic potential.",
+  "Capacitance depends on geometry and on the dielectric, never on the applied voltage.",
+  "Ohm's law is a material property and is not a fundamental law of nature.",
+  "Faraday's law states that a changing magnetic flux induces an electromotive force.",
+  "Lenz's law fixes the sign of the induced current by opposing the change that produced it.",
+  "Displacement current completes Ampere's law and makes the set of equations consistent.",
+  "A heavy charged particle scatters off electrons thousands of times lighter and barely deflects.",
+  "A beta particle collides with particles of its own mass and therefore wanders.",
+  "Attenuation describes exponential removal from a beam and does not define a finite range.",
+  "The half-value layer and the tenth-value thickness express the same relation at different ratios.",
+  "Binding energy per nucleon peaks near iron, which is why both fusion and fission release energy."
+];
+
+// The stable rules block, shared by experiments 4, 5 and 7 so those three differ ONLY in where
+// the cadet id goes -- or whether it is there at all. If each runner kept its own copy, an edit to
+// one would silently turn a layout test into a different-text test.
+var TUTOR_HEAD =
+  "You are a physics tutor for a cadet who has just completed the assigned reading.\n" +
+  "Run a focused Socratic conversation that surfaces what the cadet understands,\n" +
+  "identifies gaps and misconceptions, and prepares them for class. This is not a quiz.\n" +
+  "It is a discussion with someone who genuinely wants the cadet to learn. The lesson\n" +
+  "content is inlined below and is your only source for today's material. Read it all\n" +
+  "before you begin. Do not cite section or page numbers to the cadet at any point.\n" +
+  "Ask one question at a time and wait for the answer before deciding what follows.\n" +
+  "Praise only what is earned; acknowledge an ordinary answer plainly and move on.\n" +
+  "Never confirm a wrong physics claim in order to be agreeable.\n";
+
+function buildPrefix(seed, targetTokens) {
+  var targetChars = targetTokens * 4;
+  var out = [];
+  var len = 0;
+  var i = 0;
+  out.push("REFERENCE BLOCK " + seed);
+  len += 18;
+  while (len < targetChars) {
+    var s = BANK[(i * 7 + seed * 3) % BANK.length];
+    var line = "[" + i + "] " + s;
+    out.push(line);
+    len += line.length + 1;
+    i++;
+  }
+  return out.join("\n");
+}
+
+// ── HTTP ──────────────────────────────────────────────────────────────────────────────────────
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+var sent = 0;
+function bumpCounter() {
+  sent++;
+  var el = document.getElementById("counter");
+  el.textContent = sent + " request" + (sent === 1 ? "" : "s") + " sent this page-load";
+  el.className = "counter" + (sent >= 20 ? " over" : sent >= 14 ? " hot" : "");
+}
+
+// Sends one turn. thinkingBudget 0 keeps the output tiny; a model that rejects the field 400s
+// naming it, and we drop it and retry once -- the same inherited behaviour as the shipped builds.
+async function callGemini(key, model, systemText, userText, allowThinkingField) {
+  var _t0 = Date.now();
+  var body = {
+    systemInstruction: { parts: [{ text: systemText }] },
+    contents: [{ role: "user", parts: [{ text: userText }] }],
+    generationConfig: { maxOutputTokens: MAX_OUT, temperature: 0 }
+  };
+  if (allowThinkingField !== false) {
+    body.generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  }
+
+  var url = BASE + "/models/" + encodeURIComponent(model) + ":generateContent?key=" +
+            encodeURIComponent(key);
+  var res, text;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    text = await res.text();
+  } catch (e) {
+    bumpCounter();
+    return { error: "network", detail: String(e && e.message || e) };
+  }
+  bumpCounter();
+
+  var data = null;
+  try { data = JSON.parse(text); } catch (e) { /* leave null */ }
+
+  if (!res.ok) {
+    var msg = (data && data.error && data.error.message) || text.slice(0, 400);
+    if (res.status === 400 && /thinking/i.test(msg) && allowThinkingField !== false) {
+      return callGemini(key, model, systemText, userText, false);
+    }
+    return { error: "http " + res.status, detail: msg, raw: data || text, ms: Date.now() - _t0 };
+  }
+  return { ok: true, raw: data, ms: Date.now() - _t0 };
+}
+
+// ── Reading the usage object ──────────────────────────────────────────────────────────────────
+// House rule: a missing usageMetadata is MISSING, never zero. An absent cachedContentTokenCount
+// is ABSENT -- Google omits the field when nothing was cached, so that one is read as "no hit",
+// and the table says which of the two it was.
+function readUsage(raw) {
+  var u = raw && raw.usageMetadata;
+  if (!u) return { state: "missing" };
+  var hasCached = Object.prototype.hasOwnProperty.call(u, "cachedContentTokenCount");
+  return {
+    state: "present",
+    prompt: typeof u.promptTokenCount === "number" ? u.promptTokenCount : null,
+    cached: hasCached ? u.cachedContentTokenCount : null,
+    cachedAbsent: !hasCached,
+    output: typeof u.candidatesTokenCount === "number" ? u.candidatesTokenCount : null,
+    thoughts: typeof u.thoughtsTokenCount === "number" ? u.thoughtsTokenCount : null,
+    finish: (raw.candidates && raw.candidates[0] && raw.candidates[0].finishReason) || null
+  };
+}
+
+// ── Results table ─────────────────────────────────────────────────────────────────────────────
+var results = [];
+var rawLog = [];
+
+function render() {
+  var tb = document.getElementById("rows");
+  if (!results.length) {
+    tb.innerHTML = '<tr><td colspan="7" class="dim">Nothing run yet.</td></tr>';
+    return;
+  }
+  tb.innerHTML = results.map(function (r, i) {
+    var cachedCell, reading, cls;
+    if (r.err) {
+      cachedCell = '<span class="bad">&mdash;</span>';
+      reading = '<span class="bad">' + esc(r.err) + (r.detail ? " &mdash; " + esc(r.detail.slice(0, 120)) : "") + "</span>";
+      return row(i, r, "—", cachedCell, "—", reading);
+    }
+    var u = r.usage;
+    if (u.state === "missing") {
+      return row(i, r, '<span class="warn">?</span>', '<span class="warn">MISSING</span>', "—",
+                 '<span class="warn">No usageMetadata on the reply. Not counted as zero.</span>');
+    }
+    if (u.cachedAbsent) {
+      cachedCell = '<span class="dim">absent</span>';
+      reading = '<span class="dim">No cache hit. Google omits the field when it is zero.</span>';
+    } else if (u.cached > 0) {
+      cachedCell = '<span class="ok">' + u.cached.toLocaleString() + "</span>";
+      var pct = u.prompt ? Math.round(100 * u.cached / u.prompt) : null;
+      reading = '<span class="ok">CACHE HIT' + (pct !== null ? " &mdash; " + pct + "% of the prompt" : "") +
+                "</span>" + (pct !== null && pct < 90
+                  ? ' <span class="dim">(partial &mdash; Google caches in blocks, so a hit is'
+                    + " normally less than the whole prefix)</span>" : "");
+    } else {
+      cachedCell = "0";
+      reading = '<span class="dim">Field present and zero. No hit.</span>';
+    }
+    if (u.finish && u.finish !== "STOP") {
+      reading += ' <span class="dim">(finishReason ' + esc(u.finish) + ")</span>";
+    }
+    return row(i, r,
+      u.prompt === null ? "?" : u.prompt.toLocaleString(),
+      cachedCell,
+      u.output === null ? "?" : u.output.toLocaleString(),
+      reading);
+  }).join("");
+}
+
+function row(i, r, prompt, cached, output, reading) {
+  // Time is the ONLY column here that Google does not self-report. A hit skips prefill, so at a
+  // large prompt it should be visibly faster than the write before it. A row claiming a hit at
+  // the same speed as its write is a reason to doubt the cached count, not the clock.
+  var ms = (typeof r.ms === "number") ? (r.ms >= 1000 ? (r.ms / 1000).toFixed(1) + "s"
+                                                      : r.ms + "ms") : "&mdash;";
+  return "<tr><td>" + (i + 1) + "</td><td>" + esc(r.label) + '</td><td class="num">' + prompt +
+         '</td><td class="num">' + cached + '</td><td class="num">' + output +
+         '</td><td class="num">' + ms + "</td><td>" + reading + "</td></tr>";
+}
+
+// Reads the sweep rows straight out of the main results list, so the summary can never drift
+// from the raw numbers above it. A size with no read row yet is simply left out.
+function renderSweep() {
+  var rows = [];
+  for (var i = 0; i < SWEEP_SIZES.length; i++) {
+    var s = SWEEP_SIZES[i];
+    var r = find("6 sweep " + s.name + " read");
+    if (!r) continue;
+    var promptCell = "&mdash;", cachedCell = "&mdash;", pctCell = "&mdash;", reading;
+    if (r.err) {
+      reading = '<span class="bad">' + esc(r.err) + "</span>";
+    } else if (r.usage.state === "missing") {
+      reading = '<span class="warn">No usageMetadata. Not counted as zero.</span>';
+    } else {
+      var u = r.usage;
+      promptCell = u.prompt === null ? "?" : u.prompt.toLocaleString();
+      if (u.cachedAbsent) {
+        cachedCell = '<span class="dim">absent</span>';
+        reading = '<span class="dim">No hit at this size.</span>';
+      } else {
+        var pct = u.prompt ? Math.round(100 * u.cached / u.prompt) : null;
+        cachedCell = '<span class="ok">' + u.cached.toLocaleString() + "</span>";
+        pctCell = pct === null ? "&mdash;" : pct + "%";
+        // 1,024 is Google's stated minimum cacheable block on Flash, and the 2026-09-17 run
+        // came back at 4,076 -- almost exactly 4 blocks. Showing the block count makes a
+        // fixed ceiling obvious the moment a bigger prompt returns the same number.
+        var blocks = Math.round(u.cached / 1024);
+        reading = "about <b>" + blocks + "</b> blocks of 1,024 tokens";
+      }
+    }
+    rows.push("<tr><td>" + esc(s.name) + '</td><td class="num">' + promptCell +
+              '</td><td class="num">' + cachedCell + '</td><td class="num">' + pctCell +
+              "</td><td>" + reading + "</td></tr>");
+  }
+  var wrap = document.getElementById("sweepWrap");
+  if (!rows.length) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  document.getElementById("sweepRows").innerHTML = rows.join("");
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+  });
+}
+
+function pushRaw(label, raw) {
+  rawLog.push("=== " + label + " ===\n" + JSON.stringify(raw, null, 2));
+  document.getElementById("rawWrap").hidden = false;
+  document.getElementById("raw").textContent = rawLog.join("\n\n");
+}
+
+// ── Verdict ───────────────────────────────────────────────────────────────────────────────────
+// LAST match, not first. A 503 mid-run is a capacity refusal, not a result -- Google returned
+// one on 2026-09-17 partway through experiment 5 -- and the natural response is to re-run that
+// experiment. Reading the FIRST row would then judge the whole run on the attempt that never
+// reached the model, and report the layout test as incomplete when it had in fact passed.
+function find(label) {
+  for (var i = results.length - 1; i >= 0; i--) if (results[i].label === label) return results[i];
+  return null;
+}
+function hitOf(r) {
+  if (!r || r.err || !r.usage || r.usage.state !== "present") return null;   // unknown
+  if (r.usage.cachedAbsent) return false;
+  return r.usage.cached > 0;
+}
+
+function verdict() {
+  var el = document.getElementById("verdict");
+  var warm = hitOf(find("2 warm read"));
+  var ctrl = hitOf(find("3 negative control"));
+  var frontB = hitOf(find("4b name at front"));
+  var endB = hitOf(find("5b name at end"));
+
+  var parts = [];
+  var cls = "unknown";
+
+  if (warm === null) {
+    el.className = "verdict unknown";
+    el.innerHTML = "<b>Not established.</b><br>Run experiments 1&ndash;3. " +
+      "Nothing is claimed until they have run.";
+    return;
+  }
+
+  if (ctrl === true) {
+    el.className = "verdict unknown";
+    el.innerHTML = "<b>The control failed &mdash; experiment 2 proves nothing.</b><br>" +
+      "A different prefix reported a cache hit, so the field is not tracking what we think it " +
+      "tracks. Do not act on this run. Re-check the prefix builder before reading anything else.";
+    return;
+  }
+
+  if (warm === true) {
+    cls = "hit";
+    parts.push("<b>Yes &mdash; this key gets implicit caching.</b>");
+    parts.push("A repeated prefix came back with a non-zero <code>cachedContentTokenCount</code>, " +
+               "and a different prefix did not. That is a real hit.");
+  } else {
+    cls = "miss";
+    parts.push("<b>No &mdash; no implicit caching was observed on this key.</b>");
+    parts.push("A repeated prefix reported no cached tokens. Either free-tier keys do not get it, " +
+               "or this model does not, or the prefix was under the minimum. " +
+               "Check the prompt-token count in row 1 is above 1,024 before concluding.");
+  }
+
+  if (frontB !== null || endB !== null) {
+    parts.push("<hr style='border:0;border-top:1px solid var(--line);margin:10px 0'>");
+    if (frontB === false && endB === true) {
+      parts.push("<b>And the layout defect is confirmed.</b> A unique id near the front killed the " +
+                 "hit; the same id at the end kept it. Moving the cadet name and local time to the " +
+                 "end of the prompt is worth doing.");
+    } else if (frontB === true) {
+      parts.push("<b>Unexpected:</b> a hit survived an id at the front. Check how much of the " +
+                 "prompt was cached &mdash; a partial hit on the bytes before the id is possible " +
+                 "and would still mean the bulk of the prompt is uncached.");
+    } else if (endB === false && warm === true) {
+      parts.push("<b>Unexpected:</b> the fix layout did not hit although a plain repeat did. " +
+                 "Re-run; the entry may have expired between calls.");
+    } else {
+      parts.push("Layout experiments incomplete &mdash; run 4 and 5.");
+    }
+  }
+
+  // Experiment 7 -- the ceiling. Compare its cached count against name-at-end at the same size.
+  var noName = find("7b no name");
+  var endRow = find("5b name at end");
+  if (noName && !noName.err && noName.usage.state === "present") {
+    parts.push("<hr style='border:0;border-top:1px solid var(--line);margin:10px 0'>");
+    if (noName.usage.cachedAbsent) {
+      parts.push("<b>No name at all still did not hit.</b> That is unexpected and outranks the " +
+                 "layout question &mdash; if an identical prompt misses, something else is wrong. " +
+                 "Check the entry had not expired, then re-run.");
+    } else {
+      var nn = noName.usage.cached;
+      var msg = "<b>No name anywhere cached " + nn.toLocaleString() + " tokens.</b> " +
+                "That is the ceiling &mdash; nothing caches better than identical bytes.";
+      if (endRow && !endRow.err && endRow.usage.state === "present" && !endRow.usage.cachedAbsent) {
+        var en = endRow.usage.cached;
+        if (nn > en) {
+          msg += " It beat name-at-end (" + en.toLocaleString() + "), so the name costs something " +
+                 "even at the end. Keep it out of the prompt and stamp it into the report instead.";
+        } else if (nn === en) {
+          msg += " Name-at-end matched it exactly, so putting the name last costs nothing. " +
+                 "Either layout is fine; no need to remove the name.";
+        } else {
+          msg += " Name-at-end reported more (" + en.toLocaleString() + "), which should not " +
+                 "happen. Treat both as noise and re-run before acting on either.";
+        }
+      } else {
+        msg += " Run experiment 5 to compare it against name-at-end.";
+      }
+      parts.push(msg);
+    }
+  }
+
+  // Experiment 6 -- does the hit grow? Compare the smallest and largest sizes that both returned.
+  var sweepHits = [];
+  for (var si = 0; si < SWEEP_SIZES.length; si++) {
+    var sr = find("6 sweep " + SWEEP_SIZES[si].name + " read");
+    if (sr && !sr.err && sr.usage.state === "present" && !sr.usage.cachedAbsent) {
+      sweepHits.push({ size: SWEEP_SIZES[si].tokens, cached: sr.usage.cached });
+    }
+  }
+  if (sweepHits.length >= 2) {
+    var lo = sweepHits[0], hi = sweepHits[sweepHits.length - 1];
+    var sizeRatio = hi.size / lo.size;
+    var cacheRatio = hi.cached / lo.cached;
+    parts.push("<hr style='border:0;border-top:1px solid var(--line);margin:10px 0'>");
+    if (cacheRatio >= sizeRatio * 0.7) {
+      parts.push("<b>The hit scales with the prompt.</b> The prompt grew " + sizeRatio.toFixed(1) +
+                 "&times; and the cached count grew " + cacheRatio.toFixed(1) + "&times;. " +
+                 "A big lesson prompt gets a big discount, so the layout fix is worth real money.");
+    } else if (cacheRatio <= 1.2) {
+      parts.push("<b>The hit does NOT scale.</b> The prompt grew " + sizeRatio.toFixed(1) +
+                 "&times; but the cached count barely moved (" + cacheRatio.toFixed(1) + "&times;, " +
+                 lo.cached.toLocaleString() + " &rarr; " + hi.cached.toLocaleString() + "). " +
+                 "There is a ceiling. The saving on a real lesson prompt is <b>small</b> &mdash; " +
+                 "roughly " + Math.round(100 * hi.cached / hi.size) + "% of input at the largest " +
+                 "size. Do not quote a 90% figure anywhere.");
+    } else {
+      parts.push("<b>The hit grows, but slower than the prompt.</b> Prompt &times;" +
+                 sizeRatio.toFixed(1) + ", cache &times;" + cacheRatio.toFixed(1) + ". " +
+                 "Use the measured percentage at each size, not one number for all lessons.");
+    }
+  }
+
+  // Experiment 8 -- the one that says whether any of the layout work ever mattered.
+  var t1 = find("8 session turn 1");
+  var later = [];
+  for (var ti = 2; ti <= 5; ti++) {
+    var r8 = find("8 session turn " + ti);
+    if (r8 && !r8.err && r8.usage.state === "present") later.push(r8);
+  }
+  if (t1 && later.length) {
+    parts.push("<hr style='border:0;border-top:1px solid var(--line);margin:10px 0'>");
+    var hits = later.filter(function (r) { return !r.usage.cachedAbsent && r.usage.cached > 0; });
+    if (hits.length === later.length) {
+      parts.push("<b>Within-session caching works, and always did.</b> Every turn after the first " +
+                 "hit the cache with the cadet name sitting at the FRONT of the prompt. The name " +
+                 "never breaks a student's own session &mdash; it only ever blocked sharing " +
+                 "BETWEEN students, and on personal keys that was impossible anyway, because a " +
+                 "cache belongs to the project behind the key.");
+    } else if (!hits.length) {
+      parts.push("<b>No within-session hit at all.</b> That is the important result and it is " +
+                 "not what the layout theory predicts &mdash; the prefix is identical every turn. " +
+                 "Check the prompt is over 1,024 tokens, then look for something that changes " +
+                 "the prefix per turn.");
+    } else {
+      parts.push("<b>Within-session caching is intermittent</b> &mdash; " + hits.length + " of " +
+                 later.length + " later turns hit. Note the gap setting: entries expire after " +
+                 "about five minutes, and a slow run can cross that.");
+    }
+  }
+
+  // Experiment 9 -- is a cache per model?
+  var w1 = find("9b hit " + (document.getElementById("model").value || ""));
+  var wA = null, wB = null, wC = null;
+  for (var wi = 0; wi < results.length; wi++) {
+    var L = results[wi].label || "";
+    if (L.indexOf("9b hit") === 0) wA = results[wi];
+    if (L.indexOf("9c walked to") === 0) wB = results[wi];
+    if (L.indexOf("9d back on") === 0) wC = results[wi];
+  }
+  if (wA && wB) {
+    parts.push("<hr style='border:0;border-top:1px solid var(--line);margin:10px 0'>");
+    var aHit = hitOf(wA), bHit = hitOf(wB), cHit = hitOf(wC);
+    if (aHit === true && bHit === false) {
+      parts.push("<b>A cache is per MODEL.</b> The same prefix hit on the original model and " +
+                 "missed the moment it moved. <b>Every ladder walk is a cold start</b> &mdash; " +
+                 "which on a 20/day cap, with 781 refusals logged in one evening, is the best " +
+                 "explanation yet for paying full price with a perfectly stable prefix." +
+                 (cHit === true
+                   ? " Returning to the original model hit again, so the entry survives the detour."
+                   : cHit === false
+                     ? " <b>And it did not recover on return</b> &mdash; so a walk costs more than the one turn."
+                     : ""));
+    } else if (aHit === true && bHit === true) {
+      parts.push("<b>Unexpected: the cache survived a model switch.</b> Check the two ids really " +
+                 "differ, then treat model walking as harmless to caching.");
+    } else {
+      parts.push("Experiment 9 inconclusive &mdash; the warm call did not hit, so there was no " +
+                 "cache for the switch to lose. Re-run.");
+    }
+  }
+
+  el.className = "verdict " + cls;
+  el.innerHTML = parts.join("<br>");
+}
+
+// ── Experiment runners ────────────────────────────────────────────────────────────────────────
+function cfg() {
+  var key = document.getElementById("key").value.trim();
+  var sel = document.getElementById("model").value;
+  var model = sel === "__other" ? document.getElementById("other").value.trim() : sel;
+  var size = parseInt(document.getElementById("size").value, 10) || 8000;
+  var gap = (parseInt(document.getElementById("gap").value, 10) || 0) * 1000;
+  return { key: key, model: model, size: size, gap: gap };
+}
+
+async function one(c, label, systemText, userText) {
+  var r = await callGemini(c.key, c.model, systemText, userText);
+  var entry = { label: label, ms: r.ms };
+  if (r.error) { entry.err = r.error; entry.detail = r.detail; pushRaw(label, r.raw || r.detail); }
+  else { entry.usage = readUsage(r.raw); pushRaw(label, r.raw); }
+  results.push(entry);
+  render();
+  renderSweep();
+  verdict();
+  return entry;
+}
+
+function setBusy(on) {
+  ["runA", "runB", "runC", "runD", "runE", "runF", "runG", "runAll", "clear"].forEach(function (id) {
+    document.getElementById(id).disabled = on;
+  });
+}
+
+function guard(c) {
+  if (!c.key) { alert("Paste a Gemini API key first."); return false; }
+  if (!c.model) { alert("Pick or type a model id."); return false; }
+  return true;
+}
+
+async function runA() {
+  var c = cfg(); if (!guard(c)) return;
+  setBusy(true);
+  try {
+    var P = buildPrefix(1, c.size);
+    await one(c, "1 cold write", P, "Name one idea from the reference above. One sentence.");
+    await sleep(c.gap);
+    await one(c, "2 warm read", P, "Name a different idea from the reference above. One sentence.");
+    await sleep(c.gap);
+    var Q = buildPrefix(2, c.size);
+    await one(c, "3 negative control", Q, "Name one idea from the reference above. One sentence.");
+  } finally { setBusy(false); }
+}
+
+async function runB() {
+  var c = cfg(); if (!guard(c)) return;
+  setBusy(true);
+  try {
+    // The shipped layout: a per-cadet line about 850 characters into an otherwise identical prompt.
+    var body = buildPrefix(3, c.size);
+    var head = TUTOR_HEAD;
+    var mk = function (id) { return head + 'The cadet\'s last name is: "' + id + '".\n\n' + body; };
+    await one(c, "4a name at front", mk("Alpha"), "One sentence about the reference.");
+    await sleep(c.gap);
+    await one(c, "4b name at front", mk("Bravo"), "One different sentence about the reference.");
+  } finally { setBusy(false); }
+}
+
+async function runC() {
+  var c = cfg(); if (!guard(c)) return;
+  setBusy(true);
+  try {
+    // The fix: identical stable text, per-cadet line appended after all of it.
+    var body = buildPrefix(3, c.size);
+    var head = TUTOR_HEAD;
+    var mk = function (id) { return head + "\n" + body + '\n\nThe cadet\'s last name is: "' + id + '".'; };
+    await one(c, "5a name at end", mk("Alpha"), "One sentence about the reference.");
+    await sleep(c.gap);
+    await one(c, "5b name at end", mk("Bravo"), "One different sentence about the reference.");
+  } finally { setBusy(false); }
+}
+
+// The three real lesson sizes, measured across all 47 built lessons on 2026-09-11.
+// Smallest phys-110 L17, median phys-215 L2, largest phys-215 L15.
+var SWEEP_SIZES = [
+  { tokens: 8000,  name: "8,000 (small)" },
+  { tokens: 17400, name: "17,400 (median lesson)" },
+  { tokens: 36900, name: "36,900 (largest lesson)" }
+];
+
+// Experiment 6. For each size: one cold write, then the same prefix again with a different
+// question. The pair is what matters -- the write alone tells you nothing.
+//
+// Each size gets its OWN seed. Sharing a seed would make the small prefix a literal prefix of
+// the large one, so the large read could hit on bytes written by the small run and the sizes
+// would no longer be independent measurements.
+async function runD() {
+  var c = cfg(); if (!guard(c)) return;
+  setBusy(true);
+  try {
+    for (var i = 0; i < SWEEP_SIZES.length; i++) {
+      var s = SWEEP_SIZES[i];
+      var P = buildPrefix(10 + i, s.tokens);
+      await one(c, "6 sweep " + s.name + " write", P,
+                "Name one idea from the reference above. One sentence.");
+      await sleep(c.gap);
+      await one(c, "6 sweep " + s.name + " read", P,
+                "Name a different idea from the reference above. One sentence.");
+      if (i < SWEEP_SIZES.length - 1) await sleep(c.gap);
+    }
+  } finally { setBusy(false); }
+}
+
+// Experiment 7. No cadet id anywhere. The system text is byte-identical between the two calls,
+// and only the user turn differs -- which is the shape the real app would have if the app stamped
+// the name into the report itself and never put it in the prompt.
+//
+// This is the CEILING. Nothing can cache better than an identical prefix, so whatever fraction
+// comes back here is the most the layout work can ever recover.
+async function runE() {
+  var c = cfg(); if (!guard(c)) return;
+  setBusy(true);
+  try {
+    var body = buildPrefix(3, c.size);
+    var sys = TUTOR_HEAD + "\n" + body;      // identical bytes on both calls
+    await one(c, "7a no name", sys, "One sentence about the reference.");
+    await sleep(c.gap);
+    await one(c, "7b no name", sys, "One different sentence about the reference.");
+  } finally { setBusy(false); }
+}
+
+// callGemini sends exactly one user turn. A session is many, so this sends a whole contents
+// array. Kept separate rather than generalising callGemini, so experiments 1-7 keep sending
+// byte-for-byte what they sent when their results were recorded.
+async function callGeminiTurns(key, model, systemText, contents) {
+  var _t0 = Date.now();
+  var body = {
+    systemInstruction: { parts: [{ text: systemText }] },
+    contents: contents,
+    generationConfig: { maxOutputTokens: MAX_OUT, temperature: 0, thinkingConfig: { thinkingBudget: 0 } }
+  };
+  var url = BASE + "/models/" + encodeURIComponent(model) + ":generateContent?key=" +
+            encodeURIComponent(key);
+  var res, text;
+  try {
+    res = await fetch(url, { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    text = await res.text();
+  } catch (e) {
+    bumpCounter();
+    return { error: "network", detail: String(e && e.message || e) };
+  }
+  bumpCounter();
+  var data = null;
+  try { data = JSON.parse(text); } catch (e) {}
+  if (!res.ok) {
+    var msg = (data && data.error && data.error.message) || text.slice(0, 400);
+    return { error: "http " + res.status, detail: msg, raw: data || text, ms: Date.now() - _t0 };
+  }
+  return { ok: true, raw: data, ms: Date.now() - _t0 };
+}
+
+async function oneTurns(c, label, systemText, contents, model) {
+  var r = await callGeminiTurns(c.key, model || c.model, systemText, contents);
+  var entry = { label: label, ms: r.ms };
+  if (r.error) { entry.err = r.error; entry.detail = r.detail; pushRaw(label, r.raw || r.detail); }
+  else { entry.usage = readUsage(r.raw); pushRaw(label, r.raw); }
+  results.push(entry);
+  render(); renderSweep(); verdict();
+  return entry;
+}
+
+function replyTextOf(entry, raw) {
+  return "Understood.";
+}
+
+// Experiment 8. One student, one model, a growing conversation -- the shipped layout exactly,
+// name at the FRONT, because within a session that is harmless: it never changes.
+//
+// The point of the experiment is that every earlier one used a single turn, so none of them
+// could see the hit that a real session gets for free from turn 2 onward.
+async function runF() {
+  var c = cfg(); if (!guard(c)) return;
+  setBusy(true);
+  try {
+    var body = buildPrefix(3, c.size);
+    var sys = TUTOR_HEAD + 'The cadet\'s last name is: "Delta".\n\n' + body;
+    var turns = [];
+    var asks = [
+      "I found the idea of superposition confusing in the reading.",
+      "So the forces add as vectors, not as numbers?",
+      "Then two equal and opposite forces would cancel exactly?",
+      "What about three charges in a line?",
+      "That makes sense. What should I look at next?"
+    ];
+    for (var i = 0; i < asks.length; i++) {
+      turns.push({ role: "user", parts: [{ text: asks[i] }] });
+      await oneTurns(c, "8 session turn " + (i + 1), sys, turns.slice());
+      // A real transcript carries the tutor's replies too, and they lengthen the tail without
+      // touching the prefix. A fixed stand-in keeps the run deterministic.
+      turns.push({ role: "model", parts: [{ text:
+        "Good. Consider what happens to the direction of each contribution before you add them." }] });
+      if (i < asks.length - 1) await sleep(c.gap);
+    }
+  } finally { setBusy(false); }
+}
+
+// Experiment 9. Warm one model, walk to another, walk back.
+async function runG() {
+  var c = cfg(); if (!guard(c)) return;
+  var walk = document.getElementById("walk").value.trim();
+  if (!walk) { alert("Type a walk-to model id."); return; }
+  if (walk === c.model) { alert("The walk-to model must differ from the chosen model."); return; }
+  setBusy(true);
+  try {
+    var P = buildPrefix(7, c.size);
+    var q = "Name one idea from the reference above. One sentence.";
+    await oneTurns(c, "9a warm " + c.model, P, [{ role: "user", parts: [{ text: q }] }], c.model);
+    await sleep(c.gap);
+    await oneTurns(c, "9b hit " + c.model, P,
+                   [{ role: "user", parts: [{ text: "A different idea, one sentence." }] }], c.model);
+    await sleep(c.gap);
+    await oneTurns(c, "9c walked to " + walk, P,
+                   [{ role: "user", parts: [{ text: "A third idea, one sentence." }] }], walk);
+    await sleep(c.gap);
+    await oneTurns(c, "9d back on " + c.model, P,
+                   [{ role: "user", parts: [{ text: "A fourth idea, one sentence." }] }], c.model);
+  } finally { setBusy(false); }
+}
+
+async function runAll() {
+  await runA();
+  await runB();
+  await runC();
+  await runD();
+  await runE();
+  await runF();
+  await runG();
+}
+
+// ── Wiring ────────────────────────────────────────────────────────────────────────────────────
+document.getElementById("model").addEventListener("change", function () {
+  document.getElementById("other").disabled = this.value !== "__other";
+});
+document.getElementById("runA").addEventListener("click", runA);
+document.getElementById("runB").addEventListener("click", runB);
+document.getElementById("runC").addEventListener("click", runC);
+document.getElementById("runD").addEventListener("click", runD);
+document.getElementById("runE").addEventListener("click", runE);
+document.getElementById("runF").addEventListener("click", runF);
+document.getElementById("runG").addEventListener("click", runG);
+document.getElementById("runAll").addEventListener("click", runAll);
+document.getElementById("clear").addEventListener("click", function () {
+  results = []; rawLog = [];
+  document.getElementById("raw").textContent = "";
+  document.getElementById("rawWrap").hidden = true;
+  document.getElementById("sweepWrap").hidden = true;
+  document.getElementById("sweepRows").innerHTML = "";
+  render(); verdict();
+});
+
+render();
+</script>
+</body>
+</html>

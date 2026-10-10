@@ -8,6 +8,15 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-10-10 — Matthew Recker via Claude
+
+Committed two items left uncommitted by earlier sessions, on the operator's request to push all local work.
+
+- `tests/browser/test-gemini-implicit-cache.html` — a browser probe that measures whether a free-tier Gemini key gets implicit context caching, and whether the tutor prompt layout (per-cadet values near the front) defeats it. Test tooling only; nothing on the deploy path uses it.
+- `docs/ROADMAP.md` — one row: CORE.md and PROJECT.md say PREP replaced GradeScope; per the director it replaced WebAssign. Recorded, **not corrected** — the contract files are unchanged.
+
+**Not done:** the probe was not run. No code or data changed.
+
 ## 2026-10-02 — Matthew Recker via Claude
 
 ### Lessons 20 and 21 built from the decks, and Lab 3 stops being blocked
