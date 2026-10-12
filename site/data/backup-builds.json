@@ -205,6 +205,12 @@
       "title": "Faraday's Law of Induction, Motional EMF",
       "path": "gemini/phys-215/lesson-24-faradays-law-of-induction-motional-emf-8cbe647d.html"
     },
+    "lesson-25-angular-position-velocity-acceleration-1c2027d2": {
+      "course": "phys-110",
+      "lesson_no": 25,
+      "title": "Angular Position, Velocity, Acceleration",
+      "path": "gemini/phys-110/lesson-25-angular-position-velocity-acceleration-1c2027d2.html"
+    },
     "lesson-25-lenzs-law-induced-electric-field-1a98a6d0": {
       "course": "phys-215",
       "lesson_no": 25,
@@ -217,17 +223,47 @@
       "title": "Generators and Motors, AC, Transformers",
       "path": "gemini/phys-215/lesson-26-generators-and-motors-ac-transformers-1bbf05b9.html"
     },
+    "lesson-26-vector-product-torque-moment-of-inertia-82254ba0": {
+      "course": "phys-110",
+      "lesson_no": 26,
+      "title": "Vector Product / Torque / Moment of Inertia",
+      "path": "gemini/phys-110/lesson-26-vector-product-torque-moment-of-inertia-82254ba0.html"
+    },
+    "lesson-27-moment-of-inertia-applications-aa890e2b": {
+      "course": "phys-110",
+      "lesson_no": 27,
+      "title": "Moment of Inertia Applications",
+      "path": "gemini/phys-110/lesson-27-moment-of-inertia-applications-aa890e2b.html"
+    },
     "lesson-28-displacement-current-dc9f8b07": {
       "course": "phys-215",
       "lesson_no": 28,
       "title": "Displacement Current",
       "path": "gemini/phys-215/lesson-28-displacement-current-dc9f8b07.html"
     },
+    "lesson-28-rotational-kinetic-energy-rolling-motion-a86aff98": {
+      "course": "phys-110",
+      "lesson_no": 28,
+      "title": "Rotational Kinetic Energy / Rolling Motion",
+      "path": "gemini/phys-110/lesson-28-rotational-kinetic-energy-rolling-motion-a86aff98.html"
+    },
+    "lesson-29-angular-momentum-c706f9c3": {
+      "course": "phys-110",
+      "lesson_no": 29,
+      "title": "Angular Momentum",
+      "path": "gemini/phys-110/lesson-29-angular-momentum-c706f9c3.html"
+    },
     "lesson-29-maxwells-equations-7a27dd4c": {
       "course": "phys-215",
       "lesson_no": 29,
       "title": "Maxwell's Equations",
       "path": "gemini/phys-215/lesson-29-maxwells-equations-7a27dd4c.html"
+    },
+    "lesson-30-conservation-of-angular-momentum-6886a2ac": {
+      "course": "phys-110",
+      "lesson_no": 30,
+      "title": "Conservation of Angular Momentum",
+      "path": "gemini/phys-110/lesson-30-conservation-of-angular-momentum-6886a2ac.html"
     },
     "lesson-30-electromagnetic-waves-em-spectrum-40677a45": {
       "course": "phys-215",
@@ -241,17 +277,47 @@
       "title": "Light, Reflection, Refraction",
       "path": "gemini/phys-215/lesson-31-light-reflection-refraction-ec714375.html"
     },
+    "lesson-31-rotational-motion-applications-0bf0f930": {
+      "course": "phys-110",
+      "lesson_no": 31,
+      "title": "Rotational Motion Applications",
+      "path": "gemini/phys-110/lesson-31-rotational-motion-applications-0bf0f930.html"
+    },
     "lesson-32-image-formation-from-mirrors-fbd3ac8d": {
       "course": "phys-215",
       "lesson_no": 32,
       "title": "Image Formation from Mirrors",
       "path": "gemini/phys-215/lesson-32-image-formation-from-mirrors-fbd3ac8d.html"
     },
+    "lesson-32-lab-5-angular-momentum-6a7348fb": {
+      "course": "phys-110",
+      "lesson_no": 32,
+      "title": "LAB 5: Angular Momentum",
+      "path": "gemini/phys-110/lesson-32-lab-5-angular-momentum-6a7348fb.html"
+    },
     "lesson-33-image-formation-from-lenses-d3ec7a43": {
       "course": "phys-215",
       "lesson_no": 33,
       "title": "Image Formation from Lenses",
       "path": "gemini/phys-215/lesson-33-image-formation-from-lenses-d3ec7a43.html"
+    },
+    "lesson-33-universal-gravitation-d247e5a7": {
+      "course": "phys-110",
+      "lesson_no": 33,
+      "title": "Universal Gravitation",
+      "path": "gemini/phys-110/lesson-33-universal-gravitation-d247e5a7.html"
+    },
+    "lesson-34-gravitational-potential-energy-keplers-laws-acf1fb16": {
+      "course": "phys-110",
+      "lesson_no": 34,
+      "title": "Gravitational Potential Energy / Kepler's Laws",
+      "path": "gemini/phys-110/lesson-34-gravitational-potential-energy-keplers-laws-acf1fb16.html"
+    },
+    "lesson-35-planetary-and-satellite-motion-a265e53d": {
+      "course": "phys-110",
+      "lesson_no": 35,
+      "title": "Planetary and Satellite Motion",
+      "path": "gemini/phys-110/lesson-35-planetary-and-satellite-motion-a265e53d.html"
     },
     "lesson-36-double-slit-interference-8b6dbbb7": {
       "course": "phys-215",
@@ -265,17 +331,47 @@
       "title": "Diffraction, Resolution",
       "path": "gemini/phys-215/lesson-37-diffraction-resolution-89cef48b.html"
     },
+    "lesson-37-simple-harmonic-motion-pendulums-693379e0": {
+      "course": "phys-110",
+      "lesson_no": 37,
+      "title": "Simple Harmonic Motion & Pendulums",
+      "path": "gemini/phys-110/lesson-37-simple-harmonic-motion-pendulums-693379e0.html"
+    },
+    "lesson-38-lab-6-simple-harmonic-motion-fe47ae72": {
+      "course": "phys-110",
+      "lesson_no": 38,
+      "title": "Lab 6: Simple Harmonic Motion",
+      "path": "gemini/phys-110/lesson-38-lab-6-simple-harmonic-motion-fe47ae72.html"
+    },
+    "lesson-39-energy-of-sho-damped-oscillations-e6890552": {
+      "course": "phys-110",
+      "lesson_no": 39,
+      "title": "Energy of SHO & Damped Oscillations",
+      "path": "gemini/phys-110/lesson-39-energy-of-sho-damped-oscillations-e6890552.html"
+    },
     "lesson-39-intro-to-nuclear-4084143d": {
       "course": "phys-215",
       "lesson_no": 39,
       "title": "Intro to Nuclear",
       "path": "gemini/phys-215/lesson-39-intro-to-nuclear-4084143d.html"
     },
+    "lesson-40-wave-fundamentals-wave-equation-cae68395": {
+      "course": "phys-110",
+      "lesson_no": 40,
+      "title": "Wave Fundamentals & Wave Equation",
+      "path": "gemini/phys-110/lesson-40-wave-fundamentals-wave-equation-cae68395.html"
+    },
     "lesson-41-photoelectric-effect-wave-particle-518e76f6": {
       "course": "phys-215",
       "lesson_no": 41,
       "title": "Photoelectric Effect, Wave/Particle",
       "path": "gemini/phys-215/lesson-41-photoelectric-effect-wave-particle-518e76f6.html"
+    },
+    "lesson-41-superposition-standing-waves-applications-0549e3ca": {
+      "course": "phys-110",
+      "lesson_no": 41,
+      "title": "Superposition, Standing Waves, & Applications",
+      "path": "gemini/phys-110/lesson-41-superposition-standing-waves-applications-0549e3ca.html"
     },
     "phys310-atoms-and-nuclei-83022f32": {
       "course": "phys-310",

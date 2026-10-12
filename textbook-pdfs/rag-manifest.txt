@@ -40,8 +40,10 @@ Text_Book_PDFs/110 Sections/Changes in Mechanical Energy, Power.pdf
 Text_Book_PDFs/110 Sections/Conservation of Angular Momentum.pdf
 Text_Book_PDFs/110 Sections/Conservation of Energy.pdf
 Text_Book_PDFs/110 Sections/Constant Acceleration and Freefall.pdf
+Text_Book_PDFs/110 Sections/Energy in SHM, Damped Oscillations.pdf
 Text_Book_PDFs/110 Sections/Energy of a System, Work.pdf
 Text_Book_PDFs/110 Sections/Gravitational Potential Energy, Kepler's Laws.pdf
+Text_Book_PDFs/110 Sections/Interference of Waves and Standing Waves.pdf
 Text_Book_PDFs/110 Sections/Intro to Newton's Laws.pdf
 Text_Book_PDFs/110 Sections/Linear Momentum and 1-D Collisions.pdf
 Text_Book_PDFs/110 Sections/Moment of Inertia Applications.pdf

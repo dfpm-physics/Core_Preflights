@@ -8,6 +8,114 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-10-12 — Bryan Egner via Claude
+
+### PHYS 110 Lessons 25–41 built, published and ported to Gemini; two written preflights re-pointed at the right reading
+
+**Sixteen preflights built and published** for PHYS 110 Fall 2026, the rest of the course (lesson 36 is
+Graded Review 3 and has no preflight). Each is **NOT YET REGISTERED**: no `app.activities` row carries
+the slug, so no cadet can reach one until a director attaches it to the existing `preflight-NN` lesson
+(prefill link, **Existing assignment**, `policy=choice`).
+
+| Lsn | Slug | Published |
+|---|---|---|
+| 25 | `lesson-25-angular-position-velocity-acceleration-1c2027d2` | `https://claude.ai/public/artifacts/197c967f-ff25-48d6-b31b-5f2cd3c82738` |
+| 26 | `lesson-26-vector-product-torque-moment-of-inertia-82254ba0` | `https://claude.ai/public/artifacts/a4f86ae8-dba6-49a6-9211-9700267a438b` |
+| 27 | `lesson-27-moment-of-inertia-applications-aa890e2b` | `https://claude.ai/public/artifacts/294e05fb-92df-4ff2-b3d6-94a8b4a08387` |
+| 28 | `lesson-28-rotational-kinetic-energy-rolling-motion-a86aff98` | `https://claude.ai/public/artifacts/e205b1b9-038a-4c70-a84e-c19da07907ab` |
+| 29 | `lesson-29-angular-momentum-c706f9c3` | `https://claude.ai/public/artifacts/c93ef00a-e9d4-4e0b-866c-5fb2fc4bc469` |
+| 30 | `lesson-30-conservation-of-angular-momentum-6886a2ac` | `https://claude.ai/public/artifacts/0990ac82-24e6-4df1-b808-3c4b45094034` |
+| 31 | `lesson-31-rotational-motion-applications-0bf0f930` | `https://claude.ai/public/artifacts/2e0bd3b9-ab71-45cf-b994-373dbd909f75` |
+| 32 | `lesson-32-lab-5-angular-momentum-6a7348fb` | `https://claude.ai/public/artifacts/ae12566e-0824-4043-8cd5-00a16d884012` |
+| 33 | `lesson-33-universal-gravitation-d247e5a7` | `https://claude.ai/public/artifacts/72410b66-1522-4caf-8d78-c765f6452d04` |
+| 34 | `lesson-34-gravitational-potential-energy-keplers-laws-acf1fb16` | `https://claude.ai/public/artifacts/0a3d2a33-e51c-44c7-83e3-1f530f06b324` |
+| 35 | `lesson-35-planetary-and-satellite-motion-a265e53d` | `https://claude.ai/public/artifacts/9453f63d-9e5d-4746-81a2-eea7b0d3f6cf` |
+| 37 | `lesson-37-simple-harmonic-motion-pendulums-693379e0` | `https://claude.ai/public/artifacts/daacd085-25e6-4d74-ab97-d87215095e89` |
+| 38 | `lesson-38-lab-6-simple-harmonic-motion-fe47ae72` | `https://claude.ai/public/artifacts/7ada6e2e-a55c-478f-84cd-ab0cd77f2188` |
+| 39 | `lesson-39-energy-of-sho-damped-oscillations-e6890552` | `https://claude.ai/public/artifacts/bf44752e-a476-4b24-bf49-491b4707ef38` |
+| 40 | `lesson-40-wave-fundamentals-wave-equation-cae68395` | `https://claude.ai/public/artifacts/9f2e9b87-bf2a-42e0-94e0-a2b150d63e5c` |
+| 41 | `lesson-41-superposition-standing-waves-applications-0549e3ca` | `https://claude.ai/public/artifacts/20dcb1f1-4a06-4764-80fb-df076235bc46` |
+
+**Each URL was verified against the bytes, not the paste order or the page title.** The published
+source was fetched for every link and compared with the local `.jsx`. All sixteen are identical and
+each landed under its own lesson.
+
+**All sixteen are built on Lesson 22's source**, by asserted once-only byte substitutions. That source
+carries Lesson 19's 2026-08-21 fix set and the restored study-mode sections. Only the header, the slug,
+the generated date, the topic count, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt
+opening and its examples, and the two UI titles differ. Each has four probe topics with prose bound
+to keys. Each parses clean under the site's
+vendored Babel. `check_artifact.py` reports 31/1 on each (the known `[]` false positive), and the
+`BACKUP_ENDPOINT` count is 3.
+
+**Grounding** was read as page images from the course's OpenStax section PDFs. Lessons 32 (Lab 5) and
+38 (Lab 6) are lab preflights grounded on the lab instructions first, then the Core Physics Lab Manual,
+then OpenStax, with the LAB 1–4 scope decisions carried forward. Where a section PDF stops mid-example,
+the rest was read from the next lesson's PDF, and each build log says where. Two printed typos are
+recorded in the tutor's grounding rather than repeated:
+
+- **Example 13.1** prints 10⁻⁹ where 10⁻⁸ is meant.
+- **Example 13.8** prints 3.0 × 10³ m/s where 30 km/s is meant.
+
+**Lessons 39 and 41 had no usable reading on disk.** Their syllabus sections were in no section PDF.
+The course director added three section PDFs today: "Energy in SHM", "Damped Oscillations" and
+"Interference of Waves and Standing Waves". Lesson 39's two were merged with `pdfunite` into
+"Energy in SHM, Damped Oscillations.pdf" (12 pp.; each page's text checked against its source). Both
+files are added to `textbook-pdfs/rag-manifest.txt`, keeping it sorted. **They still have to be
+uploaded to Teams** (Core_Preflights_PDFs), or every other operator's grounding check will miss them.
+On this machine `check_grounding.py` reads 110 Sections 30/30.
+
+**Live-data repair (one-off, by the director's instruction): two written preflights re-pointed at
+the right reading.** Each update changed `content.reference_pdf` and its page range only. The
+questions were read back afterwards and are intact.
+
+| Activity | Was | Now |
+|---|---|---|
+| `phys-110-preflight-39-written` | `110 Sections/Simple Harmonic Oscillation.pdf`, pp. 710–733 | `110 Sections/Energy in SHM, Damped Oscillations.pdf`, pp. 718–725, 734–737 |
+| `phys-110-preflight-41-written` | `110 Sections/Wave Motion.pdf`, no pages | `110 Sections/Interference of Waves and Standing Waves.pdf`, pp. 774–790 |
+
+Lesson 39's row passed briefly through `Energy in SHM.pdf` pp. 718–725 before the merge. The header
+comments of the lesson 39 and 41 artifacts still say the rows point at the old PDFs. That was true
+when they were built; their build-log sections say so.
+
+**Gemini builds** were ported with `to_gemini.py --from-lesson 25` for all sixteen; Lessons 20–23 still
+report `unchanged`. `site/data/backup-builds.json` gains sixteen rows. The local `index.json` was
+regenerated from the new build-log sections first, because the porter skips unpublished rows. Each
+build was loaded in a browser from a local static server and checked:
+
+- no error banner
+- `#root` mounted
+- last-name and API-key fields present
+- no page scroll
+- slug, submit endpoint and Gemini endpoint present in the bytes, `api.anthropic.com` absent
+
+**Not run:** a live turn with a Gemini key, and the `tests/browser-harness/` drivers (their
+`puppeteer-core` dependency is not installed on this machine). **`python -m http.server` truncates
+these ~220 KB pages at 195,840 bytes about half the time on this machine.** The page then sits on
+"Loading the lesson…" forever, known-good Lesson 23 included. A small Node server that sends whole
+files was used instead.
+
+**Storage push (`artifact-sources`): phys-110 only, as on 2026-09-23.** 33 objects went up: sixteen
+sources, sixteen build records and the phys-110 index. A pull afterwards shows 33 catalogue rows, all
+but Lesson 18 published, and each new source byte-identical to the local cache. **phys-310 was held
+back again.** Its three changed build records are the ones the 2026-09-23 entry left for Matt, and
+they are still unpushed.
+
+**`PUBLISH-ARTIFACT.md` §2**: the prompt's "four String.raw blocks" became "four string blocks",
+with a note that both declaration styles are correct. The first publish session read the old wording,
+found no `String.raw` in a PHYS 110 file, and flagged it. No PHYS 110 build has ever used `String.raw`.
+The runbook now also says the session must be a regular claude.ai chat. A Claude Code or Cowork
+session has only an HTML artifact tool and refused the file.
+
+**Still open:**
+
+- Registration of all sixteen, via the director's prefill links.
+- The two new PDFs, to Teams.
+- Last night's 1 a.m. run refused at gate 1 on a transient Supabase auth timeout (no class today).
+  Every gate passes now.
+
+---
+
 ## 2026-10-10 — Matthew Recker via Claude
 
 Committed two items left uncommitted by earlier sessions, on the operator's request to push all local work.

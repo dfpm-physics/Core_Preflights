@@ -58,6 +58,8 @@ Write down the **line count** and the **exact `INTERACTION_ID`**. You need both 
 ## 2. Publish
 
 Start a session and attach the `.jsx` — **one file per session**. Paste the prompt below with it, unchanged.
+The session must be a regular claude.ai **chat** with Artifacts enabled. A Claude Code or Cowork session
+has only an HTML-publishing artifact tool and will refuse to render a React file (2026-10-12).
 
 > **If you use the course's Claude Project, the first line is the one that matters.** The
 > `preflight-factory-v2` skill is in that project's knowledge and is written to *build* an artifact.
@@ -77,9 +79,11 @@ Any edit you make — however sensible it looks — breaks a check and can silen
 cost cadets their submitted work. Reproduce it exactly.
 
 Specifically, do NOT:
-- shorten, summarize, elide, or "..." any string constant. The four String.raw
+- shorten, summarize, elide, or "..." any string constant. The four string
   blocks (TEXTBOOK_REFERENCE, LESSON_CONFIG, EXTENSION_PROBLEMS, REPORT_FORMAT)
   are long on purpose — they are the tutor's entire knowledge of this lesson.
+  (Some builds declare them with String.raw, others as plain template literals;
+  both are correct, and neither is to be converted.)
 - change INTERACTION_ID. The 8-hex suffix is a per-offering id required by
   contract; it cannot be regenerated and a changed one routes every cadet
   report to nothing.

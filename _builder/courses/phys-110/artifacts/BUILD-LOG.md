@@ -282,3 +282,259 @@ pointer from a lesson back to the exact build a cadet is running.
 | **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3. Gemini build ported the same day and rendered to its start screen from a local static server |
 | **Scope decisions** | LAB preflight, decisions carried forward from LABs 1–3: CONCEPTUAL (the report's Theory section is where derivation belongs); the reported uncertainty is the STANDARD DEVIATION OF THE MEAN, which the supplied Excel template computes; cadets take it BEFORE running the experiment, so probe preparation, never results. This lab has no bonus |
 | **Status** | **PUBLISHED 2026-09-23.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-23` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 25 — Angular Position, Velocity, Acceleration
+
+| | |
+|---|---|
+| **File** | [`lesson_25_preflight_angular_position_velocity_acceleration.jsx`](lesson_25_preflight_angular_position_velocity_acceleration.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-25-angular-position-velocity-acceleration-1c2027d2` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/197c967f-ff25-48d6-b31b-5f2cd3c82738 — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2399 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 ch. 10 §§10.1–10.3, pp. 452–468, read as page images. The syllabus's "4.4–4.5" (Cengage: uniform circular motion; tangential and radial acceleration) maps onto §10.3's centripetal and tangential acceleration. The PDF ends mid-Example 10.7; its conclusion was read from p. 469 of lesson 26's PDF |
+| **Probe topics** | 4 — `angular-variables`, `tangential-speed-radius`, `rotational-kinematics`, `centripetal-tangential-accel`. Prose bound to keys |
+| **Extensions** | 4 (A–D): The merry-go-round; A ceiling fan starts up; Braking a wheel by the turn; Total acceleration of a rotor tip. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-25` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 26 — Vector Product / Torque / Moment of Inertia
+
+| | |
+|---|---|
+| **File** | [`lesson_26_preflight_vector_product_torque_moment_of_inertia.jsx`](lesson_26_preflight_vector_product_torque_moment_of_inertia.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-26-vector-product-torque-moment-of-inertia-82254ba0` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/a4f86ae8-dba6-49a6-9211-9700267a438b — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2426 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §2.4 (the vector-product half, pp. 72–83), §10.4 (pp. 469–476) and §10.6 (pp. 485–489), read as page images. The boomerang example and Check Your Understanding 10.6 are cut off in this PDF; both were finished from pp. 477 and 490 of lesson 27's PDF |
+| **Probe topics** | 4 — `cross-product-direction`, `torque-lever-arm`, `net-torque-sign`, `moment-of-inertia-distribution`. Prose bound to keys |
+| **Extensions** | 4 (A–D): The wrench; Balancing a seesaw; Same rod, different axis; Who wins at the door?. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-26` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 27 — Moment of Inertia Applications
+
+| | |
+|---|---|
+| **File** | [`lesson_27_preflight_moment_of_inertia_applications.jsx`](lesson_27_preflight_moment_of_inertia_applications.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-27-moment-of-inertia-applications-aa890e2b` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/294e05fb-92df-4ff2-b3d6-94a8b4a08387 — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2359 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §10.5 (pp. 477–484) and §10.7 (pp. 490–493), read as page images. The PDF ends after Check Your Understanding 10.7, and the grounding stops there |
+| **Probe topics** | 4 — `inertia-axis-dependence`, `parallel-axis-compound`, `rotational-second-law`, `rotational-energy-conservation`. Prose bound to keys |
+| **Extensions** | 4 (A–D): The barbell, two ways; Spinning up a merry-go-round; Opening a heavy door; A falling meter stick. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-27` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 28 — Rotational Kinetic Energy / Rolling Motion
+
+| | |
+|---|---|
+| **File** | [`lesson_28_preflight_rotational_kinetic_energy_rolling_motion.jsx`](lesson_28_preflight_rotational_kinetic_energy_rolling_motion.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-28-rotational-kinetic-energy-rolling-motion-a86aff98` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/e205b1b9-038a-4c70-a84e-c19da07907ab — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2358 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §10.4 (pp. 469–476, the pages lesson 26 used) and §11.1 (pp. 516–522), read as page images. The Curiosity rover example is cut off on p. 522; its conclusion (9.63 m/s) was read from p. 523 of lesson 29's PDF |
+| **Probe topics** | 4 — `rotational-kinetic-energy`, `rolling-without-slipping`, `rolling-friction-role`, `rolling-energy-shape`. Prose bound to keys |
+| **Extensions** | 4 (A–D): How much of a bowling ball's energy is spin?; The race down the ramp; A sphere on a 30-degree slope; A bicycle wheel meets two hills. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-28` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 29 — Angular Momentum
+
+| | |
+|---|---|
+| **File** | [`lesson_29_preflight_angular_momentum.jsx`](lesson_29_preflight_angular_momentum.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-29-angular-momentum-c706f9c3` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/c93ef00a-e9d4-4e0b-866c-5fb2fc4bc469 — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2336 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §11.2, pp. 523–530, read as page images. The robot-arm example's solution and Check Your Understanding 11.3 were read from p. 531 of lesson 30's PDF |
+| **Probe topics** | 4 — `particle-angular-momentum`, `torque-changes-l`, `system-angular-momentum`, `rigid-body-l-i-omega`. Prose bound to keys |
+| **Extensions** | 4 (A–D): A car driving past; A ball on a string; Braking a grinding wheel; A dropped ball has angular momentum. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-29` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 30 — Conservation of Angular Momentum
+
+| | |
+|---|---|
+| **File** | [`lesson_30_preflight_conservation_of_angular_momentum.jsx`](lesson_30_preflight_conservation_of_angular_momentum.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-30-conservation-of-angular-momentum-6886a2ac` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/0990ac82-24e6-4df1-b808-3c4b45094034 — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2310 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §11.3, pp. 531–536, read as page images. The bullet-and-disk example's solution was read from p. 537 of lesson 31's PDF |
+| **Probe topics** | 4 — `conservation-condition`, `i-omega-tradeoff`, `rotational-ke-changes`, `angular-collisions`. Prose bound to keys |
+| **Extensions** | 4 (A–D): The skater's arms; Stepping onto a merry-go-round; Making a pulsar; How many somersaults?. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-30` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 31 — Rotational Motion Applications
+
+| | |
+|---|---|
+| **File** | [`lesson_31_preflight_rotational_motion_applications.jsx`](lesson_31_preflight_rotational_motion_applications.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-31-rotational-motion-applications-0bf0f930` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/2e0bd3b9-ab71-45cf-b994-373dbd909f75 — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2346 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §§11.3–11.4, pp. 531–541, read as page images. The syllabus's "11.4" is the same Cengage section as lesson 30's; this lesson applies conservation and adds the gyroscope |
+| **Probe topics** | 4 — `internal-torque-exchange`, `angular-momentum-collisions`, `precession-torque`, `spin-axis-stability`. Prose bound to keys |
+| **Extensions** | 4 (A–D): A helicopter without a tail rotor; A bullet into a door; A precessing gyroscope; Engaging a clutch. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-31` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 32 — LAB 5: Angular Momentum
+
+| | |
+|---|---|
+| **File** | [`lesson_32_preflight_lab5_angular_momentum.jsx`](lesson_32_preflight_lab5_angular_momentum.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-32-lab-5-angular-momentum-6a7348fb` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/ae12566e-0824-4043-8cd5-00a16d884012 — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2418 lines) |
+| **Grounding** | PHYS 110 Fall 2026 Lab 5 Instructions ("Conservation of Angular Momentum", 1 Aug 2026, 4 pp. including the rubric) as PRIMARY, read as page images; the Core Physics Laboratory Manual (uncertainty, standard deviation of the mean, linearizing data) as supporting text; OpenStax Univ. Physics Vol. 1 §§11.2–11.3 (the lessons 29–31 reading) as theory. Its bullet-in-a-disk example is the same physics as the lab |
+| **Probe topics** | 4 — `lab5-conserved-quantity`, `lab5-moment-of-inertia-model`, `lab5-omega-from-timing`, `lab5-linearization-uncertainty`. Prose bound to keys |
+| **Extensions** | 4 (A–D): Building the moment of inertia; One trial, from the ball to the photogate; Where did the kinetic energy go?; Reporting and comparing a result. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | LAB preflight, decisions carried forward from LABs 1–4: CONCEPTUAL (the report's Theory section is where derivation belongs); the reported uncertainty is the STANDARD DEVIATION OF THE MEAN, which the supplied Excel template computes; cadets take it BEFORE running the experiment, so probe preparation, never results. This lab has no bonus |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-32` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 33 — Universal Gravitation
+
+| | |
+|---|---|
+| **File** | [`lesson_33_preflight_universal_gravitation.jsx`](lesson_33_preflight_universal_gravitation.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-33-universal-gravitation-d247e5a7` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/72410b66-1522-4caf-8d78-c765f6452d04 — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2381 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §§13.1–13.2, pp. 599–611, read as page images. The PDF ends mid-paragraph in the shell-planet discussion, which continues on p. 612 of lesson 34's PDF. Example 13.1's printed substitution has a typo (10⁻⁹ where 10⁻⁸ is meant); the grounding records it |
+| **Probe topics** | 4 — `inverse-square-law`, `g-from-gravitation`, `gravity-at-altitude`, `field-and-apparent-weight`. Prose bound to keys |
+| **Extensions** | 4 (A–D): Two people attract; Newton's Moon test; Where is gravity half as strong?; Weighing Mars. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-33` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 34 — Gravitational Potential Energy / Kepler's Laws
+
+| | |
+|---|---|
+| **File** | [`lesson_34_preflight_gravitational_potential_energy_keplers_laws.jsx`](lesson_34_preflight_gravitational_potential_energy_keplers_laws.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-34-gravitational-potential-energy-keplers-laws-acf1fb16` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/0a3d2a33-e51c-44c7-83e3-1f530f06b324 — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2395 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §13.3 (pp. 612–616) and §13.5 (pp. 624–629), read as page images; §13.4 is lesson 35's. The PDF ends with the strategy of the Halley's comet example. Example 13.8's printed substitution has a typo (3.0 × 10³ m/s where 30 km/s is meant); the grounding records it |
+| **Probe topics** | 4 — `gravitational-pe`, `escape-velocity`, `bound-orbits-conics`, `kepler-second-third`. Prose bound to keys |
+| **Extensions** | 4 (A–D): How good is m g h?; Escaping the Moon; A comet's speeds; A Hohmann trip to Mars. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-34` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 35 — Planetary and Satellite Motion
+
+| | |
+|---|---|
+| **File** | [`lesson_35_preflight_planetary_and_satellite_motion.jsx`](lesson_35_preflight_planetary_and_satellite_motion.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-35-planetary-and-satellite-motion-a265e53d` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/9453f63d-9e5d-4746-81a2-eea7b0d3f6cf — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2347 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §13.4, pp. 617–623, read as page images. The Soyuz orbital-energy example is cut off on p. 623; its conclusion was read from p. 624, at the start of lesson 34's §13.5 excerpt |
+| **Probe topics** | 4 — `circular-orbit-speed`, `orbital-period`, `orbit-as-free-fall`, `orbital-energy`. Prose bound to keys |
+| **Extensions** | 4 (A–D): Where geosynchronous satellites live; Twice as far from the center; Weighing Jupiter; Raising an orbit. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-35` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 37 — Simple Harmonic Motion & Pendulums
+
+| | |
+|---|---|
+| **File** | [`lesson_37_preflight_simple_harmonic_motion_pendulums.jsx`](lesson_37_preflight_simple_harmonic_motion_pendulums.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-37-simple-harmonic-motion-pendulums-693379e0` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/daacd085-25e6-4d74-ab97-d87215095e89 — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2384 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §15.1 (pp. 710–717) and §15.4 (pp. 728–733), read as page images. The PDF skips pp. 718–727 (energy in SHM, lesson 39's material) and ends with the torsional pendulum's period |
+| **Probe topics** | 4 — `shm-restoring-force`, `period-independent-of-amplitude`, `simple-pendulum-period`, `shm-kinematics`. Prose bound to keys |
+| **Extensions** | 4 (A–D): A block on a spring; What changes the period?; Measuring g with a pendulum; A vertical spring, two ways. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-37` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 38 — Lab 6: Simple Harmonic Motion
+
+| | |
+|---|---|
+| **File** | [`lesson_38_preflight_lab6_simple_harmonic_motion.jsx`](lesson_38_preflight_lab6_simple_harmonic_motion.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-38-lab-6-simple-harmonic-motion-fe47ae72` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/7ada6e2e-a55c-478f-84cd-ab0cd77f2188 — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2362 lines) |
+| **Grounding** | PHYS 110 Fall 2026 Lab 6 Instructions ("Simple Harmonic Motion - Pendulums", 1 Aug 2026, 3 pp. including the rubric) as PRIMARY, read as page images; the Core Physics Laboratory Manual (uncertainty, standard deviation of the mean, linearizing data; its worked linearization example is this pendulum) as supporting text; OpenStax Univ. Physics Vol. 1 §15.4 (the simple pendulum) and §13.2 (g and Earth's rotation) as theory |
+| **Probe topics** | 4 — `lab6-small-angle-pendulum`, `lab6-variables-and-timing`, `lab6-linearize-t-squared`, `lab6-theory-comparison`. Prose bound to keys |
+| **Extensions** | 4 (A–D): Theoretical g at USAFA; One length, six periods; Reading the slope; Two small effects: rotation and a wide swing. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | LAB preflight, decisions carried forward from LABs 1–5: CONCEPTUAL (the report's Theory section is where derivation belongs); the reported uncertainty is the STANDARD DEVIATION OF THE MEAN, which the supplied Excel template computes; cadets take it BEFORE running the experiment, so probe preparation, never results. This lab has no bonus |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-38` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 39 — Energy of SHO & Damped Oscillations
+
+| | |
+|---|---|
+| **File** | [`lesson_39_preflight_energy_of_sho_damped_oscillations.jsx`](lesson_39_preflight_energy_of_sho_damped_oscillations.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-39-energy-of-sho-damped-oscillations-e6890552` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/bf44752e-a476-4b24-bf49-491b4707ef38 — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2402 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §15.2 (pp. 718–725) and §15.5 (pp. 734–737), read as page images from two section PDFs the course director added on 2026-10-12 ("Energy in SHM", "Damped Oscillations"). Fragments of neighbouring sections at the edges of each PDF are noted, not probed |
+| **Probe topics** | 4 — `shm-energy-exchange`, `energy-amplitude-squared`, `stable-equilibrium-well`, `damped-oscillations`. Prose bound to keys |
+| **Extensions** | 4 (A–D): Energy bookkeeping on a spring; Where are the energies equal?; Doubling the amplitude; A lightly damped oscillator. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. The artifact's header comment says the written `preflight-39` row still points its reference PDF at "Simple Harmonic Oscillation.pdf". That was true when it was built and was repaired the same day (CHANGELOG 2026-10-12); the comment is history, not a live instruction |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-39` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 40 — Wave Fundamentals & Wave Equation
+
+| | |
+|---|---|
+| **File** | [`lesson_40_preflight_wave_fundamentals_wave_equation.jsx`](lesson_40_preflight_wave_fundamentals_wave_equation.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-40-wave-fundamentals-wave-equation-cae68395` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/9f2e9b87-bf2a-42e0-94e0-a2b150d63e5c — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2392 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §§16.1–16.3, pp. 752–768, read as page images. The PDF ends mid-way through the guitar-string example (part b); the grounding says so rather than reconstructing the rest |
+| **Probe topics** | 4 — `wave-transfers-energy`, `wave-speed-wavelength-frequency`, `speed-set-by-medium`, `wave-function-medium-motion`. Prose bound to keys |
+| **Extensions** | 4 (A–D): A wave down a rope; Reading a wave function; Tightening a string; Same rope, two frequencies. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-40` lesson (prefill link, **Existing assignment**, `policy=choice`) |
+
+### Lesson 41 — Superposition, Standing Waves, & Applications
+
+| | |
+|---|---|
+| **File** | [`lesson_41_preflight_superposition_standing_waves_applications.jsx`](lesson_41_preflight_superposition_standing_waves_applications.jsx) |
+| **Registration slug** (`#i=` / `id=`) | `lesson-41-superposition-standing-waves-applications-0549e3ca` |
+| **Published** | 2026-10-12 — https://claude.ai/public/artifacts/20dcb1f1-4a06-4764-80fb-df076235bc46 — published by the course director; URL pasted back and then VERIFIED by fetching the published source and comparing it byte-for-byte with this file, rather than trusting list order |
+| **Built** | 2026-10-12, by Bryan Egner via Claude Code, from `preflight-kit` localized against `phys-110/COURSE_PROFILE.md` |
+| **Template** | Built on `lesson-22-center-of-mass-systems-of-particles-b554fa74` (itself built on lesson 19, the first source carrying the 2026-08-21 fix set, with the study-mode EQUATIONS, VERIFICATION PROTOCOL and CONFIDENCE LABELING sections restored) by asserted once-only substitutions; only the header, `INTERACTION_ID`, the generated date, `PROBE_TOPIC_COUNT`, `OBJECTIVE_KEYS`, the three authored blocks, the graded-prompt opening and its examples, and two UI titles differ. Spliced in **bytes**, LF preserved (2405 lines) |
+| **Grounding** | OpenStax Univ. Physics Vol. 1 §§16.5–16.6, pp. 774–790, read as page images from a section PDF the course director added on 2026-10-12 ("Interference of Waves and Standing Waves"). The syllabus's "17.1–17.2" is Cengage numbering. The PDF covers both sections to their ends |
+| **Probe topics** | 4 — `superposition-interference`, `boundary-reflection`, `standing-wave-nodes`, `normal-modes-resonance`. Prose bound to keys |
+| **Extensions** | 4 (A–D): Adding two waves with a phase shift; A string on a vibrator; Playing a guitar string; Finding the nodes. Worked answers are tutor-reference only |
+| **Checks** | `check_artifact.py` **31 passed / 1 failed** — the known `[]` false positive from `EXT_TRIGGER_MARK`. Parsed clean by the site's vendored Babel (`site/vendor/babel.min.js`); `BACKUP_ENDPOINT` count 3 |
+| **Scope decisions** | CONCEPTUAL, per this course's standing decision. The artifact's header comment says the written `preflight-41` row still points its reference PDF at "Wave Motion.pdf". That was true when it was built and was repaired the same day (CHANGELOG 2026-10-12); the comment is history, not a live instruction |
+| **Status** | **PUBLISHED 2026-10-12.** NOT YET REGISTERED — no `app.activities` row carries this slug, so no cadet can reach it through the course site until a director attaches it to the existing `preflight-41` lesson (prefill link, **Existing assignment**, `policy=choice`) |
