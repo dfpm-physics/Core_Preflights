@@ -42,6 +42,19 @@ stats paths rather than opening PDFs, so it costs nothing.
 Until someone downloads them from Teams → Files → Core_Preflights_PDFs, **PHYS 110 grading
 at lessons 39 and 41 would be ungrounded**, and the 110 job's own gate should keep refusing.
 
+**Recovered the missed lesson, and recorded how to read grade state.** `preflight-24` M-day
+ran at 05:46 and wrote 146 grades across the eight M sections (128 written + 18 no-submission
+zeros), verified against the database: no T-day bleed, no empty diagnostics, one grade row per
+cadet, repo untouched. Thirty-three of those grades showed `is_finalized=true` shortly after,
+which was **misread as the automation finalizing grades it should have left for review**. It
+was not: the rows were updated at 05:56:50, forty-nine seconds *after* the wrapper exited at
+05:56:01, in a single second — the director of M1C and M3C bulk-confirming their own sections.
+`is_finalized=true` with a non-null `graded_by` is the signature of human review, not its
+absence. A second error compounded it: counting "finalized as of now" grouped by the date a
+grade was written makes older lessons look worse purely because they have had more days of
+review, which fabricated a ~1,100-grade regression that does not exist. Both traps, the field
+semantics and the correct query, are now written down in `docs/contracts/GRADE-STATE.md`.
+
 **Unrelated false positive, left alone.** `name_scan.py` fails on
 `site/gemini/phys-110/lesson-33-universal-gravitation-d247e5a7.html:900`. The line is about
 the Cavendish experiment "a century after Newton"; a real cadet's first and last name parts
