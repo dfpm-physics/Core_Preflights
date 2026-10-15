@@ -8,6 +8,47 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-10-15 — Casey Pellizzari via Claude
+
+### The nightly grounding gate is now scoped to the course being graded
+
+**Two nights of PHYS 215 grading did not happen.** The 01:00 runs on 2026-10-14 and
+2026-10-15 both stopped at gate 3 with `textbook grounding does not resolve`. The gate was
+right that something was missing and wrong about what it meant: `cd5eee3` added two PHYS 110
+readings (lessons 39 and 41) to `textbook-pdfs/rag-manifest.txt`, and those two PDFs were
+never downloaded from Teams. `check_grounding.py` exited non-zero for the whole manifest, so
+a 110 gap refused a 215 run — and **215 resolves 30 of 30**. Nothing about that run would
+have been ungrounded. The casualty is `preflight-24` M-day, due Wed 2026-10-14 23:59.
+
+**`check_grounding.py` takes `--course`.** It scopes the *exit code* to one section folder.
+Everything still gets reported: out-of-scope gaps print a `WARN` naming the count and saying
+those courses would grade ungrounded. Unscoped behaviour is unchanged, so no existing caller
+is quietly loosened. The script already printed a per-folder breakdown with the comment
+"one course grading blind while the other is fine is the common shape" — this makes the exit
+code agree with that.
+
+**The wrapper passes `--course 215`**, derived from `COURSE` rather than hard-coded, so the
+gate follows the job.
+
+**New gate 6b: grounding is re-checked when the pull moves `HEAD`.** Gate 3 runs before gate
+6, so it validated the manifest *as it stood before the pull*. A commit that adds manifest
+entries therefore slipped past unverified — which is exactly what happened on 2026-10-13:
+that run passed gate 3 against 58 entries, pulled `cd5eee3`, and graded against a 60-entry
+manifest it had never checked. The re-check only fires when `HEAD` actually moved, and it
+stats paths rather than opening PDFs, so it costs nothing.
+
+**Still outstanding, and not fixable from here:** the two PHYS 110 PDFs are genuinely absent
+(`Energy in SHM, Damped Oscillations.pdf`, `Interference of Waves and Standing Waves.pdf`).
+Until someone downloads them from Teams → Files → Core_Preflights_PDFs, **PHYS 110 grading
+at lessons 39 and 41 would be ungrounded**, and the 110 job's own gate should keep refusing.
+
+**Unrelated false positive, left alone.** `name_scan.py` fails on
+`site/gemini/phys-110/lesson-33-universal-gravitation-d247e5a7.html:900`. The line is about
+the Cavendish experiment "a century after Newton"; a real cadet's first and last name parts
+happen to be those two words. No student data is exposed. The scanner needs a way to say so.
+
+---
+
 ## 2026-10-12 — Bryan Egner via Claude
 
 ### PHYS 110 Lessons 25–41 built, published and ported to Gemini; two written preflights re-pointed at the right reading

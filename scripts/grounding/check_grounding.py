@@ -13,8 +13,10 @@ nothing, and never opens a PDF.
     python scripts/grounding/check_grounding.py            # summary + what is missing
     python scripts/grounding/check_grounding.py --verbose  # list every entry
     python scripts/grounding/check_grounding.py --base X   # test a candidate path
+    python scripts/grounding/check_grounding.py --course 215  # fail only on that course
 
-Exit codes:  0 = every manifest entry resolved.  1 = something is missing or misconfigured.
+Exit codes:  0 = every manifest entry IN SCOPE resolved.  1 = something is missing or
+misconfigured. Scope is the whole manifest unless --course narrows it.
 
 WHY THE LAYOUT NEEDS A BRIDGE. Manifest entries begin `Text_Book_PDFs/<NNN> Sections/`
 because that is the literal string stored in the live `activities.content.reference_pdf`,
@@ -59,6 +61,11 @@ def main():
     ap = argparse.ArgumentParser(description="Verify the RAG grounding corpus resolves on this machine.")
     ap.add_argument("--base", help="Override textbook_base_path (test a candidate without editing config).")
     ap.add_argument("--verbose", action="store_true", help="List every entry, not just the failures.")
+    ap.add_argument(
+        "--course",
+        help="Only fail on this course's folder (e.g. 215). Gaps in other courses are "
+             "still reported but do not set the exit code.",
+    )
     args = ap.parse_args()
 
     entries = read_manifest(MANIFEST)
@@ -100,9 +107,30 @@ def main():
             ok, tot = by_course[k]
             print(f"    {k:<16} {ok}/{tot}" + ("" if ok == tot else "   <-- grading here is ungrounded"))
 
-    if missing:
+    # --course narrows what counts as fatal. The nightly gate grades ONE course, and an
+    # all-or-nothing exit held phys-215 -- grounded 30/30 -- hostage to two phys-110 PDFs
+    # that no 215 activity references. That is not a safety margin, it is grading that
+    # does not happen. Out-of-scope gaps still print, loudly; they just do not block.
+    if args.course:
+        def in_scope(e):
+            return e.count("/") >= 2 and e.split("/")[1].startswith(args.course)
+        blocking = [e for e in missing if in_scope(e)]
+        deferred = [e for e in missing if not in_scope(e)]
+        print(f"\nscope    : {args.course} Sections only (--course {args.course})")
+    else:
+        blocking, deferred = missing, []
+
+    if deferred:
         print(
-            "\nFAIL  Grading will proceed WITHOUT grounding for the entries above.\n"
+            f"\nWARN  {len(deferred)} entry(ies) outside the --course {args.course} scope do not\n"
+            "      resolve. Grading THOSE courses would be ungrounded. This run is not\n"
+            "      blocked by them, but they still need fixing."
+        )
+
+    if blocking:
+        print(
+            f"\nFAIL  {len(blocking)} manifest entry(ies) in scope do not resolve. Grading would\n"
+            "      proceed WITHOUT grounding for them.\n"
             "      Usual causes, in order:\n"
             "        1. `textbook_base_path` points at the repo's textbook-pdfs/ folder. It must\n"
             "           point at a directory CONTAINING `Text_Book_PDFs/{110,215} Sections/`.\n"
@@ -113,7 +141,8 @@ def main():
         )
         return 1
 
-    print("\nOK    Every manifest entry resolves. RAG grounding is available on this machine.")
+    scope_note = f" for {args.course} Sections" if args.course else ""
+    print(f"\nOK    Every manifest entry{scope_note} resolves. RAG grounding is available here.")
     return 0
 
 
