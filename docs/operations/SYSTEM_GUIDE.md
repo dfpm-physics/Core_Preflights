@@ -557,7 +557,13 @@ supabase functions deploy reset-student-password
 supabase functions deploy reset-staff-password
 supabase functions deploy set-own-password
 supabase functions deploy log-tutor-error
+supabase functions deploy genai-mil-proxy
 ```
+
+`genai-mil-proxy` also needs the secret `GENAI_MIL_API_KEY` (Dashboard → Edge Functions →
+Secrets). That key is replaced about every 30 days by editing the secret — no redeploy — and it
+locks every 14 days until the key holder unlocks it on GenAI.mil. It answers staff only until
+the secret `GENAI_MIL_REQUIRE_STAFF` is set to `0`. Details are in the function's header.
 
 That's it — the functions run on Supabase's servers from that point on. No one else needs the CLI.
 

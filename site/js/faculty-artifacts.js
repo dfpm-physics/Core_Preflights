@@ -336,6 +336,38 @@ export function loadBackups() {
   return backupsOnce;
 }
 
+// ── the GenAI.mil builds (staff-only, for now) ───────────────────────────────
+//
+// `site/genai/<course>/<slug>.html` — the same lesson on GenAI.mil with the COURSE key, held by
+// the `genai-mil-proxy` edge function. Listed in their OWN manifest, which only this page reads:
+// the student pages read backup-builds.json, and must not offer these until the course director
+// opens them. The function's staff gate is the real lock; this separation only keeps the link
+// off the cadet's screen. Written by `scripts/artifacts/to_genai.py`. Same shape as the backup
+// manifest, so `backupFor()` reads it too (ignore its `router`, which is the Gemini router).
+
+const GENAI_MANIFEST = '../data/genai-builds.json';
+let genaiOnce = null;
+
+/** Same contract as `loadBackups()`: resolves `{ builds, error }`, never rejects. A missing file
+ *  (no GenAI builds yet) is an empty list, not an error. */
+export function loadGenaiBuilds() {
+  if (!genaiOnce) {
+    genaiOnce = (async () => {
+      try {
+        const res = await fetch(`${GENAI_MANIFEST}?_=${Date.now()}`, { cache: 'no-store' });
+        if (res.status === 404) return { builds: {}, error: null };
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const doc = await res.json();
+        const builds = doc && typeof doc.builds === 'object' && doc.builds ? doc.builds : {};
+        return { builds, error: null };
+      } catch (err) {
+        return { builds: {}, error: err.message || String(err) };
+      }
+    })();
+  }
+  return genaiOnce;
+}
+
 /**
  * One slug's backup build, or `null` when it has none.
  *

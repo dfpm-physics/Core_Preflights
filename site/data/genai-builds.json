@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "builds": {
+    "lesson-25-lenzs-law-induced-electric-field-1a98a6d0": {
+      "course": "phys-215",
+      "lesson_no": 25,
+      "title": "Lenz's Law, Induced Electric Field",
+      "path": "genai/phys-215/lesson-25-lenzs-law-induced-electric-field-1a98a6d0.html"
+    },
+    "lesson-26-generators-and-motors-ac-transformers-1bbf05b9": {
+      "course": "phys-215",
+      "lesson_no": 26,
+      "title": "Generators and Motors, AC, Transformers",
+      "path": "genai/phys-215/lesson-26-generators-and-motors-ac-transformers-1bbf05b9.html"
+    },
+    "lesson-28-displacement-current-dc9f8b07": {
+      "course": "phys-215",
+      "lesson_no": 28,
+      "title": "Displacement Current",
+      "path": "genai/phys-215/lesson-28-displacement-current-dc9f8b07.html"
+    },
+    "lesson-29-maxwells-equations-7a27dd4c": {
+      "course": "phys-215",
+      "lesson_no": 29,
+      "title": "Maxwell's Equations",
+      "path": "genai/phys-215/lesson-29-maxwells-equations-7a27dd4c.html"
+    },
+    "lesson-30-electromagnetic-waves-em-spectrum-40677a45": {
+      "course": "phys-215",
+      "lesson_no": 30,
+      "title": "Electromagnetic Waves, EM Spectrum",
+      "path": "genai/phys-215/lesson-30-electromagnetic-waves-em-spectrum-40677a45.html"
+    },
+    "lesson-31-light-reflection-refraction-ec714375": {
+      "course": "phys-215",
+      "lesson_no": 31,
+      "title": "Light, Reflection, Refraction",
+      "path": "genai/phys-215/lesson-31-light-reflection-refraction-ec714375.html"
+    },
+    "lesson-32-image-formation-from-mirrors-fbd3ac8d": {
+      "course": "phys-215",
+      "lesson_no": 32,
+      "title": "Image Formation from Mirrors",
+      "path": "genai/phys-215/lesson-32-image-formation-from-mirrors-fbd3ac8d.html"
+    },
+    "lesson-33-image-formation-from-lenses-d3ec7a43": {
+      "course": "phys-215",
+      "lesson_no": 33,
+      "title": "Image Formation from Lenses",
+      "path": "genai/phys-215/lesson-33-image-formation-from-lenses-d3ec7a43.html"
+    },
+    "lesson-36-double-slit-interference-8b6dbbb7": {
+      "course": "phys-215",
+      "lesson_no": 36,
+      "title": "Double-Slit Interference",
+      "path": "genai/phys-215/lesson-36-double-slit-interference-8b6dbbb7.html"
+    },
+    "lesson-37-diffraction-resolution-89cef48b": {
+      "course": "phys-215",
+      "lesson_no": 37,
+      "title": "Diffraction, Resolution",
+      "path": "genai/phys-215/lesson-37-diffraction-resolution-89cef48b.html"
+    },
+    "lesson-39-intro-to-nuclear-4084143d": {
+      "course": "phys-215",
+      "lesson_no": 39,
+      "title": "Intro to Nuclear",
+      "path": "genai/phys-215/lesson-39-intro-to-nuclear-4084143d.html"
+    },
+    "lesson-41-photoelectric-effect-wave-particle-518e76f6": {
+      "course": "phys-215",
+      "lesson_no": 41,
+      "title": "Photoelectric Effect, Wave/Particle",
+      "path": "genai/phys-215/lesson-41-photoelectric-effect-wave-particle-518e76f6.html"
+    }
+  }
+}

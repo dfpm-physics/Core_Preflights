@@ -208,6 +208,7 @@
       reviews: null,      // review-notes.json for that course
       registered: new Map(),
       backups: { builds: {}, error: null },   // site/data/backup-builds.json (all courses)
+      genai: { builds: {}, error: null },     // site/data/genai-builds.json (staff-only list)
       filter: 'all',
       slug: null,         // null = library view
       build: null, source: null, outline: null, block: null,
@@ -235,6 +236,7 @@
       // not part of it — a fetch that fails must show as "availability unknown", never as "the
       // artifact library is not reachable". `loadBackups()` never rejects; it reports.
       state.backups = await AL.loadBackups();
+      state.genai = await AL.loadGenaiBuilds();
       try {
         state.index = await AL.loadIndex(state.course);
         state.reviews = await AL.loadReviews(state.course);
@@ -386,10 +388,14 @@
           + ' unknown.">?</span>';
       }
       const b = AL.backupFor(state.backups, a.slug);
-      return b
+      const g = AL.backupFor(state.genai, a.slug);
+      const gTag = g
+        ? ` <span class="tag gold" title="GenAI.mil build — staff only, not shown to cadets · ${esc(g.path)}">GenAI</span>`
+        : '';
+      return (b
         ? `<span class="tag blue" title="Gemini build — what cadets are launched into · ${esc(b.path)}">Gemini</span>`
         : '<span class="tag" title="No Gemini build, so this lesson still launches the Claude'
-          + ' artifact. An artifact that was never published on claude.ai has none by design.">—</span>';
+          + ' artifact. An artifact that was never published on claude.ai has none by design.">—</span>') + gTag;
     }
 
     function rowHTML(a) {
@@ -476,6 +482,7 @@
           <div class="al-rail">
             ${registerCard(a, art, reg)}
             ${backupCard(state.slug)}
+            ${genaiCard(state.slug)}
             ${builtFromCard(meta, art)}
           </div>
         </div>`;
@@ -592,6 +599,27 @@
             <a class="al-bkrouter" href="${esc(b.router)}" target="_blank" rel="noopener">What a cadet sees →</a>
           </div>
         </div>`);
+    }
+
+    // The GenAI.mil build, when there is one. No card at all when there is not: unlike the
+    // Gemini backup, its absence says nothing about the artifact.
+    function genaiCard(slug) {
+      const g = AL.backupFor(state.genai, slug);
+      if (!g) return '';
+      return `<div class="card al-card-flush" style="margin-top:18px">
+        <div class="al-cardhead"><span class="card-title">GenAI.mil build</span></div>
+        <dl class="al-dl">
+          <div><dt>File</dt><dd class="mono">${esc(g.path)}</dd></div>
+        </dl>
+        <div class="al-cardbody">
+          <span class="muted">The same lesson on GenAI.mil, run with the course key, which the
+            <code>genai-mil-proxy</code> edge function holds. <b>Staff only for now</b>: cadets are
+            not shown this link, and the function refuses them. You must be signed in to PREP in
+            this browser. Submits under <b>this same slug</b>.</span>
+          <div class="al-bklinks">
+            <a class="btn btn-sm" href="${esc(g.url)}" target="_blank" rel="noopener">Open the GenAI.mil build</a>
+          </div>
+        </div></div>`;
     }
 
     function builtFromCard(meta, art) {

@@ -8,7 +8,51 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
-## 2026-10-15 — Casey Pellizzari via Claude
+## 2026-10-16 — Matthew Recker via Claude
+
+**GenAI.mil builds of the 12 remaining PHYS 215 lessons (25–41), staff-only, not linked.**
+
+*What.* A third tutor transport beside Claude and the Gemini backup: the same lesson, talking to
+GenAI.mil with the COURSE key instead of a cadet's own Gemini key.
+- `supabase/functions/genai-mil-proxy/` — new edge function. Holds the key as the Supabase secret
+  `GENAI_MIL_API_KEY`, checks the caller's PREP sign-in, translates Google's request shape to
+  GenAI.mil's OpenAI shape and back, and flattens the whole conversation into one message
+  (GenAI.mil keeps only the last message and still answers 200). Logs who/model/tokens per call to
+  the function log, never conversation text. **Staff-only** until `GENAI_MIL_REQUIRE_STAFF=0`.
+- `scripts/artifacts/to_genai.py` — builds `site/genai/<course>/<slug>.html` from the Gemini
+  build. Byte-level, every anchor must match once, slug and submit endpoint asserted unchanged.
+  Edits follow the AI Hub local reference build (Lesson 2), plus: auth is the PREP session; the
+  placeholder key is never saved (same origin as `site/gemini/`, so it would overwrite a cadet's
+  real Gemini key); GenAI-specific 401/403/503 messages.
+- `site/genai/phys-215/` — lessons 25, 26, 28, 29, 30, 31, 32, 33, 36, 37, 39, 41 (the ones not
+  yet taught as of T24 today). Same slugs as the Gemini builds, so submissions join the same cohort.
+- `tests/browser-harness/genai-build.mjs` — browser check with the edge function mocked.
+- `docs/operations/SYSTEM_GUIDE.md` — function added to the deploy list.
+- **Artifact library (staff).** `site/data/genai-builds.json` — a SEPARATE list, written by
+  `to_genai.py`, read only by `site/faculty/artifacts.html` via `loadGenaiBuilds()` in
+  `faculty-artifacts.js`. Each listed artifact gets a gold `GenAI` tag in the Backup column and a
+  "GenAI.mil build" card with an Open link. The student pages read only `backup-builds.json`, so
+  they still do not see these. `ONBOARD-ARTIFACTS.md` re-reviewed: unaffected.
+
+*Not exposed.* No student page links `site/genai/`. The staff gate in the function is the real
+lock: a cadet who finds a URL is told the tutor is not open yet.
+
+*Verified.* `genai-build.mjs` on all 12: 192 pass, 0 fail — parse and render, no key box, PREP
+token reaches the function as Bearer, signed-out and signed-in start screens, nothing sent to
+Google, probe prompt shorter than report, `?trim=0` prompt length identical to the source build.
+**Node-only, and the function is mocked.**
+
+*Deployed* the same day (`supabase functions deploy genai-mil-proxy --use-api`). Live checks, no
+AI call: no sign-in → 401; CORS preflight → 200; test-faculty staff session → `/health` 200,
+`key_present: true`, model `gemini-3.7-flash`.
+
+*Library verified in Chrome* against the local server, signed in as test faculty: 12 `GenAI` tags on
+the phys-215 shelf; the lesson-25 card links to the page; lesson 2 (no build) shows no card; the
+linked page, against the LIVE function, shows "Ready — gemini-3.7-flash" and the badge; the student
+lessons page makes 0 requests for anything `genai`; 0 page errors. Not yet done: one live staff
+turn to GenAI.mil.
+
+
 
 ### The nightly grounding gate is now scoped to the course being graded
 
