@@ -539,6 +539,86 @@ PLAN = {
             },
         ],
     },
+    # LESSONS 22-24 HAVE NO PREFLIGHT: graded review and guest lectures. The schedule moved after
+    # the Fall 2026 workbook was written -- the deck for this lesson still says "Lesson 20" on its
+    # title slide -- so the course director's lesson number (25) is what is used here, checked
+    # against site/data/academic-calendar.json, which names Tue 20 Oct "T25".
+    ("phys-310", 25): {
+        "assignment_slug": "lesson-25",
+        "kind_id": "preflight",
+        "title": "Lesson 25 Preflight -- Fission: Neutron Multiplication",
+        "position": 25,
+        "points_possible": 3,
+        "grading_mode": "points",
+        "switch_policy": "lock_on_commit",
+        "is_published": False,          # registered as a draft; published separately on 2026-10-18
+                                        # at the course director's explicit instruction
+        "opens_at": None,               # NULL selects the rolling 7-day release window
+        # 0800 America/Denver on the lesson day, the shape lessons 16, 17, 20 and 21 carry.
+        # Tue 20 Oct is "T25" and this course's one section (T3A) is a T-day section. Still MDT.
+        "due_at": "2026-10-20 13:59:59+00",   # Tue 20 Oct 07:59:59 MDT
+        "day_key": "T",                 # this course's one section is a T-day section
+        "interactive_title": "Fission: Neutron Multiplication",
+        # Read from the artifact source's INTERACTION_ID, never retyped. The source was re-aimed to
+        # the instructor's deck on 2026-10-18 and the slug deliberately did NOT move.
+        "interactive_slug": "phys310-fission-neutron-multiplication-2a606ef1",
+        # GEMINI ROUTE, at the course director's instruction ("don't bother with the claude version").
+        # The claude.ai artifact published 2026-08-20 still serves the pre-re-aim objectives.
+        "artifact_url": "https://dfpm-physics.github.io/Core_Preflights/site/student/"
+                        "backup.html?i=phys310-fission-neutron-multiplication-2a606ef1&go=1",
+        "written_slug": "phys-310-lesson-25-written-78810efd",
+        "written_role": "graded",
+        "interactive_role": "graded",
+        "reference_pdf": None,
+        "reference_pages": None,
+        # One free-response question beyond the two defaults, worth the remaining 2 points. Written
+        # against the instructor's deck: (a) is the reproduction factor the deck closes on, and (b)
+        # is its fission-products slides. Neither part uses the deck's two in-class practice
+        # problems (eta for Pu-239, grams of U-233 per MW-day), which are the class's to work.
+        "questions": [
+            {
+                "id": "q3",
+                "role": "free_response",
+                "text": "(a) Uranium-235 releases about 2.43 neutrons per fission. If a piece of "
+                        "U-235 absorbs 100 thermal neutrons, explain why you get back FEWER than "
+                        "243 neutrons. Then write the reproduction factor eta in terms of nu and the "
+                        "fission and capture cross sections, and say why eta must be greater than 1 "
+                        "for a chain reaction to be possible. (b) A U-235 nucleus (92 protons, 143 "
+                        "neutrons) absorbs a neutron and splits into two fragments, one near mass 95 "
+                        "and one near mass 137. Explain why almost every fission fragment is "
+                        "radioactive, and say which kind of decay you expect the fragments to undergo.",
+                "type": "free_response",
+                "points": 2,
+                "figure_url": "",
+                "correct_answer": "",
+                "expected_response":
+                    "(a) Not every neutron the fuel absorbs causes a fission. Some absorptions are "
+                    "radiative CAPTURES (U-235 + n -> U-236 + gamma) that release no neutrons at "
+                    "all, so only the fraction sigma_f / sigma_a of absorptions are fissions, where "
+                    "sigma_a = sigma_f + sigma_c. Hence eta = nu * sigma_f / (sigma_f + sigma_c), "
+                    "the number of fission neutrons produced per neutron ABSORBED IN THE FUEL, which "
+                    "is always smaller than nu. eta must exceed 1 because each generation must "
+                    "produce at least one neutron for every one the fuel consumes, and in practice "
+                    "the margin above 1 also has to pay for neutrons that leak out and neutrons "
+                    "absorbed by everything that is not fuel. "
+                    "(b) The fragments inherit uranium's neutron-to-proton ratio, about 143/92 = 1.55, "
+                    "but stable nuclei of mass 95 to 137 have noticeably fewer neutrons per proton "
+                    "(roughly 1.3 to 1.45). The fragments are therefore NEUTRON-RICH -- they sit off "
+                    "the line of stability on the neutron side -- and they decay by BETA-MINUS "
+                    "emission, which turns a neutron into a proton, typically in chains of three or "
+                    "four decays until they reach a stable nucleus. "
+                    "GRADING: full credit in (a) for 'some absorptions are captures, not fissions' "
+                    "plus a correct eta expression (in words or symbols) and a reason it must exceed "
+                    "1. Do not require the leakage point. Full credit in (b) for 'too many neutrons "
+                    "for their mass / off the line of stability' plus beta-minus decay. Do not "
+                    "require any ratio. A cadet who says eta = nu, or that 100 absorbed neutrons give "
+                    "243 back, has the misconception this question exists to find: flag it, do not "
+                    "zero it. A cadet who says the fragments are radioactive because they are 'left "
+                    "with extra energy', or predicts alpha or beta-plus decay, has the second one: "
+                    "flag it too.",
+            },
+        ],
+    },
 }
 
 

@@ -8,6 +8,60 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-10-18 — Matthew Recker via Claude
+
+### PHYS 310 Lesson 25, Fission: Neutron Multiplication — written and Gemini preflight, published
+
+**What.** recker's instruction: *"create the assignment for 310 for lesson 25: Fission: Neutron
+Multiplication. It needs a free response and an interactive version … make sure it is published and
+visible to students. Don't bother with the claude version of the interaction just the gemini
+version."*
+
+- **Registered** with `scripts/fall2026/register_lesson.py --course phys-310 --lesson 25 --commit`
+  (new PLAN entry): assignment `lesson-25`, 3 points, due **Tue 20 Oct 07:59:59 MDT**
+  (`2026-10-20 13:59:59Z`), written to all three deadline locations; one T3A section row. Tue 20 Oct
+  is `T25` in `site/data/academic-calendar.json`; 0800-on-the-day is the shape lessons 16, 17, 20 and
+  21 carry.
+- **Written half** `phys-310-lesson-25-written-78810efd`: Q1 reading time (0), Q2 reflection (1),
+  Q3 (2) — (a) why 100 absorbed neutrons give back fewer than 243, and eta = nu sigma_f /
+  (sigma_f + sigma_c); (b) why fission fragments are radioactive (neutron-rich N/Z, beta-minus).
+- **Interactive half** `phys310-fission-neutron-multiplication-2a606ef1` (existing slug, unchanged),
+  `artifact_url` on the Gemini router `backup.html?…&go=1`. **No Claude route** — the claude.ai
+  publish of 2026-08-20 serves the old objectives.
+- **Published** with one `UPDATE … SET is_published = true` on that offering, as the DML role, at the
+  director's explicit instruction (the script registers drafts only). Read back over `prep_app_read`:
+  published, `due_by_day` `{T: …}`, 2 visible graded activities, `opens_at` NULL — so the 7-day
+  window has it visible to cadets now.
+
+**Re-aimed to the instructor's deck, as for lessons 15–21.** The deck
+(`Instructor Slides/lessons/lesson-24.json`; its title slide still reads "Lesson 20") ends at the
+reproduction factor eta and has **no slide on delayed neutrons, k, the four-factor formula or
+criticality** — those are the next deck. So objective 1 (fissile/fissionable) stayed, and objectives
+2 and 3 were replaced: `fission-products-and-fission-neutrons` and `reproduction-factor-and-fuel-use`.
+Delayed neutrons and k stay grounded as engage-if-raised. A `[DECK]` block now outranks the corpus.
+The tutor is told not to work the deck's two in-class practice problems and has no Pu-239 cross
+sections to offer. New extension problem F (Ba-141 + Kr-92, 3 and 4 beta decays to stability),
+recomputed twice. Full record in the phys-310 `BUILD-LOG.md`.
+
+**The cached source predated the 2026-08-20 fix set** — and so does every other phys-310 source in
+this machine's cache, which matches the bucket. `add_backup_button.py` and
+`patch_artifacts.py --only fission_neutron` were run on this one file (the other 16 were restored
+byte-for-byte), then `to_gemini.py` and `patch_autofill_guard.py`.
+
+**Not done, on purpose: the edited source was NOT pushed to the `artifact-sources` bucket.**
+`sync_artifacts.py push` (dry run) wanted to change **95 objects**, including an empty
+`phys-110/index.json`, because this machine's cache is behind the bucket for the other courses. That
+is the same drift recorded 2026-10-12. The re-aimed source lives in this machine's gitignored cache;
+its full prompt is in the committed Gemini build. Also: the phys-310 `BUILD-LOG.md` now has two
+"Lesson 25" headings (this one and Criticality); the next lessons were not renumbered without the
+schedule to check against.
+
+**Verified:** `check_artifact.py` 37/37 · `gemini-build.mjs` 8/8 in real Chrome (parse, render, key
+box, no scroll, no errors) · LF, 0 NUL · page labelled "Lesson 25". **No live tutor turn** — there is
+no Gemini key on this machine, so the conversation itself is unproven. Node-only browser check.
+
+---
+
 ## 2026-10-16 — Matthew Recker via Claude
 
 **GenAI.mil builds of the 12 remaining PHYS 215 lessons (25–41), staff-only, not linked.**

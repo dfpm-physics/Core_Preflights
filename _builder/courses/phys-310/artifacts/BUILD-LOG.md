@@ -1465,27 +1465,52 @@ but it must be answered by mechanism rather than by quality).
 3.33/1.5 = 2.22; 2111 × 606.3 = 1,279,900 against 1,280,000; 911 × 87.8 = 79,986 against 80,000;
 821 + 511 = 1332 and 310 + 1022 = 1332, and the two escape peaks are themselves 511 keV apart.
 
-### Lesson 24 — Fission: Neutron Multiplication
+### Lesson 25 — Fission: Neutron Multiplication
 
 | | |
 |---|---|
 | **File** | [`phys310_preflight_fission_neutron_multiplication.jsx`](phys310_preflight_fission_neutron_multiplication.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-fission-neutron-multiplication-2a606ef1` |
-| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/6747e8d1-1ba9-4dd8-946d-d52fd1c3d48d |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/6747e8d1-1ba9-4dd8-946d-d52fd1c3d48d — **STALE, and deliberately unused.** It serves the pre-2026-10-18 objectives, two of which this lesson's deck does not teach |
+| **Backup build** | `site/gemini/phys-310/phys310-fission-neutron-multiplication-2a606ef1.html` — **the only route cadets take** |
 | **Component** | `Phys310FissionNeutronMultiplicationPreflight` |
-| **Built** | 2026-08-05 · 2277 lines — **the longest artifact in this course** |
-| **Grounding** | Murray corpus **§6.1–§6.5** — **all five `STATUS: PENDING`**. Plus a labelled `CARRIED IN FROM EARLIER LESSONS` block of six items, every one traced to corpus sections earlier lessons already own |
+| **Built** | 2026-08-05 · 2277 lines · **re-aimed 2026-10-18 · 2562 lines** (includes the 2026-08-20 fix set and backup button, applied the same day — the cached source predated both) |
+| **Grounding** | Murray corpus **§6.1–§6.5** — **all five `STATUS: PENDING`** — **plus the instructor's own deck (`lesson-24.json`, "Fission I: Neutron Multiplication"), tagged `[DECK]`, which outranks the corpus and decides what is probed**. Plus a labelled `CARRIED IN FROM EARLIER LESSONS` block |
 | **Cross-check** | DOE NP-01/02/03 cover the fission process, yield curve, energy breakdown, delayed neutrons and the four/six-factor formulas in depth |
 | **Cadets' reading** | Murray & Holbert 6.1–6.5 |
-| **Probe topics** | 3 · ~3 active min each · ~10 min — **§6.2 and §6.3 grounded in full, not probed** |
-| **Checks** | `check_artifact.py` 37/37. Re-verified independently: 37/37, LF, 0 NUL |
-| **Status** | **DRAFT** — not reviewed, not published, not registered |
+| **Probe topics** | 3 · ~3 active min each · ~10 min — **delayed neutrons, k and the four/six-factor formulas grounded and handed forward, not probed** |
+| **Checks** | 2026-10-18: `check_artifact.py` 37/37 · LF, 0 NUL. **No live tutor turn** — no Gemini key on this machine |
+| **Status** | **REGISTERED and PUBLISHED 2026-10-18** as `lesson-25`, due Tue 20 Oct 07:59:59 MDT |
 
 | # | key | label |
 |---|---|---|
 | 1 | `fission-threshold-and-fissile` | Explains fissile vs. fissionable as an energy inequality, not a speed |
-| 2 | `neutron-yield-prompt-and-delayed` | Uses ν as a budget; explains why delayed neutrons make a reactor controllable |
-| 3 | `multiplication-factor-and-accounting` | Reads k as a generation ratio; knows what critical does and does not mean |
+| 2 | `fission-products-and-fission-neutrons` | Explains the asymmetric split, why the fragments are radioactive, and why fission neutrons are born fast |
+| 3 | `reproduction-factor-and-fuel-use` | Reads eta as neutrons out per neutron absorbed in fuel; links energy per fission to fuel consumed |
+
+**Re-aimed 2026-10-18 to the instructor's own deck, and the slug deliberately did not move.** The deck
+(`Instructor Slides/lessons/lesson-24.json`; its title slide still says "Lesson 20", from before the
+schedule moved) covers bomb basics, a review of binding energy / Q / cross sections, the four terms
+fissionable / fissile / fertile / special nuclear material, fission products, the yield curve, the
+Watt spectrum, and closes on the **reproduction factor η** with two practice problems (η for Pu-239;
+grams of U-233 per MW-day at 190 MeV). **It has no slide on delayed neutrons, k, the four-factor
+formula or criticality** — k, the four-factor formula and buckling are all in the *next* deck
+(`lesson-25.json`, "Fission II: Criticality"). So objectives 2 and 3 were replaced; objective 1 is
+the deck's slide 7 and stayed. Delayed neutrons and k are still grounded in full, now engage-if-raised.
+
+**The tutor is told not to work the deck's two practice problems** — they are the class's. It has no
+Pu-239 cross sections and is barred from supplying any. The deck's "most neutrons around 1 MeV" and
+the corpus's "most probable 0.7 MeV" are both kept, with an instruction to accept either.
+
+**Extension problems:** A, B and E unchanged. C now pays off topic 3's η (it falls out of the ledger as
+1.538 against ν = 2.43), with the k = 1 and six-factor tail labelled a preview of the next lesson. D
+(delayed neutrons) is offered only to a cadet who raised them. **New F**: n + U-235 → Ba-141 + Kr-92 +
+3n — conservation, N/Z ≈ 1.55 for parent and both fragments, and 3 and 4 beta decays to Pr-141 and
+Zr-92; recomputed twice.
+
+**Original build record (2026-08-05), kept for history.** The objectives were then
+`neutron-yield-prompt-and-delayed` and `multiplication-factor-and-accounting`, and the extension set
+was A–E as described above.
 
 **Extension problems:** A what a thermal neutron actually brings — 0.025 eV against a 6.2 MeV barrier
 is 4×10⁻⁹, and U-238's ~1 MeV is 4×10⁷ thermal (approachable arithmetic, challenging idea) ·
