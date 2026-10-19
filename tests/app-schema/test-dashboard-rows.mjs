@@ -200,4 +200,83 @@ eq('lessons but no deadlines -> the last one', D.activeLessonId(
 eq('an undated lesson does not outrank a dated one that is already due', D.activeLessonId(
    [...L, { offeringId: 'Lx', due: null }], new Date('2026-08-10T15:00:00.000Z')), 'L2');
 
+/* ══ 5. Flags and misconceptions come from BOTH paths ═════════════════════════
+ *
+ * WHY THIS EARNS ITS PLACE
+ *   The dashboard handed summarizeReports the interactive payload only. A written student's
+ *   schema:1 assessment lives on their GRADE (/preflight-analyze writes it to grades.diagnostic),
+ *   so on a question-set lesson the "Flagged for follow-up" tile always read 0 and the
+ *   misconception list was empty — while the same lesson's report page, which bridges both
+ *   paths, listed every flag. Found 2026-10-18 while answering a co-author's question about what
+ *   the tile counts. The fix is the report page's bridge, so the two pages now agree.
+ */
+
+section('faculty-data.js — the dashboard folds written-path assessments too');
+
+const R = await import('../../site/js/faculty-rollup.js');
+
+const INTER = { id: 'act-i', slug: 'preflight-05-interactive', modality: 'interactive',
+                gradingRole: 'graded', content: {} };
+const mixedOffering = () => ({ ...offering(OFF), activities: [WRITTEN, INTER], interactive: INTER });
+
+const committed = (id, enr, activities) => ({
+  id, enrollmentId: enr, offeringId: OFF, chosenActivityId: null,
+  status: 'committed', committedAt: PAST, activities,
+});
+const writtenAssessment = (over = {}) => ({
+  schema: 1, effort: 2, overall_understanding: 3,
+  misconceptions: [{ id: 'scalar-sum', label: 'Scalar sum of magnitudes' }],
+  flags: { needs_follow_up: true, notable: false }, ...over,
+});
+
+const ENR_W = 'e-w', ENR_I = 'e-i';
+const mixedRows = (gradeOver = {}) => D.buildLessonRows({
+  submissions: [
+    committed('s-w', ENR_W, { [WRITTEN.id]: { content: { q2: 'a reflection', q3: 'an answer' } } }),
+    committed('s-i', ENR_I, { [INTER.id]: { content: { schema: 1, effort: 4,
+      overall_understanding: 4, misconceptions: [], flags: { needs_follow_up: true } } } }),
+  ],
+  lessons, offerings: [mixedOffering()],
+  grades: [{ enrollment_id: ENR_W, assignment_offering_id: OFF, points_earned: 2,
+             is_finalized: true, diagnostic: writtenAssessment(), ...gradeOver }],
+  extensions: [],
+  sectionOf: { [ENR_W]: SEC_M, [ENR_I]: SEC_M },
+  studentOf: { [ENR_W]: 3009999998, [ENR_I]: 3009999997 },
+  now: NOW,
+})[OFF];
+
+const rows = mixedRows();
+const wRow = rows.find(r => r.enrollmentId === ENR_W);
+const iRow = rows.find(r => r.enrollmentId === ENR_I);
+
+eq('a written student carries their grade\'s schema:1 as report_data',
+   wRow.report_data?.flags?.needs_follow_up, true);
+eq('...and is tagged written, not inferred interactive from having report_data',
+   wRow.path, 'written');
+eq('an interactive student still carries the artifact payload', iRow.report_data?.effort, 4);
+eq('...and is tagged interactive', iRow.path, 'interactive');
+
+const s = R.summarizeReports(rows);
+eq('the follow-up count includes the written student', s.flags.needs_follow_up, 2);
+eq('paths are counted by what each student worked',
+   `${s.paths.written}/${s.paths.interactive}`, '1/1');
+check('the written student\'s misconception reaches the list',
+      s.misconceptions.some(m => m.id === 'scalar-sum'));
+
+// Effort must not move: it already resolved through the grade on the written path, and the
+// interactive claim is still read from the artifact payload only.
+eq('written effort is unchanged (resolved from the grade)', wRow.effort, 2);
+eq('interactive effort is unchanged (the artifact claim)', iRow.effort, 4);
+
+// An instructor who cleared the flag on the report page must see it cleared here too.
+const cleared = mixedRows({ diagnostic: writtenAssessment({
+  flag_overrides: { needs_follow_up: { cleared: true, by: 'u-1', at: PAST } } }) });
+eq('an instructor-cleared flag is not counted',
+   R.summarizeReports(cleared).flags.needs_follow_up, 1);
+
+// A written grade without a schema:1 payload (only the q2/q3 pair) is not an assessment.
+const legacy = mixedRows({ diagnostic: { q2_effort: 3, q3_understanding: 2 } });
+eq('a q2/q3-only diagnostic contributes no report_data',
+   legacy.find(r => r.enrollmentId === ENR_W).report_data, null);
+
 summary();

@@ -17,8 +17,9 @@ import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT,
   shapeOffering, shapeOfferings, withResolvedDue, offeringSections,
   shapeSubmission, effectiveDue, deriveStatus, lessonNumber, chunked, fetchAll,
-  effortSignal, writtenSignals,
+  effortSignal, writtenSignals, writtenReport,
 } from './schema.js';
+import { applyFlagOverrides, overridesOf } from './faculty-rollup.js';
 
 // Only the three columns a deadline needs. Deliberately not schema.js's EXTENSION_SELECT, which
 // carries the grant/revocation provenance the extensions REPORT is about; a status calculation
@@ -85,6 +86,18 @@ export function buildLessonRows({ submissions, lessons, offerings, grades, exten
     const { effort, source: effortSource } = effortSignal(grade, reportData);
     const { understanding: frUnderstanding } = writtenSignals(grade);
 
+    // What summarizeReports folds for flags, misconceptions and overall understanding: the
+    // artifact's schema:1 on the submission, or /preflight-analyze's schema:1 on the grade — the
+    // same bridge faculty-rollup.js loadInteractionData builds. Until 2026-10-18 this was the
+    // interactive payload alone, so the "Flagged for follow-up" tile and the misconception list
+    // counted artifact takers only, and a question-set lesson always showed 0 flagged while its
+    // report page listed dozens. Instructor-cleared flags are neutralized here as they are there.
+    const assessment = applyFlagOverrides(reportData || writtenReport(grade) || null,
+                                          overridesOf(grade));
+    const workedPath = interactiveWork && writtenWork ? 'both'
+                     : interactiveWork ? 'interactive'
+                     : writtenWork ? 'written' : null;
+
     bucket.push({
       student_id: studentOf[s.enrollmentId],
       enrollmentId: s.enrollmentId,
@@ -95,15 +108,16 @@ export function buildLessonRows({ submissions, lessons, offerings, grades, exten
       effortSource,
       points: grade?.points_earned == null ? null : Number(grade.points_earned),
       isFinalized: !!grade?.is_finalized,
-      report_data: reportData,
+      // summarizeReports infers the path from report_data when it is not told, which would now
+      // file every written student as interactive. Say it outright.
+      path: workedPath || 'written',
+      report_data: assessment,
       // Free-response understanding, present only when they answered the questions.
       understanding: writtenWork ? frUnderstanding : null,
       hasReport: !!interactiveWork,
       hasWritten: !!writtenWork,
       // Which path this student actually took, independent of what the offering allows.
-      workedPath: interactiveWork && writtenWork ? 'both'
-                : interactiveWork ? 'interactive'
-                : writtenWork ? 'written' : null,
+      workedPath,
     });
   });
 

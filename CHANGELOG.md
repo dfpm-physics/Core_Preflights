@@ -8,6 +8,40 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-10-19 — Casey Pellizzari via Claude
+
+### The dashboard's "Flagged for follow-up" tile counted interactive lessons only
+
+**What.** `buildLessonRows()` in `site/js/faculty-data.js` handed `summarizeReports()` the
+interactive payload (`submission_activities.content`) as each student's `report_data`, and nothing
+for a written student. A written student's `schema: 1` assessment lives on the GRADE
+(`grades.diagnostic`, written by `/preflight-analyze`), so on a question-set lesson the dashboard's
+follow-up tile always read 0 and its misconception list was empty, while the same lesson's report
+page — whose `loadInteractionData()` bridges both paths — listed every flag. Example: PHYS 110
+Lesson 04 has 51 students flagged for follow-up on the report page and showed 0 on the dashboard.
+The dashboard also ignored flags an instructor had cleared on the report page.
+
+**Fix.** The dashboard now uses the report page's bridge: the artifact payload when there is one,
+otherwise `writtenReport(grade)`, with `applyFlagOverrides()` applied. Each row now states its
+`path` outright, because `summarizeReports()` infers "interactive" from the mere presence of
+`report_data`. Effort is unchanged on both paths (it already resolved through the grade).
+Side effects, all toward agreement with the report page: written students' misconceptions now
+reach the dashboard list, overall understanding comes from their `schema: 1` value where present
+(it coincides with `q3_understanding` on a three-question preflight), and a student who did both
+paths is counted as `both`.
+
+**Why now.** Found while answering a co-author's question for the PREP methods paper about what
+the tile's caption, "low engagement or major gap", actually counts. The answer had to be "only
+interactive takers", which made the paper's dashboard sentence false.
+
+**Verified.** `tests/app-schema/test-dashboard-rows.mjs` gains 11 checks (35 pass); 5 of them fail
+against the previous `faculty-data.js`. `test-rollup` (257), `test-gradebook` (112),
+`test-student-detail` (57), `test-publish-plan` (68) and `test-imports` pass. **Node-only:** not yet
+checked in a browser against live data — open the dashboard on a written-only lesson and confirm
+the tile matches the report page's "Needs follow-up" count.
+
+---
+
 ## 2026-10-18 — Matthew Recker via Claude
 
 ### PHYS 310 Lesson 25, Fission: Neutron Multiplication — written and Gemini preflight, published
