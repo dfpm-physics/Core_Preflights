@@ -1601,27 +1601,66 @@ corpus, and §6.4's delayed-neutron paragraph is the best-written passage in it.
 > example its own reference actually supports. **The other drafts were swept separately** — see
 > *Cross-cutting fixes* at the end of this log.
 
-### Lesson 25 — Fission: Criticality
+### Lesson 27 — Fission: Criticality
 
 | | |
 |---|---|
 | **File** | [`phys310_preflight_fission_criticality.jsx`](phys310_preflight_fission_criticality.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-fission-criticality-b2dbd1a4` |
-| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/32a402ad-97f3-471a-90e1-6882ea31ebd0 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/32a402ad-97f3-471a-90e1-6882ea31ebd0 — **STALE, and deliberately unused.** It serves the pre-2026-10-23 objectives, none of which this lesson's deck teaches |
+| **Backup build** | `site/gemini/phys-310/phys310-fission-criticality-b2dbd1a4.html` — **the only route cadets take** |
 | **Component** | `Phys310FissionCriticalityPreflight` |
-| **Built** | 2026-08-05 · 2401 lines — **the longest artifact in this course** |
-| **Grounding** | Murray corpus **§16.1–§16.5** — **all five `STATUS: PENDING`** |
+| **Built** | 2026-08-05 · 2401 lines · **re-aimed 2026-10-23 · 2798 lines** (the cached source on the operating machine already carried the 2026-08-20 fix set) |
+| **Grounding** | Murray corpus **§16.1–§16.5** — **all five `STATUS: PENDING`** — **plus the instructor's own deck (`Instructor Slides/lessons/Physics-310-2026-Lesson-27-Criticality.pptx`, "Fission II: Criticality", saved 2026-10-23), tagged `[DECK]`, which outranks the corpus and decides what is probed** |
 | **Cross-check** | DOE NP-02/03/04 cover k, reactivity, generation time and prompt criticality in depth |
 | **Cadets' reading** | Murray & Holbert 16.1–16.5 |
-| **Probe topics** | 3 · ~3 active min each · ~10 min — **§16.2 and §16.5 grounded in full, not probed** |
-| **Checks** | `check_artifact.py` 37/37. Re-verified independently: 37/37, LF, 0 NUL, and the decades-per-minute coefficient recomputed — 60/ln10 = **26.058**, matching the artifact's 26.06 |
-| **Status** | **DRAFT** — not reviewed, not published, not registered |
+| **Probe topics** | 3 · ~3 active min each · ~10 min — **reactivity, 1/M, period, kinetics, feedback and control grounded and engage-if-raised, not probed** |
+| **Checks** | 2026-10-23: `check_artifact.py` 37/37 · LF, 0 NUL · `gemini-build.mjs` 8/8 and `gemini-model-ladder.mjs` 194/194 in real Chrome. **No live tutor turn** — no Gemini key is available to the agent |
+| **Status** | **REGISTERED and PUBLISHED 2026-10-23** as `lesson-27`, due Mon 26 Oct 07:59:59 MDT |
 
 | # | key | label |
 |---|---|---|
-| 1 | `reactivity-and-subcritical-multiplication` | Uses reactivity as an operating variable; reads 1/M as a prediction |
-| 2 | `reactor-period-and-two-timescales` | Separates the prompt jump from the delayed ramp; knows what one dollar is |
-| 3 | `reactivity-coefficients-and-feedback` | Explains self-regulation by coefficient sign, not by control rods |
+| 1 | `multiplication-factor-and-leakage` | Reads k as production over losses; separates k-infinity from k-eff by leakage |
+| 2 | `four-factor-neutron-life` | Follows one thermal-reactor generation through eta, epsilon, p and f |
+| 3 | `geometric-and-material-buckling` | Judges criticality by comparing geometric and material buckling |
+
+**Re-aimed 2026-10-23 to the instructor's own deck, and the slug deliberately did not move** — it had
+never been registered, so no cadet has a report under it. The deck covers the three states and the
+reflector, the two ways to determine criticality, k∞ against k_eff with k_eff = k∞ℒ (and k∞ = η for a
+fast system), the four-factor formula, a diffusion-length review, geometric buckling for a sphere,
+cylinder and block with ℒ = 1/(1 + L²B_g²), material buckling B_m² = (νΣ_f − Σ_a)/D, the
+B_g²-against-B_m² test, one practice problem (a Pu-239 sphere) and three discussion questions. **It
+has no slide on reactivity or its units, 1/M, the period, prompt criticality, reactivity coefficients
+or control**, which were all three of the old objectives. And the lesson 25 re-aim (2026-10-18) had
+handed k and the four-factor formula **forward** to this lesson, so the old "carried in from the
+previous lesson" bullets for them were false; they now say so. All three objectives were replaced.
+
+**The tutor has no data for the deck's plutonium sphere** and is barred from working it, giving its
+answer, or setting a near-copy. The deck's three discussion questions are today's ideas, so the tutor
+teaches that physics but does not quote them. The deck's answer was recomputed while building and
+holds: B_m² = 0.173 cm⁻², B_g² = 0.0247 cm⁻², supercritical.
+
+> **⚠ One slide wording to check: the fast fission factor.** Slide 9 defines ε as *(fission neutrons
+> from fast fission) / (fission neutrons from thermal fission)*. The usual definition counts **all**
+> fission neutrons in the numerator, which puts ε slightly **above** 1; the deck's wording would put
+> it well below 1. The tutor is told to teach "a small bonus, a little more than 1" and to accept
+> either wording from a cadet. Worth a look at the slide.
+
+**Extension problems:** D unchanged except its calibration (it now exercises topic 3). **New F**: one
+generation through four supplied factors (η 2.02, ε 1.03, p 0.87, f 0.71) → k∞ = 1.285, with the
+ledger of where every neutron went and the ℒ = 0.778 that would make it critical. **New G**: one cubic
+metre as a sphere, cube and H = 2R cylinder → B_g² 2.56, 2.96 and 2.81 × 10⁻³ cm⁻², the sphere leaks
+least, and a 41.6 cm sphere is exactly critical. **New H**: the deck's and the corpus's material
+buckling are one quantity, and B_g² = B_m² is k∞ℒ = 1. All recomputed twice. A, B, C and E now
+offered only to a cadet who raised their topic.
+
+**Not done, on purpose: the edited source was NOT pushed to the `artifact-sources` bucket**, as for
+lesson 25. It lives in the operating machine's gitignored cache; its full prompt is in the committed
+Gemini build. The original source is in the bucket, unchanged.
+
+**Original build record (2026-08-05), kept for history.** The objectives were then
+`reactivity-and-subcritical-multiplication`, `reactor-period-and-two-timescales` and
+`reactivity-coefficients-and-feedback`, and everything below describes that build.
 
 **Extension problems:** A reactivity in four units at k = 1.0020, the distance to prompt critical, and
 what k *is* prompt critical — **the whole operating range lives in the fourth decimal place**

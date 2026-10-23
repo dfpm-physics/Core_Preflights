@@ -619,6 +619,99 @@ PLAN = {
             },
         ],
     },
+    # LESSON 26 HAS NO PREFLIGHT: a guest lecture. Lesson 27 is "Fission: Criticality", checked
+    # against the 14 Oct 2026 schedule workbook and site/data/academic-calendar.json, which names
+    # Mon 26 Oct "T27". The artifact's index row still says lesson_no 25 (the schedule moved after
+    # the build); the course director's lesson number is what is used here.
+    ("phys-310", 27): {
+        "assignment_slug": "lesson-27",
+        "kind_id": "preflight",
+        "title": "Lesson 27 Preflight -- Fission: Criticality",
+        "position": 27,
+        "points_possible": 3,
+        "grading_mode": "points",
+        "switch_policy": "lock_on_commit",
+        "is_published": False,          # registered as a draft; published separately on 2026-10-23
+                                        # at the course director's explicit instruction
+        "opens_at": None,               # NULL selects the rolling 7-day release window
+        # 0800 America/Denver on the lesson day, the shape lessons 16, 17, 20, 21 and 25 carry.
+        # Mon 26 Oct is "T27" and this course's one section (T3A) is a T-day section. Still MDT
+        # (DST ends Sun 1 Nov 2026).
+        "due_at": "2026-10-26 13:59:59+00",   # Mon 26 Oct 07:59:59 MDT
+        "day_key": "T",                 # this course's one section is a T-day section
+        "interactive_title": "Fission: Criticality",
+        # Read from the artifact source's INTERACTION_ID, never retyped. The source was re-aimed to
+        # the instructor's deck on 2026-10-23 and the slug deliberately did NOT move -- it had never
+        # been registered, so no cadet has a report under it.
+        "interactive_slug": "phys310-fission-criticality-b2dbd1a4",
+        # GEMINI ROUTE, as for lesson 25. The claude.ai artifact published 2026-08-20 still serves
+        # the pre-re-aim objectives (reactivity, period, feedback), which this deck does not teach.
+        "artifact_url": "https://dfpm-physics.github.io/Core_Preflights/site/student/"
+                        "backup.html?i=phys310-fission-criticality-b2dbd1a4&go=1",
+        "written_slug": "phys-310-lesson-27-written-32ffbfd6",
+        "written_role": "graded",
+        "interactive_role": "graded",
+        "reference_pdf": None,
+        "reference_pages": None,
+        # One free-response question beyond the two defaults, worth the remaining 2 points. Written
+        # against the instructor's deck (Physics-310-2026-Lesson-27-Criticality.pptx): (a) is
+        # k-infinity against k-eff (slides 6-7), (b) is the four-factor formula (slide 9), and (c) is
+        # the buckling comparison (slides 12-14). None of it uses the deck's plutonium-sphere problem,
+        # which is the class's to work.
+        "questions": [
+            {
+                "id": "q3",
+                "role": "free_response",
+                "text": "(a) A lump of fissile material is made of a material with k-infinity = 1.2. "
+                        "Explain what k-infinity leaves out that k-eff includes, and explain how "
+                        "that lump could still be subcritical. (b) In a thermal reactor, "
+                        "k-infinity = eta x f x epsilon x p. Two of those four factors can never be "
+                        "greater than 1. Name them, say what loss each one counts, and say why "
+                        "neither can exceed 1. (c) An assembly has a geometric buckling that is "
+                        "LARGER than its material buckling. Is it subcritical, critical, or "
+                        "supercritical, and why? If the assembly is a sphere and you double its "
+                        "radius, what happens to its geometric buckling?",
+                "type": "free_response",
+                "points": 2,
+                "figure_url": "",
+                "correct_answer": "",
+                "expected_response":
+                    "(a) k-infinity is the multiplication the material would have if it were "
+                    "infinitely large, so that no neutron could leak out: it weighs production "
+                    "against absorption only. k-eff also counts LEAKAGE as a loss -- k-eff = "
+                    "k-infinity times the non-leakage probability, which is at most 1. A lump that "
+                    "is small (or a poor shape, or not dense enough) loses so many neutrons through "
+                    "its surface that k-eff falls below 1 even though k-infinity is 1.2: leakage "
+                    "goes with surface area, while production and absorption go with volume. "
+                    "(b) p, the resonance escape probability -- the fraction of fast neutrons that "
+                    "slow to thermal energy without being captured in a resonance (mostly by "
+                    "U-238) -- and f, the thermal utilization -- the fraction of thermal neutrons "
+                    "absorbed in the FUEL rather than in the moderator, coolant or structure. Each "
+                    "is the fraction of a population that survives a loss, i.e. a probability, so "
+                    "neither can exceed 1. (eta and epsilon are yields: eta is well above 1, "
+                    "epsilon a little above 1.) "
+                    "(c) Subcritical. Geometric buckling measures how much the shape leaks and "
+                    "material buckling measures the material's surplus of production over "
+                    "absorption, so a geometric buckling larger than the material buckling means "
+                    "the assembly leaks more than the material can pay for. For a sphere the "
+                    "geometric buckling is (pi/R)^2, so doubling the radius cuts it to ONE QUARTER "
+                    "-- less leakage, moving the assembly toward (and possibly past) critical. "
+                    "GRADING: full credit in (a) for 'k-infinity ignores leakage, k-eff includes "
+                    "it' plus 'a small lump can leak enough to fall below 1'. Do not require the "
+                    "formula or the word surface. Full credit in (b) for p and f with a correct "
+                    "description of each loss and 'they are fractions / probabilities'; accept the "
+                    "losses described in words without the names. Full credit in (c) for "
+                    "'subcritical' with a reason tied to leakage against the material, plus 'one "
+                    "quarter' (accept 'four times smaller'; accept 'smaller' with a correct "
+                    "reason). A cadet who says a material with k-infinity above 1 is supercritical "
+                    "in any amount, or that critical means dangerous or exploding, has the "
+                    "misconception this question exists to find: flag it, do not zero it. A cadet "
+                    "who names eta or epsilon in (b), or says f is the fraction of neutrons that "
+                    "cause fission, has the second one: flag it too. A cadet who reverses the "
+                    "buckling inequality in (c) has the third: flag it.",
+            },
+        ],
+    },
 }
 
 

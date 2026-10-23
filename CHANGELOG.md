@@ -8,6 +8,71 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-10-23 — Matthew Recker via Claude
+
+### PHYS 310 Lesson 27, Fission: Criticality — written and Gemini preflight, published
+
+**What.** recker's instruction: *"go ahead and do the same thing I did there for lesson 27 on
+criticality. Create both versions of the preflight and publish. Make sure you reference the slides
+for topics that will be covered in class."* "There" is lesson 25 (2026-10-18, below), so this run
+follows that one step for step.
+
+- **Registered** with `scripts/fall2026/register_lesson.py --course phys-310 --lesson 27 --commit`
+  (new PLAN entry): assignment `lesson-27`, 3 points, due **Mon 26 Oct 07:59:59 MDT**
+  (`2026-10-26 13:59:59Z`), written to all three deadline locations; one T3A section row. Mon 26 Oct
+  is `T27` in `site/data/academic-calendar.json`, and lesson 27 is "Fission: Criticality" in the
+  14 Oct 2026 schedule workbook. 0800-on-the-day is the shape lessons 16, 17, 20, 21 and 25 carry. A
+  second run reports 0 changes.
+- **Written half** `phys-310-lesson-27-written-32ffbfd6`: Q1 reading time (0), Q2 reflection (1),
+  Q3 (2) — (a) what k-infinity leaves out and how a k-infinity = 1.2 lump can be subcritical; (b) the
+  two four-factor terms that can never exceed 1 (p and f) and why; (c) geometric buckling larger than
+  material buckling, and what doubling a sphere's radius does to the geometric buckling.
+- **Interactive half** `phys310-fission-criticality-b2dbd1a4` (existing slug, unchanged; it had never
+  been registered), `artifact_url` on the Gemini router `backup.html?…&go=1`. **No Claude route** —
+  the claude.ai publish of 2026-08-20 serves the old objectives.
+- **Published** with one `UPDATE … SET is_published = true` on that offering, as the DML role, at the
+  director's explicit instruction (the script registers drafts only). Read back over `prep_app_read`:
+  published, `due_by_day` `{T: …}`, 2 visible graded activities, `opens_at` NULL — so the 7-day
+  window has it visible to cadets now.
+
+**Re-aimed to the instructor's deck — all three objectives, not one.** The deck
+(`Instructor Slides/lessons/Physics-310-2026-Lesson-27-Criticality.pptx`, saved 2026-10-23 and read
+from the `.pptx`, not the July `lesson-25.json`) teaches the criticality condition: the three states
+and the reflector, k-infinity against k-eff, k_eff = k-infinity × ℒ (k-infinity = η when fast), the
+four-factor formula, the diffusion length, geometric and material buckling, and the B_g²-against-B_m²
+test. It has **no slide** on reactivity, 1/M, the period, prompt criticality, feedback or control —
+which were all three old objectives. New keys: `multiplication-factor-and-leakage`,
+`four-factor-neutron-life`, `geometric-and-material-buckling`. The old topics stay grounded,
+engage-if-raised. A `[DECK]` block now outranks the corpus.
+
+**A second error came with it and is fixed.** The source's "carried in from earlier lessons" list said
+k and the four-factor formula had been probed last lesson. Lesson 25's re-aim handed both **forward**
+to this lesson, so that was false. The list now says so, and η (which lesson 25 did probe) is carried
+in instead.
+
+**The deck's plutonium-sphere problem is the class's.** The tutor has none of its data and may not
+work it, answer it, or set a near-copy. The deck's three discussion questions are taught as physics
+and not quoted. New extension problems F (a four-factor ledger), G (one cubic metre as a sphere, cube
+and cylinder) and H (the two material-buckling forms are one quantity), each recomputed twice. Full
+record in the phys-310 `BUILD-LOG.md`, whose criticality heading now reads "Lesson 27".
+
+**For the course director — one slide wording.** Slide 9 defines ε as fission neutrons from fast
+fission over those from thermal fission. The usual definition counts all fission neutrons on top,
+which puts ε a little above 1. The tutor accepts either wording and teaches "a small bonus, a little
+more than 1".
+
+**Not done, on purpose:** the edited source was **not** pushed to the `artifact-sources` bucket (as for
+lesson 25); it lives in this machine's gitignored cache, and its full prompt is in the committed Gemini
+build. The claude.ai artifact was not republished. `index.json` still gives this artifact
+`lesson_no` 25, and so does the new `backup-builds.json` row, which only labels it.
+
+**Verified:** `check_artifact.py` 37/37 · LF, 0 NUL · `to_gemini.py` every transform matched ·
+`patch_autofill_guard.py` applied · `gemini-build.mjs` 8/8 in real Chrome (parse, render, key box, no
+scroll, no 404s, no errors) · `gemini-model-ladder.mjs` 194/194. **No live tutor turn** — no Gemini key
+is available to the agent, so the conversation itself is unproven. Node-only browser checks.
+
+---
+
 ## 2026-10-19 — Casey Pellizzari via Claude
 
 ### The dashboard's "Flagged for follow-up" tile counted interactive lessons only
