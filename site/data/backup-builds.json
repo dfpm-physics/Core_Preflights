@@ -421,6 +421,12 @@
       "title": "Fission: Neutron Multiplication",
       "path": "gemini/phys-310/phys310-fission-neutron-multiplication-2a606ef1.html"
     },
+    "phys310-fusion-6bfea3e2": {
+      "course": "phys-310",
+      "lesson_no": 26,
+      "title": "Fusion",
+      "path": "gemini/phys-310/phys310-fusion-6bfea3e2.html"
+    },
     "phys310-lab-1-measurement-of-half-life-11c49dbc": {
       "course": "phys-310",
       "lesson_no": 6,

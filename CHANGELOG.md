@@ -8,6 +8,63 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-10-28 — Matthew Recker via Claude
+
+### PHYS 310 Lesson 29, Fusion — written and Gemini preflight, published
+
+**What.** recker's instruction: *"do the same for lesson 29. Push/commit and publish."* "The same" is
+lesson 27 (2026-10-23, below), so this run follows that one step for step.
+
+- **Registered** with `scripts/fall2026/register_lesson.py --course phys-310 --lesson 29 --commit`
+  (new PLAN entry): assignment `lesson-29`, 3 points, due **Fri 30 Oct 07:59:59 MDT**
+  (`2026-10-30 13:59:59Z`), written to all three deadline locations; one T3A section row. Fri 30 Oct
+  is `T29`, and lesson 29 is "Fusion" in the 14 Oct 2026 schedule workbook. A second run reports
+  0 changes.
+- **Written half** `phys-310-lesson-29-written-1b80cf25`: Q1 reading time (0), Q2 reflection (1),
+  Q3 (2) — (a) why fusion needs ~10⁸ K when neutron-induced fission does not, and why only light
+  nuclei; (b) how a tokamak (seconds) and a laser implosion (nanoseconds) both meet the Lawson
+  criterion; (c) where a D-T plant gets its tritium, and why the field cannot hold the neutron.
+- **Interactive half** `phys310-fusion-6bfea3e2` (existing slug, unchanged; it had never been
+  registered), `artifact_url` on the Gemini router `backup.html?…&go=1`. **No Claude route.**
+- **Published** with one `UPDATE … SET is_published = true` on that offering, as the DML role, at the
+  director's explicit instruction. Read back over `prep_app_read`: published, `due_by_day`
+  `{T: …}`, 2 visible graded activities, `opens_at` NULL — so it is visible to cadets now.
+
+**Re-aimed to the instructor's deck — and this time the objectives held.** The deck
+(`Instructor-Slides/lessons/Physics-310-2026-Lesson-29-Fusion.pptx`, saved 2026-07-31) teaches the
+Coulomb barrier, the fuels, the reactions, the case for fusion, tritium from lithium, cold fusion,
+the Lawson criterion, and ITER and NIF. All three existing topics (barrier, confinement, the D-T
+bargain) match it, so the keys did not move. A `[DECK]` block now outranks the corpus, the
+"what you do not have" list is relaxed exactly as far as the deck grounds, and each topic gained
+what the deck adds.
+
+**The deck's two practice problems are the class's.** Slide 14 (D-T Q-value against U-235 per
+mass unit) was old extension problem A almost exactly, so A is replaced. Slide 15 (four protons to
+helium) is reserved too. New problems A (closing the fuel cycle with lithium), F (the D-D Lawson
+bill) and G (what NIF's Q = 1.5 says), each computed twice. Full record in the phys-310
+`BUILD-LOG.md`, whose fusion heading now reads "Lesson 29".
+
+**For the course director — three slide values.**
+- Slide 5 says "33 mg of H-2 in every m³ of seawater". The usual figure is about 33 mg per **litre**
+  (about 33 g/m³), so this is very probably a unit slip. The tutor is told not to quote it.
+- Slide 7 gives T + T as 11.27 MeV and Li-7 + n as −2.446 MeV; atomic masses give 11.33 and −2.467.
+  Small.
+- The deck's title slide still says "Lesson 26", and it lists the reading as 7.1–7.3 where the
+  schedule says 7.1–7.2. A second deck, `Physics-310-2026-Lesson-29-Fuel-Cycle.pptx`, also carries
+  the number 29; this run used the Fusion deck, per the schedule.
+
+**Not done, on purpose:** the edited source was **not** pushed to the `artifact-sources` bucket; it
+lives in this machine's gitignored cache, and its full prompt is in the committed Gemini build. The
+claude.ai artifact was not republished. `index.json` still gives this artifact `lesson_no` 26, and
+so does the new `backup-builds.json` row, which only labels it.
+
+**Verified:** `check_artifact.py` 37/37 · LF, 0 NUL · `to_gemini.py` every transform matched ·
+`patch_autofill_guard.py` applied · `gemini-build.mjs` 8/8 in real Chrome (parse, render, key box, no
+scroll, no 404s, no errors) · `gemini-model-ladder.mjs` 194/194. **No live tutor turn** — no Gemini key
+is available to the agent, so the conversation itself is unproven.
+
+---
+
 ## 2026-10-23 — Matthew Recker via Claude
 
 ### PHYS 310 Lesson 27, Fission: Criticality — written and Gemini preflight, published

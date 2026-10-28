@@ -712,6 +712,99 @@ PLAN = {
             },
         ],
     },
+    ("phys-310", 29): {
+        "assignment_slug": "lesson-29",
+        "kind_id": "preflight",
+        "title": "Lesson 29 Preflight -- Fusion",
+        "position": 29,
+        "points_possible": 3,
+        "grading_mode": "points",
+        "switch_policy": "lock_on_commit",
+        "is_published": False,          # registered as a draft; published separately on 2026-10-28
+                                        # at the course director's explicit instruction
+        "opens_at": None,               # NULL selects the rolling 7-day release window
+        # 0800 America/Denver on the lesson day, the shape lessons 16, 17, 20, 21, 25 and 27 carry.
+        # Fri 30 Oct is "T29" and this course's one section (T3A) is a T-day section. Still MDT
+        # (DST ends Sun 1 Nov 2026).
+        "due_at": "2026-10-30 13:59:59+00",   # Fri 30 Oct 07:59:59 MDT
+        "day_key": "T",                 # this course's one section is a T-day section
+        "interactive_title": "Fusion",
+        # Read from the artifact source's INTERACTION_ID, never retyped. The source was re-aimed to
+        # the instructor's deck on 2026-10-28 and the slug deliberately did NOT move -- it had never
+        # been registered, so no cadet has a report under it.
+        "interactive_slug": "phys310-fusion-6bfea3e2",
+        # GEMINI ROUTE, as for lessons 25 and 27. The claude.ai artifact published 2026-08-20 has no
+        # [DECK] block and still sets the deck's own per-nucleon practice problem as extension A.
+        "artifact_url": "https://dfpm-physics.github.io/Core_Preflights/site/student/"
+                        "backup.html?i=phys310-fusion-6bfea3e2&go=1",
+        "written_slug": "phys-310-lesson-29-written-1b80cf25",
+        "written_role": "graded",
+        "interactive_role": "graded",
+        "reference_pdf": None,
+        "reference_pages": None,
+        # One free-response question beyond the two defaults, worth the remaining 2 points. Written
+        # against the instructor's deck (Physics-310-2026-Lesson-29-Fusion.pptx): (a) is the Coulomb
+        # barrier (slides 4 and 6 with their notes), (b) is the Lawson criterion and the two
+        # confinement strategies (slides 11-13), and (c) is tritium supply and the D-T neutron
+        # (slides 5, 7 and 9). None of it uses the deck's two practice problems (the D-T Q-value
+        # against U-235, and four protons to helium), which are the class's to work.
+        "questions": [
+            {
+                "id": "q3",
+                "role": "free_response",
+                "text": "(a) A slow neutron can cause a U-235 nucleus to fission at room "
+                        "temperature, but deuterium and tritium will only fuse at about 100 "
+                        "million K. Explain why fusion needs that temperature when "
+                        "neutron-induced fission does not, and use the same idea to explain why "
+                        "only very light nuclei are used as fusion fuel. (b) A tokamak like ITER "
+                        "holds its plasma for seconds; a laser implosion like NIF holds its fuel "
+                        "for about a billionth of a second. Explain how both can satisfy the "
+                        "Lawson criterion, and say what the inertial approach must do to make up "
+                        "for its short time. (c) Tritium is very rare in nature. Where does a "
+                        "D-T fusion plant get its tritium, and which product of the D-T reaction "
+                        "makes that possible? Why can a magnetic field not hold that product in "
+                        "the plasma?",
+                "type": "free_response",
+                "points": 2,
+                "figure_url": "",
+                "correct_answer": "",
+                "expected_response":
+                    "(a) Both nuclei in a fusion reaction are positively charged, so the Coulomb "
+                    "(electrostatic) repulsion pushes them apart all the way in, and they must "
+                    "get within about a femtometre for the nuclear force to act. Temperature is "
+                    "the source of the kinetic energy needed to get through that barrier (with "
+                    "help from tunneling). A neutron has no charge, so it feels no Coulomb "
+                    "barrier and can enter a nucleus at any energy. The repulsion grows with the "
+                    "number of protons, so heavier nuclei would need far higher temperatures; "
+                    "light nuclei such as hydrogen isotopes, with one proton each, have the "
+                    "smallest barrier. "
+                    "(b) The Lawson criterion is a condition on the PRODUCT of density and "
+                    "confinement time (n tau of about 10^14 s/cm^3 or more for D-T), not on "
+                    "either one alone. The tokamak uses low density for a long time; inertial "
+                    "confinement uses a very short time, so it must make up for it with a very "
+                    "high density, which it gets by compressing (imploding) the fuel. "
+                    "(c) Tritium is bred from lithium: a neutron striking Li-6 gives He-4 and "
+                    "tritium (a fast neutron on Li-7 also gives tritium and returns the "
+                    "neutron). The neutron from the D-T reaction itself does the breeding, in a "
+                    "lithium blanket around the plasma. A magnetic field acts only on charged "
+                    "particles, and the neutron is uncharged, so it leaves the plasma -- it "
+                    "carries about 80 percent of the energy (14.1 MeV) with it. "
+                    "GRADING: full credit in (a) for 'both nuclei are positive, so they repel; "
+                    "the temperature gives them enough energy to get close' plus 'the neutron "
+                    "is uncharged, so no barrier' plus 'more protons, bigger repulsion'. Do not "
+                    "require the word Coulomb, the femtometre, or tunneling. Full credit in (b) "
+                    "for 'it is the product n x tau that matters' plus 'very high density / "
+                    "compression'; do not require the number. Full credit in (c) for 'bred from "
+                    "lithium' plus 'the neutron' plus 'it has no charge'; do not require the "
+                    "isotope, the 80 percent, or the energy. A cadet who says the temperature is "
+                    "there to melt or ionize the fuel, or to make a plasma, has the misconception "
+                    "this question exists to find: flag it, do not zero it. A cadet who says "
+                    "longer confinement is always better, or that nanoseconds cannot be long "
+                    "enough, has the second: flag it. A cadet who says tritium is mined or "
+                    "bought, or that the field holds the neutron, has the third: flag it.",
+            },
+        ],
+    },
 }
 
 

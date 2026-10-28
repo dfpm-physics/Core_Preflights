@@ -1715,21 +1715,22 @@ in lesson 10; §16.5 because the hardware belongs to lesson 31 and its poisons w
 **§16.3 and §16.5 are the two strongest entries of the five**, and §16.5 is unusually concrete for
 this corpus — named absorbers, the reason a BWR cannot use chemical shim, and the stuck-rod criterion.
 
-### Lesson 26 — Fusion
+### Lesson 29 — Fusion
 
 | | |
 |---|---|
 | **File** | [`phys310_preflight_fusion.jsx`](phys310_preflight_fusion.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-fusion-6bfea3e2` |
-| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/816445d2-f838-460d-98f8-7ef18a48041d |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/816445d2-f838-460d-98f8-7ef18a48041d — **STALE, and deliberately unused.** It has no `[DECK]` block and still sets the deck's own per-nucleon practice problem as extension A |
+| **Backup build** | `site/gemini/phys-310/phys310-fusion-6bfea3e2.html` — **the only route cadets take** |
 | **Component** | `Phys310FusionPreflight` |
-| **Built** | 2026-08-05 · 2155 lines |
-| **Grounding** | Murray corpus **§7.1** Fusion Reactions, **§7.2** Conditions for Fusion and Confinement — **both `STATUS: PENDING`** |
+| **Built** | 2026-08-05 · 2155 lines · **re-aimed 2026-10-28 · 2553 lines** (the cached source already carried the 2026-08-20 fix set) |
+| **Grounding** | Murray corpus **§7.1** Fusion Reactions, **§7.2** Conditions for Fusion and Confinement — **both `STATUS: PENDING`** — **plus the instructor's own deck (`Instructor-Slides/lessons/Physics-310-2026-Lesson-29-Fusion.pptx`, saved 2026-07-31; its title slide still reads "Lesson 26"), tagged `[DECK]`, which outranks the corpus** |
 | **Cross-check** | **The weakest in chapters 2–16.** DOE covers fusion "only in passing" for §7.1 and **§7.2 has none at all** — the first section in this run with literally zero corroboration |
-| **Cadets' reading** | Murray & Holbert 7.1–7.2 |
-| **Probe topics** | 3 · ~3 active min each · ~10 min |
-| **Checks** | `check_artifact.py` 44 passed / 0 failed (37 base + 7 `--forbid`). Re-verified independently: 37/37, LF, 0 NUL, **and the four-branch momentum corroboration recomputed here** (below) |
-| **Status** | **DRAFT** — not reviewed, not published, not registered |
+| **Cadets' reading** | Murray & Holbert 7.1–7.2 per the schedule; **the deck lists 7.1–7.3** |
+| **Probe topics** | 3 · ~3 active min each · ~10 min — **unchanged by the re-aim**; each topic now carries what the deck adds |
+| **Checks** | 2026-10-28: `check_artifact.py` 37/37 · LF, 0 NUL · `gemini-build.mjs` 8/8 and `gemini-model-ladder.mjs` 194/194 in real Chrome. **No live tutor turn** — no Gemini key is available to the agent |
+| **Status** | **REGISTERED and PUBLISHED 2026-10-28** as `lesson-29`, due Fri 30 Oct 07:59:59 MDT |
 
 | # | key | label |
 |---|---|---|
@@ -1739,8 +1740,48 @@ this corpus — named absorbers, the reason a BWR cannot use chemical shim, and 
 
 **Charge is the deliberate through-line across all three topics.**
 
-**Extension problems:** A energy per nucleon — 17.6/5 = 3.52 against fission's 0.85, a factor of 4.1 —
-then how a fission *event* can be larger while fission *fuel* is weaker (approachable) · B **why
+**Re-aimed 2026-10-28 to the instructor's own deck, and the slug deliberately did not move** — it had
+never been registered. Unlike lessons 25 and 27, **the objectives survived**: the deck's barrier and
+cross-section slides (4, 6, with notes) are topic 1, its Lawson, ITER and NIF slides (11–13) are
+topic 2, and its fuel, reaction and tritium slides (5, 7, 9) are topic 3. What changed:
+
+- A `[DECK]` block now outranks the corpus, and the "what you do not have" list was relaxed exactly
+  as far as the deck grounds: ITER (tokamak, first plasma 2033–2034) and NIF (laser inertial,
+  December 2022, Q = 1.5); both lithium breeding energies; Lawson 10¹⁶ s/cm³ for D-D; cold fusion;
+  the advantages and disadvantages list. Everything else in it stands.
+- Each probe topic gained a "FROM THE DECK" paragraph: why only light nuclei (Ne-20 → Ca-40 would
+  need ~10¹¹ K); ITER and NIF as the two strategies, and NIF's Q = 1.5 as misconception 6; fuel supply,
+  with the Li-7 route as the answer to extension D's zero margin.
+- **The deck's two practice problems are the class's.** Slide 14 (D-T Q-value, 3.497 against
+  0.805 MeV/u) was **old extension A almost exactly**, so A is replaced. Slide 15 (four protons to
+  helium, 24.7 MeV) is reserved too. The per-nucleon key constant, the §7.1 paragraph and the lateral
+  connection now say "in words, no numbers".
+- Weapons: the deck names the bomb context (Li-6 deuteride, Castle Bravo). The tutor says that much
+  and sends the rest to the instructor.
+
+**Extension problems now:** **A (new)** closing the fuel cycle with lithium — D + Li-6 → 2 He-4 at
+17.59 + 4.78 = 22.37 MeV, and D + Li-7 → 2 He-4 + n at 15.144 MeV with a neutron spare (standard;
+independently 22.374 MeV from atomic masses) · B **why exactly 80 %** (unchanged) · C invert Lawson
+(unchanged) · D the tritium loop, now pointing at A's Li-7 route · E what "~10 keV, i.e. ~10⁸ K"
+claims (unchanged) · **F (new)** the D-D Lawson bill — 100×, so 10¹⁶ / 10²⁵ cm⁻³ against 10¹⁴ / 10²³
+(approachable) · **G (new)** what NIF's Q = 1.5 says — with a supplied 2.0 MJ in, 3.0 MJ out,
+1.065 × 10¹⁸ fusions, about 9 µg of fuel, and not ignition (standard). Each computed twice.
+
+**Three slide values to raise with the course director**, none of which the tutor quotes as fact:
+
+- **Slide 5: "33 mg of H-2 in every m³ of seawater."** The usual figure is about 33 mg per **litre**,
+  i.e. about 33 g/m³ — the slide is very probably a litre/m³ slip. The tutor is told not to quote it.
+- **Slide 7: T + T at 11.27 MeV** — atomic masses give 11.33. **Li-7 at 2.446 MeV** — atomic masses
+  give 2.467. Small; extension A uses the deck's 2.446 as printed.
+
+**Not done:** the claude.ai artifact was not republished, the edited source was not pushed to the
+`artifact-sources` bucket, and `index.json` still gives `lesson_no` 26.
+
+### Lesson 29 — the original 2026-08-05 build notes
+
+**Extension problems as first built:** A energy per nucleon — 17.6/5 = 3.52 against fission's 0.85, a
+factor of 4.1 — then how a fission *event* can be larger while fission *fuel* is weaker (approachable;
+**withdrawn 2026-10-28**, the deck's slide 14) · B **why
 exactly 80 %** — predict the D-T split from momentum conservation alone, then run it on all three
 other branches (challenging) · C invert Lawson: τ = 1 s ⇒ n > 10¹⁴ cm⁻³, τ = 1 ns ⇒ n > 10²³ cm⁻³,
 **nine orders traded one for one** (standard) · D the tritium loop — balance Li-6 + n → He-4 + H-3 and
