@@ -1848,27 +1848,31 @@ grounding than §4.4 had**, so topic 1 owns it.
 in the lesson. **A fourth topic was declined rather than squeezed**: stellar fusion (p-p, CNO) and
 aneutronic D+³He are grounded and routed to lateral connections.
 
-### Lesson 31 — Nuclear Reactors: Basics, Components, Types, Accidents
+### Lesson 30 — Nuclear Reactors: Basics, Components, Types, Accidents
 
 | | |
 |---|---|
 | **File** | [`phys310_preflight_nuclear_reactors_basics_components_types_accidents.jsx`](phys310_preflight_nuclear_reactors_basics_components_types_accidents.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-nuclear-reactors-basics-components-types-accidents-be837c38` |
-| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/1d90b211-8b8e-4acc-93fd-c994b0491d37 |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/1d90b211-8b8e-4acc-93fd-c994b0491d37 — **STALE, and unused.** It predates the deck re-aim |
+| **Backup build** | `site/gemini/phys-310/phys310-nuclear-reactors-basics-components-types-accidents-be837c38.html` — **the only route cadets take** |
 | **Component** | `Phys310NuclearReactorsBasicsComponentsTypesAccidentsPreflight` |
-| **Built** | 2026-08-05 · 2295 lines |
+| **Built** | 2026-08-05 · 2295 lines · **re-aimed 2026-10-30 · 2613 lines** |
 | **Grounding** | Murray corpus **§18.1, §18.2, §18.4, §18.5, §21.1, §21.2** — **all six `STATUS: PENDING`**. §18.3 is not assigned and nothing from it is present |
 | **Cross-check** | **Half of it does not exist.** §18.1 moderate, §18.2 good, §18.4 reduced, and **§18.5, §21.1, §21.2 have `None`** |
 | **Cadets' reading** | Murray & Holbert 18.1–18.2, 18.4–18.5, 21.1–21.2 |
 | **Probe topics** | 3 · ~3 active min each · ~10 min — **six sections, the widest overflow in the course** |
 | **Checks** | `check_artifact.py` 37/37. Re-verified independently: 37/37, LF, 0 NUL, **and every extension figure recomputed** — Carnot 49.7 % / 74.2 %, 0.05³ = 1.25×10⁻⁴ against a 0.01 common-cause term (80×), decay heat 210 / 30 / 3 MW, boil-off 93 kg/s |
-| **Status** | **DRAFT** — not reviewed, not published, not registered |
+| **Checks (re-aim)** | 2026-10-30: `check_artifact.py` 37/37 · LF, 0 NUL · `gemini-build.mjs` 8/8 and `gemini-model-ladder.mjs` 194/194. **No live tutor turn** — no Gemini key is available to the agent |
+| **Status** | **REGISTERED and PUBLISHED 2026-10-30** as `lesson-30`, due Tue 3 Nov 07:59:59 MST |
 
 | # | key | label |
 |---|---|---|
 | 1 | `defense-in-depth-barriers` | Names the four barriers; audits each accident by which one failed |
 | 2 | `pwr-bwr-one-choice` | Traces every PWR/BWR difference to boiling or not boiling in-core |
 | 3 | `decay-heat-and-common-cause` | Explains why shutdown is not safe, and why redundancy is not enough |
+
+**Re-aimed 2026-10-30 to the instructor's own deck, and the slug deliberately did not move** — it had never been registered. The deck (`Instructor-Slides/lessons/Physics-310-2026-Lesson-30-Nuclear-Reactors.pptx`, converted 2026-10-30 from the source deck "Phys 310 L31 - Reactors") covers the major components, reactor operations, capacity factor and power (E_f = 190 MeV), the BWR with LEU/HEU/weapons-grade thresholds, the void coefficient, why a PWR is pressurized, BWR against PWR, other reactor types, the US fleet, the generations, spent fuel and disposal (Onkalo), the safety functions, meltdown, the three accidents, and the pros, cons and future. **All three objectives match it, so the keys did not move.** A `[DECK]` block now outranks the corpus, and each probe topic gained a DECK LINK paragraph. The deck's capacity-factor boardwork problem is the class's: the tutor is barred from working it. No extension problem used it, so none was replaced. Two deck wordings are handled in the `[DECK]` block: the slide says the N-16 contaminates the BWR "generator" (the tutor says turbine), and "28 g of U = 100 t of coal" assumes complete fission.
 
 **Extension problems:** A the Carnot ceiling — 330 °C steam against a 30 °C sink gives 49.7 %, a real
 plant reaching ⅔ of it, an HTGR at 900 °C giving 74.2 %, and part (d) noting the PWR/BWR pressure

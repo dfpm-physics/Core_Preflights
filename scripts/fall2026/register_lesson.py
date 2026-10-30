@@ -805,6 +805,98 @@ PLAN = {
             },
         ],
     },
+    ("phys-310", 30): {
+        "assignment_slug": "lesson-30",
+        "kind_id": "preflight",
+        "title": "Lesson 30 Preflight -- Nuclear Reactors",
+        "position": 30,
+        "points_possible": 3,
+        "grading_mode": "points",
+        "switch_policy": "lock_on_commit",
+        "is_published": False,          # registered as a draft; published separately on 2026-10-30
+                                        # at the course director's explicit instruction
+        "opens_at": None,               # NULL selects the rolling 7-day release window
+        # 0800 America/Denver on the lesson day, the shape lessons 16, 17, 20, 21, 25, 27 and 29
+        # carry. Tue 3 Nov is "T30" and this course's one section (T3A) is a T-day section. Now MST:
+        # DST ended Sun 1 Nov 2026, so 0800 local is 15:00Z, not 14:00Z.
+        "due_at": "2026-11-03 14:59:59+00",   # Tue 3 Nov 07:59:59 MST
+        "day_key": "T",                 # this course's one section is a T-day section
+        "interactive_title": "Nuclear Reactors",
+        # Read from the artifact source's INTERACTION_ID, never retyped. The source was re-aimed to
+        # the instructor's deck on 2026-10-30 and the slug deliberately did NOT move -- it had never
+        # been registered, so no cadet has a report under it.
+        "interactive_slug": "phys310-nuclear-reactors-basics-components-types-accidents-be837c38",
+        # GEMINI ROUTE, as for lessons 25, 27 and 29. The claude.ai artifact published 2026-08-20 has
+        # no [DECK] block.
+        "artifact_url": "https://dfpm-physics.github.io/Core_Preflights/site/student/"
+                        "backup.html?i=phys310-nuclear-reactors-basics-components-types-accidents-"
+                        "be837c38&go=1",
+        "written_slug": "phys-310-lesson-30-written-db2af252",
+        "written_role": "graded",
+        "interactive_role": "graded",
+        "reference_pdf": None,
+        "reference_pages": None,
+        # One free-response question beyond the two defaults, worth the remaining 2 points. Written
+        # against the instructor's deck (Physics-310-2026-Lesson-30-Nuclear-Reactors.pptx): (a) is
+        # the PWR/BWR choice (BWR, void coefficient, PWR, "Why pressurize?" and BWR vs PWR slides),
+        # (b) is fuel, cladding and containment as barriers (components, meltdown and Three Mile
+        # Island slides), and (c) is decay heat and diverse backups (spent fuel, safety mechanisms
+        # and Fukushima slides). None of it uses the deck's capacity-factor problem, which is the
+        # class's to work.
+        "questions": [
+            {
+                "id": "q3",
+                "role": "free_response",
+                "text": "(a) A boiling water reactor lets its water boil in the core; a "
+                        "pressurized water reactor does not. Pick two other differences between "
+                        "the designs and explain how each one follows from that single choice. "
+                        "(b) At Three Mile Island about half the core melted, yet very little "
+                        "radioactive material reached the public. Name the layers that stand "
+                        "between the fission products and the public, and say which ones failed "
+                        "and which one held. (c) At Fukushima Daiichi the reactors shut down "
+                        "correctly when the earthquake hit, yet the cores still overheated. Why "
+                        "does a shut-down reactor still need cooling, and why did having more than "
+                        "one emergency generator not save the plant?",
+                "type": "free_response",
+                "points": 2,
+                "figure_url": "",
+                "correct_answer": "",
+                "expected_response":
+                    "(a) Not boiling requires high pressure (about 15.5 MPa against about 7 MPa), "
+                    "because pressure raises the boiling point. Because the core water stays liquid "
+                    "and radioactive, a PWR needs steam generators and a second loop to make steam, "
+                    "so its turbine is not radioactive; a BWR's steam goes straight to the turbine "
+                    "(one loop, simpler, no steam generators) and carries N-16, so its turbine side "
+                    "needs shielding. The top of a BWR vessel holds steam separators, so its control "
+                    "rods enter from the bottom and are driven in hydraulically; a PWR's drop in "
+                    "from the top. Higher pressure also means higher cost and worse loss-of-coolant "
+                    "consequences for the PWR. Any two, each tied to the boiling choice. "
+                    "(b) The fuel pellet (fuel matrix), the metal cladding, the reactor coolant "
+                    "system boundary (vessel and piping), and the containment building. At Three "
+                    "Mile Island the fuel and cladding failed (the core melted) and the coolant "
+                    "boundary was open at a stuck relief valve, but the containment held, which is "
+                    "why the offsite dose was negligible. "
+                    "(c) The fission products keep decaying after the chain reaction stops, so the "
+                    "fuel keeps making heat (decay heat) -- a few percent of full power at first -- "
+                    "and must be cooled or it melts; the same reason spent fuel sits in pools for "
+                    "years. The generators were redundant but identical and in the same place, so "
+                    "one tsunami flooded all of them at once (a common-cause failure). Diverse "
+                    "backups -- different kinds, in different places, or passive cooling that needs "
+                    "no power -- are what protect against a shared cause. "
+                    "GRADING: full credit in (a) for any two differences each linked to boiling or "
+                    "not boiling; do not require the pressures. Full credit in (b) for pellet or "
+                    "fuel, cladding and containment, with 'containment held'; do not require the "
+                    "coolant boundary or the word 'barrier'. Full credit in (c) for 'decay heat "
+                    "continues after shutdown' plus 'the backups all failed together from one "
+                    "cause'; do not require the term common-cause or any percentage. A cadet who "
+                    "says a PWR does not boil because it runs colder has the misconception this "
+                    "question exists to find: flag it, do not zero it. A cadet who says containment "
+                    "is the only barrier that matters has the second: flag it. A cadet who says a "
+                    "shut-down reactor needs no cooling, or that more identical generators would "
+                    "have fixed it, has the third: flag it.",
+            },
+        ],
+    },
 }
 
 

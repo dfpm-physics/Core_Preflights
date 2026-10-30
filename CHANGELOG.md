@@ -10,6 +10,49 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-10-30 — Matthew Recker via Claude
 
+### PHYS 310 Lesson 30, Nuclear Reactors — written and Gemini preflight, published
+
+**What.** recker's instruction: *"we've transitioned to gemini versions of the interactive
+preflights. Make sure that is done and then publish to the students."* This run follows lesson 29
+(2026-10-28, below) step for step.
+
+- **Registered** with `scripts/fall2026/register_lesson.py --course phys-310 --lesson 30 --commit`
+  (new PLAN entry): assignment `lesson-30`, 3 points, due **Tue 3 Nov 07:59:59 MST**
+  (`2026-11-03 14:59:59Z`; DST ended 1 Nov), written to all three deadline locations; one T3A
+  section row. Tue 3 Nov is `T30`. A second run reports 0 changes.
+- **Written half** `phys-310-lesson-30-written-db2af252`: Q1 reading time (0), Q2 reflection (1),
+  Q3 (2) — (a) trace two PWR/BWR differences to the one choice of boiling in the core; (b) which
+  barriers failed at TMI and why containment mattered; (c) why a scrammed reactor still needs
+  cooling, and why identical backups are not enough.
+- **Interactive half** `phys310-nuclear-reactors-basics-components-types-accidents-be837c38`
+  (existing slug, unchanged; never registered before), `artifact_url` on the Gemini router
+  `backup.html?…&go=1`. **No Claude route.**
+- **Published** with one `UPDATE … SET is_published = true` on offering `7fa9e8b9`, as the DML role,
+  at the director's instruction. Read back: published, due `2026-11-03 14:59:59Z`.
+
+**Re-aimed to the instructor's new deck; the objectives held.** The deck
+(`Instructor-Slides/lessons/Physics-310-2026-Lesson-30-Nuclear-Reactors.pptx`) was converted the
+same day from the source deck "Phys 310 L31 - Reactors". All three keys stay. A `[DECK]` block now
+outranks the corpus. The deck's capacity-factor boardwork problem is reserved for class. Full record
+in the phys-310 `BUILD-LOG.md`, whose reactors heading now reads "Lesson 30".
+
+**Checks.** `check_artifact.py` 37/37, LF, 0 NUL. `to_gemini.py --commit` (79 builds in
+`site/data/backup-builds.json`), autofill guard applied, `gemini-build.mjs` 8/8,
+`gemini-model-ladder.mjs` 194/194. **No live tutor turn**: no Gemini key is available to the agent.
+
+**For the course director — two deck wordings.**
+- The BWR slide says N-16 contaminates the "generator". It is the steam and turbine side. The tutor
+  says turbine.
+- "28 g of uranium = 100 t of coal" assumes complete fission. The tutor says so.
+
+**Not done, on purpose:** the edited source was **not** pushed to the `artifact-sources` bucket; it
+lives in this machine's gitignored cache, and its full prompt is in the committed Gemini build. The
+claude.ai artifact was not republished.
+
+---
+
+## 2026-10-30 — Matthew Recker via Claude
+
 ### Cadets can now see how the effort rating is decided; four feedback rows closed
 
 **Why.** A cadet's feedback (2026-08-26) asked how effort is decided. The submit page showed
