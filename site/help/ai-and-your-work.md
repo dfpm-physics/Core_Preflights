@@ -54,6 +54,33 @@ Interactive lessons are graded on **effort**, not correctness. Work through the 
 the reflection questions meaningfully and you earn the points. A reading reflection that is clearly
 not a real attempt is capped.
 
+### How the effort rating is decided
+
+At the end of the session the AI tutor rates your **engagement** from 0 to 5. It looks at how you
+took part in the conversation — not at whether your physics was right. **A wrong answer does not
+lower your rating.** Being wrong and working through why is exactly what the lesson is for.
+
+| Rating | What it looks like |
+|---|---|
+| 5 | You worked through the whole conversation, answered what was asked, and responded to follow-ups. |
+| 4 | Solid work with small lapses — a skipped sub-question or a short tangent. |
+| 3 | You took part, but the session was cut short, very terse, or partly off-task. |
+| 2 | Short, low-content answers, or frequent tangents. |
+| 1 | One-word answers, or mostly avoiding the questions. |
+| 0 | No real participation. |
+
+**The reading reflection sets a ceiling.** If your answer to the reading-reflection question is
+skipped, one word, copied, or does not respond to the question, your rating cannot go above 2, no
+matter how well the rest went. A few honest sentences are enough to clear it — length does not
+matter, substance does.
+
+**How the rating becomes points:** 3, 4 or 5 earns full credit. 1 or 2 earns one point. 0 earns
+zero.
+
+**If you think the rating is wrong** — for example the lesson broke partway through and cut your
+session short — tell your instructor. They can read the report of your session and change the
+grade.
+
 When you finish, the lesson sends a report of your session back to your record. Your instructor can
 read it, and the class's answers may be summarized in aggregate to plan the next lesson.
 

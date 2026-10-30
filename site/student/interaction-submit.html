@@ -236,6 +236,7 @@
       const possible = offering?.pointsPossible ?? 2;
       const effortTag = payload.effort !== null
         ? `<span class="tag blue" title="Effort ${payload.effort} of 5">effort ${payload.effort}/5</span>`
+          + ` <a href="help.html?doc=ai-and-your-work" target="_blank" rel="noopener" style="font-size:0.85em">How is effort rated?</a>`
         : '';
 
       main.innerHTML = `

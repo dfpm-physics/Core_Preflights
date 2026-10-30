@@ -8,6 +8,40 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-10-30 — Matthew Recker via Claude
+
+### Cadets can now see how the effort rating is decided; four feedback rows closed
+
+**Why.** A cadet's feedback (2026-08-26) asked how effort is decided. The submit page showed
+"effort 3/5" with no explanation, and the help page only said "graded on effort".
+
+- **`site/help/ai-and-your-work.md`** gains *How the effort rating is decided*: the 0–5
+  engagement rubric in cadet words, the reading-reflection cap at 2, and the points curve
+  (3–5 full, 1–2 one point, 0 zero). Written from `INTERACTION-DATA-CONTRACT.md` §5.2 and
+  `pointsFromEffort()` in `site/js/schema.js`. If either changes, this section is wrong.
+- **`site/student/interaction-submit.html`**: a "How is effort rated?" link beside the effort tag.
+
+Not checked in a browser (no browser session was available). The help page renders its tables
+with the same `marked` path as three other help pages that already use tables.
+`check_doc_sources.py` flags the same 6 documents before and after this change; none is this one.
+
+**Feedback triage** (`app.feedback`, written over `prep_app_dml`, each row checked for its
+expected state first, read back after):
+
+| Row | Was | Now | Why |
+|---|---|---|---|
+| `01c98bb0` cannot add PHYS 110 students | accepted | done | Same file loaded fine on 2026-08-07; 473 enrolled |
+| `af5d33c4` Finalize locked out an extended cadet | new | accepted, done | Fixed by the 2026-09-30 `planPublish()` change |
+| `7393c61c` Finalize missed some cards | new | accepted, done | Same 2026-09-30 fix |
+| `cae56e12` Boingo beats MissionNet | new | declined | A tip, not a request |
+
+**Left open on purpose:** `c5cbd61c` (a manual iPREP grade "sometimes" became 0 after publish).
+The 2026-09-30 fix removed two ways that could happen, but the grade history stores no point
+values, so it cannot be proven. Ask the submitter whether it has happened since 2026-09-30.
+`e7a37e60` (the effort question) is marked done once this push is live.
+
+---
+
 ## 2026-10-28 — Matthew Recker via Claude
 
 ### PHYS 310 Lesson 29, Fusion — written and Gemini preflight, published
