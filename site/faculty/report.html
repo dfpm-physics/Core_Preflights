@@ -832,6 +832,11 @@
       // "Submitted 18/18" with nothing saying where the other three were (a T3A instructor's
       // report, PHYS 215 Lesson 28). The sample is still what you read aloud in class; the full
       // listing is where you check that everyone is there.
+      //
+      // `low` uses the SAME test as the ✎ "Reflection capped" pill (FLAGS, below): not meaningful
+      // AND effort still at or under 2. An instructor who publishes full credit lifts effort to 3
+      // (confirmEffortRows, faculty-grade.js), which overrules the AI's judgment — so the card
+      // rejoins the sample and loses its tag, exactly as the pill clears.
       const reflOf = id => {
         const row = byId[id];
         if (!row) return null;
@@ -839,13 +844,14 @@
         const rr = (d && d.reading_reflection && typeof d.reading_reflection === 'object') ? d.reading_reflection : null;
         const text = (rr && rr.text) ? String(rr.text)
                    : (typeof row.reflection_response === 'string' ? row.reflection_response : '');
-        return text.trim() ? { text: text.trim(), meaningful: !(rr && rr.meaningful === false) } : null;
+        const low = !!rr && rr.meaningful === false && !(Number.isInteger(d?.effort) && d.effort > 2);
+        return text.trim() ? { text: text.trim(), low } : null;
       };
 
       // AI-picked showcase quotes — the aggregator stores only {student_id, section_id}; resolve the
       // verbatim text + name live from the already-loaded report_data + roster (never duplicated).
       const ai = (analysis && Array.isArray(analysis.selected_quotes) ? analysis.selected_quotes : [])
-        .map(q => { const id = String(q?.student_id); const r = reflOf(id), w = who[id]; return (r && r.meaningful && w) ? { id, text: r.text, name: w.name || '—', section: w.section || '' } : null; })
+        .map(q => { const id = String(q?.student_id); const r = reflOf(id), w = who[id]; return (r && !r.low && w) ? { id, text: r.text, name: w.name || '—', section: w.section || '' } : null; })
         .filter(Boolean);
 
       // Random pool = every meaningful reflection in scope, minus the ones already shown as AI picks.
@@ -857,7 +863,7 @@
         if (aiIds.has(id)) return;
         const refl = reflOf(id); if (!refl) return;
         const w = who[id] || {};
-        (refl.meaningful ? pool : hidden).push({ id, text: refl.text, name: w.name || '—', section: w.section || '' });
+        (refl.low ? hidden : pool).push({ id, text: refl.text, name: w.name || '—', section: w.section || '' });
       });
       return { ai, pool, hidden };
     }

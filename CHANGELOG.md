@@ -10,6 +10,51 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-11-02 — Casey Pellizzari via Claude
 
+### Written grading: "not meaningful" now means "no reflection happened", and always goes with red
+
+**What was reported.** After the entry below shipped, the same PHYS 215 instructor (Lesson 28,
+T3A) said the 3 reflections tagged "AI: not meaningful" looked no thinner than others the AI let
+through.
+
+**What was true.** She was right. Reading all 16 written T3A reflections side by side: one-line
+reflections (a question about a symbol, a single sentence about a result) were judged meaningful,
+while 3 of similar depth were not — one for saying the concept felt familiar from an earlier
+course, one for asking about the history behind the equations (the grader's note said it "doesn't
+reflect on the reading", which was wrong), and one for two genuine sentences about the previous
+lesson's topic. The interactive contract's own bar (§5.2: "a few genuine sentences clear the bar")
+passes all three. The cause was the runbook: `preflight-analyze/SKILL.md` allowed "a shallow but
+real reflection" to be yellow and `meaningful: false` at once, and that middle class is where the
+judgment drifted. Term-wide it held **715** reflections (phys-110 368, phys-215 333, phys-310 14) —
+full credit, no point lost, but a capped effort, a follow-up flag, and out of the quote sample.
+
+**What changed** (Casey's decision).
+- **`.ai/skills/preflight-analyze/SKILL.md`**: new subsection "`meaningful` and the Q2 color are ONE
+  decision". `meaningful: false` only when no reflection happened (blank, "nothing", obstacle only,
+  copied, not about physics), and exactly those are red. A short reflection, one on a nearby
+  reading, "this felt familiar", or a question about the people in the reading is `meaningful:
+  true`; depth goes to `engagement` / `q2_effort`. A pre-write check requires the two to match.
+- **`references/WRITTEN-SCHEMA1.md`**: the same rule on `reading_reflection`, and a read-back check
+  that `meaningful === false` exactly where the reflection is `zero`.
+- **`site/faculty/report.html`**: a reflection is tagged "AI: not meaningful" (and kept out of the
+  sample) only while the ✎ pill would show it — not meaningful AND effort still ≤ 2. Publishing full
+  credit lifts effort to 3 (`confirmEffortRows`), so the card now rejoins the sample, as the pill
+  already cleared. The entry below tagged it even after that.
+- Help: `instructor-grading.md` (the tag clears on publish; the gap should not open on new grading),
+  `director-ai-rules.md` (the rule, dated). `reviewed` bumped for both and for `ai-and-your-work.md`
+  (flagged by the SKILL.md edit; its written-grading text is still correct).
+
+**Not changed:** existing grades. The 715 stay as written; each clears when an instructor
+publishes full credit. The interactive artifacts and the frozen contract are untouched. The
+phys-215 nightly job picks up the new runbook at its own `git pull`; the phys-110/310 job stops when
+its clone is behind, as after any push, and needs a human pull.
+
+**Verified:** Node only — inline module passes `node --check`; panel functions run against synthetic
+rows (3 capped → tagged; 1 not-meaningful-but-published → back in the sample and eligible as an AI
+pick). Not checked in a signed-in browser. The runbook change takes effect on the next grading run
+and has not been observed in one yet.
+
+## 2026-11-02 — Casey Pellizzari via Claude
+
 ### Report page: response panels now explain why their counts are lower than "Submitted"
 
 **What was reported.** A PHYS 215 instructor, Lesson 28 (Displacement Current), section T3A: the

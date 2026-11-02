@@ -240,6 +240,13 @@ flag clears. It never lowers an effort, never goes above 3, and never touches a 
 points somewhere. The AI's original reading is kept on the record — this notes that you overrode
 its consequence, not that it never happened.
 
+**Since 2 November 2026 this gap should not open on new grading.** The AI now marks a written
+reflection "not a real attempt" only when no reflection happened — blank, "nothing", an obstacle
+and nothing else, copied text, or nothing about physics — and it grades exactly those red. A short
+or thin reflection, or one about a nearby reading, counts as a real attempt and gets a low
+engagement rating instead. So a yellow reflection with a **Reflection capped** flag comes from
+grading done before that date.
+
 **That includes an effort of 0**, which matters when you are correcting a zero rather than
 confirming a low score. The AI also writes 0 for every student it found no work from once the
 deadline passed — so a 0 can mean "nothing was handed in" *or* "nothing reached us", and those
@@ -405,7 +412,8 @@ slides.
 - *Reflections:* a reflection the AI judged was not a real attempt is left out of the AI picks and
   the random sample. It is still there: **Show all** lists it last, dashed and tagged **AI: not
   meaningful**. These are the same students as the **Reflection capped** count at the top of the
-  page.
+  page, and the tag clears the same way: publish full credit and the reflection rejoins the
+  sample.
 - *Free responses:* on a lesson with an interactive option, a student who did the interactive lesson
   had no free-response question to answer. The heading says how many did, so the gap does not read
   as missing work.

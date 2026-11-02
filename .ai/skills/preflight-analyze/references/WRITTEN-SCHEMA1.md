@@ -169,6 +169,11 @@ reconciles into canonical buckets. They are the finding's only route out of this
 `{ meaningful, engagement }`. `meaningful` is the substance judgment that gates `effort` above;
 `engagement` is the 0–5 read, which for a written preflight is the same number as `q2_effort`.
 
+**`meaningful` answers only "did a reflection take place?", and it equals "Q2 is not red".**
+*(Since 2026-11-02 — see SKILL.md, "`meaningful` and the Q2 color are ONE decision".)* A short or
+thin but genuine reflection is `meaningful: true` with a low `engagement`; how deep it went belongs
+in `engagement`, never in `meaningful`.
+
 **Omit `text`.** The contract carries it for the interactive path because the artifact's payload
 is the only record of the conversation. A written reflection is already stored verbatim in
 `submission_activities.content` — copying it here would duplicate student prose into a second
@@ -221,6 +226,9 @@ Read back `diagnostic` for the run's exact enrollment ids and require, per grade
 
 - `schema == 1` and `source == "preflight-analyze"`.
 - `effort` an integer in `[0,5]`; where the reflection was judged not meaningful, `effort <= 2`.
+- `reading_reflection.meaningful === false` exactly where the reading-reflection question (`q2` on a
+  standard preflight) has status `zero`. A yellow or green reflection with `meaningful: false` is a
+  grading error.
 - `overall_understanding` an integer in `[0,5]` or absent.
 - `objectives` an array; every entry has a non-empty `key` and an `understanding` in `[0,5]`.
 - `misconceptions` an array; every entry has non-empty `id`, `label` and `description`, and no

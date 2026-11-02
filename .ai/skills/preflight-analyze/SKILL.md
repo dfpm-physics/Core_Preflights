@@ -418,9 +418,43 @@ present and ignore the apology around it.
 
 This is the same judgment that already drives `reading_reflection.meaningful` in the `schema: 1`
 payload, and that field was **correctly `false`** on every case above while the grade said full
-credit. Keep the two consistent: **an answer judged not meaningful *because no reflection took
-place* is red.** The converse does not hold — a shallow but real reflection can be `meaningful:
-false` and still earn yellow.
+credit.
+
+#### `meaningful` and the Q2 color are ONE decision
+
+*(Changed 2026-11-02 at the course director's instruction. Until then this section said "a shallow
+but real reflection can be `meaningful: false` and still earn yellow", and that middle class is
+where the judgment drifted: on Fall 2026 PHYS 215 Lesson 28, section T3A, three reflections were
+judged not meaningful while one-line reflections no deeper were judged meaningful, and the
+instructor saw it at once. Term-wide, 715 reflections sat in that middle class.)*
+
+**`meaningful: false` if and only if Q2 is red.** There is no yellow-but-not-meaningful state.
+
+`meaningful` asks one question: **did a reflection take place?** It does not ask how deep, how
+long, or how new the reflection was. Depth is what `engagement` (0–5) is for.
+
+**`meaningful: false`** — no reflection happened:
+- blank, "nothing", "no questions", "N/A", "I don't know"
+- an obstacle and nothing else (could not find, does not have, did not do the reading)
+- copied text (the prompt, the book, or another source) with nothing of the student's own
+- not about physics at all
+
+**`meaningful: true`** — anything else, including all of these:
+- **one short, genuine sentence** about an idea, a result, a symbol, or an equation
+- **a reflection on a nearby reading** (an earlier lesson, a different section) — grade it normally,
+  add a note that points to this lesson's reading, and do not penalize it
+- **"this felt familiar"** or **"I'm not worried about this"**, when it names the concept — that is
+  a judgment about the reading, not an absence of one
+- **a question about the history or the people** in the reading (who a scientist was, or why a law
+  carries their name)
+
+Put the difference between a thin reflection and a rich one into `engagement` and `q2_effort`, never
+into `meaningful`. A one-line reflection is `meaningful: true` with `engagement` 1–2.
+
+**Check before writing:** for every student, `meaningful === false` must match a `zero` status on
+the reading-reflection question (`q2` on a standard preflight; resolve it by role, as the rest of
+this skill does, where a lesson places it elsewhere). A mismatch is a grading error — fix it before
+the write.
 
 **Feedback names where the reading is; it does not scold.** Rule 3 (every zero carries feedback)
 applies, and unlike the generic red string this one should answer the obstacle the student actually

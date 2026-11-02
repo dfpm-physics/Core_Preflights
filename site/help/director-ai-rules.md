@@ -78,6 +78,14 @@ there is something to regrade. A default full credit would not. Where a cadet re
 and reflected on *that*, the reflection is graded normally. *(Changed 11 August 2026, after the
 Fall `preflight-02` runs awarded the point to answers of this kind.)*
 
+**"Not a real attempt" and red are the same decision.** The AI judges a reading reflection "not
+meaningful" only when no reflection happened — blank, "nothing", an obstacle and nothing else,
+copied text, or nothing about physics — and exactly those are red. Any genuine reflection counts,
+however short, including one about a nearby reading or about the people in the reading; how deep it
+went goes into the hidden engagement rating instead. *(Changed 2 November 2026. Before that, a
+reflection could be yellow and still "not meaningful", and an instructor found the AI drawing that
+line in different places for answers of the same depth.)*
+
 **It never cites the book it grades against.** The AI is grounded in OpenStax; cadets in both
 courses read a Cengage text, numbered differently — the electrostatics they know as chapter 22 is
 OpenStax chapter 5. So feedback uses the physics and the vocabulary of the grounding text but never
