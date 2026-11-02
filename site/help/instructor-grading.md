@@ -400,6 +400,16 @@ picks still at the top — useful when you are looking for a particular student 
 to read aloud. Both hide names by default and both let you select responses and copy them for
 slides.
 
+**Why a panel's count can be lower than "Submitted".** Each panel says so in its heading.
+
+- *Reflections:* a reflection the AI judged was not a real attempt is left out of the AI picks and
+  the random sample. It is still there: **Show all** lists it last, dashed and tagged **AI: not
+  meaningful**. These are the same students as the **Reflection capped** count at the top of the
+  page.
+- *Free responses:* on a lesson with an interactive option, a student who did the interactive lesson
+  had no free-response question to answer. The heading says how many did, so the gap does not read
+  as missing work.
+
 **Select all shown** ticks every response currently on screen, and turns into **Clear selection**
 once they all are. It follows what is displayed, not what exists: in the sampled view that is the
 handful of cards in front of you, so reach for **Show all** first if you want the whole section.
@@ -408,10 +418,9 @@ not, so you can select first and decide about attribution afterwards.
 
 **Both panels fill as soon as students submit** — you do not have to wait for grading to read what
 the class wrote. What grading adds is the AI's reading of it: the **AI pick** quotes at the top of
-the reflections panel, and the flags and ratings elsewhere on this page. One consequence worth
-knowing — a reflection the AI later judges was not a real attempt drops out of the panel, so the
-count can fall slightly once grading lands. That is the filter doing its job, not responses going
-missing.
+the reflections panel, and the flags and ratings elsewhere on this page. Once grading lands, a
+reflection the AI judges was not a real attempt leaves the random sample and moves to the end of
+**Show all**, tagged. The total does not change.
 
 The AI panels above them — the readiness summary, the recommendation and the misconception bars —
 appear once the assignment has been graded *and* aggregated, which happens after the deadline for

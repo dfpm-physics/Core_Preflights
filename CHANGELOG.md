@@ -8,6 +8,44 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-02 — Casey Pellizzari via Claude
+
+### Report page: response panels now explain why their counts are lower than "Submitted"
+
+**What was reported.** A PHYS 215 instructor, Lesson 28 (Displacement Current), section T3A: the
+page showed **Submitted 18/18**, but **Show all 15** reading reflections and **Show all 16** free
+responses. She found no submission that was missing an answer.
+
+**What was true (live data, read over `prep_app_read`).** Nothing was lost.
+- 2 of the 18 did the **interactive** lesson. They had no written concept question, so they have no
+  free response. 18 − 2 = 16.
+- The AI judged 3 of the written reflections **not meaningful**. `reflOf()` in
+  `site/faculty/report.html` dropped those from the panel entirely, Show all included. 18 − 3 = 15.
+  They are the same 3 students as the page's ✎3 "Reflection capped" pill.
+- Across the whole lesson, this filter hid 72 of 363 reflections (20%). 12 of the 72 were already
+  published with full credit, and they stayed hidden.
+
+**What changed** (Casey's decision: keep the sample clean, make the full listing complete).
+- **Reflections:** a not-meaningful reflection still stays out of the AI picks and the random
+  sample. It now appears in **Show all**, listed last, dashed, and tagged **AI: not meaningful**.
+  The Show all count now equals everyone who wrote a reflection. The heading says
+  "· N judged not meaningful (in Show all)".
+- **Free responses:** the heading now says "· N did the interactive lesson (no free-response
+  question)" when any did.
+- `site/css/styles.css`: `.sr-quote.low` and `.sr-badge.low` (existing tokens only).
+- `site/help/instructor-grading.md`: new paragraph on why a panel's count can be lower than
+  "Submitted"; removed the sentence that said a not-meaningful reflection "drops out of the panel".
+  `reviewed` bumped for it and for `director-schema-reference.md` (flagged by the CSS edit; its
+  `.sf-*` classes are untouched).
+
+No data, schema or AI-skill change.
+
+**Verified:** Node only. The page's inline module passes `node --check`, and the changed panel
+functions were run under Node against synthetic rows shaped like T3A (13 meaningful, 3 not
+meaningful, 2 interactive): Show all 18 and 16, both headings correct, the sample never draws a
+not-meaningful card, a pre-grading cohort hides nothing, and an interactive-only lesson still has no
+free-response panel. **Not yet checked in a signed-in browser.**
+
 ## 2026-10-30 — Matthew Recker via Claude
 
 ### PHYS 310 Lesson 30, Nuclear Reactors — written and Gemini preflight, published

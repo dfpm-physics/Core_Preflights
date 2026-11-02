@@ -826,38 +826,40 @@
       // was already full for the same cohort. Both now fill on submission; what grading adds is
       // the AI's reading of the reflection and the showcase picks, not the reflection itself.
       //
-      // `meaningful === false` still excludes a student, and only ever where that judgment has
-      // actually been made. Before grading nothing has judged anyone, so nobody is filtered —
-      // which means the pool can shrink slightly once grading lands. That is the filter working,
-      // not the panel losing responses.
+      // A reflection the AI judged `meaningful === false` is kept OUT of the AI picks and the
+      // random sample, and kept IN the listing: it goes to `hidden`, which "Show all" lists last
+      // with a tag. Until 2026-11-02 it was dropped entirely, so "Show all 15" sat under
+      // "Submitted 18/18" with nothing saying where the other three were (a T3A instructor's
+      // report, PHYS 215 Lesson 28). The sample is still what you read aloud in class; the full
+      // listing is where you check that everyone is there.
       const reflOf = id => {
         const row = byId[id];
         if (!row) return null;
         const d = (row.report_data && typeof row.report_data === 'object') ? row.report_data : null;
         const rr = (d && d.reading_reflection && typeof d.reading_reflection === 'object') ? d.reading_reflection : null;
-        if (rr && rr.meaningful === false) return null;
         const text = (rr && rr.text) ? String(rr.text)
                    : (typeof row.reflection_response === 'string' ? row.reflection_response : '');
-        return text.trim() ? text.trim() : null;
+        return text.trim() ? { text: text.trim(), meaningful: !(rr && rr.meaningful === false) } : null;
       };
 
       // AI-picked showcase quotes — the aggregator stores only {student_id, section_id}; resolve the
       // verbatim text + name live from the already-loaded report_data + roster (never duplicated).
       const ai = (analysis && Array.isArray(analysis.selected_quotes) ? analysis.selected_quotes : [])
-        .map(q => { const id = String(q?.student_id); const text = reflOf(id), w = who[id]; return (text && w) ? { id, text, name: w.name || '—', section: w.section || '' } : null; })
+        .map(q => { const id = String(q?.student_id); const r = reflOf(id), w = who[id]; return (r && r.meaningful && w) ? { id, text: r.text, name: w.name || '—', section: w.section || '' } : null; })
         .filter(Boolean);
 
       // Random pool = every meaningful reflection in scope, minus the ones already shown as AI picks.
+      // `hidden` = the ones the AI judged not meaningful, for the full listing only.
       const aiIds = new Set(ai.map(q => q.id));
-      const pool = [];
+      const pool = [], hidden = [];
       rows.forEach(r => {
         const id = String(r.student_id);
         if (aiIds.has(id)) return;
-        const text = reflOf(id); if (!text) return;
+        const refl = reflOf(id); if (!refl) return;
         const w = who[id] || {};
-        pool.push({ id, text, name: w.name || '—', section: w.section || '' });
+        (refl.meaningful ? pool : hidden).push({ id, text: refl.text, name: w.name || '—', section: w.section || '' });
       });
-      return { ai, pool };
+      return { ai, pool, hidden };
     }
 
     /**
@@ -869,18 +871,23 @@
      * `row.free_response` is the verbatim answer, lifted onto the row by loadInteractionData().
      * A pure interactive taker has null there, so they simply do not appear — which is also why
      * an empty pool is the honest signal that this assignment has no free-response half.
+     *
+     * `noWritten` counts those interactive takers so the panel can SAY why its count is short of
+     * "Submitted". On a mixed lesson the gap otherwise reads as missing answers (2026-11-02).
      */
     function buildFreeResponses(rows, roster) {
       const who = whoOf(roster);
       const pool = [];
+      let noWritten = 0;
       rows.forEach(r => {
+        if (r.path === 'interactive') { noWritten++; return; }
         const text = typeof r.free_response === 'string' ? r.free_response.trim() : '';
         if (!text) return;
         const id = String(r.student_id);
         const w = who[id] || {};
         pool.push({ id, text, name: w.name || '—', section: w.section || '' });
       });
-      return { ai: [], pool };
+      return { ai: [], pool, hidden: [], noWritten };
     }
     function sampleN(arr, n) {
       const p = arr.slice(), out = [];
@@ -897,13 +904,16 @@
     //
     // Toggling names now re-renders (drawResponses) rather than unhiding, so the name only ever
     // enters the document when the instructor has actually asked for it.
-    function srCard(q, isAI, namesOn) {
+    // `isLow` marks a reflection the AI judged not meaningful. It only ever appears in "Show all".
+    function srCard(q, isAI, namesOn, isLow = false) {
       const attr = namesOn
         ? ` data-name="${esc(q.name)}" data-sec="${esc(q.section)}"`
         : ` data-sec="${esc(q.section)}"`;
-      return `<div class="sr-quote${isAI ? ' ai' : ''}" data-text="${esc(q.text)}"${attr}>
+      const badge = isAI ? '<span class="sr-badge">AI pick</span>'
+                  : isLow ? '<span class="sr-badge low">AI: not meaningful</span>' : '';
+      return `<div class="sr-quote${isAI ? ' ai' : ''}${isLow ? ' low' : ''}" data-text="${esc(q.text)}"${attr}>
         <span class="ck" aria-hidden="true"></span>
-        <div class="body">${isAI ? '<span class="sr-badge">AI pick</span>' : ''}
+        <div class="body">${badge}
           <div class="qt">${esc(q.text)}</div>
           ${namesOn ? `<div class="att">— ${esc(q.name)} · ${esc(q.section)}</div>` : ''}
         </div>
@@ -940,10 +950,10 @@
      * than the same code twice. Every id below is `${p}-…`; the CSS classes are shared, and the
      * click handlers scope themselves to `#${p}-list`.
      */
-    function responsePanel(p, { title, ai, pool, note, prompt = '' }) {
+    function responsePanel(p, { title, ai, pool, hidden = [], noWritten = 0, note, prompt = '' }) {
       // Absent, not empty. A panel with no cards says "we have nothing from this cohort", which on
       // the free-response side is indistinguishable from "this assignment had no written half".
-      if (!ai.length && !pool.length) { delete respStates[p]; return ''; }
+      if (!ai.length && !pool.length && !hidden.length) { delete respStates[p]; return ''; }
       // 3 AI picks + 5 ADDITIONAL random — the random count is fixed, not a remainder.
       //
       // This previously read `Math.max(0, 5 - ai.length)`, capping the panel at ~5 cards total, so
@@ -958,15 +968,16 @@
       // The sampled view is the teaching default (8 cards fit on a screen and in a class); reading
       // every response is a different task — grading, or looking for someone specific — and used
       // to require opening each student individually.
-      respStates[p] = { ai, pool, randN, sample: sampleN(pool, randN), namesOn: false, showAll: false };
-      const total = ai.length + pool.length;
+      // `hidden` never enters the sample — only the full listing, after the pool.
+      respStates[p] = { ai, pool, hidden, noWritten, randN, sample: sampleN(pool, randN), namesOn: false, showAll: false };
+      const total = ai.length + pool.length + hidden.length;
       return `<div class="lr-sec fw-panel" id="${p}-sec">
         <div class="lr-eyebrow">${esc(title)} <span class="dim" id="${p}-note">· ${esc(note(respStates[p]))}</span></div>
         ${prompt}
         <div class="sr-controls">
           <button class="switch" id="${p}-names" type="button" aria-pressed="false"><span class="track"><span class="knob"></span></span>Show names</button>
           <span class="spacer"></span>
-          ${pool.length > randN ? `<button class="tbtn" id="${p}-all" type="button" aria-pressed="false">Show all ${total}</button>` : ''}
+          ${pool.length + hidden.length > randN ? `<button class="tbtn" id="${p}-all" type="button" aria-pressed="false">Show all ${total}</button>` : ''}
           ${randN > 0 && pool.length > randN ? `<button class="tbtn" id="${p}-shuffle" type="button">↻ Shuffle random</button>` : ''}
           ${total > 1 ? `<button class="tbtn" id="${p}-sel" type="button" aria-pressed="false">Select all shown</button>` : ''}
           <button class="tbtn" id="${p}-copy" type="button">Copy selected</button>
@@ -976,14 +987,22 @@
     }
 
     /** The sub-heading each panel carries. Different sentences, because they are different claims. */
+    //
+    // Each panel also says why its count can be short of "Submitted" — the gap is what an
+    // instructor reads as missing work (2026-11-02). Reflections: the ones the AI judged not
+    // meaningful sit in "Show all" only. Free responses: interactive takers had no such question.
+    const lowClause = (st) => st.hidden.length
+      ? ` · ${st.hidden.length} judged not meaningful${st.showAll ? ', listed last' : ' (in Show all)'}` : '';
     const reflectionNote = (st) => st.showAll
-      ? `${st.ai.length} AI pick${st.ai.length === 1 ? '' : 's'} + all ${st.pool.length} reflections · select to copy for slides`
-      : `${st.ai.length ? `${st.ai.length} AI pick${st.ai.length === 1 ? '' : 's'}${st.randN ? ' + ' : ''}` : ''}${st.randN ? `${st.randN} random` : ''} · select to copy for slides`;
+      ? `${st.ai.length} AI pick${st.ai.length === 1 ? '' : 's'} + all ${st.pool.length + st.hidden.length} reflections${lowClause(st)} · select to copy for slides`
+      : `${st.ai.length ? `${st.ai.length} AI pick${st.ai.length === 1 ? '' : 's'}${st.randN ? ' + ' : ''}` : ''}${st.randN ? `${st.randN} random` : ''}${lowClause(st)} · select to copy for slides`;
     // No "AI pick" clause anywhere in this one — there are none, and saying "0 AI picks" would
     // imply the aggregator looked and declined rather than that it was never asked.
+    const interactiveClause = (st) => st.noWritten
+      ? ` · ${st.noWritten} did the interactive lesson (no free-response question)` : '';
     const freeNote = (st) => st.showAll
-      ? `all ${st.pool.length} responses · select to copy for slides`
-      : `${st.randN} of ${st.pool.length}, at random · select to copy for slides`;
+      ? `all ${st.pool.length} responses${interactiveClause(st)} · select to copy for slides`
+      : `${st.randN} of ${st.pool.length}, at random${interactiveClause(st)} · select to copy for slides`;
 
     /**
      * Both panels, in reading order: what they made of the reading, then what they made of the
@@ -1043,9 +1062,11 @@
         : null;
       // AI picks stay pinned on top in both modes — "show all" widens the sample, it does not
       // discard the argued-for showcase quotes or reorder them into the crowd.
+      // The not-meaningful reflections come last, tagged, and only in the full listing.
       const body = st.showAll ? st.pool : st.sample;
       list.innerHTML = st.ai.map(q => srCard(q, true, st.namesOn)).join('')
-        + body.map(q => srCard(q, false, st.namesOn)).join('');
+        + body.map(q => srCard(q, false, st.namesOn)).join('')
+        + (st.showAll ? st.hidden.map(q => srCard(q, false, st.namesOn, true)).join('') : '');
       if (sel) list.querySelectorAll('.sr-quote').forEach(c => {
         if (sel.has(c.dataset.text)) c.classList.add('sel');
       });
@@ -1075,7 +1096,7 @@
         st.showAll = !st.showAll;
         allBtn.setAttribute('aria-pressed', String(st.showAll));
         allBtn.classList.toggle('on', st.showAll);
-        allBtn.textContent = st.showAll ? `Show sample` : `Show all ${st.ai.length + st.pool.length}`;
+        allBtn.textContent = st.showAll ? `Show sample` : `Show all ${st.ai.length + st.pool.length + st.hidden.length}`;
         // Shuffling a full listing is meaningless — hide it rather than leave a dead control.
         const sh = document.getElementById(`${p}-shuffle`);
         if (sh) sh.hidden = st.showAll;
