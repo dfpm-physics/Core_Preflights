@@ -7,11 +7,13 @@
 // client is enough: a 400 means the query is malformed, and rows coming back empty is just
 // RLS doing its job. That distinction is what makes this a shape test rather than a data test.
 
+import { readFileSync } from 'node:fs';
 import { check, section, anonClient } from './harness.mjs';
 import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT, ENROLLMENT_JOIN,
   SUBMISSION_SELECT_STUDENT, GRADE_SELECT_STUDENT,
   STAFF_SELECT, ENROLLMENT_SELECT,
+  DASH_SUBMISSION_SELECT, DASH_GRADE_SELECT, PRESENCE_SUBMISSION_SELECT, ASSESSMENT_KEYS,
 } from '../../site/js/schema.js';
 
 section('PostgREST projections (shape only — RLS empties the rows)');
@@ -35,6 +37,34 @@ await shapeOk('SUBMISSION_SELECT on submissions', () =>
 
 await shapeOk('GRADE_SELECT on grades', () =>
   db.from('grades').select(GRADE_SELECT).in('enrollment_id', [NIL]));
+
+// The whole-term pair (home page + Report lesson list, 2026-11-03). Shape first, then the
+// property that makes them worth having: no report markdown, no written answers, no scores.
+await shapeOk('DASH_SUBMISSION_SELECT on submissions', () =>
+  db.from('submissions').select(DASH_SUBMISSION_SELECT).in('enrollment_id', [NIL]));
+await shapeOk('DASH_GRADE_SELECT on grades', () =>
+  db.from('grades').select(DASH_GRADE_SELECT).in('enrollment_id', [NIL]));
+await shapeOk('PRESENCE_SUBMISSION_SELECT on submissions', () =>
+  db.from('submissions').select(PRESENCE_SUBMISSION_SELECT).in('enrollment_id', [NIL]));
+check('the whole-term selects carry no report_markdown',
+      ![DASH_SUBMISSION_SELECT, PRESENCE_SUBMISSION_SELECT].some(s => s.includes('report_markdown')));
+check('…no bare content or diagnostic column (only picked keys)',
+      !/[(,]\s*(content|diagnostic)\s*[,)]/.test(DASH_SUBMISSION_SELECT + ',' + DASH_GRADE_SELECT));
+check('…and no question_scores', !DASH_GRADE_SELECT.includes('question_scores'));
+
+// THE CONTRACT: every key summarizeReports() reads from a payload must be in ASSESSMENT_KEYS, or
+// the home page reads it as absent with nothing reporting it. Read from the shipped source.
+{
+  const src = readFileSync(new URL('../../site/js/faculty-rollup.js', import.meta.url), 'utf8');
+  const start = src.indexOf('export function summarizeReports(');
+  const rest = src.slice(start + 1);
+  const next = rest.search(/\n(export )?(async )?function /);
+  const body = src.slice(start, next < 0 ? undefined : start + 1 + next);
+  const read = [...new Set([...body.matchAll(/\bd\.([a-z_]+)/g)].map(m => m[1]))].sort();
+  const missing = read.filter(k => !ASSESSMENT_KEYS.includes(k));
+  check(`ASSESSMENT_KEYS covers every key summarizeReports reads (${read.length})`,
+        start >= 0 && read.length > 5 && !missing.length, missing.join(', '));
+}
 
 // The student pair, which must parse AND must not name the diagnostic columns. The second half is
 // the whole point of them existing, and a projection test that only checked they parse would pass

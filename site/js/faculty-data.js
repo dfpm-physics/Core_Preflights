@@ -15,6 +15,7 @@
 import { db } from './supabase.js';
 import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT,
+  DASH_SUBMISSION_SELECT, DASH_GRADE_SELECT, unpackDashSubmission, unpackDashGrade,
   shapeOffering, shapeOfferings, withResolvedDue, offeringSections,
   shapeSubmission, effectiveDue, deriveStatus, lessonNumber, chunked, fetchAll,
   effortSignal, writtenSignals, writtenReport,
@@ -25,6 +26,10 @@ import { applyFlagOverrides, overridesOf } from './faculty-rollup.js';
 // carries the grant/revocation provenance the extensions REPORT is about; a status calculation
 // needs the date and nothing else. Same shape faculty-gradebook.js fetches, for the same reason.
 const DASH_EXTENSION_SELECT = 'enrollment_id,assignment_offering_id,extended_due_at';
+
+// Enrollments per request on the whole-term reads. Smaller than schema.js's CHUNK on purpose:
+// the chunks now run in parallel, so more and smaller chunks mean shorter chains of pages.
+const DASH_CHUNK = 100;
 
 const rowKey = (enrollmentId, offeringId) => `${enrollmentId}|${offeringId}`;
 
@@ -252,18 +257,24 @@ export async function loadFacultyDashboard(ctx) {
 
   // 4) All work, grades and extensions for the in-scope roster, in one pass each. Chunked so the
   //    .in() URL stays under GET length limits on a large course.
+  //
+  //    The DASH_ selects carry only the keys the summary reads (schema.js, "The whole-term
+  //    pair"). The chunks run at the same time: fetchAll pages one after another, so one big
+  //    chunk is a long chain of round trips, and several small chunks in parallel are short ones.
+  //    Before 2026-11-03 a PHYS 110 director's home page made about 13 trips in a row here, at
+  //    about 2 MB each.
+  const parts = await Promise.all(chunked(enrollmentIds, DASH_CHUNK).map(ids => Promise.all([
+    fetchAll(() => db.from('submissions').select(DASH_SUBMISSION_SELECT).in('enrollment_id', ids)),
+    fetchAll(() => db.from('grades').select(DASH_GRADE_SELECT).in('enrollment_id', ids)),
+    // A revoked extension is not an extension — the row survives revocation so the director's
+    // report can still count it, so the filter is the caller's job. See effectiveDue().
+    fetchAll(() => db.from('extensions').select(DASH_EXTENSION_SELECT).in('enrollment_id', ids)
+      .is('revoked_at', null)),
+  ])));
   const submissions = [], grades = [], extensions = [];
-  for (const ids of chunked(enrollmentIds)) {
-    const [s, g, x] = await Promise.all([
-      fetchAll(() => db.from('submissions').select(SUBMISSION_SELECT).in('enrollment_id', ids)),
-      fetchAll(() => db.from('grades').select(GRADE_SELECT).in('enrollment_id', ids)),
-      // A revoked extension is not an extension — the row survives revocation so the director's
-      // report can still count it, so the filter is the caller's job. See effectiveDue().
-      fetchAll(() => db.from('extensions').select(DASH_EXTENSION_SELECT).in('enrollment_id', ids)
-        .is('revoked_at', null)),
-    ]);
-    submissions.push(...(s.data || []).map(shapeSubmission));
-    grades.push(...(g.data || []));
+  for (const [s, g, x] of parts) {
+    submissions.push(...(s.data || []).map(r => shapeSubmission(unpackDashSubmission(r))));
+    grades.push(...(g.data || []).map(unpackDashGrade));
     extensions.push(...(x.data || []));
   }
 

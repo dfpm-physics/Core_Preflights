@@ -20,7 +20,7 @@
       "doc": "site/help/student-getting-started.md",
       "kind": "help",
       "tier": "student",
-      "reviewed": "2026-10-28",
+      "reviewed": "2026-11-03",
       "sources": [
         ".ai/instructions/PROJECT.md",
         ".ai/instructions/CORE.md",
@@ -56,7 +56,7 @@
       "doc": "site/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-11-02",
+      "reviewed": "2026-11-03",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
@@ -159,7 +159,7 @@
       "doc": "site/help/director-course-structure.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-08-24",
+      "reviewed": "2026-11-03",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/003_term_calendar.sql",
@@ -176,7 +176,7 @@
       "doc": "site/help/director-schema-reference.md",
       "kind": "help",
       "tier": "director",
-      "reviewed": "2026-11-02",
+      "reviewed": "2026-11-03",
       "sources": [
         "supabase/migrations/app/001_core_model.sql",
         "supabase/migrations/app/002_rls.sql",

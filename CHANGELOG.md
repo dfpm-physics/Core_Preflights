@@ -8,6 +8,56 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-03 — Casey Pellizzari via Claude
+
+### The faculty home page and the Report page downloaded the whole term's text on every visit
+
+**What was reported.** Casey: the site is slow, and new pages load slowly.
+
+**What was true.** The server, the CDN libraries and the database were all fast (static files
+~0.1 s, a REST round trip ~0.1 s, the RLS policies ~0.1 s per 1,000 rows, database 118 MB with a
+99.99% cache hit rate). The time went into two loaders that read **every lesson of the term** for
+every cadet in scope with the full `SUBMISSION_SELECT` / `GRADE_SELECT`:
+
+| Page | Loader | Downloaded per visit, PHYS 110 director (PHYS 215) | Used |
+|---|---|---|---|
+| Faculty home | `loadFacultyDashboard` (`faculty-data.js`) | ~43 MB (~32 MB) | 13 schema:1 keys per row |
+| Report, lesson list | `loadManager` (`faculty-rollup.js`) | ~25 MB (~18 MB) | whether work exists |
+
+Most of it was each interactive report's markdown, every written answer, every `question_scores`,
+and the AI's prose (`ai_summary`, `effort_rationale`, …) — none of which either page renders. It
+was fetched in pages of 1,000 rows, one after another, so a PHYS 110 director's home page made
+about 13 round trips in a row at ~2 MB each. The cost grows with every lesson graded, which is why
+it showed up in November and not in August. `faculty-gradebook.js` had already named this trap
+("WHY NOT loadFacultyDashboard()") and kept its own narrow selects; the home page never got the
+same treatment.
+
+**What changed.** Frontend only — no schema, data, RLS or AI-skill change.
+- `schema.js`: new `DASH_SUBMISSION_SELECT` / `DASH_GRADE_SELECT`, which pick single jsonb keys
+  (`alias:content->key`) instead of whole columns, and `unpackDashSubmission` / `unpackDashGrade`,
+  which rebuild the objects the existing helpers read. The key list (`ASSESSMENT_KEYS`,
+  `DIAGNOSTIC_KEYS`) is every key `summarizeReports` reads, plus what `writtenReport`,
+  `writtenSignals` and `overridesOf` read. New `PRESENCE_SUBMISSION_SELECT` for the lesson list.
+- `faculty-data.js` (home page) and `faculty-rollup.js` (`loadManager`) use them, and run their
+  chunks of 100 enrollments **in parallel** instead of one 300-enrollment chunk after another.
+- Estimated from the live data: home page ~43 → ~21 MB raw for a PHYS 110 director, with far
+  shorter chains of requests; Report lesson list ~25 → under 5 MB.
+
+**What stays the same.** Every number on both pages. The per-lesson Report view, the Grade page and
+the per-student page still load their one lesson (or one cadet) in full, as before.
+
+**Tests.** `test-dashboard-rows.mjs` builds the home page rows both ways from the same stored values
+and requires identical rows and an identical `summarizeReports` result; removing one key from the
+list was confirmed to fail it. `test-rest.mjs` checks the three new selects against the live schema
+and pins that the summary reads no key the list leaves out. Also fixed a stale check in
+`test-rollup.mjs` that still expected yesterday's old rule (a not-meaningful reflection is now
+tagged and kept for Show all, not dropped). `test-nav.mjs` fails on HEAD as well, on menu items
+added in August — not touched here.
+
+**Not verified:** a signed-in browser load of either page. The checks were Node only (offline
+suites + the anonymous shape test); nobody signed in. Open the home page and the Report page once
+after this lands and confirm the numbers look as they did.
+
 ## 2026-11-02 — Casey Pellizzari via Claude
 
 ### Written grading: "not meaningful" now means "no reflection happened", and always goes with red

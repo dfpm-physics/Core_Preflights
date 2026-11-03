@@ -41,6 +41,79 @@ export const GRADE_SELECT =
   'id,enrollment_id,assignment_offering_id,submission_id,points_earned,points_possible,' +
   'effort,question_scores,diagnostic,source,is_finalized,graded_by,graded_at,updated_at';
 
+/* ── The whole-term pair. Same tables, only what a cohort summary reads. ────────────────────
+ *
+ * Two pages read EVERY lesson of the term for every cadet in scope: the faculty home page
+ * (loadFacultyDashboard) and the Report page's lesson list (loadManager). With the two selects
+ * above they downloaded every interactive report's markdown, every written answer, every
+ * question_scores and all of the AI's prose. Measured 2026-11-03: about 33 MB for a PHYS 110
+ * director and 25 MB for PHYS 215, fetched again on every visit, and growing every lesson. Neither
+ * page renders any of that text. The gradebook found the same trap first (faculty-gradebook.js,
+ * "WHY NOT loadFacultyDashboard()").
+ *
+ * So these project single keys out of the jsonb (`alias:column->key`), and unpackDashSubmission()
+ * / unpackDashGrade() rebuild the object the helpers expect.
+ *
+ * THE KEY LIST IS THE CONTRACT. ASSESSMENT_KEYS is every key summarizeReports()
+ * (faculty-rollup.js) reads from a schema:1 payload, plus `schema` for writtenReport().
+ * DIAGNOSTIC_KEYS adds what writtenSignals() and overridesOf() read. A key left off reads as
+ * absent on the home page, silently. If summarizeReports starts to read a new key, add it here.
+ */
+export const ASSESSMENT_KEYS = Object.freeze([
+  'schema', 'effort', 'overall_understanding', 'self_rated_understanding', 'objectives',
+  'misconceptions', 'reading_reflection', 'reading_minutes', 'honor', 'flags',
+  'completed', 'duration_min', 'message_count',
+]);
+export const DIAGNOSTIC_KEYS = Object.freeze([
+  ...ASSESSMENT_KEYS, 'q2_effort', 'q3_understanding', 'flag_overrides',
+]);
+const pickKeys = (prefix, column, keys) => keys.map(k => `${prefix}${k}:${column}->${k}`).join(',');
+
+export const DASH_SUBMISSION_SELECT =
+  'id,enrollment_id,assignment_offering_id,chosen_activity_id,status,committed_at,' +
+  'unlocked_by,unlocked_at,updated_at,' +
+  `submission_activities(id,activity_id,is_final,updated_at,${pickKeys('c__', 'content', ASSESSMENT_KEYS)})`;
+
+export const DASH_GRADE_SELECT =
+  'id,enrollment_id,assignment_offering_id,submission_id,points_earned,points_possible,' +
+  `effort,source,is_finalized,updated_at,${pickKeys('d__', 'diagnostic', DIAGNOSTIC_KEYS)}`;
+
+/** Did work arrive, and for which activity? All the Report page's lesson list counts. */
+export const PRESENCE_SUBMISSION_SELECT =
+  'id,enrollment_id,assignment_offering_id,status,submission_activities(id,activity_id)';
+
+/** Put `alias:column->key` projections back into one object. Null when no key is present, which
+ *  every reader already treats the same as a row with no assessment. */
+export function unpackPicked(row, prefix, keys) {
+  let out = null;
+  for (const k of keys) {
+    const v = row?.[prefix + k];
+    if (v !== undefined && v !== null) (out ||= {})[k] = v;
+  }
+  return out;
+}
+
+/** A DASH_SUBMISSION_SELECT row, reshaped so shapeSubmission() reads it like a full one. */
+export function unpackDashSubmission(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    submission_activities: (row.submission_activities || []).map(sa => ({
+      id: sa.id, activity_id: sa.activity_id, is_final: sa.is_final, updated_at: sa.updated_at,
+      content: unpackPicked(sa, 'c__', ASSESSMENT_KEYS),
+    })),
+  };
+}
+
+/** A DASH_GRADE_SELECT row, with `diagnostic` rebuilt from its picked keys. */
+export function unpackDashGrade(row) {
+  if (!row) return row;
+  const out = {};
+  for (const [k, v] of Object.entries(row)) if (!k.startsWith('d__')) out[k] = v;
+  out.diagnostic = unpackPicked(row, 'd__', DIAGNOSTIC_KEYS);
+  return out;
+}
+
 /* ── The student-side pair. Same tables, deliberately less. ─────────────────────────────────
  *
  * The two constants above are FACULTY-shaped and were being used by the student loaders too,

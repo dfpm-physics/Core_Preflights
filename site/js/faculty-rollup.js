@@ -70,7 +70,7 @@
 
 import { db } from './supabase.js';
 import {
-  OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT,
+  OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT, PRESENCE_SUBMISSION_SELECT,
   shapeOfferings, withResolvedDue, offeringSections,
   shapeOffering, shapeSubmission, artifactUrlOf, chunked, fetchAll,
   int05, writtenSignals, writtenReport, effortSignal, FREE_RESPONSE_KEY, FREE_RESPONSE_LABEL,
@@ -156,10 +156,15 @@ export async function loadManager(ctx) {
   // ONE query for every submission in scope, not one per lesson. The legacy page issued a
   // report query per interaction inside a Promise.all — N+1 by construction, and the reason
   // it slowed as the term filled up. Everything reaches through the offering now.
+  //
+  // PRESENCE ONLY. This list counts who has done each lesson and nothing else. Until 2026-11-03
+  // it used SUBMISSION_SELECT, which brought every report's markdown and every written answer of
+  // the term with it — about 17 MB for a PHYS 110 director — to answer a yes/no question. The
+  // chunks also run in parallel now (see DASH_CHUNK in faculty-data.js for why that helps).
   const submissions = [];
-  for (const ids of chunked(enrollments.map(e => e.id))) {
-    const { data, error } = await fetchAll(() =>
-      db.from('submissions').select(SUBMISSION_SELECT).in('enrollment_id', ids));
+  const chunkResults = await Promise.all(chunked(enrollments.map(e => e.id), 100).map(ids =>
+    fetchAll(() => db.from('submissions').select(PRESENCE_SUBMISSION_SELECT).in('enrollment_id', ids))));
+  for (const { data, error } of chunkResults) {
     // Same rule as above, and it matters more on a chunked read: a course large enough to need a
     // second chunk would drop that chunk's submissions silently, and every completion count on
     // the page would be understated by exactly the students in it — wrong, but plausible.

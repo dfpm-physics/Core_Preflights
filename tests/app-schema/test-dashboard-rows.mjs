@@ -279,4 +279,96 @@ const legacy = mixedRows({ diagnostic: { q2_effort: 3, q3_understanding: 2 } });
 eq('a q2/q3-only diagnostic contributes no report_data',
    legacy.find(r => r.enrollmentId === ENR_W).report_data, null);
 
+/* ══ 6. The narrow whole-term selects give the SAME numbers ═══════════════════
+ *
+ * WHY THIS EARNS ITS PLACE
+ *   On 2026-11-03 the home page stopped downloading whole jsonb columns (about 33 MB for a PHYS 110
+ *   director) and started picking single keys out of them (schema.js, "The whole-term pair"). The
+ *   risk is quiet: a key the summary reads but the select leaves out shows as "no data", with
+ *   nothing failing. So: build the rows both ways, from the same stored values, and require the
+ *   summaries to be identical. The raw rows below are what PostgREST returns for each select —
+ *   a picked key that is absent comes back as null.
+ */
+
+section('schema.js — the narrow dashboard selects summarize identically to the full ones');
+
+const S = await import('../../site/js/schema.js');
+
+const fullContent = {
+  schema: 1, effort: 4, overall_understanding: 3, self_rated_understanding: 4,
+  objectives: [{ key: 'o1', label: 'Gauss', understanding: 3, confidence: 4 }],
+  misconceptions: [{ id: 'flux-area', label: 'Flux is area', severity: 'major',
+                     description: 'x', evidence: 'y' }],
+  reading_reflection: { meaningful: false, engagement: 2, sentiment: 'neutral', topics: ['gauss'] },
+  reading_minutes: 25, honor: { status: 'none' }, flags: { needs_follow_up: true, notable: true },
+  completed: true, duration_min: 12, message_count: 18,
+  // Prose the home page never reads — the reason the narrow select exists.
+  ai_summary: 'long prose', key_strengths: ['a'], recommended_review: ['b'], effort_rationale: 'c',
+  timing: {}, producer: {}, model: 'm', transport: 't',
+};
+const fullDiag = {
+  ...fullContent, q2_effort: 3, q3_understanding: 2, effort_override: { by: 'u' },
+  flag_overrides: { needs_follow_up: { cleared: true, by: 'u-1', at: PAST } },
+};
+const picked = (prefix, obj, keys) =>
+  Object.fromEntries(keys.map(k => [prefix + k, obj[k] === undefined ? null : obj[k]]));
+
+const rawSubFull = (id, enr, actId, content) => ({
+  id, enrollment_id: enr, assignment_offering_id: OFF, chosen_activity_id: null,
+  status: 'committed', committed_at: PAST, unlocked_by: null, unlocked_at: null, updated_at: PAST,
+  submission_activities: [{ id: `${id}-a`, activity_id: actId, content,
+    report_markdown: '# long report', payload_bytes: 999, is_final: true, updated_at: PAST }],
+});
+const rawSubDash = (id, enr, actId, content) => {
+  const f = rawSubFull(id, enr, actId, content);
+  const sa = f.submission_activities[0];
+  return { ...f, submission_activities: [{ id: sa.id, activity_id: sa.activity_id,
+    is_final: sa.is_final, updated_at: sa.updated_at,
+    ...picked('c__', content || {}, S.ASSESSMENT_KEYS) }] };
+};
+const rawGradeFull = (enr, diagnostic) => ({
+  id: `g-${enr}`, enrollment_id: enr, assignment_offering_id: OFF, submission_id: null,
+  points_earned: 2, points_possible: 2, effort: null, question_scores: { q2: { score: 1 } },
+  diagnostic, source: 'ai', is_finalized: false, graded_by: null, graded_at: PAST, updated_at: PAST,
+});
+const rawGradeDash = (enr, diagnostic) => {
+  const { question_scores, diagnostic: _d, graded_by, graded_at, ...rest } = rawGradeFull(enr, diagnostic);
+  return { ...rest, ...picked('d__', diagnostic || {}, S.DIAGNOSTIC_KEYS) };
+};
+
+const ENR_Q = 'e-q';   // a third student: q2/q3 pair only, no schema:1
+const buildBoth = (narrow) => {
+  const sub = narrow ? (...a) => S.shapeSubmission(S.unpackDashSubmission(rawSubDash(...a)))
+                     : (...a) => S.shapeSubmission(rawSubFull(...a));
+  const grade = narrow ? (e, d) => S.unpackDashGrade(rawGradeDash(e, d)) : rawGradeFull;
+  return D.buildLessonRows({
+    submissions: [
+      sub('s-w', ENR_W, WRITTEN.id, { q1: '20 min', q2: 'a reflection', q3: 'an answer' }),
+      sub('s-i', ENR_I, INTER.id, fullContent),
+      sub('s-q', ENR_Q, WRITTEN.id, { q2: 'x', q3: 'y' }),
+    ],
+    lessons, offerings: [mixedOffering()],
+    grades: [grade(ENR_W, fullDiag), grade(ENR_I, fullContent), grade(ENR_Q, { q2_effort: 4, q3_understanding: 1 })],
+    extensions: [],
+    sectionOf: { [ENR_W]: SEC_M, [ENR_I]: SEC_M, [ENR_Q]: SEC_M },
+    studentOf: { [ENR_W]: 3009999998, [ENR_I]: 3009999997, [ENR_Q]: 3009999996 },
+    now: NOW,
+  })[OFF];
+};
+const fullRows = buildBoth(false), dashRows = buildBoth(true);
+// Key order differs (picked keys come back in list order), so compare with keys sorted.
+const stable = v => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x))
+  ? Object.fromEntries(Object.keys(x).sort().map(key => [key, x[key]])) : x);
+const keysOnly = r => ({ ...r, report_data: S.unpackPicked(
+  Object.fromEntries(Object.entries(r.report_data || {}).map(([k, v]) => ['k_' + k, v])),
+  'k_', S.ASSESSMENT_KEYS) });
+eq('same rows, field by field (report_data compared on the keys the summary reads)',
+   stable(dashRows.map(keysOnly)), stable(fullRows.map(keysOnly)));
+eq('same summary, field by field',
+   stable(R.summarizeReports(dashRows)), stable(R.summarizeReports(fullRows)));
+check('the narrow rows really are narrow (no prose reached the row)',
+      !JSON.stringify(dashRows).includes('long prose'));
+eq('a picked row with no keys unpacks to null, like a missing column',
+   S.unpackPicked({ c__effort: null }, 'c__', S.ASSESSMENT_KEYS), null);
+
 summary();

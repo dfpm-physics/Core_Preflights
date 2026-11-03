@@ -1118,7 +1118,14 @@ check('…before any grade is consulted',
 check('report.html falls back to it when there is no schema:1 assessment yet',
       /reflOf[\s\S]{0,700}?row\.reflection_response/.test(reportSrc));
 // The quality filter survives the fallback, and only ever applies where a judgment was made.
-check('…and still drops a reflection the AI judged not meaningful',
-      /reflOf[\s\S]{0,700}?meaningful === false[\s\S]{0,60}?return null/.test(reportSrc));
+// Since 2026-11-02 (edf38db) a not-meaningful reflection is TAGGED, not dropped: it stays out of
+// the AI picks and the random sample, and Show all lists it last. Dropping it made the panel count
+// fall below "Submitted" with nothing saying why (Lt Col Howard's T3A report).
+check('…and still tags a reflection the AI judged not meaningful',
+      /reflOf[\s\S]{0,700}?const low = [^;]*meaningful === false/.test(reportSrc));
+check('…keeps it out of the AI picks',
+      /r && !r\.low && w/.test(reportSrc));
+check('…and out of the random sample, into the Show-all list only',
+      /refl\.low \? hidden : pool/.test(reportSrc));
 
 process.exitCode = summary() ? 0 : 1;
