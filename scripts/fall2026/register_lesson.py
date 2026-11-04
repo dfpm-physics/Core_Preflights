@@ -897,6 +897,93 @@ PLAN = {
             },
         ],
     },
+    ("phys-310", 31): {
+        "assignment_slug": "lesson-31",
+        "kind_id": "preflight",
+        "title": "Lesson 31 Preflight -- Fuel Cycle: Isotope Separation, Waste",
+        "position": 31,
+        "points_possible": 3,
+        "grading_mode": "points",
+        "switch_policy": "lock_on_commit",
+        "is_published": False,          # registered as a draft; published separately on 2026-11-04
+                                        # at the course director's explicit instruction
+        "opens_at": None,               # NULL selects the rolling 7-day release window
+        # 0800 America/Denver on the lesson day, the shape lessons 16 to 30 carry. Thu 5 Nov is
+        # "T31" and this course's one section (T3A) is a T-day section. MST since Sun 1 Nov 2026,
+        # so 0800 local is 15:00Z.
+        "due_at": "2026-11-05 14:59:59+00",   # Thu 5 Nov 07:59:59 MST
+        "day_key": "T",                 # this course's one section is a T-day section
+        "interactive_title": "Fuel Cycle: Isotope Separation, Waste",
+        # Read from the artifact source's INTERACTION_ID, never retyped. The source was re-aimed to
+        # the instructor's deck on 2026-11-04 and the slug deliberately did NOT move -- it had never
+        # been registered, so no cadet has a report under it.
+        "interactive_slug": "phys310-fuel-cycle-isotope-separation-waste-9277e5a0",
+        # GEMINI ROUTE, as for lessons 25, 27, 29 and 30. The claude.ai artifact published
+        # 2026-08-20 has no [DECK] block.
+        "artifact_url": "https://dfpm-physics.github.io/Core_Preflights/site/student/"
+                        "backup.html?i=phys310-fuel-cycle-isotope-separation-waste-9277e5a0&go=1",
+        "written_slug": "phys-310-lesson-31-written-9310bafb",
+        "written_role": "graded",
+        "interactive_role": "graded",
+        "reference_pdf": None,
+        "reference_pages": None,
+        # One free-response question beyond the two defaults, worth the remaining 2 points. Written
+        # against the instructor's deck (Physics-310-2026-Lesson-29-Fuel-Cycle.pptx, taught as lesson
+        # 31): (a) is the Conversion and Review slides, (b) is the Separation Factor, Gaseous
+        # Diffusion and Gas Centrifuge slides, and (c) is Steps 6 to 8b. None of it uses the deck's
+        # two board problems (the natural and 4.5 percent abundance ratios, and the stage count at
+        # alpha = 1.04), which are the class's to work, and no part asks for a number to be computed.
+        "questions": [
+            {
+                "id": "q3",
+                "role": "free_response",
+                "text": "(a) U-235 and U-238 are the same element, so no chemical reaction can "
+                        "separate them. What property is left to separate them by, and why is the "
+                        "uranium turned into UF6 before it is enriched? "
+                        "(b) One gaseous-diffusion stage multiplies the abundance ratio by only "
+                        "about 1.003. Explain why that means hundreds of stages are needed to go "
+                        "from natural uranium to reactor fuel, not about ten. Then explain why a gas "
+                        "centrifuge plant needs far fewer stages. You do not need to calculate a "
+                        "stage count. "
+                        "(c) Fuel that comes out of a reactor is called \"spent\", but it still "
+                        "contains a lot of uranium. What does reprocessing do with spent fuel, and "
+                        "what is the main drawback that makes it controversial?",
+                "type": "free_response",
+                "points": 2,
+                "figure_url": "",
+                "correct_answer": "",
+                "expected_response":
+                    "(a) Mass: the isotopes differ by three neutrons, and every enrichment method "
+                    "exploits that mass difference (speed in diffusion, wall-versus-center in a "
+                    "centrifuge, orbit radius in a calutron). Enrichment methods need a gas, and "
+                    "UF6 is a gas at a low temperature (it sublimes at 56.5 C) -- yellowcake is a "
+                    "solid. Fluorine has only one stable isotope, so all of the mass difference "
+                    "between two UF6 molecules (349 against 352) comes from the uranium. "
+                    "(b) Each stage MULTIPLIES the abundance ratio by alpha (R' = alpha R, so "
+                    "R_P = alpha^S R_F); it does not add a fixed percentage. A factor of 1.003 per "
+                    "stage has to be applied hundreds of times (the class slides say more than 600) "
+                    "to raise the ratio several-fold. A centrifuge stage has a much larger alpha "
+                    "(about 1.01 to over 1.10), so far fewer stages do the same job (about 50). "
+                    "Better: diffusion depends on the square root of the mass RATIO, which is "
+                    "barely above 1, while a centrifuge works on the mass DIFFERENCE. "
+                    "(c) Reprocessing chemically separates the uranium, the plutonium and the "
+                    "fission-product waste. The uranium can be re-enriched, or mixed with plutonium "
+                    "oxide to make mixed-oxide (MOX) fuel, which reduces what must be disposed of "
+                    "as waste. The drawback is that separated plutonium can be used to make weapons "
+                    "(proliferation); cost is a second concern. "
+                    "GRADING: full credit in (a) for 'mass' plus 'enrichment needs a gas and UF6 is "
+                    "one'; do not require the fluorine point or any number. Full credit in (b) for "
+                    "'the factor multiplies, so it takes many stages' plus 'the centrifuge has a "
+                    "bigger separation factor'; do not require the formula, the stage counts or "
+                    "the ratio-versus-difference reason. Full credit in (c) for 'separate U and Pu "
+                    "to reuse as fuel' plus 'the plutonium can be used for weapons'. A cadet who "
+                    "says 0.43 or 0.3 percent is ADDED at each stage has the misconception this "
+                    "question exists to find: flag it, do not zero it. A cadet who says the "
+                    "barrier is a filter that blocks the bigger molecule has the second: flag it. "
+                    "A cadet who says spent fuel is used up has the third: flag it.",
+            },
+        ],
+    },
 }
 
 

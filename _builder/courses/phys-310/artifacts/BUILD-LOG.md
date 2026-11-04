@@ -1955,27 +1955,33 @@ by name**, with the void coefficient's sign repaired in a sentence rather than r
 and the misconception most worth attacking (pressure versus temperature) is exactly where inventing
 one would be tempting.
 
-### Lesson 32 — Fuel Cycle: Isotope Separation, Waste
+### Lesson 31 — Fuel Cycle: Isotope Separation, Waste
 
 | | |
 |---|---|
 | **File** | [`phys310_preflight_fuel_cycle_isotope_separation_waste.jsx`](phys310_preflight_fuel_cycle_isotope_separation_waste.jsx) |
 | **Registration slug** (`#i=` / `id=`) | `phys310-fuel-cycle-isotope-separation-waste-9277e5a0` |
-| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/c2f853e9-b4a4-4811-b130-6f0fec6345ad |
+| **Published** | 2026-08-20 — https://claude.ai/public/artifacts/c2f853e9-b4a4-4811-b130-6f0fec6345ad — **STALE, and unused.** It predates the deck re-aim |
+| **Backup build** | `site/gemini/phys-310/phys310-fuel-cycle-isotope-separation-waste-9277e5a0.html` — **the only route cadets take** |
 | **Component** | `Phys310FuelCycleIsotopeSeparationWastePreflight` |
-| **Built** | 2026-08-05 · 2386 lines |
+| **Built** | 2026-08-05 · 2386 lines · **re-aimed 2026-11-04 · 2706 lines** (the cached source already carried the 2026-08-20 fix set) |
 | **Grounding** | Murray corpus **§15.1–§15.4, §23.1, §23.5** — **all six `STATUS: PENDING`**. §23.2–23.4 are not assigned and nothing from them is present |
 | **Cross-check** | **`None` on all six. The weakest-grounded lesson in the course, and it is not close** — no other lesson has zero corroboration on every section |
 | **Cadets' reading** | Murray & Holbert 15.1–15.4, 23.1, 23.5 |
 | **Probe topics** | 3 · ~3 active min each · ~10 min |
 | **Checks** | `check_artifact.py` 37/37. Re-verified independently: 37/37, LF, 0 NUL, **and the whole internal-corroboration chain recomputed** (below) |
-| **Status** | **DRAFT** — not reviewed, not published, not registered |
+| **Checks (re-aim)** | 2026-11-04: `check_artifact.py` 37/37 · LF, 0 NUL · `gemini-build.mjs` 8/8 and `gemini-model-ladder.mjs` 194/194. **No live tutor turn** — no Gemini key is available to the agent |
+| **Status** | **REGISTERED and PUBLISHED 2026-11-04** as `lesson-31`, due Thu 5 Nov 07:59:59 MST |
 
 | # | key | label |
 |---|---|---|
 | 1 | `mass-difference-and-cascade` | Traces chemical identity to a 0.85 % mass gap to a 1 400-stage cascade |
 | 2 | `centrifuge-and-the-same-cascade` | Explains difference-vs-ratio, and why one cascade serves both ends |
 | 3 | `waste-volume-hazard-timescale` | Inverts volume against hazard; separates the two waste timescales |
+
+**Re-aimed 2026-11-04 to the instructor's own deck, and the slug deliberately did not move** — it had never been registered. The deck is `Instructor-Slides/lessons/Physics-310-2026-Lesson-29-Fuel-Cycle.pptx` (its file name and title still say 29; it is taught as lesson 31). It walks the eight fuel-cycle steps (mine, mill, convert, enrich, fabricate, use, store, dispose or reprocess), defines the abundance ratio R = n_L/n_H and stresses it is not the enrichment percentage, gives R' = αR and R_P = α^S R_F, and covers diffusion, the centrifuge and the calutron with its own figures. **All three objectives still fit, so the keys did not move**, but the waste classification, volume-against-activity and the two timescales come from the reading (23.1), not the deck. A `[DECK]` block now outranks the corpus, and each topic gained a DECK LINK paragraph.
+
+**The deck's numbers replace the corpus's where they differ:** diffusion α ≈ 1.003 and more than 600 stages to 4.5 % (not 1,400; 1.0043 is kept as the ideal ceiling), centrifuge α 1.01 to over 1.10 and about 50 stages (not 1.1–1.3), weapons grade above 93 % (not about 90). The cascade relation the original build kept out is now in, because the deck grounds it. **The deck's two board problems are the class's** — the natural and 4.5 % abundance ratios, and the stage count at α = 1.04 — and the tutor is barred from computing either. **Extension problem B is rewritten**: it computed stage counts and sat close to the second board problem. New B: a real stage's ln α is 0.698 of the ideal (0.0029955/0.0042908), and one centrifuge stage replaces 16.29 (α = 1.05) to 31.82 (α = 1.10) diffusion stages, each recomputed by multiplying back. Misconception 8 added (abundance ratio taken as the enrichment percentage).
 
 **Extension problems:** A confirm 349/352 from ¹⁹F, compute √(352/349), show the 0.43 % gain is
 **half** the 0.85 % mass gap, then the hypothetical second fluorine isotope that would scramble the

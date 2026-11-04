@@ -8,6 +8,56 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-04 — Matthew Recker via Claude
+
+### PHYS 310 Lesson 31, Fuel Cycle — written and Gemini preflight, published
+
+**What.** recker's instruction: *"create the preflight for lesson 31 nuclear fuel cycle."* This run
+follows lesson 30 (2026-10-30, below) step for step, including the Gemini route.
+
+- **Registered** with `scripts/fall2026/register_lesson.py --course phys-310 --lesson 31 --commit`
+  (new PLAN entry): assignment `lesson-31`, 3 points, due **Thu 5 Nov 07:59:59 MST**
+  (`2026-11-05 14:59:59Z`), written to all three deadline locations; one T3A section row. Thu 5 Nov
+  is `T31`, and lesson 31 is "Fuel Cycle: Isotope Separation, Waste" in the 14 Oct 2026 schedule
+  workbook. A second run reports 0 changes.
+- **Written half** `phys-310-lesson-31-written-9310bafb`: Q1 reading time (0), Q2 reflection (1),
+  Q3 (2) — (a) why mass is the only handle and why UF6; (b) why a 1.003 stage factor means hundreds
+  of stages, and why a centrifuge needs fewer; (c) what reprocessing does with spent fuel, and its
+  drawback. No part asks for a computed number.
+- **Interactive half** `phys310-fuel-cycle-isotope-separation-waste-9277e5a0` (existing slug,
+  unchanged; never registered before), `artifact_url` on the Gemini router `backup.html?…&go=1`.
+  **No Claude route.**
+- **Published** with one `UPDATE … SET is_published = true` on offering `aa86c474`, as the DML role,
+  at the director's instruction, after the Gemini build was confirmed live. Read back over the read
+  role.
+
+**Re-aimed to the instructor's deck; the objectives held, the numbers did not.** The deck is
+`Instructor-Slides/lessons/Physics-310-2026-Lesson-29-Fuel-Cycle.pptx`. A `[DECK]` block now
+outranks the corpus. Where they differ, the deck's figures are used: diffusion α ≈ 1.003 and more
+than 600 stages (not 1,400), centrifuge α 1.01 to over 1.10 and about 50 stages (not 1.1–1.3),
+weapons grade above 93 %. The cascade relation R_P = α^S R_F is now grounded. The deck's two board
+problems are reserved for class, so extension problem B was rewritten. Full record in the phys-310
+`BUILD-LOG.md`, whose fuel-cycle heading now reads "Lesson 31".
+
+**Checks.** `check_artifact.py` 37/37, LF, 0 NUL. `to_gemini.py --slug … --include-unpublished
+--commit` (80 builds in `site/data/backup-builds.json`), autofill guard applied, `gemini-build.mjs`
+8/8, `gemini-model-ladder.mjs` 194/194. **No live tutor turn**: no Gemini key is available to the
+agent.
+
+**For the course director — the deck itself.**
+- The file name and title slide say "Lesson 29". The reading slide says 23.1–23.5; the schedule says
+  15.1–15.4, 23.1, 23.5.
+- The closing slide says "Next Time: Nuclear Waste". In the schedule, waste is part of this lesson and
+  lesson 32 is the Reactor Town Hall work day. The deck has no waste-classification slides, so topic
+  3 of the preflight rests on the reading alone.
+- The admin slide (Quiz 3, Sandia and TRIGA preflights) may be out of date.
+
+**Not done, on purpose:** the edited source was **not** pushed to the `artifact-sources` bucket; it
+lives in this machine's gitignored cache, and its full prompt is in the committed Gemini build. The
+claude.ai artifact was not republished.
+
+---
+
 ## 2026-11-03 — Casey Pellizzari via Claude
 
 ### The faculty home page and the Report page downloaded the whole term's text on every visit
