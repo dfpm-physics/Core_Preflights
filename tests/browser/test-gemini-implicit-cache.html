@@ -49,7 +49,7 @@
   "no hit" -- that one is a documented absence, not an unknown, and the page says which it is.
 
   RUN IT. file:// will not work -- Google's endpoint needs a real origin. From the repo root:
-      python -m http.server 8000
+      python scripts/staging/serve_local.py
   then open  http://localhost:8000/tests/browser/test-gemini-implicit-cache.html
 -->
 <style>

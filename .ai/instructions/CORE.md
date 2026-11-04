@@ -172,8 +172,12 @@ Read these repo docs before deep work: `docs/operations/SYSTEM_GUIDE.md`,
   *Gotcha:* an agent session that started **before** Node was installed inherits a stale `PATH` and
   reports `node: not found` even though it is present. Check `C:\Program Files\nodejs\node.exe`
   directly before concluding it is absent, or restart the session.
-- **Verify UI changes in a browser:** `python -m http.server 8000` from the repo root, open
-  `http://localhost:8000/site/`. Do not add a build step.
+- **Verify UI changes in a browser:** `python scripts/staging/serve_local.py` from the repo root,
+  open `http://localhost:8000/site/`. Do not add a build step. **Do not use
+  `python -m http.server` on the `v2` branch:** `site/js/config.js` sends any address but the
+  published one to the staging project, but 92 lesson pages under `site/gemini/` and `site/genai/`
+  carry the production URL themselves. The script rewrites those as it serves and has the browser
+  block production. Staging is project `wkibeptktbnaddfynrwr`; its schema, like production's, is `app`.
 - **GitHub Pages serves this repository with default Jekyll, which excludes `_`-prefixed paths.
   That exclusion is the access control on `_archive/` and `_builder/`, and it is one empty file
   away from being switched off.** Verified 2026-08-07:

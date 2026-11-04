@@ -199,7 +199,7 @@ It **refuses rather than warns** — every one of these is a `SystemExit` before
 PROJECT.md's sharp-edge table records that **`node --check` returns exit 0 on invalid JSX** — Node auto-detects any file containing `import`/`export` as ESM and does not reject JSX on that path — which is why "publishing is the only JSX parser this project has". A backup build never gets published on claude.ai, so **the Babel-in-browser page is now that parser**, and a build is unverified until it has been loaded and rendered.
 
 ```
-python -m http.server 8000          # repo root
+python scripts/staging/serve_local.py          # repo root
 # open http://localhost:8000/site/gemini/<course>/<slug>.html
 ```
 

@@ -26,7 +26,7 @@ A style guide that does not know which interpreter it is targeting gives advice 
 | the linter | **none installed.** |
 | the type checker | **none installed.** |
 | the test framework | **none for Python** — but the repo is not untested. `supabase/admin/*_test.py` are self-contained assertion scripts run directly (`app_rls_test.py`, `grade_interactive_test.py`, …), and `tests/app-schema/` is an OPTIONAL Node harness. Nothing on the deploy path requires either. |
-| the test command | **per script**, e.g. `.venv/Scripts/python supabase/admin/app_tier_check.py`. Plus `python scripts/docs/check_doc_sources.py` and, for UI, a browser against `python -m http.server 8000`. **A Node-only check is never the sole verification of a change** (CORE.md §2) — if it is all you ran, say so in `CHANGELOG.md`. |
+| the test command | **per script**, e.g. `.venv/Scripts/python supabase/admin/app_tier_check.py`. Plus `python scripts/docs/check_doc_sources.py` and, for UI, a browser against `python scripts/staging/serve_local.py`. **A Node-only check is never the sole verification of a change** (CORE.md §2) — if it is all you ran, say so in `CHANGELOG.md`. |
 | the lint command | **none.** |
 
 > **No formatter, linter or type checker is installed, and that changes how you read the rest of this file.**

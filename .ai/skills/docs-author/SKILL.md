@@ -221,7 +221,7 @@ as an orphan.
 
 1. **Render it.** No build step (CORE.md §2):
    ```
-   python -m http.server 8000
+   python scripts/staging/serve_local.py
    ```
    Open `http://localhost:8000/site/student/help.html` and `.../faculty/help.html`. Confirm the
    topic appears under the expected tier, opens, and renders — a doc that 404s locally will 404 live.

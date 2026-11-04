@@ -246,7 +246,7 @@ async function loadIndex() {
     $('preflight').innerHTML =
       '<span class="tm-bad">Prompt data not found.</span> Run '
       + '<code>python scripts/asksage/extract_prompts.py --all --commit</code>, then serve the '
-      + 'repo root with <code>python -m http.server 8000</code>.';
+      + 'repo root with <code>python scripts/staging/serve_local.py</code>.';
   }
 }
 

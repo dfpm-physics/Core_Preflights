@@ -42,7 +42,7 @@ load + render data.
 From the **repo root** (so the legacy pages resolve too):
 
 ```
-python -m http.server 8000
+python scripts/staging/serve_local.py
 ```
 
 Then open <http://localhost:8000/site/app/>. Log in with an email address and password —

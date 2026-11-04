@@ -57,7 +57,7 @@ admins) or directly at `/tests/`.
 ```
 python scripts/asksage/extract_prompts.py --all --commit      # sizes for all 47 lessons
 python scripts/asksage/extract_prompts.py --course phys-215 --lesson 02 --commit   # + its text
-python -m http.server 8000                                    # from the repo root
+python scripts/staging/serve_local.py                                    # from the repo root
 ```
 
 Then open `http://localhost:8000/tests/browser/test-asksage-tokens.html` and sign in as a

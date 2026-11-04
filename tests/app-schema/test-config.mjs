@@ -20,12 +20,15 @@ import { check, eq, section, readRepoFile, REPO } from './harness.mjs';
 
 section('config.js — schema targeting');
 
-function evalConfig(relPath) {
-  const src = readRepoFile(relPath);
+const LIVE_ADDRESS = { hostname: 'dfpm-physics.github.io', pathname: '/Core_Preflights/site/index.html' };
+
+function evalConfig(relPath, location = LIVE_ADDRESS, patch = (s) => s) {
+  const src = patch(readRepoFile(relPath));
   let captured = null;
   const sandbox = {
     supabase: { createClient: (url, key, opts) => { captured = { url, key, opts }; return { __stub: true }; } },
     window: {},
+    location,
     console,
   };
   vm.createContext(sandbox);
@@ -41,6 +44,37 @@ check('…against the expected project', String(app.captured?.url).includes('shz
 check('…with a publishable (not secret) key',
       String(app.captured?.key).startsWith('sb_publishable_'),
       'a service/secret key must never appear in a committed frontend file');
+
+// Which database. Production only on the exact published address; every other address gets
+// staging, and a missing staging key throws rather than falling back to production. The key is
+// patched in here so this check does not depend on whether the real one has been filled in yet.
+section('config.js — only the published address reaches production');
+
+const PROD_REF = 'shzvpmlnqfmzfmuxkowi';
+const STAGING_REF = 'wkibeptktbnaddfynrwr';
+const withKey = (s) => s.replace(/(url: 'https:\/\/wkibeptktbnaddfynrwr\.supabase\.co',\s*anon: )'[^']*'/,
+                                 "$1'sb_publishable_TEST'");
+
+for (const [label, loc] of [
+  ['localhost', { hostname: 'localhost', pathname: '/site/index.html' }],
+  ['127.0.0.1', { hostname: '127.0.0.1', pathname: '/site/index.html' }],
+  ['a file', { hostname: '', pathname: '/C:/repo/site/index.html' }],
+  ['a staging repo on the same github.io host',
+   { hostname: 'dfpm-physics.github.io', pathname: '/iPREP-staging/site/index.html' }],
+  ['a look-alike path', { hostname: 'dfpm-physics.github.io', pathname: '/Core_Preflights2/site/' }],
+  ['a look-alike host', { hostname: 'dfpm-physics.github.io.example.com', pathname: '/Core_Preflights/site/' }],
+]) {
+  const r = evalConfig('site/js/config.js', loc, withKey);
+  check(`${label} gets staging`, String(r.captured?.url).includes(STAGING_REF));
+  check(`${label} never names production`, !String(r.captured?.url).includes(PROD_REF));
+}
+
+let threw = false;
+try {
+  evalConfig('site/js/config.js', { hostname: 'localhost', pathname: '/site/' },
+             (s) => s.replace(/(url: 'https:\/\/wkibeptktbnaddfynrwr\.supabase\.co',\s*anon: )'[^']*'/, "$1''"));
+} catch { threw = true; }
+check('a missing staging key throws, with no fallback to production', threw);
 
 // The promotion's other half: no second config, and no legacy page left to need one. A
 // resurrected site/app/js/config.js would mean the tree got partially un-promoted; a

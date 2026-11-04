@@ -8,7 +8,115 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
-## 2026-11-04 — Matthew Recker via Claude
+## 2026-11-04 — Matthew Recker via Claude (staging database, `v2` branch)
+
+**A second Supabase project now holds a staging copy of the `app` schema, built only from the
+files in this repo.** Project ref `wkibeptktbnaddfynrwr`. It holds no data: no rows, no auth
+users, no storage buckets, no edge functions. Production was not written to.
+
+- **Why:** v2 work must not be developed or tested against the live database, and nothing had
+  ever proved that this repo's migration files rebuild production.
+- **New:** `scripts/staging/install_staging.py` builds staging from
+  `supabase/admin/app_schema_bootstrap.sql` plus `supabase/migrations/app/001`–`022` (rollback
+  files skipped), then the bootstrap §6 auth foreign keys and the §10 RLS-test grant. Dry run by
+  default; refuses the production ref; refuses unless `--expect-ref` matches the connection
+  string; `--from NNN` resumes. Reads `STAGING_DB_URL` from the environment and never prints it.
+- **New:** `scripts/staging/schema_fingerprint.py` prints a diffable description of schema `app`
+  (tables, columns, constraints, indexes, policies, function bodies by hash, triggers, views,
+  grants). Read-only; reads the catalog, no rows.
+- **Result — the repo rebuilds production's structure, with two findings.** Diffed against a
+  production fingerprint taken through `prep_app_read`: columns (249), constraints (133), indexes
+  (80), policies (68), functions (21, identical bodies), triggers (20) and the view all match.
+  1. **`009_analysis_runs.sql` does not run on its own.** It names its objects without `app.` and
+     sets no `search_path`, so in a fresh session it targets `public` and fails with
+     `permission denied for schema public`. Production must have been run with the search path
+     already on `app`. The installer now sets `search_path = app, public` for every migration;
+     the migration file itself was not changed.
+  2. **`app.tutor_error_log` is owned by `postgres` in production** and by `prep_app_owner` in
+     staging, so migration 020 was applied as `postgres`. Harmless today; noted so it is not
+     mistaken for drift later.
+- **Grants compared on a second production read (raw ACLs, not `information_schema`, which
+  shows a read-only login only its own grants).** 166 production grant rows against 168 in
+  staging. Every difference is on `app.tutor_error_log`: production grants only what migration
+  021 names (`authenticated` SELECT, `service_role` INSERT, `prep_app_read` SELECT), while staging
+  also hands `anon`, `authenticated`, `prep_app_dml` and `service_role` full DML through the
+  bootstrap's default privileges for objects `prep_app_owner` creates. Staging is the looser one;
+  RLS is on in both. Not yet aligned.
+- **CONFIRMED ON PRODUCTION: any signed-in staff member can make themselves a global admin.**
+  `authenticated` holds table-wide `UPDATE` on `app.instructors`; policy `instructors_update_own`
+  admits any update to the caller's own row (`id = app.current_uid()`) with no column limit; no
+  trigger and no column grant protects `is_global_admin`; and `app.is_admin()` (migration 002)
+  reads exactly that column. So one REST `PATCH` from any staff session grants full access to
+  every course. Cadets cannot do it: their auth id is not an `instructors.id`. Nothing was changed
+  in either database. The fix is DDL on `app` and goes to the course director as a migration.
+- **Fix written, NOT applied anywhere: `supabase/migrations/app/023_instructors_admin_flag_guard.sql`**
+  (with `_ROLLBACK.sql`). A `BEFORE INSERT OR UPDATE` trigger on `app.instructors` refuses any
+  change to `is_global_admin` made as `anon` or `authenticated` unless the caller is already a
+  global admin; server-side roles (the edge functions' service key, the `prep_app_*` tiers) pass.
+  A trigger rather than a column grant, because a column grant would also block a real admin
+  through `instructors_admin_write`. Nothing under `site/` writes `instructors`, so no page breaks.
+- **New:** `scripts/staging/test_instructors_admin_guard.py` proves both halves on staging inside
+  one transaction it always rolls back: before 023 a staff member promotes themselves; after 023
+  that is refused, as is creating a global admin, while a self-rename, an admin promoting someone
+  and a `service_role` change all still work. **6 passed, 0 failed.** The test leaves no rows
+  behind (checked: 0 instructor rows, 0 test auth users).
+- **Decision (Matthew Recker, 2026-11-04): 023 ships with v2, not to production now.** In his
+  words: *"I'm not concerned about the hole on the live site, it will be fixed with v2."* So the
+  live database keeps the hole until the v2 cutover. When it is applied, it is a coordination
+  event under CORE.md §0: run 023 as `prep_app_owner`, then the verify query at the foot of the file.
+- **Staging is now the v2 database, not a mirror of production.** Added with `--from 023`:
+  migration 023; `tutor_error_log` grants set to production's (closing the difference above); and
+  Storage: buckets `artifact-sources` and `lesson-figures` with 9 policies. Re-diffed against the
+  production read: the only differences left are the 023 guard and that table's owner.
+- **New: `supabase/migrations/024_lesson_figures_app_policies.sql`** (in the `public` chain folder,
+  run as `postgres`). 019 gates figure upload on `public.instructors`, which an `app`-only database
+  does not have, and which production is meant to be able to drop. 024 gates on `app.is_staff()`.
+  Not applied to production.
+- **The site now chooses its database by address.** `site/js/config.js` uses production only on
+  `dfpm-physics.github.io/Core_Preflights/`. Every other address gets staging, including a staging
+  site on the same host; a missing staging key throws rather than falling back. This is on `v2`
+  only. `tests/app-schema/test-config.mjs` proves it for 6 addresses (Node only; run on its own, so
+  nothing else in that suite touched a database).
+- **`config.js` alone was not enough.** 92 generated lesson pages under `site/gemini/` and
+  `site/genai/` do not load it and carry the production URL and key directly. So
+  **`scripts/staging/serve_local.py` replaces `python -m http.server` for local work:** it rewrites
+  production's values to staging's as it serves (no file changes), sends a CSP whose `connect-src`
+  omits production so the browser refuses it, binds to 127.0.0.1, and serves only `/site/` and
+  `/tests/browser/`. `--check` over 196 text files: 0 still name production. Its first path check
+  let `/site/../supabase/admin/.env` through; a probe caught that before it ever ran for real, and
+  it now judges the resolved file.
+- **Docs:** `CORE.md` §2, `PROJECT.md` and 8 operational files and test pages now name
+  `serve_local.py`. Older audits and plans keep `http.server`, as records. `check_doc_sources.py`
+  flags 21 documents because `CORE.md` changed; they were searched for the old command only, not
+  re-reviewed, and their `reviewed` dates were not bumped.
+- **Not covered:** a real lesson on claude.ai still submits to the published site, so to production.
+  `tests/app-schema/` still targets production through its own `harness.mjs`.
+- **Checked in a real browser, through `serve_local.py`.** With the staging publishable key in
+  `config.js`, the login page's client targets staging and a query on `app.courses` returns an empty
+  list with no error, so `app` is exposed. A deliberate `fetch` to production was refused by the
+  browser's CSP. A Gemini lesson page holds no production value in its served source, and its submit
+  link is local. `/supabase/admin/.env` answers 404, with and without `..`. Sign-in was not tested,
+  because staging has no users.
+- **New: `scripts/staging/seed_staging.py`, run on staging.** Made-up people only: 3 staff (global
+  admin, director, section instructor), 6 cadets in sections M1A and T3A, course `phys-215`
+  (titled STAGING TEST), term `fall-2026`, and 4 lessons with deadlines set around today: one past
+  due with sample submissions and grades, one due in days, one outside the 7-day window, one
+  unpublished draft. Dry run by default; a re-run moves deadlines and changes nothing else. Passwords
+  follow the site's default rules, so **real cadet data must never go in staging**.
+- **`--verify` signs in over the real API as 5 of those users.** All signed in, and each saw the
+  right rows (for example, the M1A instructor sees 3 of 6 enrollments and a cadet sees only their
+  own). With a real session, a director's `PATCH` of `is_global_admin` got HTTP 403 and a cadet's
+  changed no row, so migration 023 holds. 7 of 7 passed.
+- **Found while seeding:** some trigger functions name tables without `app.` (for example
+  `submissions_check_gradable`) and rely on the caller's search path. The REST API sets it; a direct
+  connection does not, and fails with `relation does not exist`. The seed script sets it. The
+  functions were not changed.
+- **Signed-in pages checked by Matthew Recker in a browser**, through the local server, on 2026-11-04.
+  He reported that they work. An agent does not type a password into a login page, so this check
+  was his.
+- **Not done:** no edge functions in staging, so any page that calls one will fail (creating staff,
+  password resets, the AI proxies, the error log). Real content (real lessons, real `phys-110`) is
+  not copied. No commit or push.
 
 ### PHYS 310 Lesson 31, Fuel Cycle — written and Gemini preflight, published
 

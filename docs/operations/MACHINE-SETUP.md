@@ -232,7 +232,7 @@ Expected:
 Then the UI, which needs no build step:
 
 ```
-python -m http.server 8000     # open http://localhost:8000/site/
+python scripts/staging/serve_local.py     # open http://localhost:8000/site/
 ```
 
 And if you installed Node:

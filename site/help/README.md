@@ -95,7 +95,7 @@ must be restricted belongs behind Supabase RLS, not here.
 No build step (see `CORE.md` §2). From the repo root:
 
 ```
-python -m http.server 8000
+python scripts/staging/serve_local.py
 ```
 
 then open `http://localhost:8000/site/student/help.html` and
