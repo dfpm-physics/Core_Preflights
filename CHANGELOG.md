@@ -428,6 +428,20 @@ no Gemini key on this machine, so the conversation itself is unproven. Node-only
 
 ---
 
+## 2026-10-16 — Matthew Recker via Claude (second)
+
+**GenAI.mil is unreachable from the edge function. The builds below do not work, by network.**
+
+A staff tester's first turn failed with HTTP 503. Cause, measured with one tiny call: GenAI.mil
+answers calls from Supabase (`us-west-1`) with an HTML page — *"You are not authorized to visit
+GenAI.mil from outside of DoW networks."* The same URL from the course director's desktop answers
+normal JSON. So the key is fine and no Supabase setting can fix it; the proxy has to run on a host
+inside a DoW network. `genai-mil-proxy` redeployed: it now turns an HTML refusal into its visible
+text, and `/health` reports the region it ran in. The pages stay staff-only and unlinked for
+students. Tokens spent: none (every call was refused).
+
+---
+
 ## 2026-10-16 — Matthew Recker via Claude
 
 **GenAI.mil builds of the 12 remaining PHYS 215 lessons (25–41), staff-only, not linked.**

@@ -7,6 +7,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // AI Hub project (`projects/socratic-interaction/local/server.py`), which is where every rule
 // below was measured.
 //
+// ── IT DOES NOT WORK FROM HERE (measured 2026-10-16) ─────────────────────────────────────────
+// GenAI.mil only accepts calls from DoW networks. From this function (Supabase, us-west-1) every
+// call gets HTTP 503 and an HTML page: "You are not authorized to visit GenAI.mil from outside of
+// DoW networks." The same URL from a desktop on an allowed network answers JSON. The key is not
+// the problem, and no Supabase region is a DoW network. The page and this function are kept,
+// staff-only, until a proxy host INSIDE a DoW network exists; GENAI.base in each page is the
+// only thing that would change.
+//
 // ── THE KEY ──────────────────────────────────────────────────────────────────────────────────
 // A Supabase secret, never in the repo and never sent to a browser:
 //
@@ -185,7 +193,10 @@ serve(async (req) => {
   const key = Deno.env.get("GENAI_MIL_API_KEY") || "";
   if (isHealth) {
     // Length and presence only — never the value.
-    return json(key ? 200 : 503, { ok: !!key, model: MODEL, key_present: !!key });
+    return json(key ? 200 : 503, {
+      ok: !!key, model: MODEL, key_present: !!key,
+      region: Deno.env.get("SB_REGION") || null,   // where this call ran; GenAI.mil filters by network
+    });
   }
   if (!key) return fail(503, "The course GenAI.mil key is not set on the server.");
 
@@ -218,8 +229,15 @@ serve(async (req) => {
     return json(200, out);
   }
 
-  const upstreamMsg = String(((data?.error || {}) as Record<string, unknown>).message || raw || "")
-    .slice(0, 300);
+  // GenAI.mil sometimes answers with an HTML page rather than JSON ("Unauthorized Access -
+  // GenAI.mil", seen 2026-10-16 from Supabase's servers while the same URL answered JSON from a
+  // desktop). Reduce it to its visible text so the reason is readable in the log and the page.
+  const plain = /^\s*</.test(raw)
+    ? raw.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ").trim()
+    : raw;
+  const upstreamMsg = String(((data?.error || {}) as Record<string, unknown>).message || plain || "")
+    .slice(0, 600);
   console.log(JSON.stringify({
     audit: "genai-mil", who: user.id, model: MODEL, status, ms, sys_chars: sysChars, turns,
     error: upstreamMsg.slice(0, 200),
