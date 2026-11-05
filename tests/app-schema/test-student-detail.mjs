@@ -19,9 +19,9 @@
 //      That is exactly why there must never be a "copy all" that runs it over a section. Nothing
 //      here tests for the absence of a feature, but the reasoning belongs next to the tests.
 //
-//   The rest is arithmetic that two pages have to agree on: the gradebook and this page compute
-//   totals from the SAME functions, and a divergence would show as a student whose row says 78%
-//   in the grid and 82% on their own page.
+//   The rest is about ONE calculation: neither this page nor the gradebook computes a total. Both print what the
+//   database functions gradebook_cells and course_totals return, so a cadet's row cannot say 78% in the grid and
+//   82% here, or 90% where the database holds 89.9.
 
 import { check, eq, section, summary, installBrowser, makeClient } from './harness.mjs';
 
@@ -92,10 +92,18 @@ const offering = (id, slug, dueAt, extra = {}) => ({
   dueBySection: {}, gradingMode: 'points', written: null, interactive: null, ...extra,
 });
 
+// A row of gradebook_cells for this cadet. The page never decides a state; it prints this one.
+const dbc = (o = {}) => ({ enrollment_id: 'e1', section_id: SEC, assignment_offering_id: 'o1', state: 'released', has_draft_score: false,
+  is_late: false, no_work_received: false, deadline_invalid: false, late_closed: false, points_earned: 2, points_possible: 2, ...o });
+const dbt = (o = {}) => ({ enrollment_id: 'e1', section_id: SEC, student_id: 3000000001, earned_text: '2', possible_text: '4', percent_text: '50',
+  percent_key_text: '50.0000000000000000000000', letter: 'F', gpa: 0, near_line_letter: null, rank: 7, tie_group: null, missing_count: 1,
+  ungraded_count: 0, unreleased_count: 0, excused_count: 0, bonus_only: false, no_work_count: 0, invalid_deadline_count: 0, ...o });
+
 const base = {
   enrollment: { enrollmentId: 'e1', sectionId: SEC, studentId: 3000000001, sectionCode: 'M1A' },
   extensions: [], submissions: [], grades: [],
   offerings: [offering('o1', 'preflight-01', PAST), offering('o2', 'preflight-02', FUTURE)],
+  dbCells: [dbc({ assignment_offering_id: 'o1', state: 'missing', points_earned: null }), dbc({ assignment_offering_id: 'o2', state: 'not_due', points_earned: null })],
   now: NOW,
 };
 
@@ -103,8 +111,10 @@ const base = {
   const rows = S.lessonRows(base);
   eq('one row per published offering', rows.length, 2);
   eq('rows are in due order', rows.map(r => r.slug), ['preflight-01', 'preflight-02']);
-  eq('a past lesson with nothing submitted is MISSING', rows[0].cell.state, CELL.MISSING);
-  eq('a future lesson with nothing submitted is PENDING', rows[1].cell.state, CELL.PENDING);
+  eq('a past lesson the database counts as missing is MISSING', rows[0].cell.state, CELL.MISSING);
+  eq('a future lesson the database calls not due is PENDING', rows[1].cell.state, CELL.PENDING);
+  check('without a database row a lesson is blank, not a local guess',
+        S.lessonRows({ ...base, dbCells: [] })[0].cell.state === CELL.PENDING && S.lessonRows({ ...base, dbCells: [] })[0].cell.points == null);
   eq('shortcodes come through for the table', rows.map(r => r.code), ['PF01', 'PF02']);
 }
 
@@ -117,6 +127,7 @@ const base = {
       // 0-5 diagnostics, deliberately DIFFERENT numbers from the points so a leak is visible.
       diagnostic: { q2_effort: 4, q3_understanding: 3 },
     }],
+    dbCells: [dbc({ assignment_offering_id: 'o1', state: 'released', points_earned: 2 })],
   });
   eq('points are the grade', rows[0].cell.points, 2);
   eq('effort is read from the diagnostic, not the points', rows[0].effort, 4);
@@ -130,8 +141,15 @@ const base = {
   const rows = S.lessonRows({
     ...base,
     grades: [{ assignment_offering_id: 'o1', points_earned: 1, points_possible: 2, is_finalized: false }],
+    dbCells: [dbc({ assignment_offering_id: 'o1', state: 'submitted_ungraded', has_draft_score: true, points_earned: 1 })],
   });
-  eq('an unfinalized grade is DRAFT, not GRADED', rows[0].cell.state, CELL.DRAFT);
+  eq('a drafted score is DRAFT, not GRADED, and keeps its points', [rows[0].cell.state, rows[0].cell.points], [CELL.DRAFT, 1]);
+}
+{
+  const r = (state, o = {}) => S.lessonRows({ ...base, dbCells: [dbc({ assignment_offering_id: 'o1', state, ...o })] })[0].cell;
+  eq('an excused item is EXCUSED', r('excused', { points_earned: null }).state, CELL.EXCUSED);
+  eq('a published score held by a release date is HELD', r('graded_unreleased').state, CELL.HELD);
+  eq('work in with no score is UNGRADED', r('submitted_ungraded', { points_earned: null }).state, CELL.UNGRADED);
 }
 
 {
@@ -139,33 +157,32 @@ const base = {
   const rows = S.lessonRows({
     ...base,
     extensions: [{ assignment_offering_id: 'o1', extended_due_at: FUTURE }],
+    dbCells: [dbc({ assignment_offering_id: 'o1', state: 'not_due', points_earned: null })],
   });
   eq('a student inside an unexpired extension is PENDING, not MISSING', rows[0].cell.state, CELL.PENDING);
   check('…and the row is flagged as extended so the instructor can see why', rows[0].extended === true);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
-section('studentTotals — agrees with the gradebook by construction');
+section('studentTotal — the database\'s own text, nothing computed');
 
+check('the old local total is gone', S.studentTotals === undefined && S.loadClassContext === undefined);
 {
-  const rows = S.lessonRows({
-    ...base,
-    grades: [{ assignment_offering_id: 'o1', points_earned: 1, points_possible: 2, is_finalized: true }],
-  });
-  const t = S.studentTotals(rows);
-  eq('only the DUE lesson is counted', t.counted, 1);
-  eq('earned', t.earned, 1);
-  eq('possible excludes the not-yet-due lesson', t.possible, 2);
-  eq('pct', t.pct, 0.5);
+  const t = S.studentTotal(dbt());
+  eq('percent, earned, possible, letter and rank are the database text', [t.percentText, t.earnedText, t.possibleText, t.letter, t.rank], ['50', '2', '4', 'F', 7]);
   eq('a band is attached for rendering', t.band.key, 'd1');
 }
-
 {
-  const t = S.studentTotals(S.lessonRows({ ...base, offerings: [offering('o2', 'preflight-02', FUTURE)] }));
-  eq('a term where nothing has come due yet has pct null, not 0', t.pct, null);
-  check('…and no band, so nothing renders a colour for it', t.band === null,
-        'a cadet reading 0% in week one because 39 lessons they cannot have done are counted '
-        + 'against them is the failure this rule exists to prevent');
+  // The cases the old local rule got wrong. Each total below is whatever the database says, and the page prints it.
+  const draftOnly = S.studentTotal(dbt({ earned_text: '0', possible_text: '0', percent_text: null, percent_key_text: null, letter: null, rank: null }));
+  eq('a drafted score is not in the total: nothing counts yet, no percent, no band', [draftOnly.percentText, draftOnly.band], [null, null]);
+  const exact = S.studentTotal(dbt({ earned_text: '8999', possible_text: '10000', percent_text: '89.99', percent_key_text: '89.9900000000000000000000', letter: 'B+' }));
+  eq('89.99 stays 89.99; it is not shown as 90', exact.percentText, '89.99');
+  eq('and it is not in the 90 band', exact.band.key, 'd4');
+  const bonus = S.studentTotal(dbt({ earned_text: '3', possible_text: '0', percent_text: null, percent_key_text: null, letter: null, bonus_only: true }));
+  eq('a bonus-only cadet keeps the earned points visible', [bonus.bonusOnly, bonus.earnedText], [true, '3']);
+  eq('excused work is in the count the database gives', S.studentTotal(dbt({ excused_count: 2 })).excused, 2);
+  eq('no row from the database is no total', S.studentTotal(undefined), null);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
@@ -205,47 +222,52 @@ section('commentCard — plain text, and it must not lie');
     offerings: [offering('o1', 'preflight-01', PAST), offering('o3', 'preflight-03', PAST)],
     grades: [{ assignment_offering_id: 'o1', points_earned: 2, points_possible: 2, is_finalized: true,
                diagnostic: { q3_understanding: 4 } }],
+    dbCells: [dbc({ assignment_offering_id: 'o1', state: 'released', points_earned: 2 }), dbc({ assignment_offering_id: 'o3', state: 'missing', points_earned: null })],
   });
-  const totals = S.studentTotals(rows);
+  const totals = S.studentTotal(dbt());
   const txt = S.commentCard({
     student: { name: 'Jane Cadet' },
     enrollment: { studentId: 3000000001, sectionCode: 'M1A' },
-    totals, rows, ei: [], classStats: { median: 0.75 },
+    totals, rows, ei: [],
   });
 
   check('names the cadet', txt.includes('Jane Cadet'));
-  check('states the grade as earned/possible AND a percentage', txt.includes('2 / 4') && txt.includes('50%'));
+  check('states the grade as the database text, earned over possible and a percentage', txt.includes('2 / 4') && txt.includes('50%'));
+  check('and the letter and rank the database gave', txt.includes('F') && txt.includes('rank 7'));
   check('lists missing work by name', txt.includes('preflight-03'),
         '"you have one missing assignment" starts an argument; naming it ends one');
-  check('compares to the section median', txt.includes('75%'));
-  check('says how far from the median, in the right direction', txt.includes('below'));
+  check('prints no class median, which would be a second calculation', !/median/i.test(txt));
   check('surfaces the 0-5 understanding separately from the grade', txt.includes('/ 5'));
   check('is plain text — no markup leaks in', !/[<>]/.test(txt));
 }
 
 {
   const rows = S.lessonRows({ ...base, offerings: [offering('o1', 'preflight-01', PAST)],
-    grades: [{ assignment_offering_id: 'o1', points_earned: 2, points_possible: 2, is_finalized: true }] });
+    grades: [{ assignment_offering_id: 'o1', points_earned: 2, points_possible: 2, is_finalized: true }],
+    dbCells: [dbc({ assignment_offering_id: 'o1', state: 'released', points_earned: 2 })] });
   const txt = S.commentCard({
     student: { name: 'Ada' }, enrollment: { studentId: 1, sectionCode: 'T3B' },
-    totals: S.studentTotals(rows), rows, ei: [],
+    totals: S.studentTotal(dbt({ earned_text: '2', possible_text: '2', percent_text: '100', percent_key_text: '100', letter: 'A', rank: 1 })), rows, ei: [],
   });
   check('a cadet with nothing missing is told so explicitly, not left to infer it',
         txt.includes('Missing work: none'));
-  check('no section comparison is printed when none was loaded', !txt.includes('median'),
-        'the comparison is an optional async read; absent must mean silent, not a wrong number');
 }
 
 {
   const rows = S.lessonRows(base);
   const txt = S.commentCard({
     student: { name: 'Ada' }, enrollment: { studentId: 1, sectionCode: 'T3B' },
-    totals: S.studentTotals(rows), rows,
+    totals: S.studentTotal(dbt({ earned_text: '0', possible_text: '0', percent_text: null, percent_key_text: null, letter: null, rank: null })), rows,
     ei: [{ started_at: '2026-08-15T20:00:00Z', duration_minutes: 30 }],
     freeText: 'Spoke after class about vectors.',
   });
+  check('a cadet with nothing counted yet is told so, not given 0%', /nothing counts yet/i.test(txt) && !txt.includes('0%'));
   check('EI attendance is summarized', txt.includes('Extra instruction: 1 session'));
   check('the instructor free-text is appended verbatim', txt.includes('Spoke after class about vectors.'));
+}
+{
+  const txt = S.commentCard({ student: { name: 'Ada' }, enrollment: { studentId: 1, sectionCode: 'T3B' }, totals: null, rows: [], ei: [] });
+  check('with no total from the database the note says so rather than inventing one', /not available/i.test(txt));
 }
 
 summary();

@@ -8,6 +8,41 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (Stage D staff entry, step 2, branch `v2-step2-entry`, not committed)
+
+- **Score entry page `site/faculty/entry.html`.** Type scores for an item graded outside PREP, down a whole column
+  (Enter moves down, pasting a list fills down), or import a Gradescope or Teams CSV. The import shows a preview first:
+  duplicate cadets and unreadable scores block it, unmatched rows hold it until skipped, and replacing a published
+  score needs a tick. A third decimal is refused, never rounded. Scores save as drafts.
+- **Publish a column** publishes every drafted score of an item for a section, and for work with no submission also
+  closes the column. **Excused** control, Directors only, with a required reason. **Backlog and export page
+  `site/faculty/backlog.html`:** piles for work to grade, drafts to publish, scores to enter, held and date problems, the
+  near-line list, a gradebook CSV and a per-course Blackboard CSV.
+- **Migration `app/065`** (`enter_grades`, `publish_preview`, `publish_column`, `unpublish_column`, a no-NaN check, grants on
+  `gradebook_cells` and `course_totals`), with its rollback. Code: `faculty-entry-parse.js`, `faculty-entry.js`,
+  `faculty-backlog.js`, `faculty-export.js`, and new `faculty-totals.js` (paged reads of the two database functions).
+- **Review fixes (2026-11-05, two reviews, each claim checked first; all were right).**
+  - **One calculation.** The staff gradebook and student detail pages no longer compute a total, a state or a class
+    median. They print what `gradebook_cells` and `course_totals` return: drafts, held scores, excused work and bonus
+    items now show correctly, and 89.99 reads 89.99. Drafted scores show as "?", held as "H", excused as "EX".
+  - **Import:** an ID that is not on the roster never falls through to a name match; a name match needs a person to accept
+    it. A file Max Points that differs from the item's points holds the import until the person accepts one or the other.
+  - **Publish:** shows a preview first, and says plainly when it published nothing. It publishes only typed and imported
+    scores; AI suggestions stay drafts and are counted for a person to review (CORE.md section 6). The column closes
+    only when the item takes no submission, and the page and database now agree. New **Unpublish**.
+  - **Replacing a published score** is reported as such. **NaN and infinity** are refused in the page, the function and
+    by a table check. **A failed re-read after a successful save** now says the change was saved and the read failed.
+  - **Backlog and export** read the two functions in pages; a large course was being cut at about 1000 rows.
+  - **Rollback grants:** the 065 rollback revokes only `course_totals`; it leaves `gradebook_cells` granted, which `060`
+    owns. 065's own grant of it is idempotent.
+- **Proved:** offline suites 43/43 (2837 checks). Migration `065` and the Director-only excusal rule on a scratch
+  database, 75 checks, then dropped. **Not run:** anything against staging data; no page was clicked through in a browser.
+- **Deliberately not done:** nothing applied to staging; the frozen `lessons.html` and `faculty-lessons.js` untouched;
+  `blackboard-fill.js` unchanged; no student page touched. **Section transfer (review A, M8) is reported, not fixed:** a
+  cadet moved between sections can flip a blank between 0 and left out, because closures are per section; the real fix is in
+  the database rule (`_cells_at`), which this branch does not change. Several help docs now show as possibly stale in
+  `check_doc_sources.py`; those are from other commits and were not reviewed here.
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 Stage C staff pages, on staging, `v2` branch)
 
 - **Rough Items page for directors, `site/faculty/items.html`, on staging only.** It enters work of all seven

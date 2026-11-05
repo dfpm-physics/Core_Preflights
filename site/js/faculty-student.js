@@ -28,9 +28,8 @@ import {
   effortSignal, questionsOf, chunked, int05,
 } from './schema.js';
 import { canonMisconceptionId } from './faculty-rollup.js';
-import {
-  cellState, totalsFor, bandOf, CELL, shortCode, loadGradebook, buildMatrix, matrixStats,
-} from './faculty-gradebook.js';
+import { cellState, CELL, shortCode, dbCellView, totalView } from './faculty-gradebook.js';
+import { loadCellsAndTotals } from './faculty-totals.js';
 import { loadEiForEnrollment } from './faculty-ei.js';
 
 /* ---------------------------------------------------------------------------
@@ -76,6 +75,13 @@ export async function loadStudentDetail(ctx, enrollmentId) {
   if (gradeRes.error) return { error: gradeRes.error };
   if (subRes.error) return { error: subRes.error };
 
+  // The state of each item and the total come from the database, never from this page. A failed read is an error:
+  // the page is not drawn with the numbers missing.
+  const ct = await loadCellsAndTotals(db, ctx.currentOffering, 'final');
+  if (ct.error) return { error: ct.error };
+  const dbCells = ct.cells.filter((c) => c.enrollment_id === enrollmentId);
+  const dbTotal = ct.totals.find((t) => t.enrollment_id === enrollmentId) || null;
+
   const offerings = shapeOfferings(offRes.data, ctx);
   const grades = gradeRes.data || [];
   const submissions = (subRes.data || []).map(shapeSubmission);
@@ -91,27 +97,10 @@ export async function loadStudentDetail(ctx, enrollmentId) {
       status: enr.status,
     },
     student: enr.students || {},
-    offerings, grades, submissions, extensions,
+    offerings, grades, submissions, extensions, dbCells, dbTotal,
     ei: eiRes.rows || [],
     eiError: eiRes.error || null,
   };
-}
-
-/**
- * The class context for the comparison card. Deliberately a SEPARATE call — it reads the cohort,
- * which is a much wider query than the rest of this page, and the page must render without it if
- * it is slow or denied. A missing comparison is a missing card, not a broken page.
- */
-export async function loadClassContext(ctx, sectionId) {
-  const out = { section: null, course: null };
-  try {
-    const all = await loadGradebook(ctx, ctx.sectionIds || []);
-    if (all?.error || all?.noCourse) return out;
-    const m = buildMatrix(all);
-    out.course = m.stats;
-    out.section = matrixStats(m.rows.filter((r) => String(r.sectionId) === String(sectionId)));
-  } catch { /* comparison is optional; see above */ }
-  return out;
 }
 
 /* ---------------------------------------------------------------------------
@@ -122,8 +111,9 @@ export async function loadClassContext(ctx, sectionId) {
  * One row per published lesson, in due order, carrying grade, diagnostics and the student's
  * actual work. This is where the two layers sit side by side and it is the only place they should.
  */
-export function lessonRows({ offerings, grades, submissions, extensions, enrollment,
+export function lessonRows({ offerings, grades, submissions, extensions, enrollment, dbCells,
                              now = new Date() }) {
+  const dbBy = new Map((dbCells || []).map((c) => [c.assignment_offering_id, c]));
   const gradeBy = new Map((grades || []).map((g) => [g.assignment_offering_id, g]));
   const subBy = new Map((submissions || []).map((s) => [s.offeringId, s]));
   const extBy = new Map((extensions || []).map((x) => [x.assignment_offering_id, x.extended_due_at]));
@@ -140,12 +130,17 @@ export function lessonRows({ offerings, grades, submissions, extensions, enrollm
       const sub = subBy.get(o.offeringId) || null;
       const extensionISO = extBy.get(o.offeringId) || null;
 
-      // cellState wants the light offering shape; shapeOffering is a superset, so it fits.
-      const cell = cellState({
+      // cellState wants the light offering shape; shapeOffering is a superset, so it fits. It supplies the deadline
+      // this cell shows. The STATE and POINTS are the database's (gradebook_cells); with no row the cell is blank.
+      const local = cellState({
         grade,
         submission: sub ? { status: sub.status, committed_at: sub.committedAt } : null,
         offering: o, sectionId, extensionISO, now,
       });
+      const dbc = dbBy.get(o.offeringId);
+      const cell = dbc
+        ? { ...local, ...dbCellView(dbc) }
+        : { ...local, state: CELL.PENDING, points: null, isFinalized: false, possible: Number(o.pointsPossible ?? 0) };
 
       const interactiveWork = o.interactive ? sub?.activities?.[o.interactive.id] : null;
       const writtenWork = o.written ? sub?.activities?.[o.written.id] : null;
@@ -184,11 +179,8 @@ export function lessonRows({ offerings, grades, submissions, extensions, enrollm
     });
 }
 
-/** Row totals, reusing the gradebook's arithmetic so the two pages cannot disagree. */
-export function studentTotals(rows) {
-  const t = totalsFor(rows.map((r) => r.cell));
-  return { ...t, band: bandOf(t.pct) };
-}
+/** The cadet's total, as the database returned it (course_totals). Nothing is added or rounded here. */
+export const studentTotal = (dbTotal) => totalView(dbTotal);
 
 /**
  * Zero-point questions are scored but never rendered (CORE.md §2; grade.html:207,215 does the same
@@ -239,8 +231,6 @@ export function foldMisconceptions(rows, aliases = null) {
  * The comment card
  * ------------------------------------------------------------------------- */
 
-const pctStr = (p) => (p == null ? '—' : `${Math.round(p * 100)}%`);
-
 /**
  * An advising blurb the instructor pastes into an email.
  *
@@ -256,19 +246,22 @@ const pctStr = (p) => (p == null ? '—' : `${Math.round(p * 100)}%`);
  * also means this string must never be built for a "copy all" of a whole section, which would be a
  * roster leak wearing a helpful hat. There is deliberately no such control.
  */
-export function commentCard({ student, enrollment, totals, rows, ei = [], classStats = null,
-                              freeText = '' }) {
+export function commentCard({ student, enrollment, totals, rows, ei = [], freeText = '' }) {
   const name = student?.name || String(enrollment?.studentId || '');
   const L = [];
 
   L.push(`${name} — ${enrollment?.sectionCode || ''}`.trim());
   L.push('');
-  L.push(`Grade to date: ${totals.earned} / ${totals.possible} (${pctStr(totals.pct)})`);
-
-  if (classStats?.median != null && totals.pct != null) {
-    const d = Math.round((totals.pct - classStats.median) * 100);
-    const where = d > 1 ? `${d} points above` : d < -1 ? `${Math.abs(d)} points below` : 'level with';
-    L.push(`Section median: ${pctStr(classStats.median)} — ${where} the median.`);
+  // Every figure below is text the database returned. The note does not round: 89.99 is written as 89.99.
+  if (!totals) {
+    L.push('Grade to date: not available (the total could not be read).');
+  } else if (totals.percentText == null) {
+    L.push(totals.bonusOnly
+      ? `Grade to date: nothing counts yet except ${totals.earnedText} bonus point(s).`
+      : 'Grade to date: nothing counts yet.');
+  } else {
+    L.push(`Grade to date: ${totals.earnedText} / ${totals.possibleText} (${totals.percentText}%)`
+      + `${totals.letter ? `, ${totals.letter}` : ''}${totals.rank != null ? `, rank ${totals.rank}` : ''}`);
   }
 
   const missing = rows.filter((r) => r.cell.state === CELL.MISSING);

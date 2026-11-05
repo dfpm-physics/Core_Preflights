@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Backlog and export · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+</head>
+<body>
+  <header id="topnav"></header>
+  <main class="page-wide" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Loading…</span></div>
+  </main>
+  <script type="module">
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { db } from '../js/supabase.js';
+    import { esc, runPage, lastFirst, triggerDownload } from '../js/util.js';
+    import * as X from '../js/faculty-export.js';
+    import * as B from '../js/faculty-backlog.js';
+
+    const ctx = await bootstrap({ require: 'faculty' });
+    runPage(ctx, init);
+
+    function init() {
+      initTheme();
+      renderNav(ctx, { active: 'backlog', onCourseChange: () => load() });
+      return load();
+    }
+
+    const head = () => `<div class="page-head"><h1>Backlog and export</h1>
+      <div class="sub">What is waiting on you in ${esc(ctx.courseTitleOf(ctx.currentOffering) || 'this course')}, and who sits just under a letter line. Staff only: students never see either.</div></div>`;
+
+    async function load() {
+      const root = document.getElementById('main');
+      if (!ctx.currentOffering) { root.innerHTML = head() + `<div class="alert alert-warn">No course access found.</div>`; return; }
+      root.innerHTML = head() + `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
+      const d = await B.loadBacklog(db, ctx.currentOffering);
+      if (d.error) {
+        console.error('backlog load failed', d.error);
+        const msg = /Could not find the function|PGRST202|permission denied/i.test(d.error.message || '')
+          ? 'This database has not been upgraded for this page yet, so there is nothing to show.' : (d.error.message || 'The read failed.');
+        root.innerHTML = head() + `<div class="alert alert-error">Could not load the backlog: ${esc(msg)}</div>`;
+        return;
+      }
+      const groups = B.groupBacklog(d.cells);
+      const total = B.PILES.reduce((n, p) => n + groups[p.key].length, 0);
+      const piles = B.PILES.map(p => {
+        const rows = groups[p.key];
+        if (!rows.length) return '';
+        const sum = rows.reduce((n, r) => n + r.count, 0);
+        return `<section style="margin-bottom:18px"><h2>${esc(p.title)} <span class="muted">· ${sum}</span></h2><div class="field-hint">${esc(p.hint)}</div>
+          <div class="table-wrap"><table><thead><tr><th>Item</th><th>Cadets</th><th>Late</th><th>Sections</th></tr></thead><tbody>
+          ${rows.map(r => `<tr><td>${esc(d.titles[r.itemId] || r.itemId)}</td><td>${r.count}</td><td>${r.late || ''}</td><td>${r.sections.size}</td></tr>`).join('')}
+          </tbody></table></div></section>`;
+      }).join('');
+      const near = B.nearLineRows(d.totals);
+      root.innerHTML = head() + (total ? piles : `<div class="alert alert-success">Nothing is waiting. Every cell the database can judge is graded or not yet due.</div>`)
+        + `<section><h2>Near a line <span class="muted">· ${near.length}</span></h2>
+          <div class="field-hint">Within the course's chosen width below the next letter. This is a staff list; use the letter scale page to see who would change before a line moves.</div>
+          ${near.length ? `<div class="table-wrap"><table><thead><tr><th>Cadet</th><th>Percent</th><th>Letter</th><th>Near</th></tr></thead><tbody>
+            ${near.map(t => `<tr><td>${esc(lastFirst(d.names[t.enrollment_id] || ''))}</td><td>${esc(t.percent_text ?? '')}</td><td>${esc(t.letter ?? '')}</td><td>${esc(t.near_line_letter)}</td></tr>`).join('')}
+          </tbody></table></div>` : '<div class="muted">Nobody in your sections is near a line.</div>'}</section>`
+        + `<section style="margin-top:22px"><h2>Export</h2>
+          <div class="field-hint">Every number comes from the same database total the students and the reports use.</div>
+          <div class="row wrap" style="gap:10px;margin:8px 0">
+            <button class="btn btn-ghost" data-gb="final">Gradebook (CSV)</button>
+            <button class="btn btn-ghost" data-gb="prog">Gradebook, Prog items only (CSV)</button>
+            <button class="btn btn-ghost" data-bb="prog">Blackboard, Prog (CSV)</button>
+            <button class="btn btn-ghost" data-bb="final">Blackboard, Final (CSV)</button>
+          </div><div id="export-msg"></div></section>`;
+      document.querySelectorAll('[data-gb],[data-bb]').forEach(b => b.onclick = () => doExport(b.dataset.gb ? 'gb' : 'bb', b.dataset.gb || b.dataset.bb));
+    }
+
+    async function doExport(kind, scope) {
+      const msg = document.getElementById('export-msg');
+      msg.innerHTML = '<span class="muted">Preparing…</span>';
+      const d = await X.loadExport(db, ctx.currentOffering, scope);
+      if (d.error) { console.error('export read failed', d.error); msg.innerHTML = `<div class="alert alert-error">Nothing was exported: the read failed (${esc(d.error.message || 'unknown')}).</div>`; return; }
+      const code = (ctx.courseTitleOf(ctx.currentOffering) || 'course').replace(/[^A-Za-z0-9]+/g, '-');
+      if (kind === 'gb') { triggerDownload(X.gradebookCsv({ ...d, scope }), `${code}-gradebook-${scope}.csv`, 'text/csv'); msg.innerHTML = '<div class="alert alert-success">Gradebook downloaded.</div>'; return; }
+      if (!ctx.isDirectorForCurrent()) { msg.innerHTML = '<div class="alert alert-warn">Only a Director can export to Blackboard.</div>'; return; }
+      const r = X.blackboardCsv({ totals: d.totals, people: d.people, scope, settings: d.settings, courseCode: code });
+      if (r.error) { msg.innerHTML = `<div class="alert alert-warn">${esc(r.error)}</div>`; return; }
+      triggerDownload(r.csv, r.filename, 'text/csv'); msg.innerHTML = '<div class="alert alert-success">Blackboard file downloaded.</div>';
+    }
+  </script>
+</body>
+</html>

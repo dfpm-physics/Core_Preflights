@@ -345,7 +345,7 @@
       const parts = [];
       if (n.written) parts.push(`${n.written} on the written questions`);
       if (n.interactive) parts.push(`${n.interactive} on the interactive lesson`);
-      if (n.nosubmission) parts.push(`${n.nosubmission} with nothing submitted yet`);
+      if (n.nosubmission) parts.push(`${n.nosubmission} with no work in yet`);
       if (parts.length < 2) return '';
       return `<div class="muted" style="font-size:0.85em;margin-bottom:12px">
         ${esc(parts.join(' · '))}. An interactive lesson is graded automatically from its report on
