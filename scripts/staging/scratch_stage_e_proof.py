@@ -447,7 +447,7 @@ def rollback_check(cur):
     check("071 rolls back", apply(mig / "rollback" / "071_answer_marking_ROLLBACK.sql"))
     check("the answer functions are gone", one(cur, "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname IN ('answer_context','record_answer','_answer_gate')") == 0)
     check("070 rolls back", apply(mig / "rollback" / "070_answer_internals_ROLLBACK.sql"))
-    check("release_at and the 029 guard are as before", one(cur, "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND (p.prosrc LIKE '%_release_core%' OR p.prosrc LIKE '%auto_check_marker%')") == 0)
+    check("release_at and the 029 guard are as before", one(cur, "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname IN ('release_at', 'grades_new_items_stay_unfinalized') AND (p.prosrc LIKE '%_release_core%' OR p.prosrc LIKE '%auto_check_marker%')") == 0)
     check("070 re-applies", apply(mig / "070_answer_internals.sql"))
     check("071 re-applies", apply(mig / "071_answer_marking.sql"))
 

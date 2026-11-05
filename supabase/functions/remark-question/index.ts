@@ -1,0 +1,27 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handle } from "./handler.js";
+
+// remark-question — staff only. Re-marks every stored answer to ONE question against its current key, after a key has
+// been corrected. All the logic is in handler.js (tested offline); this file only builds the service-role client.
+//
+// NOT DEPLOYED. Deploying needs: migrations app/070, 071 and 072 applied, this folder added to DEPLOYABLE in
+// scripts/staging/deploy_functions.py (verify_jwt true), and the Stage E gate run on staging.
+//
+// The service-role client is used for exactly two database functions, remark_context and remark_apply, whose execute
+// grant is service_role only. It never reads a table. Who may re-mark is decided in the database, from the session's id.
+
+serve((req: Request) => {
+  const admin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { db: { schema: "app" }, auth: { persistSession: false } },
+  );
+  return handle(req, {
+    getUser: async (jwt: string) => {
+      const { data, error } = await admin.auth.getUser(jwt);
+      return error || !data?.user ? null : { id: data.user.id };
+    },
+    rpc: (name: string, args: Record<string, unknown>) => admin.rpc(name, args),
+  });
+});

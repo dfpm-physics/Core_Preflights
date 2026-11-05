@@ -1,8 +1,10 @@
 # Stage E: checking an answer on the server
 
 **Status:** built offline and on a scratch database, 2026-11-05. Not deployed. Not applied to staging or production.
-Migrations `app/070` and `app/071`; the function folder `supabase/functions/check-answer/`; the shared reader
-`site/js/numeric-answer.js`.
+Migrations `app/070` to `app/073`; the function folders `supabase/functions/check-answer/` and
+`supabase/functions/remark-question/`; the shared reader `site/js/numeric-answer.js`; the student page
+`site/student/homework.html` with `site/js/homework.js`. Part one is answering (070, 071). Part two is re-marking (072)
+and the student page with its read of questions (073); both are described under "The second part" below.
 
 ## What it does
 
@@ -48,8 +50,8 @@ wrong, the attempt number and the attempts left. It never gets the key.
 - **E6, keys out of `content` and `content_snapshot`.** New homework keys already live only in `question_keys`. The
   guarantee "no route gives a student a key" also needs the old `activities.content` keys (preflights) hidden by E6;
   it does not affect homework items.
-- **Student read of questions.** The student page needs question text and choices (no key columns exist on `questions`)
-  released at the release time, in RLS or a function. Not built here.
+- **Student read of questions.** Built in part two as the function `student_homework` (073), not as a policy on
+  `questions`. See "The second part".
 - **`grades_new_items_stay_unfinalized`.** Step 1 refuses a finalized grade on a new-page item. `070` adds a narrow
   exception for the answer function (a transaction-local marker). When step 2 removes that trigger, the exception goes
   with it. Another worker editing the same function in 044 to 059 will conflict.
@@ -80,16 +82,110 @@ wrong, the attempt number and the attempts left. It never gets the key.
   key with no tolerance is accepted with a warning, since exact match is a legitimate key. (5) A comma in a number cell is
   refused even in the thousands shape (1,000), because a file is plain data; the student answer box still reads 1,000.
   Still not built: reading `.xlsx`; per-student numbers; a key-check step that records which numbers the person saw.
-- The student page: question display, the answer box, the response for each answer, score so far read from the grade row.
-  It needs the student read of questions above, the deployed function, and the 7-day release rule.
-- `remark_question`: re-marking stored attempts after a key correction. The raw answers are stored, so it can re-run the
-  shared checker in a staff-called function and update `is_correct`, `points_awarded`, `key_version_id` and the grade, and
-  log one `key_remark_runs` row. Instructor-corrected grades are listed, not changed.
+- The student page and the re-mark are built in part two (below). What is still not built there: a staff screen for the
+  re-mark (the function can be called, nothing in `site/faculty/` calls it yet); the link from the lesson list to the
+  homework page (it arrives with the Stage D lesson list); per-student numbers.
 - Result of the last scratch run (2026-11-05, 8 connections): 80 checks passed, 0 failed. Load: 150 students, 900 calls
   in 17 s, p50 146 ms, p95 168 ms, 372 on time and 528 closed, none refused for any other reason. Sixteen connections
   were refused by the shared connection limit (a connection error, not a database fault), so 8 is the default.
-- Adding `check-answer` to `DEPLOYABLE` in `scripts/staging/deploy_functions.py` (deliberately left out so it cannot be
-  deployed by accident).
+- Adding `check-answer` and `remark-question` to `DEPLOYABLE` in `scripts/staging/deploy_functions.py` (deliberately left
+  out so neither can be deployed by accident).
+- Result of the part two scratch run (2026-11-05, up to 6 connections): 112 checks passed, 0 failed (the part one script
+  also still passes, 72 checks without the load test, after its rollback check was narrowed to the two functions it
+  concerns, since `072` now also uses the marker). The offline suites `test-remark-function.mjs` (48 checks) and
+  `test-homework.mjs` (78 checks) pass.
+
+## The second part: re-marking and the student page
+
+**Status:** built offline and on a scratch database, 2026-11-05. Migrations `app/072` and `app/073`. Not deployed, not
+applied to staging or production, not run against the real `check-answer` function.
+
+### Re-marking after a key correction (072, `supabase/functions/remark-question/`)
+
+A person corrects a key (a new version; the old one is superseded). Then a director runs the re-mark for that question.
+
+| Step | Where | Rule |
+|---|---|---|
+| Who | the signed-in session, and the database | a global admin, or a director of the question's course. The same right as correcting a key |
+| Read | `remark_context` | the question's format, its current key and every stored attempt (id and raw answer). The key goes to the function and stops there |
+| Mark | the function, with the same `numeric-answer.js` | one verdict per attempt. An answer the checker cannot read (for example one stored before a rule changed) gets no verdict, is left exactly as it was, and is counted as unreadable. A key the checker cannot read stops the run |
+| Preview | `remark_apply` with commit off | writes nothing. Says how many attempts would change, how many become right and wrong, which grades would be recomputed, and lists the grades it will not touch |
+| Commit | `remark_apply` with commit on | must carry the number the preview showed, or it is refused (`changed_since_preview`). Then, in one transaction: update the attempts (`is_correct`, `points_awarded`, `key_version_id`, `parsed_value`), recompute each `auto_checked` grade, write one `key_remark_runs` row |
+
+Decisions made here:
+
+1. **A function in two halves, not a SQL parser.** The database never reads a number. The edge function marks; the database
+   checks and writes. Like `record_answer`, `remark_apply` trusts its caller for the verdicts, so both new functions are
+   granted to `service_role` only. The database does check that the verdicts are about the question's **current** key, that
+   every stored attempt of the question has exactly one verdict, and that none belong to another question. If a student
+   answered between the read and the write, the answer is `attempts_moved` and the person runs the preview again.
+2. **The preview is a person's decision point.** A commit without the preview's number, or with a different one, writes
+   nothing. A commit also refuses a key a person has not checked (an AI-written key).
+3. **One grade calculation.** The grade step of `record_answer` moved into `_regrade_auto`; `record_answer` and
+   `remark_apply` both call it. `record_answer` is replaced by `072` with the same arguments, checks and results; its
+   rollback puts the `071` text back.
+4. **A grade a person has taken over is listed, never changed.** Any grade whose source is not `auto_checked` is named in the
+   reply (enrollment, item, source) when the re-mark would have moved its points. The count is in `key_remark_runs.grades_listed`.
+5. **Safe to run twice.** An attempt already marked against the current key with the same result is not touched. A second
+   run shows 0 changes and a second commit changes 0 rows. A run with 0 changes is still logged, as a run with 0 changed.
+6. **Re-stamping counts as a change.** An attempt whose result stays the same but which was marked against an older key
+   version is moved to the current version and counted in `attempts_changed`. Its grade is only recomputed if its points moved.
+7. **`from_key_version` is the older version most attempts were marked against** (a question can have attempts from several
+   versions). `to_key_version` is the current key.
+8. **All or nothing.** The commit is one function call, so one transaction. A proof makes the grade write fail after the
+   attempts were updated: no attempt, grade or log row changed.
+9. **Locks.** One re-mark of a question at a time; then each student's item is locked the way `record_answer` locks it, so a
+   student answering during a re-mark is neither lost nor double counted. A question with more than 3000 students is refused
+   (`too_many`) rather than holding that many locks.
+
+A bug the first scratch run found, kept here so it is not repeated: an answer with no verdict was first counted as a change
+(its result went from false to null), and the list of grades to recompute was read after the attempts were already updated,
+so it came back empty. Both are fixed and each has a check.
+
+### The student page (073, `site/student/homework.html`, `site/js/homework.js`)
+
+1. **The read is a function, not a policy.** `student_homework(item)` names every column it returns and rebuilds choices as
+   `{id, text}`. A policy on `questions` would give a student every column of every released row, and any column added
+   later; the function gives nothing that a later column adds until it is edited. `questions`, `question_keys` and
+   `key_remark_runs` stay unreadable to a student session (proved).
+2. **Release.** The function uses the one release rule (`_release_core`): published, and the release time has passed. An item
+   that does not exist, is unpublished, or is not the student's gets the same answer (`not_found`). A question stays readable
+   after the deadline so a student can review. A retired question is left out. The database already refuses a prose question
+   on an auto-checked path, so none can appear.
+3. **The page does not repeat the 7-day rule.** It takes its item from `loadAssignmentStatuses`, which drops what is not
+   released, and then asks the function, which checks again. A test fails if `homework.js` or the page mention the release
+   functions, `LOOKAHEAD`, the key tables or the checker.
+4. **What a student sees.** The item's rule in plain words ("Your best try on each question counts."), the tries per question
+   and the tries left, each question with its box (a text box for a number, radio buttons, or check boxes for "all that
+   apply"), a button, and a reply after every answer ("Correct. 2 tries left." / "Not correct. No tries left."). A refused
+   answer (an unreadable number, a comma) shows the server's plain sentence and is not an attempt. A failed send says the
+   answer was not counted. The hint under a number box does not give an example number, so it cannot match a key.
+5. **The score is read back, never added.** After each answer the page reads the student's grade row and shows its points, and
+   each question's points from `question_scores`. With no row it says "No answers yet", never 0. If the read fails it says so.
+6. **One send at a time per question.** The box and button are locked while a send is open, so a double click or a double
+   Enter sends once. A question with no tries left, or a closed item, is locked. The server decides in every case; the page
+   only reflects it.
+7. **After the deadline** the page is read-only with a plain sentence, unless the item allows late work.
+8. **Reached by `homework.html?a=<assignment offering id>`.** No link to it exists yet. The lesson list that shows it is
+   Stage D's, and entering one of these items on a new page is still held back by the step 1 publish rules, so no student can
+   reach one on production today.
+
+### What it needs after the merge with Stage D (step 2)
+
+- **`my_grades`.** Step 2's rule is that a student module reads the `my_grades` view, never `grades`. That view is not on this
+  branch. `homework.js` reads the grade from one constant, `GRADE_SOURCE` (now `'grades'`). At the merge, change that one
+  line to `'my_grades'`. If step 2 removes a student's `SELECT` on `grades` first, the page shows "Could not load this
+  homework" (it fails loudly) and never a wrong score. **Check that the view returns an `auto_checked` grade before the
+  deadline**, because the score is shown while the item is open. Migration `039` already treats that grade as in progress and
+  hands the points out through the cell function; the view must do the same.
+- **The error pattern.** `site/faculty/terms.html` on step 2 has `guarded()` (one action at a time, errors shown). This page
+  does the same work inside `homework.js` (a per-question busy set, every failure drawn), so nothing needs to change.
+  `cellShowsGrade` in step 2's `student-data.js` belongs to the schedule and grade lists; this page does not use it. If those
+  lists later show an auto-checked item's score, they should use it and never read attempts.
+- **The link.** The step 2 lesson list should link an auto-checked item to `homework.html?a=<id>`.
+- **Migration numbers.** `070` to `073` do not overlap step 2's `044` to `066`. `072` replaces `record_answer`, which `071`
+  created; nothing in `044` to `066` touches it. Another worker editing `grades_new_items_stay_unfinalized` would still
+  conflict with `070`, as noted above.
 
 ## Stage E gate: test list
 
@@ -101,6 +197,16 @@ Runs now (offline or on a scratch database):
 | Altered requests cannot choose a grade; reply is right or wrong only; one parser in both places; a refused answer is not an attempt | `tests/app-schema/test-check-answer-function.mjs` |
 | No route gives a student the key (database grants, student session reads 0 key rows, refusals carry no key); retries cannot exceed limits (12 simultaneous); deadline, late, extension, release; rule best/last/first; person's correction wins; hand-made arguments refused; rollback and re-apply | `scripts/staging/scratch_stage_e_proof.py --expect-ref <staging ref>` |
 | End-of-deadline load, database side | `scripts/staging/scratch_stage_e_proof.py ... --load 150 --threads 8` |
+
+Part two, runs now:
+
+| Gate item | Test |
+|---|---|
+| Re-mark logic: one parser in three places, the checker's verdicts, preview writes nothing, a commit needs the preview number, a second commit changes 0, no key in a reply, a non-director reaches no write | `tests/app-schema/test-remark-function.mjs` (against a model of the database rules) |
+| Re-mark in the database: grants, who may call, preview writes nothing, commit counts and grades, instructor grade listed and unchanged, one log row, twice, malformed or stale verdicts, all or nothing (injected failure), students answering during a re-mark, the best / last / first rule | `scripts/staging/scratch_stage_e_part2_proof.py --expect-ref <staging ref>` |
+| Student read: grants, a released item, no key data in the document or on any other route, nothing before release, unpublished, not enrolled, other course, staff session, retired question; rollback and re-apply of 073 and 072 | the same script |
+| Page logic: what is sent, what each reply says, the score is the grade row, closed and late, markup | `tests/app-schema/test-homework.mjs` |
+| Page in a browser, against a stand-in for the function | `tests/browser/test-homework.html` on `scripts/staging/serve_local.py` (checked by hand once: right, wrong, comma refused, empty, select-all, limit reached, double click, network down, closed, late, score read failing) |
 
 Needs staging (after the function is deployed and `070`/`071` are applied there):
 
@@ -115,3 +221,12 @@ Needs staging (after the function is deployed and `070`/`071` are applied there)
    latency (p95), error rate, and Supabase connection limits; then the database invariants of the scratch load test.
 9. Function logs hold no key, answer text beyond what is intended, or token.
 10. The total (student, instructor, export) agrees for an auto-checked grade before and after the deadline.
+
+Part two, needs staging (after `072`, `073`, `check-answer` and `remark-question` are deployed there):
+
+11. The real `homework.html`, signed in as a seeded student, on an item with questions: the questions show, an answer is
+    checked by the real function, the reply and the score match, a reload shows the same tries and score. **Not done.**
+12. A student session calls `student_homework` for an unreleased item and an item of another course: nothing comes back.
+13. A staff session that is not a director calls `remark-question`: refused. A director previews, then commits with the
+    preview's number; a wrong number is refused; the same commit again changes 0.
+14. A re-mark while a second tab answers.

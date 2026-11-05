@@ -8,6 +8,34 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage E, second part: re-marking and the student homework page, built offline, not deployed)
+
+**What:** (1) Re-marking after a key correction: migration `app/072` (`remark_context`, `remark_apply`, and the grade
+calculation moved into one function, `_regrade_auto`, which `record_answer` and the re-mark both call) and the function
+folder `supabase/functions/remark-question/`, which marks with the same `numeric-answer.js`. A preview writes nothing; a
+commit must carry the preview's number, updates the attempts and the `auto_checked` grades in one transaction, lists any
+other grade without changing it, and logs one `key_remark_runs` row. A second run changes nothing. (2) The student page:
+migration `app/073` (`student_homework`, which gives a student the questions of a released item and no key data), the page
+`site/student/homework.html` and `site/js/homework.js` (question display, an answer box for each, a reply after every
+answer, tries left, the score read from the grade row). Rollbacks for both migrations are in `supabase/migrations/app/rollback/`.
+
+**Why:** a corrected key has to reach the answers already stored, and a student has to be able to answer and be told at once.
+
+**Proof:** `scripts/staging/scratch_stage_e_part2_proof.py` on a scratch database (112 checks, 0 failed; the part one script
+still passes); `tests/app-schema/test-remark-function.mjs` (48) and `tests/app-schema/test-homework.mjs` (78) in the offline
+suite list; the page was driven in a browser against a stand-in for the answer function (`tests/browser/test-homework.html`).
+The first scratch run found two faults in `072` (an unreadable answer counted as a change; the list of grades to recompute
+read after the attempts had been updated). Both are fixed and each has a check.
+
+**Deliberately not done:** nothing deployed; no migration applied to staging or production; staging was only used for
+scratch databases. The real `check-answer` function has not been called from the page, and the real page has not been opened
+signed in as a student (the migrations are not on staging). No staff screen for the re-mark, no link to the homework page
+from the lesson list (it belongs to Stage D's list), and neither function was added to the deploy list. The page reads the
+grade from `grades` until the merge with Stage D, which wants `my_grades`: the change is one constant, named in
+`docs/decisions/V2-STAGE-E-ANSWERS.md`. The name scan was not run (it needs the live roster); the fixtures use made-up names.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 Stage E, problem file upload, built offline, not deployed)
 
 **What:** one file format and one reader for making auto-checked problems from a spreadsheet, `site/js/problem-file.js` (CSV only; it reads numbers with `numeric-answer.js` and has no other dependency). An upload panel on `site/faculty/questions.html`: dry run, then a preview with each question, its key and the range of answers accepted, then one click to save; the instructions an instructor can copy into their own AI model, with one invented example and the rule that a person checks every key; a review panel where a person ticks each AI-written key. `faculty-questions.js` gained `isAiUnchecked`, `uncheckedAiQuestions` and `markKeysChecked` (sends only `checked_at`; the database names the checker). Suite `test-problem-file.mjs` (260 checks, offline, added to the CI list) and a scratch-database proof, `scripts/staging/scratch_problem_file_proof.py` (29 checks).
