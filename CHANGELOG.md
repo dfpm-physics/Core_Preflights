@@ -8,6 +8,18 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (Assignments page: tutor links, release date, two paths on one item; branch `v2-step2-rollin`, local, not pushed)
+
+**What was done.** The Assignments page (`site/faculty/items.html`, `site/js/faculty-items.js`) now covers what the older lesson editor did for tutors, in the new item model.
+- **Prefill links.** The link format is unchanged and read by a new pure module, `site/js/lesson-link.js`. A link opens a chooser: course and term first, then "Create new assignment" or "Modify or add to assignment". A new assignment is filled from the link; an existing one receives only the tutor. A card says whether the link adds a tutor, updates it in place (same id, reports kept) or replaces it (different id). Assignments entered on the older page are shown but not selectable. A test runs the older page's own code and the new module on 14 queries and 4 section layouts and compares destination and values.
+- **Release date** (when cadets can see it): the standard 7-day window, 3 or 14 days before, as soon as published, or a fixed date, in Mountain time. A preset becomes a fixed instant, and the page says so.
+- **Assignment number**, and **one item with a typed response and an interactive tutor**: who earns credit (cadet chooses, typed, or tutor), the rule once a cadet commits, and the tutor's own title and description. A new assignment still opens with title, kind, points and due date only; the new fields are under More options.
+- **Tutor replace or remove** counts the reports and committed cadets first, asks, releases committed cadets with the signed-in person recorded, then deletes. Changing only the link keeps every report.
+- **Points change on an assignment that already has grades** asks first and states the counts.
+- Tests: `test-lesson-link.mjs` (549), `test-items-paths.mjs` (164), `test-items-page.mjs` (162: ids, imports, policy hash, short form). The offline suites ran 67/67 clean, 5048 checks.
+
+**Deliberately not done.** No migration was written or applied; nothing was applied to staging or production, and no one signed in. The older `lessons.html` and `faculty-lessons.js` are unchanged. The page has no publish control, so a link's publish flag is shown and not acted on. Nothing was checked in a browser. The mixed-item path was not run against a scratch database, so its behaviour with the finalize guard rests on the tests' fakes and the migration text. The release presets subtract hours, as the student rule does, so across the clocks-change weekend they can differ from calendar-day arithmetic by an hour.
+
 ## 2026-11-05 — Matthew Recker via Claude (fix round on the roll-in: database rules, worklist, editor, Grade and Health; branch `v2-step2-rollin`, local, not applied anywhere)
 
 **What.**
