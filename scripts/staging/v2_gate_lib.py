@@ -53,10 +53,27 @@ class Builder:
                             VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING""",
                          (self.id("staff", f"{instructor_id}:{co}:{section}"), instructor_id, co, section, role))
 
+    def cadet_email(self, cadet_id, uid=None):
+        """The sign-in address for a test cadet. It cannot clash with another cadet's.
+
+        The short form, cadet<last four digits>, is kept whenever it is free, because the seeded logins use it.
+        Two ids that share their last four digits would otherwise collide on the unique email columns, so when
+        another cadet or account already holds the short form this returns the form with the whole id, which no
+        other cadet can share. The cadet's own existing row never counts as a clash.
+        """
+        short = f"cadet{str(cadet_id)[-4:]}@{DOMAIN}"
+        self.cur.execute("""SELECT 1 FROM students WHERE lower(email) = lower(%s) AND student_id <> %s
+                            UNION ALL
+                            SELECT 1 FROM auth.users WHERE lower(email) = lower(%s) AND id IS DISTINCT FROM %s""",
+                         (short, cadet_id, short, uid))
+        if self.cur.fetchone():
+            return f"cadet{cadet_id}@{DOMAIN}"
+        return short
+
     def cadet(self, cadet_id, name, section, password=None, status="active", with_auth=True):
         """A student and an enrollment. Returns (enrollment id, auth user id or None)."""
         uid = self.id("user", cadet_id) if with_auth else None
-        email = f"cadet{str(cadet_id)[-4:]}@{DOMAIN}"
+        email = self.cadet_email(cadet_id, uid)
         if with_auth:
             self.auth_user(uid, email, password)
         self.cur.execute("""INSERT INTO students (student_id, name, email, auth_user_id) VALUES (%s, %s, %s, %s)

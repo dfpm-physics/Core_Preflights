@@ -263,7 +263,7 @@ export function scheduleToForm(offering, dueRows, sections = []) {
       const z = instantToZone(offering?.due_by_day?.[d]);
       if (z) { dayDates[d] = z.date; time = time || z.time; }
     }
-    if (!Object.keys(dayDates).length && base) {          // an item saved before the days were stored: its one date
+    if (!Object.keys(dayDates).length && base) {          // an assignment saved before the days were stored: its one date
       for (const d of meetingDays(sections)) dayDates[d] = base.date;
       time = base.time;
     }
@@ -331,25 +331,25 @@ export function isLostResponse(error) {
 /** The error for a save refused because the item changed after the form was opened (the optimistic check). */
 export const CHANGED_ERROR = Object.freeze({
   code: '40001',
-  message: 'This item changed after you opened it, so nothing was saved. Reload the page and make your change again.',
+  message: 'This assignment changed after you opened it, so nothing was saved. Reload the page and make your change again.',
 });
 
 /** A database error as a sentence a director can act on. The raw error is logged by the caller. */
 export function plainError(error) {
   const raw = String(error?.message || error || 'Unknown error');
-  const text = raw.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, 'this item');
+  const text = raw.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, 'this assignment');
   if (error?.code === '42501' || /row-level security|permission denied/i.test(raw)) {
     return 'You do not have permission to change this. Only a director of this course can.';
   }
   if (error?.code === '40001' || /changed after you opened/i.test(raw)) {
-    return 'This item changed after you opened it (someone else saved it, or its questions changed its points). Nothing was saved. Reload the page and make your change again.';
+    return 'This assignment changed after you opened it (someone else saved it, or its questions changed its points). Nothing was saved. Reload the page and make your change again.';
   }
   if (error?.code === '23505') {
     // Say which rule was hit: only a title clash is cured by changing the title.
-    if (/assignments_slug_unique/.test(raw)) return 'An item with that name already exists in this course. Change the title and try again.';
+    if (/assignments_slug_unique/.test(raw)) return 'An assignment with that name already exists in this course. Change the title and try again.';
     if (/activities_slug_key/.test(raw)) return 'That tutor id is already used by another lesson. Use a different id.';
-    if (/assignment_due_dates/.test(raw)) return 'The dates of this item were changed at the same moment from another window. Reload the page and try again.';
-    if (/activities_one_per_modality/.test(raw)) return 'This item already has a path of that kind.';
+    if (/assignment_due_dates/.test(raw)) return 'The dates of this assignment were changed at the same moment from another window. Reload the page and try again.';
+    if (/activities_one_per_modality/.test(raw)) return 'This assignment already has a path of that kind.';
     return 'The database says something with the same identity already exists, so this was not saved. Reload the page and try again.';
   }
   if (error?.code === '57014' || /statement timeout|canceling statement/i.test(raw)) {
@@ -361,11 +361,11 @@ export function plainError(error) {
     return 'The connection dropped before an answer came back, so it is not known whether this was saved. Reload the page and look before you try again.';
   }
   if (/publish_needs_active/.test(raw)) {
-    return 'This term is not active, so its items cannot be published.';
+    return 'This term is not active, so its assignments cannot be published.';
   }
-  if (/stay_unpublished/.test(raw)) return 'Items entered on this page cannot be published yet.';
+  if (/stay_unpublished/.test(raw)) return 'Assignments entered on this page cannot be published yet.';
   if (/grades_within_bounds/.test(raw)) {
-    return 'A grade on this item is above its points. Raise the points, or fix that grade first.';
+    return 'A grade on this assignment is above its points. Raise the points, or fix that grade first.';
   }
   if (error?.code === '42703' || /schema cache|does not exist/i.test(raw)) {
     return 'This database has not been upgraded for this page yet. Nothing was changed.';
@@ -406,7 +406,7 @@ export const emptyForm = (kind, sections) => ({
 export function checkForm(form, { kinds = [], sections = [], slugFrozen = false, lockedPath = false, pointsLocked = false } = {}) {
   const out = [];
   const pointsOwned = lockedPath ? !!pointsLocked : pointsOwnedByQuestions(form.grading);
-  if (!String(form.title || '').trim()) out.push('Give the item a title.');
+  if (!String(form.title || '').trim()) out.push('Give the assignment a title.');
   if (String(form.title || '').length > 200) out.push('Keep the title under 200 characters.');
   if (String(form.description || '').length > 2000) out.push('Keep the description under 2000 characters.');
   if (!kinds.some(k => k.id === form.kindId)) out.push('Choose a kind.');
@@ -460,6 +460,59 @@ export function checkForm(form, { kinds = [], sections = [], slugFrozen = false,
     }
   }
   return out;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * "More options": what a first-time form hides, and when it must show it
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * The form shows title, kind, points and one due date. Everything else sits behind a closed "More options" control:
+ * the description, how the work is done and graded, the tutor id and link, late work, bonus, Counts at Prog, the
+ * deadline time, a date for each track, and a date for one section.
+ *
+ * A saved assignment opens with the control already open when ANY of those holds something other than its default,
+ * so a value that is set is never hidden from the person editing it. The defaults are: no description, the delivery and
+ * grading the kind fills in, late work accepted, not bonus, not counted at Prog, 23:59, and no date that differs
+ * between tracks or sections. Pure.
+ *
+ * @param {object|null} item     the saved assignment, or null for a new one (a new form is closed)
+ * @param {object} ctx           { prefill: prefillFromKind(its kind), sections, sched: scheduleToForm(...) }
+ */
+export function needsMoreOptions(item, { prefill = null, sections = [], sched = null } = {}) {
+  if (!item) return false;
+  if (String(item.description || '').trim()) return true;
+  if (item.lateAllowed === false || item.isBonus || item.progIncluded) return true;
+  const paths = item.paths || [];
+  if (paths.length !== 1) return true;                      // its path cannot be changed here, and the note says so
+  const p = paths[0];
+  if (p.modality === 'interactive') return true;            // a tutor id and link live there
+  if (prefill && (p.delivery !== prefill.delivery || p.grading !== prefill.grading)) return true;
+  if (sched) {
+    if (sched.time && sched.time !== DEFAULT_TIME) return true;
+    if (Object.values(sched.sectionDates || {}).some(Boolean)) return true;
+    if (isTwoTrack(sections)) {
+      const days = meetingDays(sections);
+      const given = days.map(d => sched.dayDates?.[d]).filter(Boolean);
+      if (given.length && (given.length < days.length || new Set(given).size > 1)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Which hidden field a problem sentence from checkForm() is about: an element id inside "More options", or '' when
+ * the sentence is about a field that is always shown. The page opens the control and points at that field.
+ */
+export function moreOptionsTarget(problem) {
+  const t = String(problem || '');
+  if (/tutor needs its id/i.test(t)) return 'i-islug';
+  if (/time must look like|does not exist in Mountain time/i.test(t)) return 'i-time';
+  if (/description/i.test(t)) return 'i-desc';
+  if (/delivery and grading/i.test(t)) return 'i-delivery';
+  if (/section date/i.test(t)) return 'i-sections';
+  if (/-day date|due on different days|Both tracks get the same date/i.test(t)) return 'i-daybox';
+  return '';
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -687,7 +740,7 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 /** The warning shown before an item is removed, with the counts. */
 export function removalWarning(title, impact) {
-  const base = `Remove "${title}"? This deletes the item and its dates. It cannot be undone.`;
+  const base = `Remove "${title}"? This deletes the assignment and its dates. It cannot be undone.`;
   if (!impact || (!impact.questions && !impact.keys)) return base;
   return `${base}\n\nIt also deletes its ${plural(impact.questions, 'question', 'questions')} and ` +
     `${plural(impact.keys, 'answer key version', 'answer key versions')}. There is no copy to bring them back from.`;
@@ -722,9 +775,9 @@ export async function updateItem(db, ctx, item, form, ack = null) {
   const fresh = await db.from('assignment_offerings')
     .select(`id,updated_at,${NEW_PAGE_COLUMN}`).eq('id', item.offeringId).maybeSingle();
   if (fresh.error) return { error: fresh.error };
-  if (!fresh.data) return { error: { message: 'This item no longer exists. Reload the page.' } };
+  if (!fresh.data) return { error: { message: 'This assignment no longer exists. Reload the page.' } };
   if (fresh.data[NEW_PAGE_COLUMN] !== true) {
-    return { error: { message: 'This item was entered on the older page. Edit it there. Nothing was changed.' } };
+    return { error: { message: 'This assignment was entered on the older page. Edit it there. Nothing was changed.' } };
   }
   if (item.updatedAt && fresh.data.updated_at !== item.updatedAt) return { error: CHANGED_ERROR };
 
@@ -737,13 +790,13 @@ export async function updateItem(db, ctx, item, form, ack = null) {
     // The database admits an auto-checked path only as the one path of its offering, so a replacement that begins
     // or ends on one cannot be done by adding the new path first. Say so before the title is touched.
     if (single.grading === 'auto_checked' || form.grading === 'auto_checked') {
-      return { error: { message: 'An item cannot be switched to or from "Checked automatically" with a different kind of delivery. ' +
-        'Create a new item with the delivery you want, and remove this one if it is no longer needed. Nothing was changed.' } };
+      return { error: { message: 'An assignment cannot be switched to or from "Checked automatically" with a different kind of delivery. ' +
+        'Create a new assignment with the delivery you want, and remove this one if it is no longer needed. Nothing was changed.' } };
     }
     const w = await countWork(db, item.offeringId);
     if (w.error) return { error: w.error };
     if (w.submissions || w.grades) {
-      return { error: { message: `This item already has ${w.submissions} submission${w.submissions === 1 ? '' : 's'} and ` +
+      return { error: { message: `This assignment already has ${w.submissions} submission${w.submissions === 1 ? '' : 's'} and ` +
         `${w.grades} grade${w.grades === 1 ? '' : 's'}, so its delivery cannot change to a different kind. Nothing about the path was changed.` } };
     }
     const impact = await countQuestionsAndKeys(db, [single.activityId]);
@@ -768,13 +821,13 @@ export async function updateItem(db, ctx, item, form, ack = null) {
     // would not let this person change it (the guarded statement matched nothing). Look, so each gets its own sentence.
     const again = await db.from('assignment_offerings').select('id,updated_at').eq('id', item.offeringId).maybeSingle();
     if (!again.error && again.data && again.data.updated_at === fresh.data.updated_at) {
-      return { error: { code: '42501', message: 'row-level security: this person may not change this item' } };
+      return { error: { code: '42501', message: 'row-level security: this person may not change this assignment' } };
     }
     return { error: CHANGED_ERROR };
   }
   const partial = (error) => ({
     error,
-    partial: 'The points, dates and flags were already saved; the rest of this save was not. Reload the page to see the item as it is.',
+    partial: 'The points, dates and flags were already saved; the rest of this save was not. Reload the page to see the assignment as it is.',
   });
 
   const a = await db.from('assignments').update({
@@ -854,19 +907,19 @@ export async function previewRemoval(db, offeringId) {
   const fresh = await db.from('assignment_offerings')
     .select(`id,assignment_id,${NEW_PAGE_COLUMN}`).eq('id', offeringId).maybeSingle();
   if (fresh.error) return { error: fresh.error, refused: false };
-  if (!fresh.data) return { error: { message: 'This item no longer exists. Reload the page.' }, refused: true };
+  if (!fresh.data) return { error: { message: 'This assignment no longer exists. Reload the page.' }, refused: true };
   if (fresh.data[NEW_PAGE_COLUMN] !== true) {
-    return { error: { message: 'This item was entered on the older page. Remove it there. Nothing was changed.' }, refused: true };
+    return { error: { message: 'This assignment was entered on the older page. Remove it there. Nothing was changed.' }, refused: true };
   }
   const w = await countWork(db, offeringId);
   if (w.error) {
-    return { error: { message: 'Could not check whether students have work on this item, so it was not removed.' }, refused: true };
+    return { error: { message: 'Could not check whether students have work on this assignment, so it was not removed.' }, refused: true };
   }
   if (w.submissions || w.grades) {
     const parts = [];
     if (w.submissions) parts.push(`${w.submissions} submission${w.submissions === 1 ? '' : 's'}`);
     if (w.grades) parts.push(`${w.grades} grade${w.grades === 1 ? '' : 's'}`);
-    return { error: { message: `This item has ${parts.join(' and ')}, so it cannot be removed here. Nothing was changed.` }, refused: true };
+    return { error: { message: `This assignment has ${parts.join(' and ')}, so it cannot be removed here. Nothing was changed.` }, refused: true };
   }
   const others = await db.from('assignment_offerings').select('id')
     .eq('assignment_id', fresh.data.assignment_id).neq('id', offeringId);
@@ -877,7 +930,7 @@ export async function previewRemoval(db, offeringId) {
     const acts = await db.from('activities').select('id').eq('assignment_id', fresh.data.assignment_id);
     if (acts.error) return { error: acts.error, refused: false };
     const c = await countQuestionsAndKeys(db, (acts.data || []).map(x => x.id));
-    if (c.error) return { error: { message: 'Could not count the questions on this item, so it was not removed.' }, refused: true };
+    if (c.error) return { error: { message: 'Could not count the questions on this assignment, so it was not removed.' }, refused: true };
     impact = { questions: c.questions, keys: c.keys };
   }
   return { error: null, impact, assignmentId: fresh.data.assignment_id, shared: (others.data || []).length > 0 };
@@ -898,13 +951,13 @@ export async function removeItem(db, offeringId, ack = null) {
   const d = await db.from('assignment_offerings').delete().eq('id', offeringId).select('id');
   if (d.error) return { error: d.error, refused: false };
   if (!d.data || d.data.length !== 1) {
-    return { error: { message: 'The item was not removed (it may already be gone). Reload the page.' }, refused: false };
+    return { error: { message: 'The assignment was not removed (it may already be gone). Reload the page.' }, refused: false };
   }
   if (!pre.shared) {
     const da = await db.from('assignments').delete().eq('id', pre.assignmentId).select('id');
     if (da.error) return { error: da.error, refused: false };
     if (!da.data || da.data.length !== 1) {
-      return { error: { message: 'The item was removed from this course offering, but its definition could not be removed. Reload the page.' }, refused: false };
+      return { error: { message: 'The assignment was removed from this course offering, but its definition could not be removed. Reload the page.' }, refused: false };
     }
   }
   return { error: null, refused: false };

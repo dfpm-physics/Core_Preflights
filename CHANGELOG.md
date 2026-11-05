@@ -8,6 +8,35 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage C first-time-user pass, `v2-stage-c-fixes` branch)
+
+Made the staff pages usable by a person doing this for the first time. No database change, no migration, and nothing a save writes was changed.
+
+- **Roster import** (`site/faculty/admin.html`, `site/js/roster-import.js`): the preview now opens with one plain sentence ("5 rows are ready once you create 3 sections. 3 rows stay out.") and groups each skipped row once: fix now (sections not created yet, one button), stays out (bad section name or email), and another course or term (stays out by default; letting one in is a separate control under "This row does belong here"). Every earlier safety rule and refusal is kept.
+- **Wording**: "Items" is now "Assignments" wherever staff read it (navigation, headings, buttons, messages). Code and table names are unchanged. The older lesson page is labelled "Older assignments".
+- **Assignment form** (`site/faculty/items.html`): a new assignment asks only for title, kind, points and one due date. Description, delivery, grading, tutor id and link, late work, bonus, Counts at Prog, deadline time, per-track dates and per-section dates sit behind one closed "More options". On edit it opens by itself when any of them differs from its default, and a check that needs a hidden field opens it and focuses that field.
+- **Form layout** (`site/css/styles.css`): one shared `.form-grid` rule (subgrid) keeps labels, controls and captions each on one level of a row; the assignment, question, scale and course/term forms use it. New offline check `tests/app-schema/test-form-layout.mjs`.
+- **Setting up a course for a term** (`site/faculty/terms.html`, `site/js/faculty-terms.js`): administrators get one guided form (course, term, director) that stops at the first failure and says what was made. Directors get a checklist (Roster, Assignments, Letter scale, Go active) with one button each. The earlier forms and the copy-from-an-earlier-term tool remain, under "Advanced" and a link on the checklist. Who may do what is still decided by the database.
+- Tests: offline suites 40 of 40 clean, 2740 checks. Walked in a browser against staging as an administrator and as a director using the example roster; layout measured at 1400 px and 900 px wide and checked on a phone-width screenshot.
+- **Question choices** (`site/faculty/questions.html`, `site/js/faculty-questions.js`, `site/css/styles.css`): each choice has a letter, a keyboard-operable switch labelled "Choice x is correct" (replacing the radio and the word Correct), and a text box joined to its delete button as one control. A one-answer question turns the other switches off when one goes on; a multiple-answer question keeps them independent. The rule is a pure function (`applyCorrectToggle`) with offline checks.
+- **Course Admin forms** (`site/faculty/admin.html`): the add-student form, find-a-cadet row, add-section dialog and Blackboard export row now use the shared `.form-grid` rule; `test-form-layout.mjs` covers them.
+- **Roles per course and term**: new offline suite `test-roles.mjs` runs the real sign-in code against a stub. It shows that role, navigation and the role label follow the chosen course, that directing one course and teaching another in one term works, that a past-term director is not a director of the current term, and that the Set up checklist lists only offerings the person directs. The checklist selection moved into `checklistTargets` (`site/js/faculty-terms.js`) and the navigation decisions into `visibleNavLinks` and `navRoleLabel` (`site/js/nav.js`) so they can be tested; behaviour is unchanged. No database change.
+- Tests (later run): offline suites 41 of 41 clean, 2786 checks. Choice rows and the add-student dialog were viewed in a browser on staging (no save made).
+- **Correct switch restyled**: the switch is now `.correct-toggle`, the same height as the text box, with the words Correct and Incorrect, so it no longer overrides the report page's `.switch`. Letter, switch and text box were measured on one center line on an injected row, in light and dark mode.
+- **Not done**: not pushed and not merged to `v2`; `check_doc_sources.py` flags several help pages for other reasons, which were not reviewed here. Staging now holds invented `ux-` test data (one course, one term, five enrollments, one assignment).
+
+---
+
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage C left-over review items, `v2-stage-c-fixes` branch)
+
+Three small fixes from the open review items, each test first. The scale page now reads the course's active flag again at
+the moment of saving, so a page opened before the course became active still asks for the effect preview. The question
+check refuses a percent tolerance over 100. The test-cadet builder in the staging gate scripts can no longer give two
+cadets the same sign-in address (the short form is kept when free, the whole id is used when it is taken); tested offline
+with a stand-in cursor, the live script was not run. Nothing applied to any database, no migration, no deploy, staging
+untouched. Deliberately not done: any change to key-row editing rights, the other open items (judged not worth a change
+before step 1, or needing a decision).
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 Stage C staff pages, on staging, `v2` branch)
 
 - **Rough Items page for directors, `site/faculty/items.html`, on staging only.** It enters work of all seven

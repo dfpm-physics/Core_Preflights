@@ -28,7 +28,7 @@ export function isNewPageItem(x) {
 
 /** The sentence shown when an old page declines to act on such an item. */
 export function newPageMessage(action) {
-  return `This item was entered on the newer page, so this page will not ${action} it. ` +
+  return `This assignment was entered on the newer page, so this page will not ${action} it. ` +
          `Open it on the newer page (${NEW_PAGE_HREF}) instead. Nothing was changed.`;
 }
 
@@ -87,7 +87,7 @@ export async function refuseIfNewPage(db, offeringId, action, known = null) {
   const owned = await offeringIsNewPage(db, offeringId);
   if (owned === true) return { error: newPageError(action) };
   if (owned === null) {
-    return { error: { message: `Could not check which page owns this item, so this page will not ` +
+    return { error: { message: `Could not check which page owns this assignment, so this page will not ` +
                                `${action} it. Reload and try again. Nothing was changed.`,
                       code: 'new_page_unknown' } };
   }

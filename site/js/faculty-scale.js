@@ -307,6 +307,17 @@ export async function loadScale(db, offeringId) {
   };
 }
 
+/**
+ * Whether the offering is the active one, read now. The page calls this at the moment of saving, because the flag
+ * loaded with the page can be out of date (the course may have been made active in another tab since).
+ * No row back counts as active, so the preview is still required. Returns { isActive } or { error }.
+ */
+export async function readIsActive(db, offeringId) {
+  const off = await db.from('course_offerings').select('id,is_active').eq('id', offeringId).maybeSingle();
+  if (off.error) return { error: off.error };
+  return { isActive: off.data ? !!off.data.is_active : true };
+}
+
 /** Who would change letter or near-line flag. Saves nothing. */
 export async function previewScale(db, offeringId, scale) {
   const r = await db.rpc('scale_change_preview', { p_course_offering: offeringId, p_lines: scale.lines, p_width: scale.width });

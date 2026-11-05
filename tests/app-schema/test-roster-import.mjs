@@ -13,6 +13,7 @@ import {
   departures, returning, sectionMoves,
   REQUIRED_FIELDS,
   sectionDefaultsFrom, sectionCodeProblem, describeSectionDefaults,
+  groupSkipped, importHeadline,
 } from '../../site/js/roster-import.js';
 
 // The display half of the name pipeline lives in util.js, which resolves its icon base from
@@ -599,4 +600,34 @@ eq('describes a section with no days', describeSectionDefaults('LAB-3'), 'no mee
   const r = parseRosterFile(text, { knownSections: {} });
   eq('the free-form section is offered for creation', r.unknownSections, ['LAB-3']);
   check('the odd one is skipped with the plain reason', r.skipped.some(k => /cannot use/.test(k.reason)));
+}
+
+/* ── The screen groups rows by what the person can do ─────────────────────── */
+section('groupSkipped and importHeadline');
+{
+  const example = readFileSync(new URL('../../docs/examples/roster-example.csv', import.meta.url), 'utf8');
+  const p = parseRosterFile(example, { knownSections: {}, courseCode: 'mock-101', termCode: 'fall-2026' });
+  const g = groupSkipped(p);
+  eq('five rows wait only for sections', g.fixable.length, 5);
+  eq('two rows have a problem in the row itself (a bad section name, a bad email)', g.stayOut.length, 2);
+  eq('one row names another course', g.otherCourse.length, 1);
+  eq('a row is in one group only', g.fixable.length + g.stayOut.length + g.otherCourse.length, p.skipped.length);
+  eq('the headline leads with what is ready, never with a count of matches',
+    importHeadline(p), '5 rows are ready once you create 3 sections. 3 rows stay out.');
+  check('the headline does not say "match"', !/match/i.test(importHeadline(p)));
+
+  // After the sections exist, the five are ready and the same three stay out.
+  const known = { 'LAB-1': {}, 'LAB-2': {}, W2C: {} };
+  const q = parseRosterFile(example, { knownSections: known, courseCode: 'mock-101', termCode: 'fall-2026' });
+  eq('with the sections created, the headline changes', importHeadline(q), '5 rows are ready to import. 3 rows stay out.');
+  eq('a clean file has no second sentence',
+    importHeadline(parseRosterFile('Cadet EMPLID,Cadet Name,Email,Section\n3000000901,"A, B",a@b.example,LAB-1\n', { knownSections: { 'LAB-1': {} } })),
+    '1 row is ready to import.');
+  eq('nothing ready is said plainly', importHeadline({ rows: [], skipped: [], unknownSections: [] }), 'No rows are ready to import.');
+
+  // Letting in the other-course row is a separate act, and only that row moves.
+  const key = q.identityGroups.map(x => x.key);
+  const r = parseRosterFile(example, { knownSections: known, courseCode: 'mock-101', termCode: 'fall-2026', approved: key });
+  eq('letting the other course in moves exactly that row to ready', [r.rows.length, groupSkipped(r).otherCourse.length], [6, 0]);
+  eq('the two bad rows still stay out', groupSkipped(r).stayOut.length, 2);
 }

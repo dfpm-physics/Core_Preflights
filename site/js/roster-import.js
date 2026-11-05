@@ -792,6 +792,59 @@ export function sectionMoves(rows, enrolled) {
   return { moves: moves.sort(bySection), ambiguous: ambiguous.sort(bySection) };
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════════════
+ * Grouping the rows that did not come in, by what the person can do about them
+ * ════════════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Sort the skipped rows into three groups, by what the person reading the screen can do:
+ *
+ *   fixable     the section does not exist in this course yet. One button creates it, so these are
+ *               "ready once you create the sections".
+ *   stayOut     the row itself is wrong (a bad cadet ID, a bad email, a bad section name, a duplicate).
+ *               Nothing on this screen can fix it: the file has to change.
+ *   otherCourse the row names another course or term. It stays out unless the person says, on purpose
+ *               and apart from the other two groups, that it belongs here.
+ *
+ * A row is in exactly one group, because parseRosterFile() gives each skipped row one `code`. Pure.
+ */
+export function groupSkipped(parsed) {
+  const out = { fixable: [], stayOut: [], otherCourse: [] };
+  for (const k of parsed?.skipped || []) {
+    if (k.code === 'unknown-section') out.fixable.push(k);
+    else if (k.code === 'other-course') out.otherCourse.push(k);
+    else out.stayOut.push(k);
+  }
+  return out;
+}
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The first line of the screen, in plain words: what is ready, what is ready once the sections exist,
+ * and what stays out. It never leads with "0 of 8 match". Pure.
+ *
+ * @returns {string} for example "5 rows are ready once you create 3 sections. 3 rows stay out."
+ */
+export function importHeadline(parsed) {
+  const g = groupSkipped(parsed);
+  const ready = parsed?.rows?.length || 0;
+  const sections = parsed?.unknownSections?.length || 0;
+  const stay = g.stayOut.length + g.otherCourse.length;
+  const verb = (n) => (n === 1 ? 'is' : 'are');
+  let first;
+  if (g.fixable.length && sections) {
+    const n = ready + g.fixable.length;
+    first = `${plural(n, 'row', 'rows')} ${verb(n)} ready once you create ${plural(sections, 'section', 'sections')}.`;
+  } else if (ready) {
+    first = `${plural(ready, 'row', 'rows')} ${verb(ready)} ready to import.`;
+  } else {
+    first = 'No rows are ready to import.';
+  }
+  const second = stay ? ` ${plural(stay, 'row stays', 'rows stay')} out.` : '';
+  return first + second;
+}
+
 /** Summary counts for the preview header. */
 export function summarize(parsed, reconciled, departing = []) {
   const decidable = reconciled.conflicts.filter(c => !c.trivial);

@@ -86,6 +86,25 @@ export function choiceIdFor(index) {
   return index < letters.length ? letters[index] : `c${index + 1}`;
 }
 
+/**
+ * What the correct set becomes when one choice's switch is flipped. One answer: turning one on turns the
+ * others off. Several answers: each switch is independent. Order follows the order switches were turned on.
+ */
+export function applyCorrectToggle(correct, id, on, format) {
+  const rest = (correct || []).filter(c => c !== id);
+  if (!on) return rest;
+  return format === 'multiple_select' ? [...rest, id] : [id];
+}
+
+/** One choice row: letter, a keyboard-operable switch for "correct", and the text box joined to its delete button. */
+export function choiceRowHtml(c, correct) {
+  return `<div class="choice-row" data-choice="${esc(c.id)}">
+    <span class="choice-letter">${esc(c.id)}</span>
+    <label class="correct-toggle"><input type="checkbox" role="switch" data-correct aria-label="Choice ${esc(c.id)} is correct" ${correct ? 'checked' : ''}><span class="correct-toggle-track" aria-hidden="true"></span></label>
+    <span class="choice-join"><input type="text" data-text maxlength="400" aria-label="Text of choice ${esc(c.id)}" value="${esc(c.text)}">
+    <button type="button" data-drop title="Remove this choice" aria-label="Remove choice ${esc(c.id)}">×</button></span></div>`;
+}
+
 /** The next free choice id for a list that may already have gaps (ids are stable once given). */
 export function nextChoiceId(choices) {
   const taken = new Set((choices || []).map(c => c.id));
@@ -120,7 +139,7 @@ export const emptyQuestion = (format = 'multiple_choice') => ({
 /**
  * Check one question and its key. Returns plain sentences; empty means acceptable.
  *   opts.grading     the path's grading, for the prose rule
- *   opts.takenQids   qids already used in this item (retired ones included)
+ *   opts.takenQids   qids already used in this assignment (retired ones included)
  *   opts.isNew       true when the qid must also be unused
  */
 export function checkQuestion(q, { grading = 'auto_checked', takenQids = [], isNew = true } = {}) {
@@ -129,11 +148,11 @@ export function checkQuestion(q, { grading = 'auto_checked', takenQids = [], isN
   const fmt = q.format;
   if (!FORMATS.includes(fmt)) { out.push(`${label}: the format must be one of ${FORMATS.join(', ')}.`); return out; }
   if (fmt === 'prose' && grading === 'auto_checked') {
-    out.push(`${label}: a prose question cannot be on an auto-checked item, because a machine never marks prose. Choose another format, or make the item human graded.`);
+    out.push(`${label}: a prose question cannot be on an auto-checked item, because a machine never marks prose. Choose another format, or make the assignment human graded.`);
   }
   if (blank(q.qid)) out.push('Each question needs an id.');
   else if (!QID_RE.test(String(q.qid))) out.push(`${label}: the id may use letters, numbers, dot, dash and underscore only (up to 64).`);
-  else if (isNew && takenQids.includes(q.qid)) out.push(`${label}: that id is already used in this item. An id is never reused, even after the question is retired.`);
+  else if (isNew && takenQids.includes(q.qid)) out.push(`${label}: that id is already used in this assignment. An id is never reused, even after the question is retired.`);
 
   if (blank(q.prompt)) out.push(`${label}: write the question.`);
   else if (String(q.prompt).length > MAX_PROMPT) out.push(`${label}: the question text is longer than ${MAX_PROMPT} characters.`);
@@ -196,6 +215,7 @@ export function checkQuestion(q, { grading = 'auto_checked', takenQids = [], isN
     else if (ta !== null && ta < 0) out.push(`${label}: the absolute tolerance cannot be negative.`);
     if (Number.isNaN(tp)) out.push(`${label}: the percent tolerance must be a plain number.`);
     else if (tp !== null && tp < 0) out.push(`${label}: the percent tolerance cannot be negative.`);
+    else if (tp !== null && tp > 100) out.push(`${label}: the percent tolerance cannot be over 100, which would accept almost any answer.`);
     if (v === 0 && ta === null) out.push(`${label}: a correct value of 0 needs an absolute tolerance (0 for exactly zero), because a percentage of zero means nothing.`);
     if (Number.isNaN(sf) || (sf !== null && (!Number.isInteger(sf) || sf < 1 || sf > 15))) out.push(`${label}: significant figures must be a whole number from 1 to 15.`);
     if (!MODES.includes(k.sigFigMode || 'ignore')) out.push(`${label}: the significant figures rule must be ignore, warn or require.`);
@@ -488,7 +508,7 @@ export function planImport(text, { grading = 'auto_checked', existing = [] } = {
     reserved.push(q.qid);
     if (seen.has(q.qid)) row.problems.push(`Row ${line}: the id ${q.qid} appears twice in this file.`);
     seen.add(q.qid);
-    if (taken.has(q.qid)) row.problems.push(`Row ${line}: the id ${q.qid} is already used in this item (retired questions keep their ids). The import only adds questions; change the id.`);
+    if (taken.has(q.qid)) row.problems.push(`Row ${line}: the id ${q.qid} is already used in this assignment (retired questions keep their ids). The import only adds questions; change the id.`);
 
     if (format) row.problems.push(...checkQuestion(q, { grading, takenQids: [], isNew: false }).map(p => `Row ${line}: ${p}`));
     row.question = q;
@@ -538,18 +558,18 @@ export function questionError(error) {
     return 'The connection dropped before an answer came back, so it is not known whether this was saved. Reload the page and look before you try again.';
   }
   if (error?.code === '23505' && /questions_activity_qid_key/.test(raw)) {
-    return 'That question id is already used in this item. An id is never reused.';
+    return 'That question id is already used in this assignment. An id is never reused.';
   }
   if (error?.code === '23505') return 'Someone else changed this question at the same moment. Reload the page and try again.';
   if (/question_keys_zero_needs_abs/.test(raw)) {
     return 'A correct value of 0 needs an absolute tolerance, because a percentage of zero means nothing.';
   }
-  if (/prose question/i.test(raw)) return 'Prose is never marked by a machine, so it cannot sit on an auto-checked item or carry a machine key.';
+  if (/prose question/i.test(raw)) return 'Prose is never marked by a machine, so it cannot sit on an auto-checked assignment or carry a machine key.';
   if (/numeric\b.*(field overflow|out of range)|numeric field overflow/i.test(raw)) return 'A number is too large for its column.';
   if (error?.code === '42703' || error?.code === 'PGRST205' || /schema cache|does not exist/i.test(raw)) {
     return 'This database has not been upgraded for question entry yet. Nothing was changed.';
   }
-  return raw.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, 'this item');
+  return raw.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, 'this assignment');
 }
 
 const ITEM_SELECT =
@@ -571,10 +591,10 @@ export async function loadItem(db, offeringId) {
   const isNew = d[NEW_PAGE_COLUMN] === true;
   const path = paths.length === 1 ? paths[0] : null;
   let reason = null;
-  if (!isNew) reason = 'This item was entered on the older page, so its questions are not edited here.';
-  else if (d.is_published) reason = 'This item is published, so its questions cannot be changed here.';
-  else if (!path) reason = 'Questions are entered on an item with exactly one path, delivered as questions on the site.';
-  else if (path.delivery !== 'online_questions') reason = 'This item is not delivered as questions on the site, so it has no questions to enter.';
+  if (!isNew) reason = 'This assignment was entered on the older page, so its questions are not edited here.';
+  else if (d.is_published) reason = 'This assignment is published, so its questions cannot be changed here.';
+  else if (!path) reason = 'Questions are entered on an assignment with exactly one path, delivered as questions on the site.';
+  else if (path.delivery !== 'online_questions') reason = 'This assignment is not delivered as questions on the site, so it has no questions to enter.';
   return {
     item: {
       offeringId: d.id, title: d.assignments?.title || '', slug: d.assignments?.slug || '',

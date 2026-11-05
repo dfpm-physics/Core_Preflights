@@ -133,6 +133,8 @@ section('checking one question');
   check('a value of 0 is accepted only with an absolute tolerance', problems(numeric({ value: '0' })).some(p => /needs an absolute tolerance/.test(p)));
   eq('a value of 0 with tolerance 0 passes (exactly zero)', problems(numeric({ value: '0', tolAbs: '0' })), []);
   eq('a value of 0 with tolerance 0.01 passes', problems(numeric({ value: '0.0', tolAbs: '0.01' })), []);
+  check('a percent tolerance over 100 is refused', problems(numeric({ value: '9.8', tolPct: '500' })).some(p => /percent tolerance.*100/.test(p)));
+  check('a percent tolerance of exactly 100 is allowed', !problems(numeric({ value: '9.8', tolPct: '100' })).some(p => /percent tolerance/.test(p)));
   check('a percent tolerance alone does not save a zero', problems(numeric({ value: '0', tolPct: '5' })).some(p => /needs an absolute tolerance/.test(p)));
   check('a negative tolerance is refused', problems(numeric({ tolAbs: '-1' })).some(p => /cannot be negative/.test(p)));
   check('a sig fig rule without a count is refused', problems(numeric({ sigFigMode: 'require' })).some(p => /say how many/.test(p)));
@@ -252,7 +254,7 @@ section('the import plan: the example file, and the whole file refused for one b
   check('the correct choice can be named by its text', one('t,multiple_choice,"x",1,Alpha|Beta,beta,,').ok);
   check('a multiple choice with two correct is refused', /exactly one correct/.test(why(one('t,multiple_choice,"x",1,A|B,a|b,,'))));
   check('a duplicate qid inside the file is refused', /appears twice/.test(why(Q.planImport(`${head}\nt,numeric,"x",1,,,1,0\nt,numeric,"y",1,,,1,0`, {}))));
-  check('a qid that already exists (even retired) is refused', /already used in this item/.test(why(one('q1,numeric,"x",1,,,1,0', 'auto_checked', [{ qid: 'q1', position: 1 }]))));
+  check('a qid that already exists (even retired) is refused', /already used in this assignment/.test(why(one('q1,numeric,"x",1,,,1,0', 'auto_checked', [{ qid: 'q1', position: 1 }]))));
   check('a missing qid gets the next free one, skipping existing', one('  ,numeric,"x",1,,,1,0', 'auto_checked', [{ qid: 'q1', position: 1 }]).toWrite[0].columns.qid === 'q2');
   check('a cell count above the header is refused (an unquoted comma)', /needs quotes/.test(why(one('t,numeric,"x",1,,,1,0,extra'))));
   check('an empty file is refused', /empty/.test(why(Q.planImport('   '))));
@@ -507,7 +509,25 @@ section('the page: no publish control, no key on the student side, no kind branc
   check('the module never names checked_by in a write', !/checked_by\s*:/.test(mod));
   check('the page is director only', /isDirectorForCurrent\(\)/.test(html));
   check('the page sanitizes with esc and sets no raw HTML from data', (html.match(/\$\{esc\(/g) || []).length > 20);
-  check('the Items page links to it for an online-questions item', /questions\.html\?a=/.test(read('site/faculty/items.html')));
+  check('the Assignments page links to it for an online-questions item', /questions\.html\?a=/.test(read('site/faculty/items.html')));
+}
+
+section('choice rows: a switch for correct, joined delete button');
+{
+  const set = (...a) => [...a];
+  eq('one-answer: turning b on turns a off', Q.applyCorrectToggle(set('a'), 'b', true, 'multiple_choice'), ['b']);
+  eq('one-answer: turning the only one off leaves none', Q.applyCorrectToggle(set('a'), 'a', false, 'multiple_choice'), []);
+  eq('multiple-answer: toggles are independent (on)', Q.applyCorrectToggle(set('a'), 'b', true, 'multiple_select'), ['a', 'b']);
+  eq('multiple-answer: toggles are independent (off)', Q.applyCorrectToggle(set('a', 'b'), 'a', false, 'multiple_select'), ['b']);
+  const html = Q.choiceRowHtml({ id: 'c', text: 'x "q"' }, true);
+  check('the correct control is a checkbox with role switch, keyboard focusable', /<input type="checkbox" role="switch"/.test(html) && !/tabindex="-1"/.test(html));
+  check('the switch has an accessible label naming the choice', /aria-label="Choice c is correct"/.test(html));
+  check('no radio and no word Correct as visible text', !/type="radio"/.test(html) && !/>\s*Correct\s*</.test(html));
+  check('the text input and delete button sit in one joined control', /<span class="choice-join">\s*<input type="text"[^>]*data-text[^>]*>\s*<button[^>]*data-drop/.test(html));
+  check('the letter label is kept', /class="choice-letter">c</.test(html));
+  check('the switch is checked when correct and text is escaped', /checked/.test(html) && !/x "q"/.test(html));
+  const css = read('site/css/styles.css');
+  check('the shared CSS joins the input and button with no gap', /\.choice-join\s*\{[^}]*display:\s*flex/.test(css) && /\.choice-join > button[^{]*\{[^}]*margin:\s*0;[^}]*border-left-width:\s*0/.test(css));
 }
 
 summary();

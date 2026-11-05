@@ -63,20 +63,18 @@
 
       <div id="as-picked" class="alert alert-info" style="display:none"></div>
 
-      <div class="row wrap" style="gap:12px">
-        <div class="field" style="min-width:150px;flex:1 1 150px"><label for="as-sid">Cadet ID</label>
+      <div class="form-grid" style="--fg-min:150px">
+        <div class="field"><label for="as-sid">Cadet ID</label>
           <input id="as-sid" type="text" inputmode="numeric" placeholder="3000990009"></div>
-        <div class="field grow" style="min-width:170px"><label for="as-nm">Full name</label>
+        <div class="field"><label for="as-nm">Full name</label>
           <input id="as-nm" type="text" placeholder="Jane Doe"></div>
-      </div>
-      <div class="row wrap" style="gap:12px">
-        <div class="field grow" style="min-width:190px"><label for="as-em">Email</label>
+        <div class="field"><label for="as-em">Email</label>
           <input id="as-em" type="email" placeholder="jane.doe@afacademy.af.edu">
           <div class="field-hint">Their sign-in address. Without one they cannot be given a login.</div></div>
-        <div class="field" style="min-width:110px;flex:0 0 110px"><label for="as-sq">Squadron</label>
+        <div class="field"><label for="as-sq">Squadron</label>
           <input id="as-sq" type="text" placeholder="CS-01"></div>
+        <div class="field"><label for="as-sec">Section</label><select id="as-sec"></select></div>
       </div>
-      <div class="field"><label for="as-sec">Section</label><select id="as-sec"></select></div>
 
       <div class="error-msg" id="as-error" style="min-height:1em"></div>
       <div class="row" style="gap:10px;margin-top:8px">
@@ -286,12 +284,11 @@
             <code>Cadet Name</code>, <code>Email</code>, and <code>Section</code>;
             <code>Cadet Squadron</code>, Term, Subject, Course Number, <code>Major 1</code>,
             <code>Major 2</code>, <code>Major 3</code>, Sex, and Advisor Name are picked up when
-            present and skipped when they are not. Rows naming another course or term are held
-            back and listed by what they say — <strong>tick one to include it</strong> if it
-            belongs here anyway (a second course number for the same course, say) — and you
-            review anything that would change an existing record before it is written.
-            <strong>A section the file names that this course does not have yet is offered for
-            creation in the preview</strong> — a first import into an empty course is expected.</div>
+            present and skipped when they are not. The check that follows sorts every row by what you
+            can do about it: <strong>sections to create</strong> (one button), <strong>rows that stay out</strong>
+            because of a problem in the row, and <strong>rows for another course or term</strong>, which stay out
+            unless you say a row does belong here. You review anything that would change an existing record
+            before it is written. A first import into an empty course is expected to start by creating its sections.</div>
           <div class="dropzone" id="dropzone">
             <div class="dz-ic">📄</div><div><strong>Choose a file</strong> or drag &amp; drop it here</div>
           </div>
@@ -311,14 +308,14 @@
         </details>
 
         <div class="card">
-          <div class="row wrap" style="justify-content:space-between;gap:12px;align-items:flex-end">
-            <div class="field grow" style="margin-bottom:0;min-width:220px">
+          <div class="form-grid" style="--fg-min:220px">
+            <div class="field">
               <label for="q">Find a cadet</label>
               <input id="q" type="search" placeholder="Name, cadet ID, squadron or section"
                      autocomplete="off" value="${esc(query)}">
             </div>
-            <button class="btn btn-secondary btn-sm" id="add-stu-btn">+ Add student</button>
-            <div id="prov-box"></div>
+            <div class="field-action"><button class="btn btn-secondary btn-sm" id="add-stu-btn">+ Add student</button></div>
+            <div class="field-action" id="prov-box"></div>
           </div>
           <div id="prov-result" style="font-size:0.85em;margin-top:8px"></div>
           <div id="roster-table"></div>
@@ -616,55 +613,75 @@
        * the operator back to the top of the page. The button applies them.
        */
       const idGroups = parsed.identityGroups || [];
-      const idBlocked = parsed.skipped.filter(k => k.code === 'other-course').length;
+      const groups = RI.groupSkipped(parsed);
+      const idBlocked = groups.otherCourse.length;
       const here = ctx.courses?.find(c => c.offeringId === ctx.currentOffering) || null;
       const expectedOf = (g) => (g.field === 'term' ? (here?.termLabel || g.expected) : g.expected);
-      const identityOffer = idGroups.length ? `
-        <div class="alert alert-warn">
-          <strong>${idBlocked
-            ? `${idBlocked} row(s) name a different course or term`
-            : 'Some rows name a different course or term'}</strong> — this one is
-          <strong>${esc(here?.courseTitle || ctx.currentCourseCode)}</strong>${
-            here?.termLabel ? ` · ${esc(here.termLabel)}` : ''}.
-          <div style="margin-top:6px">Tick anything that belongs here anyway, then re-check. A tick
-            admits only the rows whose <em>only</em> disagreement it is — a row that also disagrees
-            somewhere unticked stays out, and says so below. Nothing in these columns is stored:
-            they decide which rows to take, not what is recorded about a cadet.</div>
+      const rowsTable = (list, cap = 25) => `
           <div class="table-wrap" style="margin-top:8px"><table>
-            <thead><tr><th style="width:1%">Include</th><th>What the file says</th>
-              <th style="width:1%">Rows</th></tr></thead>
-            <tbody>${idGroups.map(g => `<tr>
-              <td style="text-align:center"><input type="checkbox" data-idflag="${esc(g.key)}"
-                    ${staged.approved.has(g.key) ? 'checked' : ''}></td>
-              <td><strong>${esc(g.label)}</strong> "${esc(g.value)}"
-                  <span class="muted">${g.courseCode
-                    ? `— this course's code, ${esc(g.courseCode)}, does not name a subject and a number, so the file cannot be compared with it. Tick this only if these rows belong to this course.`
-                    : `— this course is ${esc(expectedOf(g)) || '—'}`}</span></td>
-              <td>${g.rows}</td></tr>`).join('')}</tbody></table></div>
-          <div style="margin-top:8px">
-            <button class="btn btn-secondary btn-sm" id="id-recheck">Re-check with the ticked rows included</button>
-          </div>
+            <thead><tr><th>Line</th><th>Who</th><th>Why</th></tr></thead>
+            <tbody>${list.slice(0, cap).map(k => `<tr>
+                <td>${k.line}</td><td>${esc(k.label)}</td>
+                <td class="muted">${esc(k.reason)}</td></tr>`).join('')}
+              ${list.length > cap ? `<tr><td colspan="3" class="muted">…and ${list.length - cap} more</td></tr>` : ''}
+            </tbody></table></div>`;
+
+      /* ── The three groups, by what the person can DO ──────────────────────────────────────────
+       * A  fix now          the section is not created yet: one button.
+       * B  stays out        the row itself is wrong; only the file can change that.
+       * C  another course   stays out. Letting one in is a separate, deliberate control, kept apart so it
+       *                     is never mistaken for the button in A. It is the only control here that
+       *                     WIDENS an import, so it is a list of specific claims with counts and not an
+       *                     "import everything anyway" switch: each tick admits only the rows whose ONLY
+       *                     disagreement is that one. Ticking does not re-render (a long list would jump
+       *                     the page); the button applies the ticks.
+       * A row is in one group only (parseRosterFile gives each skipped row one code). */
+      const identityOffer = (idGroups.length || idBlocked) ? `
+        <div class="card imp-group" id="grp-other" style="margin-top:14px">
+          <div class="card-title">${idBlocked
+            ? `${idBlocked} row${idBlocked !== 1 ? 's are' : ' is'} for another course or term`
+            : 'Rows let in although they name another course or term'}</div>
+          <div class="card-meta">This is <strong>${esc(here?.courseTitle || ctx.currentCourseCode)}</strong>${
+            here?.termLabel ? ` · ${esc(here.termLabel)}` : ''}. ${idBlocked
+            ? 'These rows <strong>stay out</strong> of the import.' : 'You chose to let them in; they are counted as ready above.'}</div>
+          ${idBlocked ? rowsTable(groups.otherCourse, 10) : ''}
+          <details class="more-options" id="grp-other-override" style="margin-top:12px"${staged.approved.size ? ' open' : ''}>
+            <summary>This row does belong here</summary>
+            <div class="alert alert-warn">Use this only when rows that name another course number or term really are for this
+              course (a second course number for the same course, say). It is separate from creating sections: it lets rows in,
+              and nothing in these columns is stored, they only decide which rows to take.
+              A tick admits only the rows whose <em>only</em> disagreement it is, and a row that also disagrees somewhere
+              unticked stays out.</div>
+            <div class="table-wrap"><table>
+              <thead><tr><th style="width:1%">Let in</th><th>What the file says</th>
+                <th style="width:1%">Rows</th></tr></thead>
+              <tbody>${idGroups.map(g => `<tr>
+                <td style="text-align:center"><input type="checkbox" data-idflag="${esc(g.key)}"
+                      ${staged.approved.has(g.key) ? 'checked' : ''}></td>
+                <td><strong>${esc(g.label)}</strong> "${esc(g.value)}"
+                    <span class="muted">${g.courseCode
+                      ? `— this course's code, ${esc(g.courseCode)}, does not name a subject and a number, so the file cannot be compared with it. Tick this only if these rows belong to this course.`
+                      : `— this course is ${esc(expectedOf(g)) || '—'}`}</span></td>
+                <td>${g.rows}</td></tr>`).join('')}</tbody></table></div>
+            <div style="margin:8px 0 12px">
+              <button class="btn btn-secondary btn-sm" id="id-recheck">Check again with the ticked rows let in</button>
+            </div>
+          </details>
         </div>` : '';
 
-      // Unknown sections block the rows that reference them, so offer the fix inline rather
-      // than sending the operator somewhere else and back. A course with NO sections at all is
-      // the first-import case and gets its own sentence: "do not exist yet" reads as a typo when
-      // the honest answer is that nothing has been created yet, and the button is then the only
-      // way forward rather than a repair, so it leads.
-      const blocked = parsed.skipped.filter(k => k.code === 'unknown-section').length;
+      // Group A. A course with NO sections at all is the first-import case and leads with that sentence: the
+      // button is then the only way forward rather than a repair.
+      const blocked = groups.fixable.length;
       const firstImport = !offeringSections.length;
       const sectionOffer = parsed.unknownSections.length ? `
-        <div class="alert alert-warn">
-          ${firstImport
-            ? `<strong>This course has no sections yet.</strong> The file names
-               ${parsed.unknownSections.length}: ${esc(parsed.unknownSections.join(', '))}.
-               Create them and all ${blocked} row(s) can be imported — this is the normal way to
-               start a term.`
-            : `<strong>${parsed.unknownSections.length} section${parsed.unknownSections.length !== 1 ? 's' : ''} in this file do not exist yet:</strong>
-               ${esc(parsed.unknownSections.join(', '))}.
-               The ${blocked} row(s) in them were left out.`}
+        <div class="card imp-group" id="grp-fix" style="margin-top:14px">
+          <div class="card-title">Fix now: create ${parsed.unknownSections.length} section${parsed.unknownSections.length !== 1 ? 's' : ''}</div>
+          <div class="card-meta">${firstImport ? 'This course has no sections yet, which is normal for a first import. ' : ''}The file names
+            ${parsed.unknownSections.length !== 1 ? 'these sections' : 'this section'}, which ${firstImport ? 'it' : 'this course'} does not have yet:
+            <strong>${esc(parsed.unknownSections.join(', '))}</strong>. ${blocked} row${blocked !== 1 ? 's are' : ' is'} waiting on
+            ${parsed.unknownSections.length !== 1 ? 'them' : 'it'}.</div>
           <div style="margin-top:8px">
-            <button class="btn ${firstImport ? 'btn-primary' : 'btn-secondary'} btn-sm" id="mk-sections">Create these sections and re-check</button>
+            <button class="btn btn-primary" id="mk-sections">Create ${parsed.unknownSections.length !== 1 ? 'these sections' : 'this section'} and check again</button>
           </div>
           <div class="muted" style="font-size:0.85em;margin-top:6px">Each new section starts with:
             ${parsed.unknownSections.map(c => `<code>${esc(c)}</code> ${esc(RI.describeSectionDefaults(c))}`).join('; ')}.
@@ -672,28 +689,14 @@
             right for a course without M and T days. You can correct either on the Staff tab afterwards.</div>
         </div>` : '';
 
-      const skippedByCode = {};
-      parsed.skipped.forEach(k => { (skippedByCode[k.code] ||= []).push(k); });
-      const SKIP_LABEL = {
-        'other-course': 'for another course',
-        'unknown-section': 'in a section this course does not have',
-        'invalid': 'with a problem in the row',
-      };
-      const skipSummary = parsed.skipped.length ? `
-        <details style="margin-top:10px">
-          <summary class="muted" style="cursor:pointer;font-size:0.88em">
-            ${parsed.skipped.length} row(s) not imported — see why</summary>
-          <div class="table-wrap" style="margin-top:8px"><table>
-            <thead><tr><th>Line</th><th>Who</th><th>Reason</th></tr></thead>
-            <tbody>${Object.entries(skippedByCode).flatMap(([code, list]) =>
-              list.slice(0, 25).map(k => `<tr>
-                <td>${k.line}</td><td>${esc(k.label)}</td>
-                <td class="muted">${esc(k.reason)}</td></tr>`)
-              .concat(list.length > 25
-                ? [`<tr><td colspan="3" class="muted">…and ${list.length - 25} more ${esc(SKIP_LABEL[code] || code)}</td></tr>`]
-                : [])
-            ).join('')}</tbody></table></div>
-        </details>` : '';
+      // Group B.
+      const skipSummary = groups.stayOut.length ? `
+        <div class="card imp-group" id="grp-out" style="margin-top:14px">
+          <div class="card-title">${groups.stayOut.length} row${groups.stayOut.length !== 1 ? 's' : ''} stay out and cannot be fixed here</div>
+          <div class="card-meta">Each of these has a problem in the row itself. Correct it in your file and upload the file
+            again; everything else can be imported now.</div>
+          ${rowsTable(groups.stayOut)}
+        </div>` : '';
 
       const conflictBlock = decidable.length ? `
         <div class="card" style="margin-top:14px">
@@ -819,19 +822,23 @@
         </div>` : '';
 
       box.innerHTML = `
-        ${identityOffer}
-        ${sectionOffer}
-        <div class="alert alert-info">
-          <strong>${s.matched}</strong> of ${s.inFile} row(s) match this course —
-          <strong>${fresh.length}</strong> new, <strong>${conflicts.length}</strong> already have an account from an earlier term or course${trivialCount ? ` (${trivialCount} unchanged)` : ''}; no second account is made for them.
-          Sections: ${esc(s.sections.join(', ') || '—')}.
+        <div class="alert alert-info" id="imp-headline">
+          <div style="font-size:1.08em;font-weight:700">${esc(RI.importHeadline(parsed))}</div>
+          <div style="margin-top:6px">${s.matched
+            ? `Ready now: ${[
+                fresh.length ? `<strong>${fresh.length}</strong> new cadet${fresh.length !== 1 ? 's' : ''}` : '',
+                conflicts.length ? `<strong>${conflicts.length}</strong> ${conflicts.length !== 1 ? 'cadets who already have accounts' : 'cadet who already has an account'} from an earlier term or course${trivialCount ? ` (${trivialCount} unchanged)` : ''}; no second account is made for ${conflicts.length !== 1 ? 'them' : 'them'}` : '',
+              ].filter(Boolean).join(', and ')}. Sections: ${esc(s.sections.join(', ') || '—')}.`
+            : (groups.fixable.length ? 'Nothing is imported until the sections below are created.' : 'Nothing in this file can be imported as it is.')}</div>
           ${s.overridden ? `<div class="muted" style="margin-top:4px">${s.overridden} of them are
-             here only because you approved a course or term mismatch above.</div>` : ''}
+             here only because you let in rows that name another course or term.</div>` : ''}
           ${parsed.noSquadron ? `<div class="muted" style="margin-top:4px">${parsed.noSquadron} of
              them have no squadron. They are imported anyway — squadron is advisory and nothing
              depends on it.</div>` : ''}
-          ${skipSummary}
         </div>
+        ${sectionOffer}
+        ${skipSummary}
+        ${identityOffer}
         ${fresh.length ? `<details${fresh.length <= 12 ? ' open' : ''}>
           <summary class="muted" style="cursor:pointer;font-size:0.88em">${fresh.length} new student(s)</summary>
           <div class="table-wrap" style="margin-top:8px"><table>
@@ -931,7 +938,7 @@
       const codes = staged.parsed.unknownSections;
       btn.disabled = true; btn.textContent = 'Creating…';
       const { error } = await R.createSections(ctx, codes);
-      if (error) { btn.disabled = false; btn.textContent = 'Create these sections and re-check';
+      if (error) { btn.disabled = false; btn.textContent = 'Create the sections and check again';
                    showImportError([`Could not create sections: ${error.message}`]); return; }
       const { sections } = await R.loadOfferingSections(ctx);
       offeringSections = sections;
@@ -1480,7 +1487,8 @@
         `<label class="check-inline" style="margin-right:10px">
            <input type="checkbox" class="ns-day" value="${d}"> ${d}</label>`).join('');
       openModal('Add a section',
-        `<div class="field"><label for="ns-code">Section code</label>
+        `<div class="form-grid" style="--fg-min:200px">
+         <div class="field"><label for="ns-code">Section code</label>
            <input id="ns-code" type="text" autocomplete="off" placeholder="M1A" maxlength="20">
            <div class="field-hint">The registrar's code for this section. It must be unique within
              this course and term, and it is what a roster import matches rows against.</div></div>
@@ -1488,9 +1496,9 @@
            <div id="ns-days" style="padding-top:4px">${dayBoxes}</div>
            <div class="field-hint">Which day this section meets, so its deadlines land on its own
              day rather than on the assignment's default.</div></div>
-         <div class="field" style="margin-bottom:0"><label for="ns-period">Period</label>
-           <input id="ns-period" type="number" min="1" max="9" step="1" placeholder="1"
-                  style="max-width:110px"></div>`,
+         <div class="field"><label for="ns-period">Period</label>
+           <input id="ns-period" type="number" min="1" max="9" step="1" placeholder="1"></div>
+         </div>`,
         'Create section',
         async () => {
           const code = document.getElementById('ns-code').value.trim().toUpperCase();
@@ -2047,17 +2055,17 @@
           <div class="card-title">Blackboard grades CSV</div>
           <div class="card-meta">Finalized grades only. A student with no finalized grade exports
             <strong>blank, not zero</strong> — a zero posts to Blackboard as a real score.</div>
-          <div class="row wrap" style="gap:14px;align-items:flex-end">
-            <div class="field" style="margin-bottom:0;min-width:250px">
+          <div class="form-grid" style="--fg-min:220px">
+            <div class="field">
               <label for="ex-scope">Sections</label>
               <select id="ex-scope">
                 <option value="__all__">All sections (entire offering)</option>
                 ${secs.map(s => `<option value="${esc(s.id)}">${esc(s.code)}</option>`).join('')}
               </select>
             </div>
-            <button class="btn btn-primary" id="ex-csv">Download CSV</button>
-            <span id="ex-status" style="font-size:0.85em"></span>
+            <div class="field-action"><button class="btn btn-primary" id="ex-csv">Download CSV</button></div>
           </div>
+          <span id="ex-status" style="font-size:0.85em"></span>
         </div>
 
         <div class="card">

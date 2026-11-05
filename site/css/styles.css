@@ -685,6 +685,53 @@ input:focus, textarea:focus, select:focus {
 textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
 .field { margin-bottom: 18px; }
 .field-hint { font-size: 0.78em; color: var(--muted); margin-top: 4px; }
+
+/* A row of fields that line up (staff forms).
+ *
+ * Every field in a row has the same three levels: label, control, caption. The row is a grid and each
+ * field is a subgrid across three of its rows, so the labels share one level, the controls share one,
+ * and the captions share one. A caption sits on the third level and cannot push a control out of line,
+ * and a row where only one field has a caption still lines up. When the row wraps (a narrow screen),
+ * each field keeps its three levels, so a stacked field looks the same as a field in a row.
+ *
+ * Use:  <div class="form-grid"> <div class="field"><label>..</label><input><div class="field-hint">..</div></div> .. </div>
+ *       A button with no label goes in <div class="field-action"><button>..</button></div>.
+ * `--fg-min` sets the narrowest a field may be before the row wraps (default 190px). */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(var(--fg-min, 190px), 100%), 1fr));
+  column-gap: 14px; row-gap: 6px;
+  align-items: start;
+}
+.form-grid > .field, .form-grid > .field-action { margin-bottom: 0; padding-bottom: 12px; min-width: 0; }
+.form-grid > .field > label { margin-bottom: 0; align-self: end; }
+.form-grid > .field > .field-hint { margin-top: 0; }
+@supports (grid-template-rows: subgrid) {
+  .form-grid > .field, .form-grid > .field-action { grid-row: span 3; display: grid; grid-template-rows: subgrid; row-gap: 6px; }
+  .form-grid > .field > label { grid-row: 1; }
+  .form-grid > .field > :not(label):not(.field-hint) { grid-row: 2; align-self: start; }
+  .form-grid > .field > .field-hint { grid-row: 3; align-self: start; }
+  .form-grid > .field-action > * { grid-row: 2; align-self: start; justify-self: start; }
+}
+.form-grid > .field.span-all, .form-grid > .field-wide { grid-column: 1 / -1; }
+/* A date box looks like every other control in a form row, so a row of mixed boxes is one height. */
+.form-grid input[type="date"], .form-grid input[type="time"] {
+  width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px;
+  font-size: 0.95em; font-family: inherit; color: var(--text); background: var(--input-bg); box-sizing: border-box;
+}
+.form-grid input[type="date"]:focus { outline: none; border-color: var(--blue-lt); box-shadow: 0 0 0 3px rgba(42,82,152,0.18); }
+/* The director's checklist: four steps, each done or not done, with one button to go there. */
+.cl-steps { list-style: none; margin: 0; padding: 0; }
+.cl-steps li { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); }
+.cl-mark { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+           font-size: 0.85em; font-weight: 700; border: 2px solid var(--border); color: var(--muted); }
+.cl-mark.done { background: var(--alert-ok-bg); color: var(--alert-ok-fg); border-color: transparent; }
+.cl-optional { opacity: 0.9; }
+@media (max-width: 560px) { .cl-steps li { grid-template-columns: 34px 1fr; } .cl-steps li > span:last-child { grid-column: 2; } }
+details.more-options { margin: 4px 0 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 14px; }
+details.more-options > summary { cursor: pointer; font-weight: 600; font-size: 0.9em; padding: 10px 0; color: var(--blue-lt); }
+details.more-options[open] > summary { border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+details.more-options[open] { padding-bottom: 4px; }
 /* Confirmation appended to a hint after a preference saves — green enough to read as success,
    quiet enough not to become the loudest thing in the card. */
 .ok-note { color: var(--green); font-weight: 600; }
@@ -2418,3 +2465,23 @@ td.flagcell b { color: var(--red); font-variant-numeric: tabular-nums; }
 .fb-drawer-body { padding-top: 12px; }
 .fb-drawer-body .fb-item { opacity: 0.72; transition: opacity .12s; }
 .fb-drawer-body .fb-item:hover, .fb-drawer-body .fb-item:focus-within { opacity: 1; }
+
+/* Choice rows on the question editor: letter, a switch for "correct", and the text box joined to its delete button. */
+.choice-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.choice-letter { display: flex; align-items: center; justify-content: center; width: 20px; height: 36px; font-weight: 600; text-transform: uppercase; color: var(--muted, inherit); flex: none; }
+/* Named on its own: `.switch` already belongs to the report page's names control. Height matches the text box. */
+.correct-toggle { position: relative; display: block; width: 104px; height: 36px; box-sizing: border-box; flex: none; margin: 0; border: 1px solid var(--border, #999); border-radius: 6px; overflow: hidden; cursor: pointer; }
+.correct-toggle input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+.correct-toggle-track { position: absolute; inset: 0; background: var(--surface-hover, #eef1f4); transition: background .15s; }
+.correct-toggle-track::before { content: "Incorrect"; position: absolute; inset: 0 0 0 26px; display: flex; align-items: center; justify-content: center; font-size: 0.78em; font-weight: 600; color: var(--text-soft, #3d444d); }
+.correct-toggle-track::after { content: ""; position: absolute; top: 2px; bottom: 2px; left: 2px; width: 22px; border-radius: 4px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s; }
+.correct-toggle input:checked + .correct-toggle-track { background: #1a7f37; }
+.correct-toggle input:checked + .correct-toggle-track::before { content: "Correct"; inset: 0 26px 0 0; color: #fff; }
+.correct-toggle input:checked + .correct-toggle-track::after { transform: translateX(76px); }
+.correct-toggle input:focus-visible + .correct-toggle-track { outline: 2px solid var(--blue-lt, #4a90d9); outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) { .correct-toggle-track, .correct-toggle-track::after { transition: none; } }
+.choice-join { display: flex; flex: 1; min-width: 0; align-items: stretch; }
+.choice-join > input { flex: 1; min-width: 0; height: 36px; box-sizing: border-box; border-radius: 6px 0 0 6px; margin: 0; }
+.choice-join > button { height: 36px; box-sizing: border-box; flex: none; width: 36px; padding: 0; margin: 0; border: 1px solid var(--border, #999); border-left-width: 0; background: var(--surface, transparent); color: inherit; cursor: pointer; border-radius: 0 6px 6px 0; font-size: 1.1em; line-height: 1; }
+.choice-join > button:hover { background: var(--surface-hover, rgba(128,128,128,.15)); }
+.choice-join > input:focus, .choice-join > button:focus-visible { position: relative; z-index: 1; }

@@ -277,7 +277,7 @@ async function loadSide(db, offeringId, withContent) {
   ]);
   for (const r of [items, sections, courseAssignments, scale]) if (r.error) return { error: r.error };
   if ((items.data || []).length >= PAGE) {
-    return { error: { message: 'This offering holds more items than one rollover handles at once.' } };
+    return { error: { message: 'This offering holds more assignments than one rollover handles at once.' } };
   }
   const side = {
     offering, items: items.data || [], sections: sections.data || [],
@@ -355,7 +355,7 @@ export function buildRolloverPlan(src, tgt, opts, rand = randomHex) {
     }
     return cur;
   };
-  const inTarget = new Map();                       // root -> the item the target already holds for it
+  const inTarget = new Map();                       // root -> the assignment the target already holds for it
   for (const held of tgt.items) if (held.assignments?.id) inTarget.set(rootOf(held.assignments.id), held);
   const orphanByRoot = new Map();                   // root -> a copy that has no offering at all (a half-written copy)
   for (const a of lineageRows) {
@@ -379,16 +379,16 @@ export function buildRolloverPlan(src, tgt, opts, rand = randomHex) {
     const whole = !there || pathsThere >= pathsHere;
     const row = { sourceAoId: it.id, sourceAssignmentId: a.id, title: a.title, kindId: a.kind_id, notes,
                   alreadyDone: !!there && whole, blocked: false };
-    if (row.alreadyDone) { notes.push('Already in this offering (the same item, copied earlier); skipped.'); items.push(row); continue; }
+    if (row.alreadyDone) { notes.push('Already in this offering (the same assignment, copied earlier); skipped.'); items.push(row); continue; }
     if (there && !whole) {
       row.blocked = true;
-      notes.push(`A copy of this item is in the target but has only ${pathsThere} of ${pathsHere} paths, so it is not whole ` +
-        '(an earlier run was cut off). It is not copied again. Remove the half-built copy on the items page, then run this again.');
+      notes.push(`A copy of this assignment is in the target but has only ${pathsThere} of ${pathsHere} paths, so it is not whole ` +
+        '(an earlier run was cut off). It is not copied again. Remove the half-built copy on the assignments page, then run this again.');
       items.push(row); continue;
     }
     if (orphanByRoot.has(root)) {
       row.blocked = true;
-      notes.push(`A half-written copy of this item exists in the course with no offering (${orphanByRoot.get(root).slug}). ` +
+      notes.push(`A half-written copy of this assignment exists in the course with no offering (${orphanByRoot.get(root).slug}). ` +
         'It is not copied again. A site administrator has to remove that leftover first, then run this again.');
       items.push(row); continue;
     }
@@ -410,10 +410,10 @@ export function buildRolloverPlan(src, tgt, opts, rand = randomHex) {
     const trap = shift !== null && twoTrack && !!it.due_at && !hasMap && !hasRows;
     if (trap) {
       notes.push('The source has one main date and no per-day dates, and this course has M-day and T-day sections, so a shifted ' +
-        'date would put every section on the M-day date. The dates are left blank. Set the M and T dates on the items page.');
+        'date would put every section on the M-day date. The dates are left blank. Set the M and T dates on the assignments page.');
     } else if (shift !== null && twoTrack && hasMap && days.some(d => !(d in it.due_by_day))) {
       notes.push(`The source has dates for ${Object.keys(it.due_by_day).join(', ')} only; a section meeting on ` +
-        `${days.filter(d => !(d in it.due_by_day)).join(', ')} takes the main date. Check it on the items page.`);
+        `${days.filter(d => !(d in it.due_by_day)).join(', ')} takes the main date. Check it on the assignments page.`);
     }
     if (shift !== null && !trap) {
       dates.due_at = shiftInstant(it.due_at, shift);
@@ -437,10 +437,10 @@ export function buildRolloverPlan(src, tgt, opts, rand = randomHex) {
     row.offering = { ...pick(it, OFFERING_COPY), ...dates, is_published: false };
     if (it.is_published) notes.push('Published in the source; the copy is a draft.');
     if (it.part_set_id) {
-      notes.push('This item is part of a part set in the source ("do all of these"). Part sets are not copied, so the copy stands alone; set the parts again if they should stay together.');
+      notes.push('This assignment is part of a part set in the source ("do all of these"). Part sets are not copied, so the copy stands alone; set the parts again if they should stay together.');
     }
     if (it.is_group_work) {
-      notes.push('This item is group work in the source. Groups are not copied, so the copy is not marked as group work; mark it again once the groups exist.');
+      notes.push('This assignment is group work in the source. Groups are not copied, so the copy is not marked as group work; mark it again once the groups exist.');
     }
 
     row.activities = [];
@@ -452,7 +452,7 @@ export function buildRolloverPlan(src, tgt, opts, rand = randomHex) {
       let content = act.content ?? {};
       if (interactive) {
         content = { ...content, artifact_url: null };
-        notes.push('Interactive tutor: copied without its link, under a new tutor id. On the items page, set its link; the id can be changed there until a link is saved.');
+        notes.push('Interactive tutor: copied without its link, under a new tutor id. On the assignments page, set its link; the id can be changed there until a link is saved.');
       }
       const slug = interactive ? copyTutorSlug(act.slug, row.slug, rand)
         : pathSlug(tgt.offering.courseCode, row.slug, act.modality);
@@ -545,14 +545,14 @@ async function undoItem(db, made) {
   const stayed = [];
   if (made.offeringId) {
     const r = await db.from('assignment_offerings').delete().eq('id', made.offeringId);
-    if (r.error) stayed.push("the item's offering row");
+    if (r.error) stayed.push("the assignment's offering row");
   }
   if (made.assignmentId) {
     if (stayed.length) {
-      stayed.push('the item itself (its questions and paths with it)');   // it cannot go while its offering row stays
+      stayed.push('the assignment itself (its questions and paths with it)');   // it cannot go while its offering row stays
     } else {
       const r = await db.from('assignments').delete().eq('id', made.assignmentId);
-      if (r.error) stayed.push('the item itself (its questions and paths with it)');
+      if (r.error) stayed.push('the assignment itself (its questions and paths with it)');
     }
   }
   return stayed;
@@ -646,10 +646,10 @@ export async function runRollover(db, plan, tgtOfferingId, src, actor) {
  * Health page and gates publishing and scale changes; it hides a course from nobody, and turning it off deletes nothing.
  */
 export function activeStatement(makeActive) {
-  const shared = 'Active steers the nightly jobs and the Health page, lets items be published, and makes a change to the letter scale ask to see its effect first. It hides the course from nobody.';
+  const shared = 'Active steers the nightly jobs and the Health page, lets assignments be published, and makes a change to the letter scale ask to see its effect first. It hides the course from nobody.';
   return makeActive
     ? `${shared} A course can have only one active offering.`
-    : `${shared} Making it inactive deletes nothing and hides nothing: every item, grade, question and scale stays exactly as it is. While it is inactive, no new item can be published in it and scale changes no longer ask for a preview.`;
+    : `${shared} Making it inactive deletes nothing and hides nothing: every assignment, grade, question and scale stays exactly as it is. While it is inactive, no new assignment can be published in it and scale changes no longer ask for a preview.`;
 }
 
 /**
@@ -691,7 +691,7 @@ export function activeConfirmText(offering, makeActive, impact) {
   return `Make ${offering.courseTitle || offering.courseCode} · ${offering.termLabel} ${makeActive ? 'active' : 'inactive'}?
 
 ` +
-    `It has ${n(impact.enrolled, 'enrolled cadet', 'enrolled cadets')} and ${n(impact.published, 'published item', 'published items')}.
+    `It has ${n(impact.enrolled, 'enrolled cadet', 'enrolled cadets')} and ${n(impact.published, 'published assignment', 'published assignments')}.
 
 ` +
     activeStatement(makeActive);
@@ -707,4 +707,144 @@ export async function setOfferingActive(db, offeringId, makeActive) {
   if (!r.data || r.data.length !== 1) return { error: { message: 'The offering was not changed (you may not have permission, or it is gone). Reload the page.' } };
   if (r.data[0].is_active !== !!makeActive) return { error: { message: 'The database did not keep the change. Reload the page and check.' } };
   return { error: null, isActive: r.data[0].is_active };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * Setting up a course for a term: one guided path over the same three writes
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/*
+ * The data model is unchanged: a course, a term, and a row that joins them (an "offering"). The first-time path used
+ * to be three separate forms, in an order the person had to know. This is one form that picks or makes the course,
+ * picks or makes the term, chooses a director, and does the writes in that order, stopping at the first one that
+ * fails and saying what was made. The writes are the same functions as before (createCourse, createTerm,
+ * createOffering), so the database decides who may do what exactly as it did. A term set up this way is always
+ * created inactive: going active is a later step, on the checklist.
+ *
+ * The page does not show the word "offering" on this path. The words here are course, term and "course for a term".
+ */
+
+/** Problems with the guided form, as plain sentences. `form` = { course, term, directorId }, each part { mode, id, ... }. */
+export function checkSetup(form, existing = []) {
+  const out = [];
+  const c = form?.course || {}, t = form?.term || {};
+  if (c.mode === 'new') out.push(...checkCourse(c));
+  else if (!c.id) out.push('Choose the course, or make a new one.');
+  if (t.mode === 'new') out.push(...checkTerm(t));
+  else if (!t.id) out.push('Choose the term, or make a new one.');
+  if (!out.length && c.mode !== 'new' && t.mode !== 'new') {
+    const dup = (existing || []).find(o => o.courseId === c.id && o.termId === t.id);
+    if (dup) out.push('That course is already set up for that term. Open it from the list below.');
+  }
+  return out;
+}
+
+/**
+ * Do the writes in order: course, term, then the course-for-a-term row and its director. Returns what was made and, if a
+ * step failed, which one. A course or term made before a failure stays made and is returned, so the page can select it
+ * and a second press does not try to make it again.
+ *
+ * @returns {Promise<{ made: object, failedAt: ('course'|'term'|'link'|null), error: object|null, directorError: object|null }>}
+ */
+export async function runSetup(db, form, existing = []) {
+  const made = { courseId: null, courseCode: null, termId: null, termLabel: null, offeringId: null };
+  const c = form.course, t = form.term;
+  const problems = checkSetup(form, existing);
+  if (problems.length) return { made, failedAt: null, error: { message: problems.join(' ') }, directorError: null, refused: true };
+
+  if (c.mode === 'new') {
+    const r = await createCourse(db, c);
+    if (r.error) return { made, failedAt: 'course', error: r.error, directorError: null };
+    made.courseId = r.id; made.courseCode = String(c.code).trim(); made.courseCreated = true;
+  } else {
+    made.courseId = c.id;
+  }
+  if (t.mode === 'new') {
+    const r = await createTerm(db, t);
+    if (r.error) return { made, failedAt: 'term', error: r.error, directorError: null };
+    made.termId = r.id; made.termLabel = String(t.label).trim(); made.termCreated = true;
+  } else {
+    made.termId = t.id;
+  }
+  const o = await createOffering(db, { courseId: made.courseId, termId: made.termId, directorId: form.directorId || '', isActive: false });
+  if (o.error) return { made, failedAt: 'link', error: o.error, directorError: null };
+  made.offeringId = o.id;
+  return { made, failedAt: null, error: null, directorError: o.directorError || null };
+}
+
+/**
+ * What to tell the person after a guided setup, in plain words with no mention of "offerings". On a failure it lists
+ * what WAS made and what to do next, so nobody is left guessing whether to start over.
+ */
+export function setupMessage(res, form) {
+  const c = form?.course || {}, t = form?.term || {};
+  const cName = c.mode === 'new' ? `“${String(c.title || c.code || '').trim()}”` : 'the course';
+  const tName = t.mode === 'new' ? `“${String(t.label || t.code || '').trim()}”` : 'the term';
+  if (!res.error) {
+    const bits = [];
+    if (res.made.courseCreated) bits.push(`the course ${cName}`);
+    if (res.made.termCreated) bits.push(`the term ${tName}`);
+    bits.push('the course for that term (not active yet)');
+    let text = `Done. Made ${bits.join(', ')}.`;
+    if (res.directorError) text += ` The director could not be added: ${termsError(res.directorError)} Add them from the Staff tab of Course Admin.`;
+    else if (form.directorId) text += ' The director has been added.';
+    return text + ' Next, work down the checklist below.';
+  }
+  if (res.refused) return res.error.message;
+  const done = [];
+  if (res.made.courseCreated) done.push(`the course ${cName}`);
+  if (res.made.termCreated) done.push(`the term ${tName}`);
+  const madeText = done.length ? `Made ${done.join(' and ')}. ` : 'Nothing was made. ';
+  const what = { course: 'The course could not be made', term: 'The term could not be made', link: 'The course could not be set up for that term' }[res.failedAt] || 'It stopped';
+  const next = done.length
+    ? 'What you made is already chosen below. Fix the problem and press Set up again; it will not make those twice.'
+    : 'Fix the problem and press Set up again.';
+  return `${madeText}${what}: ${termsError(res.error, { partial: !!done.length })} ${next}`;
+}
+
+/**
+ * Which offerings get a checklist. A director gets one for each offering they DIRECT (not each course they
+ * merely teach in), at most six. An administrator directs everything, so "yours" would list them all: they get
+ * the offering chosen in the menu and the one just set up. Pure.
+ */
+export function checklistTargets(offerings, courses, { isAdmin = false, currentOffering = '', focusId = '' } = {}) {
+  const directs = new Set((courses || []).filter(c => c.role === 'director').map(c => c.offeringId));
+  const ids = new Set();
+  if (isAdmin) { for (const id of [focusId, currentOffering]) if (id) ids.add(id); }
+  else for (const o of offerings || []) if (directs.has(o.id)) ids.add(o.id);
+  let targets = (offerings || []).filter(o => ids.has(o.id));
+  if (focusId) targets = [...targets.filter(o => o.id === focusId), ...targets.filter(o => o.id !== focusId)];
+  return targets.slice(0, 6);
+}
+
+/** The steps of the director's checklist, from the counts. Pure. `c` = { enrolled, assignments, scaleSaved, isActive }. */
+export function checklistSteps(c) {
+  return [
+    { key: 'roster', title: 'Roster', done: (c.enrolled || 0) > 0,
+      detail: (c.enrolled || 0) > 0 ? `${c.enrolled} cadet${c.enrolled === 1 ? '' : 's'} enrolled` : 'No cadets yet' },
+    { key: 'assignments', title: 'Assignments', done: (c.assignments || 0) > 0,
+      detail: (c.assignments || 0) > 0 ? `${c.assignments} assignment${c.assignments === 1 ? '' : 's'} entered` : 'No assignments yet' },
+    { key: 'scale', title: 'Letter scale', done: !!c.scaleSaved,
+      detail: c.scaleSaved ? 'A letter scale is saved' : 'No letter scale saved yet' },
+    { key: 'active', title: 'Go active', done: !!c.isActive,
+      detail: c.isActive ? 'Active' : 'Not active yet' },
+  ];
+}
+
+/** The counts the checklist needs, for one course-for-a-term row. */
+export async function loadChecklist(db, offeringId, isActive) {
+  const sec = await db.from('sections').select('id').eq('course_offering_id', offeringId);
+  if (sec.error) return { error: sec.error };
+  const ids = (sec.data || []).map(x => x.id);
+  let enrolled = 0;
+  for (let i = 0; i < ids.length; i += 50) {
+    const r = await db.from('enrollments').select('*', { count: 'exact', head: true }).in('section_id', ids.slice(i, i + 50)).eq('status', 'active');
+    if (r.error) return { error: r.error };
+    enrolled += r.count || 0;
+  }
+  const a = await db.from('assignment_offerings').select('*', { count: 'exact', head: true }).eq('course_offering_id', offeringId);
+  if (a.error) return { error: a.error };
+  const s = await db.from('letter_scales').select('*', { count: 'exact', head: true }).eq('course_offering_id', offeringId);
+  if (s.error) return { error: s.error };
+  return { error: null, enrolled, assignments: a.count || 0, scaleSaved: (s.count || 0) > 0, isActive: !!isActive };
 }
