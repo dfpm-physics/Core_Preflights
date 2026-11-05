@@ -1,6 +1,7 @@
 -- Rollback for 079_drop_step1_rules.sql. Run as `prep_app_owner`.
 --
--- Puts the five step 1 rules (six triggers) back exactly as 028, 029 and 070 left them. A rule fires only on a later
+-- Puts the four step 1 rules (five triggers) back exactly as 028, 029 and 070 left them. The marker rule was never
+-- dropped, so it is not touched. A rule fires only on a later
 -- write, so rows made while the rules were gone (a published new-page item, a finalized grade on one) are left as they
 -- are; they simply cannot be changed in the refused ways until the rules are dropped again.
 
@@ -8,6 +9,16 @@ BEGIN;
 
 SET LOCAL lock_timeout = '5s';
 SET LOCAL search_path = app, public;
+
+-- Say what the restored grade rule will get in the way of: finalized grades already on new-page items. They are left as
+-- they are, but any later edit of one by staff is refused until the rule is dropped again.
+DO $$
+DECLARE n integer;
+BEGIN
+  SELECT count(*) INTO n FROM grades g JOIN assignment_offerings ao ON ao.id = g.assignment_offering_id
+   WHERE g.is_finalized AND ao.entered_on_new_page;
+  RAISE NOTICE '079 rollback: % finalized grade(s) on new-page items will be refused on any later change', n;
+END $$;
 
 -- ---- 1. a new-page item cannot be published ------------------------------------------------
 CREATE FUNCTION assignment_offerings_new_stay_unpublished() RETURNS trigger
@@ -24,22 +35,6 @@ CREATE TRIGGER assignment_offerings_new_stay_unpublished
   BEFORE INSERT OR UPDATE ON assignment_offerings
   FOR EACH ROW WHEN (NEW.is_published AND NEW.entered_on_new_page)
   EXECUTE FUNCTION assignment_offerings_new_stay_unpublished();
-
--- ---- 4. the marker is one-way -----------------------------------------------------------------
-CREATE FUNCTION assignment_offerings_marker_one_way() RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = app, pg_temp
-AS $$
-BEGIN
-  RAISE EXCEPTION
-    'assignment offering %: entered_on_new_page cannot be cleared (assignment_offerings_marker_one_way)',
-    NEW.id USING ERRCODE = 'check_violation';
-END; $$;
-
-CREATE TRIGGER assignment_offerings_marker_one_way
-  BEFORE UPDATE OF entered_on_new_page ON assignment_offerings
-  FOR EACH ROW WHEN (OLD.entered_on_new_page AND NOT NEW.entered_on_new_page)
-  EXECUTE FUNCTION assignment_offerings_marker_one_way();
 
 -- ---- 5. a path only a new page produces keeps its item unpublished --------------------------------
 CREATE FUNCTION assignment_offerings_new_paths_stay_unpublished() RETURNS trigger
@@ -141,8 +136,6 @@ CREATE TRIGGER grades_new_items_stay_unfinalized
 REVOKE ALL ON FUNCTION assignment_offerings_new_stay_unpublished()
   FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
 REVOKE ALL ON FUNCTION assignment_offerings_publish_needs_active()
-  FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
-REVOKE ALL ON FUNCTION assignment_offerings_marker_one_way()
   FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
 REVOKE ALL ON FUNCTION assignment_offerings_new_paths_stay_unpublished()
   FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;

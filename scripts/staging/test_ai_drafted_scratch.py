@@ -10,15 +10,16 @@ Builds schema `app` through 076 in a database of its own, loads an invented cour
               still pass; an unlisted pair is still refused; a null-delivery write still fills human_graded; the
               rollback refuses while a path uses ai_drafted and passes once none does; 077 re-applies.
   BEFORE 078  a service-role write finalizes a mark on an ai_drafted item (the gap).
+  (the Choice item, a released mark and the path edit are also proved, see the MIXED / RELEASED / PATH lines)
   APPLY 078   service role and the data role are refused, a cadet is refused, a signed-in staff member passes, a draft
               (unfinalized) passes for the service role, an item without an ai_drafted path is unchanged, an update that
               changes nothing audited on a finalized row passes.
   BEFORE 079  all six step 1 triggers exist; a new-page item cannot be published and holds no finalized grade.
-  APPLY 079   none of the six remain; a new-page item publishes (including one with an online-questions path); the marker
-              can be cleared; a staff member finalizes a mark on a new-page ai_drafted item; the service role is STILL
+  APPLY 079   five of the six remain gone (the marker rule stays); a new-page item publishes (including one with an
+              online-questions path); the marker still cannot be cleared; a staff member finalizes a mark on a new-page ai_drafted item; the service role is STILL
               refused there (078 holds without the old rule); on a new-page item without an ai_drafted path a finalize
               now passes.
-  ROLLBACK    079 puts the six triggers back (a publish of a new-page item is refused again); 078 rolls back (the gap is
+  ROLLBACK    079 puts the five triggers back (a publish of a new-page item is refused again); 078 rolls back (the gap is
               open again); 077 rolls back once no path uses ai_drafted.
 
 Sessions are simulated: the `authenticated` role plus `request.jwt.claims`. This cannot show the real REST path.
@@ -47,6 +48,9 @@ M79, R79 = "079_drop_step1_rules.sql", "079_drop_step1_rules_ROLLBACK.sql"
 SIX = ("assignment_offerings_new_stay_unpublished", "assignment_offerings_publish_needs_active",
        "grades_new_items_stay_unfinalized", "assignment_offerings_marker_one_way",
        "assignment_offerings_new_paths_stay_unpublished", "offering_activities_new_paths_stay_unpublished")
+# 079 drops five of the six; the marker rule stays until the column is dropped
+DROPPED = tuple(n for n in SIX if n != "assignment_offerings_marker_one_way")
+KEPT = "assignment_offerings_marker_one_way"
 OLD_PAIRS = [("questions", "online_questions", "auto_checked"), ("questions", "online_questions", "human_graded"),
              ("written", "typed_response", "human_graded"), ("interactive", "interactive_tutor", "effort"),
              ("external", "in_person", "hand_entered"), ("external", "in_person", "imported"),
@@ -66,6 +70,7 @@ def main():
         cur.execute("BEGIN")
         b = gl.Builder(cur, uuid.UUID("5b2f0c7e-91d4-4a6b-8c1e-3a7d2e9f1077"))
         b.auth_user = lambda uid, email, pw=None: cur.execute("INSERT INTO auth.users (id) VALUES (%s) ON CONFLICT DO NOTHING", (uid,))
+        b.cadet_email = lambda cadet_id, uid=None: f"cadet{cadet_id}@{gl.DOMAIN}"   # the scratch auth.users stub has no email column
         director = b.staff("director", "Dee Director")
         course, term = b.course("aid-101", "AI draft course"), b.term()
         co = b.offering(course, term, True)
@@ -115,6 +120,22 @@ def main():
         def draft_grade(it, enr, final=False, who=None, role="service_role", keep=True, src="ai_suggested"):
             return s.attempt(who, "INSERT INTO grades (enrollment_id, assignment_offering_id, points_earned, points_possible, source, is_finalized) "
                                   "VALUES (%s,%s,1,2,%s,%s)", (enr, it["ao"], src, final), keep=keep, role=role)
+
+        def tutor_commit(enr, it, effort=4):
+            """A cadet commits the tutor option of a mixed item: the 015/048 trigger then writes a finalized derived
+            grade as definer. Run on the admin connection (the trigger runs as its owner whoever commits)."""
+            tut_act = it["activities"][1]
+            cur.execute("BEGIN")
+            try:
+                sub = b.work(enr, it, "draft")
+                cur.execute("INSERT INTO submission_activities (submission_id, activity_id, content, report_markdown, payload_bytes) "
+                            "VALUES (%s,%s,%s,%s,10)", (sub, tut_act, '{"effort": %d}' % effort, "Made-up report."))
+                cur.execute("UPDATE submissions SET status='committed', chosen_activity_id=%s, committed_at=now() WHERE id=%s", (tut_act, sub))
+                res = ("ok", 1)
+            except s.psycopg2.Error as exc:
+                res = ("error", (str(exc).strip().splitlines() or [""])[0])
+            cur.execute("COMMIT" if res[0] == "ok" else "ROLLBACK")
+            return res
 
         def trig_count():
             return one("SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgname = ANY(%s)", (list(SIX),))
@@ -251,6 +272,55 @@ def main():
               one("SELECT count(*) FROM information_schema.routine_privileges WHERE specific_schema='app' AND routine_name='grades_ai_drafts_need_a_person' "
                   "AND grantee IN ('anon','authenticated','service_role','prep_app_dml','prep_app_read')") == 0)
 
+        # ---- review fixes: a mixed Choice item, the released mark, and the path edit --------------------------
+        print("\n=== AFTER 078: a Choice item (typed ai_drafted path + tutor path) ===")
+        MIX = new_item([{"modality": "written", "delivery": "typed_response", "grading": "ai_drafted", "warn": True},
+                        {"modality": "interactive"}])
+        cur.execute("BEGIN")
+        b.publish(MIX)
+        cur.execute("COMMIT")
+        r = tutor_commit(enr1, MIX)
+        t.chk("MIXED: a cadet committing the tutor option is NOT refused (the derived grade is written)", r == ("ok", 1), r)
+        cur.execute("SELECT is_finalized AND source = 'derived' FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", (enr1, MIX["ao"]))
+        row = cur.fetchone()
+        t.chk("MIXED: and the tutor grade is finalized and derived", bool(row and row[0] is True))
+        r = draft_grade(MIX, enr2, final=True, role="service_role", keep=False)
+        t.chk("MIXED: a script still cannot finalize a typed-path mark on the same item", refuses(r, "grades_ai_drafts_need_a_person"), r)
+        r = draft_grade(MIX, enr3, final=True, role="service_role", keep=False, src="derived")
+        t.chk("MIXED: a derived mark with no tutor submission behind it is refused", refuses(r, "grades_ai_drafts_need_a_person"), r)
+
+        print("\n=== AFTER 078: a released mark stays released ===")
+        r = s.attempt(None, "UPDATE grades SET is_finalized = false, source = 'ai_suggested' WHERE enrollment_id = %s AND assignment_offering_id = %s",
+                      (enr1, AI["ao"]), role="service_role")
+        t.chk("RELEASED: a script cannot un-finalize a mark a person finalized", refuses(r, "grades_ai_drafts_need_a_person"), r)
+        r = s.attempt(None, "INSERT INTO grades (enrollment_id, assignment_offering_id, points_earned, points_possible, source, is_finalized) "
+                            "VALUES (%s,%s,0,2,'ai_suggested',false) ON CONFLICT (enrollment_id, assignment_offering_id) DO UPDATE "
+                            "SET is_finalized = false, source = 'ai_suggested', points_earned = 0", (enr1, AI["ao"]), role="service_role")
+        t.chk("RELEASED: the nightly upsert (is_finalized false over a finalized row) is refused", refuses(r, "grades_ai_drafts_need_a_person"), r)
+        t.chk("RELEASED: the mark is still finalized after those attempts",
+              one("SELECT is_finalized AND points_earned = 1 FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", (enr1, AI["ao"])) is True)
+        r = s.attempt(director, "UPDATE grades SET is_finalized = false WHERE enrollment_id = %s AND assignment_offering_id = %s", (enr1, AI["ao"]))
+        t.chk("RELEASED: a signed-in staff member may reopen it", r == ("ok", 1), r)
+        r = draft_grade(AI, enr3, final=False, role="service_role", keep=True)
+        r = s.attempt(None, "UPDATE grades SET points_earned = 1, question_scores = '{\"q2\": {}}'::jsonb WHERE enrollment_id = %s AND assignment_offering_id = %s",
+                      (enr3, AI["ao"]), role="service_role")
+        t.chk("RELEASED: a script may still rewrite an unfinalized draft", r == ("ok", 1), r)
+
+        print("\n=== AFTER 078: the path cannot be edited out from under a draft ===")
+        r = s.attempt(None, "UPDATE offering_activities SET grading = 'human_graded' WHERE activity_id = %s AND assignment_offering_id = %s",
+                      (AI["activities"][0], AI["ao"]), role="service_role")
+        t.chk("PATH: a script cannot switch an ai_drafted path to human_graded while grades exist", refuses(r, "offering_activities_ai_drafted_stays"), r)
+        r = s.attempt(None, "DELETE FROM offering_activities WHERE activity_id = %s AND assignment_offering_id = %s",
+                      (AI["activities"][0], AI["ao"]), role="service_role")
+        t.chk("PATH: a script cannot delete an ai_drafted path while grades exist", refuses(r, "offering_activities_ai_drafted_stays"), r)
+        r = s.attempt(director, "UPDATE offering_activities SET grading = 'human_graded' WHERE activity_id = %s AND assignment_offering_id = %s",
+                      (AI["activities"][0], AI["ao"]))
+        t.chk("PATH: a signed-in staff member may change it", r == ("ok", 1), r)
+        NOGR = written_item("ai_drafted")
+        r = s.attempt(None, "UPDATE offering_activities SET grading = 'human_graded' WHERE activity_id = %s AND assignment_offering_id = %s",
+                      (NOGR["activities"][0], NOGR["ao"]), role="service_role")
+        t.chk("PATH: with no grades yet a script may still change it", r == ("ok", 1), r)
+
         # ============================ BEFORE 079 ===============================
         print("\n=== BEFORE 079 ===")
         t.chk("BEFORE 079: all six step 1 triggers exist", trig_count() == 6, trig_count())
@@ -279,9 +349,10 @@ def main():
             return 1
         print(f"\napplied  {M79}")
         print("\n=== AFTER 079 ===")
-        t.chk("AFTER 079: none of the six triggers remains", trig_count() == 0, trig_count())
-        t.chk("AFTER 079: none of the six functions remains",
-              one("SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'app' AND p.proname = ANY(%s)", (list(SIX),)) == 0)
+        t.chk("AFTER 079: five of the six triggers are gone and the marker rule stays", trig_count() == 1 and one(
+              "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgname = %s", (KEPT,)) == 1, trig_count())
+        t.chk("AFTER 079: the five functions are gone",
+              one("SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'app' AND p.proname = ANY(%s)", (list(DROPPED),)) == 0)
         t.chk("AFTER 079: 078's rule is still in place",
               one("SELECT count(*) FROM pg_trigger WHERE tgrelid = 'app.grades'::regclass AND tgname = 'grades_ai_drafts_need_a_person' AND NOT tgisinternal") == 1)
         t.chk("AFTER 079: the one-active index stays",
@@ -293,7 +364,7 @@ def main():
         r = sql_try("UPDATE assignment_offerings SET is_published = true WHERE id = %s", (NPQ2["ao"],))
         t.chk("AFTER 079: a new-page item with an online-questions path publishes", r == ("ok", 1), r)
         r = sql_try("UPDATE assignment_offerings SET entered_on_new_page = false WHERE id = %s", (NP_AI["ao"],))
-        t.chk("AFTER 079: the marker can be cleared", r == ("ok", 1), r)
+        t.chk("AFTER 079: the marker still cannot be cleared", refuses(r, "marker_one_way"), r)
         r = sql_try("UPDATE assignment_offerings SET is_published = true WHERE id = %s", (off["ao"],))
         t.chk("AFTER 079: publishing in an inactive course offering is no longer refused", r == ("ok", 1), r)
         r = s.attempt(director, "INSERT INTO grades (enrollment_id, assignment_offering_id, points_earned, points_possible, source, is_finalized) "
@@ -356,7 +427,9 @@ def main():
                                 "VALUES (%s,%s,1,2,'ai_suggested',true)", (enr3, NP3["ao"]))
         t.chk("ROLLBACK 079: a finalized grade on a new-page item is refused again", refuses(r, "grades_new_items_stay_unfinalized"), r)
         t.chk("ROLLBACK 079 can be applied over again (079 re-applies)", s.apply_file(M79))
-        t.chk("ROLLBACK 078 applies", s.apply_file(R78, rollback=True))
+        t.chk("ROLLBACK 078 refuses while an ai_drafted path exists and 079 is applied", not s.apply_file(R78, rollback=True, quiet=True))
+        t.chk("ROLLBACK 079 applies once more", s.apply_file(R79, rollback=True))
+        t.chk("ROLLBACK 078 applies once the step 1 grade rule is back", s.apply_file(R78, rollback=True))
         r = s.attempt(None, "UPDATE grades SET points_earned = 2 WHERE enrollment_id = %s AND assignment_offering_id = %s", (enr1, AI["ao"]), role="service_role")
         t.chk("ROLLBACK 078: the gap is open again", r == ("ok", 1), r)
         sql_do("UPDATE offering_activities SET grading = 'human_graded' WHERE grading = 'ai_drafted'")
