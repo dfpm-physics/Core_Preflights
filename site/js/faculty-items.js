@@ -374,9 +374,6 @@ export function plainError(error) {
   if (isLostResponse(error)) {
     return 'The connection dropped before an answer came back, so it is not known whether this was saved. Reload the page and look before you try again.';
   }
-  if (/publish_needs_active/.test(raw)) {
-    return 'This term is not active, so its items cannot be published.';
-  }
   if (/stay_unpublished/.test(raw)) return 'Items entered on this page cannot be published yet.';
   if (/grades_within_bounds/.test(raw)) {
     return 'A grade on this item is above its points. Raise the points, or fix that grade first.';

@@ -25,6 +25,7 @@
 // entry to that array — nothing else on the page needs to change.
 
 import { esc, pct } from './util.js';
+import { hasTypedOrTutorPath } from './schema.js';
 
 // Resolved at CALL time, not at import time. config.js is a classic script that assigns
 // window.db, and reading it here at module scope would both couple the load order and make
@@ -169,8 +170,8 @@ export async function loadHealth({ lessonWindow = 6, errorDays = 14 } = {}) {
       .eq('status', 'active'),
     db.from('assignment_offerings')
       .select('id,course_offering_id,is_published,opens_at,due_at,due_by_day,points_possible,' +
-              'grading_mode,assignments!inner(id,slug,title),' +
-              'offering_activities(grading_role,is_visible,activities(id,slug,modality,title,content))')
+              'grading_mode,entered_on_new_page,assignments!inner(id,slug,title),' +
+              'offering_activities(grading_role,is_visible,delivery,grading,activities(id,slug,modality,title,content))')
       .order('due_at', { ascending: true }),
     db.from('tutor_error_log')
       .select('id,logged_at,slug,kind,cadet_ref,cadet_id,http_status,model')
@@ -326,6 +327,10 @@ export function shapeHealth(raw, { offeringId = 'all' } = {}) {
     const written = acts.find(x => x.activity.modality === 'written');
     const gradedModalities = acts.filter(x => x.grading_role === 'graded')
       .map(x => x.activity.modality);
+    // Completion here counts typed responses and tutor sessions. An item made only of an online question
+    // set, an in-person session or work done elsewhere has nothing to complete on this chart, and drawing
+    // it would read as a cohort that finished nothing.
+    if (!hasTypedOrTutorPath(acts.map(x => ({ delivery: x.delivery, modality: x.activity.modality })))) continue;
 
     const subs = subsByOffering.get(a.id) || [];
     const doneByStudent = new Map();                      // studentId -> modality
@@ -409,6 +414,10 @@ export function shapeHealth(raw, { offeringId = 'all' } = {}) {
       const acts = (a.offering_activities || []).filter(x => x.activities);
       const interactive = acts.find(x => x.activities.modality === 'interactive');
       return {
+        id: a.id,
+        // Where to open this item to fix it: an item made on a newer page opens there, by its own
+        // deep link; an older row keeps the older page.
+        href: a.entered_on_new_page === true ? `items.html?a=${encodeURIComponent(a.id)}` : 'lessons.html',
         courseOfferingId: a.course_offering_id,
         offeringLabel: labelOf.get(a.course_offering_id)?.label ||
                        courseOf.get(a.course_offering_id) || '—',
@@ -535,7 +544,7 @@ export const CHECKS = [
     detect: (m) => m.allLessons.filter(L =>
       (m.tracksPerCourse.get(L.courseOfferingId)?.size || 0) > 1 &&
       (!L.dueByDay || !Object.keys(L.dueByDay).length))
-      .map(L => ({ where: `${L.offeringLabel} · ${L.slug}`, detail: 'due_by_day is empty' })),
+      .map(L => ({ where: `${L.offeringLabel} · ${L.slug}`, href: L.href, detail: 'due_by_day is empty' })),
   },
   {
     scope: 'term',
@@ -546,7 +555,7 @@ export const CHECKS = [
     fix: 'Open the lesson in <a href="lessons.html">Assignments</a> and add a written PREP path with grading role <em>graded</em>. The two paths can both be graded; a cadet picks one.',
     detect: (m) => m.allLessons.filter(L =>
       L.gradedModalities.includes('interactive') && !L.gradedModalities.includes('written'))
-      .map(L => ({ where: `${L.offeringLabel} · ${L.slug}`, detail: 'no graded PREP fallback' })),
+      .map(L => ({ where: `${L.offeringLabel} · ${L.slug}`, href: L.href, detail: 'no graded PREP fallback' })),
   },
   {
     scope: 'term',
@@ -556,7 +565,7 @@ export const CHECKS = [
     why: 'The lesson appears to cadets and the Launch button goes nowhere.',
     fix: 'Open the lesson in <a href="lessons.html">Assignments</a> and paste the published claude.ai URL. If the artifact was republished, its URL moved — the slug does not.',
     detect: (m) => m.allLessons.filter(L => L.isPublished && L.hasInteractive && !L.artifactUrl)
-      .map(L => ({ where: `${L.offeringLabel} · ${L.slug}`, detail: 'activities.content.artifact_url is empty' })),
+      .map(L => ({ where: `${L.offeringLabel} · ${L.slug}`, href: L.href, detail: 'activities.content.artifact_url is empty' })),
   },
   {
     scope: 'term',
@@ -567,7 +576,7 @@ export const CHECKS = [
     fix: 'Publish it in <a href="lessons.html">Assignments</a>, or push its due date back if it is not meant to run yet.',
     detect: (m) => m.allLessons.filter(L => !L.isPublished && L.dueAt &&
       Date.parse(L.dueAt) - Date.now() < 7 * 86400000)
-      .map(L => ({ where: `${L.offeringLabel} · ${L.slug}`, detail: 'not published, due within 7 days' })),
+      .map(L => ({ where: `${L.offeringLabel} · ${L.slug}`, href: L.href, detail: 'not published, due within 7 days' })),
   },
   {
     scope: 'errors',

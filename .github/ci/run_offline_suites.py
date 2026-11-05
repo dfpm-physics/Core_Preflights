@@ -61,6 +61,7 @@ OFFLINE = [
     "test-remark-function.mjs",
     "test-homework.mjs",
     "test-student-homework-link.mjs",
+    "test-roll-in-pages.mjs",
 ]
 # Python tests that make no network call and need no database (each stubs or never opens a connection).
 PY_OFFLINE = [

@@ -25,19 +25,28 @@ import {
   OFFERING_SELECT, GRADE_SELECT, SUBMISSION_SELECT, EXTENSION_SELECT,
   shapeOffering, withResolvedDue, offeringSections,
   shapeSubmission, questionsOf, effectiveDue, submissionLateness,
-  actionableSections, fetchAll, cardKindFor, hasAnyAnswer,
+  actionableSections, fetchAll, cardKindFor, hasAnyAnswer, isPersonGraded,
 } from './schema.js';
 
-/** Scheduled assignments for the current offering, for the picker. */
-export async function gradeAssignmentList(ctx, { strict = false } = {}) {
+/**
+ * Scheduled assignments for the current offering.
+ *
+ * `gradedByPerson`: the Grade picker passes it, and then an item is listed only when a person grades or
+ * reviews some path of it (isPersonGraded, decided from each path's delivery and grading). The export and
+ * the backup do not pass it: a graded online question set still has its column in the gradebook.
+ */
+export async function gradeAssignmentList(ctx, { strict = false, gradedByPerson = false } = {}) {
   if (!ctx.currentOffering) return [];
   const res = await db.from('assignment_offerings')
-    .select('id, due_at, position, is_published, points_possible, assignments!inner(slug, title)')
+    .select('id, due_at, position, is_published, points_possible, assignments!inner(slug, title), ' +
+            'offering_activities(delivery, grading)')
     .eq('course_offering_id', ctx.currentOffering)
     .order('position', { ascending: false, nullsFirst: false });
   // `strict`: the export and the backup must not mistake a failed read for an empty course.
   const data = strict ? checkedRows(res, 'the list of assignments') : res.data;
-  return (data || []).map(r => ({
+  return (data || [])
+    .filter(r => !gradedByPerson || isPersonGraded(r.offering_activities))
+    .map(r => ({
     id: r.id,
     slug: r.assignments?.slug,
     title: r.assignments?.title,

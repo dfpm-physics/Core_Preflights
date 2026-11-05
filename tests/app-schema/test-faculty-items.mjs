@@ -349,6 +349,8 @@ section('plain errors');
   eq('the older editor shows one plain sentence for the inactive-term refusal', G.publishRefusalMessage({ message: raw }), sentence);
   eq('and nothing for any other error', G.publishRefusalMessage({ message: 'network down' }), null);
   eq('and nothing for no error', G.publishRefusalMessage(null), null);
+  check('the newer page keeps no wording for the dropped inactive-term rule (migration 079)',
+    !/term is not active/.test(I.plainError({ message: raw })), I.plainError({ message: raw }));
   check('the page strips ids from other messages', !I.plainError({ message: `row ${uuid} is wrong (some_rule)` }).includes(uuid));
   check('a permission refusal says who can', /director/.test(I.plainError({ code: '42501', message: 'x' })));
   check('a database without the columns says so', /not been upgraded/.test(I.plainError({ code: '42703', message: 'x' })));

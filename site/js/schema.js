@@ -328,6 +328,37 @@ export function policyOf(offering) {
 export const isGradedPath = (activity) => activity?.gradingRole === 'graded';
 
 /**
+ * Whether a person grades or reviews some path of an item. The Grade picker lists an item only then.
+ * Decided from each path's delivery and grading, never from the item's kind.
+ *
+ * A path whose delivery has not been written yet (the older editor made it) counts as person-graded, which
+ * is what keeps every older row listed exactly as before. An item with no paths is listed too: the picker
+ * cannot say it has nothing to review. What is left out is an item whose every path is marked by the system
+ * (auto_checked) or entered or imported from outside (hand_entered, imported).
+ *
+ * @param {{delivery?: string|null, grading?: string|null}[]} paths
+ */
+export const PERSON_GRADINGS = ['human_graded', 'ai_drafted', 'effort'];
+export function isPersonGraded(paths) {
+  if (!paths || !paths.length) return true;
+  return paths.some(p => !p.delivery || !p.grading || PERSON_GRADINGS.includes(p.grading));
+}
+
+/**
+ * Whether an item has a path that is a typed response or a tutor session, which is what the completion
+ * counts on Report and Health describe. A path with no delivery yet is read by its modality (the older
+ * editor wrote only the modality). An item with no paths at all is left in, so it is never hidden by a gap.
+ *
+ * @param {{delivery?: string|null, modality?: string|null}[]} paths
+ */
+export function hasTypedOrTutorPath(paths) {
+  if (!paths || !paths.length) return true;
+  return paths.some(p => p.delivery
+    ? (p.delivery === 'typed_response' || p.delivery === 'interactive_tutor')
+    : (p.modality === 'written' || p.modality === 'interactive'));
+}
+
+/**
  * May the written path be taken freely, or only with an instructor's permission?
  *
  * Here, beside policyOf() and writtenPathCounts(), for the reason the whole module exists: the
