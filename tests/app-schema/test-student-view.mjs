@@ -108,6 +108,6 @@ for (const p of ['site/js/student-data.js', 'site/js/student-lessons.js', 'site/
 for (const p of ['site/student/schedule.html', 'site/student/grades.html', 'site/js/student-data.js', 'site/js/student-view.js', 'site/js/student-lessons.js']) {
   check(`${p}: never selects diagnostic`, !/diagnostic/.test(read(p).replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/instructor_note:diagnostic->instructor_note/g, '')));
 }
-check('the student grade select still projects one key, not the column', /instructor_note:diagnostic->instructor_note/.test(read('site/js/schema.js')));
+check('the student grade select names instructor_note (a my_grades column) and never diagnostic', /GRADE_SELECT_STUDENT\s*=[^;]*instructor_note/.test(read('site/js/schema.js')) && !/GRADE_SELECT_STUDENT\s*=[^;]*diagnostic/.test(read('site/js/schema.js')));
 
 summary();

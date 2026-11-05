@@ -8,6 +8,38 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 step 2: the student and entry branches merged into `v2-step2`)
+
+**What.** `v2-step2-student` and `v2-step2-entry` were merged into `v2-step2` as two local merge commits, so migrations
+044 to 048, 059, 060, 065 and 066 and the pages built on them are one line of work. Nothing was pushed or applied anywhere.
+- **Grades come from one door.** The student branch read the `grades` table; since 046 that table returns a cadet no row.
+  `loadAssignmentStatuses` now reads `my_grades` (where `instructor_note` is a column) and a failed read of any of the five
+  queries throws. `test-student-loader.mjs` now fails if any student module reads the `grades` table, and the stale check on
+  the old one-key projection in `test-student-view.mjs` was replaced by one on the new column.
+- **One state.** `my_grades` already follows `my_visible_grade_cells()`. The loader judged a cell's grade by `released`
+  alone, which dropped an auto-checked cell still in progress that the database does give points for. The loader now asks
+  one helper, whether the cell carries points or is released, in both places it decided.
+- **Past terms.** 060 widens `my_offerings()` to completed enrollments and 047's release function already counts them; the
+  combined scratch test shows a completed term still readable and a dropped one reading nothing.
+- **Stale text.** The header of 065 and its rollback no longer say the `gradebook_cells` grant is removed by hand: 060 owns
+  it and its rollback takes it back once 065 is gone.
+- **Files merged by meaning, not by side.** `CHANGELOG.md`, `docs/decisions/V2-DATA-MODEL.md` (the 060, 065 and 066 rows sit
+  in migration order) and the offline suite list keep both sides. `site/student/interaction-submit.html` keeps the
+  start-error handler and the opening-date notice; its URL and hash format are unchanged.
+- **Blackboard fill.** `site/js/blackboard-fill.js` was edited on the entry branch. The same inputs (comma and tab
+  files, three decimal settings, four line-ending settings, refusals) run through `origin/main`'s copy and this one gave 54 outputs, none different.
+
+**Proof.** `scripts/staging/test_step2_together_scratch.py`: one invented course on one throwaway database built with 023 and
+024 to 043 and then 044 to 066 in order. A Director enters a typed score and publishes the column; the cadet's `my_grades`
+row and total equal the staff `course_totals` row and the cells the export reads; a grade held by its release time is hidden
+from the cadet and visible to staff; a transfer keeps the score and total (and a blank in a closed column); a completed term
+stays readable; a dropped one reads nothing; every rollback runs newest first and every migration re-applies. 50 checks.
+The other ten scratch scripts were each re-run on the merged tree.
+
+**Deliberately not done.** Nothing applied to staging or production. Nothing pushed. The browser pages were not opened
+against a database that has these migrations, so the page behaviour of the merged tree is checked only by the offline suites.
+The export module itself was not run on scratch rows; the proof reads the database columns it reads.
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 Stage D: fixes after review C of 044 to 047; `v2-step2` branch)
 
 **What.** Edits to the unapplied migrations 047 and 048 and their rollbacks, from the third-party review of 044 to 047. (1) A report for an effort-graded item is refused by the server while a finalized grade of that item stands, in `commit_work` and `save_interactive_work`; the server reads `grades` itself, so a grade held back from the cadet's view still counts. (2) `my_grades` now lists exactly the cells the gradebook shows the cadet points for, from one function (`my_visible_grade_cells()`, which reads the gradebook cell function); a held, excused or overtaken-zero grade is no longer readable. It also lists an auto-checked grade before its deadline, because the gradebook shows its points. (3) A cadet cannot start a submission on an item that has not opened (new trigger), and `save_interactive_work` and `commit_work` check the item has opened for the cadet's section. (4) The move refuses a repeated question id that carries key text, and the rollback restores only keyed questions and refuses if a keyed id is now repeated. (5) A multiple-choice or numerical `correct_answer` is filed with machine fields (`correct_choice_ids`; `value` with a 5 percent tolerance, or an absolute tolerance of 0 for a value of 0) as well as the readable line; the grading skill now reads them from the key table. (6) The refusal for a missed deadline names the deadline in Mountain time. (7) `lesson_aggregate.py pull` and the grading skill warn when a graded written question has guidance nowhere. (8) Small: the snapshot-strip trigger is security definer; `content_key_archive` carries the forced-change block; the receiver data layer now fails closed when the grade read fails, and throws on a failed submissions or grades read; comments corrected.

@@ -73,7 +73,7 @@ function setup({ cells, grades }) {
   tables = {
     assignment_offerings: [off('o1', 'Released item'), off('o2', 'Held item'), off('o3', 'Stale zero item'),
       off('o4', 'Excused item')],
-    submissions: [], grades, extensions: [], submission_activities: [],
+    submissions: [], my_work: [], my_grades: grades, extensions: [], submission_activities: [],
   };
   rpcs = { gradebook_cells: cells, my_course_total: [{ earned_text: '10', possible_text: '10', percent_text: '100.00' }] };
 }
@@ -92,9 +92,19 @@ eq('a stale zero is not on the item', by('o3').grade, null);
 eq('a stale zero is not graded', by('o3').status === 'graded', false);
 eq('an excused item says so', [by('o4').excused, by('o1').excused], [true, false]);
 check('the cells ride back on the array', items.cells instanceof Map && items.cells.size === 4);
-const gradeQuery = calls.find(c => c.table === 'grades');
+const gradeQuery = calls.find(c => c.table === 'my_grades');
 const narrowed = gradeQuery.filters.find(f => f[0] === 'in' && f[1] === 'assignment_offering_id');
 eq('only the released item is downloaded', narrowed && narrowed[2], ['o1']);
+
+section('an auto-checked cell still in progress keeps the points the database gave it');
+{
+  const auto = [cell('o1', 'in_progress', 6), cell('o2', 'in_progress'), cell('o3', 'submitted_ungraded'), cell('o4', 'excused')];
+  setup({ cells: auto, grades: [grade('o1', 6, { source: 'auto_checked' }), grade('o2', 3, { source: 'auto_checked' })] });
+  const got = await D.loadAssignmentStatuses(ctx, { withCells: true });
+  const q = calls.find(c => c.table === 'my_grades');
+  eq('only the cell the database gave points for is downloaded', q.filters.find(f => f[0] === 'in' && f[1] === 'assignment_offering_id')[2], ['o1']);
+  eq('that grade is on its item', got.find(i => i.offeringId === 'o1').grade?.points_earned, 6);
+}
 
 section('without cells the loader is unchanged (the receiver page uses this)');
 setup({ cells: happyCells, grades: happyGrades });
@@ -151,5 +161,24 @@ for (const p of ['assignments', 'lessons', 'grades', 'schedule', 'dashboard']) {
 check('assignments.html: the reload after a commit is guarded',
   /await loadData\(\);[^\n]*\n/.test(readFileSync(resolve(ROOT, 'site/student/assignments.html'), 'utf8'))
   && /try \{\s*await loadData\(\)/.test(readFileSync(resolve(ROOT, 'site/student/assignments.html'), 'utf8')));
+
+// A cadet's grades come from the `my_grades` view. Since migration 046 the `grades` table returns a cadet no
+// row at all, so a student module that reads it directly shows "no grade" with no error.
+section('no student module reads the grades table');
+{
+  const { readdirSync } = await import('node:fs');
+  const files = [
+    ...readdirSync(resolve(ROOT, 'site/js')).filter(n => /^student-.*\.js$/.test(n)).map(n => `site/js/${n}`),
+    ...readdirSync(resolve(ROOT, 'site/student')).filter(n => n.endsWith('.html')).map(n => `site/student/${n}`),
+    'site/js/schema.js',
+  ];
+  check('the scan finds the student modules', files.length >= 8, String(files.length));
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  for (const p of files) {
+    const src = strip(readFileSync(resolve(ROOT, p), 'utf8'));
+    check(`${p}: does not read the grades table`, !/\.from\(\s*['"`]grades['"`]\s*\)/.test(src));
+  }
+  check('student-data.js reads my_grades', /\.from\('my_grades'\)/.test(readFileSync(resolve(ROOT, 'site/js/student-data.js'), 'utf8')));
+}
 
 summary();

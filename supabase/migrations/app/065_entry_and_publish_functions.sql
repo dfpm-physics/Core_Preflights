@@ -33,11 +33,10 @@
 --       the offering, or the student for their own cells). my_course_total stays ungranted here.
 --
 -- GRANTS THAT ARE SHARED WITH MIGRATION 060 (the student pages)
---   gradebook_cells(uuid, text) is granted to authenticated by BOTH this file and 060. The GRANT is idempotent in
---   each. Neither rollback revokes it: 060's rollback revokes only my_course_total, this file's rollback revokes
---   only course_totals, because each is the only file that grants that function. If both are rolled back, the
---   gradebook_cells grant stays behind (harmless: the function checks its caller) and is removed by hand:
---   REVOKE EXECUTE ON FUNCTION app.gradebook_cells(uuid, text) FROM authenticated;
+--   gradebook_cells(uuid, text) is granted to authenticated by BOTH this file and 060; the GRANT is idempotent in
+--   each. 060 owns it: this file's rollback revokes only course_totals and leaves gradebook_cells granted, and 060's
+--   rollback revokes gradebook_cells unless the functions of this file are still applied, in which case it leaves it
+--   and says so. Rolling back newest first (065, then 060) therefore leaves nothing behind.
 --
 -- WHAT IT DOES NOT DO
 --   It does not touch excusals: only a Director can set one, and that is the existing policy on

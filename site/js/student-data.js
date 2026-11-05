@@ -84,7 +84,11 @@ export async function loadAssignmentStatuses(ctx, { includeLocked = false, grade
   let cells = null;
   if (withCells) {
     cells = await loadMyCells(ctx);
-    gradesFor = [...cells.values()].filter(c => c.state === 'released').map(c => c.assignment_offering_id);
+    // The database hands a cadet points for a cell in `released`, and for an auto-checked cell still in progress
+    // (migration 039/047: my_visible_grade_cells). The cell's own points are the answer, so a cell shows a grade
+    // exactly when the database gave it points; this file never re-derives the state.
+    gradesFor = [...cells.values()].filter(cellShowsGrade)
+      .map(c => c.assignment_offering_id);
   }
 
   const { data: offeringRows, error: offeringErr } = await db.from('assignment_offerings')
@@ -172,7 +176,7 @@ export async function loadAssignmentStatuses(ctx, { includeLocked = false, grade
   const items = offerings.map(o => {
     const submission = subByOffering[o.offeringId] || null;
     const cell = cells ? (cells.get(o.offeringId) || null) : null;
-    const grade = (cells && cell?.state !== 'released') ? null : (gradeByOffering[o.offeringId] || null);
+    const grade = (cells && !cellShowsGrade(cell)) ? null : (gradeByOffering[o.offeringId] || null);
     const { due, isPast, source } = effectiveDue(o, sectionId, extByOffering[o.offeringId]);
     const status = deriveStatus({ submission, grade, isPast });
 
@@ -309,6 +313,10 @@ export async function loadStudentDashboard(ctx) {
  *   my_course_total(offering)   the running total, as text, with no letter.
  * Nothing here adds, rounds or compares a score. Both need the grants in migration 060.
  * ════════════════════════════════════════════════════════════════════════════ */
+
+/** Does the database's own cell give the cadet a grade? True in `released`, and for an auto-checked cell still in
+ *  progress, which the cell function hands points for. Judged by the cell alone, in this one place. */
+function cellShowsGrade(c) { return !!c && (c.state === 'released' || c.points_earned != null); }
 
 /** This student's cells for the current offering, keyed by assignment offering id. Throws on a failed read. */
 export async function loadMyCells(ctx, scope = 'final') {
