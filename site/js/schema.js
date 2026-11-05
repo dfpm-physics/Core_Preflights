@@ -25,7 +25,7 @@ export const OFFERING_SELECT =
   'id,points_possible,grading_mode,switch_policy,opens_at,due_at,due_by_day,is_published,position,' +
   'course_offering_id,' +
   'assignments!inner(id,slug,title,description,objectives,kind_id,course_id),' +
-  'offering_activities(grading_role,available_after,is_visible,position,' +
+  'offering_activities(grading_role,available_after,is_visible,position,delivery,grading,' +
   'activities(id,slug,modality,title,content)),' +
   'assignment_due_dates(section_id,due_at)';
 
@@ -237,6 +237,10 @@ export function shapeOffering(row) {
         title: act.title,
         content: act.content || {},
         gradingRole: oa.grading_role,
+        // How the path is delivered and graded (columns of offering_activities). Pages that must tell an
+        // auto-checked question set from a typed or tutor path read these two, never the item's kind.
+        delivery: oa.delivery ?? null,
+        grading: oa.grading ?? null,
         availableAfter: oa.available_after,
         isVisible: oa.is_visible,
         position: oa.position ?? 0,
@@ -288,6 +292,8 @@ export function shapeOffering(row) {
     // graded activities this term means the student picks; exactly one means it is required.
     gradedActivities: graded,
     isChoice: graded.length > 1,
+    // True when a path of this item is an auto-checked question set: the student answers it on homework.html.
+    autoChecked: activities.some(x => x.delivery === 'online_questions' && x.grading === 'auto_checked'),
     written: activities.find(x => x.modality === 'written') || null,
     interactive: activities.find(x => x.modality === 'interactive') || null,
   };

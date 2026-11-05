@@ -946,7 +946,7 @@ def rules(conn):
 
         def write():
             c.execute("INSERT INTO question_keys (question_id, variant_key, version, value, tol_abs, written_by, checked_by, checked_at, created_by) "
-                      "VALUES (%s, 'v', 7, 2, 0.1, 'ai', %s, now() - interval '9 days', %s) RETURNING created_by, checked_by, checked_at",
+                      "VALUES (%s, 'v', 7, 2, 0.1, 'human', %s, now() - interval '9 days', %s) RETURNING created_by, checked_by, checked_at",
                       (q, other, other))
             res["row"] = c.fetchone()
         signed_in(c, w.director, write)

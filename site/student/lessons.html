@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-3rDM0UDv9BZac3GwqgChU+Q8h4dlPulN6wWoEUgjtPA=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-/btb54VMG4o/QEaFMkPvmrCOreaWZ/J6cCLzbv5X02A=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -135,6 +135,7 @@
     }
 
     function modeLabel(l) {
+      if (l.autoChecked) return 'Homework, checked as you answer';
       if (l.completion_policy === 'choice' && l.preflight && l.interaction) return 'Your choice of format';
       if (l.completion_policy === 'interaction') return 'Interactive lesson';
       return `${l.preflight?.questions?.length ?? 0} question${(l.preflight?.questions?.length ?? 0) === 1 ? '' : 's'}`;
@@ -426,6 +427,15 @@
       // answers that can never score) and false once an interactive report has become the grade.
       const showWritten = l.showWrittenPath;
 
+      // AN AUTO-CHECKED QUESTION SET is answered on its own page, one question at a time. The page itself says whether
+      // the item is open, so this only has to lead there; the score shown on it comes from the database.
+      if (l.homeworkHref) {
+        root.innerHTML = header + homeworkBlock(l);
+        wire(l);
+        window.scrollTo(0, 0);
+        return;
+      }
+
       // Both paths loaded and still open (nothing submitted) → show them side by side. When the
       // interactive is a graded choice, both are live and the student picks. When the written is
       // required (interactive is practice), the same two-box layout renders with the interactive
@@ -578,6 +588,17 @@
           </div>
         </div>
         ${switchNote}
+      </div>`;
+    }
+
+    function homeworkBlock(l) {
+      const label = l.state === STATE.GRADED ? 'View your answers' : 'Open the homework';
+      return `<div class="card">
+        <div class="card-title">Homework</div>
+        <div class="card-meta">Each answer is checked as you send it, and your score is kept for you.</div>
+        <div class="lesson-actions" style="margin-top:12px">
+          <a class="btn btn-primary" id="homework-link" href="${esc(l.homeworkHref)}">${esc(label)}</a>
+        </div>
       </div>`;
     }
 

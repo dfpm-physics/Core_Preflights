@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Step 2 together: one invented course walked across the student, staff-entry and trust migrations, on ONE
-throwaway database built with every migration in order (023, 024 to 043, then 044 to 049, 051, 059, 060, 065, 066, 067, 068).
+throwaway database built with every migration in order (023, 024 to 043, then 044 to 049, 051, 059, 060, 065, 066, 067, 068, and Stage E's 070 to 073 with the merge's 074 to 076).
 
 It stands in for plan section 8's "agree for the same cadet" as far as a scratch database can. Sessions are simulated
 (the `authenticated` role plus `request.jwt.claims`), so it proves the database rules, not the browser pages and not
@@ -20,6 +20,12 @@ THE PATH
      export; the preview lists the cadets and its fingerprint covers them; an extension that has not passed waits;
      unpublish reopens only what a publish closed
   9  a grade's version (updated_at) moves only when the grade changes (068)
+ 10  an auto-checked numeric item through the real answer functions: my_grades returns the grade before the deadline,
+     the audit names a real actor for an answer and for a re-mark, a Director corrects the key and re-marks, and the
+     cadet's total, the staff total and the export's cells agree before and after the deadline; a hand correction
+     of an auto-checked grade holds once the step 1 new-page rule is switched off
+ 11  editing a shared question moves the current term's points and leaves a finished term's (074)
+ 12  the only functions left executable by everyone are the row-security helpers (076)
   7  every rollback runs newest first, the schema is back where it was, and the migrations re-apply; the same
      reads then give the same answers
 
@@ -27,7 +33,8 @@ Names and ids are invented; no id is printed. Staging project only (db_target re
 dropped afterwards.
 
 Usage:  python scripts/staging/test_step2_together_scratch.py --expect-ref <staging_ref> [--before 067]
-        --before 067 builds only through 066, to show that section 8 fails on the behaviour before 067.
+        --before 067 builds only through 066, to show that section 8 fails on the behaviour before 067;
+        --before 074 builds through 073, to show that sections 10 (audit), 11 and 12 fail before the merge's own migrations.
 Exit 0 only when every check passes.
 """
 import argparse
@@ -42,7 +49,8 @@ import install_staging as ins  # noqa: E402
 import v2_gate_lib as gl  # noqa: E402
 from scratch_lib import Scratch, Tally  # noqa: E402
 
-STEP2_ALL = ["044", "045", "046", "047", "048", "049", "051", "059", "060", "065", "066", "067", "068"]
+STEP2_ALL = ["044", "045", "046", "047", "048", "049", "051", "059", "060", "065", "066", "067", "068",
+             "070", "071", "072", "073", "074", "075", "076"]
 
 
 def main():
@@ -344,6 +352,301 @@ def main():
         ver2 = one("SELECT updated_at::text FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", gq)
         t.chk("a real change moves it", ver2 != ver1, (ver1, ver2))
 
+        # ================================================================================================
+        # Stage E meets step 2. One auto-checked numeric item, answered through the real database path (the answer
+        # functions the edge functions call), corrected and re-marked by staff, and read back by the student, by staff
+        # and by the export (the cells and totals the export columns come from).
+        # ================================================================================================
+        print("\n=== 10. an auto-checked item: answers, a key correction and a re-mark (070 to 075) ===")
+        try:
+            from scratch_stage_e_part2_proof import verdict as _verdict
+            from scratch_stage_e_proof import J as _J, call as _call
+            cur.execute("BEGIN")
+            term_c = b.term("tog-cur", "Together current term", starts="2026-01-01", ends="2099-12-31")
+            course3 = b.course("tog-103", "Homework course")
+            co3 = b.offering(course3, term_c, True)
+            secH = b.section(co3, "H1", ["M"])
+            dir3 = b.staff("dir3", "Hal Director")
+            b.assign(dir3, co3, "director")
+            enrA3, stuA3 = b.cadet(3000000931, "Fay Invented", secH)
+            enrB3, stuB3 = b.cadet(3000000932, "Gus Invented", secH)
+            Qp = {"modality": "questions", "delivery": "online_questions", "grading": "auto_checked"}
+            hw = b.item(course3, co3, "tog-hw", "Together homework", 0, kind="homework", paths=[Qp], due=gl.days(2),
+                        published=False, entered_on_new_page=True, attempt_limit=8, attempt_rule="best")
+            hw["q"] = {"q1": b.question(hw, "q1", "numeric", 2, key=[{"value": 9.8, "tol_pct": 2}], n=0, prompt="How fast?"),
+                       "q2": b.question(hw, "q2", "numeric", 1, key=[{"value": 0, "tol_abs": 0.01}], n=1)}
+            # step 1 keeps two rules that refuse to publish what only a new page produces; the proof turns both off
+            # for this one statement, inside its own transaction (the Stage E proofs do the same)
+            for trg in ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished"):
+                cur.execute(f"ALTER TABLE assignment_offerings DISABLE TRIGGER {trg}")
+            cur.execute("UPDATE assignment_offerings SET is_published = true WHERE id = %s", (hw["ao"],))
+            for trg in ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished"):
+                cur.execute(f"ALTER TABLE assignment_offerings ENABLE TRIGGER {trg}")
+            cur.execute("COMMIT")
+            HW, Q1, Q2 = hw["ao"], hw["q"]["q1"], hw["q"]["q2"]
+            sA3, sB3 = str(enrA3), str(enrB3)
+
+            def answer(stu, qn, raw):
+                c = _call(cur, "service_role", "answer_context", stu, HW, hw["q"][qn])
+                if c.get("status") != "ok":
+                    return c
+                ok, parsed = _verdict("numeric", {"raw": raw}, c["key"], [])
+                return _call(cur, "service_role", "record_answer", stu, HW, hw["q"][qn], _J({"raw": raw}), parsed, bool(ok), c["key_version_id"])
+
+            def tot3(sub, enr=None):
+                if enr is not None:
+                    r = mine(sub, "SELECT earned_text, possible_text, percent_text, percent_key_text FROM course_totals(%s, 'final') "
+                                  "WHERE enrollment_id = %s", (co3, enr))
+                else:
+                    r = mine(sub, "SELECT earned_text, possible_text, percent_text, percent_key_text FROM my_course_total(%s, 'final')", (co3,))
+                return tuple(r[1][0]) if r[0] == "ok" and r[1] else None
+
+            def cell3(sub, enr):
+                r = mine(sub, "SELECT state, points_earned FROM gradebook_cells(%s, 'final') WHERE enrollment_id = %s "
+                              "AND assignment_offering_id = %s", (co3, enr, HW))
+                return tuple(r[1][0]) if r[0] == "ok" and r[1] else None
+
+            def view3(sub):
+                r = mine(sub, "SELECT points_earned, source, is_finalized FROM my_grades WHERE assignment_offering_id = %s", (HW,))
+                return tuple(r[1][0]) if r[0] == "ok" and r[1] else None
+
+            def f(x):
+                return float(x) if x is not None else None
+
+            def np_rules(on):
+                """Step 1 refuses a change to a published item that a new page made (a due date, its points). The step 2
+                release removes those rules; the proof switches them off for the statements that need it, as the Stage E
+                proofs do."""
+                for trg in ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished"):
+                    cur.execute(f"ALTER TABLE assignment_offerings {'ENABLE' if on else 'DISABLE'} TRIGGER {trg}")
+
+            def agree(label, stu, enr):
+                """The cadet's total, the staff total for that cadet and the cell the export reads are one answer."""
+                mt3, st3 = tot3(stu), tot3(dir3, enr)
+                t.chk(f"{label}: the cadet's total is the staff total for that cadet", mt3 is not None and mt3 == st3, (mt3, st3))
+                sc3, mc3 = cell3(dir3, enr), cell3(stu, enr)
+                t.chk(f"{label}: the cell the export reads is the same for staff and for the cadet", sc3 is not None and sc3 == mc3, (sc3, mc3))
+                return mt3, sc3
+
+            r = [answer(stuA3, "q1", "9.8"), answer(stuA3, "q2", "0"), answer(stuB3, "q1", "9.0"), answer(stuB3, "q2", "5")]
+            t.chk("four answers go through the answer functions and are stored", all(x.get("status") == "ok" for x in r), r)
+            t.chk("the grade is source auto_checked, finalized, and the sum of the best tries (A has 3 of 3, B has 0)",
+                  one("SELECT points_earned FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s AND source = 'auto_checked' AND is_finalized", (enrA3, HW)) == 3
+                  and one("SELECT points_earned FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s AND source = 'auto_checked'", (enrB3, HW)) == 0)
+
+            # -- before the deadline: my_grades must return the auto-checked grade (Stage E reads it from there) ---
+            vA, vB = view3(stuA3), view3(stuB3)
+            t.chk("my_grades returns the auto-checked grade before the deadline (3, auto_checked, finalized)",
+                  vA is not None and f(vA[0]) == 3 and vA[1] == "auto_checked" and vA[2] is True, vA)
+            t.chk("and the other cadet's grade of 0", vB is not None and f(vB[0]) == 0 and vB[1] == "auto_checked", vB)
+            r = mine(stuA3, "SELECT enrollment_id FROM my_grades WHERE assignment_offering_id = %s", (HW,))
+            t.chk("a cadet sees only their own grade row in my_grades", r[0] == "ok" and [str(x[0]) for x in r[1]] == [sA3], r)
+            r = mine(stuA3, "SELECT diagnostic FROM my_grades")
+            t.chk("my_grades has no diagnostic column", r[0] == "error", r)
+            r = mine(stuA3, "SELECT count(*) FILTER (WHERE enrollment_id = %s), count(*) FILTER (WHERE enrollment_id <> %s) FROM question_attempts", (enrA3, enrA3))
+            t.chk("a cadet reads only their own stored attempts (two) and never another cadet's", r[0] == "ok" and r[1][0] == (2, 0), r)
+            r = mine(stuA3, "SELECT count(*) FROM question_keys")
+            t.chk("a cadet reads no answer key", r[0] == "error" or r[1][0][0] == 0, r)
+            mt3, sc3 = agree("before the deadline", stuA3, enrA3)
+            t.chk("before the deadline the item is in progress and shows its points so far, and stays out of the total",
+                  sc3 is not None and sc3[0] == "in_progress" and f(sc3[1]) == 3 and mt3 is not None and f(mt3[0]) == 0 and f(mt3[1]) == 0, (sc3, mt3))
+            agree("before the deadline, other cadet", stuB3, enrB3)
+
+            # -- the audit of an answer: a real actor ---------------------------------------------------------------
+            def events(enr):
+                cur.execute("SELECT event, actor::text, detail ->> 'via' FROM grade_events WHERE enrollment_id = %s "
+                            "AND course_offering_id = %s ORDER BY occurred_at, id", (enr, co3))
+                return cur.fetchall()
+            evA = events(enrA3)
+            t.chk("an answer's grade write is logged (created, then rescored)", [e[0] for e in evA][:2] == ["created", "rescored"], evA)
+            t.chk("with the student's own sign-in id as the actor, written 'answer'", evA and all(e[1] == stuA3 and e[2] == "answer" for e in evA), evA)
+            t.chk("no automatic write is logged without an actor", one("SELECT count(*) FROM grade_events WHERE course_offering_id = %s AND actor IS NULL", (co3,)) == 0)
+            t.chk("the actor settings are cleared after the write", one("SELECT coalesce(current_setting('app.audit_actor', true), '')") == "")
+
+            # -- a person's correction guard ------------------------------------------------------------------------
+            r = sess(dir3, "UPDATE grades SET points_earned = 2 WHERE enrollment_id = %s AND assignment_offering_id = %s", (enrB3, HW), keep=True)
+            t.chk("a staff correction of a finalized grade on a new-page item is still refused while the step 1 rule stands",
+                  r[0] == "error" and "grades_new_items_stay_unfinalized" in str(r[2]), r)
+
+            # -- a staff member corrects the key, then re-marks ---------------------------------------------------------
+            upd = one("SELECT updated_at FROM questions WHERE id = %s", (Q1,))
+            r = sess(dir3, "SELECT key_version FROM save_question(%s, %s, %s::jsonb, true, %s::jsonb, 1)",
+                     (Q1, upd, json.dumps({"prompt_md": "How fast?", "points": 2, "choices": None, "unit_hint": None}),
+                      json.dumps({"value": 9.0, "tol_pct": 2})), keep=True)
+            t.chk("a Director corrects the key of the first question (9.0, 2 percent)", r[0] == "ok" and r[1] == 2, r)
+            rc = _call(cur, "service_role", "remark_context", dir3, Q1)
+            t.chk("the re-mark asks for the key and the stored attempts", rc.get("status") == "ok" and len(rc.get("attempts", [])) == 2, str(rc)[:120])
+            vs = []
+            for a in rc["attempts"]:
+                ok, parsed = _verdict("numeric", a["answer"], rc["key"], [])
+                vs.append({"id": a["id"], "is_correct": ok, "parsed": parsed})
+            pv = _call(cur, "service_role", "remark_apply", dir3, Q1, rc["key_version_id"], _J(vs), False, None)
+            t.chk("the preview writes nothing and says two attempts and two grades move",
+                  pv.get("status") == "ok" and pv.get("attempts_changed") == 2 and pv.get("grades_to_recompute") == 2
+                  and f(view3(stuA3)[0]) == 3, str(pv)[:160])
+            res = _call(cur, "service_role", "remark_apply", dir3, Q1, rc["key_version_id"], _J(vs), True, pv.get("preview_token"))
+            t.chk("the commit applies it", res.get("status") == "ok" and res.get("attempts_changed") == 2, str(res)[:160])
+            vA, vB = view3(stuA3), view3(stuB3)
+            t.chk("the cadets read the re-marked grades from my_grades (A 3 to 1, B 0 to 2)",
+                  vA is not None and f(vA[0]) == 1 and vB is not None and f(vB[0]) == 2, (vA, vB))
+            mt3, sc3 = agree("after the re-mark, before the deadline", stuA3, enrA3)
+            t.chk("the cell shows the new points", sc3 is not None and sc3[0] == "in_progress" and f(sc3[1]) == 1, sc3)
+            agree("after the re-mark, before the deadline, other cadet", stuB3, enrB3)
+            evA = events(enrA3)
+            t.chk("the re-mark's grade change is logged with the Director as the actor, written 'remark'",
+                  evA and evA[-1][0] == "rescored" and evA[-1][1] == dir3 and evA[-1][2] == "remark", evA)
+            t.chk("and every event of both cadets names an actor", one("SELECT count(*) FROM grade_events WHERE course_offering_id = %s AND actor IS NULL", (co3,)) == 0)
+            t.chk("one re-mark run is logged, by the same Director",
+                  one("SELECT count(*) FROM key_remark_runs WHERE question_id = %s AND run_by = %s", (Q1, dir3)) == 1)
+
+            # -- after the deadline the item counts, and every reader agrees --------------------------------------------
+            np_rules(False)
+            cur.execute("UPDATE assignment_offerings SET due_at = now() - interval '1 day' WHERE id = %s", (HW,))
+            np_rules(True)
+            mtA, scA = agree("after the deadline", stuA3, enrA3)
+            mtB, scB = agree("after the deadline, other cadet", stuB3, enrB3)
+            t.chk("after the deadline the cells are released and the totals count the item (A 1 of 3, B 2 of 3)",
+                  scA and scA[0] == "released" and mtA and f(mtA[0]) == 1 and f(mtA[1]) == 3
+                  and scB and scB[0] == "released" and mtB and f(mtB[0]) == 2 and f(mtB[1]) == 3, (scA, mtA, scB, mtB))
+            t.chk("the percent the export holds is the percent the cadet sees",
+                  mtA is not None and mtA[3].startswith("33.3333") and mtA[3] == tot3(dir3, enrA3)[3], mtA)
+            # a second correction after the deadline: the same readers still agree
+            upd = one("SELECT updated_at FROM questions WHERE id = %s", (Q1,))
+            r = sess(dir3, "SELECT key_version FROM save_question(%s, %s, %s::jsonb, true, %s::jsonb, 2)",
+                     (Q1, upd, json.dumps({"prompt_md": "How fast?", "points": 2, "choices": None, "unit_hint": None}),
+                      json.dumps({"value": 9.8, "tol_pct": 2})), keep=True)
+            rc = _call(cur, "service_role", "remark_context", dir3, Q1)
+            vs = []
+            for a in rc["attempts"]:
+                ok, parsed = _verdict("numeric", a["answer"], rc["key"], [])
+                vs.append({"id": a["id"], "is_correct": ok, "parsed": parsed})
+            pv = _call(cur, "service_role", "remark_apply", dir3, Q1, rc["key_version_id"], _J(vs), False, None)
+            res = _call(cur, "service_role", "remark_apply", dir3, Q1, rc["key_version_id"], _J(vs), True, pv.get("preview_token"))
+            t.chk("a correction back to 9.8 re-marks after the deadline too", r[0] == "ok" and res.get("status") == "ok", (r, str(res)[:100]))
+            mtA, scA = agree("after the deadline and a second re-mark", stuA3, enrA3)
+            mtB, scB = agree("after the deadline and a second re-mark, other cadet", stuB3, enrB3)
+            t.chk("A is back to 3 of 3 and B to 0 of 3 for the cadet, staff and the export cells",
+                  mtA and f(mtA[0]) == 3 and f(mtA[1]) == 3 and mtB and f(mtB[0]) == 0 and f(mtB[1]) == 3
+                  and f(scA[1]) == 3 and f(scB[1]) == 0, (mtA, mtB, scA, scB))
+            # put the deadline back so the later steps see an open item
+            np_rules(False)
+            cur.execute("UPDATE assignment_offerings SET due_at = %s WHERE id = %s", (gl.days(2), HW))
+            np_rules(True)
+
+            # -- the guard when the step 1 rule is gone ---------------------------------------------------------------
+            print("  (the step 1 new-page rule is switched off below, as the step 2 release that removes it would)")
+            cur.execute("ALTER TABLE grades DISABLE TRIGGER grades_new_items_stay_unfinalized")
+            try:
+                r = sess(dir3, "UPDATE grades SET points_earned = 2.5 WHERE enrollment_id = %s AND assignment_offering_id = %s", (enrB3, HW), keep=True)
+                t.chk("a Director corrects a cadet's auto-checked grade by hand", r[0] == "ok" and r[1] == 1, r)
+                cur.execute("SELECT points_earned, source, graded_by::text FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", (enrB3, HW))
+                g = cur.fetchone()
+                t.chk("the grade moves out of auto_checked to instructor, graded by that Director, at the points typed",
+                      g and f(g[0]) == 2.5 and g[1] == "instructor" and g[2] == dir3, g)
+                evB = events(enrB3)
+                t.chk("and the correction is logged with the Director as the actor", evB and evB[-1][1] == dir3, evB)
+                n_att = one("SELECT count(*) FROM question_attempts WHERE enrollment_id = %s AND assignment_offering_id = %s", (enrB3, HW))
+                r = answer(stuB3, "q2", "0")
+                cur.execute("SELECT points_earned, source FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", (enrB3, HW))
+                g = cur.fetchone()
+                t.chk("the cadet's next answer is stored, and does not overwrite the correction",
+                      r.get("status") == "ok" and one("SELECT count(*) FROM question_attempts WHERE enrollment_id = %s AND assignment_offering_id = %s", (enrB3, HW)) == n_att + 1
+                      and f(g[0]) == 2.5 and g[1] == "instructor", (r, g))
+                upd = one("SELECT updated_at FROM questions WHERE id = %s", (Q1,))
+                sess(dir3, "SELECT key_version FROM save_question(%s, %s, %s::jsonb, true, %s::jsonb, 3)",
+                     (Q1, upd, json.dumps({"prompt_md": "How fast?", "points": 2, "choices": None, "unit_hint": None}),
+                      json.dumps({"value": 9.0, "tol_pct": 2})), keep=True)
+                rc = _call(cur, "service_role", "remark_context", dir3, Q1)
+                vs = []
+                for a in rc["attempts"]:
+                    ok, parsed = _verdict("numeric", a["answer"], rc["key"], [])
+                    vs.append({"id": a["id"], "is_correct": ok, "parsed": parsed})
+                pv = _call(cur, "service_role", "remark_apply", dir3, Q1, rc["key_version_id"], _J(vs), False, None)
+                res = _call(cur, "service_role", "remark_apply", dir3, Q1, rc["key_version_id"], _J(vs), True, pv.get("preview_token"))
+                cur.execute("SELECT points_earned, source FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", (enrB3, HW))
+                g = cur.fetchone()
+                t.chk("a re-mark lists the corrected grade and leaves it as the Director set it",
+                      res.get("status") == "ok" and res.get("grades_listed", 0) >= 1 and f(g[0]) == 2.5 and g[1] == "instructor", (str(res)[:120], g))
+                agree("with a hand correction standing", stuB3, enrB3)
+            finally:
+                cur.execute("ALTER TABLE grades ENABLE TRIGGER grades_new_items_stay_unfinalized")
+        except Exception as exc:  # noqa: BLE001
+            import traceback; traceback.print_exc(limit=-4)
+            t.chk("section 10 ran to the end", False, repr(exc))
+            cur.execute("ROLLBACK")
+
+        print("\n=== 11. a finished term keeps its points when a shared question is edited (074) ===")
+        try:
+            cur.execute("BEGIN")
+            t_old = b.term("tog-old", "Together finished term", starts="2025-01-01", ends="2025-06-01")
+            co_old = b.offering(course3, t_old, False)
+            ao_old = b.id("ao", "tog-hw-old")
+            cur.execute("INSERT INTO assignment_offerings (id, assignment_id, course_offering_id, due_at, due_by_day, grading_mode, "
+                        "points_possible, is_published, entered_on_new_page) VALUES (%s, %s, %s, %s, '{}'::jsonb, 'points', 3, false, true)",
+                        (ao_old, hw["assignment"], co_old, gl.days(-300)))
+            cur.execute("INSERT INTO offering_activities (assignment_offering_id, activity_id, grading_role, available_after, is_visible, "
+                        "position, delivery, grading) VALUES (%s, %s, 'graded', 'always', true, 0, 'online_questions', 'auto_checked')",
+                        (ao_old, hw["activities"][0]))
+            cur.execute("COMMIT")
+            t.chk("the finished term's copy starts at 3 points, like the current one",
+                  one("SELECT points_possible FROM assignment_offerings WHERE id = %s", (ao_old,)) == 3
+                  and one("SELECT points_possible FROM assignment_offerings WHERE id = %s", (HW,)) == 3)
+            upd = one("SELECT updated_at FROM questions WHERE id = %s", (Q2,))
+            np_rules(False)      # step 1 refuses a points change on a published new-page item; step 2 removes that rule
+            r = sess(dir3, "SELECT key_version FROM save_question(%s, %s, %s::jsonb, false, NULL, NULL)",
+                     (Q2, upd, json.dumps({"prompt_md": "Made-up question.", "points": 4, "choices": None, "unit_hint": None})), keep=True)
+            t.chk("a Director edits a shared question's points (1 to 4)", r[0] == "ok", r)
+            t.chk("the current term's item follows the questions (3 to 6)",
+                  one("SELECT points_possible FROM assignment_offerings WHERE id = %s", (HW,)) == 6,
+                  one("SELECT points_possible FROM assignment_offerings WHERE id = %s", (HW,)))
+            t.chk("the finished term's item keeps the points it was graded out of (still 3)",
+                  one("SELECT points_possible FROM assignment_offerings WHERE id = %s", (ao_old,)) == 3,
+                  one("SELECT points_possible FROM assignment_offerings WHERE id = %s", (ao_old,)))
+            t.chk("no grade of the current term is above what its item offers",
+                  one("SELECT count(*) FROM grades g JOIN assignment_offerings a ON a.id = g.assignment_offering_id "
+                      "WHERE g.assignment_offering_id = %s AND g.points_earned > a.points_possible", (HW,)) == 0)
+            cur.execute("UPDATE questions SET points = 1 WHERE id = %s", (Q2,))
+            np_rules(True)
+            t.chk("putting it back restores the current term and still leaves the finished one",
+                  one("SELECT points_possible FROM assignment_offerings WHERE id = %s", (HW,)) == 3
+                  and one("SELECT points_possible FROM assignment_offerings WHERE id = %s", (ao_old,)) == 3)
+        except Exception as exc:  # noqa: BLE001
+            import traceback; traceback.print_exc(limit=-4)
+            t.chk("section 11 ran to the end", False, repr(exc))
+            cur.execute("ROLLBACK")
+
+        print("\n=== 12. functions executable by everyone: only what a policy needs (076) ===")
+        try:
+            cur.execute("""SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                            WHERE n.nspname = 'app' AND p.prokind = 'f' AND p.prorettype <> 'trigger'::regtype
+                              AND EXISTS (SELECT 1 FROM aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                                           WHERE a.privilege_type = 'EXECUTE' AND a.grantee = 0)
+                            ORDER BY 1""")
+            pub = [r_[0] for r_ in cur.fetchall()]
+            helpers = ["current_uid", "director_courses", "director_offerings", "is_admin", "is_staff", "my_assignment_offerings",
+                       "my_enrollments", "my_offerings", "my_student_id", "session_must_change_password", "session_uid",
+                       "staff_offerings", "staff_sections"]
+            t.chk("the only ordinary functions left executable by everyone are the row-security helpers", pub == helpers,
+                  sorted(set(pub) ^ set(helpers)))
+            t.chk("a signed-in user and anon cannot run the term freeze functions",
+                  not one("SELECT has_function_privilege('authenticated', 'app.freeze_term(text, boolean)', 'EXECUTE')")
+                  and not one("SELECT has_function_privilege('anon', 'app.freeze_assignment_offering(uuid, boolean)', 'EXECUTE')"))
+            t.chk("the data tier that runs the freeze tool still can",
+                  one("SELECT has_function_privilege('prep_app_dml', 'app.freeze_term(text, boolean)', 'EXECUTE')")
+                  and one("SELECT has_function_privilege('prep_app_dml', 'app.freeze_assignment_offering(uuid, boolean)', 'EXECUTE')"))
+            t.chk("every student-page call is still granted: gradebook_cells, my_course_total, student_homework, my_work state",
+                  all(one(f"SELECT has_function_privilege('authenticated', '{sig}', 'EXECUTE')") for sig in
+                      ("app.gradebook_cells(uuid, text)", "app.my_course_total(uuid, text)", "app.student_homework(uuid)",
+                       "app.my_visible_grade_cells()")))
+            t.chk("no answer or re-mark function is callable by a signed-in user or anon",
+                  not any(one(f"SELECT has_function_privilege('{ro}', '{sig}', 'EXECUTE')") for ro in ("authenticated", "anon") for sig in
+                          ("app.record_answer(uuid, uuid, uuid, jsonb, text, boolean, uuid)", "app.answer_context(uuid, uuid, uuid)",
+                           "app.remark_apply(uuid, uuid, uuid, jsonb, boolean, text)", "app.remark_context(uuid, uuid)")))
+        except Exception as exc:  # noqa: BLE001
+            import traceback; traceback.print_exc(limit=-4)
+            t.chk("section 12 ran to the end", False, repr(exc))
+            cur.execute("ROLLBACK")
+
         print("\n=== 7. rollback newest first, then re-apply ===")
         names = {f.name[:3]: f.name for f in ins.migration_files(None)}
         rolled = True
@@ -372,6 +675,10 @@ def main():
                 t.chk("and the cadet's total is again the staff total (the carried blank was dropped by the rollback, as flagged)",
                       my_total(stu1) == staff_total(director, enr1) and my_total(stu1) is not None,
                       (my_total(stu1), staff_total(director, enr1)))
+                if "070" in STEP2 and "view3" in locals():
+                    t.chk("after the re-apply the homework grade is again read from my_grades and the cadet, staff and export cells agree",
+                          view3(stuA3) is not None and tot3(stuA3) == tot3(dir3, enrA3) and cell3(stuA3, enrA3) == cell3(dir3, enrA3),
+                          (view3(stuA3), tot3(stuA3), tot3(dir3, enrA3)))
         code = 0 if t.f == 0 else 1
     finally:
         s.close()

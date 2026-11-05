@@ -18,15 +18,15 @@
 //
 // NOT PROVEN LIVE   check-answer is not deployed, so the call in sendAnswer() has only run against a stand-in.
 //
-// AFTER THE STEP 2 MERGE   the grade is read with GRADE_SOURCE below. Step 2's rule is that a student module reads the
-//   `my_grades` view and never the table; that view does not exist on this branch. Change the one constant at the merge
-//   and check the view returns an auto-checked grade before the deadline (the cell function does; the view must too).
+// THE GRADE SOURCE   the grade is read with GRADE_SOURCE below: the `my_grades` view, never the table (a student module
+//   does not read `grades`). The view lists a cell the gradebook shows the student points for, and that includes an
+//   auto-checked grade before the deadline; a database test pins it (test_step2_together_scratch.py, section 10).
 
 import { esc, fmtDateTime } from './util.js';
 
 export const ANSWER_FUNCTION = 'check-answer';
-/** The relation the grade row is read from. 'my_grades' after the step 2 merge (see the header). */
-export const GRADE_SOURCE = 'grades';
+/** The relation the grade row is read from: the student's view of their own grades (see the header). */
+export const GRADE_SOURCE = 'my_grades';
 export const GRADE_COLUMNS = 'enrollment_id,assignment_offering_id,points_earned,points_possible,question_scores,source,is_finalized';
 
 export const TEXT = {

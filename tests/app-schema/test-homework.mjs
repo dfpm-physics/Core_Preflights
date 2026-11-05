@@ -51,7 +51,7 @@ section('the page code stays out of marking, keys and the release rule');
   check('the page reads no question or key table directly', !/from\('questions'\)|from\('question_keys'\)|from\('question_attempts'\)/.test(html + js));
   check('the questions come from student_homework', /rpc\('student_homework'/.test(html));
   check('the answer goes to the check-answer function', ANSWER_FUNCTION === 'check-answer');
-  check('the grade is read from one named source (to become my_grades after the merge)', GRADE_SOURCE === 'grades' && /GRADE_SOURCE/.test(html));
+  check('the grade is read from one named source, the my_grades view and not the table', GRADE_SOURCE === 'my_grades' && /GRADE_SOURCE/.test(html) && !/from\('grades'\)/.test(html + js));
   check('the page adds up no score: no reduce or sum of points in homework.js', !/\.reduce\(|sum\(/.test(js));
 }
 

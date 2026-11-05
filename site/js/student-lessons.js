@@ -259,6 +259,9 @@ export async function loadLessonStatuses(ctx) {
       objectives: item.objectives,
       points: item.pointsPossible,
       gradingMode: item.gradingMode || null,
+      // An auto-checked question set is answered on its own page, one question at a time.
+      autoChecked: item.autoChecked === true,
+      homeworkHref: item.autoChecked === true ? `homework.html?a=${encodeURIComponent(item.offeringId)}` : null,
 
       // The two paths, under the names the page already uses.
       preflight: written ? {

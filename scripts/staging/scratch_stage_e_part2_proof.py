@@ -661,8 +661,23 @@ def run_fix_checks(cur, surl, fx):
     y = b.item(p_course(cur, fx), fx.co, "f-share-y", "f-share-y", 0, kind="homework", paths=[Q], due=now_utc() + timedelta(days=2),
                published=False, entered_on_new_page=True, attempt_limit=3, attempt_rule="best")
     cur.execute("DELETE FROM offering_activities WHERE assignment_offering_id=%s", (y["ao"],))
+    # Migration 044 (step 2) refuses a path whose activity belongs to another item's assignment, so after the merge two
+    # items cannot share an activity by any ordinary write. The per-item tally is still the rule in the attempt table
+    # (071), so this proof builds the shared case with that one check off, for these statements only, and first shows the
+    # check refusing the ordinary insert.
+    try:
+        cur.execute("SAVEPOINT share_try")
+        cur.execute("""INSERT INTO offering_activities (assignment_offering_id, activity_id, grading_role, available_after, is_visible, position, delivery, grading)
+                       VALUES (%s,%s,'graded','always',true,0,'online_questions','auto_checked')""", (y["ao"], x["activities"][0]))
+        refused_share = False
+    except Exception as exc:  # noqa: BLE001
+        refused_share = "own assignment" in str(exc)
+        cur.execute("ROLLBACK TO SAVEPOINT share_try")
+    check("an ordinary write cannot put one activity on two items (044)", refused_share)
+    cur.execute("ALTER TABLE offering_activities DISABLE TRIGGER offering_activities_same_assignment")
     cur.execute("""INSERT INTO offering_activities (assignment_offering_id, activity_id, grading_role, available_after, is_visible, position, delivery, grading)
                    VALUES (%s,%s,'graded','always',true,0,'online_questions','auto_checked')""", (y["ao"], x["activities"][0]))
+    cur.execute("ALTER TABLE offering_activities ENABLE TRIGGER offering_activities_same_assignment")
     y["activities"] = x["activities"]
     y["q"] = x["q"]
     b.publish(y)
@@ -733,8 +748,10 @@ def run_fix_checks(cur, surl, fx):
     sp = b.item(course, co_past, "f-term-past", "f-term-past", 0, kind="homework", paths=[Q], due=now_utc() - timedelta(days=300),
                 published=False, entered_on_new_page=True, attempt_limit=5, attempt_rule="best")
     cur.execute("DELETE FROM offering_activities WHERE assignment_offering_id=%s", (sp["ao"],))
+    cur.execute("ALTER TABLE offering_activities DISABLE TRIGGER offering_activities_same_assignment")   # 044: see the sharing proof above
     cur.execute("""INSERT INTO offering_activities (assignment_offering_id, activity_id, grading_role, available_after, is_visible, position, delivery, grading)
                    VALUES (%s,%s,'graded','always',true,0,'online_questions','auto_checked')""", (sp["ao"], sh["activities"][0]))
+    cur.execute("ALTER TABLE offering_activities ENABLE TRIGGER offering_activities_same_assignment")
     sp["activities"], sp["q"] = sh["activities"], sh["q"]
     b.publish(sh)
     cur.execute("ALTER TABLE app.assignment_offerings DISABLE TRIGGER assignment_offerings_publish_needs_active")   # a past term was published while it was active

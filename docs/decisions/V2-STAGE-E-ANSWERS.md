@@ -45,6 +45,10 @@ wrong, the attempt number and the attempts left. It never gets the key.
    with answers, by hand; or asks their own AI model to write that file, using instructions the system provides, then
    uploads it. Normal code checks the answer in every case.
 
+## Resolved at the merge with step 2 (2026-11-05)
+
+The section below lists what Stage E needed from step 2. After the merge: `GRADE_SOURCE` is `my_grades`; the student lesson list links an auto-checked item to `homework.html?a=<id>`; `grades_person_correction` (070) stands without the step 1 new-item trigger; writes by the answer functions and the re-mark carry a real actor in the audit log (075); a question edit does not move points in a finished term (074); the two freeze functions are no longer PUBLIC (076).
+
 ## What it depends on from Stage D (step 2)
 
 - **E6, keys out of `content` and `content_snapshot`.** New homework keys already live only in `question_keys`. The

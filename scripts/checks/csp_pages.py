@@ -48,6 +48,9 @@ PINNED = {
         "sha384-uteMfOloLDGt042uDz+xHGF3ym63/WQ6rFq7murQRG8Ih7QrXGEGNtWd8688sb4O",
     "https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js":
         "sha384-NNQgBjjuhtXzPmmy4gurS5X7P4uTt1DThyevz4Ua0IVK5+kazYQI1W27JHjbbxQz",
+    "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.4.17/purify.min.js":
+        "sha512-2wT0W6vojz3cJuLoa/DxrPVQRinkfRjFWMWIDK4NghTqObEhpem1nEkeK0d9ZE+/hyvfMNuJZlfxM4LsRgeoSA==",
+    # 3.0.9 is kept only for the frozen submit page, which is not edited here
     "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js":
         "sha384-3HPB1XT51W3gGRxAmZ+qbZwRpRlFQL632y8x+adAqCr4Wp3TaWwCLSTAJJKbyWEK",
     "https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js":
