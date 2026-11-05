@@ -25,6 +25,8 @@
 import { NEW_PAGE_COLUMN } from './new-page-guard.js';
 import { dueRowsFor, defaultDueFrom, dueByDayRow, toEditorDue, pointsChanged, retroactivelyUpdateGrades } from './faculty-lessons.js';
 import { contentFromEditor, checkEditor } from './free-response.js';
+import { rolesFor, policyFromRoles, POLICIES } from './lesson-link.js';
+import { LOOKAHEAD_DAYS } from './schema.js';
 
 /* ══════════════════════════════════════════════════════════════════════════════
  * Delivery and grading
@@ -92,6 +94,134 @@ export const warnEarnsFull = (delivery, grading) =>
 
 /** A typed response: the delivery that carries a set of free-response questions. */
 export const isTypedResponse = (delivery) => delivery === 'typed_response';
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * Two paths on one item: a typed response and an interactive tutor
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * WHAT A TWO-PATH ITEM IS
+ *   One item whose cadet can do the work as a typed response or with the interactive tutor. The two paths are
+ *   an `offering_activities` row each: the typed one (delivery typed_response, graded by a person or drafted by the AI)
+ *   and the tutor (delivery interactive_tutor, graded by effort). Who earns credit is a `grading_role` on each path
+ *   (rolesFor in lesson-link.js, which a test holds equal to the older editor's roleFor):
+ *     choice  both paths earn credit; the cadet picks one and `switch_policy` says what happens once they commit
+ *     typed   the typed response earns credit; the tutor is practice
+ *     tutor   the tutor earns credit; the typed response is practice
+ *   Nothing here branches on kind. It branches on delivery, grading and role, as everything on this page does.
+ */
+export const SWITCH_POLICIES = ['lock_on_commit', 'free_until_commit', 'one_way_to_interactive', 'lock_on_start'];
+export const SWITCH_LABEL = {
+  lock_on_commit: 'Lock the choice (an instructor can unlock)',
+  free_until_commit: 'Lock the choice permanently',
+  one_way_to_interactive: 'Allow typed response to tutor only',
+  lock_on_start: 'Lock on start',
+};
+export const POLICY_LABEL = {
+  choice: 'The cadet chooses: either one earns credit',
+  typed: 'The typed response earns credit; the tutor is practice',
+  tutor: 'The tutor earns credit; the typed response is practice',
+};
+export { POLICIES };
+
+/** Which paths an item holds and whether this page can edit them: { kind: 'none'|'single'|'choice'|'locked', ... }. */
+export function pathShape(paths) {
+  const list = paths || [];
+  if (!list.length) return { kind: 'none' };
+  if (list.length === 1) return { kind: 'single', main: list[0] };
+  if (list.length === 2) {
+    const typed = list.find(p => p.modality === 'written' && p.delivery === 'typed_response' && (p.grading === 'human_graded' || p.grading === 'ai_drafted'));
+    const tutor = list.find(p => p.modality === 'interactive' && p.delivery === 'interactive_tutor' && p.grading === 'effort');
+    const policy = typed && tutor ? policyFromRoles(typed.role, tutor.role) : null;
+    // A typed side that is practice only is marked by a person: an AI draft belongs on a path that earns credit.
+    if (typed && tutor && policy && !(policy === 'tutor' && typed.grading === 'ai_drafted')) {
+      return { kind: 'choice', typed, tutor, policy };
+    }
+  }
+  return { kind: 'locked' };
+}
+
+/** The paths a form asks for, in order. One path, or the typed response plus the tutor when the form wants both. */
+export function pathPlan(form) {
+  if (isTypedResponse(form.delivery) && form.withTutor) {
+    const roles = rolesFor(form.policy || 'choice');
+    return [
+      { which: 'typed', delivery: 'typed_response', grading: form.grading, role: roles.typed, position: 0 },
+      { which: 'tutor', delivery: 'interactive_tutor', grading: 'effort', role: roles.tutor, position: 1 },
+    ];
+  }
+  return [{ which: 'main', delivery: form.delivery, grading: form.grading, role: 'graded', position: 0 }];
+}
+
+/** True when the form puts both paths on the item (so the switch rule is stored). */
+export const wantsTwoPaths = (form) => isTypedResponse(form.delivery) && !!form.withTutor;
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * When cadets can see it (the release window), in Mountain time
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * `opens_at` NULL is the standard rolling window, LOOKAHEAD_DAYS (schema.js) before each cadet's own deadline, floored
+ * to the start of that day. A value overrides it for everybody at once. The presets (3 or 14 days before the due date,
+ * now) are shortcuts that FILL the date boxes, because a timestamp cannot hold "N days before" and the table has no
+ * column for an offset. The boxes then hold a fixed instant, which does not follow a due date edited afterwards.
+ */
+export const RELEASE_CHOICES = [
+  { id: 'standard', label: `${LOOKAHEAD_DAYS} days before it is due (standard)` },
+  { id: 'd3', label: '3 days before it is due' },
+  { id: 'd14', label: '14 days before it is due' },
+  { id: 'now', label: 'As soon as it is published' },
+  { id: 'custom', label: 'On a specific date' },
+];
+
+/** The release boxes for a stored `opens_at`. */
+export function releaseFromOpensAt(iso) {
+  const z = instantToZone(iso);
+  return z ? { mode: 'custom', date: z.date, time: z.time } : { mode: 'standard', date: '', time: '00:00' };
+}
+
+/**
+ * The Mountain calendar day that is `days` x 24 hours before this instant, as 'YYYY-MM-DD'. It subtracts hours, not calendar
+ * days, because that is what the student pages do (schema.js releaseAt) and the older editor's presets did: the three must agree
+ * on the day a cadet's list opens, including across the weekend the clocks change.
+ */
+function zoneDayBefore(iso, days) {
+  const ms = new Date(iso).getTime();
+  if (isNaN(ms)) return null;
+  return instantToZone(new Date(ms - days * 86400000).toISOString())?.date || null;
+}
+
+/**
+ * What a preset puts in the boxes. `dueIso` is the earliest deadline on the form (the default deadline), counted back
+ * from, and floored to 00:00 of that Mountain day, so "14 days before" gives fourteen full days, not thirteen.
+ * Returns null for the standard window (the boxes are cleared) and when there is no deadline to count back from.
+ */
+export function resolveReleasePreset(choice, dueIso, nowMs = Date.now()) {
+  if (choice === 'standard') return null;
+  if (choice === 'now') {
+    const z = instantToZone(new Date(Math.floor(nowMs / 60000) * 60000).toISOString());
+    return z ? { date: z.date, time: z.time } : null;
+  }
+  const days = choice === 'd3' ? 3 : choice === 'd14' ? 14 : choice === 'custom' ? LOOKAHEAD_DAYS : null;
+  if (days == null) return null;
+  if (!dueIso) return choice === 'custom' ? resolveReleasePreset('now', null, nowMs) : null;
+  const date = zoneDayBefore(dueIso, days);
+  return date ? { date, time: '00:00' } : null;
+}
+
+/** The `opens_at` a form stores: null for the standard window. */
+export function opensAtFor(form) {
+  if (!form.opensDate) return null;
+  const time = form.opensTime || '00:00';
+  if (!isRealDate(form.opensDate) || !isRealTime(time)) return null;
+  return new Date(zoneWallToInstant(form.opensDate, time)).toISOString();
+}
+
+/** The stored assignment number (the item's position): a whole number, or null for none. */
+export function positionFor(form) {
+  const s = String(form.lessonNumber ?? '').trim();
+  return s === '' ? null : Number(s);
+}
 
 /**
  * An auto-checked path owns the offering's points: a database trigger (migration app/030) sets them
@@ -411,6 +541,16 @@ export const emptyForm = (kind, sections) => ({
   sectionDates: Object.fromEntries((sections || []).map(s => [s.id, ''])),
   interactiveSlug: '',
   interactiveUrl: '',
+  interactiveTitle: '',
+  interactiveDesc: '',
+  withTutor: false,            // also offer an interactive tutor beside a typed response
+  policy: 'choice',            // who earns credit when there are two paths (POLICIES)
+  switchPolicy: 'lock_on_commit',
+  swapTutor: false,            // replace the saved tutor with a different id
+  lessonNumber: '',
+  slug: '',                    // the assignment's own id, from a prefill link; the title makes one when empty
+  opensDate: '',               // empty = the standard rolling window
+  opensTime: '00:00',
 });
 
 /** Problems with a form, as plain sentences. An empty list means it may be saved. */
@@ -423,10 +563,27 @@ export function checkForm(form, { kinds = [], sections = [], slugFrozen = false,
   if (!kinds.some(k => k.id === form.kindId)) out.push('Choose a kind.');
   if (!lockedPath) {
     if (!pairAllowed(form.delivery, form.grading)) out.push('That delivery and grading do not go together.');
-    if (form.delivery === 'interactive_tutor' && !slugFrozen) {
+    if ((form.delivery === 'interactive_tutor' || wantsTwoPaths(form)) && !slugFrozen) {
       if (!/^[a-z0-9-]+$/.test(String(form.interactiveSlug || '').trim())) {
         out.push('The interactive tutor needs its id: lowercase letters, numbers and hyphens, the same id the lesson posts to.');
       }
+    }
+    if (wantsTwoPaths(form)) {
+      const pol = form.policy || 'choice';
+      if (!POLICIES.includes(pol)) out.push('Choose which path earns credit.');
+      else if (pol === 'tutor' && form.grading === 'ai_drafted') {
+        out.push('A typed response that is only practice cannot be drafted by the AI. Grade it by a person, or let it earn credit.');
+      }
+      if (form.switchPolicy && !SWITCH_POLICIES.includes(form.switchPolicy)) out.push('Choose what happens once a cadet commits.');
+    }
+  }
+  const num = String(form.lessonNumber ?? '').trim();
+  if (num !== '' && !(/^\d{1,5}$/.test(num) && Number(num) <= 32767)) out.push('The assignment number is a whole number from 0 to 32767, or empty.');
+  if (form.opensDate) {
+    if (!isRealDate(form.opensDate)) out.push('The date it opens is not a real date.');
+    else if (!isRealTime(form.opensTime || '00:00')) out.push('Write the time to open like 00:00.');
+    else if (!timeExists(form.opensDate, form.opensTime || '00:00')) {
+      out.push(`${form.opensTime || '00:00'} is a time the clocks skip on ${form.opensDate}, so it cannot be an opening time. Choose another time to open.`);
     }
   }
   if (!lockedPath && isTypedResponse(form.delivery) && form.freeResponse) {
@@ -498,7 +655,8 @@ export function needsMoreOptions(item, { prefill = null, sections = [], sched = 
   if (String(item.description || '').trim()) return true;
   if (item.lateAllowed === false || item.isBonus || item.progIncluded) return true;
   const paths = item.paths || [];
-  if (paths.length !== 1) return true;                      // its path cannot be changed here, and the note says so
+  if (paths.length !== 1) return true;                      // two paths, or a path this page does not edit: the note says so
+  if (item.position != null || item.opensAt) return true;   // an assignment number or a fixed opening date lives in there
   const p = paths[0];
   if (p.modality === 'interactive') return true;            // a tutor id and link live there
   if (prefill && (p.delivery !== prefill.delivery || p.grading !== prefill.grading)) return true;
@@ -525,6 +683,10 @@ export function moreOptionsTarget(problem) {
   if (/description/i.test(t)) return 'i-desc';
   if (/delivery and grading/i.test(t)) return 'i-delivery';
   if (/section date/i.test(t)) return 'i-sections';
+  if (/assignment number/i.test(t)) return 'i-num';
+  if (/it opens|time to open|to open\./i.test(t)) return 'i-opens';
+  if (/earns credit|only practice|which path/i.test(t)) return 'i-policy';
+  if (/once a cadet commits/i.test(t)) return 'i-switch';
   if (/reading link/i.test(t)) return 'i-written-more';
   if (/-day date|due on different days|Both tracks get the same date/i.test(t)) return 'i-daybox';
   return '';
@@ -536,9 +698,9 @@ export function moreOptionsTarget(problem) {
 
 const ITEM_SELECT =
   `id,assignment_id,points_possible,grading_mode,due_at,due_by_day,is_published,position,updated_at,` +
-  `late_allowed,is_bonus,prog_included,${NEW_PAGE_COLUMN},` +
+  `late_allowed,is_bonus,prog_included,opens_at,switch_policy,${NEW_PAGE_COLUMN},` +
   `assignments!inner(id,slug,title,description,kind_id),` +
-  `offering_activities(grading_role,delivery,grading,position,activities(id,slug,modality,title,content)),` +
+  `offering_activities(grading_role,available_after,is_visible,delivery,grading,position,activities(id,slug,modality,title,content)),` +
   `assignment_due_dates(section_id,due_at)`;
 
 /**
@@ -600,11 +762,17 @@ export function shapeItem(r, kinds = [], sections = []) {
     lateAllowed: r.late_allowed === true,
     isBonus: r.is_bonus === true,
     progIncluded: r.prog_included === true,
+    position: r.position ?? null,
+    opensAt: r.opens_at || null,
+    switchPolicy: r.switch_policy || 'lock_on_commit',
     paths: paths.map(p => ({
       delivery: p.delivery, grading: p.grading, role: p.grading_role,
       modality: p.activities?.modality, activityId: p.activities?.id, slug: p.activities?.slug,
+      title: p.activities?.title || '', order: p.position ?? 0,
+      availableAfter: p.available_after || 'always', isVisible: p.is_visible !== false,
       content: p.activities?.content || {},
     })),
+    tutorSlug: (paths.find(p => p.activities?.modality === 'interactive')?.activities?.slug) || null,
     deliveryText: paths.map(p => DELIVERY_LABEL[p.delivery] || p.delivery || p.activities?.modality || '').join(' / '),
     gradingText: paths.map(p => GRADING_LABEL[p.grading] || p.grading || '').join(' / '),
     dueText: describeDates(r, sections),
@@ -620,13 +788,17 @@ export function shapeItem(r, kinds = [], sections = []) {
  * Writing
  * ════════════════════════════════════════════════════════════════════════════ */
 
-const offeringColumns = (form, sched, pointsOwned) => ({
+const offeringColumns = (form, sched, pointsOwned, { position = true } = {}) => ({
   ...(pointsOwned ? {} : { points_possible: Number(form.points) }),
   due_at: sched.dueAt,
   due_by_day: sched.dueByDay,
   late_allowed: !!form.lateAllowed,
   is_bonus: !!form.isBonus,
   prog_included: !!form.progIncluded,
+  opens_at: opensAtFor(form),
+  ...(position ? { position: positionFor(form) } : {}),
+  // The rule for a cadet who has committed only means something when there are two paths to choose between.
+  ...(wantsTwoPaths(form) && (form.policy || 'choice') === 'choice' ? { switch_policy: form.switchPolicy || 'lock_on_commit' } : {}),
 });
 
 async function replaceDueRows(db, offeringId, rows) {
@@ -648,7 +820,7 @@ async function undoCreate(db, made) {
 /** The `content` for a path that is being created: a tutor's link, a typed response's questions, nothing for the rest. */
 function newPathContent(form) {
   if (form.delivery === 'interactive_tutor') {
-    return { artifact_url: String(form.interactiveUrl || '').trim() || null, description: null };
+    return { artifact_url: String(form.interactiveUrl || '').trim() || null, description: String(form.interactiveDesc || '').trim() || null };
   }
   if (isTypedResponse(form.delivery) && form.freeResponse) return contentFromEditor(form.freeResponse, { keepKeys: true });
   return {};
@@ -664,9 +836,9 @@ export async function createItem(db, ctx, form) {
   const made = {};
   const fail = async (error) => { await undoCreate(db, made); return { error, ...made }; };
 
-  const slugged = await freeSlug(db, ctx.courseId, slugify(form.title));
+  const slugged = await freeSlug(db, ctx.courseId, slugify(form.slug || form.title));
   if (slugged.error) return { error: slugged.error };
-  const modality = DELIVERY_MODALITY[form.delivery];
+  const plan = pathPlan(form);
 
   let r = await db.from('assignments').insert({
     course_id: ctx.courseId, kind_id: form.kindId, slug: slugged.slug,
@@ -676,17 +848,22 @@ export async function createItem(db, ctx, form) {
   made.assignmentId = r.data.id;
   made.slug = slugged.slug;
 
-  const interactive = form.delivery === 'interactive_tutor';
-  r = await db.from('activities').insert({
-    assignment_id: made.assignmentId,
-    modality,
-    slug: interactive ? String(form.interactiveSlug).trim() : pathSlug(ctx.courseCode, slugged.slug, modality),
-    title: String(form.title).trim(),
-    content: newPathContent(form),
-    position: 0,
-  }).select('id').single();
-  if (r.error) return fail(r.error);
-  const activityId = r.data.id;
+  // One activity per path: the single path of an ordinary item, or the typed response and then the tutor.
+  const activityIds = [];
+  for (const step of plan) {
+    const isTutor = step.delivery === 'interactive_tutor';
+    const modality = DELIVERY_MODALITY[step.delivery];
+    r = await db.from('activities').insert({
+      assignment_id: made.assignmentId,
+      modality,
+      slug: isTutor ? String(form.interactiveSlug).trim() : pathSlug(ctx.courseCode, slugged.slug, modality),
+      title: isTutor && step.which === 'tutor' ? tutorTitleFrom(form) : String(form.title).trim(),
+      content: step.which === 'tutor' ? tutorContentFrom(form) : newPathContent(form),
+      position: step.position,
+    }).select('id').single();
+    if (r.error) return fail(r.error);
+    activityIds.push(r.data.id);
+  }
 
   // The marker goes on at creation, before any path exists, so the rules that hold a new-page item
   // back are in force from its first row. is_published is stated, never left to a default.
@@ -697,18 +874,20 @@ export async function createItem(db, ctx, form) {
     ...offeringColumns(form, sched, pointsOwnedByQuestions(form.grading)),
     ...(pointsOwnedByQuestions(form.grading) ? { points_possible: 0 } : {}),
     is_published: false,
-    position: null,
     [NEW_PAGE_COLUMN]: true,
   }).select('id').single();
   if (r.error) return fail(r.error);
   made.offeringId = r.data.id;
 
-  r = await db.from('offering_activities').insert({
-    assignment_offering_id: made.offeringId, activity_id: activityId,
-    grading_role: 'graded', available_after: 'always', is_visible: true, position: 0,
-    delivery: form.delivery, grading: form.grading, warn_earns_full: warnEarnsFull(form.delivery, form.grading),
-  });
-  if (r.error) return fail(r.error);
+  for (let i = 0; i < plan.length; i++) {
+    const step = plan[i];
+    r = await db.from('offering_activities').insert({
+      assignment_offering_id: made.offeringId, activity_id: activityIds[i],
+      grading_role: step.role, available_after: 'always', is_visible: true, position: step.position,
+      delivery: step.delivery, grading: step.grading, warn_earns_full: warnEarnsFull(step.delivery, step.grading),
+    });
+    if (r.error) return fail(r.error);
+  }
 
   const rows = buildSchedule(form, ctx.sections, made.offeringId).rows;
   const dueErr = await replaceDueRows(db, made.offeringId, rows);
@@ -817,10 +996,16 @@ export async function updateItem(db, ctx, item, form, ack = null) {
   if (item.updatedAt && fresh.data.updated_at !== item.updatedAt) return { error: CHANGED_ERROR };
 
   // ---- decide the path step, and refuse or ask, before anything is written ----
-  const single = item.paths.length === 1 ? item.paths[0] : null;
+  const shape = pathShape(item.paths);
+  const single = shape.kind === 'single' ? shape.main : null;
+  const duo = shape.kind === 'choice' ? shape : null;           // a typed response and a tutor, both editable here
   const wantModality = DELIVERY_MODALITY[form.delivery];
+  const wantTwo = wantsTwoPaths(form);
   const changesPair = !!single && (single.delivery !== form.delivery || single.grading !== form.grading);
   const replacesPath = changesPair && wantModality !== single.modality;
+  if (duo && !isTypedResponse(form.delivery)) {
+    return { error: { message: 'This assignment offers a typed response and a tutor. Untick "Also offer an interactive tutor" first, then change how the work is done. Nothing was changed.' } };
+  }
   if (replacesPath) {
     // The database admits an auto-checked path only as the one path of its offering, so a replacement that begins
     // or ends on one cannot be done by adding the new path first. Say so before the title is touched.
@@ -841,14 +1026,71 @@ export async function updateItem(db, ctx, item, form, ack = null) {
     }
   }
 
+  // Who earns credit may not move once cadets have started: a path that stops earning credit under a cadet who chose it
+  // would change what they were asked to do. (The tutor's own removal or replacement has its own confirmation below.)
+  const wantRoles = wantTwo ? rolesFor(form.policy || 'choice') : null;
+  const typedNow = duo ? duo.typed : (single && single.modality === 'written' ? single : null);
+  const rolesChange = !!wantRoles && !!typedNow &&
+    (duo ? (duo.typed.role !== wantRoles.typed || duo.tutor.role !== wantRoles.tutor) : typedNow.role !== wantRoles.typed);
+  if (rolesChange) {
+    const w = await countWork(db, item.offeringId);
+    if (w.error) return { error: w.error };
+    if (w.submissions || w.grades) {
+      return { error: { message: `This assignment already has ${plural(w.submissions, 'submission', 'submissions')} and ` +
+        `${plural(w.grades, 'grade', 'grades')}, so which path earns credit cannot change now. Nothing was changed.` } };
+    }
+  }
+
+  // Replacing or removing the tutor deletes it, and every report cadets sent through it. Count first, ask, then act.
+  const tutorNow = duo ? duo.tutor : (single && single.modality === 'interactive' ? single : null);
+  const wantSlug = String(form.interactiveSlug || '').trim();
+  const swapping = !!tutorNow && !!form.swapTutor && !!wantSlug && wantSlug !== tutorNow.slug && (duo ? wantTwo : form.delivery === 'interactive_tutor');
+  const dropping = !!duo && !wantTwo;
+  if (swapping || dropping) {
+    if (swapping) {
+      const clash = await db.from('activities').select('id').eq('slug', wantSlug).maybeSingle();
+      if (clash.error) return { error: clash.error };
+      if (clash.data) return { error: { message: 'That tutor id is already used by another lesson. Use a different id. Nothing was changed.' } };
+    }
+    const t = await tutorImpact(db, tutorNow, item.offeringId);
+    if (t.error) return { error: t.error };
+    if (t.others.length) {
+      return { error: { message: `This tutor is also scheduled in ${t.others.join(', ')}. Replacing or removing it here would delete it, and its reports, from there too. ` +
+        'Remove it from that term first, or keep this id and change only the link. Nothing was changed.' } };
+    }
+    if ((t.committed || t.reports) && !tutorAckCovers(ack, t)) {
+      return { error: null, needsTutorConfirm: { kind: swapping ? 'swap' : 'drop', slug: tutorNow.slug, committed: t.committed, reports: t.reports } };
+    }
+  }
+
   // ---- the offering row: one guarded statement carrying every column it owns ----
   const sched = buildSchedule(form, ctx.sections, item.offeringId);
   const owned = single ? pointsOwnedByQuestions(form.grading) : item.paths.some(p => pointsOwnedByQuestions(p.grading));
   // When the switch moves points between "owned by the questions" and "typed here", the points are written after the
   // path step, because the database rule that owns them follows the path.
   const ownershipMoves = !!single && pointsOwnedByQuestions(single.grading) !== pointsOwnedByQuestions(form.grading);
+
+  // Points that cadets have already been graded on: say so before they move. A change to the points of the assignment, or to
+  // a question's points, rewrites the marks already given (the older editor did the same, silently).
+  const typedForQs = single && single.modality === 'written' ? single : (duo ? duo.typed : null);
+  const newQs = typedForQs && isTypedResponse(form.delivery) && form.freeResponse
+    ? contentFromEditor(form.freeResponse, { keepKeys: false }).questions : null;
+  const pointsMove = !owned && !ownershipMoves && Number(form.points) !== Number(item.points);
+  const questionPointsMove = !!newQs && pointsChanged(typedForQs.content?.questions || [], newQs);
+  if ((pointsMove || questionPointsMove) && !ack?.points) {
+    const w = await countWork(db, item.offeringId);
+    if (w.error) return { error: w.error };
+    if (w.grades) {
+      return { error: null, needsPointsConfirm: {
+        grades: w.grades, submissions: w.submissions, from: Number(item.points), to: Number(form.points),
+        assignmentPoints: pointsMove, questionPoints: questionPointsMove } };
+    }
+  }
+
   const o = await db.from('assignment_offerings')
-    .update(offeringColumns(form, sched, owned || ownershipMoves))
+    // The assignment number is written only when the person changed it: an item's number may also have been set by a term
+    // build, and a save that did not touch it must not rewrite it.
+    .update(offeringColumns(form, sched, owned || ownershipMoves, { position: String(form.lessonNumber ?? '') !== String(item.position ?? '') }))
     .eq('id', item.offeringId).eq('updated_at', fresh.data.updated_at).select('id');
   if (o.error) return { error: o.error };
   if (!o.data || o.data.length !== 1) {
@@ -870,6 +1112,25 @@ export async function updateItem(db, ctx, item, form, ack = null) {
   }).eq('id', item.assignmentId);
   if (a.error) return partial(a.error);
   let rescored = 0;      // grades rewritten because a question's points changed (the page says so)
+
+  /** Save a typed path's questions and rewrite the grades a changed question value touches. Returns an error or null. */
+  const saveQuestions = async (path) => {
+    // keepKeys is false: a key box the person did not touch is not sent, so a stored key stays as it is (the older editor
+    // does the same; faculty-lessons.js, ANSWER KEYS).
+    const content = contentFromEditor(form.freeResponse, { keepKeys: false });
+    const prevQs = path.content?.questions || [];
+    const u = await db.from('activities').update({ title: String(form.title).trim(), content }).eq('id', path.activityId);
+    if (u.error) return u.error;
+    if (pointsChanged(prevQs, content.questions)) {
+      try {
+        rescored = await retroactivelyUpdateGrades(item.offeringId, content.questions, Number(form.points));
+      } catch (e) {
+        return { message: 'The questions were saved, but the grades already given could not be updated to the new question points ('
+          + (e?.message || 'unknown error') + '). Some grades still hold the old values.' };
+      }
+    }
+    return null;
+  };
 
   if (single) {
     const cur = single;
@@ -908,51 +1169,229 @@ export async function updateItem(db, ctx, item, form, ack = null) {
       }
     }
     if (cur.modality === 'interactive' && wantModality === 'interactive') {
-      const content = { ...(cur.content || {}), artifact_url: String(form.interactiveUrl || '').trim() || null };
-      const patch = { title: String(form.title).trim(), content };
-      const wantSlug = String(form.interactiveSlug || '').trim();
-      if (wantSlug && wantSlug !== cur.slug) {
-        // A tutor id is the address the lesson posts to. It can still be corrected while no link has been saved and no
-        // student has used it (a copy made by a rollover starts like that, with an id nobody has built a lesson for).
-        // The state is read again here, not trusted from when the form was opened. The posting contract is untouched:
-        // an id that has a link, or has been used, never changes.
-        const fresher = await db.from('activities').select('content').eq('id', cur.activityId).maybeSingle();
-        if (fresher.error) return partial(fresher.error);
-        const used = await db.from('submission_activities').select('*', { count: 'exact', head: true }).eq('activity_id', cur.activityId);
-        if (used.error) return partial(used.error);
-        if (String(fresher.data?.content?.artifact_url || '').trim() || (used.count || 0) > 0) {
-          return partial({ message: 'The tutor id was not changed: this tutor already has a link or has been used, so its id is fixed. Everything else on this form was saved.' });
-        }
-        patch.slug = wantSlug;
-      }
-      const u = await db.from('activities').update(patch).eq('id', cur.activityId);
-      if (u.error) return partial(u.error);
+      const e = swapping ? await swapTutorPath(db, ctx, item, form, cur) : await updateTutorInPlace(db, item, form, cur);
+      if (e) return partial(e);
     }
     if (isTypedResponse(form.delivery) && single.modality === 'written' && form.freeResponse) {
-      // The questions of an existing typed-response path. keepKeys is false: a key box the person did not touch is not
-      // sent, so a stored key stays as it is (the older editor does the same; faculty-lessons.js, ANSWER KEYS).
-      const content = contentFromEditor(form.freeResponse, { keepKeys: false });
-      const prevQs = cur.content?.questions || [];
-      const u = await db.from('activities').update({ title: String(form.title).trim(), content }).eq('id', cur.activityId);
-      if (u.error) return partial(u.error);
-      if (pointsChanged(prevQs, content.questions)) {
-        try {
-          rescored = await retroactivelyUpdateGrades(item.offeringId, content.questions, Number(form.points));
-        } catch (e) {
-          return partial({ message: 'The questions were saved, but the grades already given could not be updated to the new question points ('
-            + (e?.message || 'unknown error') + '). Some grades still hold the old values.' });
-        }
-      }
+      const e = await saveQuestions(single);
+      if (e) return partial(e);
+    }
+    if (wantTwo && single.modality === 'written') {
+      const e = await addTutorPath(db, item, form, single);
+      if (e) return partial(e);
     }
     if (ownershipMoves && !pointsOwnedByQuestions(form.grading)) {
       const p = await db.from('assignment_offerings').update({ points_possible: Number(form.points) }).eq('id', item.offeringId);
       if (p.error) return partial(p.error);
+    }
+  } else if (duo) {
+    const { typed, tutor } = duo;
+    if (typed.grading !== form.grading) {
+      const u = await db.from('offering_activities')
+        .update({ grading: form.grading, warn_earns_full: warnEarnsFull('typed_response', form.grading) })
+        .eq('assignment_offering_id', item.offeringId).eq('activity_id', typed.activityId);
+      if (u.error) return partial(u.error);
+    }
+    if (form.freeResponse) {
+      const e = await saveQuestions(typed);
+      if (e) return partial(e);
+    }
+    if (wantTwo) {
+      const e = swapping ? await swapTutorPath(db, ctx, item, form, tutor) : await updateTutorInPlace(db, item, form, tutor);
+      if (e) return partial(e);
+      if (rolesChange) {
+        // A replaced tutor was written with the role it was given; the typed path and an unreplaced tutor are updated here.
+        const todo = [[typed, wantRoles.typed]];
+        if (!swapping) todo.push([tutor, wantRoles.tutor]);
+        for (const [path, role] of todo) {
+          if (path.role === role) continue;
+          const u = await db.from('offering_activities').update({ grading_role: role })
+            .eq('assignment_offering_id', item.offeringId).eq('activity_id', path.activityId);
+          if (u.error) return partial(u.error);
+        }
+      }
+    } else if (dropping) {
+      const e = await dropTutorPath(db, ctx, item, tutor, typed);
+      if (e) return partial(e);
     }
   }
 
   const err = await replaceDueRows(db, item.offeringId, sched.rows);
   if (err) return partial(err);
   return { error: null, offeringId: item.offeringId, assignmentId: item.assignmentId, rescored };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * The tutor path: in place, added, replaced, removed
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/** What `content` a new tutor path starts with. */
+const tutorContentFrom = (form) => ({
+  artifact_url: String(form.interactiveUrl || '').trim() || null,
+  description: String(form.interactiveDesc || '').trim() || null,
+});
+const tutorTitleFrom = (form) => String(form.interactiveTitle || '').trim() || String(form.title).trim();
+
+/**
+ * Everything that would be lost, and everything that blocks it, if this tutor were replaced or removed. Reads only.
+ * `committed` counts cadets who chose it in this term (they are released to choose again), `reports` every report sent
+ * through it, and `others` names the other terms that schedule the same tutor (a delete here would reach them too).
+ * @returns {Promise<{ error?: object, committed: number, reports: number, others: string[] }>}
+ */
+export async function tutorImpact(db, tutorPath, offeringId) {
+  const id = tutorPath.activityId;
+  const [c, r, o] = await Promise.all([
+    db.from('submissions').select('*', { count: 'exact', head: true }).eq('assignment_offering_id', offeringId).eq('chosen_activity_id', id),
+    db.from('submission_activities').select('*', { count: 'exact', head: true }).eq('activity_id', id),
+    db.from('offering_activities')
+      .select('assignment_offering_id, assignment_offerings!inner(id, course_offerings(courses(code), terms(label)))').eq('activity_id', id),
+  ]);
+  const error = c.error || r.error || o.error || null;
+  if (error) return { error, committed: 0, reports: 0, others: [] };
+  const others = [...new Set((o.data || []).filter(x => x.assignment_offering_id !== offeringId).map(x => {
+    const co = x.assignment_offerings?.course_offerings;
+    return [co?.courses?.code, co?.terms?.label].filter(Boolean).join(' · ') || 'another term';
+  }))];
+  return { error: null, committed: c.count || 0, reports: r.count || 0, others };
+}
+
+/** Does the acknowledgement the person gave cover exactly what a tutor change would cost now? */
+export const tutorAckCovers = (ack, impact) =>
+  !!ack?.tutor && ack.tutor.committed === impact.committed && ack.tutor.reports === impact.reports;
+
+/**
+ * Release the cadets who have committed to these activities, attributed to the person doing it, and put their
+ * submissions back to draft. The database refuses an unattributed release (submissions_lock_activity), so a delete
+ * that would clear a committed choice must come after this: letting the foreign key null it is refused.
+ * @returns {Promise<{ error: object|null, unlocked: number }>}
+ */
+export async function unlockCommittedTo(db, ctx, offeringId, activityIds) {
+  if (!activityIds?.length) return { error: null, unlocked: 0 };
+  let q = db.from('submissions').select('id').in('chosen_activity_id', activityIds);
+  if (offeringId) q = q.eq('assignment_offering_id', offeringId);
+  const hits = await q;
+  if (hits.error) return { error: hits.error, unlocked: 0 };
+  const rows = hits.data || [];
+  if (!rows.length) return { error: null, unlocked: 0 };
+  const u = await db.from('submissions').update({
+    chosen_activity_id: null,
+    status: 'draft',
+    unlocked_by: ctx.user.id,                 // must be the person acting: the database rejects anyone else
+    unlocked_at: new Date().toISOString(),
+  }).in('id', rows.map(s => s.id));
+  return { error: u.error || null, unlocked: u.error ? 0 : rows.length };
+}
+
+/** Keep a saved tutor's link, description and title up to date; change its id only while that is still safe. Returns an error or null. */
+async function updateTutorInPlace(db, item, form, cur) {
+  const content = { ...(cur.content || {}), artifact_url: String(form.interactiveUrl || '').trim() || null };
+  if (form.interactiveDesc !== undefined && form.interactiveDesc !== null) {
+    content.description = String(form.interactiveDesc).trim() || null;
+  }
+  const patch = { title: tutorTitleFrom(form), content };
+  const wantSlug = String(form.interactiveSlug || '').trim();
+  if (wantSlug && wantSlug !== cur.slug) {
+    // A tutor id is the address the lesson posts to. It can still be corrected while no link has been saved and no
+    // student has used it (a copy made by a rollover starts like that, with an id nobody has built a lesson for).
+    // The state is read again here, not trusted from when the form was opened. The posting contract is untouched:
+    // an id that has a link, or has been used, never changes.
+    const fresher = await db.from('activities').select('content').eq('id', cur.activityId).maybeSingle();
+    if (fresher.error) return fresher.error;
+    const used = await db.from('submission_activities').select('*', { count: 'exact', head: true }).eq('activity_id', cur.activityId);
+    if (used.error) return used.error;
+    if (String(fresher.data?.content?.artifact_url || '').trim() || (used.count || 0) > 0) {
+      return { message: 'The tutor id was not changed: this tutor already has a link or has been used, so its id is fixed. Everything else on this form was saved. To use a different id, choose "Replace this tutor".' };
+    }
+    patch.slug = wantSlug;
+  }
+  const u = await db.from('activities').update(patch).eq('id', cur.activityId);
+  return u.error || null;
+}
+
+/**
+ * Replace the tutor with one under a different id. An assignment holds one tutor, so the old one is deleted and its
+ * reports go with it; the cadets who had committed to it are released first, by name, so the delete is not refused.
+ * The caller has already counted and been acknowledged. The new row takes the old row's role, position and timing.
+ * Returns an error or null.
+ */
+async function swapTutorPath(db, ctx, item, form, cur) {
+  const unlocked = await unlockCommittedTo(db, ctx, item.offeringId, [cur.activityId]);
+  if (unlocked.error) return unlocked.error;
+  const del = await db.from('activities').delete().eq('id', cur.activityId);
+  if (del.error) {
+    if (/unlocked_by|unlock a committed submission/i.test(String(del.error.message || ''))) {
+      return { message: 'A cadet in another term has committed to this tutor, and that term is not one you staff, so it cannot be released from here. Nothing was replaced.' };
+    }
+    return del.error;
+  }
+  const ins = await db.from('activities').insert({
+    assignment_id: item.assignmentId, modality: 'interactive', slug: String(form.interactiveSlug).trim(),
+    title: tutorTitleFrom(form), content: tutorContentFrom(form), position: cur.order ?? 1,
+  }).select('id').single();
+  if (ins.error) return { message: 'The old tutor was removed but the new one could not be created (' + plainError(ins.error) + '). Add the tutor again from this form.' };
+  const wantRoles = wantsTwoPaths(form) ? rolesFor(form.policy || 'choice') : null;
+  const oa = await db.from('offering_activities').insert({
+    assignment_offering_id: item.offeringId, activity_id: ins.data.id,
+    grading_role: wantRoles ? wantRoles.tutor : (cur.role || 'graded'),
+    available_after: cur.availableAfter || 'always', is_visible: cur.isVisible !== false, position: cur.order ?? 1,
+    delivery: 'interactive_tutor', grading: 'effort', warn_earns_full: false,
+  });
+  if (oa.error) { await db.from('activities').delete().eq('id', ins.data.id); return oa.error; }
+  return null;
+}
+
+/** Add a tutor beside a saved typed response, with the roles the form asks for. Returns an error or null. */
+async function addTutorPath(db, item, form, typed) {
+  const roles = rolesFor(form.policy || 'choice');
+  const ins = await db.from('activities').insert({
+    assignment_id: item.assignmentId, modality: 'interactive', slug: String(form.interactiveSlug).trim(),
+    title: tutorTitleFrom(form), content: tutorContentFrom(form), position: 1,
+  }).select('id').single();
+  if (ins.error) return ins.error;
+  const oa = await db.from('offering_activities').insert({
+    assignment_offering_id: item.offeringId, activity_id: ins.data.id,
+    grading_role: roles.tutor, available_after: 'always', is_visible: true, position: 1,
+    delivery: 'interactive_tutor', grading: 'effort', warn_earns_full: false,
+  });
+  if (oa.error) { await db.from('activities').delete().eq('id', ins.data.id); return oa.error; }
+  if (typed.role !== roles.typed) {
+    const u = await db.from('offering_activities').update({ grading_role: roles.typed })
+      .eq('assignment_offering_id', item.offeringId).eq('activity_id', typed.activityId);
+    if (u.error) return u.error;
+  }
+  return null;
+}
+
+/** Remove the tutor from a two-path item: release the cadets who chose it, delete it, and let the typed path earn credit. */
+async function dropTutorPath(db, ctx, item, tutor, typed) {
+  const unlocked = await unlockCommittedTo(db, ctx, item.offeringId, [tutor.activityId]);
+  if (unlocked.error) return unlocked.error;
+  const del = await db.from('activities').delete().eq('id', tutor.activityId);
+  if (del.error) return del.error;
+  if (typed.role !== 'graded') {
+    const u = await db.from('offering_activities').update({ grading_role: 'graded' })
+      .eq('assignment_offering_id', item.offeringId).eq('activity_id', typed.activityId);
+    if (u.error) return u.error;
+  }
+  return null;
+}
+
+/** The warning shown before a tutor is replaced or removed, with the counts. */
+export function tutorChangeWarning(kind, title, impact) {
+  const what = kind === 'swap' ? `Replace the tutor “${impact.slug}” on “${title}”?` : `Remove the tutor “${impact.slug}” from “${title}”?`;
+  const lost = `It deletes ${plural(impact.reports, 'report', 'reports')} cadets sent through it.`;
+  const freed = impact.committed
+    ? ` ${plural(impact.committed, 'cadet who had', 'cadets who had')} committed to it ${impact.committed === 1 ? 'is' : 'are'} released to choose again.` : '';
+  return `${what} ${lost}${freed} There is no copy to bring them back from.${kind === 'swap' ? ' If the tutor was only rebuilt, cancel and keep the id: changing just the link keeps every report.' : ''}`;
+}
+
+/** The warning shown before points change on an assignment that already has grades. */
+export function pointsChangeWarning(title, impact) {
+  const parts = [];
+  if (impact.assignmentPoints) parts.push(`the assignment's points from ${impact.from} to ${impact.to}`);
+  if (impact.questionPoints) parts.push('the points of a question');
+  return `“${title}” already has ${plural(impact.grades, 'grade', 'grades')}. You are changing ${parts.join(' and ')}. ` +
+    'Marks already given are recalculated to the new values, and a grade above the new points is refused. Changing points in the middle of a term is not recommended. Change them anyway?';
 }
 
 /**
