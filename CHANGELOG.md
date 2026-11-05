@@ -8,6 +8,16 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (merge committed; scratch proofs repaired; filing a legacy multiple-choice key fixed; local, not deployed)
+
+**What.** Committed the `v2-stage-e` merge on `v2-step2` and repaired the proofs that failed afterwards. Four of the failures were fixtures that no longer matched the rules; one was a real fault.
+
+- **Real fault, fixed in `047_release_gated_content.sql` (nothing applied anywhere, so edited in place).** The step that files a legacy activity's answer text as a key wrote a multiple-choice key whose choice was the option text, on a question with no choices. 070 requires a choice key to name one of the question's choices, so saving a legacy-format activity that carried a multiple-choice correct answer was refused with a message about choices the file never had. The step now builds the question's choices from the file's options (each option's text is its id), files the choice key only when the answer is one of them, and otherwise files the readable line on a prose question. An existing question keeps its own choices. Proved by `test_review_c_fixes_scratch.py` (19 of 19) and the 047 rollback and re-apply inside `test_step2_together_scratch.py`.
+- **Fixtures.** The two Stage E proofs published an item in an ended term with 0 points; 074 deliberately never syncs points in an ended term, so those fixtures now set the points when the item is created. `scratch_migration_proof.py` applied every migration to a Fall-shaped seed and now stops at 043 (its stated scope): 047 rewrites `activities.content` by design and 068 stops a no-op grade update touching `updated_at`, which is what its first two controls relied on; `grades_fingerprint.py --controls` now makes a real change and undoes it. A step 2 vector test now flips an AI key (not a human one) and expects the refusal.
+- **Added check.** `scratch_problem_file_proof.py` section "director": a signed-in director's own publish statement. Its points already equal the questions' sum (the question writes set them); with the two step 1 rules in force it is refused with the rule's message, and with them removed (step 2) it succeeds.
+
+**Deliberately not done.** The step 1 publishing rules are not removed; no migration does that yet, so until one does a director cannot publish an item entered on the newer pages, and the editor shows the rule's message. Not pushed. Nothing applied to staging or production. The student homework page was not opened in a browser (it needs a staging sign-in).
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 step 2 and Stage E merged and made to work as one; local, not deployed)
 
 **What.** Merged the Stage E branch into the step 2 branch (`--no-ff`) and resolved the overlaps by meaning. Student homework now reads `my_grades` (an auto-checked grade shows as in progress before the deadline and agrees with the staff and export totals); the student lesson list links an auto-checked item to `homework.html?a=<id>`; three new migrations close the gaps found at the join.

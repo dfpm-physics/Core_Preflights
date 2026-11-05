@@ -35,6 +35,7 @@ import tempfile
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
+STEP1_LAST = "043"   # the last step 1 migration; see the comment where the migrations are chosen
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
@@ -111,7 +112,11 @@ def main():
         steps = [("auth stand-in", sbc.AUTH_STUB, False), ("bootstrap", sql, False)]
         files = ins.migration_files(None)
         early = [f for f in files if f.name[:3] <= "025" and f.name[:3] != "023"]  # 023 is applied separately
-        late = [f for f in files if "026" <= f.name[:3]]
+        # This proof is about step 1 (026 to 043) leaving Fall-shaped rows alone. Later migrations are not applied here: 047
+        # moves answer keys out of activities.content by design (it changes those rows, and only a proof of its own can
+        # say whether it did so correctly), and 068 makes a no-op grade update leave updated_at alone. Each later migration
+        # has its own scratch proof.
+        late = [f for f in files if "026" <= f.name[:3] <= STEP1_LAST]
         steps += [(f.name, f.read_text(encoding="utf-8"), True) for f in early]
         steps += [("auth.users foreign keys", ins.AUTH_FKS, False), ("tutor_error_log grants", ins.TUTOR_LOG_GRANTS, False)]
         for label, text, owner in steps:

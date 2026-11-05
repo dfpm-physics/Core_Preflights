@@ -208,6 +208,9 @@ DECLARE
   v_ca     text;
   v_has_ca boolean;
   v_choice text[];
+  v_chs    jsonb;
+  v_ex_fmt text;
+  v_ex_chs jsonb;
   v_val    numeric;
   v_tolp   numeric;
   v_tola   numeric;
@@ -239,7 +242,16 @@ BEGIN
     v_has_ca := v_ca <> '' AND (q ->> 'type') IN ('multiple_choice', 'numerical');
     v_choice := NULL; v_val := NULL; v_tolp := NULL; v_tola := NULL;
     IF v_has_ca AND (q ->> 'type') = 'multiple_choice' THEN
-      v_choice := ARRAY[v_ca];
+      -- the file lists its options as text: each option's text is the id of a choice, so the key names a real choice (070
+      -- refuses a choice key whose choice is not one of the question's). An answer that matches no option is filed as
+      -- the readable line only.
+      IF jsonb_typeof(q -> 'options') = 'array' THEN
+        SELECT jsonb_agg(jsonb_build_object('id', o, 'text', o) ORDER BY n) INTO v_chs
+          FROM jsonb_array_elements_text(q -> 'options') WITH ORDINALITY t(o, n);
+        IF EXISTS (SELECT 1 FROM jsonb_array_elements(v_chs) e WHERE e ->> 'id' = v_ca) THEN
+          v_choice := ARRAY[v_ca];
+        END IF;
+      END IF;
     ELSIF v_has_ca AND v_ca ~ '^[-+]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?$' THEN
       BEGIN
         v_val := v_ca::numeric;
@@ -249,16 +261,24 @@ BEGIN
       END;
     END IF;
 
-    SELECT qu.id INTO v_qrow FROM questions qu WHERE qu.activity_id = p_activity AND qu.qid = v_qid;
+    SELECT qu.id, qu.format, qu.choices INTO v_qrow, v_ex_fmt, v_ex_chs
+      FROM questions qu WHERE qu.activity_id = p_activity AND qu.qid = v_qid;
+    IF v_qrow IS NOT NULL AND v_choice IS NOT NULL
+       AND (v_ex_fmt NOT IN ('multiple_choice', 'multiple_select')
+            OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(v_ex_chs, '[]'::jsonb)) e WHERE e ->> 'id' = v_ca)) THEN
+      v_choice := NULL;                  -- an existing question keeps its own choices; this text is not one of them
+    END IF;
     IF v_qrow IS NULL THEN
-      v_fmt := CASE q ->> 'type' WHEN 'multiple_choice' THEN 'multiple_choice' WHEN 'numerical' THEN 'numeric' ELSE 'prose' END;
+      v_fmt := CASE WHEN q ->> 'type' = 'multiple_choice' AND v_choice IS NOT NULL THEN 'multiple_choice'
+                    WHEN q ->> 'type' = 'numerical' THEN 'numeric' ELSE 'prose' END;
       BEGIN
         v_pts := least(greatest(coalesce((q ->> 'points')::numeric, 0), 0), 9999.99);
       EXCEPTION WHEN others THEN
         v_pts := 0;
       END;
-      INSERT INTO questions (activity_id, qid, position, prompt_md, figure_url, format, points)
-      VALUES (p_activity, v_qid, ord::smallint, coalesce(q ->> 'text', ''), nullif(q ->> 'figure_url', ''), v_fmt, round(v_pts, 2))
+      INSERT INTO questions (activity_id, qid, position, prompt_md, figure_url, format, choices, points)
+      VALUES (p_activity, v_qid, ord::smallint, coalesce(q ->> 'text', ''), nullif(q ->> 'figure_url', ''), v_fmt,
+              CASE WHEN v_fmt = 'multiple_choice' THEN v_chs END, round(v_pts, 2))
       RETURNING id INTO v_qrow;
       created_questions := created_questions || v_qrow;
     END IF;
@@ -282,7 +302,7 @@ BEGIN
       INSERT INTO question_keys (question_id, variant_key, version, correct_choice_ids, select_rule, value, tol_abs, tol_pct,
                                  sig_figs, sig_fig_mode, unit, unit_aliases, unit_mode, reference_text, written_by)
       SELECT k.question_id, k.variant_key, v_next,
-             CASE WHEN v_has_ca THEN v_choice ELSE k.correct_choice_ids END, k.select_rule,
+             coalesce(v_choice, k.correct_choice_ids), k.select_rule,
              CASE WHEN v_has_ca THEN v_val ELSE k.value END,
              CASE WHEN v_has_ca THEN v_tola ELSE k.tol_abs END,
              CASE WHEN v_has_ca THEN v_tolp ELSE k.tol_pct END,

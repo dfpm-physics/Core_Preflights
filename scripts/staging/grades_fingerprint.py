@@ -233,6 +233,17 @@ def main(argv=None):
     return 1 if defects else 0
 
 
+def undo_control(url, key):
+    """Put a control's marker back out of the row. The row must really change for a control to see it: the grade touch
+    trigger (migration 068) leaves updated_at alone when an update writes the same values back."""
+    import psycopg2
+    c = psycopg2.connect(url, connect_timeout=15)
+    cur = c.cursor()
+    cur.execute("UPDATE app.grades SET diagnostic = diagnostic - 'fp_control' WHERE id = %s", (key,))
+    c.commit()
+    c.close()
+
+
 def run_controls(url):
     """Two controls, each proved on its own snapshot so neither can hide the other."""
     import psycopg2
@@ -258,11 +269,14 @@ def run_controls(url):
     before = snap()
     c = psycopg2.connect(url, connect_timeout=15)
     cur = c.cursor()
-    cur.execute("UPDATE app.grades SET points_possible = points_possible WHERE id = %s", (key,))
+    cur.execute("UPDATE app.grades SET diagnostic = diagnostic || '{\"fp_control\": 1}'::jsonb WHERE id = %s", (key,))
     c.commit()
     c.close()
     d, e, _n, _c = classify(before, snap(), set())
+    undo_control(url, key)
     a_ok = [(t, k) for t, k, _ in e] == [("grades", key)] and not d
+    if not a_ok:
+        print(f"  control A saw {len(d)} defect(s) and {len(e)} explained: {[(t, why) for t, _k, why in (d + e)][:6]}")
     print(f"control A  ordinary session changes one grades row: {'Explained, no defect' if a_ok else 'FAILED'}")
     ok &= a_ok
 
@@ -270,13 +284,16 @@ def run_controls(url):
     before = snap()
     c = psycopg2.connect(url, connect_timeout=15)
     cur = c.cursor()
-    cur.execute("UPDATE app.grades SET points_possible = points_possible WHERE id = %s", (key,))
+    cur.execute("UPDATE app.grades SET diagnostic = diagnostic || '{\"fp_control\": 1}'::jsonb WHERE id = %s", (key,))
     cur.execute("SELECT txid_current()")
     xid = cur.fetchone()[0]
     c.commit()
     c.close()
     d, e, _n, _c = classify(before, snap(), {xid % (1 << 32)})
+    undo_control(url, key)
     b_ok = [(t, k) for t, k, _ in d] == [("grades", key)] and not e
+    if not b_ok:
+        print(f"  control B saw {len(d)} defect(s) and {len(e)} explained: {[(t, why) for t, _k, why in (d + e)][:6]}")
     print(f"control B  recorded transaction changes one grades row: {'Defect' if b_ok else 'FAILED'}")
     ok &= b_ok
 

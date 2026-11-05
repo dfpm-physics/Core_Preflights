@@ -954,7 +954,13 @@ def rules(conn):
         c.execute("SELECT now() - %s < interval '1 minute'", (at,))
         check("section 12 created_by and checked_by are the signed-in caller, checked_at is now, whatever the client sent",
               (str(cb), str(ck)) == (w.director, w.director) and c.fetchone()[0], str(res["row"]))
-        refused(c, "UPDATE question_keys SET written_by = 'human' WHERE question_id = %s AND version = 7", (q,), "do not change",
+        # an AI-written key starts unchecked (070), so the check above uses a human key; the flip that matters is an AI key
+        # turned into a human one, which would launder it past the person's check
+        def write_ai():
+            c.execute("INSERT INTO question_keys (question_id, variant_key, version, value, tol_abs, written_by) "
+                      "VALUES (%s, 'w', 8, 2, 0.1, 'ai')", (q,))
+        signed_in(c, w.director, write_ai)
+        refused(c, "UPDATE question_keys SET written_by = 'human' WHERE question_id = %s AND version = 8", (q,), "do not change",
                 "section 12 written_by cannot be flipped after the fact")
     run_world(conn, keys)
 

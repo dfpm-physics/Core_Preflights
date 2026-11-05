@@ -185,7 +185,7 @@ def make_fixture(cur):
     fx.hw_conc = homework("hw-conc", future, attempt_limit=3)
     fx.hw_two = homework("hw-two", future, attempt_limit=4)
     # the ended-term offering: late allowed, but the last class day has gone by
-    it = b.item(course2, fx.co_old, "hw-oldterm", "hw-oldterm", 0, kind="homework", paths=[Q], due=past, published=False,
+    it = b.item(course2, fx.co_old, "hw-oldterm", "hw-oldterm", 1, kind="homework", paths=[Q], due=past, published=False,
                 entered_on_new_page=True, attempt_limit=3, late_allowed=True)
     it["q"] = {"q1": b.question(it, "q1", "numeric", 1, key=[num_key], n=0)}
     fx.hw_old = it

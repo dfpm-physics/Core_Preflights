@@ -298,6 +298,50 @@ def run_checks(cur, fx, node):
     cur.execute("COMMIT")
     check("replacing the key by hand (a new human version) clears the block", try_publish(cur, fx, mixed_item) is None)
 
+    section("director")
+    # A director publishes through the lesson editor's own statement (one boolean on the offering; nothing writes the
+    # points). The points were already set by the question writes above, so the publish check agrees. Until step 2 removes
+    # the two step 1 rules, the database refuses the same statement for an item entered on the newer page, with a message
+    # the editor shows as it stands.
+    cur.execute("BEGIN")
+    dir_item = new_item("pf-director")
+    as_user(cur, director_user)
+    write_rows(cur, dir_item["activities"][0], human_plan)
+    as_owner(cur)
+    cur.execute("COMMIT")
+    check("a new item's points are the sum of its questions before anyone publishes it",
+          float(one(cur, "SELECT points_possible FROM app.assignment_offerings WHERE id=%s", dir_item["ao"])) == 6.0)
+
+    def director_publish():
+        cur.execute("BEGIN")
+        cur.execute("SAVEPOINT dp")
+        as_user(cur, director_user)
+        try:
+            cur.execute("UPDATE app.assignment_offerings SET is_published = true WHERE id = %s", (dir_item["ao"],))
+            as_owner(cur)
+            cur.execute("RELEASE SAVEPOINT dp")
+            cur.execute("COMMIT")
+            return None
+        except Exception as e:  # noqa: BLE001
+            cur.execute("ROLLBACK TO SAVEPOINT dp")
+            as_owner(cur)
+            cur.execute("RELEASE SAVEPOINT dp")
+            cur.execute("COMMIT")
+            return str(e).strip().splitlines()[0]
+    why = director_publish()
+    check("with the step 1 rules in force a director's publish is refused and the message says why",
+          why is not None and ("stay_unpublished" in why or "cannot be published yet" in why), str(why))
+    trig = ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished")
+    for t in trig:
+        cur.execute(f"ALTER TABLE app.assignment_offerings DISABLE TRIGGER {t}")
+    try:
+        why = director_publish()
+    finally:
+        for t in trig:
+            cur.execute(f"ALTER TABLE app.assignment_offerings ENABLE TRIGGER {t}")
+    check("with those two rules gone (step 2) a director's own publish statement succeeds, points equal to the questions", why is None, str(why))
+    check("...and the item is published", one(cur, "SELECT is_published FROM app.assignment_offerings WHERE id=%s", dir_item["ao"]) is True)
+
     section("door")
     check("two variants of one question are two rows the schema allows (nothing reads the second)",
           one(cur, "SELECT count(*) FROM pg_indexes WHERE schemaname='app' AND indexname='question_keys_current_idx' AND indexdef LIKE '%(question_id, variant_key)%'") == 1)

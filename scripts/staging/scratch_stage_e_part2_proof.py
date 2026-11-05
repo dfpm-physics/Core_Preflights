@@ -745,7 +745,7 @@ def run_fix_checks(cur, surl, fx):
     sh = b.item(course, fx.co, "f-term-active", "f-term-active", 0, kind="homework", paths=[Q], due=now_utc() + timedelta(days=2),
                 published=False, entered_on_new_page=True, attempt_limit=5, attempt_rule="best")
     sh["q"] = {"q1": b.question(sh, "q1", "numeric", 2, key=[NUM_KEY], n=0)}
-    sp = b.item(course, co_past, "f-term-past", "f-term-past", 0, kind="homework", paths=[Q], due=now_utc() - timedelta(days=300),
+    sp = b.item(course, co_past, "f-term-past", "f-term-past", 2, kind="homework", paths=[Q], due=now_utc() - timedelta(days=300),
                 published=False, entered_on_new_page=True, attempt_limit=5, attempt_rule="best")
     cur.execute("DELETE FROM offering_activities WHERE assignment_offering_id=%s", (sp["ao"],))
     cur.execute("ALTER TABLE offering_activities DISABLE TRIGGER offering_activities_same_assignment")   # 044: see the sharing proof above
