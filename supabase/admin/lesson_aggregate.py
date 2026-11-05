@@ -1408,6 +1408,33 @@ def track_covered_sql(payload_expr, ids_expr):
 GRADED_DELIVERIES = ["typed_response", "interactive_tutor"]
 
 
+def eligible_path_sql(oa="oa", ao="ao", has_marker=True):
+    """SQL predicate: may the nightly jobs take this path? `oa` and `ao` name the offering_activities and
+    assignment_offerings aliases in the caller's query. Written here once so a test evaluates the text the
+    worklist runs.
+
+    * a tutor path (interactive_tutor) is eligible, as before.
+    * a typed response graded `ai_drafted` (migration 077) is eligible: the job drafts, a person finalizes.
+    * a typed response graded `human_graded` is eligible only on an item NOT entered on a newer page: that is
+      the Fall shape, which has always been analyzed by a hand-started run. A new `human_graded` typed response
+      is marked by a person and the job skips it. After Fall closes this clause can go.
+    A database that predates the marker column (`has_marker` False) has no newer-page items, so every typed
+    response is eligible there; one without 077 simply has no ai_drafted rows, and the same text works on it.
+    """
+    old_shape = f"not {ao}.entered_on_new_page" if has_marker else "true"
+    return (f"({oa}.delivery = 'interactive_tutor' "
+            f"or ({oa}.delivery = 'typed_response' and ({oa}.grading = 'ai_drafted' or {old_shape})))")
+
+
+def _has_marker_column(cur):
+    """Whether assignment_offerings.entered_on_new_page exists (migration 028)."""
+    cur.execute("""select count(*) as n from information_schema.columns
+                    where table_schema = 'app' and table_name = 'assignment_offerings'
+                      and column_name = 'entered_on_new_page'""")
+    row = cur.fetchone()
+    return (row["n"] if isinstance(row, dict) else row[0]) > 0
+
+
 def _refuse_null_delivery(cur, course):
     """Stop the worklist when any path of an active offering has no delivery recorded.
 
@@ -1592,14 +1619,14 @@ def cmd_worklist(args, conn):
            and exists (select 1 from offering_activities oa
                         where oa.assignment_offering_id = ao.id
                           and oa.grading_role = 'graded'
-                          and oa.delivery = any(%(deliveries)s))
+                          and /*ELIGIBLE*/)
          -- d.track breaks the tie between tracks sharing one deadline. Without it the order of
          -- two otherwise-identical rows is whatever the plan happens to emit, and --latest picks
          -- from the top.
          order by d.due_at desc, a.slug, d.track
-    """.replace("/*TRACK_COVERED*/", track_covered_sql("ar.payload", "d.section_ids")),
-        {"course": args.course, "day": day, "kind": KIND, "as_of": as_of,
-         "deliveries": GRADED_DELIVERIES})
+    """.replace("/*TRACK_COVERED*/", track_covered_sql("ar.payload", "d.section_ids"))
+       .replace("/*ELIGIBLE*/", eligible_path_sql("oa", "ao", _has_marker_column(cur))),
+        {"course": args.course, "day": day, "kind": KIND, "as_of": as_of})
     rows = cur.fetchall()
     if not rows:
         msg = f"Nothing past due in {args.course}" + (f" for day {day}" if day else "") + "."

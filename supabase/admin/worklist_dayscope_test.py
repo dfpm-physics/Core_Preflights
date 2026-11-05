@@ -99,6 +99,8 @@ def test_wired():
           "and ar.kind = %(kind)s)" not in src)
     check("the track's section ids are collected for it to test",
           "array_agg(distinct sd.section_id::text)" in src)
+    check("the worklist takes its path eligibility from the shared builder (ai_drafted; migration 077)",
+          "/*ELIGIBLE*/" in src and "eligible_path_sql(" in src and "any(%(deliveries)s)" not in src)
     check("tied deadlines get a deterministic order before --latest sees them",
           "order by d.due_at desc, a.slug, d.track" in src)
     # sec_due claims to mirror schema.js effectiveDue(), which has had FOUR tiers since migration

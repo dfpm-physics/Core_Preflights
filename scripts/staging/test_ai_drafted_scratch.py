@@ -38,6 +38,9 @@ sys.path.insert(0, str(HERE))
 import v2_gate_lib as gl  # noqa: E402
 from scratch_lib import Scratch, Tally  # noqa: E402
 
+sys.path.insert(0, str(HERE.parents[1] / "supabase" / "admin"))
+from lesson_aggregate import eligible_path_sql  # noqa: E402   the text the nightly worklist runs
+
 M77, R77 = "077_ai_drafted_grading.sql", "077_ai_drafted_grading_ROLLBACK.sql"
 M78, R78 = "078_ai_drafts_need_a_person.sql", "078_ai_drafts_need_a_person_ROLLBACK.sql"
 M79, R79 = "079_drop_step1_rules.sql", "079_drop_step1_rules_ROLLBACK.sql"
@@ -169,6 +172,30 @@ def main():
         AI = written_item("ai_drafted")
         t.chk("AFTER: an item made with the new pair keeps it",
               one("SELECT grading FROM offering_activities WHERE activity_id = %s", (AI["activities"][0],)) == "ai_drafted")
+
+        # ---- which paths the nightly worklist may take (supabase/admin/lesson_aggregate.py) ------------------
+        print("\n=== the worklist's eligibility rule, evaluated over real rows ===")
+        fall_shape = written_item()                                          # human_graded, not entered on a newer page
+        new_human = written_item("human_graded", entered_on_new_page=True)   # a person marks it: the job skips it
+        new_ai = written_item("ai_drafted", entered_on_new_page=True)
+        new_tutor = new_item([{"modality": "interactive"}], entered_on_new_page=True)
+        new_q = new_item([{"modality": "questions", "delivery": "online_questions", "grading": "auto_checked"}],
+                         entered_on_new_page=True)
+        new_hand = new_item([{"modality": "external", "delivery": "in_person", "grading": "hand_entered"}],
+                            entered_on_new_page=True)
+
+        def eligible(it, has_marker=True):
+            pred = eligible_path_sql("oa", "ao", has_marker)
+            return one(f"SELECT bool_or({pred}) FROM offering_activities oa JOIN assignment_offerings ao "  # noqa: S608
+                       "ON ao.id = oa.assignment_offering_id WHERE oa.assignment_offering_id = %s", (it["ao"],))
+        t.chk("ELIGIBLE: a Fall-shaped typed response (human_graded, older page) is picked", eligible(fall_shape) is True)
+        t.chk("ELIGIBLE: an ai_drafted typed response on a newer page is picked", eligible(new_ai) is True)
+        t.chk("ELIGIBLE: a tutor path is picked", eligible(new_tutor) is True)
+        t.chk("ELIGIBLE: a NEW human_graded typed response is not picked", eligible(new_human) is False)
+        t.chk("ELIGIBLE: an online-questions item is not picked, so it cannot mask a preflight", eligible(new_q) is False)
+        t.chk("ELIGIBLE: an in-person item is not picked", eligible(new_hand) is False)
+        t.chk("ELIGIBLE: on a database without the marker column every typed response is picked (text only)",
+              "entered_on_new_page" not in eligible_path_sql("oa", "ao", False))
 
         # ============================ ROLLBACK 077 =============================
         print("\n=== ROLLBACK 077 (with an ai_drafted path present) ===")
