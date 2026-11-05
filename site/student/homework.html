@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Homework · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+</head>
+<body>
+  <header id="topnav"></header>
+  <main class="page" id="main">
+    <button class="btn btn-secondary btn-sm" id="back-btn" style="margin-bottom:20px">← Back to assignments</button>
+    <div id="hw-root"><div class="center-load"><span class="spinner"></span><span>Loading…</span></div></div>
+  </main>
+
+  <script type="module">
+    // An auto-checked homework item: the questions, an answer box for each, and a reply for every answer.
+    //
+    // This page marks nothing and adds nothing up. The questions come from the database function student_homework
+    // (only once the item is released, and never with a key). Each answer goes to the check-answer function. The score
+    // is read back from the student's grade row. All of that is in js/homework.js; this file only supplies the reads.
+    //
+    // Which item is open is decided by the one student loader (loadAssignmentStatuses), which applies the 7-day
+    // release rule. This page does not repeat that rule.
+    //
+    // Reached by ?a=<assignment offering id>. A link to it is added to the lesson list by Stage D (step 2).
+    //
+    // NOT PROVEN LIVE: check-answer is not deployed, so no answer sent from this page has been checked by the real
+    // function. See docs/decisions/V2-STAGE-E-ANSWERS.md.
+    import { db } from '../js/supabase.js';
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { loadAssignmentStatuses } from '../js/student-data.js';
+    import { runPage } from '../js/util.js';
+    import { mountHomework, GRADE_SOURCE, GRADE_COLUMNS } from '../js/homework.js';
+
+    const ctx = await bootstrap({ require: 'student' });
+    runPage(ctx, init);
+
+    async function init() {
+      initTheme();
+      renderNav(ctx, { active: 'lessons', onCourseChange: () => { location.href = 'lessons.html'; } });
+      document.getElementById('back-btn').addEventListener('click', () => { location.href = 'lessons.html'; });
+
+      const id = new URLSearchParams(location.search).get('a');
+      if (!id) { location.replace('lessons.html'); return; }
+      if (!ctx.currentOffering) {
+        document.getElementById('hw-root').innerHTML = `<div class="alert alert-warn">You're not enrolled in a course this term.</div>`;
+        return;
+      }
+
+      await mountHomework(document.getElementById('hw-root'), {
+        offeringId: id,
+        // The loader drops an item that is not released yet; a miss here means "not open", not an error.
+        loadItem: async () => (await loadAssignmentStatuses(ctx)).find(x => String(x.offeringId) === String(id)) || null,
+        loadQuestions: async () => {
+          const { data, error } = await db.rpc('student_homework', { p_assignment_offering: id });
+          if (error) throw new Error(error.message);
+          return data;
+        },
+        readGrade: async () => {
+          const { data, error } = await db.from(GRADE_SOURCE).select(GRADE_COLUMNS)
+            .in('enrollment_id', ctx.enrollmentIds || []).eq('assignment_offering_id', id).limit(1);
+          if (error) throw new Error(error.message);
+          return data?.[0] || null;
+        },
+        invoke: (name, body) => db.functions.invoke(name, { body }),
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Homework page against a stand-in server · PREP</title>
+  <link rel="stylesheet" href="../../site/css/styles.css">
+</head>
+<body>
+  <!--
+    The student homework page (site/js/homework.js) drawn and wired against a STAND-IN for the network. No sign-in, no
+    database, no real check-answer function (which is not deployed). The "server" below is a small model that replies in
+    the documented shape: { ok, correct, attempt_no, attempts_left } or { ok:false, code, error }. It holds a key
+    (9.8 within 2 percent; choice b) inside this closure only, as the real function holds it inside the server.
+
+    This proves the page's behaviour in a browser. It does NOT prove the real function, the real database, or the
+    release rule. Query flags:  ?past=1  deadline passed    ?past=1&late=1  late work allowed    ?down=1  the network
+    fails    ?gradefail=load|after  the score read fails    ?slow=1  each reply takes a second    ?limit=2  tries per question    ?rule=last
+  -->
+  <main class="page" id="main">
+    <div class="alert alert-info">Test page. The answers below are checked by a stand-in, not by the real system.</div>
+    <div id="hw-root"></div>
+  </main>
+  <script type="module">
+    import { mountHomework } from '../../site/js/homework.js';
+    const qs = new URLSearchParams(location.search);
+    const limit = qs.has('limit') ? Number(qs.get('limit')) : 3;
+    const rule = qs.get('rule') || 'best';
+    const past = qs.has('past'), late = qs.has('late'), down = qs.has('down'), slow = qs.has('slow');
+    const AO = '22222222-2222-4222-8222-222222222222';
+    const Q = { q1: '33333333-3333-4333-8333-333333333331', q2: '33333333-3333-4333-8333-333333333332', q3: '33333333-3333-4333-8333-333333333333' };
+    const questions = [
+      { id: Q.q1, qid: 'q1', position: 0, prompt_md: 'A ball falls for one second. How fast is it moving, in m/s?', figure_url: null, unit_hint: 'm/s', format: 'numeric', choices: [], points: 2 },
+      { id: Q.q2, qid: 'q2', position: 1, prompt_md: 'Which of these is a vector?', figure_url: null, unit_hint: null, format: 'multiple_choice',
+        choices: [{ id: 'a', text: 'Speed' }, { id: 'b', text: 'Velocity' }, { id: 'c', text: 'Mass' }], points: 1 },
+      { id: Q.q3, qid: 'q3', position: 2, prompt_md: 'Which of these are scalars?', figure_url: null, unit_hint: null, format: 'multiple_select',
+        choices: [{ id: 'a', text: 'Speed' }, { id: 'b', text: 'Velocity' }, { id: 'c', text: 'Mass' }], points: 1 },
+    ];
+    // the stand-in server's own state, which the page cannot see
+    const KEY = { q1: (v) => Math.abs(v - 9.8) * 100 <= 9.8 * 2, q2: (c) => c === 'b', q3: (c) => [...c].sort().join() === 'a,c' };
+    const tries = { q1: [], q2: [], q3: [] };
+    const worth = { q1: 2, q2: 1, q3: 1 };
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    function gradeRow() {
+      const scores = {}; let earned = 0, any = false;
+      for (const k of Object.keys(tries)) {
+        const t = tries[k]; if (!t.length) continue; any = true;
+        const pts = rule === 'last' ? t[t.length - 1] : rule === 'first' ? t[0] : Math.max(...t);
+        scores[k] = { score: pts * worth[k], max: worth[k], status: pts ? 'full' : 'zero' }; earned += pts * worth[k];
+      }
+      return any ? { points_earned: String(earned), points_possible: '4', question_scores: scores } : null;
+    }
+    let reads = 0;
+    const byId = Object.fromEntries(questions.map(q => [q.id, q]));
+    window.__sent = [];
+    const deps = {
+      offeringId: AO,
+      loadItem: async () => ({ title: 'Homework 3: free fall', due: new Date(Date.now() + (past ? -86400000 : 172800000)), isPast: past, pointsPossible: 4, offeringId: AO }),
+      loadQuestions: async () => ({ status: 'ok', attempt_limit: limit, attempt_rule: rule, late_allowed: late,
+        questions: questions.map(q => ({ ...q, attempts_used: tries[q.qid].length })) }),
+      readGrade: async () => { reads++; if (qs.has('gradefail') && (qs.get('gradefail') === 'load' || reads > 1)) throw new Error('grades unavailable'); return gradeRow(); },
+      invoke: async (name, body) => {
+        window.__sent.push([name, body]);
+        if (slow) await sleep(1000);
+        if (down) return { data: null, error: new Error('Failed to fetch') };
+        const q = byId[body.question_id]; const t = tries[q.qid];
+        if (past && !late) return { data: { ok: false, code: 'closed', error: 'This assignment is closed. The deadline has passed.' }, error: null };
+        if (t.length >= limit) return { data: { ok: false, code: 'limit_reached', error: 'You have used all of your attempts on this question.' }, error: null };
+        let right;
+        if (q.format === 'numeric') {
+          if (/,/.test(body.answer)) return { data: { ok: false, code: 'comma', error: 'Write the number with a decimal point, with a decimal point.' }, error: null };
+          const v = Number(body.answer); if (!Number.isFinite(v)) return { data: { ok: false, code: 'not_a_number', error: 'That is not a number. Type digits.' }, error: null };
+          right = KEY.q1(v);
+        } else right = KEY[q.qid](body.answer);
+        t.push(right ? 1 : 0);
+        return { data: { ok: true, correct: right, attempt_no: t.length, attempts_left: limit - t.length, secret_key: 'never shown' }, error: null };
+      },
+    };
+    window.__view = await mountHomework(document.getElementById('hw-root'), deps);
+  </script>
+</body>
+</html>

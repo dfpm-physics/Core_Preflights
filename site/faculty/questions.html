@@ -109,6 +109,68 @@
     </div>
   </div>
 
+  <!-- Problem file upload. Dry run and preview first; nothing is written until the person confirms. -->
+  <div class="modal-backdrop" id="pf-modal">
+    <div class="modal" style="max-width:1040px">
+      <div class="modal-head"><h2>Upload a problem file</h2><button class="modal-close" data-close>×</button></div>
+      <div class="alert alert-error" id="pf-error" style="display:none"></div>
+      <p class="muted" style="margin-top:0">Make many number and multiple-choice problems at once from a spreadsheet saved as a CSV file.
+        You see every question, its answer and the range of answers that will be marked right before anything is saved.
+        If any row is wrong, nothing is saved. The site marks answers with ordinary rules and does not use AI.</p>
+      <details style="margin-bottom:10px"><summary>Three ways to make a file</summary>
+        <ol class="field-hint" style="margin:8px 0 8px 18px">
+          <li>For one problem, use <strong>+ Add a question</strong> and type its numbers.</li>
+          <li>Write the file yourself in a spreadsheet. Download the example below and change it.</li>
+          <li>Ask your own AI model to write the file, using the instructions below. Then upload what it gives you.</li>
+        </ol>
+        <div class="field-hint">Every student gets the same numbers: put the numbers in the question text.
+          Only CSV files are read here. For an Excel file choose File, Save As, then "CSV UTF-8".</div>
+      </details>
+      <details id="pf-ai-box" style="margin-bottom:10px"><summary>Instructions to give your own AI model</summary>
+        <div class="field-hint" style="margin:8px 0">Copy this, paste it into your AI model, and add a description of the problems you want.
+          Save its reply as a CSV file and upload it here. <strong>An AI model can get an answer wrong. You must check every answer before students see it.</strong>
+          The site will not let the item be published until each of these answers is checked.</div>
+        <textarea id="pf-ai-text" readonly style="width:100%;min-height:170px;font-family:monospace;font-size:0.8em" spellcheck="false"></textarea>
+        <div class="row" style="gap:10px;margin-top:6px;align-items:center">
+          <button class="btn btn-ghost btn-sm" type="button" id="pf-copy">Copy the instructions</button>
+          <button class="btn btn-ghost btn-sm" type="button" id="pf-download-example">Download an example file</button>
+          <span class="field-hint" id="pf-copied" role="status"></span></div>
+      </details>
+      <div class="row wrap" style="gap:10px;align-items:center;margin-bottom:8px">
+        <input type="file" id="pf-file" accept=".csv,.tsv,.txt,text/csv">
+      </div>
+      <textarea id="pf-text" style="width:100%;min-height:130px;font-family:monospace;font-size:0.85em" spellcheck="false" placeholder="Choose a file, or paste its text here."></textarea>
+      <fieldset id="pf-origin-box" style="border:1px solid var(--border,#ccc);border-radius:8px;margin:10px 0;padding:8px 12px">
+        <legend>Who wrote the answers in this file?</legend>
+        <label class="check-inline"><input type="radio" name="pf-origin" value="human"> <span>A person wrote them</span></label>
+        <label class="check-inline" style="margin-left:18px"><input type="radio" name="pf-origin" value="ai"> <span>An AI model wrote them</span></label>
+        <div class="field-hint">Needed only when the file has no <code>written_by</code> column. If the file has that column, it is used and this is ignored.
+          Answers written by an AI model must each be checked by a person before the item can be published.</div>
+      </fieldset>
+      <div class="row" style="gap:10px;margin:10px 0">
+        <button class="btn btn-primary" type="button" id="pf-check">Check the file (dry run)</button>
+        <button class="btn btn-primary" type="button" id="pf-write" disabled>Save these questions</button>
+        <button class="btn btn-ghost" data-close>Close</button>
+      </div>
+      <div id="pf-report"></div>
+    </div>
+  </div>
+
+  <!-- Review of answers an AI model wrote. A person ticks each one after looking at it. -->
+  <div class="modal-backdrop" id="rv-modal">
+    <div class="modal" style="max-width:920px">
+      <div class="modal-head"><h2>Check the answers an AI model wrote</h2><button class="modal-close" data-close>×</button></div>
+      <div class="alert alert-error" id="rv-error" style="display:none"></div>
+      <p class="muted" style="margin-top:0">Work each problem yourself. Tick a row only when you have looked at the question, the answer and the range
+        of answers that will be marked right, and you agree with all three. A wrong answer here gives every student a wrong mark.</p>
+      <div id="rv-list"></div>
+      <div class="row" style="gap:10px;margin:10px 0">
+        <button class="btn btn-primary" type="button" id="rv-save">Mark the ticked answers as checked</button>
+        <button class="btn btn-ghost" data-close>Close</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     import { bootstrap } from '../js/auth.js';
     import { renderNav } from '../js/nav.js';
@@ -116,6 +178,7 @@
     import { db } from '../js/supabase.js';
     import { esc, runPage, wireModalDismiss, triggerDownload } from '../js/util.js';
     import * as Q from '../js/faculty-questions.js';
+    import * as PF from '../js/problem-file.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
     runPage(ctx, init);
@@ -126,6 +189,8 @@
     let plan = null;            // the last dry run
     let planText = null;        // the exact text that dry run read; Write only ever uses a plan for the text now in the box
     let busy = false;
+    let pfPlan = null;          // the last problem-file dry run
+    let pfKey = null;           // the text and origin choice it read; Save only uses a plan for what the form holds now
 
     const $ = (id) => document.getElementById(id);
     const offeringId = () => new URLSearchParams(location.search).get('a');
@@ -177,6 +242,7 @@
       const auto = item.grading === 'auto_checked';
       const actions = `<div class="row" style="gap:8px;flex-wrap:wrap">${back}
         <button class="btn btn-ghost" id="imp-btn">Import from CSV</button>
+        <button class="btn btn-ghost" id="pf-btn">Upload a problem file</button>
         <button class="btn btn-ghost" id="pv-btn">Preview as a student</button>
         <button class="btn btn-primary" id="add-btn">+ Add a question</button></div>`;
       const live = questions.filter(q => !q.isRetired);
@@ -186,13 +252,19 @@
         : `<div class="alert alert-info" id="points-note">This item is human graded, so its points (<strong id="item-points">${esc(String(item.points))}</strong>) are set on the Items page. The questions add up to <strong>${esc(String(Q.sumPoints(questions)))}</strong>.</div>`;
       const unpub = `<div class="alert alert-info" id="unpublished-note">This item stays unpublished. Students cannot see its questions, and no student can read an answer key at any time.</div>`;
       const rows = questions.map((q, i) => rowHtml(q, i)).join('');
-      root.innerHTML = head(actions, sub) + pointsNote + unpub + (questions.length
+      const aiLeft = Q.uncheckedAiQuestions(questions);
+      const aiNote = aiLeft.length
+        ? `<div class="alert alert-warn" id="ai-note">${aiLeft.length} answer${aiLeft.length === 1 ? ' was' : 's were'} written by an AI model and ${aiLeft.length === 1 ? 'has' : 'have'} not been checked by a person.
+            This item cannot be published until ${aiLeft.length === 1 ? 'it is' : 'each is'} checked. <button class="btn btn-primary btn-sm" id="rv-btn" type="button">Check them now</button></div>` : '';
+      root.innerHTML = head(actions, sub) + pointsNote + unpub + aiNote + (questions.length
         ? `<div class="table-wrap"><table id="q-table"><thead><tr><th>#</th><th>Id</th><th>Format</th><th>Question</th><th>Points</th><th>Key</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
         : `<div class="empty-state"><div class="es-ic">❓</div><h3>No questions yet</h3><p>Click <strong>+ Add a question</strong>, or <strong>Import from CSV</strong> to add many at once.</p></div>`)
         + `<div id="pv-all" style="display:none;margin-top:18px"></div>`;
       root.dataset.drawn = String((Number(root.dataset.drawn) || 0) + 1);   // a test waits on this changing
       $('add-btn').addEventListener('click', () => openQuestion(null));
       $('imp-btn').addEventListener('click', openImport);
+      $('pf-btn').addEventListener('click', openProblemFile);
+      if ($('rv-btn')) $('rv-btn').addEventListener('click', openReview);
       $('pv-btn').addEventListener('click', togglePreviewAll);
       root.querySelectorAll('[data-qedit]').forEach(b => b.addEventListener('click', () => openQuestion(questions.find(q => q.id === b.dataset.qedit))));
       root.querySelectorAll('[data-qmove]').forEach(b => b.addEventListener('click', () => move(b.dataset.qmove, b.dataset.dir)));
@@ -202,6 +274,9 @@
 
     function keyText(q) {
       if (!q.keyId) return q.format === 'prose' ? '<span class="muted">no note</span>' : '<span class="score-badge zero">missing</span>';
+      const w = q.keyRow && q.keyRow.written_by === 'ai';
+      if (w && !q.keyRow.checked_by && !q.keyRow.checked_at) return `<span class="score-badge zero">v${esc(String(q.keyVersion))} · AI, not checked</span>`;
+      if (w) return `<span class="score-badge full">v${esc(String(q.keyVersion))} · AI, checked</span>`;
       return `<span class="score-badge full">v${esc(String(q.keyVersion))}</span>`;
     }
     function rowHtml(q, i) {
@@ -259,6 +334,17 @@
     function wireModals() {
       wireModalDismiss(document.getElementById('q-modal'), closeQuestion);
       wireModalDismiss(document.getElementById('imp-modal'), () => $('imp-modal').classList.remove('open'));
+      wireModalDismiss(document.getElementById('pf-modal'), () => $('pf-modal').classList.remove('open'));
+      wireModalDismiss(document.getElementById('rv-modal'), () => $('rv-modal').classList.remove('open'));
+      $('pf-ai-text').value = PF.aiInstructions();
+      $('pf-copy').addEventListener('click', copyInstructions);
+      $('pf-download-example').addEventListener('click', () => triggerDownload(PF.exampleProblemFile('human'), 'problem-file-example.csv', 'text/csv'));
+      $('pf-check').addEventListener('click', pfDryRun);
+      $('pf-write').addEventListener('click', pfWrite);
+      $('pf-file').addEventListener('change', pfReadFile);
+      $('pf-text').addEventListener('input', pfStale);
+      document.querySelectorAll('input[name="pf-origin"]').forEach(r => r.addEventListener('change', pfStale));
+      $('rv-save').addEventListener('click', saveReview);
       $('q-format').addEventListener('change', () => { if (!editing) { const cur = readQuestion(); resetFor($('q-format').value, cur); } });
       $('q-add-choice').addEventListener('click', () => addChoiceRow());
       $('qm-save').addEventListener('click', saveQ);
@@ -386,6 +472,126 @@
         closeQuestion();
         await refresh();
       } finally { busy = false; $('qm-save').disabled = false; }
+    }
+
+    /* ── Problem file ──────────────────────────────────────────────────── */
+    const pfOrigin = () => { const r = document.querySelector('input[name="pf-origin"]:checked'); return r ? r.value : null; };
+    const pfShowError = (t) => { const e = $('pf-error'); e.textContent = t; e.style.display = t ? 'block' : 'none'; };
+    function pfStale() {
+      pfPlan = null; pfKey = null; $('pf-write').disabled = true;
+      if ($('pf-report').innerHTML) $('pf-report').innerHTML = '<div class="alert alert-warn" id="pf-stale">You changed the file or your choice after it was checked. Check it again before saving.</div>';
+    }
+    function openProblemFile() {
+      pfPlan = null; pfKey = null; pfShowError('');
+      $('pf-report').innerHTML = ''; $('pf-write').disabled = true; $('pf-copied').textContent = '';
+      $('pf-modal').classList.add('open');
+      $('pf-text').focus();
+    }
+    async function copyInstructions() {
+      const text = $('pf-ai-text').value;
+      try { await navigator.clipboard.writeText(text); $('pf-copied').textContent = 'Copied.'; }
+      catch { $('pf-ai-text').focus(); $('pf-ai-text').select(); $('pf-copied').textContent = 'Press Ctrl+C to copy the selected text.'; }
+    }
+    function pfReadFile() {
+      const f = $('pf-file').files[0]; if (!f) return;
+      pfShowError(''); pfStale(); $('pf-report').innerHTML = '';
+      if (f.size > PF.MAX_CHARS * 4) { pfShowError('That file is too large.'); return; }
+      const reader = new FileReader();
+      reader.onerror = () => { $('pf-text').value = ''; pfShowError('That file could not be read. Nothing was changed. Choose it again, or paste the text.'); };
+      reader.onload = () => {
+        // The raw bytes are decoded here, so an Excel workbook and a file that is not UTF-8 are named, not misread.
+        const d = PF.decodeProblemFile(reader.result);
+        pfStale(); $('pf-report').innerHTML = '';
+        if (d.error) { $('pf-text').value = ''; pfShowError(d.error); return; }
+        $('pf-text').value = d.text;
+      };
+      reader.readAsArrayBuffer(f);
+    }
+    const pfStamp = () => JSON.stringify([$('pf-text').value, pfOrigin()]);
+    function pfDryRun() {
+      pfShowError('');
+      const startPosition = questions.reduce((m, q) => Math.max(m, Number(q.position) || 0), 0);
+      pfPlan = PF.readProblemFile($('pf-text').value, { existingQids: questions.map(q => q.qid), askedOrigin: pfOrigin(), startPosition });
+      pfKey = pfStamp();
+      const plan = pfPlan;
+      const fileErrs = plan.fileErrors.map(e => `<div class="alert alert-error">${esc(e)}</div>`).join('');
+      const rows = plan.rows.map(r => {
+        const answer = r.summary ? esc(r.summary.text) : '<span class="muted">not shown while the row is refused</span>';
+        const wb = plan.toWrite.find(w => w.line === r.line);
+        return `<tr data-line="${r.line}" data-ok="${r.ok ? '1' : '0'}"><td>${r.line}</td><td><code>${esc(r.qid)}</code></td><td>${esc(r.type)}</td>
+          <td style="max-width:300px">${esc(r.question)}</td><td>${answer}</td><td>${esc(r.points)}</td>
+          <td>${wb ? esc(wb.key.written_by === 'ai' ? 'AI model' : 'a person') : ''}</td>
+          <td>${r.ok ? '<span class="score-badge full">Ready</span>' : '<span class="score-badge zero">Refused</span>'}
+            ${r.problems.map(p => `<div style="color:var(--red);font-size:0.85em">${esc(p)}</div>`).join('')}</td></tr>`;
+      }).join('');
+      const bad = plan.rows.filter(r => !r.ok).length;
+      const warn = plan.warnings.map(w => `<div class="alert alert-warn">${esc(w)}</div>`).join('');
+      const aiLine = plan.aiCount
+        ? ` ${plan.aiCount} answer${plan.aiCount === 1 ? ' is' : 's are'} marked as written by an AI model, so you will be asked to check ${plan.aiCount === 1 ? 'it' : 'each'} before the item can be published.` : '';
+      const verdict = plan.fileErrors.length ? ''
+        : plan.ok ? `<div class="alert alert-info" id="pf-verdict">Every row is good. ${plan.rows.length} question${plan.rows.length === 1 ? '' : 's'} will be saved.
+            Look at each question, its answer and the range of answers that will be marked right. Nothing has been saved yet.${aiLine}</div>`
+          : `<div class="alert alert-error" id="pf-verdict">${bad} row${bad === 1 ? ' is' : 's are'} refused, so the whole file is refused and nothing will be saved. Every refused row is listed below. Fix the file and check it again.</div>`;
+      $('pf-report').innerHTML = fileErrs + verdict + warn + (plan.rows.length
+        ? `<div class="table-wrap" style="max-height:380px;overflow:auto"><table id="pf-table"><thead><tr><th>Row</th><th>Id</th><th>Type</th><th>Question</th><th>Answer and accepted range</th><th>Points</th><th>Written by</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table></div>` : '');
+      $('pf-write').disabled = !plan.ok;
+    }
+    async function pfWrite() {
+      if (busy || !pfPlan || !pfPlan.ok) return;
+      if (pfKey !== pfStamp()) { pfStale(); pfShowError('The file or your choice changed after it was checked. Check it again before saving.'); return; }
+      busy = true; $('pf-write').disabled = true;
+      try {
+        const res = await Q.writeImport(db, item.activityId, pfPlan);
+        if (res.error) {
+          console.error('problem file write failed', res.error);
+          pfShowError(Q.questionError(res.error) + ' ' + (res.outcome || ''));
+          await refresh();                       // the list behind this window must show what is really there
+          pfPlan = null; pfKey = null;
+          return;
+        }
+        const ai = pfPlan.aiCount;
+        $('pf-modal').classList.remove('open');
+        await refresh();
+        if (ai) openReview();
+      } finally { busy = false; }
+    }
+
+    /* ── Review of answers an AI model wrote ───────────────────────────── */
+    function reviewRow(q) {
+      const k = q.keyRow;
+      let key;
+      if (q.format === 'numeric') {
+        const range = PF.acceptedRange({ value: k.value, tol_abs: k.tol_abs, tol_pct: k.tol_pct });
+        key = `<div>Answer: <strong>${esc(String(k.value))}</strong>${k.unit ? ' ' + esc(k.unit) : ''}</div><div>Marked right: ${esc(range.text)}</div>`;
+      } else {
+        const right = new Set(k.correct_choice_ids || []);
+        key = `<div>Choices (the right ones are marked):</div><ul style="margin:4px 0 0 18px">${q.choices.map(c => `<li>${right.has(c.id) ? '<strong>✓</strong> ' : ''}${esc(c.id)}. ${esc(c.text)}</li>`).join('')}</ul>`;
+      }
+      return `<div class="card" style="padding:10px 12px;margin-bottom:10px" data-rv-key="${esc(k.id)}">
+        <label class="check-inline"><input type="checkbox" data-rv-tick> <span>I worked this out and the answer is right</span></label>
+        <div style="margin-top:6px"><code>${esc(q.qid)}</code> · ${esc(q.points)} point${q.points === '1' ? '' : 's'}</div>
+        <div style="margin:6px 0;white-space:pre-wrap">${esc(q.prompt)}</div>${key}</div>`;
+    }
+    function openReview() {
+      $('rv-error').style.display = 'none';
+      const list = Q.uncheckedAiQuestions(questions);
+      $('rv-list').innerHTML = list.length ? list.map(reviewRow).join('') : '<div class="alert alert-info">Every answer an AI model wrote has been checked.</div>';
+      $('rv-save').disabled = !list.length;
+      $('rv-modal').classList.add('open');
+    }
+    async function saveReview() {
+      if (busy) return;
+      const ids = [...$('rv-list').querySelectorAll('[data-rv-key]')].filter(d => d.querySelector('[data-rv-tick]').checked).map(d => d.dataset.rvKey);
+      const err = (t) => { $('rv-error').textContent = t; $('rv-error').style.display = 'block'; };
+      if (!ids.length) { err('Tick the answers you have checked first.'); return; }
+      busy = true; $('rv-save').disabled = true;
+      try {
+        const r = await Q.markKeysChecked(db, ids);
+        if (r.error) { console.error('key check failed', r.error); err(Q.questionError(r.error)); return; }
+        await refresh();
+        if (r.missed) { openReview(); err(`${r.missed} answer${r.missed === 1 ? ' was' : 's were'} changed by someone else while you were looking, so ${r.missed === 1 ? 'it was' : 'they were'} not marked checked. Look at ${r.missed === 1 ? 'it' : 'them'} again.`); return; }
+        $('rv-modal').classList.remove('open');
+      } finally { busy = false; $('rv-save').disabled = false; }
     }
 
     /* ── Import ────────────────────────────────────────────────────────── */

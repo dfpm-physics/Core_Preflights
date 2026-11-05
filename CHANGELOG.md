@@ -8,6 +8,21 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 step 2 and Stage E merged and made to work as one; local, not deployed)
+
+**What.** Merged the Stage E branch into the step 2 branch (`--no-ff`) and resolved the overlaps by meaning. Student homework now reads `my_grades` (an auto-checked grade shows as in progress before the deadline and agrees with the staff and export totals); the student lesson list links an auto-checked item to `homework.html?a=<id>`; three new migrations close the gaps found at the join.
+
+- **`074_past_terms_keep_points.sql`.** A question edit no longer moves `points_possible` on an offering of a finished term (`_term_is_over`: term end date before today in Denver). Both `sync_auto_checked_points` (030) and `questions_regrade_auto` (072) skip it.
+- **`075_answer_audit_actor.sql`.** The audit row for a grade written by `record_answer` or by a re-mark names the cadet or the staff member behind it, with `detail.via` of `answer` or `remark`.
+- **`076_revoke_public_freeze.sql`.** Of the older functions still executable by everyone, the two term freeze functions no page calls are revoked and granted to the data-only role. The 13 row-security helpers stay: every policy calls them and each returns only the caller's own data. Nine trigger functions are PUBLIC but cannot be called directly.
+- **Conflicts.** The CI suite list, this file and the data-model doc kept both sides. Stage E sharing (one path shared by two items) clashes with step 2's same-offering trigger (044): an ordinary insert is refused, as 044 intends, and the Stage E proof now disables that one trigger for its setup rows only. `grades_person_correction` (070) does not depend on the step 1 new-item trigger, so a person's correction holds after step 2 drops it; both cases are tested. A step 2 vector test that wrote a checked AI key now writes a human key, since 070 requires an AI key to start unchecked.
+- **Lesson list.** `OFFERING_SELECT` carries each path's `delivery` and `grading`; the list says "Homework, checked as you answer".
+- **Libraries.** DOMPurify moves from 3.0.9 to 3.4.17 on the three help and report pages; the CSP checker pins its sha512. The frozen submit page keeps 3.0.9. `homework.html` loads the pinned supabase-js build with an integrity hash.
+- **Tests.** `test_step2_together_scratch.py` gains a numeric-answer scenario through the real functions (answer, key correction, re-mark; student, staff and export totals agree before and after the deadline), the finished-term check and the PUBLIC-function check. New offline `test-student-homework-link.mjs`.
+
+**Deliberately not done.** Not pushed. Nothing applied to staging or production. The DOMPurify hash was read through a summarizing fetch, not computed from the file, and was not exercised in a browser. The remark `is_active` definition was left as it is. The 13 PUBLIC helper functions were kept.
+
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 step 2: publishing closes a column, counted flag, version and rollback fixes; local)
 
 Migrations 067 and 068 are on the branch only. Nothing is applied to staging or production, and nothing is pushed.
@@ -290,6 +305,79 @@ The export module itself was not run on scratch rows; the proof reads the databa
   a check now holds that, and no refusal was added. (4) Rows that disagree on the maximum are held in all three formats and
   the notes match; the Gradescope whole-course format has no status column, so it cannot blank Missing rows, as before.
   Offline suites 44/44 (2896 checks).
+
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage E: fixes from the two reviews, built offline, not deployed)
+
+**What:** Seven major faults from the security and correctness reviews, each reproduced first, fixed in migrations `070` to
+`073` (edited in place; none applied anywhere) and their rollbacks, the two function handlers, the number reader, the
+problem file reader and the homework page. (1) `numeric-answer.js`: `5 e-3`, `5 X 10^-3` and superscript powers read as the
+number; `5x10-3` and a broken `e` are refused with a plain message; `0,125` is refused, never 125. (2) A key the checker
+cannot read is refused when entered (trigger `question_keys_readable`, and the upload); met at answer time it is
+`key_fault`: no attempt, no try used, nothing marked wrong. (3) Re-mark changes only an active term, shows each term and
+what it refuses, and a commit must carry the preview's token. (4) Trigger `grades_person_correction`: an instructor's
+change to an auto-checked grade holds, with or without the step 1 new-page rule. (5) Attempts and grades are kept per
+offering (`question_attempts_unique` now includes the offering). (6) Retiring a question or changing its points recomputes
+the auto-checked grades (`questions_regrade_auto`); a grade is never above its offering. (7) An AI-written key is checked
+only by a separate act of a signed-in person (`question_keys_ai_check`); the student page leaves out a question whose AI
+key was not checked and says some are held back; late work with no term end date is refused in plain words
+(`late_unavailable`). An unreleased item now reads as `not_found`.
+
+**Proof:** `scratch_stage_e_proof.py` 75 passed, `scratch_stage_e_part2_proof.py` 177 passed, `scratch_problem_file_proof.py`
+29 passed (all on scratch databases, 0 failed, dropped); offline suites 44 of 44, 3304 checks (the new tests fail on the old
+code: the number reader on 29 checks, the answer handler on 30). `docs/decisions/V2-STAGE-E-ANSWERS.md` records the
+decisions, what the step 2 merge must keep, and the minors left.
+
+**Deliberately not done:** nothing deployed or applied to staging or production; no function deployed. Minor findings
+left, each with its reason, are listed in the decision record (attempt ceiling for choice questions, unit spacing, three
+wording choices, the two-statement upload, the library sync that moves a completed term's points).
+
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage E, second part: re-marking and the student homework page, built offline, not deployed)
+
+**What:** (1) Re-marking after a key correction: migration `app/072` (`remark_context`, `remark_apply`, and the grade
+calculation moved into one function, `_regrade_auto`, which `record_answer` and the re-mark both call) and the function
+folder `supabase/functions/remark-question/`, which marks with the same `numeric-answer.js`. A preview writes nothing; a
+commit must carry the preview's number, updates the attempts and the `auto_checked` grades in one transaction, lists any
+other grade without changing it, and logs one `key_remark_runs` row. A second run changes nothing. (2) The student page:
+migration `app/073` (`student_homework`, which gives a student the questions of a released item and no key data), the page
+`site/student/homework.html` and `site/js/homework.js` (question display, an answer box for each, a reply after every
+answer, tries left, the score read from the grade row). Rollbacks for both migrations are in `supabase/migrations/app/rollback/`.
+
+**Why:** a corrected key has to reach the answers already stored, and a student has to be able to answer and be told at once.
+
+**Proof:** `scripts/staging/scratch_stage_e_part2_proof.py` on a scratch database (112 checks, 0 failed; the part one script
+still passes); `tests/app-schema/test-remark-function.mjs` (48) and `tests/app-schema/test-homework.mjs` (78) in the offline
+suite list; the page was driven in a browser against a stand-in for the answer function (`tests/browser/test-homework.html`).
+The first scratch run found two faults in `072` (an unreadable answer counted as a change; the list of grades to recompute
+read after the attempts had been updated). Both are fixed and each has a check.
+
+**Deliberately not done:** nothing deployed; no migration applied to staging or production; staging was only used for
+scratch databases. The real `check-answer` function has not been called from the page, and the real page has not been opened
+signed in as a student (the migrations are not on staging). No staff screen for the re-mark, no link to the homework page
+from the lesson list (it belongs to Stage D's list), and neither function was added to the deploy list. The page reads the
+grade from `grades` until the merge with Stage D, which wants `my_grades`: the change is one constant, named in
+`docs/decisions/V2-STAGE-E-ANSWERS.md`. The name scan was not run (it needs the live roster); the fixtures use made-up names.
+
+---
+
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage E, problem file upload, built offline, not deployed)
+
+**What:** one file format and one reader for making auto-checked problems from a spreadsheet, `site/js/problem-file.js` (CSV only; it reads numbers with `numeric-answer.js` and has no other dependency). An upload panel on `site/faculty/questions.html`: dry run, then a preview with each question, its key and the range of answers accepted, then one click to save; the instructions an instructor can copy into their own AI model, with one invented example and the rule that a person checks every key; a review panel where a person ticks each AI-written key. `faculty-questions.js` gained `isAiUnchecked`, `uncheckedAiQuestions` and `markKeysChecked` (sends only `checked_at`; the database names the checker). Suite `test-problem-file.mjs` (260 checks, offline, added to the CI list) and a scratch-database proof, `scripts/staging/scratch_problem_file_proof.py` (29 checks).
+
+**Rules:** a cell that reads as formula text, a comma in a number, a unit in a number cell, or an empty key refuses the whole file, and every bad row is listed with its row and column. A key from a file marked `ai` is stored `written_by = 'ai'`; publishing stays refused until a person records a check. If the file has no `written_by` column the form asks. Same numbers for every student; a `variant` column is kept and must be empty today.
+
+**Deliberately not done:** no Excel reader (none exists in the repository; a workbook is recognised and answered with the steps to save a CSV); no per-student numbers; no new migration (the existing rules were enough, shown on a scratch database); nothing applied to staging or production, and no save or publish clicked on staging. The panel was opened and its dry run exercised in a browser on a local address against staging's sign-in, but the save and review steps were not clicked through, because staging holds no new-page item with questions. The older `Import from CSV` button is unchanged.
+
+---
+
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage E, answer checking, built offline, not deployed)
+
+**What:** one number reader and checker (`site/js/numeric-answer.js`, copied into `supabase/functions/check-answer/`); the `check-answer` function logic; migrations `app/070` and `app/071` with rollbacks (deadline, attempt limit, key version, lock, attempt row, `auto_checked` grade, all in the database, execute for `service_role` only); two offline suites; a scratch-database proof and load test (`scripts/staging/scratch_stage_e_proof.py`); `docs/decisions/V2-STAGE-E-ANSWERS.md` with the decisions, Stage D dependencies and the gate test list.
+
+**Why:** online numeric homework must work on the first homework due date. Open: whether Cengage and WebAssign are used in Spring 2027 is unknown as far as is known (at least one version of a similar class will not use it); the build does not depend on it. Default used, still unanswered: each student gets the same numbers.
+
+**Deliberately not done:** nothing deployed or applied to staging or production; no AI key-writing step; no student page; no re-mark function; `check-answer` not added to the deploy list; `site/faculty/` untouched. The scratch proof's last pass (80 checks, 0 failed, load of 150 students) is recorded in the decision doc.
+
+---
 
 ## 2026-11-05 — Matthew Recker via Claude (v2 Stage C staff pages, on staging, `v2` branch)
 
