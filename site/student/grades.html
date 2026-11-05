@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-feotcDkwiIQlDYfGGVmDcAJfRUNAL0y8YCg2Z8/sTRs='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-7IIj13HL9fcqU6uXESTmPdAZeXfjfRQtu+G+Xfur8iA=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My grades · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -21,7 +21,7 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { loadMyGrades } from '../js/student-data.js';
-    import { scoreText, pointsText, totalView, fmtNum } from '../js/student-view.js';
+    import { visibleScore, pointsText, totalView, fmtNum } from '../js/student-view.js';
     import { esc, fmtDateTime, runPage, guarded } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
@@ -53,7 +53,7 @@
     }
 
     function row(r) {
-      const score = r.state === 'released' ? scoreText(r.earned, r.possible) : '';
+      const score = visibleScore(r);
       const sub = [r.due ? 'Due ' + fmtDateTime(r.due) : '', r.isLate ? 'Late' : '', pointsText(r.points)].filter(Boolean).join(' · ');
       const fb = r.feedback.filter(f => f.text.trim())
         .map(f => `<div class="feedback-block"><strong>${esc(f.key.toUpperCase())}${f.max != null ? ` (${esc(fmtNum(f.score))}/${esc(fmtNum(f.max))})` : ''}:</strong> ${esc(f.text)}</div>`).join('');

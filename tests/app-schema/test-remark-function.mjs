@@ -170,6 +170,7 @@ section('who may call, and what the body can choose');
   const w = world({ role: 'student' });
   const r = await send(w, { question_id: Q, mode: 'preview' });
   check('a caller the database does not accept gets not_allowed and no apply call', r.ok === false && r.code === 'not_allowed' && !w.calls.some(c => c[0] === 'remark_apply'));
+  check('the refusal says the right belongs to a director in the current term (the database also refuses a director of a past term only)', /current term/.test(r.error || ''));
   for (const [label, token] of [['no header', null], ['a forged token', 'bad']]) {
     const w2 = world(); const r2 = await send(w2, { question_id: Q, mode: 'preview' }, token);
     check(`${label}: refused with no database call`, r2.ok === false && r2.code === 'not_signed_in' && !w2.calls.length);

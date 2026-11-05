@@ -12,9 +12,8 @@
 -- Grants: before 049 the signed-in role held INSERT, UPDATE and DELETE on `grade_events` (the policies decide what is
 -- allowed) and no TRUNCATE. This file grants exactly those three to the signed-in role. THE ONE DIFFERENCE FROM 'EXACT':
 -- before 049 the unauthenticated role (anon) held the same three rights as a platform default, and nothing uses them,
--- so this file gives anon back SELECT only, which is what anon holds after 049 too (row security still decides what
--- it can read). Rolling back therefore never returns a write right to the unauthenticated role, and applying 049 again
--- after a rollback gives the same grants as the first time. Everything else is restored as it was.
+-- so this file leaves anon with NO right on the table. Rolling back therefore never returns a write right to the
+-- unauthenticated role. Everything else is restored as it was.
 
 BEGIN;
 
@@ -43,7 +42,6 @@ CREATE POLICY ge_staff_read ON grade_events FOR SELECT TO authenticated
 
 -- the grants as they were: no TRUNCATE, and nothing beyond what the platform gave these roles by default
 REVOKE ALL ON grade_events FROM anon;
-GRANT SELECT ON grade_events TO anon;
 GRANT INSERT, UPDATE, DELETE ON grade_events TO authenticated;
 
 -- the two foreign keys, for new rows only: the rows kept since 049 may name a grade that no longer exists

@@ -35,6 +35,16 @@ eq('score text', V.scoreText('8.50', 10), '8.5 / 10 pts');
 eq('score text with no score is empty', V.scoreText(null, 10), '');
 eq('effort is named only for effort items', [V.gradingNote('effort'), V.gradingNote('points'), V.gradingNote(null)], ['Graded on effort', '', '']);
 
+section('score shown on the grades page');
+{
+  const sw = (c, i = item()) => V.visibleScore(V.scheduleRow(i, c));
+  eq('an auto-checked cell still in progress shows the points the database gave', sw(cell({ state: 'in_progress', points_earned: '10.00', points_possible: '10.00' })), '10 / 10 pts');
+  eq('a released cell shows its score', sw(cell({ state: 'released', points_earned: '8.5' })), '8.5 / 10 pts');
+  eq('a held cell (no points from the database) shows no score', sw(cell({ state: 'submitted_ungraded', points_earned: null })), '');
+  eq('an in-progress cell with no points shows no score', sw(cell({ state: 'in_progress', points_earned: null })), '');
+  check('grades.html uses the one rule, not a state test of its own', /visibleScore\(/.test(readFileSync(resolve(ROOT, 'site/student/grades.html'), 'utf8')) && !/state === 'released' \? scoreText/.test(readFileSync(resolve(ROOT, 'site/student/grades.html'), 'utf8')));
+}
+
 section('schedule row');
 const locked = V.scheduleRow(item({ released: false, releasesAt: new Date(2027, 0, 13) }), cell());
 check('a locked item keeps its date and title', locked.locked && locked.due instanceof Date && locked.title === 'Item A');

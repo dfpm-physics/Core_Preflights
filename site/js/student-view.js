@@ -54,6 +54,11 @@ export function scoreText(earned, possible) {
   return `${fmtNum(earned)} / ${fmtNum(possible)} pts`;
 }
 
+/** The score a grades row shows. The database's cell function already hands points only for a released cell and for an
+ *  auto-checked cell still in progress (a score so far), so a row shows a score exactly when it holds points. The page
+ *  must not add a state test of its own: it hid the in-progress score the database had given. */
+export function visibleScore(row) { return row ? scoreText(row.earned, row.possible) : ''; }
+
 /** Said only about an item graded on effort. Any other grading mode says nothing about effort. */
 export function gradingNote(gradingMode) {
   return gradingMode === 'effort' ? 'Graded on effort' : '';
