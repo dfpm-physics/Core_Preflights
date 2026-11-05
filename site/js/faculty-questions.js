@@ -196,6 +196,7 @@ export function checkQuestion(q, { grading = 'auto_checked', takenQids = [], isN
     else if (ta !== null && ta < 0) out.push(`${label}: the absolute tolerance cannot be negative.`);
     if (Number.isNaN(tp)) out.push(`${label}: the percent tolerance must be a plain number.`);
     else if (tp !== null && tp < 0) out.push(`${label}: the percent tolerance cannot be negative.`);
+    else if (tp !== null && tp > 100) out.push(`${label}: the percent tolerance cannot be over 100, which would accept almost any answer.`);
     if (v === 0 && ta === null) out.push(`${label}: a correct value of 0 needs an absolute tolerance (0 for exactly zero), because a percentage of zero means nothing.`);
     if (Number.isNaN(sf) || (sf !== null && (!Number.isInteger(sf) || sf < 1 || sf > 15))) out.push(`${label}: significant figures must be a whole number from 1 to 15.`);
     if (!MODES.includes(k.sigFigMode || 'ignore')) out.push(`${label}: the significant figures rule must be ignore, warn or require.`);

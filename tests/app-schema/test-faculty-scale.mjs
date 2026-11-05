@@ -182,6 +182,17 @@ section('the database calls (recording stub)');
   reset({ 'rpc:current_letter_scale': { __error: { code: '42501', message: 'current_letter_scale: not permitted' } } });
   check('a refused read comes back as an error', !!(await S.loadScale(db, 'o1')).error);
 
+  // The active flag is read again at save time: a page opened while the course was inactive must not skip the
+  // preview after the course has been made active in another tab.
+  reset({ 'course_offerings.select': [{ id: 'o1', is_active: true }] });
+  eq('a fresh read says active', await S.readIsActive(db, 'o1'), { isActive: true });
+  reset({ 'course_offerings.select': [{ id: 'o1', is_active: false }] });
+  eq('a fresh read says inactive', await S.readIsActive(db, 'o1'), { isActive: false });
+  reset({ 'course_offerings.select': [] });
+  eq('no row back counts as active, so the preview is still required', await S.readIsActive(db, 'o1'), { isActive: true });
+  reset({ 'course_offerings.select': { __error: { code: '57014', message: 'timeout' } } });
+  check('a failed read is an error, not a guess', !!(await S.readIsActive(db, 'o1')).error);
+
   const scale = { lines: S.DEFAULT_LINES.map(l => ({ ...l, cutoff: l.cutoff === 90 ? 89 : l.cutoff })), width: 0.5 };
   reset({ 'rpc:save_letter_scale': 3 });
   const ok = await S.saveScale(db, 'o1', scale, st2);

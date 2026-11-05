@@ -302,6 +302,11 @@ The cost is a blocked night whenever someone pushes. That was accepted knowingly
 
 - **`pull` rejects a bare slug.** `--lesson preflight-02` fails — both phys-110 and phys-215 have
   one live this term. Use `--lesson phys-110-preflight-02-written`.
+- **`worklist` lists only published items that have a graded path submitted online** (typed response
+  or interactive tutor). An unpublished item, or one whose graded path is in person or elsewhere, is
+  not listed even when its deadline has passed. If any path row of an active offering of the course
+  has no delivery recorded, `worklist` prints nothing, exits non-zero and says how many rows it found.
+  Fill the delivery column and re-run; an empty list in that state is a refusal, not "nothing due".
 - **`worklist`'s `submissions` count is offering-wide, not track-scoped.** It reported 267 for
   preflight-02 day M; the M track actually held 163, the other 104 being T-track. Do not quote it
   as the size of the track being run.

@@ -133,6 +133,8 @@ section('checking one question');
   check('a value of 0 is accepted only with an absolute tolerance', problems(numeric({ value: '0' })).some(p => /needs an absolute tolerance/.test(p)));
   eq('a value of 0 with tolerance 0 passes (exactly zero)', problems(numeric({ value: '0', tolAbs: '0' })), []);
   eq('a value of 0 with tolerance 0.01 passes', problems(numeric({ value: '0.0', tolAbs: '0.01' })), []);
+  check('a percent tolerance over 100 is refused', problems(numeric({ value: '9.8', tolPct: '500' })).some(p => /percent tolerance.*100/.test(p)));
+  check('a percent tolerance of exactly 100 is allowed', !problems(numeric({ value: '9.8', tolPct: '100' })).some(p => /percent tolerance/.test(p)));
   check('a percent tolerance alone does not save a zero', problems(numeric({ value: '0', tolPct: '5' })).some(p => /needs an absolute tolerance/.test(p)));
   check('a negative tolerance is refused', problems(numeric({ tolAbs: '-1' })).some(p => /cannot be negative/.test(p)));
   check('a sig fig rule without a count is refused', problems(numeric({ sigFigMode: 'require' })).some(p => /say how many/.test(p)));

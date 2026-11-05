@@ -184,8 +184,23 @@
       readRows();
       const v = S.validateScale(rows, widthTxt);
       const scale = v.errors.length ? null : { lines: v.lines, width: v.width };
+      if (busy) return;
+      // The active flag loaded with the page may be old; ask again before deciding whether a preview is needed.
+      busy = true; $('sc-save').disabled = true;
+      const fresh = await S.readIsActive(db, ctx.currentOffering);
+      busy = false;
+      const e0 = $('sc-save-error');
+      if (fresh.error) {
+        console.error('scale active check failed', fresh.error);
+        e0.textContent = 'Could not check whether this course is active, so nothing was saved. ' + S.scaleError(fresh.error);
+        e0.style.display = 'block'; $('sc-save').disabled = false; return;
+      }
+      if (fresh.isActive !== state.isActive) { state.isActive = fresh.isActive; draw(); }
       const plan = S.planSave({ scale, current: { lines: state.current.lines, width: state.current.width }, isActive: state.isActive, previewKey });
-      if (!plan.ok || busy) return;
+      if (!plan.ok) {
+        if (fresh.isActive) { const e1 = $('sc-save-error'); e1.textContent = plan.reason; e1.style.display = 'block'; }
+        $('sc-save').disabled = false; return;
+      }
       busy = true; $('sc-save').disabled = true;
       const r = await S.saveScale(db, ctx.currentOffering, scale, state);
       busy = false;

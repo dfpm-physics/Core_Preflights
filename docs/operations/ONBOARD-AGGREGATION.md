@@ -180,6 +180,10 @@ preflight-02             M 2026-08-10 05:59 M1A,M1C,M3A,M3   39        0  never 
 preflight-02             T 2026-08-10 05:59 T1A,T1B,T1C,T1   39        0  never analyzed
 ```
 
+`worklist` lists only published items with a graded path submitted online. If an active offering has
+a path row with no delivery recorded, it lists nothing and exits non-zero rather than printing an
+empty table; fix the delivery value and re-run.
+
 **Two tracks of one lesson do not always close on different days.** Whether they do is a
 per-course habit, not a rule: phys-215 sets per-section deadlines on every offering and its tracks
 close a day apart, while phys-110 sets them on almost none — so both its tracks land on the same

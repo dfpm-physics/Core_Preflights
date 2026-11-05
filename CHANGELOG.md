@@ -8,6 +8,41 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage C gate and doc review, `v2` branch)
+
+The course director entered a mock course by hand on staging and passed the Stage C gate. His comments on the staff pages
+are being worked on separately and are not in this commit. A review of the operations documents corrected four and
+re-dated the rest (`docs/DOC-SOURCES.json`, `site/help/DOC-STATUS.json`). During the day a test run also wrote test-cadet
+rows on staging; nothing reached production. Deliberately not done: no production change, no migration, no merge to `main`.
+
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage C left-over review items, `v2-stage-c-fixes` branch)
+
+Three small fixes from the open review items, each test first. The scale page now reads the course's active flag again at
+the moment of saving, so a page opened before the course became active still asks for the effect preview. The question
+check refuses a percent tolerance over 100. The test-cadet builder in the staging gate scripts can no longer give two
+cadets the same sign-in address (the short form is kept when free, the whole id is used when it is taken); tested offline
+with a stand-in cursor, the live script was not run. Nothing applied to any database, no migration, no deploy, staging
+untouched. Deliberately not done: any change to key-row editing rights, the other open items (judged not worth a change
+before step 1, or needing a decision).
+
+## 2026-11-05 — Matthew Recker via Claude (v2 step 1 day tools, branch `v2-step1-tools`)
+
+- **Six tools for the day step 1 is applied**, listed in `docs/operations/STEP1-TOOLS.md`: a runner for the 19
+  prechecks that prints each beside its expected result for a named stage; a snapshot of 15 tables to a git-ignored
+  folder with a count check; a before-and-after comparison of deadlines, extensions and grade score columns that works
+  with no transaction numbers and says what it cannot detect; a psycopg2 replacement for the `psql` loops that records
+  transaction numbers; an anonymous API check of the queries the student pages send; and a rehearsal that runs them all
+  on a throwaway database.
+- **`backfill_paths.py` gained `--dotenv`** (data-writing tier). `grades_fingerprint.snapshot` gained an optional
+  `extra` reader; its output is unchanged.
+- **Checked:** 62 offline tests pass. The rehearsal ran 23 steps on a throwaway database on the staging server (build
+  through 022, 024 to 043, ledger rows, backfill with `--dotenv`, compare, rollback and re-apply of 043) with no
+  unexpected exit, and the database was dropped. The precheck runner, the comparison and the API check were run
+  read-only against staging. The ported deadline rule agreed with the database function on all 139 item-section pairs there.
+- **Not done:** nothing was run against the live project; no migration was applied to staging; the runbook was not
+  edited. Two items remain by hand: the sign-in view of a real cadet, and the restore drill. `psql` and `pg_dump` are
+  not installed on this machine.
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 Stage C staff pages, on staging, `v2` branch)
 
 - **Rough Items page for directors, `site/faculty/items.html`, on staging only.** It enters work of all seven
