@@ -51,6 +51,10 @@ const ok = (body: Record<string, unknown>) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
+// Intake limits live in the database too (migration app/051): a row for a lesson that is not registered, and rows past
+// a per-minute cap, are dropped there. This function reports success for them, as it does for a stored row.
+const SLUG_OK = /^[A-Za-z0-9][A-Za-z0-9_.-]{2,119}$/;
+
 const MAX_BODY = 16 * 1024;      // a well-formed payload is ~2 KB
 const MAX_MODELS = 12;           // the ladder is 6; twice that is generous
 
@@ -134,6 +138,7 @@ serve(async (req) => {
 
     const slug = str(p.slug, 120);
     if (!slug) return ok({ error: "slug required" });
+    if (!SLUG_OK.test(slug)) return ok({ error: "bad slug" });
 
     // THE WHITELIST. Every column, named once, from a checked accessor. Adding a field here
     // is a deliberate act; nothing arrives by being forgotten.

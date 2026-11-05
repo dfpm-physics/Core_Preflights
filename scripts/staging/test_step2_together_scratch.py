@@ -37,7 +37,7 @@ import install_staging as ins  # noqa: E402
 import v2_gate_lib as gl  # noqa: E402
 from scratch_lib import Scratch, Tally  # noqa: E402
 
-STEP2 = ["044", "045", "046", "047", "048", "049", "059", "060", "065", "066"]
+STEP2 = ["044", "045", "046", "047", "048", "049", "051", "059", "060", "065", "066"]
 
 
 def main():

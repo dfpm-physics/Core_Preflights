@@ -8,6 +8,16 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 step 2: error log intake limits, and the sign-in redirect accepts only paths on this site)
+
+- **Migration `app/051_error_log_intake.sql`** (with rollback). A trigger on the tutor error log drops a row for a lesson that is not registered and rows beyond 120 per lesson or 600 overall in a minute. A dropped row is not an error, so lesson pages behave the same. The API roles hold no write on the table. The identity columns stay claims.
+- **`log-tutor-error`** checks the shape of the lesson slug. Source only: not deployed.
+- **Sign-in redirect.** `site/js/safe-next.js` replaces the check inside `login.html`. A `next` value is followed only when it is a path on this site: it is refused when it begins with two slashes or a slash and a backslash, holds a backslash or a control character, or resolves to another origin. The page's policy hash was rebuilt.
+- **Checked.** `scripts/staging/test_error_log_intake_scratch.py` on a throwaway database (14 checks; the before step shows the gaps, the rollback brings them back). `tests/app-schema/test-safe-next.mjs` (23 checks; the two wiring checks failed before `login.html` changed). Added to the offline suite list; the together test now applies 051.
+- **Not checked.** The deployed function and the platform gateway; a browser's handling of each redirect form beyond the cases listed in the test. Not applied to staging or production.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 step 2: libraries pinned with integrity values, and a content security policy on every shipped page)
 
 **What.** Page and tool changes only. Nothing applied or deployed.

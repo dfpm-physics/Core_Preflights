@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-Xx7D6t/J8chRaRadA7fpIoU0LpO2orB2v/lX0t7PZ8Q='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-oxMiYfCGMW+XeJHIlxWpQ5Hw45Mq+MehK+bT4T0JzxE='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sign in · PREP</title>
   <!-- no-flash theme: set data-theme before the stylesheet paints -->
@@ -51,6 +51,7 @@
   <script type="module">
     import { db } from './js/supabase.js';
     import { initTheme } from './js/theme.js';
+    import { safeNext } from './js/safe-next.js';
 
     initTheme();
 
@@ -64,12 +65,8 @@
     const params = new URLSearchParams(location.search);
     const errEl  = document.getElementById('error');
 
-    // Only allow same-site relative redirects (no open-redirect via ?next=).
-    function safeNext() {
-      const n = params.get('next');
-      if (n && n.startsWith('/') && !n.startsWith('//')) return n;
-      return 'index.html';
-    }
+    // Only a path on this site is followed after sign-in (see js/safe-next.js).
+    const nextUrl = () => safeNext(params.get('next'));
     function showError(msg) { errEl.textContent = msg; errEl.style.display = ''; }
 
     if (params.get('err') === 'notreg') {
@@ -85,7 +82,7 @@
     // Already signed in? Skip the form.
     (async () => {
       const { data: { session } } = await db.auth.getSession();
-      if (session) location.replace(safeNext());
+      if (session) location.replace(nextUrl());
     })();
 
     document.getElementById('login-form').addEventListener('submit', async (e) => {
@@ -120,7 +117,7 @@
           : 'Sign-in failed: ' + error.message);
         return;
       }
-      location.replace(safeNext());
+      location.replace(nextUrl());
     });
   </script>
 </body>
