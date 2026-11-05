@@ -62,18 +62,7 @@ check('the total is the database text, not recomputed', lines[1].includes(',9.5,
 check('a name with a comma is quoted', lines[2].includes('"Bo, Sample"'));
 check('missing shows as 0 in its cell', lines[2].split(',').includes('0') || lines[2].includes(',0,'));
 
-section('blackboardCsv');
-const st = { blackboard_export: true, bb_prog_column: 'Prog Grade', bb_final_column: 'Final Grade' };
-let r = X.blackboardCsv({ totals, people, scope: 'prog', settings: st, courseCode: 'phys' });
-eq('named column, one row per cadet', r.csv.trim().split('\r\n')[0], 'Student ID,Prog Grade,Prog Grade letter');
-eq('percent has no trailing zeros and is not rounded', r.csv.trim().split('\r\n')[1], '3000000001,95,A');
-eq('filename says scope', r.filename, 'phys-blackboard-prog.csv');
-r = X.blackboardCsv({ totals, people, scope: 'final', settings: { ...st, blackboard_export: false } });
-check('a course that has not chosen it gets a plain refusal', /not chosen/.test(r.error));
-r = X.blackboardCsv({ totals, people, scope: 'final', settings: { ...st, bb_final_column: '' } });
-check('an unnamed column is refused', /not set/.test(r.error));
-r = X.blackboardCsv({ totals: [{ ...totals[0], percent_key_text: '66.6666666666666666666666' }], people, scope: 'prog', settings: st });
-check('a repeating percent is cut at the database digits, never rounded', r.csv.includes('66.6666666666666666666666'));
+// The Blackboard export is a fill of the file the staff member uploads; its tests are in test-blackboard-export.mjs.
 
 section('the loaders read every page of a capped API');
 {

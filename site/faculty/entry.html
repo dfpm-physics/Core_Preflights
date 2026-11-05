@@ -323,18 +323,20 @@
         ${plan.held.length ? `<div class="alert alert-warn"><ul>${list(plan.held)}</ul>
            ${plan.unmatched.length ? `<label class="check-inline"><input type="checkbox" id="opt-skip"${importOpts.skipUnmatched ? ' checked' : ''}> <span>Skip the ${plan.unmatched.length} unmatched row(s)</span></label>` : ''}
            ${plan.nameMatched.length ? `<label class="check-inline"><input type="checkbox" id="opt-name"${importOpts.acceptNameMatches ? ' checked' : ''}> <span>Accept the ${plan.nameMatched.length} row(s) matched by name alone</span></label>` : ''}
-           ${plan.maxMismatch.map(mm => `<label class="check-inline"><input type="checkbox" data-max="${esc(mm.key)}"${importOpts.acceptMax[mm.key] ? ' checked' : ''}> <span>Import "${esc(mm.name)}" as written, although it is out of ${P.centsText(mm.fileMaxCents)} and the item is worth ${P.centsText(mm.itemPointsCents)}</span></label>`).join('')}
-           ${plan.changes.some(c => c.finalized) ? `<label class="check-inline"><input type="checkbox" id="opt-pub"${importOpts.allowPublished ? ' checked' : ''}> <span>Allow replacing published scores</span></label>` : ''}</div>` : ''}
+           ${plan.maxMismatch.map(mm => `<label class="check-inline"><input type="checkbox" data-max="${esc(mm.key)}"${importOpts.acceptMax[mm.key] === mm.token ? ' checked' : ''}> <span>Import "${esc(mm.name)}" as written, although it is out of ${esc(mm.fileMaxList.map(P.centsText).join(' and '))} and the item is worth ${P.centsText(mm.itemPointsCents)}</span></label>`).join('')}
+           ${plan.changes.some(c => c.finalized) ? `<label class="check-inline"><input type="checkbox" id="opt-pub"${importOpts.allowPublished === plan.overwritesPublished ? ' checked' : ''}> <span>Allow replacing ${plan.overwritesPublished} published score(s)</span></label>` : ''}</div>` : ''}
         ${plan.unmatched.length ? `<details><summary>${plan.unmatched.length} unmatched row(s)</summary><ul>${plan.unmatched.map(u => `<li>Line ${u.rowNo}: ${esc(u.name)} (${esc(u.reason)})</li>`).join('')}</ul></details>` : ''}
         ${plan.notes.length ? `<div class="alert alert-info"><ul>${list(plan.notes)}</ul></div>` : ''}
         ${plan.changes.length ? `<div class="table-wrap" style="max-height:320px;overflow:auto"><table><thead><tr><th>Cadet</th><th>Item</th><th>Now</th><th>New</th><th></th></tr></thead><tbody>${chg}</tbody></table></div>${plan.changes.length > 200 ? `<div class="field-hint">Showing the first 200 of ${plan.changes.length}.</div>` : ''}` : ''}
         <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn btn-primary" id="imp-apply"${plan.canApply ? '' : ' disabled'}>Import ${plan.changes.length} score(s)</button></div></div>`;
       $('imp-cancel').onclick = () => { parsed = null; renderImport(); };
-      box.querySelectorAll('[data-col]').forEach(s => s.onchange = () => { const it = vm.items.find(i => i.id === s.value); if (it) mapping[s.dataset.col] = it; else delete mapping[s.dataset.col]; renderImport(); });
+      box.querySelectorAll('[data-col]').forEach(s => s.onchange = () => { const it = vm.items.find(i => i.id === s.value); if (it) mapping[s.dataset.col] = it; else delete mapping[s.dataset.col];
+        // A tick belongs to the mapping it was given under. Changing a column clears them, so nothing is approved that was not shown.
+        importOpts.allowPublished = false; importOpts.acceptMax = {}; renderImport(); });
       const sk = $('opt-skip'); if (sk) sk.onchange = () => { importOpts.skipUnmatched = sk.checked; renderImport(); };
-      const pb = $('opt-pub'); if (pb) pb.onchange = () => { importOpts.allowPublished = pb.checked; renderImport(); };
+      const pb = $('opt-pub'); if (pb) pb.onchange = () => { importOpts.allowPublished = pb.checked ? plan.overwritesPublished : false; renderImport(); };
       const nm = $('opt-name'); if (nm) nm.onchange = () => { importOpts.acceptNameMatches = nm.checked; renderImport(); };
-      box.querySelectorAll('[data-max]').forEach(c => c.onchange = () => { importOpts.acceptMax[c.dataset.max] = c.checked; renderImport(); });
+      box.querySelectorAll('[data-max]').forEach(c => c.onchange = () => { importOpts.acceptMax[c.dataset.max] = c.checked ? plan.maxMismatch.find(m => m.key === c.dataset.max)?.token : ''; renderImport(); });
       $('imp-apply').onclick = async () => {
         if (busy || !plan.canApply) return;
         // One call per item: each is all-or-nothing, and an item that fails is named.
@@ -342,7 +344,7 @@
         plan.changes.forEach(c => (byItem.get(c.itemId) || byItem.set(c.itemId, []).get(c.itemId)).push(c));
         busy = true; let done = 0, saved = 0, replaced = 0;
         for (const [iid, list2] of byItem) {
-          const res = await E.enterGrades(db, iid, list2, { source: 'imported', allowPublished: importOpts.allowPublished });
+          const res = await E.enterGrades(db, iid, list2, { source: 'imported', allowPublished: plan.overwritesPublished > 0 });
           if (res.error) {
             busy = false;
             note = { kind: 'error', text: `${E.plainEntryError(res.error)} ${done ? `${done} item(s) were already saved before this one.` : 'Nothing was saved.'}` };

@@ -38,10 +38,35 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 - **Proved:** offline suites 43/43 (2837 checks). Migration `065` and the Director-only excusal rule on a scratch
   database, 75 checks, then dropped. **Not run:** anything against staging data; no page was clicked through in a browser.
 - **Deliberately not done:** nothing applied to staging; the frozen `lessons.html` and `faculty-lessons.js` untouched;
-  `blackboard-fill.js` unchanged; no student page touched. **Section transfer (review A, M8) is reported, not fixed:** a
-  cadet moved between sections can flip a blank between 0 and left out, because closures are per section; the real fix is in
-  the database rule (`_cells_at`), which this branch does not change. Several help docs now show as possibly stale in
-  `check_doc_sources.py`; those are from other commits and were not reviewed here.
+  no student page touched. Several help docs now show as possibly stale in `check_doc_sources.py`; those are from other
+  commits and were not reviewed here.
+- **Section transfer keeps a blank where it was (review A, M8; migration `app/066`, with rollback).** A cadet moved between a
+  section whose column is closed and one whose column is open used to change between a counted 0 and a left-out blank, with
+  no event. A new table `closure_carry` and two triggers keep the state the cadet had until a person closes or reopens that
+  column in the new section; `_cells_at` reads it. On a scratch database, swapping six cadets changed 6 of 14 cells before and
+  0 after; the total vectors (105) and the entry proof (77) hold. Nothing was backfilled, so moves made before it are not
+  recorded. Scores, deadlines and extensions are untouched.
+- **Blackboard export rebuilt as a fill of the file the staff member uploads, like the live preflight fill.** Read from the
+  published code: the Director drops Blackboard's own gradebook download, one file per Blackboard course; cadets match by
+  cadet ID only and a file with no ID column is refused; the same file shape comes back (delimiter, line ending, BOM,
+  quoting), with only the identity columns and the columns that received a value; a blank is a blank, never a zero.
+  The new export keeps all of that and adds every kind of item (matched by exact title; a preflight still by the PF token
+  and lesson number) and the Prog and Final columns (matched by the names saved in the course settings; a column of the
+  same name plus "letter" takes the letter). Values are `gradebook_cells` and `course_totals` text, never recomputed.
+  The earlier button that wrote a file with its own invented headers is gone. `blackboard-fill.js` gained `matchTargets`,
+  a text-value path in `fillGrid` and a third argument to `readFile`; its preflight behaviour is unchanged (136 checks of the
+  existing suite, same count before and after). New suite `test-blackboard-export.mjs` (47 checks, Blackboard-shaped
+  fixtures, invented names). **Choices this changes:** one file out, not a "both percent and letter" column pair, and the
+  live total, because the live workflow never adds a column; a letter goes only into a column the file already has.
+  **Not run:** the page in a browser.
+- **Review A2 majors.** (1) Two Gradescope columns with one name each keep their own scores and maximum; two same-named
+  columns with only some maximums block the import. (2) An import approval belongs to what was shown: "allow replacing
+  published" is tied to the count on screen and "accept this maximum" to the item, its points and the file maxima; a changed
+  mapping voids both, and the page also clears them. (3) **Not reproduced:** `enter_grades` on an item whose mode is effort
+  stores the typed score, because the effort trigger has acted only on a row that carries an effort since migration `014`;
+  a check now holds that, and no refusal was added. (4) Rows that disagree on the maximum are held in all three formats and
+  the notes match; the Gradescope whole-course format has no status column, so it cannot blank Missing rows, as before.
+  Offline suites 44/44 (2896 checks).
 
 ## 2026-11-05 — Matthew Recker via Claude (v2 Stage C staff pages, on staging, `v2` branch)
 

@@ -21,6 +21,7 @@
     import { db } from '../js/supabase.js';
     import { esc, runPage, lastFirst, triggerDownload } from '../js/util.js';
     import * as X from '../js/faculty-export.js';
+    import * as BB from '../js/blackboard-fill.js';
     import * as B from '../js/faculty-backlog.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
@@ -70,23 +71,103 @@
           <div class="row wrap" style="gap:10px;margin:8px 0">
             <button class="btn btn-ghost" data-gb="final">Gradebook (CSV)</button>
             <button class="btn btn-ghost" data-gb="prog">Gradebook, Prog items only (CSV)</button>
-            <button class="btn btn-ghost" data-bb="prog">Blackboard, Prog (CSV)</button>
-            <button class="btn btn-ghost" data-bb="final">Blackboard, Final (CSV)</button>
-          </div><div id="export-msg"></div></section>`;
-      document.querySelectorAll('[data-gb],[data-bb]').forEach(b => b.onclick = () => doExport(b.dataset.gb ? 'gb' : 'bb', b.dataset.gb || b.dataset.bb));
+          </div><div id="export-msg"></div>
+          ${ctx.isDirectorForCurrent() ? `<h3 style="margin-top:18px">Fill a Blackboard file</h3>
+            <div class="field-hint">Download the gradebook from Blackboard and drop it here, one file per Blackboard course. Scores are written into the columns that already exist and the file comes back in the same shape. Cadets are matched by cadet ID only. An item is matched by its exact title (a preflight by PF and the lesson number). The Prog and Final columns are matched by the names saved in the course settings, and a column with the same name plus <em>letter</em> takes the letter. Nothing is added, renamed or reordered, a column nothing was written to is left out of the file, and a blank stays a blank, never a zero. Totals are the same ones students and reports read.</div>
+            <div class="dropzone" id="bb-dz" style="min-height:80px;margin-top:10px"><div><strong>Choose files</strong> or drag and drop them here</div></div>
+            <input type="file" id="bb-file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" multiple style="display:none">
+            <div id="bb-preview" style="margin-top:12px"></div>` : ''}</section>`;
+      document.querySelectorAll('[data-gb]').forEach(b => b.onclick = () => doExport(b.dataset.gb));
+      bbFiles.length = 0; bbData = null;
+      if (ctx.isDirectorForCurrent()) wireBb();
     }
 
-    async function doExport(kind, scope) {
+    async function doExport(scope) {
       const msg = document.getElementById('export-msg');
       msg.innerHTML = '<span class="muted">Preparing…</span>';
       const d = await X.loadExport(db, ctx.currentOffering, scope);
       if (d.error) { console.error('export read failed', d.error); msg.innerHTML = `<div class="alert alert-error">Nothing was exported: the read failed (${esc(d.error.message || 'unknown')}).</div>`; return; }
       const code = (ctx.courseTitleOf(ctx.currentOffering) || 'course').replace(/[^A-Za-z0-9]+/g, '-');
-      if (kind === 'gb') { triggerDownload(X.gradebookCsv({ ...d, scope }), `${code}-gradebook-${scope}.csv`, 'text/csv'); msg.innerHTML = '<div class="alert alert-success">Gradebook downloaded.</div>'; return; }
-      if (!ctx.isDirectorForCurrent()) { msg.innerHTML = '<div class="alert alert-warn">Only a Director can export to Blackboard.</div>'; return; }
-      const r = X.blackboardCsv({ totals: d.totals, people: d.people, scope, settings: d.settings, courseCode: code });
-      if (r.error) { msg.innerHTML = `<div class="alert alert-warn">${esc(r.error)}</div>`; return; }
-      triggerDownload(r.csv, r.filename, 'text/csv'); msg.innerHTML = '<div class="alert alert-success">Blackboard file downloaded.</div>';
+      triggerDownload(X.gradebookCsv({ ...d, scope }), `${code}-gradebook-${scope}.csv`, 'text/csv');
+      msg.innerHTML = '<div class="alert alert-success">Gradebook downloaded.</div>';
+    }
+
+    /* ── Fill a Blackboard file: preview, then download. Writes nothing to the database. ── */
+    const bbFiles = [];
+    let bbData = null;                  // { targets, lookup, roster }
+
+    async function bbLoad() {
+      if (bbData) return bbData;
+      const d = await X.loadBlackboardData(db, ctx.currentOffering);
+      if (d.error) { console.error('blackboard read failed', d.error); return { error: `The read failed (${d.error.message || 'unknown'}). Nothing can be filled.` }; }
+      const t = X.blackboardTargets({ items: d.items, settings: d.settings });
+      if (t.error) return { error: t.error };
+      bbData = { targets: t.targets, lookup: X.blackboardLookup(d), roster: Object.values(d.people).map(p => ({ studentId: Number(p.cadetId), sectionCode: p.section })) };
+      return bbData;
+    }
+
+    function bbRead(file) {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        // Decode the bytes ourselves with ignoreBOM, so the file's BOM reaches readFile and is put back on the way out.
+        const text = new TextDecoder('utf-8', { ignoreBOM: true }).decode(e.target.result);
+        const data = await bbLoad();
+        if (data.error) { document.getElementById('bb-preview').innerHTML = `<div class="alert alert-warn">${esc(data.error)}</div>`; return; }
+        const entry = { name: file.name, ...BB.readFile(text, data.targets, BB.matchTargets) };
+        const i = bbFiles.findIndex(f => f.name === file.name);
+        if (i >= 0) bbFiles[i] = entry; else bbFiles.push(entry);
+        renderBb();
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function wireBb() {
+      const dz = document.getElementById('bb-dz'), input = document.getElementById('bb-file');
+      dz.addEventListener('click', () => input.click());
+      input.addEventListener('change', (e) => { [...e.target.files].forEach(bbRead); e.target.value = ''; });
+      dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-over'); });
+      dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+      dz.addEventListener('drop', (e) => { e.preventDefault(); dz.classList.remove('drag-over'); [...e.dataTransfer.files].forEach(bbRead); });
+    }
+
+    function bbFileBlock(f) {
+      if (f.error) return `<div class="card-meta" style="color:var(--red)"><strong>${esc(f.name)}</strong><br>${esc(f.error)}</div>`;
+      const matched = f.columns.filter(c => c.key), dupes = f.columns.filter(c => c.note);
+      return `<div class="card-meta" style="margin-bottom:10px"><strong>${esc(f.name)}</strong>: ${f.rows} cadet row(s), ${matched.length} column(s) matched.
+        ${dupes.length ? `<div style="color:var(--red)">${dupes.map(c => `Skipped “${esc(c.header)}”: ${esc(c.note)}.`).join('<br>')}</div>` : ''}
+        ${f.ambiguous.length ? `<div style="color:var(--red)">${f.ambiguous.map(a => `Two items are titled “${esc(a.title)}”, so no column is filled for either.`).join('<br>')}</div>` : ''}
+        ${f.unmatched.length ? `<div>No column here for: ${f.unmatched.map(t => esc(t.title || `${t.column} ${t.part}`)).join('; ')}. Those values will not post.</div>` : ''}</div>`;
+    }
+
+    function renderBb() {
+      const box = document.getElementById('bb-preview');
+      if (!bbFiles.length) { box.innerHTML = ''; return; }
+      const usable = bbFiles.filter(f => !f.error);
+      const x = BB.checkFiles(usable.map(f => ({ label: f.name, ids: f.ids })), bbData ? bbData.roster : []);
+      const problems = [];
+      for (const [a, b] of x.duplicateFiles) problems.push(`<strong>${esc(a)}</strong> and <strong>${esc(b)}</strong> hold the same cadets: the same export was probably chosen twice.`);
+      for (const p of x.partial) problems.push(`<strong>${esc(p.sectionCode)} is only partly in the upload</strong>: ${p.present} of ${p.enrolled} cadets. Their values will not post.`);
+      if (x.inMultiple.length) problems.push(`${x.inMultiple.length} cadet(s) appear in more than one file.`);
+      if (x.notOnRoster.length) problems.push(`${x.notOnRoster.length} ID(s) in the file(s) are not enrolled in this course: those rows are left untouched.`);
+      const uncovered = x.uncovered.length ? `<div class="card-meta" style="margin-top:8px"><strong>${x.uncovered.length} section(s) are in none of these files</strong>: ${x.uncovered.map(s => `${esc(s.sectionCode)} (${s.enrolled})`).join(', ')}. If another instructor runs them in a separate Blackboard course, they need their own file.</div>` : '';
+      box.innerHTML = `${bbFiles.map(bbFileBlock).join('')}
+        <div class="card-meta">Covering <strong>${x.coveredCadets}</strong> of ${x.rosterSize} enrolled cadets across ${x.covered.length} fully matched section(s).</div>${uncovered}
+        <div class="card-meta" style="margin-top:8px">${problems.length ? `<div style="color:var(--red)">${problems.map(p => `<div>${p}</div>`).join('')}</div>` : '<span style="color:var(--green)">Every section present in these files is complete.</span>'}</div>
+        <div class="row wrap" style="gap:14px;margin-top:12px"><button class="btn btn-primary" id="bb-go" ${usable.length ? '' : 'disabled'}>Download filled file${usable.length > 1 ? 's' : ''}</button>
+        <button class="btn btn-secondary" id="bb-clear">Clear</button><span id="bb-status" style="font-size:0.85em"></span></div>`;
+      document.getElementById('bb-clear').onclick = () => { bbFiles.length = 0; renderBb(); };
+      document.getElementById('bb-go').onclick = () => {
+        const st = document.getElementById('bb-status'), done = [], empty = [];
+        for (const f of usable) {
+          const r = BB.fillGrid(f.grid, f.idColumn.index, f.matched, bbData.lookup, { decimals: f.format.decimals });
+          const n = BB.narrowToPosted(r.grid, f.matched, f.idColumn.index);
+          if (!n.postedColumns.length) { empty.push(f.name); continue; }
+          triggerDownload(BB.toCsv(n.grid, f.delimiter, f.format), f.name.replace(/\.csv$/i, '') + '_filled.csv', 'text/csv');
+          done.push(`${f.name}: ${r.filled} value(s) in ${n.postedColumns.length} column(s), ${n.dropped} other column(s) left out`);
+        }
+        st.style.color = done.length ? 'var(--green)' : 'var(--red)';
+        st.innerHTML = (done.length ? esc(done.join(' · ')) : '') + (empty.length ? `<span style="color:var(--red)">${done.length ? '<br>' : ''}Nothing to post for ${esc(empty.join(', '))}, so no file was produced.</span>` : '');
+      };
     }
   </script>
 </body>

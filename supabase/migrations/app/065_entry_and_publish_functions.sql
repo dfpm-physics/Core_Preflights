@@ -43,9 +43,8 @@
 --   It does not touch excusals: only a Director can set one, and that is the existing policy on
 --   grade_excusals (033), unchanged. It does not remove the step 1 rules that keep new items unpublished and
 --   unfinalized, so publish_column is refused on such an item until those rules come out.
---   It does not change how a section transfer treats a blank: the column closure belongs to a section, so a
---   cadet moved between a closed and an open section changes between a counted 0 and a left-out blank. That
---   belongs in the total rule and is a decision for the course director, not a side effect of this file.
+--   It does not change how a section transfer treats a blank: that is migration 066, which keeps a moved
+--   cadet's closed-or-open state in the total rule itself.
 
 BEGIN;
 

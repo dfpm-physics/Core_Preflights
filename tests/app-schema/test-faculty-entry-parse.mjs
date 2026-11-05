@@ -162,7 +162,7 @@ plan = P.buildImportPlan({ ...base, parsed: fileOf([fr(2, '3000000001', '9', '')
   existing: { 'e1|q1': { cents: 800, finalized: true, updatedAt: 't' } } });
 check('replacing a published grade is held until allowed', plan.held.length === 1 && !plan.canApply);
 eq('the old value and its version ride with the change', [plan.changes[0].old, plan.changes[0].updatedAt, plan.changes[0].kind], [800, 't', 'changed']);
-plan = P.buildImportPlan({ ...base, parsed: fileOf([fr(2, '3000000001', '9', '')]), options: { allowPublished: true },
+plan = P.buildImportPlan({ ...base, parsed: fileOf([fr(2, '3000000001', '9', '')]), options: { allowPublished: 1 },
   existing: { 'e1|q1': { cents: 800, finalized: true, updatedAt: 't' } } });
 check('and allowed when the instructor says so', plan.canApply);
 
@@ -178,9 +178,9 @@ const maxFile = (v) => ({ format: 'gradescope-assignment', notes: [], columns: [
 plan = P.buildImportPlan({ ...base, mapping: bigMax, parsed: maxFile('6') });
 check('a differing maximum holds the import even when every score is within the item', !plan.canApply && plan.held.some(h => /20/.test(h) && /10/.test(h)));
 eq('the page is told which column to ask about', plan.maxMismatch.map(x => [x.key, x.fileMaxCents, x.itemPointsCents]), [['c0', 2000, 1000]]);
-plan = P.buildImportPlan({ ...base, mapping: bigMax, parsed: maxFile('6'), options: { acceptMax: { c0: true } } });
+plan = P.buildImportPlan({ ...base, mapping: bigMax, parsed: maxFile('6'), options: { acceptMax: { c0: 'q1|1000|2000' } } });
 check('it goes ahead once the person accepts that column as written', plan.canApply && plan.changes[0].cents === 600);
-plan = P.buildImportPlan({ ...base, mapping: bigMax, parsed: maxFile('6'), options: { acceptMax: { c1: true } } });
+plan = P.buildImportPlan({ ...base, mapping: bigMax, parsed: maxFile('6'), options: { acceptMax: { c1: 'q1|1000|2000' } } });
 check('accepting a different column does not release it', !plan.canApply);
 plan = P.buildImportPlan({ ...base, mapping: { c0: { ...q1, bonus: true, pointsCents: 1000 } }, parsed: maxFile('6') });
 check('a bonus item is held too', !plan.canApply);
@@ -234,5 +234,62 @@ section('guessItem');
 eq('same title ignoring case and punctuation', P.guessItem('quiz-1', [q1, q2])?.id, 'q1');
 eq('no guess when it is not clear', P.guessItem('Quiz', [q1, q2]), null);
 
+
+/* ── Review A2 majors ───────────────────────────────────────────────────────── */
+section('A2-M1: two Gradescope columns with one name keep their own scores');
+{
+  const twin = 'First Name,Last Name,SID,Email,Quiz,Quiz - Max Points,Quiz,Quiz - Max Points\n'
+    + 'Ada,Test,3000000001,ada.test@x.example,9,10,3,5\nBo,Sample,3000000002,bo.sample@x.example,7,10,4,5\n';
+  const t = P.parseGradeFile(twin);
+  eq('the second column carries its own scores', t.rows.map(r => r.cells), [['9', '3'], ['7', '4']]);
+  eq('and its own maximum', t.columns.map(c => c.maxCents), [1000, 500]);
+  const lone = P.parseGradeFile('First Name,Last Name,SID,Email,Quiz,Quiz,Quiz - Max Points\nAda,Test,3000000001,a@x.example,9,3,10\n');
+  const planLone = P.buildImportPlan({ ...base, mapping: { c0: q1 }, parsed: lone });
+  check('two columns of one name and only one maximum cannot be paired: it blocks, naming the column',
+    !planLone.canApply && planLone.blockers.some(b => /two columns are named "Quiz"/i.test(b)), JSON.stringify(planLone.blockers));
+}
+
+section('A2-M2: an approval belongs to what was shown');
+{
+  const A = { id: 'a', title: 'Item A', pointsCents: 1000, bonus: false };
+  const B = { id: 'b', title: 'Item B', pointsCents: 500, bonus: false };
+  const file = { format: 'gradescope-course', notes: [], columns: [{ key: 'c0', name: 'Quiz 1', maxCents: 2000 }, { key: 'c1', name: 'Quiz 2', maxCents: 1000 }],
+    rows: [fr(2, '3000000001', '4', '3'), fr(3, '3000000002', '5', '2')] };
+  const pub = { 'e1|a': { cents: 100, finalized: true, updatedAt: 't' }, 'e1|b': { cents: 100, finalized: true, updatedAt: 't' }, 'e2|b': { cents: 100, finalized: true, updatedAt: 't' } };
+  const p1 = P.buildImportPlan({ ...base, existing: pub, parsed: file, mapping: { c1: A } });
+  eq('the plan says how many published scores it would replace', p1.overwritesPublished, 1);
+  const ticked = P.buildImportPlan({ ...base, existing: pub, parsed: file, mapping: { c1: A }, options: { allowPublished: p1.overwritesPublished } });
+  check('ticking for the count that was shown allows it', ticked.canApply);
+  const wider = P.buildImportPlan({ ...base, existing: pub, parsed: file, mapping: { c1: A, c0: B }, options: { allowPublished: p1.overwritesPublished, acceptMax: { c0: 'x' } } });
+  check('a later mapping that replaces more published scores is held again', !wider.canApply && wider.held.some(h => /published/.test(h)), JSON.stringify(wider.held));
+  check('a bare true no longer approves anything', !P.buildImportPlan({ ...base, existing: pub, parsed: file, mapping: { c1: A }, options: { allowPublished: true } }).canApply);
+
+  const m1 = P.buildImportPlan({ ...base, parsed: file, mapping: { c0: A } });
+  const token = m1.maxMismatch[0]?.token;
+  check('the plan hands the page a token for each held maximum', typeof token === 'string' && token.length > 0);
+  check('the token releases that column', P.buildImportPlan({ ...base, parsed: file, mapping: { c0: A }, options: { acceptMax: { c0: token } } }).canApply);
+  const moved = P.buildImportPlan({ ...base, parsed: file, mapping: { c0: B }, options: { acceptMax: { c0: token } } });
+  check('pointing the same column at another item voids the tick', !moved.canApply && moved.held.some(h => /out of 20/.test(h)), JSON.stringify(moved.held));
+  check('a bare true no longer approves a maximum', !P.buildImportPlan({ ...base, parsed: file, mapping: { c0: A }, options: { acceptMax: { c0: true } } }).canApply);
+}
+
+section('A2-M4: a mixed maximum is held in every format, and the formats say it alike');
+{
+  const gsMixed = gsA + 'Ada Test,Ada,Test,3000000001,a@x.example,A,6,20,Graded,1\nBo Sample,Bo,Sample,3000000002,b@x.example,A,5,10,Graded,2\n';
+  const a = P.parseGradeFile(gsMixed);
+  eq('assignment format keeps every maximum it saw', a.columns[0].maxList, [2000, 1000]);
+  const planA = P.buildImportPlan({ ...base, mapping: { c0: q1 }, parsed: a });
+  check('the assignment format holds a mixed maximum, naming both values', !planA.canApply && planA.held.some(h => /20/.test(h) && /10/.test(h)), JSON.stringify(planA.held));
+  const course = 'First Name,Last Name,SID,Email,Quiz 1,Quiz 1 - Max Points\nAda,Test,3000000001,a@x.example,6,20\nBo,Sample,3000000002,b@x.example,5,10\n';
+  const c = P.parseGradeFile(course);
+  eq('course format keeps every maximum too', c.columns[0].maxList, [2000, 1000]);
+  check('and leaves a note, as the assignment format does', c.notes.some(n => /differs between rows/.test(n)), JSON.stringify(c.notes));
+  const planC = P.buildImportPlan({ ...base, mapping: { c0: q1 }, parsed: c });
+  check('the course format holds it as well', !planC.canApply && planC.held.some(h => /20/.test(h)), JSON.stringify(planC.held));
+  const teamsMixed = 'First Name,Last Name,Email Address,Lab 1,Points,Feedback\nAda,Test,a@x.example,6,20,\nBo,Sample,b@x.example,5,10,\n';
+  const t = P.parseGradeFile(teamsMixed);
+  eq('teams keeps every maximum too', t.columns[0].maxList, [2000, 1000]);
+  check('a uniform maximum equal to the item is not held', P.buildImportPlan({ ...base, mapping: { c0: q1 }, parsed: P.parseGradeFile(course.replace('20', '10')) }).canApply);
+}
 
 process.exit(summary() ? 0 : 1);

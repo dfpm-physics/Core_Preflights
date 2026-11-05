@@ -115,6 +115,12 @@ export function detectFormat(header) {
  * `rowNo` is the 1-based line number in the file, header included, so a message points at the line a
  * person sees in a spreadsheet.
  */
+/** Every distinct maximum a column showed, as sorted cents; { maxCents: the one value or null, maxList }. */
+function maxInfo(set) {
+  const list = [...set].sort((a, b) => b - a);
+  return { maxCents: list.length === 1 ? list[0] : null, maxList: list };
+}
+
 export function parseGradeFile(text) {
   const src = String(text ?? '').replace(/^﻿/, '');
   if (!src.trim()) return { error: 'The file is empty.' };
@@ -144,8 +150,8 @@ export function parseGradeFile(text) {
     columns.forEach(c => {
       const maxes = new Set();
       body.forEach(r => { const p = parseScore(cell(r, c.idx + 1)); if (p.ok && !p.blank) maxes.add(p.cents); });
-      if (maxes.size === 1) c.maxCents = [...maxes][0];
-      else if (maxes.size > 1) notes.push(`"${c.name}": the maximum differs between rows, so it is not used to check scores.`);
+      Object.assign(c, maxInfo(maxes));
+      if (maxes.size > 1) notes.push(`"${c.name}": the maximum differs between rows (${c.maxList.map(centsText).join(' and ')}), so the import is held until you accept it.`);
     });
     notes.push('Teams feedback text is not imported: a points grade has nowhere to keep it.');
     return { format, columns: columns.map(({ idx, ...c }) => c), rows: out, notes };
@@ -176,22 +182,41 @@ export function parseGradeFile(text) {
       pushRow(r, k, [score]);
     });
     if (blanked) notes.push(`${blanked} row(s) marked Missing or Ungraded were left blank rather than set to 0. A blank becomes 0 when you close the column.`);
-    const col = { key: 'c0', name: 'Total Score', maxCents: maxes.size === 1 ? [...maxes][0] : null };
-    if (maxes.size > 1) notes.push('Max Points differs between rows, so it is not used to check scores.');
+    const col = { key: 'c0', name: 'Total Score', ...maxInfo(maxes) };
+    if (maxes.size > 1) notes.push(`Max Points differs between rows (${col.maxList.map(centsText).join(' and ')}), so the import is held until you accept it.`);
     return { format, columns: [col], rows: out, notes, singleColumn: true };
   }
 
-  // gradescope-course
-  const idxs = [];
-  h.forEach((x, i) => { if (x.endsWith(' - max points')) { const base = x.slice(0, -' - max points'.length); const j = h.indexOf(base); if (j >= 0) idxs.push({ j, m: i }); } });
-  const columns = idxs.map((c, n) => ({ key: `c${n}`, name: clean(header[c.j]), maxCents: null, idx: c.j, midx: c.m }));
+  // gradescope-course. Each "<name> - Max Points" column belongs to the NEAREST PRECEDING unclaimed column named
+  // <name>, so two assignments with one title keep their own scores and their own maximum. Pairing by name alone
+  // (the first column of that name) gave both items the first column's scores.
+  const idxs = [], claimed = new Set(), blockers = [];
+  h.forEach((x, i) => {
+    if (!x.endsWith(' - max points')) return;
+    const base = x.slice(0, -' - max points'.length);
+    let j = -1;
+    for (let k = i - 1; k >= 0; k--) if (h[k] === base && !claimed.has(k)) { j = k; break; }
+    if (j >= 0) { claimed.add(j); idxs.push({ j, m: i }); }
+  });
+  const named = new Map();
+  h.forEach((x, i) => { if (x && !x.endsWith(' - max points')) named.set(x, [...(named.get(x) || []), i]); });
+  for (const { j } of idxs) {
+    const same = named.get(h[j]) || [];
+    const unpaired = same.filter(i => !claimed.has(i));
+    if (same.length > 1 && unpaired.length) {
+      const msg = `Two columns are named "${clean(header[j])}" and only some have a "Max Points" column, so their scores cannot be told apart. Rename one in Gradescope and export again.`;
+      if (!blockers.includes(msg)) blockers.push(msg);
+    }
+  }
+  const columns = idxs.sort((x, y) => x.j - y.j).map((c, n) => ({ key: `c${n}`, name: clean(header[c.j]), maxCents: null, maxList: [], idx: c.j, midx: c.m }));
   body.forEach((r, k) => pushRow(r, k, columns.map(c => cell(r, c.idx))));
   columns.forEach(c => {
     const maxes = new Set();
     body.forEach(r => { const p = parseScore(cell(r, c.midx)); if (p.ok && !p.blank) maxes.add(p.cents); });
-    if (maxes.size === 1) c.maxCents = [...maxes][0];
+    Object.assign(c, maxInfo(maxes));
+    if (maxes.size > 1) notes.push(`"${c.name}": the maximum differs between rows (${c.maxList.map(centsText).join(' and ')}), so the import is held until you accept it.`);
   });
-  return { format, columns: columns.map(({ idx, midx, ...c }) => c), rows: out, notes };
+  return { format, columns: columns.map(({ idx, midx, ...c }) => c), rows: out, notes, blockers };
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -287,7 +312,7 @@ export function matchRoster(rows, roster) {
  *   canApply   true when nothing blocks or holds and at least one cell changes
  */
 export function buildImportPlan({ parsed, mapping, roster, existing = {}, options = {} }) {
-  const blockers = [], held = [], notes = [...(parsed.notes || [])];
+  const blockers = [...(parsed.blockers || [])], held = [], notes = [...(parsed.notes || [])];
   const mapped = (parsed.columns || []).map((c, i) => ({ c, i, item: mapping?.[c.key] })).filter(x => x.item);
   if (!mapped.length) blockers.push('No file column is matched to an item yet.');
   const usedItems = new Map();
@@ -295,8 +320,12 @@ export function buildImportPlan({ parsed, mapping, roster, existing = {}, option
   for (const x of mapped) {
     if (usedItems.has(x.item.id)) blockers.push(`"${usedItems.get(x.item.id)}" and "${x.c.name}" are both matched to "${x.item.title}".`);
     else usedItems.set(x.item.id, x.c.name);
-    if (x.c.maxCents != null && x.item.pointsCents != null && x.c.maxCents !== x.item.pointsCents) {
-      maxMismatch.push({ key: x.c.key, name: x.c.name, title: x.item.title, fileMaxCents: x.c.maxCents, itemPointsCents: x.item.pointsCents });
+    // Every maximum the column showed is compared, so rows that disagree with each other are held like a file whose
+    // one maximum disagrees with the item.
+    const seen = x.c.maxList?.length ? x.c.maxList : (x.c.maxCents != null ? [x.c.maxCents] : []);
+    if (seen.length && x.item.pointsCents != null && seen.some(v => v !== x.item.pointsCents)) {
+      maxMismatch.push({ key: x.c.key, name: x.c.name, title: x.item.title, itemId: x.item.id, fileMaxCents: seen[0], fileMaxList: seen,
+        itemPointsCents: x.item.pointsCents, token: `${x.item.id}|${x.item.pointsCents}|${seen.join(',')}` });
     }
   }
 
@@ -304,8 +333,11 @@ export function buildImportPlan({ parsed, mapping, roster, existing = {}, option
   // held until the person either accepts that column as written or sets it to "Do not import". It is never scaled:
   // a scaled score would need rounding, and nothing here rounds.
   for (const mm of maxMismatch) {
-    if (options.acceptMax?.[mm.key]) continue;
-    held.push(`"${mm.name}" is out of ${centsText(mm.fileMaxCents)} in the file but "${mm.title}" is worth ${centsText(mm.itemPointsCents)}. Scores would be entered as written, not scaled. Tick the box for that column to import it as written, or choose "Do not import".`);
+    // The tick is the token the plan handed out for THIS item, this value and these file maxima. A different item
+    // behind the column, a changed item value or a different file voids it; a bare true never counts.
+    if (options.acceptMax?.[mm.key] === mm.token) continue;
+    const outOf = mm.fileMaxList.map(centsText).join(' and ');
+    held.push(`"${mm.name}" is out of ${outOf} in the file but "${mm.title}" is worth ${centsText(mm.itemPointsCents)}. Scores would be entered as written, not scaled. Tick the box for that column to import it as written, or choose "Do not import".`);
   }
 
   const { matches, unmatched, duplicates } = matchRoster(parsed.rows || [], roster);
@@ -340,7 +372,9 @@ export function buildImportPlan({ parsed, mapping, roster, existing = {}, option
     }
   }
   if (badCells.length) blockers.push(`${badCells.length} score(s) cannot be read: ${badCells.slice(0, 8).join('; ')}${badCells.length > 8 ? '; …' : ''}. Nothing is imported until the file is fixed.`);
-  if (overwritesPublished && !options.allowPublished) {
+  // The tick is the COUNT that was on screen when it was given. If the mapping changes and the count changes, the
+  // tick no longer covers what would happen, and the hold returns.
+  if (overwritesPublished && !(typeof options.allowPublished === 'number' && options.allowPublished === overwritesPublished)) {
     held.push(`${overwritesPublished} score(s) would replace a grade already published to students. Tick the box to allow that.`);
   }
   const nameMatched = matches.filter(m => m.method === 'name');
@@ -350,7 +384,7 @@ export function buildImportPlan({ parsed, mapping, roster, existing = {}, option
   if (!blockers.length && !changes.length) blockers.push(same ? 'Every score in the file is already entered. Nothing would change.' : 'The file holds no scores to enter.');
 
   return {
-    blockers, held, notes, changes, same, unmatched, duplicates, maxMismatch,
+    blockers, held, notes, changes, same, unmatched, duplicates, maxMismatch, overwritesPublished,
     nameMatched: nameMatched.map(m => ({ rowNo: m.rowNo, enrollmentId: m.enrollmentId })),
     counts: { rows: (parsed.rows || []).length, matched: matches.length, unmatched: unmatched.length, changes: changes.length, same },
     canApply: blockers.length === 0 && held.length === 0 && changes.length > 0,

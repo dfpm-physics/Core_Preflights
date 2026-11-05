@@ -52,7 +52,7 @@ const ID_HEADER_ALIASES = [
   'studentid', 'cadetemplid', 'emplid', 'cadetid', 'username', 'userid', 'id',
 ];
 
-const normKey = (h) => String(h || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+export const normKey = (h) => String(h || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /** A cell holds a cadet id if it parses into the 30xxxxxxxx range the students CHECK enforces. */
 function cadetIdIn(cell) {
@@ -140,7 +140,7 @@ export function findIdColumn(grid) {
  * `|1234567` column id are both common. Both contain digits, and both would poison a naive
  * "first number in the string" reader: `Preflight 8 [Total Pts: 2]` must resolve to 8, not 2.
  */
-function stripColumnMeta(text) {
+export function stripColumnMeta(text) {
   return String(text || '')
     .split('|')[0]                 // drop the trailing column id
     .replace(/\[[^\]]*\]/g, ' ')   // drop [Total Pts: 2] and friends
@@ -260,8 +260,11 @@ export function fillGrid(grid, idCol, colMap, lookup, { decimals = 0 } = {}) {
       const c = Number(colIdx);
       const v = lookup(id, offeringId);
       // RULE 2. null → empty string, never 0. See the header of this file.
-      if (v == null) { copy[c] = ''; blanks++; }
-      else { copy[c] = fmt(v); filled++; touchedAny = true; }
+      // A lookup may also return finished TEXT (the all-items export hands back database text for a
+      // percent or a letter, which must not be re-rounded to the file's width). Text is written as it is;
+      // an empty text is a blank. A number is formatted as before.
+      if (v == null || v === '') { copy[c] = ''; blanks++; }
+      else { copy[c] = typeof v === 'string' ? v : fmt(v); filled++; touchedAny = true; }
     }
     if (!touchedAny) unknownIds.push(id);
     out.push(copy);
@@ -382,7 +385,7 @@ export function toCsv(grid, delimiter = ',', { eol = '\r\n', bom = false, traili
  * director has seen this, which is the same preview-then-commit shape the roster import uses and
  * for the same reason: a file nobody has looked at should not be acted on.
  */
-export function readFile(text, offerings) {
+export function readFile(text, offerings, matcher = matchColumns) {
   if (/^PK\x03\x04/.test(String(text || '').slice(0, 4))) {
     return { error: 'That looks like an Excel workbook (.xlsx), which this page cannot read. '
                   + 'In Excel: File → Save As → CSV UTF-8 (Comma delimited), then upload that file.' };
@@ -408,7 +411,7 @@ export function readFile(text, offerings) {
   const id = findIdColumn(grid);
   if (id.error) return { error: id.error };
 
-  const cols = matchColumns(grid[0], offerings);
+  const cols = matcher(grid[0], offerings);
   const ids = grid.slice(1).map(r => cadetIdIn(r[id.index])).filter(v => v != null);
 
   return { grid, delimiter, idColumn: id, ...cols, ids, rows: grid.length - 1,
@@ -537,4 +540,77 @@ export function checkFiles(files, roster) {
     coveredCadets: [...seenIn].filter(([id]) => sectionOf.has(id)).length,
     rosterSize: (roster || []).length,
   };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════
+ * Every kind of item, and the Prog and Final grade columns
+ * ════════════════════════════════════════════════════════════════════════════════════ */
+
+/** Same function, general name: it keeps the identity columns and the columns that received a value. */
+export const narrowToPosted = narrowToPreflights;
+
+/**
+ * Map Blackboard columns onto targets of any kind. The live preflight rules above are unchanged; this adds two
+ * more, each as strict as they are.
+ *
+ * A target is { key, kind: 'item' | 'total', ... }:
+ *   item   { key, title, lesson }  lesson is the preflight number when the item's slug names one, else null
+ *   total  { key, column, part }   the column name the Director saved for Prog or Final; part is 'percent' or 'letter'
+ *
+ * One header is read by the FIRST rule that claims it, in this order:
+ *   1. a saved total column: the header, with Blackboard's [..] and |id removed, equals the saved name
+ *      (a letter column is the saved name plus " letter")
+ *   2. a preflight: the PF / preflight token and a lesson number, exactly the live rule
+ *   3. any other item: the header, cleaned the same way, equals the item's TITLE. Equal, not "contains": a
+ *      column called "Quiz 1 - Gauss Extra Credit" is not "Quiz 1 - Gauss". An item that is a preflight is never
+ *      matched by title, and an item that shares a title with another matches no column.
+ * A column two headers claim is filled by neither. A target with no column is returned, never dropped.
+ */
+export function matchTargets(headerCells, targets) {
+  const list = targets || [];
+  const totals = list.filter(t => t.kind === 'total' && normKey(t.column));
+  const preflights = new Map();
+  for (const t of list) if (t.kind === 'item' && t.lesson != null) preflights.set(t.lesson, t);
+  const byTitle = new Map();
+  for (const t of list) {
+    if (t.kind !== 'item' || t.lesson != null) continue;
+    const k = normKey(t.title);
+    if (!k) continue;
+    if (!byTitle.has(k)) byTitle.set(k, []);
+    byTitle.get(k).push(t);
+  }
+  const ambiguous = [...byTitle.values()].filter(v => v.length > 1).map(v => ({ title: v[0].title, keys: v.map(t => t.key) }));
+
+  const hits = [];                         // { index, header, target }
+  (headerCells || []).forEach((h, i) => {
+    const clean = normKey(stripColumnMeta(h));
+    let target = null;
+    if (clean) {
+      target = totals.find(t => clean === normKey(t.column) + (t.part === 'letter' ? 'letter' : '')) || null;
+    }
+    if (!target) {
+      const lesson = lessonNumberOf(h);
+      if (lesson != null) target = preflights.get(lesson) || null;
+      else if (clean && byTitle.has(clean) && byTitle.get(clean).length === 1) target = byTitle.get(clean)[0];
+    }
+    if (target) hits.push({ index: i, header: h, target });
+  });
+
+  // Two headers claiming one target: fill NEITHER. A guess here writes a grade into a column the director did not
+  // mean, and they cannot see which one we picked.
+  const perTarget = new Map();
+  for (const hit of hits) perTarget.set(hit.target.key, (perTarget.get(hit.target.key) || 0) + 1);
+  const matched = {}, columns = [], claimed = new Set();
+  for (const hit of hits) {
+    const t = hit.target;
+    if (perTarget.get(t.key) > 1) {
+      columns.push({ index: hit.index, header: hit.header, key: null, note: `duplicate — more than one column is named "${t.title || t.column}"` });
+    } else {
+      claimed.add(t.key);
+      matched[hit.index] = t.key;
+      columns.push({ index: hit.index, header: hit.header, key: t.key, title: t.title || t.column });
+    }
+  }
+
+  return { matched, columns, ambiguous, unmatched: list.filter(t => !claimed.has(t.key)) };
 }

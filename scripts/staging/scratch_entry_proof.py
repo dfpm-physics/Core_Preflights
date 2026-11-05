@@ -134,6 +134,7 @@ def main():
         mixed = b.item(course, co, "proof-mixed", "Proof mixed", 10, kind="homework", published=False, paths=[
             {"modality": "external", "delivery": "in_person", "grading": "hand_entered"},
             {"modality": "written", "role": "practice"}])
+        eff = b.item(course, co, "proof-effort", "Proof effort", 10, kind="homework", paths=hand, published=False, grading_mode="effort")
         for it in (quiz, bonus, aiit, mixed):       # published, so a student's total can see them
             b.publish(it)
         cur.execute("COMMIT")
@@ -169,6 +170,17 @@ def main():
         check("a Director enters three scores in one call", e is None and r[0][0]["saved"] == 3 and r[0][0]["replaced_published"] == 0, str(e or r))
         g = grade(enrB1, Q)
         check("an explicit zero is stored as a score, as a draft", g is not None and g[0] == 0 and g[1] is False and g[2] == "instructor", str(g))
+        # Review A2 M3 claimed an item with grading_mode 'effort' would have a typed score rewritten to 0 by the effort
+        # trigger. Migration 014 moved that trigger onto the ROW (it acts only when the row carries an effort), so a typed
+        # score is kept. This check holds the claim false; if the trigger ever goes back to keying on the item, it fails.
+        as_(director)
+        cur.execute("RESET ROLE")
+        cur.execute("SELECT grading_mode FROM app.assignment_offerings WHERE id = %s", (eff["ao"],))
+        check("the fixture item really is graded on effort", cur.fetchone()[0] == "effort")
+        as_(director)
+        r, e = call("SELECT app.enter_grades(%s, %s::jsonb)", (eff["ao"], rows([{"enrollment_id": enrA1, "points": "9"}])))
+        g = grade(enrA1, eff["ao"])
+        check("typed points on an effort-mode item are stored as typed, not rewritten to 0", e is None and g is not None and g[0] == 9, str(e or g))
         as_(director)
         _, e = call("SELECT app.enter_grades(%s, %s::jsonb)", (Q, rows([{"enrollment_id": enrA1, "points": "9", "expect": None}])))
         check("a row with no version for an existing grade is refused as stale", e is not None and getattr(e, "pgcode", "") == "40001", str(e))
