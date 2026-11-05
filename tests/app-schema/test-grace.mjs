@@ -184,6 +184,8 @@ check(`no offset is accepted and late at once (${offsets.length} checked)`,
  * loudly: a silent `undefined` would make a query nobody stubbed look like one that returned
  * nothing — which here would read as "no deadline", the answer that lets everything through. */
 let RESPONSES = {};
+let stubInsertError = false;
+let created = false;
 let CALLS = [];      // writes only: insert / update / upsert / delete
 let READS = [];      // every select, with the filters it carried
 
@@ -204,6 +206,7 @@ const stubFrom = (table) => {
   const result = (mode) => {
     const key = `${table}.${state.verb}`;
     const r = RESPONSES[key];
+    if (state.verb === 'insert' && table === 'submissions' && stubInsertError) { created = true; return { data: null, error: { code: '23505', message: 'duplicate key' } }; }
     const data = typeof r === 'function' ? r(state, mode) : r;
     if (data === undefined) return { data: mode === 'many' ? [] : null, error: null };
     return { data, error: null };
@@ -214,9 +217,21 @@ const stubFrom = (table) => {
   return c;
 };
 
-globalThis.window.db = { from: stubFrom };
+// Functions the page calls. The commit is a database function since migration 048: the clock, the grace and the
+// late rule are the server's, so what this suite can pin is WHAT IS ASKED (and that no time is sent) and that the
+// server's answer, a receipt or a sentence, is passed through unchanged.
+let RPCS = [];
+let RPC_RESULT = {};
+const stubRpc = (name, args) => {
+  RPCS.push({ name, args });
+  const r = RPC_RESULT[name];
+  if (r && r.error) return Promise.resolve({ data: null, error: r.error });
+  return Promise.resolve({ data: r ? r.data : null, error: null });
+};
 
-const { commitSubmission, submitInteractionReport } = await import('../../site/js/student-data.js');
+globalThis.window.db = { from: stubFrom, rpc: stubRpc };
+
+const { commitSubmission, submitInteractionReport, ensureSubmission } = await import('../../site/js/student-data.js');
 
 const ctx = {
   currentOffering: 'co-1',
@@ -283,83 +298,82 @@ const wrote = (table, verb) => CALLS.some(c => c.table === table && c.verb === v
 const dueText = (row) => new Date(row.due_at).toLocaleString(undefined,
   { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
-section('commitSubmission — the deadline is checked at submit time');
+const RECEIPT = [{ out_submission_id: 'sub-1', out_receipt_id: 'rc-1', out_committed_at: '2026-11-05T12:00:00Z',
+                   out_is_late: false, out_content_sha256: 'ab12', out_already: false }];
+const TOO_LATE = 'The deadline for this assignment was Nov 5, 11:59 PM and it has passed. Your answers are saved.';
 
-const lateRow = scenario({ dueMin: -5 });
-const refused = await commitSubmission(ctx, 'off-live', WRITTEN.id);
-check('a written submit five minutes late is refused', !!refused.error);
-check('…the refusal names the deadline it missed',
-      (refused.error?.message || '').includes(dueText(lateRow)),
-      `${refused.error?.message} — expected to contain ${dueText(lateRow)}`);
-check('…and says the work is not lost',
-      /saved/i.test(refused.error?.message || ''), refused.error?.message);
-check('…and points them at their instructor',
-      /instructor/i.test(refused.error?.message || ''), refused.error?.message);
-// The whole point of refusing before ensureSubmission(): a refusal is not a write.
-eq('…and NOTHING was written', CALLS, []);
-
-scenario({ dueMin: -1 });
-const insideGrace = await commitSubmission(ctx, 'off-live', WRITTEN.id);
-eq('a submit one minute late is inside the grace and accepted', insideGrace.error, null);
-check('…and the commit really went out', wrote('submissions', 'update'));
-check('…and the activity was marked final', wrote('submission_activities', 'update'));
+section('commitSubmission — one server operation, no client clock');
 
 scenario({ dueMin: 60 });
-eq('a submit an hour early is accepted',
-   (await commitSubmission(ctx, 'off-live', WRITTEN.id)).error, null);
+RPCS = []; RPC_RESULT = { commit_work: { data: RECEIPT } };
+const ok = await commitSubmission(ctx, 'off-live', WRITTEN.id);
+eq('a submit succeeds', ok.error, null);
+eq('...by calling commit_work once', RPCS.map(r => r.name), ['commit_work']);
+eq('...with the offering and the activity', RPCS[0].args, { p_offering: 'off-live', p_activity: WRITTEN.id });
+check('...and no time of any kind is sent', !Object.keys(RPCS[0].args).some(k => /time|_at|date|late/i.test(k)));
+eq('...and the page writes nothing to a table itself', CALLS, []);
+eq('...the receipt comes back in the page words',
+   [ok.receipt.receiptId, ok.receipt.isLate, ok.receipt.already, ok.receipt.sha256], ['rc-1', false, false, 'ab12']);
+check('...with a committed time as a date', ok.receipt.committedAt instanceof Date);
 
-// The deadline is re-read, so a director's extension granted after the page loaded is honoured —
-// this is the case where trusting the page's copy would refuse a student who had been excused.
-scenario({ dueMin: -5, extension: new Date(Date.now() + 60 * MIN).toISOString() });
-eq('an extension granted since page load rescues a late submit',
-   (await commitSubmission(ctx, 'off-live', WRITTEN.id)).error, null);
+RPC_RESULT = { commit_work: { data: [{ ...RECEIPT[0], out_is_late: true }] } };
+eq('a late-allowed commit is reported as late', (await commitSubmission(ctx, 'off-live', WRITTEN.id)).receipt.isLate, true);
 
-const extRead = READS.find(r => r.table === 'extensions');
-check('the extension query filters revoked_at IS NULL',
-      !!extRead && Object.prototype.hasOwnProperty.call(extRead.filters, 'revoked_at')
-      && extRead.filters.revoked_at === null);
-check('…scoped to this offering and this student',
-      extRead?.filters?.assignment_offering_id === 'off-live'
-      && Array.isArray(extRead?.filters?.enrollment_id));
+RPC_RESULT = { commit_work: { data: [{ ...RECEIPT[0], out_already: true }] } };
+eq('a repeated request is reported as already done', (await commitSubmission(ctx, 'off-live', WRITTEN.id)).receipt.already, true);
 
-// A read that fails or is withheld must not read as "you missed the deadline" — the student can
-// argue with a network error and cannot argue with that.
-scenario({ dueMin: -5 });
-RESPONSES['assignment_offerings.select'] = null;
-eq('an unreadable offering does not become a refusal',
-   (await commitSubmission(ctx, 'off-live', WRITTEN.id)).error, null);
+RPC_RESULT = { commit_work: { error: { message: TOO_LATE, code: '42501' } } };
+const refused = await commitSubmission(ctx, 'off-live', WRITTEN.id);
+check('a refusal comes back as an error', !!refused.error);
+eq('...carrying the server own sentence', refused.error.message, TOO_LATE);
+check('...and no receipt', !refused.receipt);
+eq('...and the page wrote nothing', CALLS, []);
 
-section('submitInteractionReport — the same cutoff, graded path only');
+section('submitInteractionReport — graded goes through commit_work, practice does not');
 
-const iLateRow = scenario({ dueMin: -5, interactiveRole: 'graded' });
-const iRefused = await submitInteractionReport(ctx, {
+scenario({ dueMin: 60, interactiveRole: 'graded' });
+RPCS = []; RPC_RESULT = { commit_work: { data: RECEIPT } };
+const gOk = await submitInteractionReport(ctx, {
+  activity: INTERACTIVE, offering: shapeOffering(liveOffering(60 * MIN, 'graded')),
+  markdown: '# report', data: { schema: 1, effort: 4 }, transport: 'gemini',
+});
+eq('a graded report commits', [gOk.error, gOk.committed, gOk.role], [null, true, 'graded']);
+eq('...in one call', RPCS.map(r => r.name), ['commit_work']);
+eq('...carrying the report, with the transport merged in', RPCS[0].args.p_content, { schema: 1, effort: 4, transport: 'gemini' });
+eq('...and the markdown and its size', [RPCS[0].args.p_markdown, RPCS[0].args.p_bytes], ['# report', 8]);
+check('...and no time is sent', !Object.keys(RPCS[0].args).some(k => /time|_at|date|late/i.test(k)));
+check('...with no submission row made first by the page', !wrote('submissions', 'insert'));
+eq('...and a receipt', gOk.receipt.receiptId, 'rc-1');
+
+scenario({ dueMin: -5, interactiveRole: 'graded' });
+RPCS = []; RPC_RESULT = { commit_work: { error: { message: TOO_LATE } } };
+const gLate = await submitInteractionReport(ctx, {
   activity: INTERACTIVE, offering: shapeOffering(liveOffering(-5 * MIN, 'graded')),
   markdown: '# report', data: { schema: 1, effort: 4 },
 });
-check('a graded report five minutes late is refused', !!iRefused.error);
-check('…the refusal names the deadline it missed',
-      (iRefused.error?.message || '').includes(dueText(iLateRow)),
-      `${iRefused.error?.message} — expected to contain ${dueText(iLateRow)}`);
-eq('…and the report was NOT written', CALLS, []);
+check('a graded report past the deadline is refused', !!gLate.error);
+check('...with a sentence that names the deadline (this one comes from the page check)', /\w/.test(gLate.error?.message || ''));
+check('...and the report is never stored', !RPCS.some(r => r.name === 'save_interactive_work'));
 
 // Practice carries no credit, so refusing it protects nothing and costs the revealed-preference
 // signal the activity is stored for.
 scenario({ dueMin: -5, interactiveRole: 'practice' });
+RPCS = []; RPC_RESULT = {};
 const iPractice = await submitInteractionReport(ctx, {
   activity: INTERACTIVE, offering: shapeOffering(liveOffering(-5 * MIN, 'practice')),
   markdown: '# report', data: { schema: 1, effort: 4 },
 });
 eq('a PRACTICE report is still accepted after the deadline', iPractice.error, null);
-check('…and stored', wrote('submission_activities', 'upsert'));
-eq('…without committing anything', iPractice.committed, false);
-check('…and without touching the submission row', !wrote('submissions', 'update'));
+eq('...stored through the save function', RPCS.map(r => r.name), ['save_interactive_work']);
+eq('...without committing anything', iPractice.committed, false);
+check('...and without touching the submission row', !wrote('submissions', 'update'));
 
-scenario({ dueMin: -1, interactiveRole: 'graded' });
-const iGrace = await submitInteractionReport(ctx, {
-  activity: INTERACTIVE, offering: shapeOffering(liveOffering(-1 * MIN, 'graded')),
-  markdown: '# report', data: { schema: 1, effort: 4 },
-});
-eq('a graded report one minute late is inside the grace', iGrace.error, null);
-eq('…and commits', iGrace.committed, true);
+section('ensureSubmission — two tabs creating the row at once');
+scenario({ dueMin: 60 });
+RESPONSES['submissions.select'] = (st) => created ? { id: 'sub-won', enrollment_id: 'enr-1', assignment_offering_id: 'off-live', status: 'draft', chosen_activity_id: null, submission_activities: [] } : null;
+stubInsertError = true;
+const raced = await ensureSubmission(ctx, 'off-live');
+check('the loser of a race gets the winner row, not an error', !raced.error && raced.data?.id === 'sub-won', JSON.stringify(raced.error));
+stubInsertError = false;
 
 process.exit(summary() ? 0 : 1);

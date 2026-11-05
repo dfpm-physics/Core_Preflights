@@ -26,6 +26,10 @@ import {
   questionsOf, questionPoints, displayPoints, isActivityAvailable, answeredCount,
 } from './schema.js';
 
+/** The answers this tab last loaded or saved, per `offeringId:activityId`. A save sends only what differs from this,
+ *  so a second tab with an older view cannot blank what the first saved (migration 048, save_written_answers). */
+const WRITTEN_BASE = new Map();
+
 /** The enrollment ids the current student holds in the current offering. */
 function myEnrollmentIds(ctx) {
   return ctx.enrollmentIds || [];
@@ -130,6 +134,8 @@ export async function loadAssignmentStatuses(ctx, { includeLocked = false } = {}
     answerRows.forEach(r => {
       const act = subById[r.submission_id]?.activities?.[r.activity_id];
       if (act) act.content = r.content || null;
+      const sb = subById[r.submission_id];
+      if (sb) WRITTEN_BASE.set(`${sb.offeringId}:${r.activity_id}`, { ...(r.content || {}) });
     });
   }
 
@@ -392,6 +398,13 @@ export async function ensureSubmission(ctx, offeringId, chosenActivityId = null)
     chosen_activity_id: chosenActivityId,
     status: 'draft',
   }).select(SUBMISSION_SELECT).maybeSingle();
+  if (error && error.code === '23505') {
+    // Two tabs (or two requests) created it at the same moment: the other one won. Read theirs.
+    const { data: won, error: rErr } = await db.from('submissions')
+      .select(SUBMISSION_SELECT)
+      .eq('enrollment_id', enrollmentId).eq('assignment_offering_id', offeringId).maybeSingle();
+    return { data: won ? shapeSubmission(won) : null, error: won ? null : (rErr || error) };
+  }
   return { data: shapeSubmission(data), error };
 }
 
@@ -403,11 +416,20 @@ export async function saveWrittenAnswers(ctx, offeringId, activityId, answers) {
   const { data: submission, error } = await ensureSubmission(ctx, offeringId);
   if (error || !submission) return { error: error || new Error('Could not open a submission.') };
 
-  return db.from('submission_activities').upsert({
-    submission_id: submission.id,
-    activity_id: activityId,
-    content: answers,
-  }, { onConflict: 'submission_id,activity_id' });
+  // Send only what this tab changed since it last loaded or saved, and let the database merge it into what is
+  // stored. A save of the whole answer set from a second tab with an older view used to blank the first tab's work.
+  const key = `${offeringId}:${activityId}`;
+  const base = WRITTEN_BASE.get(key) || {};
+  const patch = {};
+  for (const [k, v] of Object.entries(answers || {})) {
+    if (String(v ?? '') !== String(base[k] ?? '')) patch[k] = v;
+  }
+  if (!Object.keys(patch).length) return { data: null, error: null };       // nothing changed since the last save
+  const res = await db.rpc('save_written_answers', {
+    p_submission: submission.id, p_activity: activityId, p_patch: patch,
+  });
+  if (!res.error) WRITTEN_BASE.set(key, { ...base, ...patch });
+  return res;
 }
 
 /**
@@ -434,52 +456,24 @@ export async function saveWrittenAnswers(ctx, offeringId, activityId, answers) {
  * enforcement until the deadline-enforcement migration lands (schema.js GRACE_MS).
  */
 export async function commitSubmission(ctx, offeringId, activityId) {
-  // First, and from the database rather than from whatever the page believes. Before
-  // ensureSubmission() too, so a refused late click writes nothing at all.
-  const { due, isPast } = await currentDeadline(ctx, offeringId);
-  if (isPast) {
-    // Their answers are untouched: the caller saves them into submission_activities before
-    // committing, and that row is written whether or not the commit is allowed. A refusal costs
-    // them the submission, never the work.
-    return { error: pastDueError(due, 'Your answers are saved and your instructor can still see '
-                                    + 'them — nothing you wrote has been lost.') };
-  }
+  // One server operation (migration 048, commit_work). The database reads its own clock, applies the deadline rule
+  // (an extension, the 120 second grace, the late setting of the assignment), stores nothing the client claims about
+  // time, marks the answers final, commits and writes a receipt, all in one transaction. Its refusals are already
+  // sentences for the cadet. The saved answers are never touched by a refusal.
+  const { data, error } = await db.rpc('commit_work', { p_offering: offeringId, p_activity: activityId });
+  if (error) return { error };
+  return { error: null, receipt: shapeReceipt(data) };
+}
 
-  const { data: submission, error } = await ensureSubmission(ctx, offeringId);
-  if (error || !submission) return { error: error || new Error('Could not open a submission.') };
-
-  // Can this activity carry credit at all? (mirrors submissions_check_gradable)
-  const { data: oa } = await db.from('offering_activities')
-    .select('grading_role')
-    .eq('assignment_offering_id', offeringId)
-    .eq('activity_id', activityId)
-    .maybeSingle();
-  if (oa?.grading_role !== 'graded') {
-    return { error: new Error('This isn’t the graded part of the assignment, so it can’t be '
-                            + 'submitted for credit. Check the lesson page for how to complete it.') };
-  }
-
-  // Is the choice already spent elsewhere? (mirrors submissions_lock_activity)
-  if (submission.status === 'committed' && submission.chosenActivityId
-      && submission.chosenActivityId !== activityId) {
-    return { error: new Error('You’ve already completed this assignment another way, and that '
-                            + 'version is the one being graded. Ask your instructor if you need '
-                            + 'it reopened.') };
-  }
-
-  const { error: cErr } = await db.from('submissions').update({
-    chosen_activity_id: activityId,
-    status: 'committed',
-    committed_at: new Date().toISOString(),
-  }).eq('id', submission.id);
-  if (cErr) return { error: cErr };
-
-  const { error: aErr } = await db.from('submission_activities')
-    .update({ is_final: true })
-    .eq('submission_id', submission.id).eq('activity_id', activityId);
-  if (aErr) return { error: aErr };
-
-  return { error: null };
+/** The receipt commit_work returns, in the page's words. `already` is true for a repeated request. */
+function shapeReceipt(data) {
+  const r = Array.isArray(data) ? data[0] : data;
+  if (!r) return null;
+  return {
+    submissionId: r.out_submission_id, receiptId: r.out_receipt_id,
+    committedAt: r.out_committed_at ? new Date(r.out_committed_at) : null,
+    isLate: !!r.out_is_late, sha256: r.out_content_sha256 || null, already: !!r.out_already,
+  };
 }
 
 /**
@@ -531,6 +525,23 @@ export async function resolveActivityBySlug(ctx, slug) {
 
   const offering = shapeOfferings(offeringRows, ctx)[0] || null;
   return { activity: data, offering, error: null };
+}
+
+/**
+ * When a lesson that is held back from this cadet opens, found by the lesson's slug.
+ *
+ * Since migration 047 the database does not deliver a lesson's content before it opens, so
+ * resolveActivityBySlug() finds nothing for an artifact link opened early, and the receiver page would
+ * call a real lesson "not set up yet". The database answers this one narrow question instead: for a
+ * published lesson of the caller's own enrolments that has not opened, when does it open. It returns
+ * nothing for any other slug, so it cannot be used to find lessons the cadet has no part in.
+ *
+ * @returns {{opensAt: Date|null, error: object|null}} a failed lookup is an error, not "no date".
+ */
+export async function lessonOpensAt(slug) {
+  const { data, error } = await db.rpc('my_lesson_opens_at', { p_slug: slug });
+  if (error) return { opensAt: null, error };
+  return { opensAt: data ? new Date(data) : null, error: null };
 }
 
 /**
@@ -586,9 +597,6 @@ export async function submitInteractionReport(ctx, { activity, offering, markdow
                                           + 'you want to keep it; nothing about it has been lost.') };
   }
 
-  const { data: submission, error } = await ensureSubmission(ctx, offering.offeringId);
-  if (error || !submission) return { error: error || new Error('Could not open a submission.') };
-
   // WHICH TUTOR THIS CAME THROUGH. Recorded only when the artifact actually declared one
   // (`#v=`), which today means one of the Gemini backup builds `scripts/artifacts/to_gemini.py`
   // writes. A published Claude artifact sends no `v`, so absence means "not one of ours" — which
@@ -609,6 +617,21 @@ export async function submitInteractionReport(ctx, { activity, offering, markdow
     ? { ...data, transport }
     : (data ?? null);
 
+  // GRADED: one server operation (migration 048, commit_work). It saves the report, applies the deadline on the
+  // server's own clock, marks it late when the assignment allows that, commits, and writes the receipt, in one
+  // transaction, so a failure leaves nothing half-done. The client sends no time.
+  if (offered?.gradingRole === 'graded') {
+    const { data: rec, error: cErr } = await db.rpc('commit_work', {
+      p_offering: offering.offeringId, p_activity: activity.id,
+      p_content: content, p_markdown: markdown, p_bytes: markdown ? markdown.length : null,
+    });
+    if (cErr) return { error: cErr, committed: false, role: 'graded' };
+    return { error: null, committed: true, role: 'graded', receipt: shapeReceipt(rec) };
+  }
+
+  const { data: submission, error } = await ensureSubmission(ctx, offering.offeringId);
+  if (error || !submission) return { error: error || new Error('Could not open a submission.') };
+
   // Through a function, not the table: since migration 047 a cadet cannot select an interactive row, and an
   // upsert needs the row to be selectable. The function checks the submission is theirs and the activity is an
   // interactive one of that assignment. The values stored are exactly the ones the table write stored.
@@ -622,16 +645,6 @@ export async function submitInteractionReport(ctx, { activity, offering, markdow
   });
   if (workErr) return { error: workErr };
 
-  if (offered?.gradingRole !== 'graded') {
-    // Practice: recorded, not chosen. Nothing more to do.
-    return { error: null, committed: false, role: offered?.gradingRole || 'unknown' };
-  }
-
-  const { error: commitErr } = await db.from('submissions').update({
-    chosen_activity_id: activity.id,
-    status: 'committed',
-    committed_at: new Date().toISOString(),
-  }).eq('id', submission.id);
-
-  return { error: commitErr, committed: !commitErr, role: 'graded' };
+  // Practice: recorded, not chosen. Nothing more to do.
+  return { error: null, committed: false, role: offered?.gradingRole || 'unknown' };
 }

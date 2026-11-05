@@ -26,6 +26,7 @@
       <div class="modal-head"><h2 id="lm-title">New assignment</h2><button class="modal-close" data-close>×</button></div>
       <div class="alert alert-error" id="lm-error" style="display:none"></div>
       <div class="alert alert-warn" id="lm-notice" style="display:none"></div>
+      <div class="alert alert-warn" id="lm-keys-notice" style="display:none"></div>
 
       <div class="row wrap" style="gap:14px">
         <div class="field grow" style="min-width:180px"><label for="f-course">Course &amp; term</label><select id="f-course"></select></div>
@@ -787,6 +788,17 @@
 
       model = existing ? modelFromLesson(existing) : blankModel();
 
+      // Stored answer guidance lives in the key table (migration 047), not in the lesson's content. Read it for
+      // the written activity so the boxes show the real key. A failed read is said out loud; the boxes then stay
+      // blank, and a save leaves the stored keys alone either way (faculty-lessons.js, "ANSWER KEYS IN THE EDITOR").
+      let keysNotice = '';
+      if (existing?.written?.id) {
+        const kr = await L.loadQuestionKeys(existing.written.id);
+        if (kr.error) keysNotice = 'The stored answer guidance could not be read, so those boxes are blank. '
+          + 'Saving will not change it. Reload to try again. (' + (kr.error.message || 'unknown error') + ')';
+        else L.showKeys(model.questions, kr.keys);
+      }
+
       if (prefill) {
         if (['preflight', 'interaction', 'choice'].includes(prefill.policy)) model.policy = prefill.policy;
         if (prefill.iid != null || prefill.iurl != null) {
@@ -810,6 +822,8 @@
       const pick = (pv, ev) => (pv != null && pv !== '' ? pv : (ev ?? ''));
       document.getElementById('lm-error').style.display = 'none';
       document.getElementById('lm-notice').style.display = 'none';
+      const kn = document.getElementById('lm-keys-notice');
+      kn.textContent = keysNotice; kn.style.display = keysNotice ? '' : 'none';
       document.getElementById('lm-title').textContent =
         id ? 'Edit assignment' : (prefill ? 'New assignment — review & save' : 'New assignment');
 

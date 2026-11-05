@@ -8,6 +8,18 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage D: lesson-editor keys, commit freeze and receipt, key-version guard; `v2-step2` branch)
+
+**What.** (1) The lesson editor shows the current answer key to staff who may read it, and a save never blanks or loses one (keys are sent only when edited; a failed key read shows a notice and the save leaves keys alone). (2) A lesson that has not opened yet: the receiver page says it opens on its date instead of "not set up yet" (`my_lesson_opens_at`). (3) Migration `059`: a replaced key version cannot be changed or deleted through the API roles; closes review item A M2. (4) Migration `048`: submitting is one server operation with a receipt; the server clock and the 120 second grace decide; a committed submission is frozen to the API roles; a late commit the assignment allows is marked late; the auto-grade no longer re-fires. Written answers save as a merge of changed answers, so a second tab cannot blank the first.
+
+**Files.** `048` and `059` with rollbacks; `site/js/faculty-lessons.js`, `site/faculty/lessons.html` (key boxes and a notice; the prefill parameters are unchanged); `site/js/student-data.js`; `site/student/interaction-submit.html` (the one edit to this frozen page: an import, one lookup line and one banner branch; URL and wire format unchanged); offline suites `test-lesson-keys.mjs`, `test-written-merge.mjs`, and `test-grace.mjs` rewritten for the server commit; scratch proofs `test_key_version_guard_scratch.py` and `test_commit_freeze_scratch.py` with `scratch_lib.py`.
+
+**Seen.** Offline 41 of 41 suites clean, 2690 checks. Scratch databases: 059 11 passed 0 failed; 048 44 passed 0 failed; gap attempts served before and after: 5 of 5 then 0, 8 of 8 then 0.
+
+**Deliberately not done.** Nothing applied to staging or production; no page was opened in a signed-in session, so the editor key boxes and the opening-date banner are proved offline only. The effort in a report cannot be proved: the tutor runs on claude.ai and the site only receives what it sends. An in-place edit of the current key is not guarded. Work committed before 048 has no receipt. Stage E paths on other branches were not tested against 048. The server's refusal text for a missed deadline replaces the page's own message.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 Stage D: answer keys out of content, release time in row-level security; `v2-step2` branch)
 
 - **Migration `app/047_release_gated_content.sql`, with its rollback.** Not applied anywhere; proved on a throwaway

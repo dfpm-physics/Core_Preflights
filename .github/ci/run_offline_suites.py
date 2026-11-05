@@ -39,7 +39,7 @@ OFFLINE = [
     "test-student-completion.mjs", "test-student-detail.mjs", "test-system-prefs.mjs",
     "test-tasks.mjs", "test-nav.mjs", "test-permission-block.mjs",
     "test-target-guard.mjs", "test-zero-checks.mjs", "test-new-page-guard.mjs",
-    "test-faculty-items.mjs",
+    "test-faculty-items.mjs", "test-lesson-keys.mjs", "test-written-merge.mjs",
     "test-faculty-questions.mjs",
     "test-faculty-scale.mjs",
     "test-faculty-terms.mjs",

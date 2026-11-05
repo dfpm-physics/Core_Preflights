@@ -37,7 +37,7 @@
     import { renderNav } from '../js/nav.js';
     import { initTheme } from '../js/theme.js';
     import { esc, fmtDate } from '../js/util.js';
-    import { resolveActivityBySlug, submitInteractionReport, loadAssignmentStatuses } from '../js/student-data.js';
+    import { resolveActivityBySlug, submitInteractionReport, loadAssignmentStatuses, lessonOpensAt } from '../js/student-data.js';
     import { questionsOf, answeredCount, pointsFromEffort } from '../js/schema.js';
 
     const PENDING_KEY = 'cp.pendingReport';
@@ -148,6 +148,9 @@
         resolved = await resolveActivityBySlug(ctx, payload.id);
       }
       const { activity, offering } = resolved;
+      // An unreleased lesson's content is not delivered, so its link resolves to nothing. Ask when it opens,
+      // so the page says that and not "not set up yet".
+      const opensLater = (!activity && payload.id) ? (await lessonOpensAt(payload.id)).opensAt : null;
 
       // If the same assignment also has a written path and the student has saved answers on
       // it, submitting here makes the interactive the graded one instead. Both sets of work
@@ -201,6 +204,10 @@
       if (!payload.id) {
         banner = `<div class="alert alert-warn">This link is missing its assignment id, so the report can’t be
           attached to an assignment. You can read it below, but it can’t be saved.</div>`;
+      } else if (!activity && opensLater) {
+        banner = `<div class="alert alert-warn">This lesson <strong>opens on ${esc(fmtDate(opensLater))}</strong>, so
+          this report can’t be submitted for a grade yet. You can read your report below, and run the lesson
+          again once it opens.</div>`;
       } else if (!activity) {
         banner = `<div class="alert alert-warn">This assignment isn’t set up yet — ask your instructor to add
           interaction “${esc(payload.id)}” before you submit.</div>`;

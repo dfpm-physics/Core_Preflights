@@ -440,6 +440,68 @@ export function dueByDayRow(dueByDay) {
 
 const pointsOf = (q) => (isNaN(Number(q?.points)) ? 0 : Number(q.points));
 
+/* ══════════════════════════════════════════════════════════════════════════════
+ * ANSWER KEYS IN THE EDITOR (migration 047)
+ *
+ * Stored answer guidance is no longer inside `activities.content`; it is in the staff-only key table. The
+ * editor therefore reads it from there and puts it in the two key boxes, and a save must never lose it.
+ *
+ * HOW A SAVE STAYS SAFE
+ *   * A box the director did not touch is NOT sent. The database files any key text it receives as a new
+ *     version when it differs from the stored one, and treats a blank or missing field as "no change", so
+ *     sending nothing is the one way a save is guaranteed to leave a key alone, whatever its stored form.
+ *   * A box the director edited is sent, and the database files it as a new key version.
+ *   * A NEW activity (a new lesson, or a copy into another term) has no stored key to protect, so what the
+ *     boxes hold is sent, and a copy does not lose its keys.
+ *   * Which boxes were filled from the key table is remembered on the question in `_keyShown`, a field that is
+ *     never stored (questionsForSave removes it).
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+const KEY_FIELDS = ['expected_response', 'correct_answer'];
+
+/** The current key text of each question of one activity, keyed by question id.
+ *  { keys, error }. A failed read is an error, never an empty map: an empty map would read as "no keys". */
+export async function loadQuestionKeys(activityId) {
+  const { data, error } = await db.from('questions')
+    .select('qid, question_keys(reference_text, variant_key, superseded_at)')
+    .eq('activity_id', activityId);
+  if (error) return { keys: null, error };
+  const keys = {};
+  for (const row of data || []) {
+    const cur = (row.question_keys || []).find(k => (k.variant_key || '') === '' && !k.superseded_at);
+    if (cur && cur.reference_text) keys[row.qid] = cur.reference_text;
+  }
+  return { keys, error: null };
+}
+
+/** Put stored key text into the boxes the editor draws. A multiple-choice or numerical question shows its
+ *  answer without the "Correct answer: " label the filing step added. Mutates and returns `questions`. */
+export function showKeys(questions, keys) {
+  for (const q of questions || []) {
+    const text = keys?.[q.id];
+    if (!text) continue;
+    const field = (q.type === 'multiple_choice' || q.type === 'numerical') ? 'correct_answer' : 'expected_response';
+    const shown = field === 'correct_answer' ? text.replace(/^Correct answer: ([^\n]*)$/, '$1') : text;
+    q[field] = shown;
+    (q._keyShown ||= {})[field] = shown;
+  }
+  return questions;
+}
+
+/** The questions as they should be stored. `keepKeys` is true for a NEW activity only. */
+export function questionsForSave(questions, { keepKeys }) {
+  return (questions || []).map(q => {
+    const out = { ...q };
+    const shown = q._keyShown || {};
+    for (const f of KEY_FIELDS) {
+      if (!keepKeys && f in out && shown[f] !== undefined && out[f] === shown[f]) delete out[f];
+      if (!keepKeys && f in out && shown[f] !== undefined && out[f] === '') delete out[f];
+    }
+    delete out._keyShown;
+    return out;
+  });
+}
+
 /** True iff a question that ALREADY existed changed its point value. Added/removed questions
  *  don't qualify — they have no graded rows to correct. */
 export function pointsChanged(oldQs, newQs) {
@@ -707,7 +769,7 @@ export async function saveLesson(ctx, model, editingOfferingId) {
     // lessons and press Save would silently remove the permission gate from it. A key added to
     // `activities.content` anywhere else has to be added here too, or it does not survive an edit.
     const content = {
-      questions: model.written.questions || [],
+      questions: questionsForSave(model.written.questions, { keepKeys: !existing.written }),
       reading_link: model.written.reading_link || null,
       reference_pdf: model.written.reference_pdf || null,
       reference_pages: model.written.reference_pages || null,
