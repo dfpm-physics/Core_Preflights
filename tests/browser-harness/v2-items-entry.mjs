@@ -205,7 +205,7 @@ const d = dir.page;
 check('director signed in', !/login\.html/.test(d.url()), d.url());
 await useCourse(d, ENTRY, 'Gate entry');
 let text = await open(d, '/site/faculty/items.html');
-check('the page says items stay unpublished until step 2', /stay unpublished until step 2/.test(text));
+check('the page says students cannot see an assignment until it is published', /cannot see an assignment until it is published/.test(text));
 check('the page says the course offering is the entry course and lists the seeded items', /Gate homework 1/.test(text) && /Gate exam 1/.test(text), text.slice(0, 200));
 check('there is no publish button anywhere on the page', !(await d.$('[data-pub]')) && !/\bPublish\b/.test(await d.evaluate(() => [...document.querySelectorAll('button, a.btn')].map(b => b.innerText).join(' | '))));
 const seededRowIsNew = await d.$$eval('#items-table tbody tr', rs => rs.filter(r => /Gate homework 1/.test(r.innerText)).map(r => r.dataset.new));

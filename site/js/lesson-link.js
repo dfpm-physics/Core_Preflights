@@ -94,7 +94,8 @@ const pick = (pv, ev) => (pv != null && pv !== '' ? pv : (ev ?? ''));
  *   num     the assignment number (stored as its position).
  *   iid     the tutor id. Without it the assignment id stands in, as in the older page.
  *   due_m / due_t   the M-day and T-day dates. The older page keys them by letter into a per-day map; so does this.
- *   pub     carried and shown, never acted on: this page saves unpublished.
+ *   pub     sets the Published control for the director to review. A link never publishes by itself: the form shows
+ *           the control ticked and the save is the director's.
  *
  * @param {object} prefill  from parsePrefill
  * @param {object[]} sections  the offering's sections, to place the dates

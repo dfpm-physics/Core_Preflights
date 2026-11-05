@@ -6,10 +6,13 @@
 //   DELIVERY (how the student does the work) and GRADING (how it is marked), because those are what
 //   the database checks. Kind only prefills those two boxes, from data in `assignment_kinds`.
 //
-// WHAT THE PAGE NEVER DOES
-//   It does not publish: every item it writes carries `entered_on_new_page = true` and
-//   `is_published = false`. Publishing is a separate act (publishItem, further down), and the database
-//   rules that used to refuse it for these items are removed by migration 079.
+// PUBLISHING
+//   A new row is always inserted with `is_published = false` and `entered_on_new_page = true`. Publishing is the LAST
+//   write of a save (publishStep), made only when the form carries the publish control and it differs from the stored
+//   state, so a refused publish leaves a complete, saved, unpublished item and says so (`publishError`). A prefill
+//   link only sets the control for the director to review; nothing here reads the link. The database rules that once
+//   refused publishing for these items are removed by migration 079; the older editor's sentence for the one refusal
+//   that remains is used (publishErrorText).
 //
 // DEADLINES
 //   Stored by the same helpers the older lesson editor uses (`dueRowsFor`, `defaultDueFrom`,
@@ -22,7 +25,7 @@
 //   Every function that touches the database is handed the client, so a test can pass a recording
 //   stub (tests/app-schema/test-faculty-items.mjs).
 
-import { NEW_PAGE_COLUMN } from './new-page-guard.js';
+import { NEW_PAGE_COLUMN, publishRefusalMessage } from './new-page-guard.js';
 import { dueRowsFor, defaultDueFrom, dueByDayRow, toEditorDue, pointsChanged, retroactivelyUpdateGrades } from './faculty-lessons.js';
 import { contentFromEditor, checkEditor, REMOVAL_LOCKED_NOTE } from './free-response.js';
 import { rolesFor, policyFromRoles, POLICIES } from './lesson-link.js';
@@ -811,6 +814,17 @@ const offeringColumns = (form, sched, pointsOwned, { position = true } = {}) => 
   ...(wantsTwoPaths(form) && (form.policy || 'choice') === 'choice' ? { switch_policy: form.switchPolicy || 'lock_on_commit' } : {}),
 });
 
+/** Set the published state of one offering. The form's choice, never a literal. Returns an error or null. */
+async function publishStep(db, offeringId, want) {
+  const r = await db.from('assignment_offerings').update({ is_published: !!want }).eq('id', offeringId);
+  return r.error || null;
+}
+
+/** The sentence for a publish that was refused: the older editor's plain text where it has one, else the database's own. */
+export function publishErrorText(error) {
+  return publishRefusalMessage(error) || ('Could not publish: ' + plainError(error));
+}
+
 async function replaceDueRows(db, offeringId, rows) {
   const del = await db.from('assignment_due_dates').delete().eq('assignment_offering_id', offeringId);
   if (del.error) return del.error;
@@ -902,6 +916,12 @@ export async function createItem(db, ctx, form) {
   const rows = buildSchedule(form, ctx.sections, made.offeringId).rows;
   const dueErr = await replaceDueRows(db, made.offeringId, rows);
   if (dueErr) return fail(dueErr);
+
+  // Last, so a refusal leaves a complete item that is simply not published yet.
+  if (form.publish === true) {
+    const pubErr = await publishStep(db, made.offeringId, true);
+    if (pubErr) return { error: null, ...made, publishError: pubErr };
+  }
 
   return { error: null, ...made };
 }
@@ -1241,6 +1261,10 @@ export async function updateItem(db, ctx, item, form, ack = null) {
 
   const err = await replaceDueRows(db, item.offeringId, sched.rows);
   if (err) return partial(err);
+  if (typeof form.publish === 'boolean' && form.publish !== (item.isPublished === true)) {
+    const pubErr = await publishStep(db, item.offeringId, form.publish);
+    if (pubErr) return { error: null, offeringId: item.offeringId, assignmentId: item.assignmentId, rescored, publishError: pubErr };
+  }
   return { error: null, offeringId: item.offeringId, assignmentId: item.assignmentId, rescored };
 }
 

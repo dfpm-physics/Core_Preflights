@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-pIdzyVdH7ZhccpLZXLZDrnwwJhmTmXJBl0h0rJxmDx0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-q4XctvjL/egQiZSK/8YOTtVbAjg1FqsqntUYv2KFC6s='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -98,11 +98,14 @@
         <div id="i-sections" style="margin:10px 0 14px"></div>
       </details>
 
+      <div class="field" style="margin:4px 0 10px">
+        <label class="check-inline"><input type="checkbox" id="i-publish"> <span>Published (visible to students)</span></label>
+        <div class="field-hint">Cadets see it only in the days before their own deadline, or from the date set under More options. Leave it unticked to keep working on it.</div>
+      </div>
       <div class="row" style="justify-content:flex-end;gap:10px;margin-top:6px">
         <button class="btn btn-ghost" data-close>Cancel</button>
         <button class="btn btn-primary" id="im-save">Save assignment</button>
       </div>
-      <div class="field-hint" style="text-align:right;margin-top:8px">Saving keeps the assignment unpublished.</div>
     </div>
   </div>
 
@@ -212,8 +215,8 @@
 
       const newBtn = `<span class="row" style="gap:8px"><a class="btn btn-ghost btn-sm" id="scale-link" href="scale.html">Letter scale</a>
         <button class="btn btn-primary" id="new-btn">+ New assignment</button></span>`;
-      const banner = `<div class="alert alert-info" id="unpublished-note">Assignments saved here stay unpublished.
-        Students cannot see an assignment until it is published.</div>`;
+      const banner = `<div class="alert alert-info" id="unpublished-note">Students cannot see an assignment until it is published.
+        Tick Published on its form when it is ready.</div>`;
       const rows = vm.items.map(rowHtml).join('');
       root.innerHTML = head(newBtn) + banner + (vm.items.length ? `<div class="table-wrap"><table id="items-table">
           <thead><tr><th>Assignment</th><th>Kind</th><th>Delivery</th><th>Grading</th><th>Points</th><th>Dates</th><th>State</th><th></th></tr></thead>
@@ -425,6 +428,7 @@
       $('i-points').value = item ? item.pointsText : '';
       $('i-late').checked = item ? item.lateAllowed : form.lateAllowed;
       $('i-bonus').checked = item ? item.isBonus : false;
+      $('i-publish').checked = item ? item.isPublished : false;
       $('i-prog').checked = item ? item.progIncluded : false;
 
       const path = mainOf(item);
@@ -532,7 +536,9 @@
       if (I.isTwoTrack(vm.sections)) syncTopDate();
       syncDueNote();
       formSlug = f.slug || '';
-      if (f.publishRequested) showNote('The link asked for this to be published. This page saves unpublished; publish it when it is ready.');
+      // The link's flag sets the control and nothing more: the director sees it ticked, and Save is theirs to press.
+      if (f.publishRequested != null) $('i-publish').checked = f.publishRequested;
+      if (f.publishRequested) showNote('The link asked for this to be published, so Published is ticked below. Check the dates, then save.');
     }
     /* Choosing an existing assignment carries the tutor and nothing else. */
     function applyOverlay(o, item) {
@@ -565,6 +571,7 @@
         lateAllowed: $('i-late').checked,
         isBonus: $('i-bonus').checked,
         progIncluded: $('i-prog').checked,
+        publish: $('i-publish').checked,
         allDate: $('i-alldate').value,
         dayDates,
         sameDate: $('i-same').checked,
@@ -639,6 +646,10 @@
         }
         closeForm();
         await load();
+        if (res.publishError) {
+          console.error('item publish refused', res.publishError);
+          window.alert('The assignment was saved, but it is not published. ' + I.publishErrorText(res.publishError));
+        }
         if (res.rescored) window.alert(res.rescored + ' grade(s) already given were updated to the new question points.');
       } finally { saving = false; $('im-save').disabled = false; }
     }

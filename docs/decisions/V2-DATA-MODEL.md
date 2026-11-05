@@ -1193,8 +1193,11 @@ anything in the schema. Where a gap remains it is listed here rather than closed
   kept one-way (true cannot be cleared). Setting it true on an older item would drop that item from the nightly list; that
   needs a deliberate write to the offering and is not guarded. It goes when Fall closes and the column is dropped; if the
   column is dropped first the worklist treats no `human_graded` typed response as eligible, never all of them.
-- **The worklist leaves a whole choice item out** when its typed side is marked by a person, so the tutor reports of
-  that item are not summarised overnight either. This is deliberate: the grading step finds the typed side by modality.
+- **A choice item whose typed side is marked by a person is left out of the nightly worklist whole, and its rollup
+  covers the tutor side only.** A person-marked typed side has no per-student AI assessment for the rollup to read.
+  A hand-started pull of such an item refuses unless `--tutor-only` is given; with that flag it says plainly that the
+  typed side is not in the pull. The status view uses the same rule, and the dashboard's "no rollup yet" line can stay
+  for that item. This is a known limit, not an oversight.
 
 ## 25. Gate seed, and the current-site pass
 

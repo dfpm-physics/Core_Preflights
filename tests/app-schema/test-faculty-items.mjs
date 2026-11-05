@@ -112,8 +112,10 @@ section('kinds prefill from data, and no code branches on kind');
   const src = read('site/js/faculty-items.js') + read('site/faculty/items.html');
   const hits = kinds.map(k => k.id).filter(id => new RegExp(`['"\`]${id}['"\`]`).test(src));
   eq('neither the module nor the page names a kind id', hits, []);
-  check('the page has no publish control and the module never sends is_published true',
-    !/is_published\s*:\s*true/.test(src) && !/>\s*Publish\s*</i.test(src) && !/data-pub/.test(src));
+  check('the module never writes a literal true; it publishes only what the form asks for',
+    !/is_published\s*:\s*true/.test(src) && /is_published:\s*!!want/.test(src));
+  check('the page has a publish control the director sees before saving',
+    /id="i-publish"/.test(read('site/faculty/items.html')) && /type="checkbox" id="i-publish"/.test(read('site/faculty/items.html')));
 }
 
 section('Mountain time, from any browser zone');
@@ -271,6 +273,32 @@ section('createItem: a failure part way leaves nothing behind');
     CALLS.filter(c => c.verb === 'delete').map(c => c.table), ['assignment_offerings', 'assignments']);
 }
 
+section('publishing: one control, the last write, and a refusal that leaves the item saved');
+{
+  reset({ 'assignments.select': [] });
+  let r = await I.createItem(db, ctx, form({ publish: true }));
+  eq('create with the control on succeeds', r.error, null);
+  const pubs = () => CALLS.filter(c => c.table === 'assignment_offerings' && c.verb === 'update' && c.payload && 'is_published' in c.payload);
+  eq('exactly one publish write', pubs().length, 1);
+  eq('it sets is_published on the new offering', [pubs()[0].payload, pubs()[0].filters.id], [{ is_published: true }, r.offeringId]);
+  eq('it is the last write, after the paths and the dates', CALLS[CALLS.length - 1], pubs()[0]);
+  eq('the offering row itself was still inserted unpublished', writesTo('assignment_offerings', 'insert')[0].payload.is_published, false);
+
+  for (const v of [false, undefined]) {
+    reset({ 'assignments.select': [] });
+    await I.createItem(db, ctx, form({ publish: v }));
+    eq(`control ${v === false ? 'off' : 'absent'}: no publish write`, pubs().length, 0);
+  }
+
+  reset({ 'assignments.select': [], 'assignment_offerings.update': () => ({ __error: { message: 'x assignment_offerings_publish_needs_active x' } }) });
+  r = await I.createItem(db, ctx, form({ publish: true }));
+  eq('a refused publish is not a failed save', r.error, null);
+  check('it comes back as publishError', !!r.publishError && r.offeringId);
+  eq('the saved item is not undone', CALLS.filter(c => c.verb === 'delete' && c.table !== 'assignment_due_dates').length, 0);
+  eq('the older editor plain sentence is used', I.publishErrorText(r.publishError), 'This term is not active, so its lessons cannot be published.');
+  check('any other error is named plainly', /^Could not publish: /.test(I.publishErrorText({ message: 'boom' })));
+}
+
 section('updateItem');
 const item = (o = {}) => ({ offeringId: 'o-1', assignmentId: 'a-1', slug: 'x', isNew: true,
   paths: [{ delivery: 'elsewhere', grading: 'imported', modality: 'external', activityId: 'act-1', content: {} }], ...o });
@@ -295,6 +323,27 @@ const item = (o = {}) => ({ offeringId: 'o-1', assignmentId: 'a-1', slug: 'x', i
   const upd = writesTo('assignment_offerings', 'update')[0].payload;
   check('the offering update never touches publish state or the marker',
     !('is_published' in upd) && !('entered_on_new_page' in upd) && !('position' in upd), Object.keys(upd).join());
+
+  // the publish control on a saved item
+  const pubsU = () => CALLS.filter(c => c.table === 'assignment_offerings' && c.verb === 'update' && c.payload && 'is_published' in c.payload);
+  const sel = { 'assignment_offerings.select': { id: 'o-1', entered_on_new_page: true } };
+  reset(sel);
+  r = await I.updateItem(db, ctx, item({ isPublished: false }), form({ delivery: 'in_person', grading: 'hand_entered', publish: true }));
+  eq('turning the control on publishes, as the last write', [r.error, pubsU().length, CALLS[CALLS.length - 1] === pubsU()[0], pubsU()[0]?.payload, pubsU()[0]?.filters.id],
+    [null, 1, true, { is_published: true }, 'o-1']);
+  reset(sel);
+  await I.updateItem(db, ctx, item({ isPublished: true }), form({ delivery: 'in_person', grading: 'hand_entered', publish: true }));
+  eq('already published and still on: no publish write', pubsU().length, 0);
+  reset(sel);
+  await I.updateItem(db, ctx, item({ isPublished: true }), form({ delivery: 'in_person', grading: 'hand_entered', publish: false }));
+  eq('turning it off unpublishes', pubsU().map(c => c.payload), [{ is_published: false }]);
+  reset(sel);
+  await I.updateItem(db, ctx, item({ isPublished: true }), form({ delivery: 'in_person', grading: 'hand_entered' }));
+  eq('a form that does not carry the control never changes publish state', pubsU().length, 0);
+  reset({ ...sel, 'assignment_offerings.update': (st) => (st.payload && 'is_published' in st.payload
+    ? { __error: { message: 'x assignment_offerings_publish_needs_active x' } } : undefined) });
+  r = await I.updateItem(db, ctx, item({ isPublished: false }), form({ delivery: 'in_person', grading: 'hand_entered', publish: true }));
+  check('a refused publish leaves the save done and says so', r.error === null && !!r.publishError && !r.partial);
 
   reset({ 'assignment_offerings.select': { id: 'o-1', entered_on_new_page: true }, 'submissions.select': { __count: 2 } });
   r = await I.updateItem(db, ctx, item(), form({ delivery: 'typed_response', grading: 'human_graded' }));
@@ -387,7 +436,7 @@ section('the page is for directors, and only directors see the entry');
   const html = read('site/faculty/items.html');
   check('the page checks the director test before it loads any item',
     html.indexOf('if (!isDirector())') > -1 && html.indexOf('if (!isDirector())') < html.indexOf('I.loadItems('));
-  check('the page says assignments stay unpublished and no longer waits for step 2', !/until step 2/.test(html) && /Assignments saved here stay unpublished/.test(html));
+  check('the page says students cannot see an assignment until it is published, and no longer waits for step 2', !/until step 2/.test(html) && /Students cannot see an assignment until it is published/.test(html));
   check('the page escapes what it renders (no data goes into innerHTML without esc)',
     !/\$\{(it|item|s)\.(title|slug|description|kindLabel|deliveryText|gradingText|dueText)\}/.test(html));
 }

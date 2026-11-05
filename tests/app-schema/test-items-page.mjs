@@ -5,7 +5,8 @@
 //   A page fault that shows only in a browser (an id the script reads that the markup does not have, an import that does
 //   not resolve, a policy hash that no longer matches the script) is the known risk of a page with no build step. This
 //   cannot run the page. It checks the things that make the page fail to start, and the rules the page must keep:
-//   a new assignment still opens short, new fields live behind "More options", nothing names a kind, no publish control.
+//   a new assignment still opens short, new fields live behind "More options", nothing names a kind, and the publish
+//   control is on the form where the director sees it, set by a link and never acted on by one.
 
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -81,7 +82,24 @@ section('the rules the page keeps');
 {
   const kinds = ['preflight', 'homework', 'case_study', 'group_project', 'quiz', 'exam', 'lab'];
   for (const k of kinds) check(`no kind id '${k}' is named`, !html.includes(`'${k}'`) && !html.includes(`"${k}"`));
-  check('no publish control', !/is_published:\s*true/.test(script) && !/id="[^"]*publish[^"]*"/i.test(markup));
+  check('the page never writes a literal publish true', !/is_published:\s*true/.test(script));
+  {
+    const modal = markup.slice(markup.indexOf('id="item-modal"'), markup.indexOf('id="dest-modal"'));
+    const before = modal.slice(0, modal.indexOf('<details'));
+    const after = modal.slice(modal.indexOf('</details>'));
+    check('the publish control is a checkbox outside More options, so it is always in view',
+      /<input type="checkbox" id="i-publish">/.test(modal) && !modal.slice(modal.indexOf('<details'), modal.indexOf('</details>')).includes('id="i-publish"')
+      && (before.includes('id="i-publish"') || after.includes('id="i-publish"')));
+    check('it sits before the Save button', modal.indexOf('id="i-publish"') < modal.indexOf('id="im-save"'));
+    check('the old line saying saving keeps it unpublished is gone', !/Saving keeps the assignment unpublished/.test(markup));
+  }
+  check('the form sends the control', /publish:\s*\$\('i-publish'\)\.checked/.test(script));
+  check('a link publish flag only sets the control, for the director to review', /if \(f\.publishRequested != null\) \$\('i-publish'\)\.checked = f\.publishRequested/.test(script));
+  check('an assignment opened for editing starts from its own state', /\$\('i-publish'\)\.checked = item \? item\.isPublished : false/.test(script));
+  check('choosing an existing assignment for a link does not carry the flag', !/publishRequested/.test(script.slice(script.indexOf('function applyOverlay'), script.indexOf('function showNote'))));
+  check('the note about the link no longer says the page saves unpublished', !/saves unpublished/.test(script));
+  check('a publish refusal is shown with the older editor sentence and the save is reported done', /res\.publishError/.test(script) && /publishErrorText\(res\.publishError\)/.test(script));
+  check('the list banner no longer says saving keeps assignments unpublished', !/stay unpublished/.test(script));
   check('no inline event handlers', !/\son[a-z]+="/i.test(markup));
   check('no javascript: link', !/javascript:/i.test(html));
   check('the new rows use form-grid', (markup.match(/class="form-grid"/g) || []).length >= 6);
