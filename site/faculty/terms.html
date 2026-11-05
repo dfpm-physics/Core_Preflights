@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-Kljqa6fyrSSwWQ0OVeH0XOV7TqYkWNXPs1QCNTTaQLQ=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-qxL1b3a13rsDd7YhMwDVkaavbCD5w9QvRN+IH47j4B8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Courses and terms · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -43,9 +43,14 @@
     }
 
     const head = () => `<div class="page-head"><h1>Courses and terms</h1>
-      <div class="sub">Create a course, a term or an offering, and copy one term's design into the next.</div></div>`;
+      <div class="sub">${isAdmin() ? 'Set up a course for a term, follow the checklist for each one, and copy one term into the next.'
+        : 'Follow the checklist for your course, and copy one term into the next.'}</div></div>`;
 
-    async function load(flash = '') {
+    let draft = null;      // the guided form as the person left it, kept across a reload after a partly failed setup
+    let setupNote = null;  // { text, ok } shown above the guided form
+    let lists = [];        // [{ o, data, error }] one checklist per course for a term
+
+    async function load(flash = '', focusId = '') {
       const root = $('main');
       if (!directs()) {
         root.innerHTML = head() + `<div class="empty-state"><div class="es-ic">🔒</div><h3>Directors only</h3>
@@ -60,9 +65,141 @@
       }
       state = { offerings: o.offerings, courses: c.courses, terms: c.terms, instructors: c.instructors };
       preview = null;
+      lists = await loadLists(focusId);
       root.innerHTML = head() + (flash ? `<div class="alert alert-info" id="flash">${esc(flash)}</div>` : '') +
-        listHtml() + (isAdmin() ? createHtml() : adminNote()) + rolloverHtml();
+        (isAdmin() ? setupHtml() : '') + checklistsHtml() + listHtml() + rolloverHtml() + advancedHtml();
       wire();
+    }
+
+    /* ── Set up a course for a term (administrators) ─────────────────────── */
+    function setupHtml() {
+      const d = draft || { course: { mode: state.courses.length ? 'existing' : 'new' }, term: { mode: state.terms.length ? 'existing' : 'new' }, directorId: '' };
+      const cm = d.course.mode, tm = d.term.mode;
+      const courseOpts = state.courses.map(c => `<option value="${esc(c.id)}"${d.course.id === c.id ? ' selected' : ''}>${esc(c.title)} (${esc(c.code)})</option>`).join('');
+      const termOpts = state.terms.map(t => `<option value="${esc(t.id)}"${d.term.id === t.id ? ' selected' : ''}>${esc(t.label)} (${esc(t.code)})</option>`).join('');
+      const people = state.instructors.map(i => `<option value="${esc(i.id)}"${d.directorId === i.id ? ' selected' : ''}>${esc(i.name)}</option>`).join('');
+      const v = (x) => esc(x || '');
+      const note = setupNote ? `<div class="alert ${setupNote.ok ? 'alert-info' : 'alert-error'}" id="${setupNote.ok ? 'setup-done' : 'setup-error'}">${esc(setupNote.text)}</div>` : '';
+      return `<section class="card" id="sec-setup"><h2>Set up a course for a term</h2>
+        <div class="sub" style="margin-bottom:12px">One form. Pick or make the course, pick or make the term, and choose who directs it. It starts not active; the checklist below takes you through the rest.</div>
+        ${note}
+        <h3>1. Course</h3>
+        <div class="row wrap" style="gap:20px;margin-bottom:10px">
+          <label class="check-inline"><input type="radio" name="su-cm" id="su-cm-existing" value="existing"${cm === 'existing' ? ' checked' : ''}${state.courses.length ? '' : ' disabled'}> <span>Use a course that already exists</span></label>
+          <label class="check-inline"><input type="radio" name="su-cm" id="su-cm-new" value="new"${cm === 'new' ? ' checked' : ''}> <span>Make a new course</span></label>
+        </div>
+        <div class="form-grid" id="su-course-existing" style="--fg-min:260px;max-width:520px;${cm === 'existing' ? '' : 'display:none'}">
+          <div class="field"><label for="su-course">Course</label><select id="su-course"><option value="">Choose…</option>${courseOpts}</select></div>
+        </div>
+        <div class="form-grid" id="su-course-new" style="--fg-min:180px;${cm === 'new' ? '' : 'display:none'}">
+          <div class="field"><label for="su-ccode">Code</label><input id="su-ccode" type="text" placeholder="phys-310" maxlength="40" value="${v(d.course.code)}">
+            <div class="field-hint">Lowercase letters, numbers and hyphens.</div></div>
+          <div class="field"><label for="su-ctitle">Title</label><input id="su-ctitle" type="text" placeholder="Physics 310" maxlength="120" value="${v(d.course.title)}"></div>
+          <div class="field"><label for="su-cdept">Department (optional)</label><input id="su-cdept" type="text" maxlength="80" value="${v(d.course.department)}"></div>
+        </div>
+
+        <h3>2. Term</h3>
+        <div class="row wrap" style="gap:20px;margin-bottom:10px">
+          <label class="check-inline"><input type="radio" name="su-tm" id="su-tm-existing" value="existing"${tm === 'existing' ? ' checked' : ''}${state.terms.length ? '' : ' disabled'}> <span>Use a term that already exists</span></label>
+          <label class="check-inline"><input type="radio" name="su-tm" id="su-tm-new" value="new"${tm === 'new' ? ' checked' : ''}> <span>Make a new term</span></label>
+        </div>
+        <div class="form-grid" id="su-term-existing" style="--fg-min:260px;max-width:520px;${tm === 'existing' ? '' : 'display:none'}">
+          <div class="field"><label for="su-term">Term</label><select id="su-term"><option value="">Choose…</option>${termOpts}</select></div>
+        </div>
+        <div class="form-grid" id="su-term-new" style="--fg-min:170px;${tm === 'new' ? '' : 'display:none'}">
+          <div class="field"><label for="su-tcode">Code</label><input id="su-tcode" type="text" placeholder="spring-2027" maxlength="40" value="${v(d.term.code)}"></div>
+          <div class="field"><label for="su-tlabel">Name</label><input id="su-tlabel" type="text" placeholder="Spring 2027" maxlength="60" value="${v(d.term.label)}"></div>
+          <div class="field"><label for="su-tstart">First class day</label><input id="su-tstart" type="date" value="${v(d.term.startsOn)}"></div>
+          <div class="field"><label for="su-tend">Last class day</label><input id="su-tend" type="date" value="${v(d.term.endsOn)}">
+            <div class="field-hint">The last day late work is taken.</div></div>
+        </div>
+
+        <h3>3. Director</h3>
+        <div class="form-grid" style="--fg-min:260px;max-width:520px">
+          <div class="field"><label for="su-director">Who directs it</label><select id="su-director"><option value="">Choose later</option>${people}</select>
+            <div class="field-hint">A director enters the roster and the assignments. You can add one later from the Staff tab.</div></div>
+        </div>
+
+        <h3>4. Finish</h3>
+        <button class="btn btn-primary" id="su-go">Set up this course</button>
+        <div class="field-hint" style="margin-top:6px">It is made not active. If a step fails, this page says what was made and what to do next.</div>
+      </section>`;
+    }
+
+    function readSetup() {
+      const mode = (name) => (document.querySelector(`input[name="${name}"]:checked`) || {}).value || 'existing';
+      return {
+        course: { mode: mode('su-cm'), id: $('su-course').value, code: $('su-ccode').value, title: $('su-ctitle').value, department: $('su-cdept').value },
+        term: { mode: mode('su-tm'), id: $('su-term').value, code: $('su-tcode').value, label: $('su-tlabel').value, startsOn: $('su-tstart').value, endsOn: $('su-tend').value },
+        directorId: $('su-director').value,
+      };
+    }
+
+    async function doSetup() {
+      const form = readSetup();
+      const res = await T.runSetup(db, form, state.offerings);
+      if (res.error) console.error('setup stopped', res.failedAt, res.error);
+      const text = T.setupMessage(res, form);
+      if (res.error) {
+        // Keep what was typed. Anything already made becomes a choice from the list, so a second press cannot make it twice.
+        draft = JSON.parse(JSON.stringify(form));
+        if (res.made.courseCreated) draft.course = { mode: 'existing', id: res.made.courseId };
+        if (res.made.termCreated) draft.term = { mode: 'existing', id: res.made.termId };
+        setupNote = { text, ok: false };
+        await load();
+        $('sec-setup')?.scrollIntoView({ block: 'start' });
+        return;
+      }
+      draft = null; setupNote = { text, ok: true };
+      await load('', res.made.offeringId);
+      setupNote = null;
+      $('sec-setup')?.scrollIntoView({ block: 'start' });
+    }
+
+    /* ── The checklist ───────────────────────────────────────────────────── */
+    // Directors see one for each course they direct. An administrator sees the course chosen in the menu, and the one just set up.
+    async function loadLists(focusId) {
+      const targets = T.checklistTargets(state.offerings, ctx.courses, { isAdmin: isAdmin(), currentOffering: ctx.currentOffering, focusId });
+      return Promise.all(targets.map(async (o) => {
+        const r = await T.loadChecklist(db, o.id, o.isActive);
+        if (r.error) console.error('checklist failed', r.error);
+        return { o, data: r.error ? null : r, error: r.error ? T.termsError(r.error) : '' };
+      }));
+    }
+
+    function checklistsHtml() {
+      if (!lists.length) return '';
+      return lists.map(({ o, data, error }) => {
+        const title = `${esc(o.courseTitle || o.courseCode)} · ${esc(o.termLabel)}`;
+        if (!data) return `<section class="card checklist" data-checklist="${esc(o.id)}"><h2>${title}</h2><div class="alert alert-error">Could not load the checklist: ${esc(error)}</div></section>`;
+        const steps = T.checklistSteps(data);
+        const go = (href, label) => `<a class="btn btn-secondary btn-sm" href="${href}" data-go="${href}" data-go-offering="${esc(o.id)}">${label}</a>`;
+        const button = {
+          roster: go('admin.html?tab=students', 'Go to the roster'),
+          assignments: go('items.html', 'Go to assignments'),
+          scale: go('scale.html', 'Go to the letter scale'),
+          active: isAdmin()
+            ? (o.isActive ? '' : `<button class="btn btn-secondary btn-sm" data-active-toggle="${esc(o.id)}" data-make="active">Make it active</button>`)
+            : `<span class="muted" style="font-size:0.85em">A site administrator switches a course on.</span>`,
+        };
+        const left = steps.filter(s => !s.done).length;
+        return `<section class="card checklist" data-checklist="${esc(o.id)}"><h2>${title}</h2>
+          <div class="sub" style="margin-bottom:6px">${left ? `${left} of 4 steps left.` : 'All four steps are done.'} Each button takes you to the page for that step.</div>
+          <ol class="cl-steps">${steps.map((s, i) => `<li data-step="${s.key}" data-done="${s.done ? '1' : '0'}">
+            <span class="cl-mark ${s.done ? 'done' : ''}" aria-label="${s.done ? 'Done' : 'Not done'}">${s.done ? '✓' : i + 1}</span>
+            <span><strong>${s.title}</strong> <span class="muted">· ${esc(s.detail)}</span></span>
+            <span>${button[s.key]}</span></li>`).join('')}
+            <li data-step="copy" class="cl-optional"><span class="cl-mark">+</span>
+              <span><strong>Copy from an earlier term</strong> <span class="muted">· optional, brings over assignments and the letter scale</span></span>
+              <span><a class="btn btn-ghost btn-sm" href="#sec-rollover" data-scroll="sec-rollover">Copy a term in</a></span></li>
+          </ol></section>`;
+      }).join('');
+    }
+
+    function advancedHtml() {
+      return `<details class="card" id="sec-advanced"><summary style="cursor:pointer;font-weight:600">Advanced: make a course, a term or an offering one form at a time</summary>
+        <div class="muted" style="margin:8px 0 0">These are the three separate forms the guided setup above uses. Most people never need them.</div>
+        ${isAdmin() ? createHtml() : adminNote()}</details>`;
     }
 
     /* ── What exists ─────────────────────────────────────────────────────── */
@@ -73,12 +210,12 @@
         <td><span class="score-badge ${o.isActive ? 'full' : 'pending'}">${o.isActive ? 'Active' : 'Inactive'}</span></td>
         <td>${canOpenStudents(o) ? `<a class="btn btn-ghost btn-sm" href="admin.html?tab=students" data-open-students="${esc(o.id)}">Students and roster import</a>` : ''}</td>
         ${isAdmin() ? `<td><button class="btn btn-ghost btn-sm" data-active-toggle="${esc(o.id)}" data-make="${o.isActive ? 'inactive' : 'active'}">${o.isActive ? 'Make inactive' : 'Make active'}</button></td>` : ''}</tr>`).join('');
-      return `<section class="card" id="sec-list"><h2>Offerings you can see</h2>` + (state.offerings.length
+      return `<section class="card" id="sec-list"><h2>Your courses, by term</h2>` + (state.offerings.length
         ? `<div class="table-wrap"><table id="offerings-table"><thead><tr><th>Course</th><th>Term</th><th>State</th><th></th>${isAdmin() ? '<th></th>' : ''}</tr></thead><tbody>${rows}</tbody></table></div>
            <div class="alert alert-error" id="active-error" style="display:none"></div>
-           <div class="field-hint" id="active-statement">A course has at most one active offering. Active steers the nightly jobs and the Health page; it does not hide a course from anyone.
-             ${isAdmin() ? 'Making an offering inactive deletes and hides nothing. Both changes ask for confirmation, with the number of enrolled cadets and published items.' : ''}</div>`
-        : `<div class="empty-state"><h3>No offerings yet</h3><p>${isAdmin() ? 'Create a course, a term and an offering below.' : 'Ask a site administrator to create one.'}</p></div>`) + `</section>`;
+           <div class="field-hint" id="active-statement">A course has at most one active term. Active steers the nightly jobs and the Health page; it does not hide a course from anyone.
+             ${isAdmin() ? 'Making a course inactive deletes and hides nothing. Both changes ask for confirmation, with the number of enrolled cadets and published assignments.' : ''}</div>`
+        : `<div class="empty-state"><h3>No courses set up yet</h3><p>${isAdmin() ? 'Use Set up a course for a term, above.' : 'Ask a site administrator to set one up and make you its director.'}</p></div>`) + `</section>`;
     }
 
     // The Students tab opens on whatever offering is current, so the link makes this one current first. It works the
@@ -86,9 +223,9 @@
     const canOpenStudents = (o) => isAdmin() || (ctx.courses || []).some(c => c.offeringId === o.id && c.role === 'director');
 
     function adminNote() {
-      return `<section class="card" id="sec-create"><h2>New course, term or offering</h2>
+      return `<div id="sec-create">
         <div class="alert alert-info" id="admin-only-note">Only a site administrator can create a course, a term or an offering.
-        Ask one to create the offering you need and make you its director; you can then copy a term into it below.</div></section>`;
+        Ask one to create the offering you need and make you its director; you can then copy a term into it below.</div></div>`;
     }
 
     /* ── Creating ────────────────────────────────────────────────────────── */
@@ -96,29 +233,29 @@
       const courseOpts = state.courses.map(c => `<option value="${esc(c.id)}">${esc(c.title)} (${esc(c.code)})</option>`).join('');
       const termOpts = state.terms.map(t => `<option value="${esc(t.id)}">${esc(t.label)} (${esc(t.code)})</option>`).join('');
       const people = state.instructors.map(i => `<option value="${esc(i.id)}">${esc(i.name)}</option>`).join('');
-      return `<section class="card" id="sec-create"><h2>New course, term or offering</h2>
+      return `<div id="sec-create">
         <div class="alert alert-error" id="create-error" style="display:none"></div>
 
         <h3>New course</h3>
-        <div class="row wrap" style="gap:14px;align-items:flex-end">
+        <div class="form-grid" style="--fg-min:170px">
           <div class="field"><label for="c-code">Code</label><input id="c-code" type="text" placeholder="phys-310" maxlength="40"></div>
-          <div class="field grow"><label for="c-title">Title</label><input id="c-title" type="text" placeholder="Physics 310" maxlength="120"></div>
+          <div class="field"><label for="c-title">Title</label><input id="c-title" type="text" placeholder="Physics 310" maxlength="120"></div>
           <div class="field"><label for="c-dept">Department (optional)</label><input id="c-dept" type="text" maxlength="80"></div>
-          <div class="field"><button class="btn btn-primary" id="c-save">Create course</button></div>
+          <div class="field-action"><button class="btn btn-primary" id="c-save">Create course</button></div>
         </div>
 
         <h3 style="margin-top:18px">New term</h3>
-        <div class="row wrap" style="gap:14px;align-items:flex-end">
+        <div class="form-grid" style="--fg-min:170px">
           <div class="field"><label for="t-code">Code</label><input id="t-code" type="text" placeholder="spring-2027" maxlength="40"></div>
           <div class="field"><label for="t-label">Label</label><input id="t-label" type="text" placeholder="Spring 2027" maxlength="60"></div>
           <div class="field"><label for="t-start">First class day</label><input id="t-start" type="date"></div>
           <div class="field"><label for="t-end">Last class day</label><input id="t-end" type="date"></div>
-          <div class="field"><button class="btn btn-primary" id="t-save">Create term</button></div>
+          <div class="field-action"><button class="btn btn-primary" id="t-save">Create term</button></div>
         </div>
         <div class="field-hint">The last class day is the last day late work is taken, so set it if the course accepts late work.</div>
 
         <h3 style="margin-top:18px">New offering of a course in a term</h3>
-        <div class="row wrap" style="gap:14px;align-items:flex-end">
+        <div class="form-grid" style="--fg-min:170px">
           <div class="field"><label for="o-course">Course</label><select id="o-course"><option value="">Choose…</option>${courseOpts}</select></div>
           <div class="field"><label for="o-term">Term</label><select id="o-term"><option value="">Choose…</option>${termOpts}</select></div>
           <div class="field"><label for="o-director">Director (optional)</label><select id="o-director"><option value="">None yet</option>${people}</select></div>
@@ -128,7 +265,7 @@
           <label class="check-inline"><input type="radio" name="o-active" id="o-active" value="yes"> <span>Active (only one offering of a course can be)</span></label>
         </div>
         <button class="btn btn-primary" id="o-save">Create offering</button>
-      </section>`;
+      </div>`;
     }
 
     const showCreateError = (t) => { const e = $('create-error'); e.textContent = t; e.style.display = 'block'; };
@@ -179,7 +316,7 @@
       busy = true;
       try {
         const impact = await T.offeringImpact(db, id);
-        if (impact.error) { console.error('impact failed', impact.error); showErr('Could not count the cadets and items, so nothing was changed: ' + T.termsError(impact.error)); return; }
+        if (impact.error) { console.error('impact failed', impact.error); showErr('Could not count the cadets and assignments, so nothing was changed: ' + T.termsError(impact.error)); return; }
         if (!window.confirm(T.activeConfirmText(o, makeActive, impact))) return;
         const r = await T.setOfferingActive(db, id, makeActive);
         if (r.error) { console.error('set active failed', r.error); showErr(T.termsError(r.error)); return; }
@@ -197,10 +334,10 @@
       const all = state.offerings.map(o => `<option value="${esc(o.id)}">${esc(o.courseTitle || o.courseCode)} · ${esc(o.termLabel)}${o.isActive ? ' (active)' : ''}</option>`).join('');
       const into = directedOfferings().map(o => `<option value="${esc(o.id)}">${esc(o.courseTitle || o.courseCode)} · ${esc(o.termLabel)}${o.isActive ? ' (active)' : ''}</option>`).join('');
       return `<section class="card" id="sec-rollover"><h2>Copy a term into the next</h2>
-        <p class="muted">Copies the design of one offering into another offering of the same course: the items, their questions and
+        <p class="muted">Copies the design of one offering into another offering of the same course: the assignments, their questions and
         keys, points and policies, and the letter scale. It never changes the offering you copy from, never publishes anything,
         and never copies students, sections, submissions or grades. It also does not copy part sets, groups or the group-work
-        flag, extensions, closures, excusals or the offering's settings: each item the dry run lists says so where it applies.</p>
+        flag, extensions, closures, excusals or the offering's settings: each assignment the dry run lists says so where it applies.</p>
         <div class="alert alert-error" id="ro-error" style="display:none"></div>
         <div class="row wrap" style="gap:14px">
           <div class="field grow"><label for="ro-from">Copy from</label><select id="ro-from"><option value="">Choose…</option>${all}</select></div>
@@ -244,7 +381,7 @@
         ${plan.skipped} already copied${plan.blocked ? `, <strong>${plan.blocked}</strong> held back (a half-written copy is in the way; see the notes)` : ''}.
         ${esc(scaleText)}${esc(shifted)} Nothing has been written yet. When you press Copy now the page reads both offerings again,
         so a slug may differ from the one listed here.</div>
-        <div class="table-wrap"><table id="ro-table"><thead><tr><th>Item</th><th>Content</th><th>Due</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        <div class="table-wrap"><table id="ro-table"><thead><tr><th>Assignment</th><th>Content</th><th>Due</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     }
 
     async function runPreview() {
@@ -273,22 +410,22 @@
         const res = await T.runRollover(db, fresh.plan, $('ro-to').value, fresh.src, { id: ctx.instructorRow?.id });
         if (res.error) {
           console.error('rollover failed', res.error);
-          const head = `Copied ${res.copied} item${res.copied === 1 ? '' : 's'}, then stopped at "${res.failedTitle || ''}": ${T.termsError(res.error, { partial: true })} `;
+          const head = `Copied ${res.copied} assignment${res.copied === 1 ? '' : 's'}, then stopped at "${res.failedTitle || ''}": ${T.termsError(res.error, { partial: true })} `;
           let tail;
           if (res.stayed && res.stayed.length) {
-            tail = `The item that failed could NOT be fully removed: ${res.stayed.join(' and ')} stayed behind. ` +
-              'Reload the page and look at the target before you do anything else. The next dry run lists a half-built copy and does not copy that item again.';
+            tail = `The assignment that failed could NOT be fully removed: ${res.stayed.join(' and ')} stayed behind. ` +
+              'Reload the page and look at the target before you do anything else. The next dry run lists a half-built copy and does not copy that assignment again.';
           } else if (res.outcomeUnknown) {
-            tail = 'It is not known whether that item was written. Reload the page and look at the target before you run this again; ' +
-              'the next dry run lists a half-built copy and holds that item back.';
+            tail = 'It is not known whether that assignment was written. Reload the page and look at the target before you run this again; ' +
+              'the next dry run lists a half-built copy and holds that assignment back.';
           } else {
-            tail = 'The item that failed was removed whole. Run it again to continue; items already copied are skipped.';
+            tail = 'The assignment that failed was removed whole. Run it again to continue; assignments already copied are skipped.';
           }
           roError(head + tail);
           $('ro-go').disabled = false;       // the message says to run it again; the next press reads both sides afresh
           return;
         }
-        const bits = [`Copied ${res.copied} item${res.copied === 1 ? '' : 's'}.`];
+        const bits = [`Copied ${res.copied} assignment${res.copied === 1 ? '' : 's'}.`];
         if (res.scaleCopied) bits.push('The letter scale was copied.');
         if (res.scaleError) bits.push('The letter scale could not be copied: ' + T.termsError(res.scaleError, { partial: true }));
         bits.push('Everything copied is unpublished.');
@@ -303,6 +440,28 @@
         $('t-save').addEventListener('click', () => guarded(saveTerm));
         $('o-save').addEventListener('click', () => guarded(saveOffering));
       }
+      if (isAdmin()) {
+        $('su-go').addEventListener('click', () => guarded(doSetup));
+        for (const [name, prefix] of [['su-cm', 'su-course'], ['su-tm', 'su-term']]) {
+          document.querySelectorAll(`input[name="${name}"]`).forEach(r => r.addEventListener('change', () => {
+            const isNew = document.querySelector(`input[name="${name}"]:checked`).value === 'new';
+            $(`${prefix}-existing`).style.display = isNew ? 'none' : '';
+            $(`${prefix}-new`).style.display = isNew ? '' : 'none';
+          }));
+        }
+      }
+      document.querySelectorAll('[data-scroll]').forEach(a => a.addEventListener('click', (ev) => {
+        ev.preventDefault(); $(a.dataset.scroll)?.scrollIntoView({ block: 'start' });
+      }));
+      document.querySelectorAll('[data-go-offering]').forEach(a =>
+        a.addEventListener('click', async (ev) => {
+          const o = state.offerings.find(x => x.id === a.dataset.goOffering);
+          if (!o) return;
+          setPref('cp.currentOffering', `${o.courseCode}|${o.termCode}`);
+          ev.preventDefault();
+          await flushPrefs();
+          location.href = a.href;
+        }));
       document.querySelectorAll('[data-open-students]').forEach(a =>
         a.addEventListener('click', async (ev) => {
           const o = state.offerings.find(x => x.id === a.dataset.openStudents);

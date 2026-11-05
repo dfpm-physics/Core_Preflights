@@ -28,6 +28,7 @@ export async function loadManifest(url = '../../textbook-pdfs/rag-manifest.txt')
  * `opts.aiDrafted()` says whether the item is graded by AI drafts (the page reads its grading select).
  */
 export function mountFreeResponse(host, opts = {}) {
+  const moreHost = opts.moreHost || null;
   let editor = null;
   let manifest = [];
   let notice = '';
@@ -81,9 +82,11 @@ export function mountFreeResponse(host, opts = {}) {
   }
 
   function draw() {
-    if (!editor) { host.innerHTML = ''; return; }
+    if (!editor) { host.innerHTML = ''; if (moreHost) moreHost.innerHTML = ''; return; }
     const pins = pinnedState(editor);
-    host.innerHTML = `
+    // The reading fields and the two pinned-question switches go to the page's "More options" when it gave a
+    // second place for them, so a new assignment opens short. With no second place they stay above the questions.
+    const readingHtml = `
       <div class="field"><label>Reading</label>
         <div class="row wrap" style="gap:12px"><div class="field grow" style="min-width:220px"><label style="font-weight:500">Reference file the grader reads</label>${pdfSelect()}</div>
           <div class="field"><label style="font-weight:500">Pages</label><input type="text" data-f="pages" value="${esc(editor.reference_pages)}" style="width:110px" placeholder="170-179"></div></div>
@@ -92,15 +95,18 @@ export function mountFreeResponse(host, opts = {}) {
         <label class="check-inline"><input type="checkbox" data-pin="reading_time"${pins.reading_time ? ' checked' : ''}> <span>Ask how long the reading took (worth 0 points)</span></label>
         <label class="check-inline"><input type="checkbox" data-pin="reading_reflection"${pins.reading_reflection ? ' checked' : ''}> <span>Ask for a reading reflection</span></label></div>
       <div class="field-hint">${esc(READING_TIME_NOTE)}</div>
-      ${notice ? `<div class="alert alert-info">${esc(notice)}</div>` : ''}
+      ${notice ? `<div class="alert alert-info">${esc(notice)}</div>` : ''}`;
+    const questionsHtml = `
       <div id="fr-list">${editor.questions.map(qHtml).join('')}</div>
       <div class="row wrap" style="gap:8px"><span class="muted">Add a question:</span>
         ${QUESTION_TYPES.map(t => `<button type="button" class="btn btn-ghost btn-sm" data-add="${t}">${esc(TYPE_LABEL[t])}</button>`).join('')}</div>
       ${opts.aiDrafted && opts.aiDrafted() ? `<div class="field-hint" style="margin-top:8px">Graded by AI drafts: each free-response question needs
         a description of a good answer above, because that is what the overnight draft is checked against. A person still reviews every grade.</div>` : ''}`;
+    if (moreHost) { moreHost.innerHTML = readingHtml; host.innerHTML = questionsHtml; }
+    else host.innerHTML = readingHtml + questionsHtml;
   }
 
-  host.addEventListener('input', (ev) => {
+  const onInput = (ev) => {
     const el = ev.target; if (!editor || !(el instanceof HTMLElement)) return;
     const f = el.dataset.f, qi = el.dataset.q;
     if (f === 'pages') editor.reference_pages = el.value;
@@ -115,9 +121,9 @@ export function mountFreeResponse(host, opts = {}) {
       if (f === 'expected_response' || f === 'correct_answer') q._keyShown = true;
     }
     opts.onChange && opts.onChange();
-  });
+  };
 
-  host.addEventListener('change', async (ev) => {
+  const onChange = async (ev) => {
     const el = ev.target; if (!editor || !(el instanceof HTMLElement)) return;
     if (el.dataset.pin) {
       const on = el.checked;
@@ -144,9 +150,9 @@ export function mountFreeResponse(host, opts = {}) {
       } catch (e) { notice = 'The figure could not be uploaded: ' + (e?.message || 'unknown error'); }
       draw(); opts.onChange && opts.onChange();
     }
-  });
+  };
 
-  host.addEventListener('click', (ev) => {
+  const onClick = (ev) => {
     const b = ev.target instanceof HTMLElement ? ev.target.closest('button') : null;
     if (!b || !editor) return;
     if (b.dataset.add) { editor.questions.push(newQuestion(b.dataset.add, editor.questions)); draw(); opts.onChange && opts.onChange(); return; }
@@ -157,7 +163,14 @@ export function mountFreeResponse(host, opts = {}) {
     else if (b.dataset.act === 'fig-clear') delete qs[i].figure_url;
     else return;
     draw(); opts.onChange && opts.onChange();
-  });
+  };
+
+  for (const h of [host, moreHost]) {
+    if (!h) continue;
+    h.addEventListener('input', onInput);
+    h.addEventListener('change', onChange);
+    h.addEventListener('click', onClick);
+  }
 
   return { set, get, setManifest, redraw: draw, showKeys };
 }

@@ -381,13 +381,13 @@ section('the page is for directors, and only directors see the entry');
 {
   const nav = await import('../../site/js/nav.js');
   const link = nav.FACULTY_LINKS.find(l => l.key === 'items');
-  check('the bar has an Items entry pointing at items.html', link?.href === 'items.html');
+  check('the bar has an Assignments entry pointing at items.html', link?.href === 'items.html');
   check('and it is director-only, not admin-only', link?.directorOnly === true && !link?.adminOnly);
   eq('the older pages link to the same file', G.NEW_PAGE_HREF, 'items.html');
   const html = read('site/faculty/items.html');
   check('the page checks the director test before it loads any item',
     html.indexOf('if (!isDirector())') > -1 && html.indexOf('if (!isDirector())') < html.indexOf('I.loadItems('));
-  check('the page no longer says items wait for step 2 and still says they stay unpublished', !/until step 2/.test(html) && /Items saved here stay unpublished/.test(html));
+  check('the page says assignments stay unpublished and no longer waits for step 2', !/until step 2/.test(html) && /Assignments saved here stay unpublished/.test(html));
   check('the page escapes what it renders (no data goes into innerHTML without esc)',
     !/\$\{(it|item|s)\.(title|slug|description|kindLabel|deliveryText|gradingText|dueText)\}/.test(html));
 }
@@ -598,6 +598,58 @@ section('database refusals read as the rule that was hit (review B S7)');
   check('a timeout does not claim nothing changed', !/Nothing was changed/.test(e({ code: '57014', message: 'canceling statement due to statement timeout' })));
   check('a dropped connection says it is not known', /not known/.test(e({ message: 'TypeError: Failed to fetch' })));
   check('a foreign key refusal is explained', /depend/.test(e({ code: '23503', message: 'x' })));
+}
+
+/* ───────────────────────────────────────────────────────────────────────────────────────── */
+section('the first-time form shows only what most assignments need');
+{
+  const html = read('site/faculty/items.html');
+  const more = html.indexOf('id="i-more"');
+  const moreEnd = html.indexOf('</details>', more);
+  const inMore = (id) => { const at = html.indexOf(`id="${id}"`); return at > more && at < moreEnd; };
+  check('the control is closed in the markup (no open attribute)', !/<details[^>]*id="i-more"[^>]*open/.test(html));
+  for (const id of ['i-kind', 'i-title', 'i-points', 'i-alldate']) check(`${id} is shown at once`, html.indexOf(`id="${id}"`) > -1 && !inMore(id));
+  for (const id of ['i-desc', 'i-delivery', 'i-grading', 'i-islug', 'i-iurl', 'i-late', 'i-bonus', 'i-prog', 'i-time', 'i-same', 'i-sections', 'i-daybox'])
+    check(`${id} is behind More options`, inMore(id));
+  check('the save opens the control for a refusal about a hidden field', /revealHidden\(problems\)/.test(html) && /\$\('i-more'\)\.open = true/.test(html));
+  check('an edit opens the control by the rule in faculty-items.js', /I\.needsMoreOptions\(/.test(html));
+}
+
+section('More options opens on its own when a hidden field is not at its default');
+{
+  const kind = { id: 'homework', default_delivery: 'online_questions', default_grading: 'auto_checked' };
+  const pre = I.prefillFromKind(kind);
+  const mt = [{ id: 'm1', meeting_days: ['M'] }, { id: 't1', meeting_days: ['T'] }];
+  const one = [{ id: 's1', meeting_days: ['W'] }];
+  const path = { modality: 'questions', delivery: 'online_questions', grading: 'auto_checked' };
+  const plain = { description: '', lateAllowed: true, isBonus: false, progIncluded: false, paths: [path] };
+  const sched = { time: '23:59', sectionDates: {}, dayDates: {} };
+  const opens = (over, s = sched, secs = one) => I.needsMoreOptions({ ...plain, ...over }, { prefill: pre, sections: secs, sched: s });
+  check('a new assignment is closed', I.needsMoreOptions(null, { prefill: pre, sections: one, sched }) === false);
+  check('a saved one with only defaults stays closed', opens({}) === false);
+  check('a description opens it', opens({ description: 'Read chapter 3' }));
+  check('late work turned off opens it', opens({ lateAllowed: false }));
+  check('bonus opens it', opens({ isBonus: true }));
+  check('Counts at Prog opens it', opens({ progIncluded: true }));
+  check('a delivery other than the kind fills in opens it', opens({ paths: [{ ...path, grading: 'human_graded' }] }));
+  check('a tutor opens it (its id and link are in there)', opens({ paths: [{ ...path, modality: 'interactive', delivery: 'interactive_tutor', grading: 'effort' }] }));
+  check('a path that cannot be changed here opens it', opens({ paths: [] }));
+  check('a deadline time other than 23:59 opens it', opens({}, { ...sched, time: '17:59' }));
+  check('a date for one section opens it', opens({}, { ...sched, sectionDates: { s1: '2026-12-10' } }));
+  check('two tracks with the same date stay closed', opens({}, { ...sched, dayDates: { M: '2026-12-10', T: '2026-12-10' } }, mt) === false);
+  check('two tracks with different dates open it', opens({}, { ...sched, dayDates: { M: '2026-12-10', T: '2026-12-14' } }, mt));
+  check('a date for only one track opens it', opens({}, { ...sched, dayDates: { M: '2026-12-10' } }, mt));
+}
+
+section('a refusal about a hidden field is pointed at that field');
+{
+  const t = I.moreOptionsTarget;
+  eq('the tutor id', t('The interactive tutor needs its id: lowercase letters, numbers and hyphens, the same id the lesson posts to.'), 'i-islug');
+  eq('the time', t('The time must look like 23:59.'), 'i-time');
+  eq('a section date', t('A section date is not a real date (x).'), 'i-sections');
+  eq('a track date', t('This course has M and T sections, which are due on different days. Enter a date for each (M, T), or tick "Both tracks get the same date" if that is what you mean.'), 'i-daybox');
+  eq('the title is always shown', t('Give the assignment a title.'), '');
+  eq('the points are always shown', t('Enter the points (0 or more).'), '');
 }
 
 process.exit(summary() ? 0 : 1);

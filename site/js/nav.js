@@ -77,11 +77,11 @@ export const FACULTY_LINKS = [
   // schema calls them; the FILE stays `lessons.html` because `site/faculty/lessons.html` is a
   // frozen contract URL (CORE.md §6) that AI-generated prefill links target — renaming it would
   // break every deployed artifact. Same for the student list.
-  { key: 'lessons',      label: 'Assignments',  href: 'lessons.html',           icon: 'assignments',   emoji: '📚' },
+  { key: 'lessons',      label: 'Older assignments', href: 'lessons.html',           icon: 'assignments',   emoji: '📚' },
   // Items: the newer entry page for every kind of work (v2). Directors only, because it writes.
   // An instructor who types the URL gets a plain "directors only" state, and the database refuses
   // the writes regardless.
-  { key: 'items',        label: 'Items',        href: 'items.html',             icon: 'grades',        emoji: '🧾', directorOnly: true },
+  { key: 'items',        label: 'Assignments',       href: 'items.html',             icon: 'grades',        emoji: '🧾', directorOnly: true },
   // Enter scores and Backlog: staff pages for hand-entered work. Ungated; the database decides who may write.
   { key: 'entry',        label: 'Enter scores', href: 'entry.html',             icon: 'grades',        emoji: '✏️' },
   { key: 'backlog',      label: 'Backlog',      href: 'backlog.html',           icon: 'progress',      emoji: '📋' },
@@ -282,6 +282,22 @@ function brandCourseHTML(ctx, courseTitle) {
     </span>`;
 }
 
+/** The destinations the bar offers this caller. Role is read for the CHOSEN course, never "anywhere". */
+export function visibleNavLinks(ctx) {
+  return (ctx.role === 'faculty' ? FACULTY_LINKS : STUDENT_LINKS)
+    .filter(l => !l.directorOnly || ctx.isDirectorForCurrent?.())
+    // adminOnly is the global flag, NOT a director of the current course.
+    .filter(l => !l.adminOnly || ctx.instructorRow?.is_global_admin);
+}
+
+/** The role word shown beside the name, for the chosen course. */
+export function navRoleLabel(ctx) {
+  return ctx.role === 'faculty'
+    ? (ctx.instructorRow?.is_global_admin ? 'Global admin'
+        : ctx.isDirectorForCurrent?.() ? 'Director' : 'Instructor')
+    : 'Student';
+}
+
 export function renderNav(ctx, opts = {}) {
   const { active = '', onCourseChange } = opts;
   const mount = opts.mount || document.getElementById('topnav') || (() => {
@@ -289,16 +305,9 @@ export function renderNav(ctx, opts = {}) {
     document.body.insertBefore(h, document.body.firstChild); return h;
   })();
 
-  const links = (ctx.role === 'faculty' ? FACULTY_LINKS : STUDENT_LINKS)
-    .filter(l => !l.directorOnly || ctx.isDirectorForCurrent?.())
-    // adminOnly is the global flag, NOT a director of the current course — the two are
-    // different powers and a director must not inherit the system tier by switching course.
-    .filter(l => !l.adminOnly || ctx.instructorRow?.is_global_admin);
+  const links = visibleNavLinks(ctx);
   const name = ctx.studentRow?.name || ctx.instructorRow?.name || 'Account';
-  const roleLabel = ctx.role === 'faculty'
-    ? (ctx.instructorRow?.is_global_admin ? 'Global admin'
-        : ctx.isDirectorForCurrent?.() ? 'Director' : 'Instructor')
-    : 'Student';
+  const roleLabel = navRoleLabel(ctx);
   const courseTitle = ctx.currentOffering ? ctx.courseTitleOf(ctx.currentOffering) : '';
 
   // Only disambiguate by term when the caller actually spans more than one. Showing

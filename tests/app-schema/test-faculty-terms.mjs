@@ -185,7 +185,7 @@ section('the plan: what would be copied');
   eq('a retired question is not copied', p1.activities[0].questions.length, 1);
   eq('the tutor link is removed', p2.activities[0].activity.content.artifact_url, null);
   eq('the tutor gets a new id with its stem', p2.activities[0].activity.slug, 'lesson-02-charge-deadbeef');
-  check('the tutor copy says it has no link and where to set one', p2.notes.some(n => /without its link, under a new tutor id/.test(n) && /items page/.test(n)));
+  check('the tutor copy says it has no link and where to set one', p2.notes.some(n => /without its link, under a new tutor id/.test(n) && /assignments page/.test(n)));
   check('a written path gets a fresh generated slug, not the old one', p1.activities[0].activity.slug !== 'old-written' && /^c-1-hw-1-spring-2027-written-/.test(p1.activities[0].activity.slug));
   check('a published source item is noted as a draft in the copy', p1.notes.some(n => /copy is a draft/.test(n)));
   eq('the letter scale is to be copied', blank.scale, 'copy');
@@ -235,7 +235,7 @@ section('lineage follows the whole chain, and a half-built copy is never taken f
   // Half built: the lineage is there but the paths are not
   p = plan(fixture({ targetDone: ['as-1'], targetPaths: 0 }));
   check('a copy with fewer paths than its source is NOT counted as already copied', !p.items[0].alreadyDone && p.items[0].blocked, JSON.stringify(p.items[0]));
-  check('...it is held back, not copied a second time, and says what to do', p.toCopy === 1 && p.blocked === 1 && /not whole/.test(p.items[0].notes[0]) && /items page/.test(p.items[0].notes[0]));
+  check('...it is held back, not copied a second time, and says what to do', p.toCopy === 1 && p.blocked === 1 && /not whole/.test(p.items[0].notes[0]) && /assignments page/.test(p.items[0].notes[0]));
   // Orphan: an assignment with lineage and no offering at all
   f = fixture();
   f.src.lineage = f.tgt.lineage = [...f.src.lineage,
@@ -253,7 +253,7 @@ section('dates on a shift: an empty per-day map on a two-track course is not cop
   f.src.items[0] = { ...f.src.items[0], due_by_day: {}, assignment_due_dates: [] };
   const p = T.buildRolloverPlan(f.src, f.tgt, { dates: 'shift', days: '7' }, rand);
   eq('the item with one main date and no per-day dates gets BLANK dates', [p.items[0].offering.due_at, p.items[0].offering.due_by_day, p.items[0].dueRows], [null, {}, []]);
-  check('...with a note that names why and where to fix it', /M-day and T-day/.test(p.items[0].notes.join(' ')) && /items page/.test(p.items[0].notes.join(' ')));
+  check('...with a note that names why and where to fix it', /M-day and T-day/.test(p.items[0].notes.join(' ')) && /assignments page/.test(p.items[0].notes.join(' ')));
   eq('...and the dry run says blank, not a plausible date', p.items[0].dueText, 'blank (see note)');
   eq('the item that does have a per-day map is shifted as before', p.items[1].offering.due_at, '2026-12-18T06:59:59.000Z');
   // The same item on a one-track course is shifted: there the empty map is not the trap.
@@ -300,7 +300,7 @@ section('the letter scale: one step, never into an active target (B2 S5)');
   reset();
   RPC_RESULT = { data: null, error: { code: '22023', message: 'save_letter_scale: A cutoff can have three decimal places at most. Nothing was saved.' } };
   const r3 = await T.runRollover(db, q, 'co-spring', g.src, { id: 'me' });
-  check('a refused scale is reported, and the items were still copied', r3.copied === 2 && !!r3.scaleError && r3.scaleCopied === false);
+  check('a refused scale is reported, and the assignments were still copied', r3.copied === 2 && !!r3.scaleError && r3.scaleCopied === false);
 }
 
 section('the write: only design tables, no publish, no change to the source');
@@ -350,13 +350,13 @@ section('a failure removes the half-made item and stops');
   FAIL = { table: 'offering_activities', verb: 'insert', error: { message: 'boom', code: 'XX000' } };
   OVERRIDE = { 'assignment_offerings.delete': { data: null, error: { message: 'TypeError: Failed to fetch' } } };
   let r2 = await T.runRollover(db, plan, 'co-spring', src, { id: 'me' });
-  check('a failed undo names what stayed behind, offering row and item', r2.stayed.length === 2 && /offering row/.test(r2.stayed[0]) && /the item itself/.test(r2.stayed[1]), JSON.stringify(r2.stayed));
+  check('a failed undo names what stayed behind, offering row and assignment', r2.stayed.length === 2 && /offering row/.test(r2.stayed[0]) && /the assignment itself/.test(r2.stayed[1]), JSON.stringify(r2.stayed));
   check('...and does not try to delete the item its offering row still protects', CALLS.filter(c => c.verb === 'delete').map(c => c.table).join() === 'assignment_offerings');
   reset();
   FAIL = { table: 'offering_activities', verb: 'insert', error: { message: 'boom', code: 'XX000' } };
   OVERRIDE = { 'assignments.delete': { data: null, error: { code: '23503', message: 'fk' } } };
   r2 = await T.runRollover(db, plan, 'co-spring', src, { id: 'me' });
-  check('a failed delete of the item alone is reported too', r2.stayed.length === 1 && /the item itself/.test(r2.stayed[0]));
+  check('a failed delete of the item alone is reported too', r2.stayed.length === 1 && /the assignment itself/.test(r2.stayed[0]));
   // A lost response at the very first write: nothing is known to have been made.
   reset();
   FAIL = { table: 'assignments', verb: 'insert', error: { message: 'TypeError: Failed to fetch' } };
@@ -463,10 +463,10 @@ section('active or inactive: a statement, a count, a confirm, one active offerin
     'assignment_offerings.select': { data: null, count: 5, error: null },
   };
   const imp = await T.offeringImpact(db, 'b');
-  eq('the impact counts the enrolled cadets and the published items', [imp.error, imp.enrolled, imp.published], [null, 18, 5]);
+  eq('the impact counts the enrolled cadets and the published assignments', [imp.error, imp.enrolled, imp.published], [null, 18, 5]);
   const txt = T.activeConfirmText(offs[1], true, imp);
-  check('the confirmation states both counts and the statement', /18 enrolled cadets/.test(txt) && /5 published items/.test(txt) && /nightly jobs/.test(txt), txt);
-  check('one cadet and one item use the singular', /1 enrolled cadet and 1 published item\./.test(T.activeConfirmText(offs[1], false, { enrolled: 1, published: 1 })));
+  check('the confirmation states both counts and the statement', /18 enrolled cadets/.test(txt) && /5 published assignments/.test(txt) && /nightly jobs/.test(txt), txt);
+  check('one cadet and one assignment use the singular', /1 enrolled cadet and 1 published assignment./.test(T.activeConfirmText(offs[1], false, { enrolled: 1, published: 1 })));
   reset();
   OVERRIDE = { 'sections.select': { data: null, error: { message: 'down' } } };
   check('a count that cannot be read is an error, so no confirm is shown', !!(await T.offeringImpact(db, 'b')).error);
@@ -489,6 +489,63 @@ section('active or inactive: a statement, a count, a confirm, one active offerin
   const html = read('site/faculty/terms.html');
   check('the control is for a global admin only', /isAdmin|is_global_admin|isGlobalAdmin/.test(html) && /toggleActive/.test(html));
   check('the page asks with window.confirm before it writes', html.indexOf('window.confirm') > -1 && html.indexOf('window.confirm') < html.indexOf('T.setOfferingActive'));
+}
+
+/* ───────────────────────────────────────────────────────────────────────────────────────── */
+section('the guided setup: one form over the same three writes');
+{
+  const newBoth = { course: { mode: 'new', code: 'mock-101', title: 'Mock Course' }, term: { mode: 'new', code: 'mock-term', label: 'Mock Term', startsOn: '2027-01-10', endsOn: '2027-05-10' }, directorId: 'person' };
+  reset();
+  let r = await T.runSetup(db, newBoth, []);
+  eq('everything is made in order: course, term, then the course for the term', writes().map(c => c.table), ['courses', 'terms', 'course_offerings', 'staff_assignments']);
+  eq('it succeeds with nothing failed', [r.error, r.failedAt], [null, null]);
+  eq('the course for the term is made not active', writes().find(c => c.table === 'course_offerings').payload.is_active, false);
+  check('the done message names what was made and has no mention of an offering', /Done\. Made the course “Mock Course”, the term “Mock Term”/.test(T.setupMessage(r, newBoth)) && !/offering/i.test(T.setupMessage(r, newBoth)));
+
+  reset();
+  r = await T.runSetup(db, { course: { mode: 'existing', id: 'c1' }, term: { mode: 'existing', id: 't1' }, directorId: '' }, []);
+  eq('an existing course and term make only the link', writes().map(c => c.table), ['course_offerings']);
+
+  reset();
+  r = await T.runSetup(db, { course: { mode: 'existing', id: 'c1' }, term: { mode: 'existing', id: 't1' } }, [{ courseId: 'c1', termId: 't1' }]);
+  eq('a course already set up for that term is refused before any write', [writes().length, r.refused], [0, true]);
+  check('...in a sentence', /already set up/.test(T.setupMessage(r, {})));
+
+  reset();
+  FAIL = { table: 'terms', verb: 'insert', error: { code: '23505', message: 'duplicate key "terms_code_key"' } };
+  r = await T.runSetup(db, newBoth, []);
+  eq('a term that fails stops there: the course stays made, nothing else is written', [r.failedAt, r.made.courseCreated, writes().map(c => c.table)], ['term', true, ['courses', 'terms']]);
+  const msg = T.setupMessage(r, newBoth);
+  check('the message says what was made, what failed, and what to do next',
+    /Made the course “Mock Course”\./.test(msg) && /The term could not be made/.test(msg) && /press Set up again/.test(msg) && !/offering/i.test(msg), msg);
+
+  reset();
+  FAIL = { table: 'courses', verb: 'insert', error: { code: '42501', message: 'row-level security' } };
+  r = await T.runSetup(db, newBoth, []);
+  check('a course that fails makes nothing and says so', r.failedAt === 'course' && /Nothing was made/.test(T.setupMessage(r, newBoth)) && writes().length === 1);
+
+  reset();
+  FAIL = { table: 'staff_assignments', verb: 'insert', error: { message: 'x' } };
+  r = await T.runSetup(db, newBoth, []);
+  check('a director that cannot be added leaves the rest done and says where to add them', !r.error && !!r.directorError && /Staff tab/.test(T.setupMessage(r, newBoth)));
+
+  check('the form is checked in words before any write', T.checkSetup({ course: { mode: 'existing' }, term: { mode: 'new', code: 'x' } }).length >= 2);
+}
+
+section('the checklist');
+{
+  const steps = T.checklistSteps({ enrolled: 0, assignments: 3, scaleSaved: false, isActive: false });
+  eq('four steps in order', steps.map(s => s.key), ['roster', 'assignments', 'scale', 'active']);
+  eq('done and not done come from the counts', steps.map(s => s.done), [false, true, false, false]);
+  eq('all done', T.checklistSteps({ enrolled: 5, assignments: 1, scaleSaved: true, isActive: true }).every(s => s.done), true);
+  reset();
+  const html = read('site/faculty/terms.html');
+  check('the guided page has the set-up form, the checklist and the old forms under Advanced',
+    /Set up a course for a term/.test(html) && /checklistsHtml\(\)/.test(html) && /id="sec-advanced"/.test(html));
+  const guided = html.slice(html.indexOf('function setupHtml'), html.indexOf('function readSetup'));
+  check('no "offering" in the words on the guided form', !/offering/i.test(guided.replace(/offeringId|c-offering/g, '')), (guided.match(/.{20}offering.{20}/i) || [''])[0]);
+  check('the copy into the next term is reachable from the checklist', /data-scroll="sec-rollover"/.test(html));
+  check('turning a course on stays a site-administrator button', /isAdmin\(\)\s*\n?\s*\? \(o\.isActive/.test(html));
 }
 
 process.exit(summary() ? 0 : 1);

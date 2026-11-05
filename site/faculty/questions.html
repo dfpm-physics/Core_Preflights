@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-7sU19Ut7/RRxfeyQKXwjHAK+yVrQNTikj/q4Ba+dCmM=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-dAqOKZBp7zeqY07yaqmAemLDYdG+N1Gmhc4xxUTu1FQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Questions · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -21,12 +21,12 @@
     <div class="modal" style="max-width:780px">
       <div class="modal-head"><h2 id="qm-title">Add a question</h2><button class="modal-close" data-close>×</button></div>
       <div class="alert alert-error" id="qm-error" style="display:none"></div>
-      <div class="row wrap" style="gap:14px">
-        <div class="field" style="min-width:150px;flex:0 0 170px"><label for="q-qid">Question id</label><input id="q-qid" type="text" maxlength="64">
+      <div class="form-grid" style="--fg-min:150px">
+        <div class="field"><label for="q-qid">Question id</label><input id="q-qid" type="text" maxlength="64">
           <div class="field-hint" id="q-qid-note">Never reused, even after the question is retired.</div></div>
-        <div class="field grow" style="min-width:220px"><label for="q-format">Format</label><select id="q-format"></select>
+        <div class="field"><label for="q-format">Format</label><select id="q-format"></select>
           <div class="field-hint" id="q-format-note"></div></div>
-        <div class="field" style="min-width:110px;flex:0 0 120px"><label for="q-points">Points</label><input id="q-points" type="text" inputmode="decimal">
+        <div class="field"><label for="q-points">Points</label><input id="q-points" type="text" inputmode="decimal">
           <div class="field-hint">Two decimals at most.</div></div>
       </div>
       <div class="field"><label for="q-prompt">Question</label><textarea id="q-prompt" maxlength="5000" style="min-height:90px"></textarea></div>
@@ -39,24 +39,24 @@
       </div>
 
       <div id="q-numeric-part" style="display:none">
-        <div class="row wrap" style="gap:14px">
-          <div class="field" style="min-width:130px"><label for="q-value">Correct value</label><input id="q-value" type="text" inputmode="decimal">
+        <div class="form-grid" style="--fg-min:150px">
+          <div class="field"><label for="q-value">Correct value</label><input id="q-value" type="text" inputmode="decimal">
             <div class="field-hint">0 is a real value.</div></div>
-          <div class="field" style="min-width:130px"><label for="q-tolabs">Tolerance (absolute)</label><input id="q-tolabs" type="text" inputmode="decimal">
+          <div class="field"><label for="q-tolabs">Tolerance (absolute)</label><input id="q-tolabs" type="text" inputmode="decimal">
             <div class="field-hint">Required when the value is 0.</div></div>
-          <div class="field" style="min-width:130px"><label for="q-tolpct">Tolerance (percent)</label><input id="q-tolpct" type="text" inputmode="decimal">
+          <div class="field"><label for="q-tolpct">Tolerance (percent)</label><input id="q-tolpct" type="text" inputmode="decimal">
             <div class="field-hint">Either tolerance counts; the edge is included.</div></div>
         </div>
-        <div class="row wrap" style="gap:14px">
-          <div class="field" style="min-width:130px"><label for="q-sigfigs">Significant figures</label><input id="q-sigfigs" type="text" inputmode="numeric"></div>
-          <div class="field" style="min-width:130px"><label for="q-sigmode">Significant figures rule</label><select id="q-sigmode"></select></div>
-          <div class="field" style="min-width:130px"><label for="q-unit">Unit</label><input id="q-unit" type="text" maxlength="60"></div>
-          <div class="field" style="min-width:130px"><label for="q-unitmode">Unit rule</label><select id="q-unitmode"></select></div>
+        <div class="form-grid" style="--fg-min:150px">
+          <div class="field"><label for="q-sigfigs">Significant figures</label><input id="q-sigfigs" type="text" inputmode="numeric"></div>
+          <div class="field"><label for="q-sigmode">Significant figures rule</label><select id="q-sigmode"></select></div>
+          <div class="field"><label for="q-unit">Unit</label><input id="q-unit" type="text" maxlength="60"></div>
+          <div class="field"><label for="q-unitmode">Unit rule</label><select id="q-unitmode"></select></div>
         </div>
-        <div class="row wrap" style="gap:14px">
-          <div class="field grow" style="min-width:220px"><label for="q-aliases">Other ways to write the unit</label><input id="q-aliases" type="text" placeholder="m/s2, m s^-2">
+        <div class="form-grid" style="--fg-min:150px">
+          <div class="field"><label for="q-aliases">Other ways to write the unit</label><input id="q-aliases" type="text" placeholder="m/s2, m s^-2">
             <div class="field-hint">Separate with commas.</div></div>
-          <div class="field grow" style="min-width:180px"><label for="q-unithint">Unit hint shown to the student</label><input id="q-unithint" type="text" maxlength="60"></div>
+          <div class="field"><label for="q-unithint">Unit hint shown to the student</label><input id="q-unithint" type="text" maxlength="60"></div>
         </div>
       </div>
 
@@ -206,7 +206,7 @@
       return `<div class="page-head"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div><h1>Questions</h1><div class="sub">${sub}</div></div>${extra}</div></div>`;
     }
-    const back = `<a class="btn btn-ghost btn-sm" href="items.html">Back to Items</a>`;
+    const back = `<a class="btn btn-ghost btn-sm" href="items.html">Back to Assignments</a>`;
 
     async function load() {
       const root = $('main');
@@ -217,11 +217,11 @@
         return;
       }
       const id = offeringId();
-      if (!id) { root.innerHTML = head(back) + `<div class="alert alert-warn">Open this page from an item on the Items page.</div>`; return; }
+      if (!id) { root.innerHTML = head(back) + `<div class="alert alert-warn">Open this page from an assignment on the Assignments page.</div>`; return; }
       const r = await Q.loadItem(db, id);
       if (r.error) { console.error('question page load failed', r.error); root.innerHTML = head(back) + `<div class="alert alert-error">${esc(Q.questionError(r.error))}</div>`; return; }
       if (!r.item || r.item.courseOfferingId !== ctx.currentOffering) {
-        root.innerHTML = head(back) + `<div class="alert alert-warn">That item is not in the course offering you have selected. Choose its course from the menu at the top.</div>`;
+        root.innerHTML = head(back) + `<div class="alert alert-warn">That assignment is not in the course offering you have selected. Choose its course from the menu at the top.</div>`;
         return;
       }
       item = r.item;
@@ -248,9 +248,9 @@
       const live = questions.filter(q => !q.isRetired);
       const sub = `${esc(item.title)} · ${esc(auto ? 'auto-checked' : 'human graded')}`;
       const pointsNote = auto
-        ? `<div class="alert alert-info" id="points-note">This item is worth <strong id="item-points">${esc(String(item.points))}</strong> points, the sum of its ${live.length} question${live.length === 1 ? '' : 's'}. The database keeps the two equal; you do not enter the item's points.</div>`
-        : `<div class="alert alert-info" id="points-note">This item is human graded, so its points (<strong id="item-points">${esc(String(item.points))}</strong>) are set on the Items page. The questions add up to <strong>${esc(String(Q.sumPoints(questions)))}</strong>.</div>`;
-      const unpub = `<div class="alert alert-info" id="unpublished-note">This item stays unpublished. Students cannot see its questions, and no student can read an answer key at any time.</div>`;
+        ? `<div class="alert alert-info" id="points-note">This assignment is worth <strong id="item-points">${esc(String(item.points))}</strong> points, the sum of its ${live.length} question${live.length === 1 ? '' : 's'}. The database keeps the two equal; you do not enter the assignment's points.</div>`
+        : `<div class="alert alert-info" id="points-note">This assignment is human graded, so its points (<strong id="item-points">${esc(String(item.points))}</strong>) are set on the Assignments page. The questions add up to <strong>${esc(String(Q.sumPoints(questions)))}</strong>.</div>`;
+      const unpub = `<div class="alert alert-info" id="unpublished-note">This assignment stays unpublished. Students cannot see its questions, and no student can read an answer key at any time.</div>`;
       const rows = questions.map((q, i) => rowHtml(q, i)).join('');
       const aiLeft = Q.uncheckedAiQuestions(questions);
       const aiNote = aiLeft.length
@@ -363,24 +363,24 @@
 
     const optionList = (values, labels) => values.map(v => `<option value="${esc(v)}">${esc(labels?.[v] || v)}</option>`).join('');
 
-    function choiceRow(c, correct, type) {
-      return `<div class="row" style="gap:8px;margin-bottom:6px;align-items:center" data-choice="${esc(c.id)}">
-        <label class="check-inline" title="This is a correct answer"><input type="${type}" name="q-correct" data-correct ${correct ? 'checked' : ''}> <span>Correct</span></label>
-        <span class="muted" style="width:24px">${esc(c.id)}</span>
-        <input type="text" class="grow" data-text maxlength="400" value="${esc(c.text)}" style="flex:1">
-        <button class="btn btn-ghost btn-sm" type="button" data-drop title="Remove this choice">×</button></div>`;
+    function wireChoiceRow(r) {
+      r.querySelector('[data-drop]').addEventListener('click', () => r.remove());
+      r.querySelector('[data-correct]').addEventListener('change', (e) => {
+        const rows = [...$('q-choices').querySelectorAll('[data-choice]')];
+        const now = rows.filter(x => x.querySelector('[data-correct]').checked && x !== r).map(x => x.dataset.choice);
+        const next = Q.applyCorrectToggle(now, r.dataset.choice, e.target.checked, $('q-format').value);
+        rows.forEach(x => { x.querySelector('[data-correct]').checked = next.includes(x.dataset.choice); });
+      });
     }
-    function currentChoiceType() { return $('q-format').value === 'multiple_select' ? 'checkbox' : 'radio'; }
     function addChoiceRow(c) {
       const rows = [...$('q-choices').querySelectorAll('[data-choice]')].map(r => ({ id: r.dataset.choice }));
       const choice = c || { id: Q.nextChoiceId(rows), text: '' };
-      $('q-choices').insertAdjacentHTML('beforeend', choiceRow(choice, false, currentChoiceType()));
-      const last = $('q-choices').lastElementChild;
-      last.querySelector('[data-drop]').addEventListener('click', () => last.remove());
+      $('q-choices').insertAdjacentHTML('beforeend', Q.choiceRowHtml(choice, false));
+      wireChoiceRow($('q-choices').lastElementChild);
     }
     function fillChoices(choices, correct) {
-      $('q-choices').innerHTML = choices.map(c => choiceRow(c, (correct || []).includes(c.id), currentChoiceType())).join('');
-      $('q-choices').querySelectorAll('[data-choice]').forEach(r => r.querySelector('[data-drop]').addEventListener('click', () => r.remove()));
+      $('q-choices').innerHTML = choices.map(c => Q.choiceRowHtml(c, (correct || []).includes(c.id))).join('');
+      $('q-choices').querySelectorAll('[data-choice]').forEach(wireChoiceRow);
     }
 
     function showParts(format) {
@@ -389,8 +389,8 @@
       $('q-numeric-part').style.display = format === 'numeric' ? 'block' : 'none';
       $('q-prose-part').style.display = format === 'prose' ? 'block' : 'none';
       $('q-choice-hint').textContent = format === 'multiple_select'
-        ? 'Tick every correct choice. A student must pick exactly those to earn the points.'
-        : 'Tick the one correct choice.';
+        ? 'Switch on every correct choice. A student must pick exactly those to earn the points.'
+        : 'Switch on the one correct choice.';
     }
     function resetFor(format, keep) {
       const fresh = Q.emptyQuestion(format);
@@ -409,7 +409,7 @@
       $('q-format').innerHTML = optionList(formats, Q.FORMAT_LABEL);
       $('q-sigmode').innerHTML = optionList(Q.MODES); $('q-unitmode').innerHTML = optionList(Q.MODES);
       $('q-format-note').textContent = item.grading === 'auto_checked'
-        ? 'Prose is not offered: a machine never marks prose, and an auto-checked item is marked by machine.' : '';
+        ? 'Prose is not offered: a machine never marks prose, and an auto-checked assignment is marked by machine.' : '';
       const src = q || Q.emptyQuestion(formats[0]);
       $('q-qid').value = q ? q.qid : Q.nextQid(questions);
       $('q-qid').disabled = !!q;

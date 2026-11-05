@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-C0lhOTmsYbXpa/6zpVkNSI2WdFjc4VWHtMYYlds/2V8=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-9ft1sKhecE6iUapW+bfvrHx9Nll90Ndh1cs3/2Kn7MM=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Letter scale · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -48,7 +48,7 @@
       return `<div class="page-head"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div><h1>Letter scale</h1><div class="sub">${sub}</div></div>${extra}</div></div>`;
     }
-    const back = `<a class="btn btn-ghost btn-sm" href="items.html">Back to Items</a>`;
+    const back = `<a class="btn btn-ghost btn-sm" href="items.html">Back to Assignments</a>`;
 
     async function load() {
       const root = $('main');
@@ -90,12 +90,14 @@
               <td><input class="sc-in" data-f="gpa" data-i="${i}" type="text" inputmode="decimal" value="${esc(r.gpa)}" style="width:5em" aria-label="GPA, line ${i + 1}"></td>
               <td><button class="btn btn-ghost btn-sm" type="button" data-del="${i}">Remove</button></td></tr>`).join('')}
           </tbody></table>
-          <div class="row wrap" style="gap:10px;margin:10px 0;align-items:flex-end">
+          <div class="row wrap" style="gap:10px;margin:10px 0">
             <button class="btn btn-ghost btn-sm" type="button" id="sc-add">+ Add a line</button>
             <button class="btn btn-ghost btn-sm" type="button" id="sc-default">Fill in the default scale</button>
             <button class="btn btn-ghost btn-sm" type="button" id="sc-reset">Undo my edits</button>
-            <div class="field" style="margin:0"><label for="sc-width">Near-line width (percentage points)</label>
-              <input id="sc-width" type="text" inputmode="decimal" value="${esc(widthTxt)}" style="width:6em">
+          </div>
+          <div class="form-grid" style="--fg-min:260px">
+            <div class="field"><label for="sc-width">Near-line width (percentage points)</label>
+              <input id="sc-width" type="text" inputmode="decimal" value="${esc(widthTxt)}">
               <div class="field-hint">A cadet within this many points below a line is marked as near it. Must be below the smallest gap between cutoffs.</div></div>
           </div>
           <div id="sc-errors">${v.errors.length ? `<div class="alert alert-error"><ul style="margin:0 0 0 18px">${v.errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul></div>` : ''}</div>
@@ -104,10 +106,10 @@
 
         <div class="card" style="margin-top:14px"><div class="card-body">
           <h3 style="margin-top:0">Try a score</h3>
-          <div class="row wrap" style="gap:10px;align-items:flex-end">
-            <div class="field" style="margin:0"><label for="sc-e">Points earned</label><input id="sc-e" type="text" inputmode="decimal" style="width:7em" value="${esc(tryE)}"></div>
-            <div class="field" style="margin:0"><label for="sc-p">Points possible</label><input id="sc-p" type="text" inputmode="decimal" style="width:7em" value="${esc(tryP)}"></div>
-            <div id="sc-try-out" style="padding-bottom:6px">${tryHtml(scale)}</div>
+          <div class="form-grid" style="--fg-min:150px">
+            <div class="field"><label for="sc-e">Points earned</label><input id="sc-e" type="text" inputmode="decimal" value="${esc(tryE)}"></div>
+            <div class="field"><label for="sc-p">Points possible</label><input id="sc-p" type="text" inputmode="decimal" value="${esc(tryP)}"></div>
+            <div class="field"><label>Letter</label><div id="sc-try-out" style="padding:10px 0">${tryHtml(scale)}</div></div>
           </div>
         </div></div>
 
@@ -185,8 +187,23 @@
       readRows();
       const v = S.validateScale(rows, widthTxt);
       const scale = v.errors.length ? null : { lines: v.lines, width: v.width };
+      if (busy) return;
+      // The active flag loaded with the page may be old; ask again before deciding whether a preview is needed.
+      busy = true; $('sc-save').disabled = true;
+      const fresh = await S.readIsActive(db, ctx.currentOffering);
+      busy = false;
+      const e0 = $('sc-save-error');
+      if (fresh.error) {
+        console.error('scale active check failed', fresh.error);
+        e0.textContent = 'Could not check whether this course is active, so nothing was saved. ' + S.scaleError(fresh.error);
+        e0.style.display = 'block'; $('sc-save').disabled = false; return;
+      }
+      if (fresh.isActive !== state.isActive) { state.isActive = fresh.isActive; draw(); }
       const plan = S.planSave({ scale, current: { lines: state.current.lines, width: state.current.width }, isActive: state.isActive, previewKey });
-      if (!plan.ok || busy) return;
+      if (!plan.ok) {
+        if (fresh.isActive) { const e1 = $('sc-save-error'); e1.textContent = plan.reason; e1.style.display = 'block'; }
+        $('sc-save').disabled = false; return;
+      }
       busy = true; $('sc-save').disabled = true;
       const r = await S.saveScale(db, ctx.currentOffering, scale, state);
       busy = false;
