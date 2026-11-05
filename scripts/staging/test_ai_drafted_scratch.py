@@ -321,6 +321,37 @@ def main():
                       (NOGR["activities"][0], NOGR["ao"]), role="service_role")
         t.chk("PATH: with no grades yet a script may still change it", r == ("ok", 1), r)
 
+        print("\n=== AFTER 078: one Choice item end to end (tutor submit by a cadet session, overnight draft, staff finalize, upsert) ===")
+        MX = new_item([{"modality": "written", "delivery": "typed_response", "grading": "ai_drafted", "warn": True},
+                       {"modality": "interactive"}])
+        cur.execute("BEGIN")
+        b.publish(MX)
+        cur.execute("COMMIT")
+        r = s.attempt(stu1, "SELECT count(*) FROM commit_work(%s, %s, %s::jsonb, %s, %s)",
+                      (MX["ao"], MX["activities"][1], '{"effort": 4}', "Made-up report.", 20), keep=True)
+        t.chk("E2E: a cadet session submits the tutor option through the real submit function and is not refused", r[0] == "ok", r)
+        cur.execute("SELECT is_finalized, source, points_earned FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", (enr1, MX["ao"]))
+        row = cur.fetchone()
+        t.chk("E2E: the tutor grade is written finalized and derived", bool(row and row[0] is True and row[1] == "derived"), row)
+        tutor_pts = row[2] if row else None
+        r = draft_grade(MX, enr2, final=False, role="service_role", keep=True)
+        t.chk("E2E: the overnight job drafts the typed-side cadet (unfinalized)", r[0] == "ok", r)
+        r = s.attempt(None, "INSERT INTO grades (enrollment_id, assignment_offering_id, points_earned, points_possible, source, is_finalized) "
+                            "VALUES (%s,%s,0,2,'ai_suggested',false) ON CONFLICT (enrollment_id, assignment_offering_id) DO UPDATE "
+                            "SET is_finalized = false, source = 'ai_suggested', points_earned = 0", (enr1, MX["ao"]), role="service_role")
+        t.chk("E2E: the overnight upsert cannot overwrite the tutor cadet's released grade", refuses(r, "grades_ai_drafts_need_a_person"), r)
+        r = s.attempt(director, "UPDATE grades SET is_finalized = true, source = 'instructor', points_earned = 2 WHERE enrollment_id = %s AND assignment_offering_id = %s",
+                      (enr2, MX["ao"]), keep=True)
+        t.chk("E2E: a staff member finalizes the typed-side cadet's draft", r == ("ok", 1), r)
+        r = s.attempt(None, "INSERT INTO grades (enrollment_id, assignment_offering_id, points_earned, points_possible, source, is_finalized) "
+                            "VALUES (%s,%s,0,2,'ai_suggested',false) ON CONFLICT (enrollment_id, assignment_offering_id) DO UPDATE "
+                            "SET is_finalized = false, source = 'ai_suggested', points_earned = 0", (enr2, MX["ao"]), role="service_role")
+        t.chk("E2E: a later overnight upsert cannot take the released mark back", refuses(r, "grades_ai_drafts_need_a_person"), r)
+        cur.execute("SELECT is_finalized, points_earned FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", (enr2, MX["ao"]))
+        row2 = cur.fetchone()
+        t.chk("E2E: both marks are still as released", bool(row2 and row2[0] is True and float(row2[1]) == 2.0) and
+              one("SELECT is_finalized AND points_earned = %s FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", (tutor_pts, enr1, MX["ao"])) is True, row2)
+
         # ============================ BEFORE 079 ===============================
         print("\n=== BEFORE 079 ===")
         t.chk("BEFORE 079: all six step 1 triggers exist", trig_count() == 6, trig_count())
@@ -422,6 +453,17 @@ def main():
             got = la._offering_activity_ids(s.conn, wl[key]["ao"])
             t.chk(f"PULL: the written side of the '{key}' item is {'offered' if expect else 'withheld'}",
                   bool(got["written_id"]) is expect, got)
+        # the hand-started pull must say so, not quietly cover half the class
+        for key, expect in (("mixed_human", True), ("mixed_ai", False), ("fall", False)):
+            m = la._lesson_meta(s.conn, wl[key]["slug"], None)
+            t.chk(f"PULL: the '{key}' item {'reports' if expect else 'does not report'} a withheld typed side", bool(m.get("written_withheld")) is expect, m.get("written_withheld"))
+        refused_pull = False
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                la.cmd_pull(Namespace(activity=wl["mixed_human"]["slug"], term=None, day=None, out=None, tutor_only=False), s.conn)
+        except SystemExit as e:
+            refused_pull = "--tutor-only" in str(e)
+        t.chk("PULL: a hand-started pull of a Choice item with a person-marked typed side refuses and names --tutor-only", refused_pull)
         t.chk("WORKLIST: an online-questions item and an in-person item are not",
               wl["questions"]["slug"] not in listed and wl["inperson"]["slug"] not in listed)
         out = io.StringIO()
@@ -431,7 +473,12 @@ def main():
 
         # ============================ ROLLBACK 079/078 ==========================
         print("\n=== ROLLBACK ===")
-        t.chk("ROLLBACK 079 applies", s.apply_file(R79, rollback=True))
+        pub_new = one("SELECT count(*) FROM assignment_offerings WHERE is_published AND entered_on_new_page")
+        t.chk("ROLLBACK 079 refuses while a newer-page item is published (cadets would get raw errors)",
+              pub_new > 0 and not s.apply_file(R79, rollback=True, quiet=True), pub_new)
+        t.chk("ROLLBACK 079: nothing changed after the refusal (the five triggers are still gone)", trig_count() == 1, trig_count())
+        sql_do("UPDATE assignment_offerings SET is_published = false WHERE entered_on_new_page")
+        t.chk("ROLLBACK 079 applies once those items are unpublished", s.apply_file(R79, rollback=True))
         t.chk("ROLLBACK 079: all six triggers are back", trig_count() == 6, trig_count())
         NP4 = written_item("ai_drafted", entered_on_new_page=True)
         r = sql_try("UPDATE assignment_offerings SET is_published = true WHERE id = %s", (NP4["ao"],))

@@ -569,13 +569,14 @@ def _offering_activity_ids(conn, offering_id):
     skip = ineligible_typed_sql("oa", "ao", *eligibility_flags(cur))
     cur.execute("""
         select max(case when act.modality = 'interactive' then act.id::text end) as interactive_id,
-               max(case when act.modality = 'written' and not /*SKIP*/ then act.id::text end) as written_id
+               max(case when act.modality = 'written' and not /*SKIP*/ then act.id::text end) as written_id,
+               coalesce(bool_or(act.modality = 'written' and /*SKIP*/), false) as written_withheld
           from offering_activities oa
           join assignment_offerings ao on ao.id = oa.assignment_offering_id
           join activities act on act.id = oa.activity_id
          where oa.assignment_offering_id = %s
     """.replace("/*SKIP*/", skip), (offering_id,))
-    return cur.fetchone() or {"interactive_id": None, "written_id": None}
+    return cur.fetchone() or {"interactive_id": None, "written_id": None, "written_withheld": False}
 
 
 def _ambiguous_slug_message(slug, rows):
@@ -654,7 +655,8 @@ def _lesson_meta(conn, slug, term=None):
                max(case when act.modality = 'written' and not /*SKIP*/ then act.id::text end) as written_id,
                max(case when act.modality = 'written' and not /*SKIP*/ then act.slug end)     as written_slug,
                max(case when act.modality = 'written' and not /*SKIP*/
-                        then act.content::text end)                              as written_content
+                        then act.content::text end)                              as written_content,
+               coalesce(bool_or(act.modality = 'written' and /*SKIP*/), false)   as written_withheld
           from assignment_offerings ao
           join assignments          a  on a.id  = ao.assignment_id
           join course_offerings     co on co.id = ao.course_offering_id
@@ -1175,6 +1177,15 @@ def cmd_pull(args, conn):
         sys.exit(f"No lesson '{args.activity}' in " + (f"term {term}" if term else "an active offering")
                  + " (tried it as both an assignment slug and an activity slug)."
                  + (f" --term {term} may not match any term." if term else ""))
+    # A typed side a person marks is never read by this job (ineligible_typed_sql). On a Choice item that leaves the tutor
+    # cadets only, and a summary written from them would read as the whole class. Say so and stop, unless the operator
+    # asked for the tutor side alone out loud.
+    if meta.get("written_withheld"):
+        if not getattr(args, "tutor_only", False):
+            sys.exit(f"'{args.activity}' has a typed-response side that a person marks, which this job does not read. A pull "
+                     "would cover the tutor cadets only and read as the whole class. Nothing was pulled. Re-run with "
+                     "--tutor-only to pull the tutor side knowingly; the typed side stays out of the rollup.")
+        print("NOTE: --tutor-only. The typed-response side of this lesson is not in this pull.", file=sys.stderr)
     refl_qid = _reflection_question_id(meta.get("written_content"))
     response_qs = _graded_response_questions(meta.get("written_content"))
     reports = _load_reports(conn, meta["offering_id"], meta["interactive_id"],
@@ -1308,6 +1319,7 @@ def cmd_pull(args, conn):
                        "written": bool(meta["written_id"])},
         "paths": whole["numbers"]["paths"],
         "day": day,
+        "written_side_withheld": bool(meta.get("written_withheld")),
         "coverage": coverage,
         "reflection_question_id": refl_qid,
         # Who teaches what — the basis for the instructor scopes the readiness summary is now
@@ -2151,6 +2163,9 @@ def main():
     pl.add_argument("--lesson", "--activity", "--interaction", dest="activity", required=True,
                     help="assignment slug (preferred) or activity slug of the lesson to aggregate")
     pl.add_argument("--out", help="write JSON here (UTF-8) instead of stdout")
+    pl.add_argument("--tutor-only", dest="tutor_only", action="store_true",
+                    help="a Choice item whose typed side a person marks: pull the tutor cadets only, knowingly. "
+                         "Without this the pull refuses, because it would read as the whole class")
     pl.add_argument("--term", help="terms.code, when one course has two active terms (e.g. "
                                    "training-fall-2026 alongside fall-2026). Only needed to "
                                    "break a tie the activity slug cannot")

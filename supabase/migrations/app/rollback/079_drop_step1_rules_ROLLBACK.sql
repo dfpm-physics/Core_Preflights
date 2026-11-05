@@ -1,5 +1,9 @@
 -- Rollback for 079_drop_step1_rules.sql. Run as `prep_app_owner`.
 --
+-- THIS ROLLBACK REFUSES (it does not handle the case) while any item entered on a newer page is published. The restored
+-- grade rule would then refuse the finalized grade a cadet's tutor commit writes, and every staff finalize, on a live item,
+-- with a raw database error for cadets and staff. Unpublish those items (or finish with them) first; the refusal names the count.
+--
 -- Puts the four step 1 rules (five triggers) back exactly as 028, 029 and 070 left them. The marker rule was never
 -- dropped, so it is not touched. A rule fires only on a later
 -- write, so rows made while the rules were gone (a published new-page item, a finalized grade on one) are left as they
@@ -9,6 +13,16 @@ BEGIN;
 
 SET LOCAL lock_timeout = '5s';
 SET LOCAL search_path = app, public;
+
+DO $$
+DECLARE n integer;
+BEGIN
+  SELECT count(*) INTO n FROM assignment_offerings WHERE is_published AND entered_on_new_page;
+  IF n > 0 THEN
+    RAISE EXCEPTION '079 rollback refused: % published item(s) were entered on a newer page. The restored rules would make a cadet''s tutor commit and every staff finalize on them fail. Unpublish them first, then run this again.', n
+      USING ERRCODE = 'check_violation';
+  END IF;
+END $$;
 
 -- Say what the restored grade rule will get in the way of: finalized grades already on new-page items. They are left as
 -- they are, but any later edit of one by staff is refused until the rule is dropped again.
