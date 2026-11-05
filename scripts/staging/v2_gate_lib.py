@@ -212,6 +212,28 @@ class Builder:
                          (self.id("closure", f"{item['ao']}:{section}"), item["ao"], section, by))
 
 
+def existing_triggers(cur, table, names):
+    """Those of `names` that exist on `table`. Migration 079 drops the step 1 rules, so a proof that switches them
+    off for one statement switches off only what the database still has."""
+    cur.execute("SELECT tgname FROM pg_trigger WHERE tgrelid = ('app.' || %s)::regclass AND NOT tgisinternal "
+                "AND tgname = ANY(%s)", (table, list(names)))
+    have = {r[0] for r in cur.fetchall()}
+    return [n for n in names if n in have]
+
+
+def triggers_off(cur, table, names):
+    """Switch the named triggers off (those that exist) and return the list, for triggers_on."""
+    live = existing_triggers(cur, table, names)
+    for n in live:
+        cur.execute(f"ALTER TABLE app.{table} DISABLE TRIGGER {n}")
+    return live
+
+
+def triggers_on(cur, table, live):
+    for n in live:
+        cur.execute(f"ALTER TABLE app.{table} ENABLE TRIGGER {n}")
+
+
 def days(n, hour=23, minute=59, second=59):
     """2359:59 UTC on the day n days from now, as a UTC datetime."""
     d = datetime.now(timezone.utc).date() + timedelta(days=n)

@@ -97,7 +97,7 @@ def main():
         sql = re.sub(r"^CREATE ROLE prep_app_\w+.*?;", "", sql, flags=re.S | re.M)
         sql = re.sub(r"^ALTER ROLE prep_app_\w+\s+BYPASSRLS;", "", sql, flags=re.M)
         steps = [("auth stand-in", sbc.AUTH_STUB, False), ("bootstrap", sql, False)]
-        files = [f for f in ins.migration_files(None) if f.name[:3] != "023" and f.name[:3] < "077"]   # 077 to 079 have their own proof
+        files = [f for f in ins.migration_files(None) if f.name[:3] != "023" and f.name[:3] < "080"]   # the whole chain, through 079
         steps += [(f.name, f.read_text(encoding="utf-8"), True) for f in files]
         steps += [("auth.users foreign keys", ins.AUTH_FKS, False)]
         for label, text, owner in steps:

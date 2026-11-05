@@ -92,7 +92,7 @@ def build(cur):
     sql = ins.BOOTSTRAP.read_text(encoding="utf-8")
     sql = re.sub(r"^CREATE ROLE prep_app_\w+.*?;", "", sql, flags=re.S | re.M)
     sql = re.sub(r"^ALTER ROLE prep_app_\w+\s+BYPASSRLS;", "", sql, flags=re.M)
-    files = [f for f in ins.migration_files(None) if f.name[:3] != "023" and f.name[:3] < "077"]   # 077 to 079 have their own proof
+    files = [f for f in ins.migration_files(None) if f.name[:3] != "023" and f.name[:3] < "080"]   # the whole chain, through 079
     steps = [("auth stand-in", sbc.AUTH_STUB, False), ("bootstrap", sql, False)]
     early = [f for f in files if f.name[:3] <= "025"]
     late = [f for f in files if f.name[:3] >= "026"]
@@ -121,12 +121,11 @@ def make_fixture(cur):
     def publish(item):
         # Step 1 keeps two rules that refuse to publish what only a new page produces. Step 2 removes them; the
         # proof turns both off for this one statement, inside its own transaction, as v2_gate_lib.publish does for one.
+        # Migration 079 drops both, so only those the database still has are switched off.
         trig = ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished")
-        for t in trig:
-            cur.execute(f"ALTER TABLE assignment_offerings DISABLE TRIGGER {t}")
+        live = lib.triggers_off(cur, "assignment_offerings", trig)
         cur.execute("UPDATE assignment_offerings SET is_published = true WHERE id = %s AND NOT is_published", (item["ao"],))
-        for t in trig:
-            cur.execute(f"ALTER TABLE assignment_offerings ENABLE TRIGGER {t}")
+        lib.triggers_on(cur, "assignment_offerings", live)
     b.publish = publish
     course = b.course("e-proof", "Stage E proof course")
     term = b.term("proof-term", "Proof term", starts="2026-08-01", ends="2099-12-31")
@@ -356,15 +355,11 @@ def run_checks(surl, cur, fx):
     check("no attempt limit set: still capped at a ceiling (100)", ctx(cur, fx, "A", fx.hw_last)["status"] == "ok")
 
     section("a person's correction wins")
-    try:
-        cur.execute("UPDATE app.grades SET source='instructor', points_earned = 1.5, graded_by = %s WHERE enrollment_id=%s AND assignment_offering_id=%s", (fx.director, fx.cadet["A"][1], fx.hw_first["ao"]))
-        check("the step 1 rule still refuses an ordinary finalized write on a new-page item", False)
-    except Exception as e:  # noqa: BLE001
-        check("the step 1 rule still refuses an ordinary finalized write on a new-page item", "grades_new_items_stay_unfinalized" in str(e))
-    # the instructor's correction as step 2 will allow it: the step 1 rule is switched off for this one statement
-    cur.execute("ALTER TABLE app.grades DISABLE TRIGGER grades_new_items_stay_unfinalized")
+    # Migration 079 drops the step 1 rule that refused a finalized write on a new-page item, so the correction is an
+    # ordinary write. Where a database still has the rule (a build below 079), it is switched off for this one statement.
+    live = lib.triggers_off(cur, "grades", ("grades_new_items_stay_unfinalized",))
     cur.execute("UPDATE app.grades SET source='instructor', points_earned = 1.5, graded_by = %s WHERE enrollment_id=%s AND assignment_offering_id=%s", (fx.director, fx.cadet["A"][1], fx.hw_first["ao"]))
-    cur.execute("ALTER TABLE app.grades ENABLE TRIGGER grades_new_items_stay_unfinalized")
+    lib.triggers_on(cur, "grades", live)
     rec(cur, fx, "A", fx.hw_first, "q1", "9.8", "98e-1", True)
     cur.execute("SELECT points_earned, source FROM app.grades WHERE enrollment_id=%s AND assignment_offering_id=%s", (fx.cadet["A"][1], fx.hw_first["ao"]))
     g = cur.fetchone()
@@ -494,11 +489,9 @@ def load_test(surl, cur, fx, n_students, threads):
     due = now_utc() - timedelta(seconds=120) + timedelta(seconds=window)
     trig = ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished")
     cur.execute("BEGIN")
-    for t in trig:  # the publish rules also fire on an update of a published row; off for this one statement, as in publish()
-        cur.execute(f"ALTER TABLE app.assignment_offerings DISABLE TRIGGER {t}")
+    live = lib.triggers_off(cur, "assignment_offerings", trig)  # the publish rules (gone after 079) also fire on an update of a published row
     cur.execute("UPDATE app.assignment_offerings SET due_at = %s, due_by_day = '{}'::jsonb WHERE id = %s", (due, it["ao"]))
-    for t in trig:
-        cur.execute(f"ALTER TABLE app.assignment_offerings ENABLE TRIGGER {t}")
+    lib.triggers_on(cur, "assignment_offerings", live)
     cur.execute("COMMIT")
     keys = {q: one(cur, "SELECT id FROM app.question_keys WHERE question_id=%s AND superseded_at IS NULL", qid) for q, qid in it["q"].items()}
 

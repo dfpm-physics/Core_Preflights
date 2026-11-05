@@ -310,6 +310,41 @@ def main():
         r = draft_grade(NP3, enr1, final=True, role="service_role", keep=False)
         t.chk("AFTER 079: a finalize on a new-page item without an ai_drafted path now passes", r[0] == "ok", r)
 
+        # ===================== THE WORKLIST, END TO END (whole chain, 079 applied) =====================
+        print("=== the nightly worklist query, run in full over the finished chain ===")
+        import io
+        import contextlib
+        from argparse import Namespace
+        from datetime import datetime, timedelta, timezone
+        from psycopg2.extras import RealDictCursor  # noqa: F401  (the worklist asks for it itself)
+        import lesson_aggregate as la
+        past = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+        wl = {}
+        for key, paths, kw in [
+            ("fall", [{"modality": "written"}], {}),
+            ("ai", [{"modality": "written", "delivery": "typed_response", "grading": "ai_drafted", "warn": True}], {"entered_on_new_page": True}),
+            ("human_new", [{"modality": "written", "delivery": "typed_response", "grading": "human_graded", "warn": True}], {"entered_on_new_page": True}),
+            ("questions", [{"modality": "questions", "delivery": "online_questions", "grading": "auto_checked"}], {"entered_on_new_page": True}),
+            ("inperson", [{"modality": "external", "delivery": "in_person", "grading": "hand_entered"}], {"entered_on_new_page": True}),
+        ]:
+            wl[key] = new_item(paths, due_by_day={"M": past}, **kw)
+            cur.execute("BEGIN")
+            b.publish(wl[key])
+            cur.execute("COMMIT")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            la.cmd_worklist(Namespace(course="aid-101", day=None, as_of=None, latest=False, json=True), s.conn)
+        listed = {i["slug"] for i in __import__("json").loads(out.getvalue())["items"]}
+        t.chk("WORKLIST: the full query runs on the finished chain and lists the Fall-shaped item", wl["fall"]["slug"] in listed, sorted(listed))
+        t.chk("WORKLIST: an ai_drafted item on a newer page is listed", wl["ai"]["slug"] in listed)
+        t.chk("WORKLIST: a new human_graded typed response is not", wl["human_new"]["slug"] not in listed)
+        t.chk("WORKLIST: an online-questions item and an in-person item are not",
+              wl["questions"]["slug"] not in listed and wl["inperson"]["slug"] not in listed)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            la.cmd_worklist(Namespace(course="aid-101", day=None, as_of=None, latest=True, json=True), s.conn)
+        t.chk("WORKLIST: --latest names one of the listed items", __import__("json").loads(out.getvalue()).get("slug") in listed, out.getvalue()[:120])
+
         # ============================ ROLLBACK 079/078 ==========================
         print("\n=== ROLLBACK ===")
         t.chk("ROLLBACK 079 applies", s.apply_file(R79, rollback=True))

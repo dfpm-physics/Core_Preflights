@@ -56,7 +56,7 @@ STEP2_ALL = ["044", "045", "046", "047", "048", "049", "051", "059", "060", "065
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--expect-ref", required=True)
-    ap.add_argument("--before", default="077")   # these prove step 2 and Stage E; 077 to 079 have their own proof (test_ai_drafted_scratch.py)
+    ap.add_argument("--before", default="080")   # the whole chain, through 079; 077 to 079 also have their own proof (test_ai_drafted_scratch.py)
     args = ap.parse_args()
     STEP2 = [n for n in STEP2_ALL if n < args.before]
     s = Scratch("scratch_tg", args.expect_ref, before=args.before, skip=())
@@ -377,11 +377,9 @@ def main():
                        "q2": b.question(hw, "q2", "numeric", 1, key=[{"value": 0, "tol_abs": 0.01}], n=1)}
             # step 1 keeps two rules that refuse to publish what only a new page produces; the proof turns both off
             # for this one statement, inside its own transaction (the Stage E proofs do the same)
-            for trg in ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished"):
-                cur.execute(f"ALTER TABLE assignment_offerings DISABLE TRIGGER {trg}")
+            live = gl.triggers_off(cur, "assignment_offerings", ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished"))
             cur.execute("UPDATE assignment_offerings SET is_published = true WHERE id = %s", (hw["ao"],))
-            for trg in ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished"):
-                cur.execute(f"ALTER TABLE assignment_offerings ENABLE TRIGGER {trg}")
+            gl.triggers_on(cur, "assignment_offerings", live)
             cur.execute("COMMIT")
             HW, Q1, Q2 = hw["ao"], hw["q"]["q1"], hw["q"]["q2"]
             sA3, sB3 = str(enrA3), str(enrB3)
@@ -413,12 +411,17 @@ def main():
             def f(x):
                 return float(x) if x is not None else None
 
+            np_live = []
+
             def np_rules(on):
                 """Step 1 refuses a change to a published item that a new page made (a due date, its points). The step 2
                 release removes those rules; the proof switches them off for the statements that need it, as the Stage E
                 proofs do."""
-                for trg in ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished"):
-                    cur.execute(f"ALTER TABLE assignment_offerings {'ENABLE' if on else 'DISABLE'} TRIGGER {trg}")
+                names = ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished")
+                if on:
+                    gl.triggers_on(cur, "assignment_offerings", np_live)   # only what np_rules(False) switched off (079 drops both)
+                else:
+                    np_live[:] = gl.triggers_off(cur, "assignment_offerings", names)
 
             def agree(label, stu, enr):
                 """The cadet's total, the staff total for that cadet and the cell the export reads are one answer."""
@@ -464,9 +467,16 @@ def main():
             t.chk("the actor settings are cleared after the write", one("SELECT coalesce(current_setting('app.audit_actor', true), '')") == "")
 
             # -- a person's correction guard ------------------------------------------------------------------------
-            r = sess(dir3, "UPDATE grades SET points_earned = 2 WHERE enrollment_id = %s AND assignment_offering_id = %s", (enrB3, HW), keep=True)
-            t.chk("a staff correction of a finalized grade on a new-page item is still refused while the step 1 rule stands",
-                  r[0] == "error" and "grades_new_items_stay_unfinalized" in str(r[2]), r)
+            # Migration 079 drops the step 1 rule, so a staff correction of a finalized grade on a new-page item is an
+            # ordinary write. It is tried here and rolled back (no keep), so the later steps start from the same grades.
+            rule_left = bool(gl.existing_triggers(cur, "grades", ("grades_new_items_stay_unfinalized",)))
+            r = sess(dir3, "UPDATE grades SET points_earned = 2 WHERE enrollment_id = %s AND assignment_offering_id = %s", (enrB3, HW))
+            if rule_left:
+                t.chk("a staff correction of a finalized grade on a new-page item is refused while the step 1 rule stands",
+                      r[0] == "error" and "grades_new_items_stay_unfinalized" in str(r[2]), r)
+            else:
+                t.chk("a staff correction of a finalized grade on a new-page item is accepted once 079 has dropped the step 1 rule",
+                      r[0] == "ok", r)
 
             # -- a staff member corrects the key, then re-marks ---------------------------------------------------------
             upd = one("SELECT updated_at FROM questions WHERE id = %s", (Q1,))
@@ -535,7 +545,7 @@ def main():
 
             # -- the guard when the step 1 rule is gone ---------------------------------------------------------------
             print("  (the step 1 new-page rule is switched off below, as the step 2 release that removes it would)")
-            cur.execute("ALTER TABLE grades DISABLE TRIGGER grades_new_items_stay_unfinalized")
+            guard_live = gl.triggers_off(cur, "grades", ("grades_new_items_stay_unfinalized",))
             try:
                 r = sess(dir3, "UPDATE grades SET points_earned = 2.5 WHERE enrollment_id = %s AND assignment_offering_id = %s", (enrB3, HW), keep=True)
                 t.chk("a Director corrects a cadet's auto-checked grade by hand", r[0] == "ok" and r[1] == 1, r)
@@ -569,7 +579,7 @@ def main():
                       res.get("status") == "ok" and res.get("grades_listed", 0) >= 1 and f(g[0]) == 2.5 and g[1] == "instructor", (str(res)[:120], g))
                 agree("with a hand correction standing", stuB3, enrB3)
             finally:
-                cur.execute("ALTER TABLE grades ENABLE TRIGGER grades_new_items_stay_unfinalized")
+                gl.triggers_on(cur, "grades", guard_live)
         except Exception as exc:  # noqa: BLE001
             import traceback; traceback.print_exc(limit=-4)
             t.chk("section 10 ran to the end", False, repr(exc))
