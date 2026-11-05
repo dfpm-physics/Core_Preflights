@@ -24,7 +24,7 @@
 
 import { NEW_PAGE_COLUMN } from './new-page-guard.js';
 import { dueRowsFor, defaultDueFrom, dueByDayRow, toEditorDue, pointsChanged, retroactivelyUpdateGrades } from './faculty-lessons.js';
-import { contentFromEditor, checkEditor } from './free-response.js';
+import { contentFromEditor, checkEditor, REMOVAL_LOCKED_NOTE } from './free-response.js';
 import { rolesFor, policyFromRoles, POLICIES } from './lesson-link.js';
 import { LOOKAHEAD_DAYS } from './schema.js';
 
@@ -650,6 +650,15 @@ export function checkForm(form, { kinds = [], sections = [], slugFrozen = false,
  * @param {object|null} item     the saved assignment, or null for a new one (a new form is closed)
  * @param {object} ctx           { prefill: prefillFromKind(its kind), sections, sched: scheduleToForm(...) }
  */
+/** Whether a stored typed-response set holds a value in the reading fields, or has a standard question turned off.
+ *  A value that is set is never hidden, and a switch that is off is a setting too. */
+function typedFieldsSet(content) {
+  const c = content || {};
+  if (['reference_pdf', 'reference_pages', 'reading_link'].some(k => String(c[k] ?? '').trim())) return true;
+  const roles = new Set((Array.isArray(c.questions) ? c.questions : []).map(q => q?.role));
+  return !(roles.has('reading_time') && roles.has('reading_reflection'));
+}
+
 export function needsMoreOptions(item, { prefill = null, sections = [], sched = null } = {}) {
   if (!item) return false;
   if (String(item.description || '').trim()) return true;
@@ -659,6 +668,7 @@ export function needsMoreOptions(item, { prefill = null, sections = [], sched = 
   if (item.position != null || item.opensAt) return true;   // an assignment number or a fixed opening date lives in there
   const p = paths[0];
   if (p.modality === 'interactive') return true;            // a tutor id and link live there
+  if (p.delivery === 'typed_response' && p.modality === 'written' && typedFieldsSet(p.content)) return true;   // reading fields, or a switch turned off
   if (prefill && (p.delivery !== prefill.delivery || p.grading !== prefill.grading)) return true;
   if (sched) {
     if (sched.time && sched.time !== DEFAULT_TIME) return true;
@@ -687,7 +697,7 @@ export function moreOptionsTarget(problem) {
   if (/it opens|time to open|to open\./i.test(t)) return 'i-opens';
   if (/earns credit|only practice|which path/i.test(t)) return 'i-policy';
   if (/once a cadet commits/i.test(t)) return 'i-switch';
-  if (/reading link/i.test(t)) return 'i-written-more';
+  if (/reading link|reference file/i.test(t)) return 'i-written-more';
   if (/-day date|due on different days|Both tracks get the same date/i.test(t)) return 'i-daybox';
   return '';
 }
@@ -1075,6 +1085,19 @@ export async function updateItem(db, ctx, item, form, ack = null) {
   const typedForQs = single && single.modality === 'written' ? single : (duo ? duo.typed : null);
   const newQs = typedForQs && isTypedResponse(form.delivery) && form.freeResponse
     ? contentFromEditor(form.freeResponse, { keepKeys: false }).questions : null;
+  // A stored question holds answers and scores. Once the assignment has any work, none may be dropped by a save; the editor
+  // greys the controls out, and this is the check that holds when the page was stale or another route reached here.
+  if (newQs) {
+    const kept = new Set(newQs.map(q => q.id));
+    const dropped = (typedForQs.content?.questions || []).filter(q => q?.id && !kept.has(q.id));
+    if (dropped.length) {
+      const w = await countWork(db, item.offeringId);
+      if (w.error) return { error: w.error };
+      if (w.submissions || w.grades) {
+        return { error: { message: `${REMOVAL_LOCKED_NOTE} (${dropped.length === 1 ? 'One question' : dropped.length + ' questions'} would have gone; ${w.submissions} submission${w.submissions === 1 ? '' : 's'} and ${w.grades} grade${w.grades === 1 ? '' : 's'} exist.) Nothing was changed.` } };
+      }
+    }
+  }
   const pointsMove = !owned && !ownershipMoves && Number(form.points) !== Number(item.points);
   const questionPointsMove = !!newQs && pointsChanged(typedForQs.content?.questions || [], newQs);
   if ((pointsMove || questionPointsMove) && !ack?.points) {

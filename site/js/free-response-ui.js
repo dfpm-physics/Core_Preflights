@@ -9,7 +9,7 @@ import { esc } from './util.js';
 import { uploadFigure } from './faculty-lessons.js';
 import {
   QUESTION_TYPES, TYPE_LABEL, READING_TIME_NOTE, newQuestion, pinnedState, pinOn, pinOff,
-  ragLabel, parseRagManifest, showKeys, PINNED_ROLES, removeQuestion, canChangeType,
+  ragLabel, parseRagManifest, showKeys, PINNED_ROLES, removeQuestion, canChangeType, canRemove, REMOVAL_LOCKED_NOTE,
 } from './free-response.js';
 
 const ROLE_LABEL = { reading_time: 'Reading time question', reading_reflection: 'Reading reflection question' };
@@ -82,12 +82,13 @@ export function mountFreeResponse(host, opts = {}) {
       <div class="row" style="gap:8px">${fig}
         <button type="button" class="btn btn-ghost btn-sm" data-q="${i}" data-act="up"${i === 0 ? ' disabled' : ''}>Up</button>
         <button type="button" class="btn btn-ghost btn-sm" data-q="${i}" data-act="down"${i === editor.questions.length - 1 ? ' disabled' : ''}>Down</button>
-        ${pinned ? '' : `<button type="button" class="btn btn-ghost btn-sm" data-q="${i}" data-act="remove">Remove</button>`}</div></div>`;
+        ${pinned ? '' : `<button type="button" class="btn btn-ghost btn-sm" data-q="${i}" data-act="remove"${canRemove(editor, q) ? '' : ` disabled title="${esc(REMOVAL_LOCKED_NOTE)}"`}>Remove</button>`}</div></div>`;
   }
 
   function draw() {
     if (!editor) { host.innerHTML = ''; if (moreHost) moreHost.innerHTML = ''; return; }
     const pins = pinnedState(editor);
+    const pinLock = (role) => { const q = editor.questions.find(x => x.role === role); return q && !canRemove(editor, q) ? ` disabled title="${esc(REMOVAL_LOCKED_NOTE)}"` : ''; };
     // The reading fields and the two pinned-question switches go to the page's "More options" when it gave a
     // second place for them, so a new assignment opens short. With no second place they stay above the questions.
     const readingHtml = `
@@ -96,8 +97,8 @@ export function mountFreeResponse(host, opts = {}) {
           <div class="field"><label style="font-weight:500">Pages</label><input type="text" data-f="pages" value="${esc(editor.reference_pages)}" style="width:110px" placeholder="170-179"></div></div>
         <div class="field"><label style="font-weight:500">Reading link (optional)</label><input type="text" data-f="link" value="${esc(editor.reading_link)}" placeholder="https://"></div></div>
       <div class="row wrap" style="gap:20px;margin-bottom:8px">
-        <label class="check-inline"><input type="checkbox" data-pin="reading_time"${pins.reading_time ? ' checked' : ''}> <span>Ask how long the reading took (worth 0 points)</span></label>
-        <label class="check-inline"><input type="checkbox" data-pin="reading_reflection"${pins.reading_reflection ? ' checked' : ''}> <span>Ask for a reading reflection</span></label></div>
+        <label class="check-inline"><input type="checkbox" data-pin="reading_time"${pins.reading_time ? ' checked' : ''}${pinLock('reading_time')}> <span>Ask how long the reading took (worth 0 points)</span></label>
+        <label class="check-inline"><input type="checkbox" data-pin="reading_reflection"${pins.reading_reflection ? ' checked' : ''}${pinLock('reading_reflection')}> <span>Ask for a reading reflection</span></label></div>
       <div class="field-hint">${esc(READING_TIME_NOTE)}</div>
       ${notice ? `<div class="alert alert-info">${esc(notice)}</div>` : ''}`;
     const questionsHtml = `
@@ -132,7 +133,8 @@ export function mountFreeResponse(host, opts = {}) {
     if (el.dataset.pin) {
       const on = el.checked;
       const r = on ? pinOn(editor, el.dataset.pin) : pinOff(editor, el.dataset.pin);
-      notice = r === 'kept' ? 'That question was reworded, so it was kept as an ordinary free-response question.' : '';
+      notice = r === 'kept' ? 'That question was reworded, so it was kept as an ordinary free-response question.'
+        : r === 'locked' ? REMOVAL_LOCKED_NOTE : '';
       draw(); opts.onChange && opts.onChange(); return;
     }
     if (el.dataset.f === 'pdf') {
@@ -162,7 +164,7 @@ export function mountFreeResponse(host, opts = {}) {
     if (!b || !editor) return;
     if (b.dataset.add) { editor.questions.push(newQuestion(b.dataset.add, editor.questions, editor.used_ids)); draw(); opts.onChange && opts.onChange(); return; }
     const i = Number(b.dataset.q), qs = editor.questions;
-    if (b.dataset.act === 'remove') { if (PINNED_ROLES.includes(qs[i]?.role)) return; removeQuestion(editor, i); }
+    if (b.dataset.act === 'remove') { if (PINNED_ROLES.includes(qs[i]?.role)) return; if (!canRemove(editor, qs[i])) { notice = REMOVAL_LOCKED_NOTE; draw(); return; } removeQuestion(editor, i); }
     else if (b.dataset.act === 'up' && i > 0) [qs[i - 1], qs[i]] = [qs[i], qs[i - 1]];
     else if (b.dataset.act === 'down' && i < qs.length - 1) [qs[i + 1], qs[i]] = [qs[i], qs[i + 1]];
     else if (b.dataset.act === 'fig-clear') delete qs[i].figure_url;

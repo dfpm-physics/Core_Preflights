@@ -423,4 +423,42 @@ section('removal states what goes with the item, tutor included');
   check('an item cadets have started is refused with the count, before any delete', /1 submission/.test(refused.error?.message || '') && CALLS.filter(c => c.verb === 'delete').length === 0);
 }
 
+
+section('updateItem: a stored question cannot be removed once the assignment has any work');
+{
+  const F = await import('../../site/js/free-response.js');
+  const stored = { questions: [
+    { id: 'q1', type: 'free_response', text: 'Why?', points: 1, role: 'free_response' },
+    { id: 'q2', type: 'free_response', text: F.READING_REFLECTION_TEXT, points: 1, role: 'reading_reflection' },
+    { id: 'q4', type: 'free_response', text: 'Second?', points: 0, role: 'free_response' }] };
+  const item = typedItem({ paths: [{ ...typedItem().paths[0], content: stored }] });
+  const content = { ...stored, reading_link: null, reference_pdf: null, reference_pages: null };
+  // Input B: an ordinary stored question is removed.
+  let editor = F.editorFromContent(content, null);
+  F.removeQuestion(editor, 2);
+  reset(withFresh({ 'submissions.select': { __count: 6 }, 'grades.select': { __count: 0 } }));
+  let r = await I.updateItem(db, ctx, item, base({ freeResponse: editor }));
+  check('removing a stored question with answers on it is refused, in words, before any write',
+    /cannot be removed/.test(r.error?.message || '') && /0/.test(r.error?.message || '') && CALLS.filter(c => c.verb !== 'select').length === 0);
+  // Input A: the reflection tick is cleared.
+  editor = F.editorFromContent(content, null);
+  editor.workLocked = true;
+  const res = F.pinOff(editor, 'reading_reflection');
+  eq('with work on the item the editor itself refuses to drop a stored pinned question', [res, editor.questions.length], ['locked', 3]);
+  editor = F.editorFromContent(content, null);
+  editor.workLocked = true;
+  eq('the editor greys out Remove for a stored question when locked', [F.canRemove(editor, editor.questions[0]), F.canRemove(editor, F.newQuestion('free_response', editor.questions, editor.used_ids))], [false, true]);
+  editor = F.editorFromContent(content, null);
+  F.pinOff(editor, 'reading_reflection');          // an unlocked editor drops it, as before
+  reset(withFresh({ 'submissions.select': { __count: 0 }, 'grades.select': { __count: 3 } }));
+  r = await I.updateItem(db, ctx, item, base({ freeResponse: editor }));
+  check('a grade alone counts as work', /cannot be removed/.test(r.error?.message || ''));
+  reset(withFresh({ 'submissions.select': { __count: 0 }, 'grades.select': { __count: 0 } }));
+  r = await I.updateItem(db, ctx, item, base({ freeResponse: editor }));
+  eq('with no work the removal saves', r.error, null);
+  reset(withFresh({ 'submissions.select': { __count: 6 }, 'grades.select': { __count: 6 } }));
+  r = await I.updateItem(db, ctx, item, base({ freeResponse: F.editorFromContent(content, null) }));
+  eq('and an unchanged question set with work is not stopped', r.error, null);
+}
+
 process.exit(summary() ? 0 : 1);

@@ -639,6 +639,16 @@ section('More options opens on its own when a hidden field is not at its default
   check('two tracks with the same date stay closed', opens({}, { ...sched, dayDates: { M: '2026-12-10', T: '2026-12-10' } }, mt) === false);
   check('two tracks with different dates open it', opens({}, { ...sched, dayDates: { M: '2026-12-10', T: '2026-12-14' } }, mt));
   check('a date for only one track opens it', opens({}, { ...sched, dayDates: { M: '2026-12-10' } }, mt));
+  const both = [{ id: 'q1', role: 'reading_time' }, { id: 'q2', role: 'reading_reflection' }];
+  const typed = (content) => [{ modality: 'written', delivery: 'typed_response', grading: 'human_graded', content }];
+  const preT = I.prefillFromKind({ id: 'p', default_delivery: 'typed_response', default_grading: 'human_graded' });
+  const opensT = (content) => I.needsMoreOptions({ ...plain, paths: typed(content) }, { prefill: preT, sections: one, sched });
+  check('a typed set with both standard questions and no reading fields stays closed', opensT({ questions: both }) === false);
+  check('a stored reference file opens it', opensT({ questions: both, reference_pdf: 'Text_Book_PDFs/x.pdf' }));
+  check('stored pages open it', opensT({ questions: both, reference_pages: '1-2' }));
+  check('a stored reading link opens it', opensT({ questions: both, reading_link: 'https://example.test' }));
+  check('a missing reading-time question opens it', opensT({ questions: [both[1]] }));
+  check('a missing reading reflection opens it', opensT({ questions: [both[0]] }));
 }
 
 section('a refusal about a hidden field is pointed at that field');
@@ -648,6 +658,7 @@ section('a refusal about a hidden field is pointed at that field');
   eq('the time', t('The time must look like 23:59.'), 'i-time');
   eq('a section date', t('A section date is not a real date (x).'), 'i-sections');
   eq('a track date', t('This course has M and T sections, which are due on different days. Enter a date for each (M, T), or tick "Both tracks get the same date" if that is what you mean.'), 'i-daybox');
+  eq('the reference file', t('The reference file must be a file name ending in .pdf. Pick one from the list, or leave it empty.'), 'i-written-more');
   eq('the title is always shown', t('Give the assignment a title.'), '');
   eq('the points are always shown', t('Enter the points (0 or more).'), '');
 }

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-mibIiMowQkMcIJ4iJdwfhWC8a4egzS6zUhDTDd5Zv5Y='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-pIdzyVdH7ZhccpLZXLZDrnwwJhmTmXJBl0h0rJxmDx0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -459,6 +459,11 @@
       fr.set(emptyEditor());
       if (path && path.delivery === 'typed_response' && path.modality === 'written') {
         fr.set(editorFromContent(path.content, null));
+        // Work on the item locks the stored questions: the count arrives after the form is usable, and the save checks again.
+        I.countWork(db, item.offeringId).then(w => {
+          if (editing !== item || !fr.get() || w.error || !(w.submissions || w.grades)) return;
+          fr.get().workLocked = true; fr.redraw();
+        });
         // The keys arrive after the form is usable. They are put into the boxes that are still empty and never replace
         // what the person has typed meanwhile; the ids the activity has rows for are remembered so none is reused.
         Promise.all([loadQuestionKeys(path.activityId), I.loadQuestionIds(db, path.activityId)]).then(([r, ids]) => {

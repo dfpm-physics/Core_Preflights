@@ -131,6 +131,14 @@ export function removeQuestion(editor, i) {
   return gone;
 }
 
+/** Whether a question may be removed. Once the assignment has any submission or grade (`editor.workLocked`, set by the page
+ *  after it counts the work), a question that came from storage may not: its answers and scores belong to it. A question
+ *  added in this editing session has no work yet and can go. To drop one, set its points to 0 instead. */
+export const canRemove = (editor, q) => !(editor?.workLocked && q?._stored);
+
+/** The sentence shown where a removal is refused, on screen and by the save. */
+export const REMOVAL_LOCKED_NOTE = 'This assignment already has work, so a question already saved cannot be removed. Set its points to 0 instead.';
+
 /** Whether a question may change type. One that came from storage may not: its answers, scores and key belong to the
  *  type it has. To change it the director removes it and adds a new one, which gets a new id. */
 export const canChangeType = (q) => !q._stored && !PINNED_ROLES.includes(q.role);
@@ -149,13 +157,14 @@ export function pinOn(editor, role) {
 /**
  * Turn a pinned question off. It never destroys authored text: a question still carrying the standard wording (or
  * empty) is removed; one the director rewrote keeps its text and becomes an ordinary free response.
- * @returns {'removed'|'kept'|'absent'}
+ * @returns {'removed'|'kept'|'absent'|'locked'} 'locked' means the question holds work and stays as it is
  */
 export function pinOff(editor, role) {
   const q = editor.questions.find(x => x.role === role);
   if (!q) return 'absent';
   const standard = role === 'reading_time' ? READING_TIME_TEXT : READING_REFLECTION_TEXT;
   const text = (q.text || '').trim();
+  if (!canRemove(editor, q) && (!text || text === standard.trim())) return 'locked';
   if (!text || text === standard.trim()) {
     editor.used_ids = [...new Set([...(editor.used_ids || []), q.id])];
     editor.questions = editor.questions.filter(x => x !== q);

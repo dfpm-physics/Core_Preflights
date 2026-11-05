@@ -425,6 +425,9 @@ export function shapeHealth(raw, { offeringId = 'all' } = {}) {
         isPublished: !!a.is_published,
         dueAt: a.due_at,
         dueByDay: a.due_by_day,
+        // An item made on the Assignments page with one path cannot be given a second there, so the written-fallback
+        // check has nothing for the person to do on it.
+        soloNewPage: a.entered_on_new_page === true && acts.length < 2,
         hasInteractive: !!interactive,
         artifactUrl: interactive?.activities?.content?.artifact_url || null,
         gradedModalities: acts.filter(x => x.grading_role === 'graded')
@@ -555,7 +558,7 @@ export const CHECKS = [
     why: 'A cadet whose tutor will not start has nowhere to go. This is exactly what happened on lesson 07: completion fell to 49% on the largest cohort, and recovered once a graded PREP was added.',
     fix: 'Open the lesson in <a href="lessons.html">Assignments</a> and add a written PREP path with grading role <em>graded</em>. The two paths can both be graded; a cadet picks one.',
     detect: (m) => m.allLessons.filter(L =>
-      L.gradedModalities.includes('interactive') && !L.gradedModalities.includes('written'))
+      !L.soloNewPage && L.gradedModalities.includes('interactive') && !L.gradedModalities.includes('written'))
       .map(L => ({ where: `${L.offeringLabel} · ${L.slug}`, href: L.href, detail: 'no graded PREP fallback' })),
   },
   {

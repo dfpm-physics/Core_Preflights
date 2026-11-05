@@ -168,6 +168,14 @@ eq('an item with no deadline at all is not flagged for a missing per-day deadlin
 eq('an item with a single deadline and no per-day map still is',
   dbd([hRow('onedate', [{ modality: 'written', delivery: 'typed_response', grading: 'ai_drafted' }], { due_by_day: {} })]), ['onedate']);
 
+// A single-path tutor item made on the Assignments page cannot be given a second path there, so it is not a finding;
+// a two-path item whose typed side is practice only is, and an older single-path row still is.
+const nf = (assignments) => H.runChecks(H.shapeHealth(rawFor(assignments))).find(c => c.id === 'no-graded-fallback').findings.map(f => f.where.split(' · ').pop());
+eq('a single-path tutor item on the newer page is not flagged for a missing written path',
+  nf([hRow('solo', [{ modality: 'interactive', delivery: 'interactive_tutor', grading: 'effort' }], { entered_on_new_page: true })]), []);
+eq('an older single-path tutor row still is',
+  nf([hRow('oldsolo', [{ modality: 'interactive' }])]), ['oldsolo']);
+
 const loadQ = [];
 RESPONSES = { 'assignment_offerings.select': (st) => { loadQ.push({ t: 'assignment_offerings', cols: st.cols }); return []; } };
 try { await H.loadHealth(); } catch { /* only the query matters */ }
