@@ -252,7 +252,7 @@ section('checkForm carries the question-set problems for a typed response only')
 section('saving the questions of an existing item');
 {
   const ctx = { courseId: 'course-1', courseCode: 'phys-215', courseOfferingId: 'co-1', sections: [] };
-  const item = (over = {}) => ({ offeringId: 'o-1', assignmentId: 'a-1', slug: 'it', updatedAt: 'U1',
+  const item = (over = {}) => ({ offeringId: 'o-1', assignmentId: 'a-1', slug: 'it', updatedAt: 'U1', points: 2,
     paths: [{ delivery: 'typed_response', grading: 'human_graded', modality: 'written', activityId: 'act-1', slug: 's', content: over.content || { questions: [] } }] });
   const form = (over) => ({ kindId: 'preflight', title: 'T', description: '', delivery: 'typed_response', grading: 'human_graded', points: '2',
     lateAllowed: true, isBonus: false, progIncluded: false, allDate: '', dayDates: {}, sameDate: false, time: '23:59', sectionDates: {},
