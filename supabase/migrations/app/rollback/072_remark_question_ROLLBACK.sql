@@ -1,6 +1,6 @@
 -- Rollback for 072_remark_question.sql. Run as `prep_app_owner`.
--- Puts record_answer back to its 071 text (the grade step written out in the function), then drops the five functions this
--- migration added. Stored attempts, grades and key_remark_runs rows stay: they are data. Run before rolling back 071.
+-- Puts record_answer back to its 071 text (the grade step written out in the function), then drops the functions and the question
+-- trigger this migration added. Stored attempts, grades and key_remark_runs rows stay: they are data. Run before rolling back 071.
 
 BEGIN;
 
@@ -54,12 +54,12 @@ BEGIN
     SELECT q.qid, q.points,
            CASE g.attempt_rule
              WHEN 'best'  THEN (SELECT max(a.points_awarded) FROM question_attempts a
-                                 WHERE a.enrollment_id = g.enrollment_id AND a.question_id = q.id)
+                                 WHERE a.enrollment_id = g.enrollment_id AND a.assignment_offering_id = p_assignment_offering AND a.question_id = q.id)
              WHEN 'last'  THEN (SELECT a.points_awarded FROM question_attempts a
-                                 WHERE a.enrollment_id = g.enrollment_id AND a.question_id = q.id
+                                 WHERE a.enrollment_id = g.enrollment_id AND a.assignment_offering_id = p_assignment_offering AND a.question_id = q.id
                                  ORDER BY a.attempt_no DESC LIMIT 1)
              ELSE              (SELECT a.points_awarded FROM question_attempts a
-                                 WHERE a.enrollment_id = g.enrollment_id AND a.question_id = q.id
+                                 WHERE a.enrollment_id = g.enrollment_id AND a.assignment_offering_id = p_assignment_offering AND a.question_id = q.id
                                  ORDER BY a.attempt_no ASC LIMIT 1)
            END AS pts
       FROM questions q WHERE q.activity_id = g.activity_id AND NOT q.is_retired)
@@ -87,7 +87,9 @@ EXCEPTION WHEN unique_violation THEN
   RETURN jsonb_build_object('status', 'busy');
 END; $$;
 
-DROP FUNCTION remark_apply(uuid, uuid, uuid, jsonb, boolean, integer);
+DROP TRIGGER questions_regrade_auto ON questions;
+DROP FUNCTION questions_regrade_auto();
+DROP FUNCTION remark_apply(uuid, uuid, uuid, jsonb, boolean, text);
 DROP FUNCTION remark_context(uuid, uuid);
 DROP FUNCTION _remark_calc(uuid, uuid, jsonb);
 DROP FUNCTION _may_correct_key(uuid, uuid);

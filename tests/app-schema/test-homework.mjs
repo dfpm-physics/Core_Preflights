@@ -142,6 +142,10 @@ section('the drawn page');
   check('select-all has checkboxes and says so', (ms.match(/type="checkbox"/g) || []).length === 2 && ms.includes('Choose all that apply.'));
   check('each question has its own Check answer button, reply line and counts line', (html.match(/data-check=/g) || []).length === 2 && (html.match(/data-reply=/g) || []).length === 2 && (html.match(/data-counts=/g) || []).length === 2);
   check('the score line is drawn from the grade row', html.includes('Score so far: 2 of 3.'));
+  check('with nothing held back there is no held-back notice', !/not available yet/.test(html));
+  const held = renderHomework(buildView({ item, doc: doc({ held_back: 2 }), grade }));
+  check('questions an instructor has not finished checking are counted, not shown', held.includes('2 questions are not available yet'), held.slice(0, 40));
+  check('one held-back question reads in the singular', renderHomework(buildView({ item, doc: doc({ held_back: 1 }), grade })).includes('1 question is not available yet'));
   check('the page carries no key field names', !/correct_choice|tol_|key_version/.test(html));
   check('a figure url is escaped into an image', renderHomework(buildView({ item, doc: doc({ questions: [{ ...doc().questions[0], figure_url: 'https://x.test/a"b.png' }] }), grade })).includes('a&quot;b.png'));
 }

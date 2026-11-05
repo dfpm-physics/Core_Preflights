@@ -4,7 +4,7 @@
 // WHAT THIS FUNCTION IS
 //   After a key is corrected, every stored answer to that question is read again with the SAME checker the answer
 //   function uses (numeric-answer.js), against the question's CURRENT key. A person calls it twice: a preview that
-//   shows what would change and writes nothing, then a commit that carries the number the preview showed.
+//   shows what would change and writes nothing, then a commit that carries the token the preview returned.
 //
 // WHO DECIDES WHAT
 //   * Who is calling:        the signed-in session (deps.getUser), never a field of the request.
@@ -14,7 +14,8 @@
 //                            calculation record_answer uses, and one key_remark_runs row. A grade that a person has
 //                            taken over (any source but auto_checked) is listed and not changed.
 //   The request body is read for exactly three fields: question_id, mode ('preview' or 'commit') and, for a commit,
-//   expect_changed. Anything else is ignored.
+//   preview_token (the token the preview returned). Anything else is ignored.
+//   Only attempts in an ACTIVE term are changed. The preview breaks the numbers down by term and lists the terms it refuses.
 //
 // SAFE TO RUN TWICE
 //   An attempt already marked against the current key with the same result is left alone, so a second commit changes 0.
@@ -41,8 +42,9 @@ export const MESSAGES = {
   key_unchecked: 'The current key was written by AI and nobody has checked it yet. Check it first.',
   key_changed: 'The key was corrected while this ran. Run the preview again.',
   key_unreadable: 'The current key could not be read by the checker, so nothing was re-marked. Fix the key first.',
+  key_fault: 'The current key cannot be read by the checker (no value, too many digits, or no correct choice), so nothing was re-marked. Fix the key first.',
   attempts_moved: 'A student answered while this ran. Run the preview again.',
-  changed_since_preview: 'The answers changed since the preview. Run the preview again and confirm the new numbers.',
+  changed_since_preview: 'The answers or the key changed since the preview. Run the preview again and confirm what it shows.',
   too_many: 'There are too many students on this question to re-mark in one step. Tell the maintainers.',
   bad_request: 'The request was not valid.',
   busy: 'The system is busy. Try again.',
@@ -76,6 +78,12 @@ export function markAttempt(ctx, attempt) {
   return null;
 }
 
+const termRow = (t) => ({
+  term: t?.term ?? null, course_offering_id: t?.course_offering_id ?? null, active: t?.active ?? false,
+  attempts: t?.attempts ?? 0, would_change: t?.would_change ?? 0, grades_affected: t?.grades_affected ?? 0,
+  applied: t?.applied ?? false, reason: t?.reason ?? null,
+});
+
 /**
  * deps = {
  *   getUser(jwt)    -> { id } | null       verifies the session
@@ -97,11 +105,11 @@ export async function handle(req, deps) {
   const mode = body.mode;
   if (typeof questionId !== 'string' || !UUID.test(questionId)) return refusal('bad_request', 'The request is missing the question.');
   if (mode !== 'preview' && mode !== 'commit') return refusal('bad_request', 'Say whether this is a preview or a commit.');
-  let expect = null;
+  let token = null;
   if (mode === 'commit') {
-    expect = body.expect_changed;
-    if (!Number.isInteger(expect) || expect < 0 || expect > 1000000) {
-      return refusal('bad_request', 'A commit must carry the number of answers the preview showed.');
+    token = body.preview_token;
+    if (typeof token !== 'string' || !/^[0-9a-f]{32}$/.test(token)) {
+      return refusal('bad_request', 'A commit must carry the token the preview returned. Run the preview first.');
     }
   }
 
@@ -126,14 +134,13 @@ export async function handle(req, deps) {
 
   const res = await deps.rpc('remark_apply', {
     p_auth_user: user.id, p_question: questionId, p_key_version: ctx.key_version_id,
-    p_verdicts: verdicts, p_commit: mode === 'commit', p_expect_changed: expect,
+    p_verdicts: verdicts, p_commit: mode === 'commit', p_preview_token: token,
   });
   if (res.error) return refusal('busy');
   const r = res.data;
   if (!r || r.status !== 'ok') {
     const code = r?.status || 'busy';
-    return refusal(code, code === 'changed_since_preview' && Number.isInteger(r?.attempts_changed)
-      ? `${MESSAGES.changed_since_preview} It is now ${r.attempts_changed}.` : undefined);
+    return refusal(code);
   }
   // Built field by field so nothing else can ride along.
   return out({
@@ -143,5 +150,9 @@ export async function handle(req, deps) {
     grades_to_recompute: r.grades_to_recompute, grades_listed: r.grades_listed,
     listed: Array.isArray(r.listed) ? r.listed : [],
     sample: Array.isArray(r.sample) ? r.sample : [],
+    by_term: Array.isArray(r.by_term) ? r.by_term.map(termRow) : [],
+    refused: Array.isArray(r.refused) ? r.refused.map(termRow) : [],
+    refused_attempts: r.refused_attempts ?? 0,
+    preview_token: typeof r.preview_token === 'string' ? r.preview_token : null,
   });
 }

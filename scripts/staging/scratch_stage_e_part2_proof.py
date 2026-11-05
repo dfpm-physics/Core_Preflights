@@ -266,17 +266,17 @@ def run_remark_checks(cur, surl, fx):
 
     section("the commit")
     r0 = apply(cur, D, q1, new_key, vs, True, None)
-    check("a commit without the preview's number is refused", r0["status"] == "bad_request")
-    r1 = apply(cur, D, q1, new_key, vs, True, pv["attempts_changed"] + 1)
-    check("a commit with another number is refused (changed_since_preview) and writes nothing",
+    check("a commit without the preview's token is refused", r0["status"] == "bad_request")
+    r1 = apply(cur, D, q1, new_key, vs, True, "f" * 32)
+    check("a commit with a token the preview did not give is refused (changed_since_preview) and writes nothing",
           r1["status"] == "changed_since_preview" and before == (fp(snap(cur, q1)), fp(grade_snap(cur, it["ao"])), len(runs(cur, q1))), str(r1))
-    r2 = apply(cur, D, q1, str(uuid.uuid4()), vs, True, pv["attempts_changed"])
+    r2 = apply(cur, D, q1, str(uuid.uuid4()), vs, True, pv["preview_token"])
     check("verdicts about a key that is not the current one are refused (key_changed)", r2["status"] == "key_changed")
-    r3 = apply(cur, D, q1, old_key, vs, True, pv["attempts_changed"])
+    r3 = apply(cur, D, q1, old_key, vs, True, pv["preview_token"])
     check("verdicts about the superseded key are refused", r3["status"] == "key_changed")
     check("none of those wrote anything", before == (fp(snap(cur, q1)), fp(grade_snap(cur, it["ao"])), len(runs(cur, q1))))
-    res = apply(cur, D, q1, new_key, vs, True, pv["attempts_changed"])
-    check("a commit with the preview's number is applied", res["status"] == "ok" and res["committed"] is True and res["attempts_changed"] == 6, str(res))
+    res = apply(cur, D, q1, new_key, vs, True, pv["preview_token"])
+    check("a commit with the preview's token is applied", res["status"] == "ok" and res["committed"] is True and res["attempts_changed"] == 6, str(res))
     cur.execute("SELECT a.is_correct, a.points_awarded, a.key_version_id::text, e.student_id FROM app.question_attempts a JOIN app.enrollments e ON e.id = a.enrollment_id WHERE a.question_id=%s ORDER BY a.id", (q1,))
     rows = cur.fetchall()
     check("every readable attempt is stamped with the new key", sum(1 for r in rows if r[2] == new_key) == 6)
@@ -295,7 +295,7 @@ def run_remark_checks(cur, surl, fx):
     vs2 = verdicts_for(c2)
     pv2 = apply(cur, D, q1, new_key, vs2, False)
     check("the preview now shows 0 changes", pv2["attempts_changed"] == 0 and pv2["grades_listed"] == 0 and pv2["grades_to_recompute"] == 0, str(pv2))
-    again = apply(cur, D, q1, new_key, vs2, True, 0)
+    again = apply(cur, D, q1, new_key, vs2, True, pv2["preview_token"])
     check("a second commit changes 0 and touches nothing", again["status"] == "ok" and again["attempts_changed"] == 0 and snap1 == fp(snap(cur, q1)) and gsnap1 == fp(grade_snap(cur, it["ao"])))
     check("the second run is logged as a run with 0 changed", len(runs(cur, q1)) == 2 and tuple(runs(cur, q1)[1][3:]) == (0, 0, 0))
 
@@ -334,7 +334,7 @@ def run_remark_checks(cur, surl, fx):
     pv4 = apply(cur, D, q2k, k2, v4, False)
     s0 = (fp(snap(cur, q2k)), fp(grade_snap(cur, r2it["ao"])), len(runs(cur, q2k)))
     try:
-        apply(cur, D, q2k, k2, v4, True, pv4["attempts_changed"])
+        apply(cur, D, q2k, k2, v4, True, pv4["preview_token"])
         check("the failing commit raised", False)
     except Exception as e:  # noqa: BLE001
         check("the failing commit raised the injected error", "proof failure" in str(e), str(e)[:80])
@@ -344,7 +344,7 @@ def run_remark_checks(cur, surl, fx):
     cur.execute("DROP TRIGGER _proof_boom ON app.grades")
     cur.execute("DROP FUNCTION app._proof_boom()")
     cur.execute("RESET ROLE")
-    ok2 = apply(cur, D, q2k, k2, v4, True, pv4["attempts_changed"])
+    ok2 = apply(cur, D, q2k, k2, v4, True, pv4["preview_token"])
     check("with the fault removed the same commit succeeds", ok2["status"] == "ok" and ok2["attempts_changed"] == pv4["attempts_changed"] > 0, str(ok2))
 
     section("students answering while a re-mark runs (12 attempts)")
@@ -377,7 +377,7 @@ def run_remark_checks(cur, surl, fx):
         prev = apply(cur, D, q3k, k3, verdicts_for(cx), False)
         if prev["status"] != "ok":
             continue
-        done = apply(cur, D, q3k, k3, verdicts_for(cx), True, prev["attempts_changed"])
+        done = apply(cur, D, q3k, k3, verdicts_for(cx), True, prev["preview_token"])
         if done["status"] == "ok":
             break
     [t.join() for t in threads]
@@ -385,7 +385,7 @@ def run_remark_checks(cur, surl, fx):
     # whatever arrived after the last commit was marked by record_answer against the current key: finish with one more pass
     cx = rctx(cur, D, q3k)
     last = apply(cur, D, q3k, k3, verdicts_for(cx), False)
-    apply(cur, D, q3k, k3, verdicts_for(cx), True, last["attempts_changed"]) if last["attempts_changed"] else None
+    apply(cur, D, q3k, k3, verdicts_for(cx), True, last["preview_token"]) if last["attempts_changed"] else None
     check("no database error in any thread", not errs, str(errs[:2]))
     check("every answer was stored or cleanly refused", set(statuses) <= {"ok", "busy", "limit_reached"}, str(sorted(set(statuses))))
     check("every attempt on the question is stamped with the current key", one(cur, "SELECT count(*) FROM app.question_attempts WHERE question_id=%s AND key_version_id IS DISTINCT FROM %s", q3k, k3) == 0)
@@ -403,7 +403,7 @@ def run_remark_checks(cur, surl, fx):
         nk = correct_key(cur, qq, 1, 2)       # the correct answer is now 1: right/wrong swap
         cx = rctx(cur, D, qq)
         prev = apply(cur, D, qq, nk, verdicts_for(cx), False)
-        apply(cur, D, qq, nk, verdicts_for(cx), True, prev["attempts_changed"])
+        apply(cur, D, qq, nk, verdicts_for(cx), True, prev["preview_token"])
         after_pts = float(one(cur, "SELECT points_earned FROM app.grades WHERE enrollment_id=%s AND assignment_offering_id=%s", fx.cadet["B"][1], item["ao"]))
         want = {"last": 2.0, "first": 0.0}[name]
         check(f"rule {name}: after the key moves to 1 the same rule gives {want}", after_pts == want, str(after_pts))
@@ -451,8 +451,8 @@ def run_student_checks(cur, surl, fx):
     section("student read: what is withheld")
     check("an item past its deadline is still readable (review)", hw(A, fx.s_closed)["status"] == "ok")
     for label, who, item, want in (
-        ("an item whose release time is tomorrow", "A", fx.s_notyet, "not_open"),
-        ("an item due in 20 days (seven days before the deadline has not come)", "A", fx.s_far, "not_open"),
+        ("an item whose release time is tomorrow", "A", fx.s_notyet, "not_found"),
+        ("an item due in 20 days (seven days before the deadline has not come)", "A", fx.s_far, "not_found"),
         ("an unpublished item", "A", fx.s_unpub, "not_found"),
         ("a dropped enrollment", "D", fx.r1, "not_found"),
         ("a student enrolled in another course", "F", fx.r1, "not_found"),
@@ -493,6 +493,301 @@ def run_student_checks(cur, surl, fx):
           not any(w in json.dumps(d2) for w in KEY_FORBIDDEN) and "12" not in [q.get("value") for q in d2["questions"]])
 
 
+def set_uid(cur, uid):
+    claim = json.dumps({"sub": uid, "role": "authenticated"})
+    cur.execute("SELECT set_config('request.jwt.claims', %s, false), set_config('request.jwt.claim.sub', %s, false)", (claim, uid))
+
+
+def clear_uid(cur):
+    cur.execute("SELECT set_config('request.jwt.claims', '', false), set_config('request.jwt.claim.sub', '', false)")
+
+
+def refused(cur, sql, args=()):
+    """The first line of the error a statement raises, or None when it ran."""
+    try:
+        cur.execute(sql, args)
+        return None
+    except Exception as e:  # noqa: BLE001
+        return str(e).strip().splitlines()[0]
+
+
+def refused_current(cur, qid, cols, vals):
+    """Try to enter a CURRENT key (the old one superseded in the same transaction); roll it all back. Returns the error line or None."""
+    cur.execute("BEGIN")
+    try:
+        cur.execute("UPDATE app.question_keys SET superseded_at = now() WHERE question_id = %s AND superseded_at IS NULL", (qid,))
+        cur.execute(f"INSERT INTO app.question_keys (question_id, version, {cols}) VALUES (%s, 90, {', '.join(['%s'] * len(vals))})", (qid, *vals))
+        return None
+    except Exception as e:  # noqa: BLE001
+        return str(e).strip().splitlines()[0]
+    finally:
+        cur.execute("ROLLBACK")
+
+
+def new_item(cur, fx, slug, **policy):
+    """A homework item with q1 (2 points), q2 (1 point), q3 (1 point, multiple choice), published, in the active proof term."""
+    b = fx.b
+    Qp = {"modality": "questions", "delivery": "online_questions", "grading": "auto_checked"}
+    cur.execute("BEGIN")
+    cur.execute("SET LOCAL search_path = app, public, extensions")
+    it = b.item(p_course(cur, fx), fx.co, slug, slug, 0, kind="homework", paths=[Qp], due=now_utc() + timedelta(days=2),
+                published=False, entered_on_new_page=True, **policy)
+    it["q"] = {
+        "q1": b.question(it, "q1", "numeric", 2, key=[NUM_KEY], n=0),
+        "q2": b.question(it, "q2", "numeric", 1, key=[ZERO_KEY], n=1),
+        "q3": b.question(it, "q3", "multiple_choice", 1, key=[MC_KEY], choices=CHS, n=2),
+    }
+    b.publish(it)
+    cur.execute("COMMIT")
+    return it
+
+
+def grade_of(cur, enr, ao):
+    cur.execute("SELECT points_earned, source, graded_by, points_possible FROM app.grades WHERE enrollment_id=%s AND assignment_offering_id=%s", (enr, ao))
+    return cur.fetchone()
+
+
+def run_fix_checks(cur, surl, fx):
+    D = fx.director
+    A, B = fx.cadet["A"][1], fx.cadet["B"][1]
+
+    def as_user(uid, fn):
+        set_uid(cur, uid)
+        cur.execute("SET ROLE authenticated")
+        try:
+            return fn()
+        finally:
+            cur.execute("RESET ROLE")
+            clear_uid(cur)
+
+    section("fixes: the migrations carry the new objects")
+    for t in ("question_keys_readable", "question_keys_ai_check", "grades_person_correction", "questions_regrade_auto"):
+        check(f"trigger {t} exists once", one(cur, "SELECT count(*) FROM pg_trigger WHERE tgname = %s AND NOT tgisinternal", t) == 1)
+    for fn in ("_key_problem", "_key_number_ok", "question_keys_readable", "question_keys_ai_check", "grades_person_correction", "questions_regrade_auto"):
+        check(f"{fn} is executable by no web-facing role",
+              not any(one(cur, "SELECT has_function_privilege(%s, p.oid, 'EXECUTE') FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname=%s", r, fn)
+                      for r in ("anon", "authenticated", "service_role")))
+
+    section("fixes: a key the checker cannot read is refused when it is entered")
+    kf = new_item(cur, fx, "f-keyfault", attempt_limit=3)
+    q1, q3 = kf["q"]["q1"], kf["q"]["q3"]
+    e = refused_current(cur, q1, "value, tol_abs", (None, 0.01))
+    check("a numeric key with no value is refused by the key rule", e is not None and "duplicate" not in e, str(e))
+    e = refused_current(cur, q1, "value, tol_pct", ("1" + "0" * 61, 2))
+    check("a 62-digit value is refused", e is not None and "duplicate" not in e, str(e))
+    e = refused_current(cur, q1, "value, tol_pct", (9.8, "1" + "0" * 40))
+    check("a tolerance too large to read is refused", e is not None and "duplicate" not in e, str(e))
+    e = refused(cur, "UPDATE app.question_keys SET value = NULL, tol_abs = 0.01 WHERE question_id = %s AND superseded_at IS NULL", (q1,))
+    check("changing a current key to one with no value is refused", e is not None, str(e))
+    e = refused(cur, "UPDATE app.question_keys SET correct_choice_ids = '{}' WHERE question_id = %s AND superseded_at IS NULL", (q3,))
+    check("a choice key that names nothing is refused", e is not None, str(e))
+    e = refused(cur, "UPDATE app.question_keys SET correct_choice_ids = '{zz}' WHERE question_id = %s AND superseded_at IS NULL", (q3,))
+    check("a choice key that names a choice not offered is refused", e is not None, str(e))
+    check("the keys are as they were", one(cur, "SELECT value FROM app.question_keys WHERE question_id=%s AND superseded_at IS NULL", q1) == Decimal("9.8"))
+    # a fault that is already in the data (the entry rule off for one statement): the gate says so and stores nothing
+    cur.execute("ALTER TABLE app.question_keys DISABLE TRIGGER question_keys_readable")
+    cur.execute("UPDATE app.question_keys SET value = NULL, tol_abs = 0.01 WHERE question_id = %s AND superseded_at IS NULL", (q1,))
+    cur.execute("UPDATE app.question_keys SET correct_choice_ids = '{}' WHERE question_id = %s AND superseded_at IS NULL", (q3,))
+    cur.execute("ALTER TABLE app.question_keys ENABLE TRIGGER question_keys_readable")
+    c = call(cur, "service_role", "answer_context", fx.cadet["A"][2], kf["ao"], q1)
+    check("a numeric key with no value: answer_context says key_fault", c["status"] == "key_fault", str(c)[:100])
+    r = call(cur, "service_role", "record_answer", fx.cadet["A"][2], kf["ao"], q1, J({"raw": "9.8"}), "9.8", True, one(cur, "SELECT id FROM app.question_keys WHERE question_id=%s AND superseded_at IS NULL", q1))
+    check("...and record_answer stores nothing and says key_fault", r["status"] == "key_fault"
+          and one(cur, "SELECT count(*) FROM app.question_attempts WHERE question_id=%s", q1) == 0, str(r)[:100])
+    c = call(cur, "service_role", "answer_context", fx.cadet["A"][2], kf["ao"], q3)
+    check("a choice key that names nothing: key_fault", c["status"] == "key_fault", str(c)[:100])
+    check("no grade was made for it", grade_of(cur, A, kf["ao"]) is None)
+
+    section("fixes: an AI-written key is checked by a person, as a separate step")
+    ai = new_item(cur, fx, "f-aikey", attempt_limit=3)
+    qa = ai["q"]["q2"]
+    cur.execute("UPDATE app.question_keys SET superseded_at = now() WHERE question_id=%s AND superseded_at IS NULL", (qa,))
+    e = refused(cur, "INSERT INTO app.question_keys (question_id, version, value, tol_abs, written_by, checked_by, checked_at) VALUES (%s, 2, 0, 0.01, 'ai', %s, now())", (qa, D))
+    check("an AI key inserted already checked is refused", e is not None and "starts unchecked" in e, str(e))
+    cur.execute("INSERT INTO app.question_keys (question_id, version, value, tol_abs, written_by) VALUES (%s, 2, 0, 0.01, 'ai') RETURNING id", (qa,))
+    kid = cur.fetchone()[0]
+    check("an AI key inserted unchecked is accepted", kid is not None)
+    check("the gate holds the question back while it is unchecked", call(cur, "service_role", "answer_context", fx.cadet["A"][2], ai["ao"], qa)["status"] == "key_unchecked")
+    e = refused(cur, "UPDATE app.question_keys SET checked_by=%s, checked_at=now() WHERE id=%s", (D, kid))
+    check("a check with no signed-in person is refused", e is not None and "signed-in person" in e, str(e))
+    set_uid(cur, D)
+    e = refused(cur, "UPDATE app.question_keys SET checked_by=%s, checked_at=now(), value=5 WHERE id=%s", (D, kid))
+    check("a check that also edits the key is refused", e is not None and "cannot change the key" in e, str(e))
+    e = refused(cur, "UPDATE app.question_keys SET checked_by=%s, checked_at=now() WHERE id=%s", (D, kid))
+    clear_uid(cur)
+    check("a separate check by a signed-in person is accepted", e is None, str(e))
+    check("the gate lets the question through now", call(cur, "service_role", "answer_context", fx.cadet["A"][2], ai["ao"], qa)["status"] == "ok")
+
+    section("fixes: a person's correction of an auto-checked grade holds")
+    pc = new_item(cur, fx, "f-person", attempt_limit=4)
+    ans(cur, fx, "A", pc, "q1", "9.8")
+    g = grade_of(cur, A, pc["ao"])
+    check("a first answer makes an auto_checked grade of 2", g[1] == "auto_checked" and float(g[0]) == 2.0, str(g))
+    set_uid(cur, D)
+    e = refused(cur, "UPDATE app.grades SET points_earned = 1.5 WHERE enrollment_id=%s AND assignment_offering_id=%s", (A, pc["ao"]))
+    check("at step 1 the new-page rule refuses a person's write outright", e is not None and "grades_new_items_stay_unfinalized" in e, str(e))
+    # step 2 drops that rule; the correction must hold without it
+    cur.execute("ALTER TABLE app.grades DISABLE TRIGGER grades_new_items_stay_unfinalized")
+    cur.execute("UPDATE app.grades SET points_earned = 1.5 WHERE enrollment_id=%s AND assignment_offering_id=%s", (A, pc["ao"]))
+    cur.execute("ALTER TABLE app.grades ENABLE TRIGGER grades_new_items_stay_unfinalized")
+    clear_uid(cur)
+    g = grade_of(cur, A, pc["ao"])
+    check("a person's write moves it to source instructor, graded_by that person", g[1] == "instructor" and float(g[0]) == 1.5 and str(g[2]) == str(D), str(g))
+    ans(cur, fx, "A", pc, "q2", "0")
+    ans(cur, fx, "A", pc, "q1", "9.8")
+    g = grade_of(cur, A, pc["ao"])
+    check("later answers do not overwrite it", g[1] == "instructor" and float(g[0]) == 1.5, str(g))
+    # the per-question scores too, with the step 1 rule off
+    cur.execute("ALTER TABLE app.grades DISABLE TRIGGER grades_new_items_stay_unfinalized")
+    try:
+        ans(cur, fx, "B", pc, "q1", "9.8")
+        set_uid(cur, D)
+        cur.execute("UPDATE app.grades SET question_scores = jsonb_set(coalesce(question_scores, '{}'::jsonb), '{note}', '\"x\"') WHERE enrollment_id=%s AND assignment_offering_id=%s", (B, pc["ao"]))
+        clear_uid(cur)
+        g = grade_of(cur, B, pc["ao"])
+        check("with the step 1 rule off, a person's change to the per-question scores still moves it to instructor", g[1] == "instructor", str(g))
+        ans(cur, fx, "B", pc, "q2", "0")
+        g = grade_of(cur, B, pc["ao"])
+        check("...and the next answer still does not overwrite it", g[1] == "instructor" and float(g[0]) == 2.0, str(g))
+    finally:
+        cur.execute("ALTER TABLE app.grades ENABLE TRIGGER grades_new_items_stay_unfinalized")
+
+    section("fixes: two offerings sharing one activity keep separate attempts and grades")
+    b = fx.b
+    Q = {"modality": "questions", "delivery": "online_questions", "grading": "auto_checked"}
+    x = new_item(cur, fx, "f-share-x", attempt_limit=3, attempt_rule="best")
+    cur.execute("BEGIN")
+    cur.execute("SET LOCAL search_path = app, public, extensions")
+    y = b.item(p_course(cur, fx), fx.co, "f-share-y", "f-share-y", 0, kind="homework", paths=[Q], due=now_utc() + timedelta(days=2),
+               published=False, entered_on_new_page=True, attempt_limit=3, attempt_rule="best")
+    cur.execute("DELETE FROM offering_activities WHERE assignment_offering_id=%s", (y["ao"],))
+    cur.execute("""INSERT INTO offering_activities (assignment_offering_id, activity_id, grading_role, available_after, is_visible, position, delivery, grading)
+                   VALUES (%s,%s,'graded','always',true,0,'online_questions','auto_checked')""", (y["ao"], x["activities"][0]))
+    y["activities"] = x["activities"]
+    y["q"] = x["q"]
+    b.publish(y)
+    cur.execute("COMMIT")
+    for _ in range(3):
+        ans(cur, fx, "A", x, "q1", "1.0")
+    check("the fourth answer on X is refused: the limit is reached", p.ctx(cur, fx, "A", x, "q1").get("status") == "limit_reached")
+    cy = p.ctx(cur, fx, "A", y, "q1")
+    check("the same student has all three attempts left on Y", cy.get("status") == "ok", str({k: v for k, v in cy.items() if k != "key"}))
+    ans(cur, fx, "A", y, "q1", "9.8")
+    ans(cur, fx, "B", x, "q1", "9.8")
+    ans(cur, fx, "B", y, "q2", "0")
+    check("attempts are stored against the offering they were made in",
+          one(cur, "SELECT count(*) FROM app.question_attempts WHERE enrollment_id=%s AND assignment_offering_id=%s AND question_id=%s", A, x["ao"], x["q"]["q1"]) == 3
+          and one(cur, "SELECT count(*) FROM app.question_attempts WHERE enrollment_id=%s AND assignment_offering_id=%s AND question_id=%s", A, y["ao"], x["q"]["q1"]) == 1)
+    gxa, gya = grade_of(cur, A, x["ao"]), grade_of(cur, A, y["ao"])
+    check("A: X holds 0 (three wrong answers), Y holds 2 (one right answer)", float(gxa[0]) == 0.0 and float(gya[0]) == 2.0, f"{gxa} {gya}")
+    gxb, gyb = grade_of(cur, B, x["ao"]), grade_of(cur, B, y["ao"])
+    check("B: X holds 2 (q1 only), Y holds 1 (q2 only): neither carries the other's answers", float(gxb[0]) == 2.0 and float(gyb[0]) == 1.0, f"{gxb} {gyb}")
+    check("no grade is more than its offering's points", all(float(g[0]) <= float(one(cur, "SELECT points_possible FROM app.assignment_offerings WHERE id=%s", ao))
+                                                           for g, ao in ((gxa, x["ao"]), (gya, y["ao"]), (gxb, x["ao"]), (gyb, y["ao"]))))
+    check("every auto_checked grade equals the independent recomputation (both offerings)", independent_ok(cur, x["ao"]) == 0 and independent_ok(cur, y["ao"]) == 0)
+
+    section("fixes: retiring a question, or changing its points, cannot leave a grade above its offering")
+    rg = new_item(cur, fx, "f-retire", attempt_limit=4)
+    ans(cur, fx, "A", rg, "q1", "9.8"); ans(cur, fx, "A", rg, "q2", "0"); ans(cur, fx, "A", rg, "q3", None, choices=["b"])
+    pp = lambda: float(one(cur, "SELECT points_possible FROM app.assignment_offerings WHERE id=%s", rg["ao"]))
+    # step 1 refuses a points change on a published new-page item; step 2 removes that rule, so the proof turns it off here
+    for t in ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished"):
+        cur.execute(f"ALTER TABLE app.assignment_offerings DISABLE TRIGGER {t}")
+    check("before: grade 4 of 4", float(grade_of(cur, A, rg["ao"])[0]) == 4.0 and pp() == 4.0, f"{grade_of(cur, A, rg['ao'])} {pp()}")
+    cur.execute("UPDATE app.questions SET is_retired = true WHERE id=%s", (rg["q"]["q1"],))
+    g = grade_of(cur, A, rg["ao"])
+    check("a retired question counts for nothing: grade 2 of 2", float(g[0]) == 2.0 and pp() == 2.0, f"{g} {pp()}")
+    cur.execute("UPDATE app.questions SET points = 3 WHERE id=%s", (rg["q"]["q2"],))
+    g = grade_of(cur, A, rg["ao"])
+    check("raising a question's points moves the offering, and the grade never exceeds it", float(g[0]) <= pp(), f"{g} {pp()}")
+    cur.execute("UPDATE app.questions SET points = 1 WHERE id=%s", (rg["q"]["q3"],))
+    g = grade_of(cur, A, rg["ao"])
+    check("...and still not after lowering another", float(g[0]) <= pp(), f"{g} {pp()}")
+    for t in ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished"):
+        cur.execute(f"ALTER TABLE app.assignment_offerings ENABLE TRIGGER {t}")
+
+    section("fixes: late work when the term has no last class day is refused in plain words")
+    term_id = one(cur, "SELECT term_id FROM app.course_offerings WHERE id=%s", fx.co)
+    cur.execute("UPDATE app.terms SET ends_on = NULL WHERE id=%s", (term_id,))
+    try:
+        c = call(cur, "service_role", "answer_context", fx.cadet["A"][2], fx.hw_late["ao"], fx.hw_late["q"]["q1"])
+        check("answer_context says late_unavailable", c["status"] == "late_unavailable", str(c)[:100])
+        before_n = one(cur, "SELECT count(*) FROM app.question_attempts WHERE assignment_offering_id=%s", fx.hw_late["ao"])
+        r = call(cur, "service_role", "record_answer", fx.cadet["A"][2], fx.hw_late["ao"], fx.hw_late["q"]["q1"], J({"raw": "9.8"}), "9.8", True, c.get("key_version_id") or one(cur, "SELECT id FROM app.question_keys WHERE question_id=%s AND superseded_at IS NULL", fx.hw_late["q"]["q1"]))
+        check("record_answer stores nothing", r["status"] == "late_unavailable" and one(cur, "SELECT count(*) FROM app.question_attempts WHERE assignment_offering_id=%s", fx.hw_late["ao"]) == before_n, str(r)[:100])
+    finally:
+        cur.execute("UPDATE app.terms SET ends_on = '2099-12-31' WHERE id=%s", (term_id,))
+    check("with the end date back, late work is accepted again", call(cur, "service_role", "answer_context", fx.cadet["A"][2], fx.hw_late["ao"], fx.hw_late["q"]["q1"])["status"] == "ok")
+
+    section("fixes: a re-mark changes only an active term")
+    course = one(cur, "SELECT course_id FROM app.course_offerings WHERE id = %s", fx.co)
+    cur.execute("BEGIN")
+    cur.execute("SET LOCAL search_path = app, public, extensions")
+    t_past = b.term("proof-past", "Proof past term", starts="2025-01-01", ends="2025-06-01")
+    co_past = b.offering(course, t_past, False)
+    sec_past = b.section(co_past, "P1", ["M"])
+    enr_j, uid_j = b.cadet(3000900020, "Test Cadet J", sec_past)
+    sh = b.item(course, fx.co, "f-term-active", "f-term-active", 0, kind="homework", paths=[Q], due=now_utc() + timedelta(days=2),
+                published=False, entered_on_new_page=True, attempt_limit=5, attempt_rule="best")
+    sh["q"] = {"q1": b.question(sh, "q1", "numeric", 2, key=[NUM_KEY], n=0)}
+    sp = b.item(course, co_past, "f-term-past", "f-term-past", 0, kind="homework", paths=[Q], due=now_utc() - timedelta(days=300),
+                published=False, entered_on_new_page=True, attempt_limit=5, attempt_rule="best")
+    cur.execute("DELETE FROM offering_activities WHERE assignment_offering_id=%s", (sp["ao"],))
+    cur.execute("""INSERT INTO offering_activities (assignment_offering_id, activity_id, grading_role, available_after, is_visible, position, delivery, grading)
+                   VALUES (%s,%s,'graded','always',true,0,'online_questions','auto_checked')""", (sp["ao"], sh["activities"][0]))
+    sp["activities"], sp["q"] = sh["activities"], sh["q"]
+    b.publish(sh)
+    cur.execute("ALTER TABLE app.assignment_offerings DISABLE TRIGGER assignment_offerings_publish_needs_active")   # a past term was published while it was active
+    b.publish(sp)
+    cur.execute("ALTER TABLE app.assignment_offerings ENABLE TRIGGER assignment_offerings_publish_needs_active")
+    past_staff = b.staff("proof-past-director", "Test Past Director")
+    b.assign(past_staff, co_past, "director")
+    cur.execute("COMMIT")
+    qq = sh["q"]["q1"]
+    key0 = one(cur, "SELECT id FROM app.question_keys WHERE question_id=%s AND superseded_at IS NULL", qq)
+    # a completed-term attempt and its finalized grade, as a past term would hold them
+    cur.execute("""INSERT INTO app.question_attempts (enrollment_id, assignment_offering_id, question_id, attempt_no, answer, parsed_value, is_correct, points_awarded, key_version_id, is_late)
+                   VALUES (%s,%s,%s,1,%s,9.8,true,2,%s,false)""", (enr_j, sp["ao"], qq, J({"raw": "9.8"}), key0))
+    cur.execute("BEGIN")
+    cur.execute("SET LOCAL search_path = app, public, extensions")
+    cur.execute("SELECT set_config('app.auto_check_marker', 'on', true)")
+    b.grade(enr_j, sp, 2, final=True, source="auto_checked", possible=2)
+    cur.execute("COMMIT")
+    ans(cur, fx, "A", sh, "q1", "9.8")
+    past_before = (fp(grade_snap(cur, sp["ao"])), one(cur, "SELECT is_correct FROM app.question_attempts WHERE enrollment_id=%s AND assignment_offering_id=%s", enr_j, sp["ao"]))
+    k12 = correct_key(cur, qq, 12, 2)
+    check("a director of only the completed term cannot re-mark", rctx(cur, past_staff, qq)["status"] == "not_allowed")
+    c = rctx(cur, D, qq)
+    check("the director of the active term can", c["status"] == "ok" and len(c["attempts"]) == 2, str(c)[:100])
+    vs = verdicts_for(c)
+    pv = apply(cur, D, qq, k12, vs, False)
+    terms = {t["term"]: t for t in pv["by_term"]} if pv.get("by_term") else {}
+    check("the preview lists each term and says which is applied", len(terms) == 2 and sum(1 for t in terms.values() if t["applied"]) == 1, str(pv.get("by_term"))[:200])
+    check("it names what it refuses", pv["refused_attempts"] == 1 and len(pv["refused"]) == 1 and "never" in str(pv["refused"][0]["reason"]), str(pv.get("refused"))[:200])
+    check("only the active term's attempt would change", pv["attempts_changed"] == 1, str(pv)[:160])
+    check("the preview returns a token", isinstance(pv.get("preview_token"), str) and len(pv["preview_token"]) == 32)
+    r = apply(cur, D, qq, k12, vs, True, None)
+    check("a commit with no token is refused", r["status"] == "bad_request")
+    r = apply(cur, D, qq, k12, vs, True, "0" * 32)
+    check("a commit with a wrong token is refused: changed_since_preview", r["status"] == "changed_since_preview")
+    res = apply(cur, D, qq, k12, vs, True, pv["preview_token"])
+    check("a commit with the preview's token is applied", res["status"] == "ok" and res["attempts_changed"] == 1, str(res)[:160])
+    past_after = (fp(grade_snap(cur, sp["ao"])), one(cur, "SELECT is_correct FROM app.question_attempts WHERE enrollment_id=%s AND assignment_offering_id=%s", enr_j, sp["ao"]))
+    check("the completed term's attempt and its finalized grade are exactly as they were", past_before == past_after, f"{past_before} {past_after}")
+    check("the active term's attempt was re-marked (9.8 against a key of 12)", one(cur, "SELECT is_correct FROM app.question_attempts WHERE enrollment_id=%s AND assignment_offering_id=%s", A, sh["ao"]) is False)
+
+    section("fixes: the student page leaves out a question whose AI key no person checked")
+    d = as_user(fx.cadet["A"][2], lambda: (cur.execute("SELECT app.student_homework(%s)", (fx.r6["ao"],)) or cur.fetchone()[0]))
+    check("r6 has an unchecked AI key on q1: 2 of 3 questions shown, held_back 1", d["status"] == "ok" and len(d["questions"]) == 2 and d.get("held_back") == 1
+          and "q1" not in [q["qid"] for q in d["questions"]], str(d)[:160])
+    d = as_user(fx.cadet["A"][2], lambda: (cur.execute("SELECT app.student_homework(%s)", (fx.r1["ao"],)) or cur.fetchone()[0]))
+    check("an item with no unchecked key holds back nothing", d.get("held_back") == 0 and len(d["questions"]) == 3)
+    d = as_user(fx.cadet["A"][2], lambda: (cur.execute("SELECT app.student_homework(%s)", (x["ao"],)) or cur.fetchone()[0]))
+    check("attempts_used is per offering (A made 3 on X)", next(q for q in d["questions"] if q["qid"] == "q1")["attempts_used"] == 3)
+    d = as_user(fx.cadet["A"][2], lambda: (cur.execute("SELECT app.student_homework(%s)", (y["ao"],)) or cur.fetchone()[0]))
+    check("...and 1 on Y, for the same question", next(q for q in d["questions"] if q["qid"] == "q1")["attempts_used"] == 1)
+
+
 def rollback_check(cur, fx):
     section("rollback and re-apply")
     mig = REPO / "supabase" / "migrations" / "app"
@@ -514,6 +809,7 @@ def rollback_check(cur, fx):
     n = lambda names: one(cur, "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname = ANY(%s)", names)
     check("073 rolls back", apply_sql(mig / "rollback" / "073_student_homework_ROLLBACK.sql") and n(["student_homework"]) == 0)
     check("072 rolls back", apply_sql(mig / "rollback" / "072_remark_question_ROLLBACK.sql"))
+    check("...and the question trigger is gone", one(cur, "SELECT count(*) FROM pg_trigger WHERE tgname='questions_regrade_auto'") == 0)
     check("the five functions are gone", n(["remark_context", "remark_apply", "_remark_calc", "_may_correct_key", "_regrade_auto"]) == 0)
     check("record_answer is back to its 071 text and still works", n(["record_answer"]) == 1
           and one(cur, "SELECT count(*) FROM pg_proc p WHERE p.proname='record_answer' AND p.prosrc LIKE '%_regrade_auto%'") == 0
@@ -522,6 +818,7 @@ def rollback_check(cur, fx):
           and one(cur, "SELECT has_function_privilege('authenticated', 'app.record_answer(uuid,uuid,uuid,jsonb,text,boolean,uuid)', 'EXECUTE')") is False)
     check("072 re-applies", apply_sql(mig / "072_remark_question.sql"))
     check("073 re-applies", apply_sql(mig / "073_student_homework.sql"))
+    check("...and the question trigger is back", one(cur, "SELECT count(*) FROM pg_trigger WHERE tgname='questions_regrade_auto' AND NOT tgisinternal") == 1)
     check("record_answer delegates the grade again", one(cur, "SELECT count(*) FROM pg_proc p WHERE p.proname='record_answer' AND p.prosrc LIKE '%_regrade_auto%'") == 1)
 
 
@@ -558,6 +855,7 @@ def main():
         make_items(cur, fx)
         run_remark_checks(cur, surl, fx)
         run_student_checks(cur, surl, fx)
+        run_fix_checks(cur, surl, fx)
         rollback_check(cur, fx)
         conn.close()
         print(f"\n{len(p.PASSED)} passed, {len(p.FAILED)} failed")

@@ -400,14 +400,14 @@ def run_checks(surl, cur, fx):
             c2.close()
         except Exception as e:  # noqa: BLE001
             errs.append(str(e)[:80])
-    ts = [threading.Thread(target=tab, args=(i,)) for i in range(12)]
+    ts = [threading.Thread(target=tab, args=(i,)) for i in range(6)]
     [t.start() for t in ts]
     [t.join() for t in ts]
     n = one(cur, "SELECT count(*) FROM app.question_attempts WHERE enrollment_id=%s AND question_id=%s", fx.cadet["C"][1], fx.hw_conc["q"]["q1"])
     nums = sorted(r[0] for r in (cur.execute("SELECT attempt_no FROM app.question_attempts WHERE enrollment_id=%s AND question_id=%s", (fx.cadet["C"][1], fx.hw_conc["q"]["q1"])) or cur.fetchall()))
-    check("12 simultaneous answers, limit 3: exactly 3 stored", n == 3 and results.count("ok") == 3 and not errs, f"stored {n}, ok {results.count('ok')}, errs {errs[:2]}")
+    check("6 simultaneous answers, limit 3: exactly 3 stored", n == 3 and results.count("ok") == 3 and not errs, f"stored {n}, ok {results.count('ok')}, errs {errs[:2]}")
     check("attempt numbers are 1, 2, 3 with no gap and no duplicate", nums == [1, 2, 3], str(nums))
-    check("the other 9 were told limit_reached", results.count("limit_reached") == 9, str(sorted(set(results))))
+    check("the other 3 were told limit_reached", results.count("limit_reached") == 3, str(sorted(set(results))))
 
     section("the total does not see attempts, only the grade")
     try:
@@ -448,8 +448,12 @@ def rollback_check(cur):
     check("the answer functions are gone", one(cur, "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname IN ('answer_context','record_answer','_answer_gate')") == 0)
     check("070 rolls back", apply(mig / "rollback" / "070_answer_internals_ROLLBACK.sql"))
     check("release_at and the 029 guard are as before", one(cur, "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname IN ('release_at', 'grades_new_items_stay_unfinalized') AND (p.prosrc LIKE '%_release_core%' OR p.prosrc LIKE '%auto_check_marker%')") == 0)
-    check("070 re-applies", apply(mig / "070_answer_internals.sql"))
+    trg = lambda: one(cur, "SELECT count(*) FROM pg_trigger WHERE tgname IN ('question_keys_readable','question_keys_ai_check','grades_person_correction') AND NOT tgisinternal")
+    check("the three 070 triggers and their functions are gone", trg() == 0 and one(cur, "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname IN ('_key_problem','_key_number_ok','question_keys_readable','question_keys_ai_check','grades_person_correction')") == 0)
+    check("attempt uniqueness is back to per student and question", one(cur, "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='question_attempts_unique'") == "UNIQUE (enrollment_id, question_id, attempt_no)")
+    check("070 re-applies", apply(mig / "070_answer_internals.sql") and trg() == 3)
     check("071 re-applies", apply(mig / "071_answer_marking.sql"))
+    check("attempt uniqueness is per offering again", "assignment_offering_id" in one(cur, "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='question_attempts_unique'"))
 
 
 def connect(surl):

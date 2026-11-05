@@ -18,8 +18,11 @@
 --   enrolled   an ACTIVE enrollment in the offering that owns the item; a staff session with no enrollment gets nothing
 --   published  the item is published
 --   released   _release_core(item, the student's section) has passed: the one release rule (opens_at, else seven days
---              before the scheduled deadline, floored to the start of the day in Denver)
+--              before the scheduled deadline, floored to the start of the day in Denver). An item not yet released gets the
+--              same answer as one that does not exist, so a student cannot learn that an unreleased item is there
 --   path       only questions of an auto_checked path, not retired, not prose
+--   checked    a question whose current key was written by AI and has not been checked by a person is not shown at all
+--              (the reply says how many are held back). Attempts are counted for THIS item only
 --   after      a question stays readable after the deadline (a student reviews work); answering is another function
 --
 -- WHAT IT DOES NOT DO
@@ -55,7 +58,7 @@ BEGIN
 
   IF NOT v_ao.is_published THEN RETURN jsonb_build_object('status', 'not_found'); END IF;
   v_rel := _release_core(v_ao.id, v_section);
-  IF v_rel IS NOT NULL AND now() < v_rel THEN RETURN jsonb_build_object('status', 'not_open'); END IF;
+  IF v_rel IS NOT NULL AND now() < v_rel THEN RETURN jsonb_build_object('status', 'not_found'); END IF;
 
   RETURN jsonb_build_object(
     'status', 'ok',
@@ -74,17 +77,28 @@ BEGIN
                'choices', coalesce((SELECT jsonb_agg(jsonb_build_object('id', c ->> 'id', 'text', c ->> 'text'))
                                       FROM jsonb_array_elements(coalesce(q.choices, '[]'::jsonb)) c), '[]'::jsonb),
                'points', q.points,
-               'attempts_used', (SELECT count(*) FROM question_attempts a WHERE a.enrollment_id = v_enr AND a.question_id = q.id)
+               'attempts_used', (SELECT count(*) FROM question_attempts a
+                                  WHERE a.enrollment_id = v_enr AND a.assignment_offering_id = v_ao.id AND a.question_id = q.id)
              ) ORDER BY q.position, q.qid)
         FROM questions q
         JOIN offering_activities oa ON oa.activity_id = q.activity_id AND oa.assignment_offering_id = v_ao.id
-       WHERE oa.grading = 'auto_checked' AND NOT q.is_retired AND q.format <> 'prose'), '[]'::jsonb));
+       WHERE oa.grading = 'auto_checked' AND NOT q.is_retired AND q.format <> 'prose'
+         AND NOT EXISTS (SELECT 1 FROM question_keys k
+                          WHERE k.question_id = q.id AND k.variant_key = '' AND k.superseded_at IS NULL
+                            AND k.written_by = 'ai' AND k.checked_by IS NULL)), '[]'::jsonb),
+    'held_back', (SELECT count(*) FROM questions q
+                    JOIN offering_activities oa ON oa.activity_id = q.activity_id AND oa.assignment_offering_id = v_ao.id
+                   WHERE oa.grading = 'auto_checked' AND NOT q.is_retired AND q.format <> 'prose'
+                     AND EXISTS (SELECT 1 FROM question_keys k
+                                  WHERE k.question_id = q.id AND k.variant_key = '' AND k.superseded_at IS NULL
+                                    AND k.written_by = 'ai' AND k.checked_by IS NULL)));
 END; $$;
 
 COMMENT ON FUNCTION student_homework(uuid) IS
   'The signed-in student''s view of one auto-checked item: attempt limit and rule, and each question''s prompt, figure, '
-  'format, choices as {id, text}, points and attempts used. Only once the item is published and released, only for an '
-  'enrolled student. Returns no key data. Names every column it returns.';
+  'format, choices as {id, text}, points and attempts used (this item only). Only once the item is published and released, only '
+  'for an enrolled student. A question whose AI-written key no person has checked is held back and counted. Returns no key '
+  'data. Names every column it returns.';
 
 REVOKE ALL ON FUNCTION student_homework(uuid) FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
 GRANT EXECUTE ON FUNCTION student_homework(uuid) TO authenticated;

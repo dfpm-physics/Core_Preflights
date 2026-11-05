@@ -187,6 +187,82 @@ so it came back empty. Both are fixed and each has a check.
   created; nothing in `044` to `066` touches it. Another worker editing `grades_new_items_stay_unfinalized` would still
   conflict with `070`, as noted above.
 
+## After the two Stage E reviews (2026-11-05)
+
+Two reviews of the second part (a security review and a correctness review) found seven major faults and a set of smaller
+ones. Each was reproduced before it was fixed. Migrations `070` to `073` were edited in place, because none had been
+applied anywhere; each rollback was changed to match. This section replaces anything above that says otherwise.
+
+### Decisions
+
+- **Numbers.** `5 e-3` is read as 0.005. `5 X 10^-3`, `5 x 10^-3`, `5 * 10^-3` and `5 x 10^3` are read as the number
+  (the power of ten needs the `^`; a raised exponent such as 5 x 10 with a superscript -3 is read too). `5x10-3` and `5 x 10` are
+  **refused** with a plain message, never read as 5 with a unit and never marked wrong. `5 e` and `5e-` are refused. A
+  unit that starts with `e` or `E` (`eV`, `EJ`) is still a unit. `0,125` is refused as a comma problem (it used to read as
+  125); `1,000` and `12,345,678` still read as thousands. Superscript units (`m/s²`) fold to `m/s^2`. One file,
+  `site/js/numeric-answer.js`, byte-equal in both function folders (a test compares them).
+- **A key the checker cannot read.** Refused when it is entered: a numeric key with no value, a value or tolerance over 40
+  digits, a choice key that names nothing, two choices on a single-answer question, or a choice that is not offered. The
+  rule is a database trigger (`question_keys_readable`), so the upload and any other route meet it. The upload page says the
+  same in its own words before it writes. If one is met anyway when a student answers, `answer_context` and
+  `record_answer` return `key_fault`, the function tells the student the question has a fault, **no attempt is written,
+  no try is used, and nothing is marked wrong**. Superseded rows are not checked (they are history).
+- **Re-mark changes only an active term.** A completed term's attempts and finalized grades are never rewritten.
+  "Director" for a question now means a director of a course offering that is active (or a global admin); a director of
+  only a past term is refused. The preview shows every term the question appears in, which one is applied, how many
+  attempts would change in each, and lists what it refuses, with the reason. A commit **must** carry the preview's token
+  (a hash of the key and the changes the preview showed). A missing token is `bad_request`; a token that no longer matches
+  (the data or the key moved) is `changed_since_preview` and writes nothing. The old bare count is gone.
+- **A person's correction of an auto-checked grade holds.** Trigger `grades_person_correction` (070): any write that is not
+  the answer functions (they set `app.auto_check_marker`) and changes `points_earned` or `question_scores` of an
+  `auto_checked` grade moves it to source `instructor`, graded by the caller, so a later answer or re-mark skips it.
+  It does not read the new-page rule.
+- **Attempts and grades belong to one offering.** `question_attempts_unique` is `(enrollment, assignment_offering,
+  question, attempt_no)`. The limit, the used count, the best / last / first choice, the grade and the re-mark all filter by
+  offering, so two offerings that share an activity no longer share tries or points.
+- **A retired question or a points change.** Rule: a retired question contributes nothing, and a grade is never more than
+  its offering's current points. The library's own sync already moves the offering's points; trigger
+  `questions_regrade_auto` (072) now recomputes the `auto_checked` grades of that item through `_regrade_auto` in the same
+  transaction (active terms only, same advisory lock as an answer). Person-set grades are left alone. So a grade of 3 on an
+  offering of 2 cannot be left behind.
+- **An AI-written key is checked as a separate act.** Trigger `question_keys_ai_check` (070): an AI key is inserted
+  unchecked; a check is an UPDATE of `checked_by` / `checked_at` only, by a signed-in person; an INSERT that already carries a
+  check, a check with no signed-in person, and a check that edits the key in the same statement are all refused.
+- **The student page leaves out a question whose AI key no person checked.** `student_homework` omits it and returns
+  `held_back` (a count); the page says that some questions are not open yet. The answer functions already refused it
+  (`key_unchecked`). An item that is not released returns `not_found`, the same as one that does not exist, so a student
+  cannot learn that a future item exists. `attempts_used` is per offering.
+- **Late work in a term with no last class day** (`terms.ends_on` empty) is refused with `late_unavailable`, and the page
+  tells the student that the end of the term has not been set, so a staff member can fix it. It used to fall through.
+
+### What the merge with step 2 must keep
+
+When step 2 drops `grades_new_items_stay_unfinalized`:
+
+1. **Keep `grades_person_correction`.** It is what protects an instructor's correction. It is separate on purpose: it
+   works with or without the 029 rule, and the scratch proof checks it with that rule switched off.
+2. **Keep attempt uniqueness per offering** (`question_attempts_unique` with `assignment_offering_id`), and every query that
+   counts or reads attempts must filter by offering.
+3. **Keep the `app.auto_check_marker` convention** for every function that writes an `auto_checked` grade, including
+   `_regrade_auto` and `questions_regrade_auto`; a write without it is treated as a person's.
+4. **The `my_grades` view** still has to return an `auto_checked` grade before the deadline (see above).
+
+### Minor findings left, with the reason
+
+- **Attempt ceiling for choice questions** (security): a question with no limit set allows 100 tries; a limit for choice
+  questions is a policy and a form field on the entry page. Left for the entry page work.
+- **`ms` against `m s`, and spacing inside units** (correctness): needs a rule on what a unit string means; not changed
+  rather than guessed.
+- **Wording on a transport error, the score shown before a grade-release hold, and the message when an instructor-set
+  grade wins** (page): wording and a product choice about what a student sees. Not changed.
+- **The two-statement upload is not one transaction** (correctness): each statement is safe alone and the re-run is
+  idempotent; one transaction needs a new database function. Left.
+- **`sig_fig_rule` edges and a negative `-x` question**, **a rollback that freezes rows**, and **the page's own idea of "past"**
+  (it follows the browser clock; the database decides): left, none changes a mark.
+- **Older functions executable by PUBLIC** (security, outside Stage E): not touched here.
+- **Library question edits already move a completed term's `points_possible`** through the 030 sync. The new regrade covers
+  active terms only; whether past terms should be frozen against library edits is the director's decision.
+
 ## Stage E gate: test list
 
 Runs now (offline or on a scratch database):
@@ -202,8 +278,9 @@ Part two, runs now:
 
 | Gate item | Test |
 |---|---|
-| Re-mark logic: one parser in three places, the checker's verdicts, preview writes nothing, a commit needs the preview number, a second commit changes 0, no key in a reply, a non-director reaches no write | `tests/app-schema/test-remark-function.mjs` (against a model of the database rules) |
+| Re-mark logic: one parser in three places, the checker's verdicts, preview writes nothing, a commit needs the preview token, a second commit changes 0, only an active term changes, no key in a reply, a non-director reaches no write | `tests/app-schema/test-remark-function.mjs` (against a model of the database rules) |
 | Re-mark in the database: grants, who may call, preview writes nothing, commit counts and grades, instructor grade listed and unchanged, one log row, twice, malformed or stale verdicts, all or nothing (injected failure), students answering during a re-mark, the best / last / first rule | `scripts/staging/scratch_stage_e_part2_proof.py --expect-ref <staging ref>` |
+| After the reviews, in the database: a key that cannot be read is refused at entry and met as `key_fault`; an AI key is checked only by a separate act; a person's correction holds (with and without the 029 rule); two offerings sharing an activity keep separate tries and grades; retiring or re-pointing a question leaves no grade above its offering; late work with no term end is refused; a re-mark changes only an active term and refuses a missing or stale token; held-back questions; rollback of the new objects | `scripts/staging/scratch_stage_e_part2_proof.py` and `scratch_stage_e_proof.py` |
 | Student read: grants, a released item, no key data in the document or on any other route, nothing before release, unpublished, not enrolled, other course, staff session, retired question; rollback and re-apply of 073 and 072 | the same script |
 | Page logic: what is sent, what each reply says, the score is the grade row, closed and late, markup | `tests/app-schema/test-homework.mjs` |
 | Page in a browser, against a stand-in for the function | `tests/browser/test-homework.html` on `scripts/staging/serve_local.py` (checked by hand once: right, wrong, comma refused, empty, select-all, limit reached, double click, network down, closed, late, score read failing) |

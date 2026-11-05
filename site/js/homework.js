@@ -40,6 +40,8 @@ export const TEXT = {
   late: 'The deadline has passed. Your instructor allows late work, so you can still answer.',
 };
 
+export const heldBackText = (n) => `${n} ${n === 1 ? 'question is' : 'questions are'} not available yet. Your instructor is still checking ${n === 1 ? 'it' : 'them'}.`;
+
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 /** 2 -> "2", 1.5 -> "1.5", 2.50 -> "2.5". */
 export const fmt = (v) => String(Math.round(num(v) * 100) / 100);
@@ -83,6 +85,7 @@ export function buildView({ item, doc, grade }) {
     readOnly: past && !late,
     banner: past ? (late ? TEXT.late : TEXT.closed) : '',
     score: scoreText(grade, item),
+    heldBack: Math.max(0, Math.floor(num(doc.held_back))),
     questions: (doc.questions || []).map((q, i) => {
       const used = num(q.attempts_used);
       const s = scores[q.qid];
@@ -181,6 +184,7 @@ export function renderHomework(view) {
       <div style="margin-top:12px;font-weight:700" id="hw-score" role="status" aria-live="polite">${esc(view.score.text)}</div>
     </div>
     ${view.banner ? `<div class="alert ${view.readOnly ? 'alert-warn' : 'alert-info'}">${esc(view.banner)}</div>` : ''}
+    ${view.heldBack > 0 ? `<div class="alert alert-info">${esc(heldBackText(view.heldBack))}</div>` : ''}
     <div id="hw-questions">${view.questions.map(q => questionHTML(q, view.readOnly)).join('')}</div>`;
 }
 

@@ -147,7 +147,7 @@ section('a refused answer is not an attempt');
 }
 
 section('refusal codes from the database reach the student as plain sentences');
-for (const code of ['not_found', 'not_enrolled', 'not_open', 'closed', 'limit_reached', 'retired', 'no_key', 'key_unchecked', 'deadline_unreadable']) {
+for (const code of ['not_found', 'not_enrolled', 'not_open', 'closed', 'limit_reached', 'retired', 'no_key', 'key_unchecked', 'deadline_unreadable', 'late_unavailable', 'key_fault']) {
   const r = await send(world({ status: code }), base);
   check(`${code}: ok false with that code and a sentence`, r.ok === false && r.code === code && typeof r.error === 'string' && r.error.length > 10);
 }
@@ -155,6 +155,30 @@ for (const code of ['not_found', 'not_enrolled', 'not_open', 'closed', 'limit_re
   const r = await send(world({ recStatus: 'closed' }), base); check('the deadline passing between the two calls is a refusal', r.ok === false && r.code === 'closed');
   const e = await handle(post(base), { getUser: async () => ({ id: U }), rpc: async () => ({ data: null, error: { message: 'boom secret' } }) });
   const j = await e.json(); check('a database error is a plain "busy", with no database text', j.ok === false && j.code === 'busy' && !/boom|secret/.test(j.error));
+}
+
+section('a question with a fault is not the student\'s mistake');
+{
+  const unreadable = [
+    ['a numeric key with no value', { value: null, tol_pct: '2' }],
+    ['a value the checker cannot read', { value: 'abc' }],
+    ['a value of 62 digits', { value: '1' + '0'.repeat(61) }],
+    ['a tolerance the checker cannot read', { value: '9.8', tol_pct: 'x' }],
+  ];
+  for (const [label, key] of unreadable) {
+    const w = world({ key: { tol_abs: null, tol_pct: null, sig_figs: null, sig_fig_mode: 'ignore', unit: null, unit_aliases: [], unit_mode: 'ignore', ...key } });
+    const r = await send(w, { ...base, answer: '1e61' });
+    check(`${label}: the student is told the question has a fault`, r.ok === false && r.code === 'key_fault' && /fault in this question/.test(r.error), JSON.stringify(r));
+    check(`${label}: no attempt is stored and record_answer is never called`, w.stored.length === 0 && !w.calls.some(c => c[0] === 'record_answer'));
+    check(`${label}: nothing was marked wrong`, !('correct' in r));
+  }
+  for (const [label, format, ids] of [['a choice key naming nothing', 'multiple_choice', []], ['a choice key naming a choice that is not offered', 'multiple_choice', ['zz']]]) {
+    const w = world({ format, key: { correct_choice_ids: ids } });
+    const r = await send(w, { ...base, answer: 'a' });
+    check(`${label}: key_fault, nothing stored`, r.ok === false && r.code === 'key_fault' && w.stored.length === 0);
+  }
+  const rl = await send(world({ status: 'late_unavailable' }), base);
+  check('late work with no term end is refused in plain words', rl.ok === false && /end of the term has not been set/.test(rl.error), JSON.stringify(rl));
 }
 
 section('a key corrected between the two calls');

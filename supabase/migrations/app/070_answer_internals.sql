@@ -14,6 +14,18 @@
 --                                     transaction-local marker for the single statement that writes an auto-checked
 --                                     grade. Step 2 drops this trigger altogether; the exception goes with it.
 --
+--   3. _key_problem(format, choices, key)  ONE rule for "can the checker read this key". question_keys_readable() applies it
+--                                     when a current key is written, so a numeric key with no value, a value that
+--                                     does not fit the checker (more than 40 digits written out), or a choice key that
+--                                     names nothing, never gets in. _answer_gate (071) applies it again at answer time.
+--   4. question_keys_ai_check()        an AI-written key starts unchecked. A check is a separate UPDATE by a signed-in
+--                                     person that changes nothing else on the key; an INSERT that already carries a check,
+--                                     or an UPDATE that edits the key and checks it in one statement, is refused.
+--   5. grades_person_correction()      a person's write to the points or the per-question scores of an auto_checked grade
+--                                     moves the grade out of auto_checked (source instructor, graded_by the caller), so a
+--                                     later answer or re-mark cannot overwrite the correction. It does not depend on
+--                                     grades_new_items_stay_unfinalized: it must still hold after step 2 drops that trigger.
+--
 -- WHAT IT DOES NOT DO
 --   It grants nothing new. _release_core has no web-facing grant. Nothing the current site calls changes behaviour:
 --   release_at has no grant at step 1 and the trigger still refuses every write that does not set the marker.
@@ -89,6 +101,136 @@ BEGIN
   RETURN NEW;
 END; $$;
 
+-- ---- can the checker read this key -------------------------------------------------------------------
+-- The checker reads a key's numbers as text with at most 40 significant-looking digits (site/js/numeric-answer.js). A
+-- value the database accepts but the checker cannot read would mark every answer wrong, so it is refused at entry.
+CREATE FUNCTION _key_number_ok(p_v numeric) RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path = app, pg_temp
+AS $$
+  SELECT p_v IS NOT NULL
+     AND p_v::text ~ '^-?[0-9]+(\.[0-9]+)?$'
+     AND length(regexp_replace(regexp_replace(p_v::text, '^-', ''), '\.|^0+(?=[0-9])', '', 'g')) <= 40
+$$;
+
+CREATE FUNCTION _key_problem(p_format text, p_choices jsonb, k question_keys) RETURNS text
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = app, pg_temp
+AS $$
+BEGIN
+  IF p_format = 'numeric' THEN
+    IF k.value IS NULL THEN RETURN 'a number question needs the correct value'; END IF;
+    IF NOT _key_number_ok(k.value) THEN RETURN 'the correct value is too large or too small to check (more than 40 digits written out)'; END IF;
+    IF k.tol_abs IS NOT NULL AND NOT _key_number_ok(k.tol_abs) THEN RETURN 'the absolute tolerance is too large or too small to check'; END IF;
+    IF k.tol_pct IS NOT NULL AND NOT _key_number_ok(k.tol_pct) THEN RETURN 'the percentage tolerance is too large or too small to check'; END IF;
+  ELSIF p_format IN ('multiple_choice', 'multiple_select') THEN
+    IF coalesce(cardinality(k.correct_choice_ids), 0) = 0 THEN RETURN 'a choice question needs at least one correct choice'; END IF;
+    IF p_format = 'multiple_choice' AND cardinality(k.correct_choice_ids) <> 1 THEN RETURN 'a single-answer question needs exactly one correct choice'; END IF;
+    IF EXISTS (SELECT 1 FROM unnest(k.correct_choice_ids) c(id)
+                WHERE c.id IS NULL
+                   OR c.id NOT IN (SELECT e ->> 'id' FROM jsonb_array_elements(coalesce(p_choices, '[]'::jsonb)) e)) THEN
+      RETURN 'a correct choice is not one of the question''s choices';
+    END IF;
+  END IF;
+  RETURN NULL;
+END; $$;
+
+CREATE FUNCTION question_keys_readable() RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = app, pg_temp
+AS $$
+DECLARE
+  q         questions%ROWTYPE;
+  v_problem text;
+BEGIN
+  IF NEW.superseded_at IS NOT NULL THEN RETURN NEW; END IF;          -- an old version is history, not a key in use
+  IF TG_OP = 'UPDATE' AND OLD.superseded_at IS NULL
+     AND NEW.value IS NOT DISTINCT FROM OLD.value AND NEW.tol_abs IS NOT DISTINCT FROM OLD.tol_abs
+     AND NEW.tol_pct IS NOT DISTINCT FROM OLD.tol_pct AND NEW.correct_choice_ids IS NOT DISTINCT FROM OLD.correct_choice_ids THEN
+    RETURN NEW;                                                       -- a check, or an edit of something else
+  END IF;
+  SELECT * INTO q FROM questions WHERE id = NEW.question_id;
+  v_problem := _key_problem(q.format, q.choices, NEW);
+  IF v_problem IS NOT NULL THEN
+    RAISE EXCEPTION 'question %: %', q.qid, v_problem USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END; $$;
+
+CREATE TRIGGER question_keys_readable
+  BEFORE INSERT OR UPDATE ON question_keys
+  FOR EACH ROW EXECUTE FUNCTION question_keys_readable();
+
+-- ---- an AI-written key is checked by a person, in a separate step ------------------------------------
+CREATE FUNCTION question_keys_ai_check() RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = app, pg_temp
+AS $$
+BEGIN
+  IF NEW.written_by <> 'ai' THEN RETURN NEW; END IF;
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.checked_by IS NOT NULL OR NEW.checked_at IS NOT NULL THEN
+      RAISE EXCEPTION 'a key written by AI starts unchecked: a person checks it afterwards, as a separate step'
+        USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF OLD.checked_at IS NULL AND (NEW.checked_at IS NOT NULL OR NEW.checked_by IS NOT NULL) THEN
+    IF current_uid() IS NULL THEN
+      RAISE EXCEPTION 'an AI-written key is checked by a signed-in person' USING ERRCODE = 'check_violation';
+    END IF;
+    IF (NEW.correct_choice_ids, NEW.value, NEW.tol_abs, NEW.tol_pct, NEW.sig_figs, NEW.sig_fig_mode, NEW.unit,
+        NEW.unit_aliases, NEW.unit_mode, NEW.reference_text, NEW.superseded_at)
+       IS DISTINCT FROM
+       (OLD.correct_choice_ids, OLD.value, OLD.tol_abs, OLD.tol_pct, OLD.sig_figs, OLD.sig_fig_mode, OLD.unit,
+        OLD.unit_aliases, OLD.unit_mode, OLD.reference_text, OLD.superseded_at) THEN
+      RAISE EXCEPTION 'a check records that a person looked at the key as it stands: it cannot change the key in the same step'
+        USING ERRCODE = 'check_violation';
+    END IF;
+  END IF;
+  RETURN NEW;
+END; $$;
+
+CREATE TRIGGER question_keys_ai_check
+  BEFORE INSERT OR UPDATE ON question_keys
+  FOR EACH ROW EXECUTE FUNCTION question_keys_ai_check();
+
+-- ---- a person's correction of an auto-checked grade holds --------------------------------------------
+-- Only the answer functions write an auto_checked grade, and they set the marker for that one statement. Any other write
+-- that changes the points or the per-question scores of such a grade is a person's correction: the grade stops being
+-- auto_checked, so neither the next answer nor a re-mark recomputes it. This trigger does not read the new-page rule, so it
+-- still stands when step 2 drops grades_new_items_stay_unfinalized.
+CREATE FUNCTION grades_person_correction() RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = app, pg_temp
+AS $$
+BEGIN
+  IF coalesce(current_setting('app.auto_check_marker', true), '') = 'on' THEN
+    RETURN NEW;
+  END IF;
+  IF NEW.points_earned IS DISTINCT FROM OLD.points_earned OR NEW.question_scores IS DISTINCT FROM OLD.question_scores THEN
+    NEW.source    := 'instructor';
+    NEW.graded_by := coalesce(current_uid(), NEW.graded_by);
+    NEW.graded_at := now();
+  END IF;
+  RETURN NEW;
+END; $$;
+
+CREATE TRIGGER grades_person_correction
+  BEFORE UPDATE ON grades
+  FOR EACH ROW WHEN (OLD.source = 'auto_checked' AND NEW.source = 'auto_checked')
+  EXECUTE FUNCTION grades_person_correction();
+
+REVOKE ALL ON FUNCTION _key_number_ok(numeric)                  FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
+REVOKE ALL ON FUNCTION _key_problem(text, jsonb, question_keys) FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
+REVOKE ALL ON FUNCTION question_keys_readable()                 FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
+REVOKE ALL ON FUNCTION question_keys_ai_check()                 FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
+REVOKE ALL ON FUNCTION grades_person_correction()               FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
 REVOKE ALL ON FUNCTION _release_core(uuid, uuid) FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
 REVOKE ALL ON FUNCTION release_at(uuid, uuid)    FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
 REVOKE ALL ON FUNCTION grades_new_items_stay_unfinalized()

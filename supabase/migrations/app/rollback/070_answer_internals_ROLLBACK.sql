@@ -1,11 +1,21 @@
 -- Rollback for 070_answer_internals.sql. Run as `prep_app_owner`, AFTER 071 has been rolled back.
--- Restores release_at and grades_new_items_stay_unfinalized to their 038 and 029 bodies, then drops _release_core.
--- Holds no data and loses none.
+-- Restores release_at and grades_new_items_stay_unfinalized to their 038 and 029 bodies, then drops _release_core, the key
+-- readability and AI-check triggers, and the person-correction trigger. Holds no data and loses none. A grade that a person
+-- corrected keeps source instructor.
 
 BEGIN;
 
 SET LOCAL lock_timeout = '5s';
 SET LOCAL search_path = app, public;
+
+DROP TRIGGER grades_person_correction ON grades;
+DROP TRIGGER question_keys_ai_check ON question_keys;
+DROP TRIGGER question_keys_readable ON question_keys;
+DROP FUNCTION grades_person_correction();
+DROP FUNCTION question_keys_ai_check();
+DROP FUNCTION question_keys_readable();
+DROP FUNCTION _key_problem(text, jsonb, question_keys);
+DROP FUNCTION _key_number_ok(numeric);
 
 CREATE OR REPLACE FUNCTION release_at(p_assignment_offering uuid, p_section uuid) RETURNS timestamptz
 LANGUAGE plpgsql

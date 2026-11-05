@@ -19,7 +19,11 @@
 
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
-import { check, eq, section, summary } from './mini-assert.mjs';
+import { check as check0, eq as eq0, section, summary } from './mini-assert.mjs';
+// Labels name characters like a superscript minus; printed raw, some consoles cannot decode them. Print them as escapes.
+const esc = (s) => String(s).replace(/[^\x00-\x7f]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+const check = (d, ...r) => check0(esc(d), ...r);
+const eq = (d, ...r) => eq0(esc(d), ...r);
 
 const here = new URL('.', import.meta.url);
 const target = process.env.NA_MODULE ? pathToFileURL(resolve(process.env.NA_MODULE)).href
@@ -80,6 +84,32 @@ eq('5eV is 5 with unit eV, not an exponent', [plain('5eV'), parseAnswer('5eV').u
 eq('1e3m is 1000 with unit m', [plain('1e3m'), parseAnswer('1e3m').unit], ['1000', 'm']);
 eq('a bare number has no unit', parseAnswer('9.8').unit, '');
 eq('degrees and percent are units', [parseAnswer('30°').unit, parseAnswer('5%').unit], ['°', '%']);
+
+section('a power of ten is read or refused, never taken for a unit (Stage E review)');
+for (const [text, want] of [
+  ['5 e-3', '0.005'], ['5 E-3', '0.005'], ['5e-3', '0.005'], ['5 X 10^-3', '0.005'], ['5 x 10^-3', '0.005'], ['5X10^-3', '0.005'],
+  ['5×10⁻³', '0.005'], ['5 × 10⁻³', '0.005'], ['1.5 E3', '1500'], ['1.5 e3', '1500'], ['5 e3', '5000'], ['5 X 10^3', '5000'],
+]) eq(`"${text}" reads as ${want}, with no unit`, [plain(text), parseAnswer(text).unit], [want, '']);
+for (const bad of ['5e-', '5e+', '5 e', '5x10-3', '5 x 10-3', '5 X 10 -3', '5x10', '5 x 3', '5*2', '5 × 10']) {
+  const r = parseAnswer(bad);
+  check(`"${bad}" is refused as an unclear power of ten`, !r.ok && r.code === 'exponent_form' && r.message.length > 30, j(r));
+}
+check('eV and EJ are still units, not exponents', parseAnswer('5eV').unit === 'eV' && parseAnswer('5 EJ').unit === 'EJ');
+check('x after a number with no digit after it is still a unit', parseAnswer('5 xyz').ok && parseAnswer('5 xyz').unit === 'xyz');
+{
+  const key = { value: '0.005', tol_abs: null, tol_pct: '1', sig_figs: null, sig_fig_mode: 'ignore', unit: null, unit_aliases: [], unit_mode: 'ignore' };
+  check('a student who types 5 e-3 for 0.005 is right', checkNumeric(parseAnswer('5 e-3'), key).correct);
+  check('5 X 10^-3 for 0.005 is right', checkNumeric(parseAnswer('5 X 10^-3'), key).correct);
+  check('5x10-3 for 0.005 is not marked at all', !parseAnswer('5x10-3').ok);
+  check('5 e3 against 5 is wrong, not right (it means 5000)', !checkNumeric(parseAnswer('5 e3'), { ...key, value: '5', tol_pct: null }).correct);
+}
+section('a European decimal is refused, never read as a thousand times too large');
+for (const bad of ['0,125', '0,500', '0,005', '00,125', '0,5']) {
+  const r = parseAnswer(bad);
+  check(`"${bad}" is refused as a comma problem`, !r.ok && r.code === 'comma', j(r));
+}
+eq('1,125 is still one thousand one hundred twenty five', plain('1,125'), '1125');
+eq('a superscript square folds into the unit', [parseAnswer('9.8 m/s²').unit, na.normalizeUnit('m/s²') === na.normalizeUnit('m/s^2')], ['m/s²', true]);
 
 section('significant figures as written');
 for (const [text, min, max] of [

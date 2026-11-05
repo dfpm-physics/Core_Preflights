@@ -8,6 +8,31 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage E: fixes from the two reviews, built offline, not deployed)
+
+**What:** Seven major faults from the security and correctness reviews, each reproduced first, fixed in migrations `070` to
+`073` (edited in place; none applied anywhere) and their rollbacks, the two function handlers, the number reader, the
+problem file reader and the homework page. (1) `numeric-answer.js`: `5 e-3`, `5 X 10^-3` and superscript powers read as the
+number; `5x10-3` and a broken `e` are refused with a plain message; `0,125` is refused, never 125. (2) A key the checker
+cannot read is refused when entered (trigger `question_keys_readable`, and the upload); met at answer time it is
+`key_fault`: no attempt, no try used, nothing marked wrong. (3) Re-mark changes only an active term, shows each term and
+what it refuses, and a commit must carry the preview's token. (4) Trigger `grades_person_correction`: an instructor's
+change to an auto-checked grade holds, with or without the step 1 new-page rule. (5) Attempts and grades are kept per
+offering (`question_attempts_unique` now includes the offering). (6) Retiring a question or changing its points recomputes
+the auto-checked grades (`questions_regrade_auto`); a grade is never above its offering. (7) An AI-written key is checked
+only by a separate act of a signed-in person (`question_keys_ai_check`); the student page leaves out a question whose AI
+key was not checked and says some are held back; late work with no term end date is refused in plain words
+(`late_unavailable`). An unreleased item now reads as `not_found`.
+
+**Proof:** `scratch_stage_e_proof.py` 75 passed, `scratch_stage_e_part2_proof.py` 177 passed, `scratch_problem_file_proof.py`
+29 passed (all on scratch databases, 0 failed, dropped); offline suites 44 of 44, 3304 checks (the new tests fail on the old
+code: the number reader on 29 checks, the answer handler on 30). `docs/decisions/V2-STAGE-E-ANSWERS.md` records the
+decisions, what the step 2 merge must keep, and the minors left.
+
+**Deliberately not done:** nothing deployed or applied to staging or production; no function deployed. Minor findings
+left, each with its reason, are listed in the decision record (attempt ceiling for choice questions, unit spacing, three
+wording choices, the two-statement upload, the library sync that moves a completed term's points).
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 Stage E, second part: re-marking and the student homework page, built offline, not deployed)
 
 **What:** (1) Re-marking after a key correction: migration `app/072` (`remark_context`, `remark_apply`, and the grade

@@ -22,7 +22,7 @@
 //   written_by           human | ai   who wrote the answers. If the column is missing, the upload form asks.
 //
 // THE REJECTION RULE  (the whole file is refused, and every bad row is listed at once)
-//   * Any cell that begins with =, @, or a + or - followed by a letter, bracket or @ (spreadsheet formula text), or a
+//   * Any cell that begins with =, @, or a + or - that is not a plain signed number (spreadsheet formula text), or a
 //     tab or line break, is refused, in every column.
 //   * A number cell must be a plain number: digits, one optional point, one optional sign, one optional exponent.
 //     A comma (1,5 or 1,000), a unit (9.8 m/s), words, NaN, Infinity, hex, a fraction (1/2), a unit sign are refused.
@@ -101,6 +101,9 @@ export function readCsv(text) {
       if (ch === '\n') line++;
       cell += ch; i++; continue;
     }
+    if (wasQuoted && ch !== delim && ch !== '\r' && ch !== '\n') {
+      return { rows: [], lines: [], delimiter: delim, error: `Line ${line} has text straight after a closing quote. A quoted cell must end at its closing quote; put a comma after it.` };
+    }
     if (ch === '"' && cell === '' && !wasQuoted) { inQ = true; wasQuoted = true; quoteLine = line; i++; continue; }
     if (ch === delim) { endCell(); i++; continue; }
     if (ch === '\r') { endRow(); line++; rowLine = line; i += s[i + 1] === '\n' ? 2 : 1; continue; }
@@ -124,7 +127,9 @@ export function looksLikeFormula(cell) {
   if (/^[\t\r\n]/.test(raw)) return true;
   const t = raw.trim();
   if (/^[=@＝＠]/.test(t)) return true;
-  return /^[+\-−][A-Za-z(@=\\|]/.test(t);
+  // A cell that starts with + or - is a formula to a spreadsheet whatever follows, so only a plain signed number is let through.
+  if (/^[+\-−]/.test(t) && t.length > 1) return !/^[+\-−]\s?(?:\d[\d,]*\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(t);
+  return false;
 }
 
 /**
@@ -145,7 +150,12 @@ export function plainNumber(cell) {
   const d = decimalFromLiteral(t);
   if (!d) return { ok: false, why: `"${t.slice(0, 30)}" is not a plain number. Use digits, one decimal point, and an exponent such as 1e3 if needed` };
   if (d.c.toString().length > 40) return { ok: false, why: 'has more than 40 digits. Round it' };
-  return { ok: true, d, text: normalizedPlain(d) };
+  const text = normalizedPlain(d);
+  // written out in full it must still be a number the answer checker and the database both read (no more than 40 digits)
+  if (text.replace(/^-/, '').replace('.', '').replace(/^0+(?=d)/, '').length > 40) {
+    return { ok: false, why: 'is too large or too small to store as it stands (written out it has more than 40 digits). Use an ordinary-sized number' };
+  }
+  return { ok: true, d, text };
 }
 
 /** A decimal as plain text without trailing zeros after the point (the value is the same). */
@@ -264,7 +274,7 @@ export function readProblemFile(text, opts = {}) {
     }
     // the formula rule applies to every cell of the row, named columns or not
     cells.forEach((c, idx) => {
-      if (looksLikeFormula(c)) bad(header[idx] || `column ${idx + 1}`, 'this cell reads as spreadsheet formula text (it begins with = + - or @ followed by a letter or bracket). Rewrite it as plain text');
+      if (looksLikeFormula(c)) bad(header[idx] || `column ${idx + 1}`, 'this cell reads as spreadsheet formula text (it begins with = @ or a + or - that is not a plain number). Rewrite it as plain text');
     });
     const formulaNames = new Set(cells.map((c, idx) => looksLikeFormula(c) ? header[idx] : null).filter(Boolean));
     const cell = (name) => get(cells, name).trim();

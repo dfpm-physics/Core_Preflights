@@ -18,7 +18,8 @@
 //
 // A REFUSED ANSWER IS NOT AN ATTEMPT
 //   An unreadable number, an ambiguous comma, a choice that is not on the list: the student is told why and no
-//   attempt is stored or counted.
+//   attempt is stored or counted. The same holds when the QUESTION is at fault: a key the checker cannot read (no value, too
+//   many digits, no correct choice) gives 'key_fault', stores nothing, costs no attempt and marks nothing wrong.
 //
 // ANSWERS ARE ALWAYS HTTP 200
 //   { ok: true, correct, attempt_no, attempts_left } or { ok: false, code, error }. The site's other functions do
@@ -42,6 +43,8 @@ export const MESSAGES = {
   not_enrolled: 'You are not enrolled in this course.',
   not_open: 'This assignment is not open yet.',
   closed: 'This assignment is closed. The deadline has passed.',
+  late_unavailable: 'The deadline has passed, and late work cannot be accepted because the end of the term has not been set. Tell your instructor.',
+  key_fault: 'There is a fault in this question, not in your answer. Nothing was counted against you. Tell your instructor.',
   limit_reached: 'You have used all of your attempts on this question.',
   retired: 'This question has been withdrawn.',
   no_key: 'This question cannot be checked yet. Tell your instructor.',
@@ -108,13 +111,22 @@ export async function handle(req, deps) {
       if (answer.length > MAX_ANSWER_CHARS) return refusal('too_long', `That answer is longer than ${MAX_ANSWER_CHARS} characters.`);
       const parsed = parseAnswer(answer);
       if (!parsed.ok) return refusal(parsed.code, parsed.message);
-      correct = checkNumeric(parsed, ctx.key).correct;
+      const verdict = checkNumeric(parsed, ctx.key);
+      if (verdict.why === 'key_value_unreadable' || verdict.why === 'key_tolerance_unreadable') {
+        return refusal('key_fault', MESSAGES.key_fault);          // the question is at fault: nothing is stored or counted
+      }
+      correct = verdict.correct;
       rawAnswer = { raw: answer };
       parsedText = parsed.dbText;
     } else if (ctx.format === 'multiple_choice' || ctx.format === 'multiple_select') {
       const selected = Array.isArray(answer) ? answer : typeof answer === 'string' ? [answer] : null;
       if (!selected || selected.length > MAX_CHOICES) return refusal('bad_answer', 'Choose an answer.');
-      const res = checkChoices(selected, ctx.choice_ids || [], ctx.key?.correct_choice_ids || [], ctx.format);
+      const keyIds = ctx.key?.correct_choice_ids || [];
+      const offered = ctx.choice_ids || [];
+      if (keyIds.length === 0 || keyIds.some(id => !offered.includes(id))) {
+        return refusal('key_fault', MESSAGES.key_fault);
+      }
+      const res = checkChoices(selected, offered, keyIds, ctx.format);
       if (!res.ok) return refusal(res.code, res.message);
       correct = res.correct;
       rawAnswer = { choices: [...new Set(selected)].sort() };

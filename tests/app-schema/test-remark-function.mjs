@@ -4,7 +4,9 @@
 //   * The function folder carries the SAME parser file as the site and as check-answer (byte for byte, line endings
 //     aside): there is no second parser.
 //   * The re-mark uses that checker: the same answers get the same verdicts here as in check-answer.
-//   * A preview writes nothing; a commit must carry the preview's number; a second commit changes 0.
+//   * A preview writes nothing and returns a token; a commit must carry that token; a second commit changes 0.
+//   * Only attempts of an active term are changed; the preview shows each term and lists the ones it refuses; a stale
+//     token (the data or the key moved) is refused.
 //   * An answer the checker cannot read is left as it was, not marked wrong. A key the checker cannot read stops the run.
 //   * A session that is missing, forged or not a director reaches no write. The body cannot choose a verdict.
 //   * The reply to a caller carries counts and ids and never the key.
@@ -14,6 +16,7 @@
 //   The in-memory model below copies the rules of app.remark_apply; it is a model, not the database.
 
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { handle, markAttempt } from '../../supabase/functions/remark-question/handler.js';
 import * as siteParser from '../../site/js/numeric-answer.js';
 import { check, eq, section, summary } from './mini-assert.mjs';
@@ -45,6 +48,7 @@ function world({ format = 'numeric', key = KEY, role = 'director', attempts, gra
     { id: 'a0000000-0000-4000-8000-000000000003', enr: 'e3', answer: { raw: '9.7' }, c: true, p: 2, k: K2 },      // already current
     { id: 'a0000000-0000-4000-8000-000000000004', enr: 'e1', answer: { raw: '1,5' }, c: false, p: 0, k: K1 },     // cannot be read
   ];
+  for (const a of w.attempts) { a.active ??= true; a.term ??= 'Fall'; }
   w.grades = { e1: 'auto_checked', e2: 'instructor', e3: 'auto_checked', ...graded };
   w.deps = {
     getUser: async (jwt) => (jwt === 'good' || jwt === 'other' ? { id: U } : null),
@@ -63,17 +67,26 @@ function world({ format = 'numeric', key = KEY, role = 'director', attempts, gra
           const nc = v.is_correct; const np = nc === null ? a.p : (nc ? 2 : 0); const nk = nc === null ? a.k : args.p_key_version;
           return { a, nc, np, nk, changed: nc !== a.c && nc !== null || np !== a.p || nk !== a.k };
         });
-        const changed = calc.filter(c => c.changed).length;
-        const pts = calc.filter(c => c.np !== c.a.p);
+        const live = calc.filter(c => c.a.active);
+        const changed = live.filter(c => c.changed).length;
+        const token = createHash('md5').update(args.p_key_version + live.filter(c => c.changed).map(c => `${c.a.id}/${c.nc}/${c.np}`).join(',')).digest('hex');
+        const terms = [...new Set(calc.map(c => c.a.term))].map(t => {
+          const rows = calc.filter(c => c.a.term === t);
+          return { term: t, course_offering_id: 'co-' + t, active: rows[0].a.active, attempts: rows.length, would_change: rows.filter(c => c.changed).length,
+            grades_affected: new Set(rows.filter(c => c.np !== c.a.p).map(c => c.a.enr)).size, applied: rows[0].a.active,
+            reason: rows[0].a.active ? null : 'not an active term: completed work is never re-marked', extra: 'must not appear' };
+        });
+        const pts = live.filter(c => c.np !== c.a.p);
         const enrs = [...new Set(pts.map(c => c.a.enr))];
         const listed = enrs.filter(e => w.grades[e] !== 'auto_checked').map(e => ({ enrollment_id: e, source: w.grades[e] }));
         const base = { status: 'ok', attempts_total: w.attempts.length, attempts_changed: changed,
           now_correct: calc.filter(c => c.nc === true && c.a.c !== true).length, now_wrong: calc.filter(c => c.nc === false && c.a.c !== false).length,
-          unreadable: calc.filter(c => c.nc === null).length, grades_to_recompute: enrs.length - listed.length, grades_listed: listed.length,
+          unreadable: calc.filter(c => c.nc === null).length, by_term: terms, refused: terms.filter(t => !t.active && t.would_change > 0),
+          refused_attempts: calc.filter(c => !c.a.active && c.changed).length, preview_token: token, grades_to_recompute: enrs.length - listed.length, grades_listed: listed.length,
           listed, sample: [], leak: 'must not appear', key: 'must not appear' };
         if (!args.p_commit) return { data: { ...base, committed: false }, error: null };
-        if (args.p_expect_changed !== changed) return { data: { status: 'changed_since_preview', attempts_changed: changed }, error: null };
-        for (const c of calc) { if (c.changed) { w.writes++; c.a.c = c.nc ?? c.a.c; c.a.p = c.np; c.a.k = c.nk; } }
+        if (args.p_preview_token !== token) return { data: { status: 'changed_since_preview', attempts_changed: changed }, error: null };
+        for (const c of live) { if (c.changed) { w.writes++; c.a.c = c.nc ?? c.a.c; c.a.p = c.np; c.a.k = c.nk; } }
         w.runs.push({ changed, from: K1, to: args.p_key_version, by: args.p_auth_user });
         return { data: { ...base, committed: true }, error: null };
       }
@@ -104,7 +117,7 @@ section('markAttempt uses the shared checker');
   eq('a key the checker cannot read stops the run', markAttempt({ format: 'numeric', key: { ...KEY, value: 'abc' } }, { id: 'x', answer: { raw: '9.8' } }), null);
 }
 
-section('preview writes nothing; commit needs the preview number');
+section('preview writes nothing; commit needs the preview token');
 {
   const w = world();
   const p = await send(w, { question_id: Q, mode: 'preview' });
@@ -114,20 +127,42 @@ section('preview writes nothing; commit needs the preview number');
   check('nothing was written', w.writes === 0 && w.runs.length === 0);
   eq('an instructor-corrected grade is listed, not changed', p.listed.map(l => l.enrollment_id), ['e2']);
   eq('counts of grades: one to recompute, one listed', [p.grades_to_recompute, p.grades_listed], [1, 1]);
+  check('the preview returns a token', /^[0-9a-f]{32}$/.test(p.preview_token), String(p.preview_token));
   const noExpect = await send(w, { question_id: Q, mode: 'commit' });
-  check('a commit without the number is refused before any call', noExpect.ok === false && noExpect.code === 'bad_request' && !w.calls.some(c => c[0] === 'remark_apply' && c[1].p_commit));
-  const wrong = await send(w, { question_id: Q, mode: 'commit', expect_changed: p.attempts_changed + 1 });
-  check('a commit with a different number is refused and writes nothing', wrong.ok === false && wrong.code === 'changed_since_preview' && w.writes === 0, JSON.stringify(wrong));
-  check('...and the refusal says what the number is now', /It is now \d+/.test(wrong.error));
-  const c1 = await send(w, { question_id: Q, mode: 'commit', expect_changed: p.attempts_changed });
+  check('a commit without the token is refused before any call', noExpect.ok === false && noExpect.code === 'bad_request' && !w.calls.some(c => c[0] === 'remark_apply' && c[1].p_commit));
+  const wrong = await send(w, { question_id: Q, mode: 'commit', preview_token: 'f'.repeat(32) });
+  check('a commit with a token the preview did not return is refused and writes nothing', wrong.ok === false && wrong.code === 'changed_since_preview' && w.writes === 0, JSON.stringify(wrong));
+  const oldNumber = await send(w, { question_id: Q, mode: 'commit', expect_changed: p.attempts_changed });
+  check('the old way (a bare count) is no longer a commit', oldNumber.ok === false && oldNumber.code === 'bad_request' && w.writes === 0, JSON.stringify(oldNumber));
+  const c1 = await send(w, { question_id: Q, mode: 'commit', preview_token: p.preview_token });
   check('a commit with the preview number is applied', c1.ok && c1.committed === true && w.writes === p.attempts_changed && w.runs.length === 1, JSON.stringify(c1));
   const p2 = await send(w, { question_id: Q, mode: 'preview' });
   eq('run again: the preview now shows 0 changes', p2.attempts_changed, 0);
-  const c2 = await send(w, { question_id: Q, mode: 'commit', expect_changed: 0 });
+  const c2 = await send(w, { question_id: Q, mode: 'commit', preview_token: p2.preview_token });
   check('a second commit changes 0 attempts', c2.ok && c2.attempts_changed === 0 && w.writes === p.attempts_changed);
   check('the reply never carries the key or database extras', !/must not appear|9\.8|tol_/.test(JSON.stringify([p, c1, c2])), JSON.stringify(c1));
   eq('the reply has only the intended fields', Object.keys(c1).sort(),
-    ['attempts_changed', 'attempts_total', 'committed', 'grades_listed', 'grades_to_recompute', 'listed', 'now_correct', 'now_wrong', 'ok', 'sample', 'unreadable']);
+    ['attempts_changed', 'attempts_total', 'by_term', 'committed', 'grades_listed', 'grades_to_recompute', 'listed', 'now_correct', 'now_wrong', 'ok', 'preview_token', 'refused', 'refused_attempts', 'sample', 'unreadable']);
+}
+
+section('only an active term is changed; the preview shows every term and what it refuses');
+{
+  const att = (n, extra) => ({ id: `a0000000-0000-4000-8000-0000000000${n}`, enr: `e${n}`, answer: { raw: '9.8' }, c: false, p: 0, k: K1, ...extra });
+  const w = world({ attempts: [att(11, {}), att(12, { active: false, term: 'Past' }), att(13, { active: false, term: 'Past' })], graded: { e11: 'auto_checked', e12: 'auto_checked', e13: 'auto_checked' } });
+  const p = await send(w, { question_id: Q, mode: 'preview' });
+  eq('the preview counts only the active term as changing', [p.attempts_total, p.attempts_changed, p.refused_attempts], [3, 1, 2]);
+  eq('it lists each term, and which one is applied', p.by_term.map(t => [t.term, t.active, t.would_change, t.applied]), [['Fall', true, 1, true], ['Past', false, 2, false]]);
+  eq('it names the term it refuses and why', p.refused.map(t => [t.term, t.would_change, /never re-marked/.test(t.reason)]), [['Past', 2, true]]);
+  check('a term row carries only the intended fields', p.by_term.every(t => !('extra' in t)), JSON.stringify(p.by_term));
+  const c = await send(w, { question_id: Q, mode: 'commit', preview_token: p.preview_token });
+  check('the commit writes the active attempt only', c.ok && w.writes === 1, JSON.stringify(c));
+  check('the completed term is exactly as it was', w.attempts.filter(a => a.term === 'Past').every(a => a.c === false && a.p === 0 && a.k === K1));
+  // a token from before the key or the data moved is stale
+  const w2 = world();
+  const p2 = await send(w2, { question_id: Q, mode: 'preview' });
+  w2.attempts[0].answer = { raw: '50' };
+  const stale = await send(w2, { question_id: Q, mode: 'commit', preview_token: p2.preview_token });
+  check('a token whose changes are no longer the changes is refused, with nothing written', stale.ok === false && stale.code === 'changed_since_preview' && w2.writes === 0, JSON.stringify(stale));
 }
 
 section('who may call, and what the body can choose');
@@ -145,7 +180,7 @@ section('who may call, and what the body can choose');
   check('the identity sent is the session user and the verdicts come from the checker, not the body',
     apply.p_auth_user === U && apply.p_verdicts.length === 4 && apply.p_key_version === K2);
   for (const bad of [{ mode: 'preview' }, { question_id: 'nope', mode: 'preview' }, { question_id: Q }, { question_id: Q, mode: 'run' },
-                     { question_id: Q, mode: 'commit', expect_changed: -1 }, { question_id: Q, mode: 'commit', expect_changed: '3' }]) {
+                     { question_id: Q, mode: 'commit', preview_token: 'abc' }, { question_id: Q, mode: 'commit', preview_token: 3 }, { question_id: Q, mode: 'commit', preview_token: 'F'.repeat(32) }]) {
     const wb = world(); const rb = await send(wb, bad);
     check(`a malformed request ${JSON.stringify(bad).slice(0, 40)} is refused before any call`, rb.ok === false && rb.code === 'bad_request' && !wb.calls.length);
   }
@@ -168,7 +203,7 @@ section('refusals reach staff as plain sentences');
   check('an attempt that arrived meanwhile gives attempts_moved', rm.ok === false && rm.code === 'attempts_moved');
   const e = await handle(post({ question_id: Q, mode: 'preview' }), { getUser: async () => ({ id: U }), rpc: async () => ({ data: null, error: { message: 'boom secret' } }) });
   const j = await e.json(); check('a database error is a plain "busy", with no database text', j.ok === false && j.code === 'busy' && !/boom|secret/.test(j.error));
-  for (const code of ['not_found', 'not_auto_checked', 'no_key', 'key_unchecked']) {
+  for (const code of ['not_found', 'not_auto_checked', 'no_key', 'key_unchecked', 'key_fault']) {
     const wc = world(); const o3 = wc.deps.rpc; wc.deps.rpc = async (n, a) => n === 'remark_context' ? { data: { status: code }, error: null } : o3(n, a);
     const rc = await send(wc, { question_id: Q, mode: 'preview' });
     check(`${code}: ok false, that code, a sentence`, rc.ok === false && rc.code === code && rc.error.length > 10);

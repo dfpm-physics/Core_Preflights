@@ -97,7 +97,9 @@ refused('a unit in the tolerance', { tolerance_absolute: '0.1 m' }, 'tolerance_a
 refused('a negative tolerance', { tolerance_percent: '-2' }, 'tolerance_percent', 'negative');
 refused('a tolerance over 100 percent', { tolerance_percent: '150' }, 'tolerance_percent', '100');
 refused('an answer of 0 with no absolute tolerance', { answer: '0', tolerance_percent: '2' }, 'tolerance_absolute', 'required');
-refused('an exponent too large to type back', { answer: '1e300', tolerance_percent: '1' }, 'answer', 'checker');
+refused('an exponent too large to store written out', { answer: '1e300', tolerance_percent: '1' }, 'answer', 'too large');
+refused('an answer of 1e100 names the number, not the typed-back form', { answer: '1e100' }, 'answer', 'more than 40 digits');
+refused('a tiny tolerance written out in full', { answer: '5', tolerance_absolute: '1e-60' }, 'tolerance_absolute', 'too large or too small');
 refused('more than 40 digits', { answer: '1.' + '1'.repeat(41) }, 'answer', '40');
 refused('points with three decimals', { points: '1.234' }, 'points', 'two decimals');
 refused('points with a comma', { points: '1,5' }, 'points');
@@ -146,6 +148,14 @@ section('a bad file shows every bad row at once, and writes nothing');
   check('several problems in one row are all listed', plan.rows[0].problems.length >= 2, JSON.stringify(plan.rows[0].problems));
 }
 
+section('text after a closing quote is refused, not merged into the cell');
+{
+  const r = P.readCsv('a,b\n"abc"def,x\n');
+  check('"abc"def is an error', !!r.error && /closing quote/.test(r.error), JSON.stringify(r.error));
+  check('"abc",def is fine', P.readCsv('a,b\n"abc",def\n').error === null);
+  check('a doubled quote inside quotes is fine', P.readCsv('a,b\n"a""b",x\n').rows[1][0] === 'a"b');
+}
+
 section('a hostile file');
 {
   const cells = Object.fromEntries(cols.map(c => [c, '=cmd|\' /C calc\'!A0']));
@@ -153,10 +163,10 @@ section('a hostile file');
   check('formula text in every column is refused', !plan.ok && plan.toWrite.length === 0);
   check('it is refused once per cell, with the column named', allProblems(plan).filter(p => p.includes('formula')).length >= cols.length - 1, String(allProblems(plan).length));
 }
-for (const bad of ['\t=1+1', '\r=1+1', '+cmd', '-cmd', '-(1+1)', '@SUM(1)', '=1', '＝1+1']) {
+for (const bad of ['\t=1+1', '\r=1+1', '+cmd', '-cmd', '-(1+1)', '@SUM(1)', '=1', '＝1+1', "+1+cmd|' /C calc'!A0", '-1+2', '+5 m/s is the speed', '-2-3']) {
   check(`"${ascii(bad)}" reads as formula text`, P.looksLikeFormula(bad) === true);
 }
-for (const fine of ['-5', '+5', '-.5', '-1e3', '5 m', 'Which force?', '-', 'a=b', '3 = 3']) {
+for (const fine of ['-5', '+5', '-.5', '-1e3', '-1,000', '- 5', '5 m', 'Which force?', '-', 'a=b', '3 = 3']) {
   check(`"${fine}" does not read as formula text`, P.looksLikeFormula(fine) === false);
 }
 {

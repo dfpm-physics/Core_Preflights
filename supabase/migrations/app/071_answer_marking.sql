@@ -22,12 +22,17 @@
 --   path         the question sits on an auto_checked path of that item, is not retired, and is not prose
 --   deadline     _effective_core: an extension, else the section / day / offering date, with the 120 s grace.
 --                After it: refused, unless the item allows late work and the term's last class day has not ended;
---                then the attempt is stored with is_late = true. An unusable deadline refuses.
---   limit        assignment_offerings.attempt_limit per question. With no limit set a ceiling of 100 applies, so
+--                then the attempt is stored with is_late = true. An unusable deadline refuses. A term with no last
+--                class day recorded cannot say when late work stops, so late work is refused there ('late_unavailable').
+--   limit        assignment_offerings.attempt_limit per question AND PER ITEM: attempts are counted and numbered for one
+--                enrollment, one item and one question, so an activity shared by two items of a term keeps two separate
+--                tallies and two separate grades. With no limit set a ceiling of 100 applies, so
 --                the answer cannot be hunted for without end.
 --   serial       one lock per student and item: attempt numbers run 1, 2, 3 with no gap, two tabs cannot both take
 --                the last attempt, and UNIQUE (enrollment, question, attempt_no) backs it up.
---   key          p_key_version must be the current key of the question, else 'key_changed' (the function retries)
+--   key          p_key_version must be the current key of the question, else 'key_changed' (the function retries). A key
+--                the checker cannot read (a numeric key with no value or too many digits, a choice key naming nothing)
+--                gives 'key_fault': no attempt is stored or counted and nothing is marked wrong
 --   the grade    never a parameter. points_earned and question_scores are computed here from the stored attempts by
 --                the item's attempt_rule (best / last / first), source auto_checked, finalized. A grade that a person
 --                has taken over (any other source) is left alone; attempts are still stored.
@@ -44,6 +49,13 @@ BEGIN;
 
 SET LOCAL lock_timeout = '5s';
 SET LOCAL search_path = app, public;
+
+-- ---- attempts belong to one item -----------------------------------------------------------------------
+-- The attempt number is unique per student, item and question (it was per student and question), so a question that
+-- two items of one term share is tallied, limited and graded in each item on its own.
+ALTER TABLE question_attempts DROP CONSTRAINT question_attempts_unique;
+ALTER TABLE question_attempts ADD CONSTRAINT question_attempts_unique
+  UNIQUE (enrollment_id, assignment_offering_id, question_id, attempt_no);
 
 -- ---- the one gate both functions use -----------------------------------------------------------------
 CREATE FUNCTION _answer_gate(p_auth_user uuid, p_assignment_offering uuid, p_question uuid, p_lock boolean)
@@ -113,11 +125,15 @@ BEGIN
     IF NOT v_ao.late_allowed OR (v_close IS NOT NULL AND now() > v_close) THEN
       status := 'closed'; RETURN NEXT; RETURN;
     END IF;
+    IF v_close IS NULL THEN                -- late work is allowed, but the term has no last class day to end it
+      status := 'late_unavailable'; RETURN NEXT; RETURN;
+    END IF;
     is_late := true;
   END IF;
 
-  -- the attempt limit, per question
-  SELECT count(*) INTO v_used FROM question_attempts a WHERE a.enrollment_id = v_enr AND a.question_id = v_q.id;
+  -- the attempt limit, per question and per item
+  SELECT count(*) INTO v_used FROM question_attempts a
+   WHERE a.enrollment_id = v_enr AND a.assignment_offering_id = v_ao.id AND a.question_id = v_q.id;
   attempts_used := v_used;
   attempt_limit := v_ao.attempt_limit;
   IF v_used >= coalesce(v_ao.attempt_limit, c_ceiling) THEN status := 'limit_reached'; RETURN NEXT; RETURN; END IF;
@@ -127,6 +143,7 @@ BEGIN
    WHERE k.question_id = v_q.id AND k.variant_key = '' AND k.superseded_at IS NULL;
   IF v_key.id IS NULL THEN status := 'no_key'; RETURN NEXT; RETURN; END IF;
   IF v_key.written_by = 'ai' AND v_key.checked_by IS NULL THEN status := 'key_unchecked'; RETURN NEXT; RETURN; END IF;
+  IF _key_problem(v_q.format, v_q.choices, v_key) IS NOT NULL THEN status := 'key_fault'; RETURN NEXT; RETURN; END IF;
   key_id := v_key.id;
   RETURN NEXT;
 END; $$;
@@ -213,12 +230,12 @@ BEGIN
     SELECT q.qid, q.points,
            CASE g.attempt_rule
              WHEN 'best'  THEN (SELECT max(a.points_awarded) FROM question_attempts a
-                                 WHERE a.enrollment_id = g.enrollment_id AND a.question_id = q.id)
+                                 WHERE a.enrollment_id = g.enrollment_id AND a.assignment_offering_id = p_assignment_offering AND a.question_id = q.id)
              WHEN 'last'  THEN (SELECT a.points_awarded FROM question_attempts a
-                                 WHERE a.enrollment_id = g.enrollment_id AND a.question_id = q.id
+                                 WHERE a.enrollment_id = g.enrollment_id AND a.assignment_offering_id = p_assignment_offering AND a.question_id = q.id
                                  ORDER BY a.attempt_no DESC LIMIT 1)
              ELSE              (SELECT a.points_awarded FROM question_attempts a
-                                 WHERE a.enrollment_id = g.enrollment_id AND a.question_id = q.id
+                                 WHERE a.enrollment_id = g.enrollment_id AND a.assignment_offering_id = p_assignment_offering AND a.question_id = q.id
                                  ORDER BY a.attempt_no ASC LIMIT 1)
            END AS pts
       FROM questions q WHERE q.activity_id = g.activity_id AND NOT q.is_retired)

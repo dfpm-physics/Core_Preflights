@@ -26,6 +26,9 @@
 //
 // ── THE OTHER FORMS ───────────────────────────────────────────────────────────────────────────────────────
 //   1E3  1.0e3  1000  1,000  +5  -5  −5 (U+2212)  .5  5.  1.5e-3  1.0×10^3  1.0 x 10^3  1.0*10^3
+//   A tail that looks like a power of ten is READ or REFUSED, never taken for a unit (a unit is discarded, so the number in
+//   front would be marked alone): "5 e-3", "1.5 E3", "5 X 10^-3", "5×10⁻³" are read; "5e-", "5x10-3" (no ^) are refused with a
+//   plain sentence and cost no attempt. A leading-zero comma group ("0,125") is a European decimal and is refused.
 //   Then an optional unit, written after the number: "9.8 m/s^2". A unit must start with a letter or one of
 //   ° µ μ Ω %, so "1/2" is refused (it is not one number) instead of reading as 1 with a unit "/2".
 //   Refused: nothing, words, NaN, Infinity, hex, a second number, more than 40 digits, an exponent beyond ±400,
@@ -95,9 +98,14 @@ const refuse = (code, message) => ({ ok: false, code, message });
 
 const NUMBER_TOKEN = /^([+-]?)([\d,]*)(?:\.(\d*))?/;
 const EXPONENT_E = /^[eE]([+-]?\d+)/;
-const EXPONENT_TEN = /^\s*[x×*]\s*10\s*\^\s*([+-]?\d+)/;
+const EXPONENT_E_BROKEN = /^[eE](?:[+-]|$)/;                       // "5e-", "5 e": an exponent that was started and not finished
+const EXPONENT_TEN = /^[xX×*]\s*10\s*\^\s*([+-]?\d+)/;
+const EXPONENT_TEN_SUP = /^[xX×*]\s*10\s*([⁺⁻]?[⁰¹²³⁴⁵⁶⁷⁸⁹]+)/;    // 5×10⁻³, a common paste
+const TEN_LIKE = /^[xX×*]\s*[\d.]/;                                 // a multiplication sign followed by a digit
 const UNIT_START = /^[A-Za-zµμΩ°%]/;
-const GROUPED = /^\d{1,3}(,\d{3})+$/;
+const GROUPED = /^[1-9]\d{0,2}(,\d{3})+$/;                          // no leading zero: 0,125 is a decimal written the European way
+const SUPERSCRIPT_DIGITS = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁺': '+', '⁻': '-' };
+const fromSuperscript = (s) => s.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻]/g, c => SUPERSCRIPT_DIGITS[c]);
 
 /** Collapse the characters people paste: a real minus sign, a multiplication sign, odd spaces. */
 const normalize = (t) => String(t)
@@ -153,17 +161,28 @@ export function parseAnswer(input) {
   if (!/\d/.test(intDigits + frac)) return refuse('not_a_number', 'That is not a number. Type digits, for example 9.8, 1e3 or 1,000.');
   if ((intDigits + frac).replace(/^0+/, '').length > MAX_DIGITS) return refuse('too_many_digits', `That has more than ${MAX_DIGITS} digits. Round it.`);
 
+  if (/^0[xXbBoO][0-9A-Za-z]/.test(t)) return refuse('not_a_number', 'That looks like a number in another base (such as 0x1F). Type an ordinary decimal number.');
+  // The tail after the number is a power of ten, a unit, or nothing. A tail that LOOKS like a power of ten is read as
+  // one or refused; it is never allowed to fall through and be taken for a unit, because a unit is thrown away and the
+  // number in front would then be marked on its own (5 e-3 read as 5).
   let exp = 0;
-  const e1 = EXPONENT_E.exec(rest);
-  if (e1) { exp = parseInt(e1[1], 10); rest = rest.slice(e1[0].length); }
-  else {
-    const e2 = EXPONENT_TEN.exec(rest);
-    if (e2) { exp = parseInt(e2[1], 10); rest = rest.slice(e2[0].length); }
+  const lead = rest.replace(/^\s+/, '');
+  const e1 = EXPONENT_E.exec(lead);
+  if (e1) { exp = parseInt(e1[1], 10); rest = lead.slice(e1[0].length); }
+  else if (EXPONENT_E_BROKEN.test(lead)) {
+    return refuse('exponent_form', 'An "e" after a number must be followed by a power of ten, as in 5e-3. Retype your answer, for example 5e-3 or 5 x 10^-3.');
+  } else if (TEN_LIKE.test(lead)) {
+    const e2 = EXPONENT_TEN.exec(lead);
+    const e3 = e2 ? null : EXPONENT_TEN_SUP.exec(lead);
+    if (!e2 && !e3) {
+      return refuse('exponent_form', 'It is unclear whether that is a power of ten. Retype it as 5e-3 or as 5 x 10^-3 (with the ^).');
+    }
+    exp = parseInt(e2 ? e2[1] : fromSuperscript(e3[1]), 10);
+    rest = lead.slice((e2 || e3)[0].length);
   }
   if (!Number.isSafeInteger(exp) || Math.abs(exp) > MAX_EXPONENT) return refuse('exponent_range', 'That power of ten is too large or too small.');
 
   const unit = rest.trim();
-  if (/^0[xXbBoO][0-9A-Za-z]/.test(t)) return refuse('not_a_number', 'That looks like a number in another base (such as 0x1F). Type an ordinary decimal number.');
   if (unit !== '') {
     if (/^[\d.,]/.test(unit)) {
       return refuse('second_number', 'Type one number. If that is a comma or a second point, remove it.');
@@ -191,7 +210,8 @@ export function parseAnswer(input) {
 /* ── the checker ─────────────────────────────────────────────────────────────────────────────────────── */
 
 /** Units compare as written, case-sensitive (N is not n, M is not m), with spaces and middle dots tidied. */
-export const normalizeUnit = (u) => String(u ?? '').replace(/[·⋅]/g, '*').replace(/\s+/g, '').replace(/−/g, '-');
+export const normalizeUnit = (u) => String(u ?? '').replace(/[·⋅]/g, '*').replace(/\s+/g, '').replace(/−/g, '-')
+  .replace(/⁻¹/g, '^-1').replace(/⁻²/g, '^-2').replace(/²/g, '^2').replace(/³/g, '^3');
 
 /**
  * Is a parsed answer right against a key? `key` fields are the question_keys columns:
