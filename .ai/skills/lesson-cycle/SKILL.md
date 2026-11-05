@@ -110,9 +110,11 @@ class. `pull` warns about that, but by then you have already spent the run.
 response graded `ai_drafted` (the overnight option: the job drafts the marks, a person reviews and finalizes them),
 or a typed response graded `human_graded` on an item **not entered on a newer page** (the Fall shape). A new
 `human_graded` typed response is marked by a person and is not offered. Online-question, in-person and elsewhere
-items are never offered. The rule is `eligible_path_sql()` in `supabase/admin/lesson_aggregate.py`. A draft is always
-written unfinalized; on an `ai_drafted` item the database refuses a finalize that does not come from a signed-in
-staff member (migration 078).
+items are never offered. An item that offers a choice (a tutor path beside a typed one) is offered only when its typed
+side is itself eligible; if a person marks the typed side, the whole item is left out and the pull does not return its
+written activity. The rule is `eligible_path_sql()` and `ineligible_typed_sql()` in `supabase/admin/lesson_aggregate.py`.
+A draft is always written unfinalized; on an `ai_drafted` item the database refuses a finalize, or taking back a
+finalized mark, that does not come from a signed-in staff member (migration 078).
 
 `--as-of <ts>` is a read-only **rehearsal**: it moves the clock for the "which tracks are past
 due" test only, prints a banner, and writes nothing. Use it to see what a close-out will look like

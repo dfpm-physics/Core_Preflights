@@ -70,6 +70,7 @@ PY_OFFLINE = [
     "scripts/fall2026/step1_script_guards_test.py",
     "scripts/v2/test_backfill_paths.py",
     "scripts/checks/csp_pages_test.py",
+    "scripts/checks/worklist_eligibility_test.py",
 ]
 # NOT listed anywhere, on purpose (they sign in to, or read, a live database):
 #   test-rest.mjs test-student.mjs test-isolation.mjs test-prefs.mjs test-paging.mjs

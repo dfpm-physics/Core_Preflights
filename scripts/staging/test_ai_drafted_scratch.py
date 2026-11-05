@@ -397,6 +397,11 @@ def main():
             ("human_new", [{"modality": "written", "delivery": "typed_response", "grading": "human_graded", "warn": True}], {"entered_on_new_page": True}),
             ("questions", [{"modality": "questions", "delivery": "online_questions", "grading": "auto_checked"}], {"entered_on_new_page": True}),
             ("inperson", [{"modality": "external", "delivery": "in_person", "grading": "hand_entered"}], {"entered_on_new_page": True}),
+            # a choice item: a tutor path beside a typed path. The tutor path alone would make it eligible.
+            ("mixed_human", [{"modality": "written", "delivery": "typed_response", "grading": "human_graded", "warn": True},
+                             {"modality": "interactive"}], {"entered_on_new_page": True}),
+            ("mixed_ai", [{"modality": "written", "delivery": "typed_response", "grading": "ai_drafted", "warn": True},
+                          {"modality": "interactive"}], {"entered_on_new_page": True}),
         ]:
             wl[key] = new_item(paths, due_by_day={"M": past}, **kw)
             cur.execute("BEGIN")
@@ -409,6 +414,14 @@ def main():
         t.chk("WORKLIST: the full query runs on the finished chain and lists the Fall-shaped item", wl["fall"]["slug"] in listed, sorted(listed))
         t.chk("WORKLIST: an ai_drafted item on a newer page is listed", wl["ai"]["slug"] in listed)
         t.chk("WORKLIST: a new human_graded typed response is not", wl["human_new"]["slug"] not in listed)
+        t.chk("WORKLIST: a choice item whose typed path a person marks is not listed (the tutor path cannot carry it in)",
+              wl["mixed_human"]["slug"] not in listed, sorted(listed))
+        t.chk("WORKLIST: a choice item whose typed path is ai_drafted is listed", wl["mixed_ai"]["slug"] in listed)
+        # the pull must not hand the job the typed side either
+        for key, expect in (("mixed_human", False), ("mixed_ai", True), ("fall", True)):
+            got = la._offering_activity_ids(s.conn, wl[key]["ao"])
+            t.chk(f"PULL: the written side of the '{key}' item is {'offered' if expect else 'withheld'}",
+                  bool(got["written_id"]) is expect, got)
         t.chk("WORKLIST: an online-questions item and an in-person item are not",
               wl["questions"]["slug"] not in listed and wl["inperson"]["slug"] not in listed)
         out = io.StringIO()

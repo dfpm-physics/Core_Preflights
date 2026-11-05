@@ -565,13 +565,16 @@ def _offering_activity_ids(conn, offering_id):
     `_ambiguous_slug_message`, even though the offering was never in doubt.
     """
     cur = conn.cursor(cursor_factory=RealDictCursor)
+    # A typed path a person marks is not offered as the written side (see ineligible_typed_sql).
+    skip = ineligible_typed_sql("oa", "ao", *eligibility_flags(cur))
     cur.execute("""
         select max(case when act.modality = 'interactive' then act.id::text end) as interactive_id,
-               max(case when act.modality = 'written'     then act.id::text end) as written_id
+               max(case when act.modality = 'written' and not /*SKIP*/ then act.id::text end) as written_id
           from offering_activities oa
+          join assignment_offerings ao on ao.id = oa.assignment_offering_id
           join activities act on act.id = oa.activity_id
          where oa.assignment_offering_id = %s
-    """, (offering_id,))
+    """.replace("/*SKIP*/", skip), (offering_id,))
     return cur.fetchone() or {"interactive_id": None, "written_id": None}
 
 
@@ -640,6 +643,7 @@ def _lesson_meta(conn, slug, term=None):
     still be found. Without `term`, only active offerings are searched, as before.
     """
     cur = conn.cursor(cursor_factory=RealDictCursor)
+    skip = ineligible_typed_sql("oa", "ao", *eligibility_flags(cur))   # a typed path a person marks is not the written side
     cur.execute("""
         select ao.id as offering_id, ao.points_possible, ao.grading_mode, ao.is_published,
                a.slug as assignment_slug, a.title as assignment_title,
@@ -647,9 +651,9 @@ def _lesson_meta(conn, slug, term=None):
                max(case when act.modality = 'interactive' then act.id::text end) as interactive_id,
                max(case when act.modality = 'interactive' then act.slug end)     as interactive_slug,
                max(case when act.modality = 'interactive' then act.title end)    as interactive_title,
-               max(case when act.modality = 'written'     then act.id::text end) as written_id,
-               max(case when act.modality = 'written'     then act.slug end)     as written_slug,
-               max(case when act.modality = 'written'
+               max(case when act.modality = 'written' and not /*SKIP*/ then act.id::text end) as written_id,
+               max(case when act.modality = 'written' and not /*SKIP*/ then act.slug end)     as written_slug,
+               max(case when act.modality = 'written' and not /*SKIP*/
                         then act.content::text end)                              as written_content
           from assignment_offerings ao
           join assignments          a  on a.id  = ao.assignment_id
@@ -669,7 +673,7 @@ def _lesson_meta(conn, slug, term=None):
                   where act2.slug = %(slug)s or a2.slug = %(slug)s)
          group by ao.id, ao.points_possible, ao.grading_mode, ao.is_published,
                   a.slug, a.title, co.id, c.code, t.code
-    """, {"slug": slug, "term": term})
+    """.replace("/*SKIP*/", skip), {"slug": slug, "term": term})
     rows = cur.fetchall()
     if not rows:
         return None
@@ -1408,7 +1412,22 @@ def track_covered_sql(payload_expr, ids_expr):
 GRADED_DELIVERIES = ["typed_response", "interactive_tutor"]
 
 
-def eligible_path_sql(oa="oa", ao="ao", has_marker=True):
+def _old_shape_sql(ao, has_marker, ai_option):
+    """The clause that keeps Fall's human_graded typed responses eligible.
+
+    * the marker column exists: an item NOT entered on a newer page (the Fall shape).
+    * no marker column and no ai_drafted option: a database older than both, where every typed response is the Fall
+      shape, so every one is eligible.
+    * no marker column but the ai_drafted option exists: the marker was dropped later, after Fall closed. Then no
+      human_graded typed response is eligible. Reading "no column" as "everything is old" here would quietly hand every
+      person-marked response to the job, so it is false.
+    """
+    if has_marker:
+        return f"not {ao}.entered_on_new_page"
+    return "false" if ai_option else "true"
+
+
+def eligible_path_sql(oa="oa", ao="ao", has_marker=True, ai_option=False):
     """SQL predicate: may the nightly jobs take this path? `oa` and `ao` name the offering_activities and
     assignment_offerings aliases in the caller's query. Written here once so a test evaluates the text the
     worklist runs.
@@ -1418,12 +1437,16 @@ def eligible_path_sql(oa="oa", ao="ao", has_marker=True):
     * a typed response graded `human_graded` is eligible only on an item NOT entered on a newer page: that is
       the Fall shape, which has always been analyzed by a hand-started run. A new `human_graded` typed response
       is marked by a person and the job skips it. After Fall closes this clause can go.
-    A database that predates the marker column (`has_marker` False) has no newer-page items, so every typed
-    response is eligible there; one without 077 simply has no ai_drafted rows, and the same text works on it.
+    `has_marker` and `ai_option` say what the database has (see `_old_shape_sql`); `eligibility_flags` reads them.
     """
-    old_shape = f"not {ao}.entered_on_new_page" if has_marker else "true"
     return (f"({oa}.delivery = 'interactive_tutor' "
-            f"or ({oa}.delivery = 'typed_response' and ({oa}.grading = 'ai_drafted' or {old_shape})))")
+            f"or ({oa}.delivery = 'typed_response' and ({oa}.grading = 'ai_drafted' or {_old_shape_sql(ao, has_marker, ai_option)})))")
+
+
+def ineligible_typed_sql(oa="oa", ao="ao", has_marker=True, ai_option=False):
+    """SQL predicate: this path is a typed response the job must NOT draft (a person marks it)."""
+    return (f"({oa}.delivery = 'typed_response' and not ({oa}.grading = 'ai_drafted' or "
+            f"{_old_shape_sql(ao, has_marker, ai_option)}))")
 
 
 def _has_marker_column(cur):
@@ -1433,6 +1456,20 @@ def _has_marker_column(cur):
                       and column_name = 'entered_on_new_page'""")
     row = cur.fetchone()
     return (row["n"] if isinstance(row, dict) else row[0]) > 0
+
+
+def _has_ai_option(cur):
+    """Whether the database allows the ai_drafted grading (migration 077)."""
+    cur.execute("""select count(*) as n from pg_constraint
+                    where conname = 'offering_activities_delivery_grading_ck'
+                      and pg_get_constraintdef(oid) like '%%ai_drafted%%'""")
+    row = cur.fetchone()
+    return (row["n"] if isinstance(row, dict) else row[0]) > 0
+
+
+def eligibility_flags(cur):
+    """(has_marker, ai_option) for the connected database."""
+    return _has_marker_column(cur), _has_ai_option(cur)
 
 
 def _refuse_null_delivery(cur, course):
@@ -1620,12 +1657,19 @@ def cmd_worklist(args, conn):
                         where oa.assignment_offering_id = ao.id
                           and oa.grading_role = 'graded'
                           and /*ELIGIBLE*/)
+           -- A typed response a person marks is never drafted. On a choice item (a tutor path beside it) the tutor path
+           -- would otherwise make the offering eligible and the run would draft the typed side too, so such an item is
+           -- left out whole.
+           and not exists (select 1 from offering_activities ob
+                            where ob.assignment_offering_id = ao.id
+                              and /*INELIGIBLE*/)
          -- d.track breaks the tie between tracks sharing one deadline. Without it the order of
          -- two otherwise-identical rows is whatever the plan happens to emit, and --latest picks
          -- from the top.
          order by d.due_at desc, a.slug, d.track
     """.replace("/*TRACK_COVERED*/", track_covered_sql("ar.payload", "d.section_ids"))
-       .replace("/*ELIGIBLE*/", eligible_path_sql("oa", "ao", _has_marker_column(cur))),
+       .replace("/*ELIGIBLE*/", eligible_path_sql("oa", "ao", *eligibility_flags(cur)))
+       .replace("/*INELIGIBLE*/", ineligible_typed_sql("ob", "ao", *eligibility_flags(cur))),
         {"course": args.course, "day": day, "kind": KIND, "as_of": as_of})
     rows = cur.fetchall()
     if not rows:
