@@ -28,6 +28,8 @@ import { mountFeedback } from './feedback.js';
 const STUDENT_LINKS = [
   { key: 'dashboard', label: 'Dashboard', href: 'dashboard.html', icon: 'dashboard',   emoji: '🏠' },
   { key: 'lessons',   label: 'Assignments', href: 'lessons.html', icon: 'assignments', emoji: '📚' },
+  { key: 'schedule',  label: 'Schedule',    href: 'schedule.html', icon: 'due-soon',   emoji: '🗓️' },
+  { key: 'grades',    label: 'My grades',   href: 'grades.html',   icon: 'award',      emoji: '🏅' },
 ];
 // Report (the lesson rollup) is intentionally absent: it is reached only via a link carrying its
 // lesson key (?i=) — from an Interactions card or the dashboard's "Open full rollup →".
@@ -235,7 +237,7 @@ export function courseOptionsHTML(ctx) {
   const option = (c) => {
     const active = c.offeringId === ctx.currentOffering;
     // When the term is already a heading above, repeating it on every row is noise.
-    const sub = [spansTerms ? null : c.termLabel, roleWord(c), c.isActive === false ? 'Inactive' : null].filter(Boolean).join(' · ');
+    const sub = [spansTerms ? null : c.termLabel, roleWord(c), c.past ? 'Past term' : null, c.isActive === false ? 'Inactive' : null].filter(Boolean).join(' · ');
     return `
       <button class="menu-item course-opt${active ? ' active' : ''}" role="menuitemradio"
               aria-checked="${active}" data-course="${esc(c.offeringId)}">

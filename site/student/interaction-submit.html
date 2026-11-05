@@ -113,7 +113,7 @@
     const ctx = await bootstrap();
     let resolved = { activity: null, offering: null };
     let writtenAnswers = 0;   // saved work on the written path that would stop counting
-    if (ctx) init();
+    if (ctx) init().catch(e => notice('error', 'This page could not load.', e?.message || String(e)));
 
     async function init() {
       initTheme();
@@ -233,7 +233,7 @@
           you won’t be able to switch back without asking your instructor.</div>`;
       }
 
-      const possible = offering?.pointsPossible ?? 2;
+      const possible = offering?.pointsPossible ?? null;   // no default: an item states its own points
       const effortTag = payload.effort !== null
         ? `<span class="tag blue" title="Effort ${payload.effort} of 5">effort ${payload.effort}/5</span>`
           + ` <a href="help.html?doc=ai-and-your-work" target="_blank" rel="noopener" style="font-size:0.85em">How is effort rated?</a>`
@@ -308,7 +308,7 @@
       // analysis workflow reading the stored payload, not by this page.
       const pts = payload.effort !== null
         ? ` Your instructor will see an effort rating of ${payload.effort}/5` +
-          (committed ? ` (about ${pointsFromEffort(payload.effort, possible)} of ${possible} pts).` : '.')
+          (committed && possible != null ? ` (about ${pointsFromEffort(payload.effort, possible)} of ${possible} pts).` : '.')
         : '';
       // WHAT HAPPENS IF THEY RUN THE LESSON AGAIN — and it is NOT "it overwrites", which is what
       // this said until 2026-07-28. A graded interactive submission auto-finalizes its grade the

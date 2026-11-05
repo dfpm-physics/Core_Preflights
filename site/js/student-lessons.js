@@ -20,7 +20,7 @@
 // `lesson_completions` is gone with no replacement: it existed to reconcile two grade
 // sources, and there is now exactly one (app.grades, UNIQUE per enrollment per offering).
 
-import { loadAssignmentStatuses } from './student-data.js';
+import { loadAssignmentStatuses, loadMyTotal } from './student-data.js';
 import { questionsOf, answeredCount, displayPoints, isActivityAvailable, isArtifactLaunchable,
          policyOf, writtenPathCounts, isWrittenByPermission } from './schema.js';
 
@@ -92,6 +92,7 @@ export const STATE = {
   GRADING:     'grading',       // 5 · past due, submitted, not yet released
   GRADED:      'graded',        // 6 · instructor released the grade
   MISSED:      'missed',        // 7 · past due, nothing submitted → 0
+  EXCUSED:     'excused',       // 8 · the instructor excused it; left out of the total
 };
 
 /** Status-dot colour per state. Deliberately modality-neutral: a `.tag` says which path was
@@ -105,6 +106,7 @@ export const STATE_DOT = {
   [STATE.GRADING]:     'blue',
   [STATE.GRADED]:      'green',
   [STATE.MISSED]:      'red',
+  [STATE.EXCUSED]:     'grey',
 };
 
 /**
@@ -117,6 +119,8 @@ export const STATE_DOT = {
  * answers afterwards, and nothing should.
  */
 export function resolveState(item) {
+  // Excused work is left out of the total and is not asked of the cadet (the database says so).
+  if (item.excused) return STATE.EXCUSED;
   const grade = item.grade;
   if (grade?.is_finalized) return STATE.GRADED;
 
@@ -187,7 +191,7 @@ export function deriveCompletion(item, offering = item) {
  *     canChoose, hasInteraction }
  */
 export async function loadLessonStatuses(ctx) {
-  const items = await loadAssignmentStatuses(ctx);
+  const items = await loadAssignmentStatuses(ctx, { withCells: true });
   const backups = await loadBackupBuilds();
 
   const rows = items.map(item => {
@@ -254,6 +258,7 @@ export async function loadLessonStatuses(ctx) {
       lesson_number: item.position ?? null,
       objectives: item.objectives,
       points: item.pointsPossible,
+      gradingMode: item.gradingMode || null,
 
       // The two paths, under the names the page already uses.
       preflight: written ? {
@@ -332,24 +337,21 @@ export async function loadStudentLessonDashboard(ctx) {
   const toDo   = lessons.filter(l => l.state === STATE.NOT_STARTED || l.state === STATE.DRAFT);
   const missed = lessons.filter(l => l.state === STATE.MISSED);
   const graded = lessons.filter(l => l.state === STATE.GRADED);
-  const done   = lessons.filter(l => l.completion);
 
-  // Points earned out of points available — NOT a correctness percentage. A lesson is worth
-  // its offering's points_possible; showing a percentage of per-question scores here would
-  // tell cadets they're graded on getting it right, which is the one thing the choice UI must
-  // not imply (STUDENT-LESSON-VIEW §2, §8).
-  const earned    = done.reduce((s, l) => s + (l.completion.points || 0), 0);
-  const available = lessons.reduce((s, l) => s + (l.points ?? 2), 0);
+  // THE RUNNING TOTAL IS THE DATABASE'S. This used to add completion points up here and divide by the
+  // sum of points_possible, which was a second total that could not know about excused work, held grades
+  // or bonus items. my_course_total (migration 039) is the one rule; a failed read is reported, never
+  // shown as zero.
+  let total = null, totalError = null;
+  try { total = await loadMyTotal(ctx); } catch (e) { totalError = e.message; }
 
   return {
     noCourse: false,
-    stats: { toDo: toDo.length, missed: missed.length, graded: graded.length, earned, available },
+    stats: { toDo: toDo.length, missed: missed.length, graded: graded.length },
+    total, totalError,
     lessons, toDo, missed, graded,
     upNext: toDo.slice(0, 6),
-    // How many lessons the release window is holding back. Note what this does to `available`
-    // above: the points denominator is now "out of what has been released to you so far"
-    // rather than "out of the whole term", which is the more useful of the two readings —
-    // 4/6 in week two says something a cadet can act on, 4/82 does not.
+    // How many assignments the release window is holding back, so the page can say later work exists.
     lockedCount: lessons.lockedCount || 0,
   };
 }

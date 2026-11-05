@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schedule · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+</head>
+<body>
+  <header id="topnav"></header>
+  <main class="page-wide" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Loading your schedule…</span></div>
+  </main>
+
+  <script type="module">
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { loadSchedule } from '../js/student-data.js';
+    import { groupByMonth, pointsText, opensText, totalView } from '../js/student-view.js';
+    import { esc, fmtDateTime, runPage, guarded } from '../js/util.js';
+
+    const ctx = await bootstrap({ require: 'student' });
+    runPage(ctx, () => { initTheme(); renderNav(ctx, { active: 'schedule', onCourseChange: guarded(() => main()) }); return main(); });
+
+    async function main() {
+      const root = document.getElementById('main');
+      if (!ctx.currentOffering) {
+        root.innerHTML = `<div class="alert alert-warn">Your section isn't assigned to a course yet.</div>`;
+        return;
+      }
+      root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading your schedule…</span></div>`;
+      // A failed read throws, and runPage shows it. It is never drawn as an empty schedule.
+      const { rows, total } = await loadSchedule(ctx);
+      const tv = totalView(total);
+
+      const head = `<div class="page-head"><h1>Schedule</h1>
+        <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))}${ctx.currentIsPast ? ' · Past term, read only' : ''}${tv && tv.line ? ' · ' + esc(tv.line) : ''}</div></div>`;
+
+      if (!rows.length) {
+        root.innerHTML = head + `<div class="empty-state"><h3>Nothing is scheduled yet</h3>
+          <p>Work appears here once your instructor publishes it.</p></div>`;
+        return;
+      }
+
+      root.innerHTML = head + groupByMonth(rows).map(g => `
+        <section class="dash-section" data-month="${esc(g.key)}">
+          <div class="section-head"><h2>${esc(g.label)}</h2><span class="count-pill">${g.rows.length}</span></div>
+          <div class="list">${g.rows.map(row).join('')}</div>
+        </section>`).join('');
+    }
+
+    function row(r) {
+      const due = r.due ? `${r.isExtended ? 'Extended to ' : 'Due '}${fmtDateTime(r.due)}` : 'No due date yet';
+      const meta = [due, pointsText(r.points)].filter(Boolean).join(' · ');
+      const status = r.locked ? opensText(r.releasesAt, fmtDateTime)
+        : [r.stateWord, r.isLate ? 'Late' : ''].filter(Boolean).join(' · ');
+      const dot = r.locked ? 'grey' : r.tone;
+      const inner = `<span class="status-dot ${esc(dot)}"></span>
+        <div class="li-body"><div class="li-title">${esc(r.title)}</div>
+          <div class="li-meta"><span>${esc(meta)}</span><span class="deadline">${esc(status)}</span></div></div>
+        ${r.openable ? '<span class="li-arrow">›</span>' : ''}`;
+      return r.openable
+        ? `<a class="list-item" data-row="${esc(r.offeringId)}" href="lessons.html?l=${encodeURIComponent(r.offeringId)}">${inner}</a>`
+        : `<div class="list-item" data-row="${esc(r.offeringId)}">${inner}</div>`;
+    }
+  </script>
+</body>
+</html>

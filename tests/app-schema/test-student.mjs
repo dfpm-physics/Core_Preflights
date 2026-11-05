@@ -83,8 +83,7 @@ check('dashboard resolved', dash.noCourse !== true);
 eq('dashboard counts agree with the list',
    dash.stats.toDo + dash.stats.inProgress + dash.stats.overdue +
    dash.stats.submitted + dash.stats.graded >= items.length ? true : true, true);
-check('avgPct is null or a percentage',
-      dash.stats.avgPct === null || (dash.stats.avgPct >= 0 && dash.stats.avgPct <= 100));
+check('the old browser-side average is gone (the total comes from the database)', !('avgPct' in dash.stats));
 
 const inters = await loadInteractionStatuses(ctx);
 eq('interaction projection matches the interactive items', inters.length, interactive.length);
