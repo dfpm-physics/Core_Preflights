@@ -36,12 +36,13 @@ BEGIN
   END IF;
   SELECT ao.opens_at INTO v_opens FROM assignment_offerings ao WHERE ao.id = p_assignment_offering;
   IF v_opens IS NOT NULL THEN
-    RETURN v_opens;
+    RETURN v_opens;                       -- explicit wins, earlier or later, at the exact instant
   END IF;
   SELECT c.due_at INTO v_due FROM _scheduled_core(p_assignment_offering, p_section) c;
   IF v_due IS NULL THEN
     RETURN NULL;
   END IF;
+  -- seven days before the SCHEDULED deadline (never the extended one), floored to the start of that day in Denver
   RETURN date_trunc('day', (v_due - interval '7 days') AT TIME ZONE 'America/Denver') AT TIME ZONE 'America/Denver';
 END; $$;
 
