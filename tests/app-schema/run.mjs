@@ -175,7 +175,7 @@ for (const s of OFFLINE) await runInProcess(s);
 //                 does by default and is not something a wrong answer announces
 for (const suite of ['test-imports.mjs', 'test-rollup.mjs', 'test-system-prefs.mjs',
                      'test-run-banner.mjs', 'test-help-status.mjs', 'test-prefs.mjs',
-                     'test-tasks.mjs', 'test-new-page-guard.mjs', 'test-faculty-items.mjs', 'test-faculty-questions.mjs', 'test-faculty-scale.mjs', 'test-faculty-terms.mjs', 'test-gradebook.mjs',
+                     'test-tasks.mjs', 'test-new-page-guard.mjs', 'test-faculty-items.mjs', 'test-free-response.mjs', 'test-faculty-questions.mjs', 'test-faculty-scale.mjs', 'test-faculty-terms.mjs', 'test-gradebook.mjs',
                      'test-grade.mjs',
                      'test-grade-effort-write.mjs', 'test-ei.mjs',
                      'test-dashboard-rows.mjs', 'test-student-detail.mjs', 'test-feedback.mjs',

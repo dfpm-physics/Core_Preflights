@@ -4,7 +4,7 @@
 //   * Nothing the page writes is ever published, and every new item carries the marker that holds
 //     it back (docs/decisions/V2-DATA-MODEL.md section 1).
 //   * No code branches on kind. Kind only prefills delivery and grading, from data.
-//   * Only (delivery, grading) pairs migration 027 accepts are offered. The test reads that file.
+//   * Only (delivery, grading) pairs migration 077 accepts (027's list plus ai_drafted) are offered. The test reads that file.
 //   * Deadlines come out as 23:59:59 Mountain time stored as UTC, from ANY browser zone, through the
 //     older editor's own helpers (imported, not copied).
 //   * A removal with submissions or grades is refused, with the counts, before anything is deleted.
@@ -63,16 +63,27 @@ const writesTo = (table, verb) => CALLS.filter(c => c.table === table && (!verb 
 const read = (rel) => readFileSync(resolve(REPO, rel), 'utf8');
 
 /* ───────────────────────────────────────────────────────────────────────────────────────── */
-section('allowed pairs match migration 027');
+section('allowed pairs match migration 077 (the newest text of the check)');
 {
-  const sql = read('supabase/migrations/app/027_path_delivery_grading.sql');
+  const sql = read('supabase/migrations/app/077_ai_drafted_grading.sql');
   const start = sql.indexOf('ADD CONSTRAINT offering_activities_delivery_grading_ck');
   const block = sql.slice(start, sql.indexOf('offering_activities_warn_needs_human_ck', start));
   const pairs = [...block.matchAll(/\('([a-z_]+)',\s*'([a-z_]+)'\)/g)].map(m => [m[1], m[2]]);
   const mine = JSON.stringify([...I.ALLOWED_PAIRS].sort());
   check('the page offers exactly the pairs the database check accepts (both ways)',
     JSON.stringify(pairs.sort()) === mine, `${JSON.stringify(pairs.sort())} vs ${mine}`);
-  eq('there are eight pairs', I.ALLOWED_PAIRS.length, 8);
+  eq('there are nine pairs', I.ALLOWED_PAIRS.length, 9);
+  const old = read('supabase/migrations/app/027_path_delivery_grading.sql');
+  const oldPairs = [...old.slice(old.indexOf('ADD CONSTRAINT offering_activities_delivery_grading_ck'),
+    old.indexOf('offering_activities_warn_needs_human_ck', old.indexOf('ADD CONSTRAINT offering_activities_delivery_grading_ck')))
+    .matchAll(/\('([a-z_]+)',\s*'([a-z_]+)'\)/g)].map(m => [m[1], m[2]]);
+  check('077 adds exactly one pair to 027\'s eight, typed_response with ai_drafted',
+    oldPairs.length === 8 && pairs.length === 9 && oldPairs.every(p => pairs.some(q => q[0] === p[0] && q[1] === p[1]))
+    && pairs.filter(q => !oldPairs.some(p => p[0] === q[0] && p[1] === q[1])).map(q => q.join('/')).join() === 'typed_response/ai_drafted');
+  eq('a typed response can be graded two ways', I.gradingsFor('typed_response'), ['human_graded', 'ai_drafted']);
+  check('a yellow mark earns full credit on both typed-response gradings and on nothing else',
+    I.warnEarnsFull('typed_response', 'human_graded') && I.warnEarnsFull('typed_response', 'ai_drafted')
+    && !I.warnEarnsFull('interactive_tutor', 'effort') && !I.warnEarnsFull('online_questions', 'human_graded'));
   check('every pair offered is marked by pairAllowed()', I.ALLOWED_PAIRS.every(p => I.pairAllowed(p[0], p[1])));
   check('a pair the database refuses is not offered (typed response, hand entered)', !I.pairAllowed('typed_response', 'hand_entered'));
   check('every delivery has a modality and a label',
@@ -374,7 +385,7 @@ section('the page is for directors, and only directors see the entry');
   const html = read('site/faculty/items.html');
   check('the page checks the director test before it loads any item',
     html.indexOf('if (!isDirector())') > -1 && html.indexOf('if (!isDirector())') < html.indexOf('I.loadItems('));
-  check('the page says items stay unpublished until step 2', /stay unpublished until step 2/.test(html));
+  check('the page no longer says items wait for step 2 and still says they stay unpublished', !/until step 2/.test(html) && /Items saved here stay unpublished/.test(html));
   check('the page escapes what it renders (no data goes into innerHTML without esc)',
     !/\$\{(it|item|s)\.(title|slug|description|kindLabel|deliveryText|gradingText|dueText)\}/.test(html));
 }

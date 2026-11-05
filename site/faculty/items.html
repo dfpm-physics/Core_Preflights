@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-z6uiVaGh6MlIsOma8gW7f9cais8MLSxJoc3yAz2s+Xk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-sHgVATVzrh+RLT+zYTgzCQaeqGZD7dlXAj/O6eLKl1E='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Items · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -43,6 +43,7 @@
           <div class="field-hint">The id the tutor lesson posts to. Lowercase letters, numbers and hyphens. It cannot be changed later.</div></div>
         <div class="field grow" style="min-width:200px"><label for="i-iurl">Tutor link (optional)</label><input id="i-iurl" type="text" placeholder="https://"></div>
       </div>
+      <div id="i-written" style="display:none;margin-bottom:14px"></div>
 
       <div class="row wrap" style="gap:20px;margin-bottom:16px">
         <label class="check-inline"><input type="checkbox" id="i-late"> <span>Accept late work (it is marked late)</span></label>
@@ -80,6 +81,9 @@
     import { db } from '../js/supabase.js';
     import { esc, runPage, wireModalDismiss } from '../js/util.js';
     import * as I from '../js/faculty-items.js';
+    import { mountFreeResponse, loadManifest } from '../js/free-response-ui.js';
+    import { emptyEditor, editorFromContent } from '../js/free-response.js';
+    import { loadQuestionKeys } from '../js/faculty-lessons.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
     runPage(ctx, init);
@@ -87,6 +91,7 @@
     let vm = null;               // { items, sections, kinds }
     let editing = null;          // the item being edited, or null for a new one
     let saving = false;
+    let fr = null;               // the free-response question editor (shown when the work is a typed response)
 
     const $ = (id) => document.getElementById(id);
     const isDirector = () => ctx.isDirectorForCurrent();
@@ -94,6 +99,8 @@
     function init() {
       initTheme();
       renderNav(ctx, { active: 'items', onCourseChange: () => load() });
+      fr = mountFreeResponse($('i-written'), { aiDrafted: () => $('i-grading').value === 'ai_drafted' });
+      loadManifest().then(list => fr.setManifest(list));
       wireForm();
       return load().then(openFromQuery);
     }
@@ -132,8 +139,8 @@
 
       const newBtn = `<span class="row" style="gap:8px"><a class="btn btn-ghost btn-sm" id="scale-link" href="scale.html">Letter scale</a>
         <button class="btn btn-primary" id="new-btn">+ New item</button></span>`;
-      const banner = `<div class="alert alert-info" id="unpublished-note">Items entered here stay unpublished until step 2.
-        Students cannot see them, and there is no publish button on this page yet.</div>`;
+      const banner = `<div class="alert alert-info" id="unpublished-note">Items saved here stay unpublished.
+        Students cannot see an item until it is published.</div>`;
       const rows = vm.items.map(rowHtml).join('');
       root.innerHTML = head(newBtn) + banner + (vm.items.length ? `<div class="table-wrap"><table id="items-table">
           <thead><tr><th>Item</th><th>Kind</th><th>Delivery</th><th>Grading</th><th>Points</th><th>Dates</th><th>State</th><th></th></tr></thead>
@@ -190,12 +197,14 @@
         const kind = vm.kinds.find(k => k.id === $('i-kind').value);
         const p = I.prefillFromKind(kind);
         fillDelivery(p.delivery); fillGrading(p.delivery, p.grading); showInteractive(); syncPoints();
+        if (p.delivery === 'typed_response' && !fr.get()) fr.set(emptyEditor());
       });
       $('i-delivery').addEventListener('change', () => {
         const d = $('i-delivery').value;
         fillGrading(d, I.gradingsFor(d)[0]); showInteractive(); syncPoints();
+        if (d === 'typed_response' && !fr.get()) fr.set(emptyEditor());
       });
-      $('i-grading').addEventListener('change', syncPoints);
+      $('i-grading').addEventListener('change', () => { syncPoints(); fr.redraw(); });
       $('im-save').addEventListener('click', save);
     }
 
@@ -222,6 +231,7 @@
     }
     function showInteractive() {
       $('i-interactive').style.display = $('i-delivery').value === 'interactive_tutor' ? 'flex' : 'none';
+      $('i-written').style.display = $('i-delivery').value === 'typed_response' && !(editing && editing.paths.length !== 1) ? 'block' : 'none';
     }
 
     function sectionRows(sectionDates) {
@@ -270,6 +280,16 @@
         : (path && path.modality === 'interactive' && !tutorHasLink
           ? 'This tutor has no link yet, so its id can still be changed: use the id its lesson posts to. Once a link is saved the id is fixed.'
           : 'Only combinations the database accepts are offered.');
+      // The question set: a stored one is read with its answer keys; a failed key read is said out loud and leaves keys alone.
+      fr.set(emptyEditor());
+      if (path && path.delivery === 'typed_response' && path.modality === 'written') {
+        fr.set(editorFromContent(path.content, null));
+        loadQuestionKeys(path.activityId).then(r => {
+          if (editing !== item) return;
+          if (r.error) { note.textContent = 'The answer keys could not be read, so their boxes are blank. Saving leaves the stored keys as they are.'; note.style.display = 'block'; return; }
+          fr.set(editorFromContent(path.content, r.keys));
+        });
+      } else if (item) fr.set(null);
       showInteractive();
       syncPoints();
 
@@ -316,6 +336,7 @@
         sectionDates,
         interactiveSlug: $('i-islug').value,
         interactiveUrl: $('i-iurl').value,
+        freeResponse: $('i-delivery').value === 'typed_response' && fr.get() ? fr.get() : undefined,
       };
     }
 

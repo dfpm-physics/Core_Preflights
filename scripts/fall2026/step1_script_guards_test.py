@@ -187,7 +187,7 @@ check("the check reads delivery on active offerings of that course",
       "oa.delivery is null" in squash(cur.calls[0][0]) and "co.is_active" in squash(cur.calls[0][0])
       and cur.calls[0][1] == {"course": "phys-215"})
 
-cur = Cur([[{"n": 0}], []])
+cur = Cur([[{"n": 0}], [{"n": 1}], []])
 out = io.StringIO()
 saved = sys.stdout
 sys.stdout = out
@@ -195,14 +195,14 @@ try:
     LA.cmd_worklist(Args(), Conn(cur))
 finally:
     sys.stdout = saved
-check("with no null delivery the worklist query is sent", len(cur.calls) == 2)
-wsql, wparams = cur.calls[1]
+check("with no null delivery the marker column is looked up and then the worklist query is sent", len(cur.calls) == 3)
+wsql, wparams = cur.calls[2]
 w = squash(wsql)
 check("it keeps only published work", "and ao.is_published" in w)
-check("it requires a graded path with a delivery in the list",
-      "oa.grading_role = 'graded'" in w and "oa.delivery = any(%(deliveries)s)" in w)
-eq("the deliveries are typed_response and interactive_tutor and nothing else",
-   sorted(wparams["deliveries"]), ["interactive_tutor", "typed_response"])
+check("it requires a graded path that is eligible: a tutor, or a typed response drafted by AI or entered the older way",
+      "oa.grading_role = 'graded'" in w and "/*ELIGIBLE*/" not in w
+      and "oa.delivery = 'interactive_tutor'" in w and "oa.grading = 'ai_drafted'" in w
+      and "ao.entered_on_new_page" in w)
 check("it does not read kind", "kind_id" not in w)
 check("an empty answer still prints the existing message", "Nothing past due" in out.getvalue()
       or '"items": []' in out.getvalue())

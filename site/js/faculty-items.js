@@ -7,9 +7,9 @@
 //   the database checks. Kind only prefills those two boxes, from data in `assignment_kinds`.
 //
 // WHAT THE PAGE NEVER DOES
-//   It never publishes. Every item it writes carries `entered_on_new_page = true` and
-//   `is_published = false`, and the database refuses to publish such an item until step 2. There is
-//   no publish control, and nothing here ever asks for an item to be published.
+//   It does not publish: every item it writes carries `entered_on_new_page = true` and
+//   `is_published = false`. Publishing is a separate act (publishItem, further down), and the database
+//   rules that used to refuse it for these items are removed by migration 079.
 //
 // DEADLINES
 //   Stored by the same helpers the older lesson editor uses (`dueRowsFor`, `defaultDueFrom`,
@@ -23,7 +23,8 @@
 //   stub (tests/app-schema/test-faculty-items.mjs).
 
 import { NEW_PAGE_COLUMN } from './new-page-guard.js';
-import { dueRowsFor, defaultDueFrom, dueByDayRow, toEditorDue } from './faculty-lessons.js';
+import { dueRowsFor, defaultDueFrom, dueByDayRow, toEditorDue, pointsChanged, retroactivelyUpdateGrades } from './faculty-lessons.js';
+import { contentFromEditor, checkEditor } from './free-response.js';
 
 /* ══════════════════════════════════════════════════════════════════════════════
  * Delivery and grading
@@ -39,6 +40,7 @@ export const ALLOWED_PAIRS = [
   ['online_questions', 'auto_checked'],
   ['online_questions', 'human_graded'],
   ['typed_response', 'human_graded'],
+  ['typed_response', 'ai_drafted'],
   ['interactive_tutor', 'effort'],
   ['in_person', 'hand_entered'],
   ['in_person', 'imported'],
@@ -66,6 +68,7 @@ export const DELIVERY_LABEL = {
 export const GRADING_LABEL = {
   auto_checked: 'Checked automatically',
   human_graded: 'Graded by a person',
+  ai_drafted: 'Free response: AI drafts overnight, a person reviews',
   effort: 'Effort',
   hand_entered: 'Scores typed in by staff',
   imported: 'Scores imported',
@@ -78,6 +81,17 @@ export const gradingsFor = (delivery) => ALLOWED_PAIRS.filter(p => p[0] === deli
 
 export const pairAllowed = (delivery, grading) =>
   ALLOWED_PAIRS.some(p => p[0] === delivery && p[1] === grading);
+
+/**
+ * Whether a yellow (warn) mark earns full credit on this path. True for a typed response, graded by a person or drafted
+ * by the AI: that is what the grader's rule and the older editor have always written. False for everything else.
+ * (offering_activities_warn_needs_human_ck allows it only with those two gradings; migration 077.)
+ */
+export const warnEarnsFull = (delivery, grading) =>
+  delivery === 'typed_response' && (grading === 'human_graded' || grading === 'ai_drafted');
+
+/** A typed response: the delivery that carries a set of free-response questions. */
+export const isTypedResponse = (delivery) => delivery === 'typed_response';
 
 /**
  * An auto-checked path owns the offering's points: a database trigger (migration app/030) sets them
@@ -418,6 +432,9 @@ export function checkForm(form, { kinds = [], sections = [], slugFrozen = false,
       }
     }
   }
+  if (!lockedPath && isTypedResponse(form.delivery) && form.freeResponse) {
+    for (const p of checkEditor(form.freeResponse)) out.push(p);
+  }
   const pts = String(form.points ?? '').trim();
   if (pointsOwned) { /* set by the questions; nothing to check */ }
   else if (pts === '' || isNaN(Number(pts))) out.push('Enter the points (0 or more).');
@@ -577,6 +594,15 @@ async function undoCreate(db, made) {
   if (made.assignmentId) await db.from('assignments').delete().eq('id', made.assignmentId);
 }
 
+/** The `content` for a path that is being created: a tutor's link, a typed response's questions, nothing for the rest. */
+function newPathContent(form) {
+  if (form.delivery === 'interactive_tutor') {
+    return { artifact_url: String(form.interactiveUrl || '').trim() || null, description: null };
+  }
+  if (isTypedResponse(form.delivery) && form.freeResponse) return contentFromEditor(form.freeResponse, { keepKeys: true });
+  return {};
+}
+
 /**
  * Create a new item. Never publishes.
  *
@@ -605,7 +631,7 @@ export async function createItem(db, ctx, form) {
     modality,
     slug: interactive ? String(form.interactiveSlug).trim() : pathSlug(ctx.courseCode, slugged.slug, modality),
     title: String(form.title).trim(),
-    content: interactive ? { artifact_url: String(form.interactiveUrl || '').trim() || null, description: null } : {},
+    content: newPathContent(form),
     position: 0,
   }).select('id').single();
   if (r.error) return fail(r.error);
@@ -629,7 +655,7 @@ export async function createItem(db, ctx, form) {
   r = await db.from('offering_activities').insert({
     assignment_offering_id: made.offeringId, activity_id: activityId,
     grading_role: 'graded', available_after: 'always', is_visible: true, position: 0,
-    delivery: form.delivery, grading: form.grading, warn_earns_full: false,
+    delivery: form.delivery, grading: form.grading, warn_earns_full: warnEarnsFull(form.delivery, form.grading),
   });
   if (r.error) return fail(r.error);
 
@@ -781,12 +807,18 @@ export async function updateItem(db, ctx, item, form, ack = null) {
     kind_id: form.kindId, title: String(form.title).trim(), description: String(form.description || '').trim() || null,
   }).eq('id', item.assignmentId);
   if (a.error) return partial(a.error);
+  let rescored = 0;      // grades rewritten because a question's points changed (the page says so)
 
   if (single) {
     const cur = single;
     if (changesPair) {
       if (!replacesPath) {
-        const u = await db.from('offering_activities').update({ delivery: form.delivery, grading: form.grading })
+        // In place means the same kind of activity. A typed response also states warn_earns_full, because an item made
+        // before the AI option existed may hold false and the grader's yellow-earns-full rule needs true; no other pair
+        // carries the flag, so those updates send the two columns only.
+        const patch = { delivery: form.delivery, grading: form.grading };
+        if (isTypedResponse(form.delivery)) patch.warn_earns_full = warnEarnsFull(form.delivery, form.grading);
+        const u = await db.from('offering_activities').update(patch)
           .eq('assignment_offering_id', item.offeringId).eq('activity_id', cur.activityId);
         if (u.error) return partial(u.error);
       } else {
@@ -795,14 +827,14 @@ export async function updateItem(db, ctx, item, form, ack = null) {
           assignment_id: item.assignmentId, modality: wantModality,
           slug: interactive ? String(form.interactiveSlug).trim() : pathSlug(ctx.courseCode, item.slug, wantModality),
           title: String(form.title).trim(),
-          content: interactive ? { artifact_url: String(form.interactiveUrl || '').trim() || null, description: null } : {},
+          content: newPathContent(form),
           position: 0,
         }).select('id').single();
         if (ins.error) return partial(ins.error);
         const oa = await db.from('offering_activities').insert({
           assignment_offering_id: item.offeringId, activity_id: ins.data.id,
           grading_role: 'graded', available_after: 'always', is_visible: true, position: 0,
-          delivery: form.delivery, grading: form.grading, warn_earns_full: false,
+          delivery: form.delivery, grading: form.grading, warn_earns_full: warnEarnsFull(form.delivery, form.grading),
         });
         if (oa.error) { await db.from('activities').delete().eq('id', ins.data.id); return partial(oa.error); }
         // The old path goes last, so a failure above leaves the item as it was.
@@ -834,6 +866,22 @@ export async function updateItem(db, ctx, item, form, ack = null) {
       const u = await db.from('activities').update(patch).eq('id', cur.activityId);
       if (u.error) return partial(u.error);
     }
+    if (isTypedResponse(form.delivery) && single.modality === 'written' && form.freeResponse) {
+      // The questions of an existing typed-response path. keepKeys is false: a key box the person did not touch is not
+      // sent, so a stored key stays as it is (the older editor does the same; faculty-lessons.js, ANSWER KEYS).
+      const content = contentFromEditor(form.freeResponse, { keepKeys: false });
+      const prevQs = cur.content?.questions || [];
+      const u = await db.from('activities').update({ title: String(form.title).trim(), content }).eq('id', cur.activityId);
+      if (u.error) return partial(u.error);
+      if (pointsChanged(prevQs, content.questions)) {
+        try {
+          rescored = await retroactivelyUpdateGrades(item.offeringId, content.questions, Number(form.points));
+        } catch (e) {
+          return partial({ message: 'The questions were saved, but the grades already given could not be updated to the new question points ('
+            + (e?.message || 'unknown error') + '). Some grades still hold the old values.' });
+        }
+      }
+    }
     if (ownershipMoves && !pointsOwnedByQuestions(form.grading)) {
       const p = await db.from('assignment_offerings').update({ points_possible: Number(form.points) }).eq('id', item.offeringId);
       if (p.error) return partial(p.error);
@@ -842,7 +890,7 @@ export async function updateItem(db, ctx, item, form, ack = null) {
 
   const err = await replaceDueRows(db, item.offeringId, sched.rows);
   if (err) return partial(err);
-  return { error: null, offeringId: item.offeringId, assignmentId: item.assignmentId };
+  return { error: null, offeringId: item.offeringId, assignmentId: item.assignmentId, rescored };
 }
 
 /**
