@@ -56,7 +56,7 @@ STEP2_ALL = ["044", "045", "046", "047", "048", "049", "051", "059", "060", "065
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--expect-ref", required=True)
-    ap.add_argument("--before", default="999")
+    ap.add_argument("--before", default="077")   # these prove step 2 and Stage E; 077 to 079 have their own proof (test_ai_drafted_scratch.py)
     args = ap.parse_args()
     STEP2 = [n for n in STEP2_ALL if n < args.before]
     s = Scratch("scratch_tg", args.expect_ref, before=args.before, skip=())

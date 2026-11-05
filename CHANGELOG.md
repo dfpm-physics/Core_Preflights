@@ -8,6 +8,20 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (roll-in of the older assignment editor, part 1: the AI-drafted option and the end of the step 1 rules; branch `v2-step2-rollin`, local, not applied anywhere)
+
+**What.** Three migrations and one proof, on branch `v2-step2-rollin` cut from `v2-step2` at `256e94b`. Nothing is applied to staging or production.
+- `077_ai_drafted_grading.sql`: a ninth allowed (delivery, grading) pair, `typed_response` with `ai_drafted` (the overnight job drafts a mark, a person reviews it). `warn_earns_full` is allowed with `human_graded` or `ai_drafted`. The fill trigger is unchanged. Rollback refuses while a path uses the value.
+- `078_ai_drafts_need_a_person.sql`: a finalized grade on an offering with an `ai_drafted` path is refused unless the session names a staff member. The service key, the data role and a cadet session are refused.
+- `079_drop_step1_rules.sql`: removes the five step 1 rules (six triggers) listed in `docs/decisions/V2-DATA-MODEL.md` section 1. Apply order 077, 078, 079. Rollback restores them.
+- `scripts/staging/test_ai_drafted_scratch.py`: 55 checks on a throwaway database, each migration shown refused before and passing after, and each rollback run. `v2_gate_lib.publish` no longer fails on a database without the rule it switches off; the Stage E, entry and step 2 scratch proofs stop at 076, because 079 removes triggers they switch off.
+
+**Why.** Matthew asked for free-response preflights graded overnight by the AI to be creatable on the Assignments page, and for the older assignments tab to be rolled in. The five-rule drop is on the critical path: with the step 1 rules in place no item made on the newer pages can be published or finalized.
+
+**Not done.** Nothing applied to any database. No Fall row written. `lessons.html` and `faculty-lessons.js` untouched. The page parts of the roll-in are later commits on this branch.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (merge committed; scratch proofs repaired; filing a legacy multiple-choice key fixed; local, not deployed)
 
 **What.** Committed the `v2-stage-e` merge on `v2-step2` and repaired the proofs that failed afterwards. Four of the failures were fixtures that no longer matched the rules; one was a real fault.

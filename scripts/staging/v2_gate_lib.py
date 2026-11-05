@@ -146,6 +146,10 @@ class Builder:
         c.execute("SELECT EXISTS (SELECT 1 FROM offering_activities WHERE assignment_offering_id = %s "
                   "AND delivery IN ('online_questions', 'in_person', 'elsewhere'))", (item["ao"],))
         guarded = c.fetchone()[0]
+        if guarded:         # migration 079 drops the rule; a database without it has nothing to switch off
+            c.execute("SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'assignment_offerings_new_paths_stay_unpublished' "
+                      "AND NOT tgisinternal)")
+            guarded = c.fetchone()[0]
         if guarded:
             c.execute("ALTER TABLE assignment_offerings DISABLE TRIGGER assignment_offerings_new_paths_stay_unpublished")
         try:

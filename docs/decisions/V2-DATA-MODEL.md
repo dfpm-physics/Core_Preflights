@@ -86,6 +86,8 @@ Marked defaults, each noted where it shapes the design:
 
 **Six database rules hold the step 1 line. The first five are removed at step 2.**
 
+*Migration `079_drop_step1_rules.sql` (2026-11-05, branch `v2-step2-rollin`, not applied anywhere) removes the first five; the list below is the state before it.*
+
 | Rule | What it refuses |
 |---|---|
 | `assignment_offerings_new_stay_unpublished` | Publishing an item entered on a new page. |
@@ -148,7 +150,7 @@ deliveries and two grading methods under one grade, so an item-level column coul
 Delivery and grading are checked by a constraint. Modality against delivery crosses two tables, so the trigger
 below checks it.
 
-`warn_earns_full` may be true only with `human_graded`. **New items write false, so homework does not inherit
+`warn_earns_full` may be true only with `human_graded` or, from migration 077, `ai_drafted` (typed response; the overnight job drafts the mark, a person finalizes it, and 078 holds that line in the database). **New items write false, so homework does not inherit
 "warn still earns full credit".** Backfilled preflights write true. At step 2 the one line that applies the
 rule, `site/js/faculty-grade.js:250`, reads this column instead of assuming it.
 
@@ -1094,6 +1096,9 @@ Next number in the `app` chain is `026`. Each applies as `prep_app_owner` under 
 | `074_past_terms_keep_points.sql` | Added 2026-11-05, at the merge of step 2 and Stage E. A question edit no longer moves `points_possible` on an offering whose term has ended (`_term_is_over`: the term's end date is before today in Denver). `sync_auto_checked_points` (030) and `questions_regrade_auto` (072) both skip such an offering, so a finished term keeps the maximum it was graded out of and no grade of it is recomputed. A current or coming term syncs as before. A path added later to an offering of an ended term is not synced. Proved in `test_step2_together_scratch.py` section 11 (fails before this file). Rollback restores the 030 and 072 texts. |
 | `075_answer_audit_actor.sql` | Added 2026-11-05, at the merge. The audit row for a grade written by `record_answer` or by a re-mark names the person behind it: the cadet whose sign-in id the edge function verified, or the staff member who ran the re-mark. Two transaction-local settings (`app.audit_actor`, `app.audit_via`) are set around the grade step and honoured by `grades_audit` only while the answer-marking marker is on for that statement; `detail.via` reads `answer` or `remark`. Replaces `grades_audit` (049), `record_answer` and `remark_apply` (072), otherwise unchanged. Proved in section 10 of the same test. Rollback restores the 049 and 072 texts. |
 | `076_revoke_public_freeze.sql` | Added 2026-11-05, at the merge. Of the 15 ordinary functions in `app` still executable by everyone, 13 are the row-security helpers every policy calls and are kept; the two term freeze functions (`freeze_assignment_offering`, `freeze_term`), which no page calls, are revoked from PUBLIC, anon, authenticated, service_role and prep_app_read and granted to `prep_app_dml`. Section 12 of the same test lists what stays. Rollback grants them to PUBLIC again. |
+| `077_ai_drafted_grading.sql` | Added 2026-11-05, on branch `v2-step2-rollin` (roll-in of the older assignment editor). A ninth allowed pair, `typed_response` with `ai_drafted`: the overnight job writes a suggested mark and a person reviews and finalizes it. The delivery-and-grading check gains the pair; `warn_earns_full` is allowed with `human_graded` or `ai_drafted`. The fill trigger is unchanged, so an older writer still gets `typed_response` + `human_graded`; the activity modality stays `written`, so the tools that find a lesson by modality keep working. Not applied anywhere; proved on a throwaway database (`scripts/staging/test_ai_drafted_scratch.py`). Rollback refuses while any path uses `ai_drafted`. |
+| `078_ai_drafts_need_a_person.sql` | Added 2026-11-05, same branch. `grades_ai_drafts_need_a_person`: a finalized grade on an offering that has an `ai_drafted` path is refused unless the session names a staff member (`audit_actor()`), so the service key, the data role and a cadet session cannot finalize it whatever a script says. An update that changes nothing audited on an already finalized row passes. It does not read `source`, because the grade page keeps `ai_suggested` when a person accepts an untouched draft. Apply before 079. Rollback drops the trigger and function. |
+| `079_drop_step1_rules.sql` | Added 2026-11-05, same branch. Removes the five step 1 rules (six triggers): `assignment_offerings_new_stay_unpublished`, `assignment_offerings_publish_needs_active`, `grades_new_items_stay_unfinalized`, `assignment_offerings_marker_one_way`, and `assignment_offerings_new_paths_stay_unpublished` with `offering_activities_new_paths_stay_unpublished`. Section 1 lists them. After it an item made on a newer page publishes and can hold a finalized grade, except that 078 still requires a staff session on an `ai_drafted` item. Drops no column and changes no row. Apply order: 077, 078, 079. Rollback restores the six triggers as 028, 029 and 070 left them. |
 
 Migrations `048` and `059`, with rollbacks, not applied anywhere; proved on throwaway databases (`scripts/staging/test_commit_freeze_scratch.py`: 44 passed, 0 failed, 8 of 8 gap attempts served before and 0 after; `test_key_version_guard_scratch.py`: 11 passed, 0 failed, 5 of 5 before and 0 after).
 
