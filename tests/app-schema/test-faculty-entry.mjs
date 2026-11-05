@@ -37,23 +37,25 @@ eq('all drafts', E.writeSummary({ saved: 3, replacedPublished: 0 }), { kind: 'su
 
 section('publishColumn and publishPreview: the answer comes from the database');
 {
-  const db = stub(() => ({ data: { published: 4, closed: 2, held_ai: 1, close_applies: true }, error: null }));
-  const r = await E.publishColumn(db, 'i1', 's1', true);
-  eq('counts are passed through', r, { published: 4, closed: 2, heldAi: 1, closeApplies: true });
-  eq('the page asks to close and the database decides', db.calls[0], ['publish_column', { p_offering: 'i1', p_section: 's1', p_close: true }]);
+  const db = stub(() => ({ data: { published: 4, closed: 2, zeroed: 3, held_ai: 1, close_applies: true }, error: null }));
+  const r = await E.publishColumn(db, 'i1', 's1', 'fp-1');
+  eq('counts are passed through', r, { published: 4, closed: 2, zeroed: 3, heldAi: 1, closeApplies: true });
+  eq('the page sends the preview fingerprint and does not choose to close', db.calls[0], ['publish_column', { p_offering: 'i1', p_section: 's1', p_fingerprint: 'fp-1' }]);
 }
 {
-  const db = stub(() => ({ data: { item_published: false, hand_entered: true, drafts: 2, held_ai: 0, live: 0, close_applies: true, open_sections: 2, sections: 2 }, error: null }));
+  const db = stub(() => ({ data: { item_published: false, hand_entered: true, drafts: 2, held_ai: 0, live: 0, close_applies: true, open_sections: 2, sections: 2,
+    blank_count: 1, blank_cadets: [{ enrollment_id: 'e1', section_id: 's1' }], waiting_count: 1, fingerprint: 'fp-2', publish_closed_sections: 0, hand_closed_sections: 1 }, error: null }));
   const r = await E.publishPreview(db, 'i1', null);
-  eq('the preview is camel-cased and nothing is computed', r.preview, { itemPublished: false, handEntered: true, drafts: 2, heldAi: 0, live: 0, closeApplies: true, openSections: 2, sections: 2 });
+  eq('the preview is camel-cased and nothing is computed', r.preview, { itemPublished: false, handEntered: true, drafts: 2, heldAi: 0, live: 0, closeApplies: true, openSections: 2, sections: 2,
+    blankCount: 1, blankCadets: [{ enrollment_id: 'e1', section_id: 's1' }], waitingCount: 1, fingerprint: 'fp-2', publishClosedSections: 0, handClosedSections: 1 });
 }
 {
   const db = stub(() => ({ data: null, error: { message: 'boom' } }));
   check('a failed preview is an error, not an empty preview', !!(await E.publishPreview(db, 'i1', null)).error);
 }
 {
-  const db = stub(() => ({ data: { unpublished: 3, reopened: 2 }, error: null }));
-  eq('unpublish returns both counts', await E.unpublishColumn(db, 'i1', null), { unpublished: 3, reopened: 2 });
+  const db = stub(() => ({ data: { unpublished: 3, reopened: 2, kept_closed: 1 }, error: null }));
+  eq('unpublish returns the counts, including the columns it left closed', await E.unpublishColumn(db, 'i1', null), { unpublished: 3, reopened: 2, keptClosed: 1 });
   eq('and reopens by default', db.calls[0], ['unpublish_column', { p_offering: 'i1', p_section: null, p_reopen: true }]);
 }
 
@@ -77,6 +79,14 @@ section('publishSummary: publishing nothing is not success');
 {
   const s = E.publishSummary({ published: 0, closed: 2, heldAi: 0, closeApplies: true });
   check('closing alone is reported as closing', s.kind === 'success' && /closed 2/.test(s.text) && /No scores needed/.test(s.text), s.text);
+}
+{
+  const s = E.publishSummary({ published: 1, closed: 1, zeroed: 4, heldAi: 0, closeApplies: true });
+  check('the number of blanks that now count as 0 is said', /4 blank score\(s\) now count as 0/.test(s.text), s.text);
+}
+{
+  check('a changed column gets its own sentence', /changed after the preview/.test(E.plainEntryError({ code: '40001', message: 'publish_column: the column changed since you read the preview; read it again' })));
+  check('and so does a publish that skipped the preview', /preview was not confirmed/.test(E.plainEntryError({ message: 'publish_column: this publish would count 3 blank score(s) as 0; read the preview and confirm it first' })));
 }
 
 section('afterWrite: a saved change is not hidden by a failed reload');

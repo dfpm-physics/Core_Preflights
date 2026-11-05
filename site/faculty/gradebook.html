@@ -196,14 +196,19 @@
 
     // A total is the database's own text (course_totals). Nothing here adds, divides or rounds, so the figure
     // on this page is the one the student, the export and the backlog show.
+    // "counted 5 of 9": how many of the cadet's published items are in the total above. It changes no number; items
+    // that are drafted, held, awaiting a score, excused, not due or still in progress are the ones not counted.
+    function countedText(t) {
+      return t.items ? `counted ${t.counted} of ${t.items} items` : '';
+    }
     function totalHTML(t) {
       if (!t) return '<span class="muted" title="The database returned no total for this cadet">—</span>';
       if (t.percentText == null) {
         return t.bonusOnly
-          ? `<strong>${esc(t.earnedText)} pts</strong><span class="gb-frac">bonus only</span>`
-          : '<span class="muted">—</span><span class="gb-frac">nothing counts yet</span>';
+          ? `<strong>${esc(t.earnedText)} pts</strong><span class="gb-frac">bonus only · ${esc(countedText(t))}</span>`
+          : `<span class="muted">—</span><span class="gb-frac">nothing counts yet · ${esc(countedText(t))}</span>`;
       }
-      const extra = [t.letter, t.rank != null ? `#${t.rank}` : ''].filter(Boolean).join(' · ');
+      const extra = [t.letter, t.rank != null ? `#${t.rank}` : '', countedText(t)].filter(Boolean).join(' · ');
       return `<strong>${esc(t.percentText)}%</strong>${t.nearLine ? ' <span class="muted" title="Within the near-line width of a letter line">≈</span>' : ''}`
         + `<span class="gb-frac">${esc(t.earnedText)}/${esc(t.possibleText)}${extra ? ' · ' + esc(extra) : ''}</span>`;
     }

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prove score entry, column publishing and the Director-only excusal rule on a THROWAWAY database.
 
-Builds schema `app` from the repo's files (every migration but 023, in order, through 065) into a database
+Builds schema `app` from the repo's files (every migration but 023, in order) into a database
 named scratch_entry_<random> on the staging project's server, invents a small course, and calls the new
 functions as real roles with a JWT claim set, the way the browser would. Then drops the database.
 
@@ -155,6 +155,12 @@ def main():
             except Exception as exc:  # noqa: BLE001
                 return None, exc
 
+        def pubcall(item, sec, close):
+            """publish_column the way the page calls it: read the preview, send its fingerprint (067)."""
+            pr, pe = call("SELECT app.publish_preview(%s, %s)", (item, sec))
+            fp = pr[0][0].get("fingerprint") if pr else None
+            return call("SELECT app.publish_column(%s, %s, %s, %s)", (item, sec, close, fp))
+
         def rows(items):
             return json.dumps(items)
 
@@ -246,15 +252,15 @@ def main():
 
         print("\n=== publish_column ===")
         as_(instr)
-        r, e = call("SELECT app.publish_column(%s, NULL, true)", (Q,))
+        r, e = pubcall(Q, None, True)
         pub = r[0][0] if r else {}
         check("an instructor publishes their own section only", e is None and pub.get("published") == 2 and pub.get("closed") == 1 and pub.get("held_ai") == 0, str(e or pub))
         check("the other section's draft is still a draft", grade(enrB1, Q)[1] is False)
         as_(instr)
-        r, e = call("SELECT app.publish_column(%s, NULL, true)", (Q,))
+        r, e = pubcall(Q, None, True)
         check("publishing again publishes and closes nothing", e is None and r[0][0]["published"] == 0 and r[0][0]["closed"] == 0, str(e or r))
         as_(director)
-        r, e = call("SELECT app.publish_column(%s, %s, true)", (Q, secB))
+        r, e = pubcall(Q, secB, True)
         check("a Director publishes and closes the other section", e is None and r[0][0]["published"] == 1 and r[0][0]["closed"] == 1, str(e or r))
         cur.execute("RESET ROLE")
         cur.execute("SELECT updated_at::text FROM app.grades WHERE enrollment_id=%s AND assignment_offering_id=%s", (enrA1, Q))
@@ -270,10 +276,10 @@ def main():
         _, e = call("SELECT app.enter_grades(%s, %s::jsonb)", (H, rows([{"enrollment_id": enrA1, "points": "5"}])))
         check("an item still held by the step 1 rules takes a draft", e is None, str(e))
         as_(director)
-        _, e = call("SELECT app.publish_column(%s, NULL, false)", (H,))
+        _, e = pubcall(H, None, False)
         check("but publishing it is refused until those rules come out", e is not None, str(e))
         as_(stranger)
-        _, e = call("SELECT app.publish_column(%s, NULL, true)", (Q,))
+        _, e = pubcall(Q, None, True)
         check("a Director of another course cannot publish here", e is not None, str(e))
 
         print("\n=== publish_column: what it will not do ===")
@@ -281,7 +287,7 @@ def main():
         _, e = call("SELECT app.enter_grades(%s, %s::jsonb)", (U, rows([{"enrollment_id": enrA1, "points": "4"}])))
         check("an item not yet published to students takes a draft", e is None, str(e))
         as_(director)
-        _, e = call("SELECT app.publish_column(%s, NULL, true)", (U,))
+        _, e = pubcall(U, None, True)
         check("but publishing its column is refused, because students would see nothing", e is not None and "not published to students" in str(e), str(e))
         check("and the draft is still a draft", grade(enrA1, U)[1] is False)
         as_(director)
@@ -297,13 +303,13 @@ def main():
         r, e = call("SELECT app.publish_preview(%s, NULL)", (AI,))
         check("the preview counts the person's draft and the AI draft apart", e is None and r[0][0]["drafts"] == 1 and r[0][0]["held_ai"] == 1, str(e or r))
         as_(director)
-        r, e = call("SELECT app.publish_column(%s, NULL, false)", (AI,))
+        r, e = pubcall(AI, None, False)
         check("publishing finalizes the person's score and reports the AI draft it left out",
               e is None and r[0][0]["published"] == 1 and r[0][0]["held_ai"] == 1, str(e or r))
         check("the AI suggestion is still not finalized", grade(enrA1, AI)[1] is False and grade(enrA1, AI)[2] == "ai_suggested", str(grade(enrA1, AI)))
         check("the person's score is", grade(enrA2, AI)[1] is True)
         as_(director)
-        r, e = call("SELECT app.publish_column(%s, NULL, false)", (AI,))
+        r, e = pubcall(AI, None, False)
         check("a second publish says it published nothing", e is None and r[0][0]["published"] == 0 and r[0][0]["held_ai"] == 1, str(e or r))
         # the closing rule belongs to the database
         as_(director)
@@ -312,10 +318,10 @@ def main():
         as_(director)
         _, e = call("SELECT app.enter_grades(%s, %s::jsonb)", (MX, rows([{"enrollment_id": enrA1, "points": "3"}])))
         as_(director)
-        r, e = call("SELECT app.publish_column(%s, NULL, true)", (MX,))
+        r, e = pubcall(MX, None, True)
         check("and publish_column closes it, whatever the page believes", e is None and r[0][0]["closed"] == 2 and r[0][0]["close_applies"] is True, str(e or r))
         as_(director)
-        r, e = call("SELECT app.publish_column(%s, NULL, false)", (MX,))
+        r, e = pubcall(MX, None, False)
         check("a publish that does not ask to close leaves the closure alone", e is None and r[0][0]["closed"] == 0, str(e or r))
 
         print("\n=== unpublish_column: the undo ===")
@@ -335,7 +341,7 @@ def main():
         r, e = call("SELECT app.unpublish_column(%s, NULL, true)", (Q,))
         check("and doing it again changes nothing", e is None and r[0][0]["unpublished"] == 0 and r[0][0]["reopened"] == 0, str(e or r))
         as_(director)
-        r, e = call("SELECT app.publish_column(%s, NULL, true)", (Q,))
+        r, e = pubcall(Q, None, True)
         check("the column can be published again afterwards", e is None and r[0][0]["published"] == 3, str(e or r))
         as_(stranger)
         _, e = call("SELECT app.unpublish_column(%s, NULL, true)", (Q,))

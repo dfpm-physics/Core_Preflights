@@ -9,9 +9,11 @@
 -- so with the table dropped and the new functions still deployed, no reset can be done.
 -- Run it after the site release that stops the pages writing `grade_events` is reverted, or those pages warn.
 --
--- Grants: before 049 the signed-in role and the unauthenticated role each held INSERT, UPDATE and DELETE on
--- `grade_events` (the policies decide what is allowed) and NEITHER held TRUNCATE. This file grants exactly those
--- three and nothing wider. The grants are not restored to a wider set than they were.
+-- Grants: before 049 the signed-in role held INSERT, UPDATE and DELETE on `grade_events` (the policies decide what is
+-- allowed) and no TRUNCATE. This file grants exactly those three to the signed-in role. THE ONE DIFFERENCE FROM 'EXACT':
+-- before 049 the unauthenticated role (anon) held the same three rights as a platform default, and nothing uses them,
+-- so this file leaves anon with NO right on the table. Rolling back therefore never returns a write right to the
+-- unauthenticated role. Everything else is restored as it was.
 
 BEGIN;
 
@@ -39,7 +41,8 @@ CREATE POLICY ge_staff_read ON grade_events FOR SELECT TO authenticated
                     AND e.section_id IN (SELECT staff_sections())));
 
 -- the grants as they were: no TRUNCATE, and nothing beyond what the platform gave these roles by default
-GRANT INSERT, UPDATE, DELETE ON grade_events TO anon, authenticated;
+REVOKE ALL ON grade_events FROM anon;
+GRANT INSERT, UPDATE, DELETE ON grade_events TO authenticated;
 
 -- the two foreign keys, for new rows only: the rows kept since 049 may name a grade that no longer exists
 ALTER TABLE grade_events DROP CONSTRAINT IF EXISTS grade_events_grade_id_fkey;

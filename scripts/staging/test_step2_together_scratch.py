@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Step 2 together: one invented course walked across the student, staff-entry and trust migrations, on ONE
-throwaway database built with every migration in order (023, 024 to 043, then 044 to 049, 059, 060, 065, 066).
+throwaway database built with every migration in order (023, 024 to 043, then 044 to 049, 051, 059, 060, 065, 066, 067, 068).
 
 It stands in for plan section 8's "agree for the same cadet" as far as a scratch database can. Sessions are simulated
 (the `authenticated` role plus `request.jwt.claims`), so it proves the database rules, not the browser pages and not
@@ -16,13 +16,18 @@ THE PATH
      in the section the cadet left
   5  a completed term stays readable: the term's items, the grade, the total
   6  a dropped enrollment reads nothing
+  8  publishing a no-submission column closes it (067): the ten-item case reads 10 of 100 for staff, the cadet and the
+     export; the preview lists the cadets and its fingerprint covers them; an extension that has not passed waits;
+     unpublish reopens only what a publish closed
+  9  a grade's version (updated_at) moves only when the grade changes (068)
   7  every rollback runs newest first, the schema is back where it was, and the migrations re-apply; the same
      reads then give the same answers
 
 Names and ids are invented; no id is printed. Staging project only (db_target refuses anything else); one database,
 dropped afterwards.
 
-Usage:  python scripts/staging/test_step2_together_scratch.py --expect-ref <staging_ref>
+Usage:  python scripts/staging/test_step2_together_scratch.py --expect-ref <staging_ref> [--before 067]
+        --before 067 builds only through 066, to show that section 8 fails on the behaviour before 067.
 Exit 0 only when every check passes.
 """
 import argparse
@@ -37,14 +42,16 @@ import install_staging as ins  # noqa: E402
 import v2_gate_lib as gl  # noqa: E402
 from scratch_lib import Scratch, Tally  # noqa: E402
 
-STEP2 = ["044", "045", "046", "047", "048", "049", "051", "059", "060", "065", "066"]
+STEP2_ALL = ["044", "045", "046", "047", "048", "049", "051", "059", "060", "065", "066", "067", "068"]
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--expect-ref", required=True)
+    ap.add_argument("--before", default="999")
     args = ap.parse_args()
-    s = Scratch("scratch_tg", args.expect_ref, before="999", skip=())
+    STEP2 = [n for n in STEP2_ALL if n < args.before]
+    s = Scratch("scratch_tg", args.expect_ref, before=args.before, skip=())
     t = Tally()
     code = 1
     try:
@@ -116,13 +123,21 @@ def main():
                           "AND assignment_offering_id = %s", (co, enr, ao))
             return tuple(r[1][0]) if r[0] == "ok" and r[1] else None
 
+        def pub(item, sec=None):
+            """Publish a column the way the page does: read the preview, send its fingerprint (none before 067)."""
+            pv = mine(director, "SELECT publish_preview(%s, %s)", (item, sec))
+            fp = pv[1][0][0].get("fingerprint") if pv[0] == "ok" else None
+            if fp:
+                return sess(director, "SELECT publish_column(%s, %s, %s, %s)", (item, sec, False, fp), keep=True)
+            return sess(director, "SELECT publish_column(%s, %s, true)", (item, sec), keep=True)
+
         print("\n=== 1. a typed score is a draft ===")
         r = sess(director, "SELECT enter_grades(%s, %s::jsonb)", (Q, json.dumps([{"enrollment_id": enr1, "points": "8.5"}])), keep=True)
         t.chk("a Director enters a typed score", r[0] == "ok", r)
         t.chk("the cadet reads no grade for the draft", pts(stu1, Q) is None)
 
         print("\n=== 2. publishing the column: student, staff and export read one value ===")
-        r = sess(director, "SELECT publish_column(%s, NULL, false)", (Q,), keep=True)
+        r = pub(Q)
         t.chk("the Director publishes the column", r[0] == "ok", r)
         t.chk("the cadet's my_grades row is the typed score", pts(stu1, Q) is not None and float(pts(stu1, Q)) == 8.5, pts(stu1, Q))
         mt, st = my_total(stu1), staff_total(director, enr1)
@@ -149,7 +164,7 @@ def main():
         t.chk("the held grade is left out of the cadet's total and the staff total alike", my_total(stu1) == staff_total(director, enr1) == mt, (my_total(stu1), staff_total(director, enr1), mt))
 
         print("\n=== 4. a section transfer keeps past values ===")
-        r = sess(director, "SELECT publish_column(%s, %s, true)", (Q2, secA), keep=True)
+        r = pub(Q2, secA)
         t.chk("the second quiz's column is closed for the first section (a blank there counts 0)", r[0] == "ok", r)
         before = (my_total(stu1), cell(stu1, enr1, Q2), pts(stu1, Q))
         t.chk("the closed blank is in the total (possible includes the second quiz)", before[0] is not None and before[0][1] == "20", before)
@@ -175,6 +190,159 @@ def main():
         t.chk("no grade", pts(stu1, Q) is None)
         cur.execute("UPDATE enrollments SET status = 'active' WHERE id = %s", (enr1,))
         answers_before = (pts(stu1, Q), my_total(stu1), pts(stu1, H), cell(stu1, enr1, Q2))
+
+        print("\n=== 8. publishing a no-submission column closes it (067) ===")
+        try:
+            cur.execute("BEGIN")
+            course2 = b.course("tog-102", "Ten item course")
+            co2 = b.offering(course2, term, True)
+            secP, secQ = b.section(co2, "P1", ["M"]), b.section(co2, "Q1", ["T"])
+            b.assign(director, co2, "director")
+            enrA, stuA = b.cadet(3000000921, "Cal Invented", secP)
+            enrB, stuB = b.cadet(3000000922, "Dot Invented", secP)
+            enrC, stuC = b.cadet(3000000923, "Eli Invented", secQ)
+            ten = [b.item(course2, co2, f"tog-ten-{i}", f"Ten item {i}", 10, kind="quiz", paths=hand,
+                          due=gl.days(-3), published=False) for i in range(10)]
+            for it in ten:
+                b.publish(it)
+            cur.execute("COMMIT")
+            AO = [it["ao"] for it in ten]
+            sA, sB, sC = str(enrA), str(enrB), str(enrC)
+
+            def pv(i, sec=secP):
+                r = mine(director, "SELECT publish_preview(%s, %s)", (AO[i], sec))
+                return r[1][0][0] if r[0] == "ok" else {}
+
+            def total2(sub, enr=None):
+                if enr is not None:
+                    r = mine(sub, "SELECT earned_text, possible_text, percent_text, percent_key_text FROM course_totals(%s, 'final') "
+                                  "WHERE enrollment_id = %s", (co2, enr))
+                else:
+                    r = mine(sub, "SELECT earned_text, possible_text, percent_text, percent_key_text FROM my_course_total(%s, 'final')", (co2,))
+                return tuple(r[1][0]) if r[0] == "ok" and r[1] else None
+
+            def missing(i):
+                r = mine(director, "SELECT enrollment_id FROM gradebook_cells(%s, 'final') WHERE assignment_offering_id = %s "
+                                   "AND state = 'missing'", (co2, AO[i]))
+                return {str(x[0]) for x in r[1]} if r[0] == "ok" else None
+
+            def state_of(sub, enr, i):
+                r = mine(sub, "SELECT state FROM gradebook_cells(%s, 'final') WHERE enrollment_id = %s AND assignment_offering_id = %s",
+                         (co2, enr, AO[i]))
+                return r[1][0][0] if r[0] == "ok" and r[1] else None
+
+            def num(x):
+                return float(x) if x is not None else None
+
+            # the setup: cadet A has 10 of 10 on the first item; cadet B has an extension on the third; the last
+            # column was closed by hand before anyone published it
+            r = sess(director, "SELECT enter_grades(%s, %s::jsonb)", (AO[0], json.dumps([{"enrollment_id": sA, "points": "10"}])), keep=True)
+            t.chk("a Director enters 10 of 10 for the first cadet on the first item", r[0] == "ok", r)
+            cur.execute("INSERT INTO extensions (enrollment_id, assignment_offering_id, extended_due_at, granted_by, reason) "
+                        "VALUES (%s, %s, now() + interval '5 days', %s, 'made-up reason')", (enrB, AO[2], director))
+            b.close_column(ten[9], secP, director)
+
+            p0 = pv(0)
+            t.chk("the preview of the first column lists the one blank cadet first, with the number",
+                  p0.get("blank_count") == 1 and [x["enrollment_id"] for x in p0.get("blank_cadets", [])] == [sB], p0)
+            r = pub(AO[0], secP)
+            t.chk("publishing the first column closes it and zeroes that blank", r[0] == "ok" and r[1].get("closed") == 1
+                  and r[1].get("zeroed") == 1, r)
+            tA = total2(director, enrA)
+            t.chk("after the first column only, the cadet reads 10 of 20 (the hand-closed last column already counts 0)",
+                  tA is not None and num(tA[0]) == 10 and num(tA[1]) == 20, tA)
+
+            # a change after the preview asks for a new preview
+            fp1 = pv(1).get("fingerprint")
+            t.chk("the preview of the second column lists both blank cadets", pv(1).get("blank_count") == 2, pv(1))
+            sess(director, "SELECT enter_grades(%s, %s::jsonb)", (AO[1], json.dumps([{"enrollment_id": sB, "points": "3"}])), keep=True)
+            r = sess(director, "SELECT publish_column(%s, %s, false, %s)", (AO[1], secP, fp1), keep=True)
+            t.chk("a publish with the old fingerprint is refused after a score changed", r[0] == "error" and r[1] == "40001", r)
+            r = sess(director, "SELECT publish_column(%s, %s, true)", (AO[1], secP), keep=True)
+            t.chk("a publish that would zero a blank is refused without a fingerprint", r[0] == "error" and "preview" in str(r[2]), r)
+            t.chk("neither refusal published or closed anything", pv(1).get("publish_closed_sections") == 0 and missing(1) == set(), missing(1))
+            before = missing(1)
+            plist = {x["enrollment_id"] for x in pv(1).get("blank_cadets", [])}
+            r = pub(AO[1], secP)
+            t.chk("with a fresh preview the publish goes through, and the list was the cadets that changed",
+                  r[0] == "ok" and plist == {sA} and (missing(1) - before) == plist and r[1].get("zeroed") == 1, (r, plist))
+
+            # an extension that has not passed waits
+            p2 = pv(2)
+            t.chk("the third column lists the first cadet as blank and the extended cadet as waiting",
+                  p2.get("blank_count") == 1 and p2.get("waiting_count") == 1
+                  and [x["enrollment_id"] for x in p2.get("blank_cadets", [])] == [sA], p2)
+            r = pub(AO[2], secP)
+            t.chk("publishing it zeroes only the cadet with no extension", r[0] == "ok" and r[1].get("zeroed") == 1, r)
+            t.chk("the extended cadet's cell has not become Missing", state_of(director, enrB, 2) != "missing", state_of(director, enrB, 2))
+            cur.execute("UPDATE extensions SET extended_due_at = now() - interval '1 hour' WHERE enrollment_id = %s AND assignment_offering_id = %s",
+                        (enrB, AO[2]))
+            t.chk("once the extension has passed the cell counts 0", state_of(director, enrB, 2) == "missing", state_of(director, enrB, 2))
+
+            # the rest of the columns, each preview matching what changed
+            all_match = True
+            for i in range(3, 9):
+                before = missing(i)
+                plist = {x["enrollment_id"] for x in pv(i).get("blank_cadets", [])}
+                r = pub(AO[i], secP)
+                ok = r[0] == "ok" and before is not None and (missing(i) - before) == plist and r[1].get("zeroed") == len(plist) == 2
+                all_match = all_match and ok
+            t.chk("columns 4 to 9: each preview named exactly the cadets that became Missing", all_match)
+            p9 = pv(9)
+            t.chk("the column closed by hand lists nobody and a publish adds no closure", p9.get("blank_count") == 0, p9)
+            r = pub(AO[9], secP)
+            t.chk("publishing it closes nothing new", r[0] == "ok" and r[1].get("closed") == 0 and r[1].get("zeroed") == 0, r)
+
+            # the ten-item case: one rule for staff, the cadet and the export's columns
+            tA, mA = total2(director, enrA), total2(stuA)
+            t.chk("10 of 100, or 10 percent, for staff (course_totals)",
+                  tA is not None and num(tA[0]) == 10 and num(tA[1]) == 100 and num(tA[2]) == 10, tA)
+            t.chk("the cadet's own total is the same four values", mA == tA, (mA, tA))
+            rows_staff = mine(director, "SELECT assignment_offering_id, state, points_earned FROM gradebook_cells(%s, 'final') "
+                                        "WHERE enrollment_id = %s ORDER BY 1", (co2, enrA))
+            rows_cadet = mine(stuA, "SELECT assignment_offering_id, state, points_earned FROM gradebook_cells(%s, 'final') "
+                                    "WHERE enrollment_id = %s ORDER BY 1", (co2, enrA))
+            states = sorted(x[1] for x in rows_staff[1]) if rows_staff[0] == "ok" else []
+            t.chk("the cells the export reads agree for staff and cadet: one released and nine Missing",
+                  rows_staff == rows_cadet and states == ["missing"] * 9 + ["released"], states)
+            t.chk("another section's cadet is untouched: no closure there, no Missing cell, nothing counts",
+                  one("SELECT count(*) FROM column_closures WHERE section_id = %s", (secQ,)) == 0
+                  and state_of(director, enrC, 3) != "missing" and (total2(director, enrC) or (None, "0"))[1] in ("0", None),
+                  (state_of(director, enrC, 3), total2(director, enrC)))
+
+            # what a publish closed is recorded, and unpublish reopens only that
+            marks = one("SELECT count(*) FROM column_closures WHERE section_id = %s AND closed_by_publish AND reopened_at IS NULL", (secP,))
+            hand_n = one("SELECT count(*) FROM column_closures WHERE section_id = %s AND NOT closed_by_publish AND reopened_at IS NULL", (secP,))
+            t.chk("nine closures are marked as made by a publish and the hand closure is not", marks == 9 and hand_n == 1, (marks, hand_n))
+            r = sess(director, "SELECT unpublish_column(%s, %s, true)", (AO[3], secP), keep=True)
+            t.chk("unpublishing a column a publish closed reopens it", r[0] == "ok" and r[1].get("reopened") == 1, r)
+            t.chk("the cadet's blank on it leaves the total (90 possible)", num((total2(director, enrA) or (0, 0))[1]) == 90, total2(director, enrA))
+            r = sess(director, "SELECT unpublish_column(%s, %s, true)", (AO[9], secP), keep=True)
+            t.chk("unpublishing the hand-closed column reopens nothing and says it stays closed",
+                  r[0] == "ok" and r[1].get("reopened") == 0 and r[1].get("kept_closed") == 1, r)
+            t.chk("its blanks still count 0", state_of(director, enrA, 9) == "missing", state_of(director, enrA, 9))
+            r = sess(director, "INSERT INTO column_closures (assignment_offering_id, section_id, closed_by_publish) VALUES (%s, %s, true)",
+                     (AO[3], secP), keep=True)
+            t.chk("a closure written by hand while sending the marker is stored unmarked",
+                  r[0] == "ok" and one("SELECT closed_by_publish FROM column_closures WHERE assignment_offering_id = %s AND section_id = %s "
+                                       "AND reopened_at IS NULL", (AO[3], secP)) is False, r)
+            r = sess(director, "SELECT unpublish_column(%s, %s, true)", (AO[3], secP), keep=True)
+            t.chk("and unpublish leaves that one closed", r[0] == "ok" and r[1].get("reopened") == 0 and r[1].get("kept_closed") == 1, r)
+            r = sess(director, "UPDATE column_closures SET closed_by_publish = true WHERE assignment_offering_id = %s AND reopened_at IS NULL", (AO[9],))
+            t.chk("the marker cannot be changed afterwards", r[0] == "error", r)
+        except Exception as exc:  # noqa: BLE001
+            t.chk("section 8 ran to the end", False, repr(exc))
+            cur.execute("ROLLBACK")
+
+        print("\n=== 9. a grade's version moves only on a real change (068) ===")
+        gq = (enr1, Q)
+        ver0 = one("SELECT updated_at::text FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", gq)
+        cur.execute("UPDATE grades SET points_earned = points_earned WHERE enrollment_id = %s AND assignment_offering_id = %s", gq)
+        ver1 = one("SELECT updated_at::text FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", gq)
+        t.chk("a write that changes nothing leaves the version alone", ver1 == ver0, (ver0, ver1))
+        cur.execute("UPDATE grades SET question_scores = jsonb_build_object('q9', 1) WHERE enrollment_id = %s AND assignment_offering_id = %s", gq)
+        ver2 = one("SELECT updated_at::text FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", gq)
+        t.chk("a real change moves it", ver2 != ver1, (ver1, ver2))
 
         print("\n=== 7. rollback newest first, then re-apply ===")
         names = {f.name[:3]: f.name for f in ins.migration_files(None)}

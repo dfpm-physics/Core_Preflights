@@ -58,7 +58,8 @@ check('049: a write to an existing row keeps that row\'s grader', /keeps the gra
 const rbFull = readRepoFile('supabase/migrations/app/rollback/049_grade_audit_ROLLBACK.sql');
 const rb = rbFull.split(/\r?\n/).filter(l => !l.startsWith('--')).join(' ');
 check('049 rollback: never grants TRUNCATE or any right to the API roles beyond INSERT, UPDATE, DELETE',
-      !/GRANT[^;]*TRUNCATE/i.test(rb) && !/GRANT\s+ALL/i.test(rb) && /GRANT INSERT, UPDATE, DELETE ON grade_events TO anon, authenticated;/.test(rb));
+      !/GRANT[^;]*TRUNCATE/i.test(rb) && !/GRANT\s+ALL/i.test(rb) && /GRANT INSERT, UPDATE, DELETE ON grade_events TO authenticated;/.test(rb)
+      && /REVOKE ALL ON grade_events FROM anon;/.test(rb) && !/GRANT[^;]*TO[^;]*anon/i.test(rb));
 check('049 rollback: says to put the previous reset functions back first', /BEFORE running this file/.test(rbFull));
 check('the test cleanup does not delete from the audit table', !/DELETE FROM app\.grade_events/.test(readRepoFile('tests/app-schema/cleanup.py')));
 

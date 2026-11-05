@@ -126,6 +126,22 @@ eq('held a grade with no version: stale (cannot be shown current)', G.staleEnrol
 eq('only the changed rows are named', G.staleEnrollments(rows('a', 'b', 'c'),
   { a: { updated_at: '1' }, b: { updated_at: '9' }, c: { updated_at: '1' } }, { a: held('1'), b: held('2'), c: held('1') }), ['b']);
 eq('no rows: nothing to refuse', G.staleEnrollments([], { e: { updated_at: 'v2' } }, { e: held('v1') }), []);
+{
+  // A retry after the page's own write must not be refused as a colleague's; a colleague's later write still is.
+  const studs = [{ enrollment_id: 'e', student_id: 5002 }];
+  const gm = { 5002: { gradeId: 'g', updatedAt: 'v1', qs: {} } };
+  G.applyOwnWrites(studs, gm, [{ enrollment_id: 'e' }], [{ id: 'g', enrollment_id: 'e', updated_at: 'v2' }], false);
+  eq('the page takes the version its own write produced', gm[5002].updatedAt, 'v2');
+  eq('so a retry after a half-finished save is current', G.staleEnrollments(rows('e'), { e: { updated_at: 'v2' } }, { e: gm[5002] }), []);
+  eq('and a colleague writing after that is still refused', G.staleEnrollments(rows('e'), { e: { updated_at: 'v3' } }, { e: gm[5002] }), ['e']);
+  const gm2 = {};
+  G.applyOwnWrites(studs, gm2, [{ enrollment_id: 'e', question_scores: { q1: { score: 1 } } }], [{ id: 'g2', enrollment_id: 'e', updated_at: 'w1' }], true);
+  eq('a grade this page created is held with its id and version', [gm2[5002].gradeId, gm2[5002].updatedAt, gm2[5002].finalized], ['g2', 'w1', true]);
+  eq('so the retry sees it as its own', G.staleEnrollments(rows('e'), { e: { updated_at: 'w1' } }, { e: gm2[5002] }), []);
+  const gm3 = { 5002: { gradeId: 'g', updatedAt: 'v1' } };
+  G.applyOwnWrites(studs, gm3, [{ enrollment_id: 'e' }], [{ id: 'g', enrollment_id: 'e' }], false);
+  eq('a response with no version changes nothing (the safe direction)', gm3[5002].updatedAt, 'v1');
+}
 
 /* ── P5 ────────────────────────────────────────────────────────────────────────────────────────────────────────── */
 section('P5 — a card with no earlier grader');

@@ -65,6 +65,8 @@ export async function loadEntry(db, courseOfferingId) {
 /** Turn a database or network error into a sentence a person can act on. */
 export function plainEntryError(e) {
   const m = String(e?.message || e || '');
+  if (/changed since you read the preview/.test(m)) return 'The column changed after the preview was read, so nothing was published. The preview has been read again: check it, then publish again.';
+  if (/would count \d+ blank/.test(m)) return 'Publishing this column would count blank scores as 0, and the preview was not confirmed. Nothing was published. Reload the page and publish again.';
   if (e?.code === '40001' || /changed since you read|removed since you read/.test(m)) return 'A grade changed while you were looking at it. Reload the page and check the numbers again. Nothing was saved.';
   if (/already published/.test(m)) return 'A score you are changing is already published to students. Nothing was saved. Confirm the replacement and try again.';
   if (/not a plain number|too large|above the item|below zero|more than two decimals/.test(m)) return 'A score is out of range or is not a plain number. Nothing was saved.';
@@ -111,32 +113,37 @@ export async function publishPreview(db, itemId, sectionId) {
   return { preview: {
     itemPublished: !!data?.item_published, handEntered: !!data?.hand_entered, drafts: data?.drafts ?? 0,
     heldAi: data?.held_ai ?? 0, live: data?.live ?? 0, closeApplies: !!data?.close_applies,
-    openSections: data?.open_sections ?? 0, sections: data?.sections ?? 0 } };
+    openSections: data?.open_sections ?? 0, sections: data?.sections ?? 0,
+    blankCount: data?.blank_count ?? 0, blankCadets: Array.isArray(data?.blank_cadets) ? data.blank_cadets : [],
+    waitingCount: data?.waiting_count ?? 0, fingerprint: data?.fingerprint ?? null,
+    publishClosedSections: data?.publish_closed_sections ?? 0, handClosedSections: data?.hand_closed_sections ?? 0 } };
 }
 
 /**
- * Publish the hand-entered or imported drafts of one item for a section (or all the caller's sections). The page says
- * whether it WANTS the column closed; the database closes it only when the item takes no submission.
+ * Publish the hand-entered or imported drafts of one item for a section (or all the caller's sections). The database
+ * also closes the column when the item takes no submission: that is part of publishing, and the page does not choose
+ * it. `fingerprint` is the value the preview showed; the database refuses a publish whose column has changed since.
  */
-export async function publishColumn(db, itemId, sectionId, close) {
-  const { data, error } = await db.rpc('publish_column', { p_offering: itemId, p_section: sectionId || null, p_close: !!close });
-  return error ? { error } : { published: data?.published ?? 0, closed: data?.closed ?? 0, heldAi: data?.held_ai ?? 0, closeApplies: !!data?.close_applies };
+export async function publishColumn(db, itemId, sectionId, fingerprint) {
+  const { data, error } = await db.rpc('publish_column', { p_offering: itemId, p_section: sectionId || null, p_fingerprint: fingerprint ?? null });
+  return error ? { error } : { published: data?.published ?? 0, closed: data?.closed ?? 0, zeroed: data?.zeroed ?? 0, heldAi: data?.held_ai ?? 0, closeApplies: !!data?.close_applies };
 }
 
-/** Undo a publish: the scores go back to drafts and, by default, the column reopens. */
+/** Undo a publish: the scores go back to drafts and, by default, the columns that publish closed reopen. A column closed any other way stays closed. */
 export async function unpublishColumn(db, itemId, sectionId, reopen = true) {
   const { data, error } = await db.rpc('unpublish_column', { p_offering: itemId, p_section: sectionId || null, p_reopen: !!reopen });
-  return error ? { error } : { unpublished: data?.unpublished ?? 0, reopened: data?.reopened ?? 0 };
+  return error ? { error } : { unpublished: data?.unpublished ?? 0, reopened: data?.reopened ?? 0, keptClosed: data?.kept_closed ?? 0 };
 }
 
 /** The sentence for a publish. Publishing nothing is never reported as a success. */
-export function publishSummary({ published, closed, heldAi }) {
+export function publishSummary({ published, closed, zeroed, heldAi }) {
   const ai = heldAi ? ` ${heldAi} AI-suggested draft(s) were left out: a person reviews those on the grade page.` : '';
   if (!published && !closed) {
     return { kind: heldAi ? 'warn' : 'info', text: `Nothing was published: there were no drafted scores to publish.${ai}` };
   }
   const parts = [published ? `Published ${published} score(s)` : 'No scores needed publishing'];
-  if (closed) parts.push(`closed ${closed} section column(s), so a blank now counts as 0`);
+  if (closed) parts.push(`closed ${closed} section column(s)`);
+  if (zeroed) parts.push(`${zeroed} blank score(s) now count as 0`);
   return { kind: heldAi ? 'warn' : 'success', text: `${parts.join('; ')}.${ai}` };
 }
 

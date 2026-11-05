@@ -722,10 +722,16 @@
         (held ? `\n\n${held}` : '') +
         `\n\nStudents will see their scores and feedback immediately.`)) return;
       st.textContent = 'Publishing…';
-      const { error } = await G.finalizeScores(ctx, current, currentStudents, gradeData, scoreMap, effortData, extras);
+      const out = await G.finalizeScores(ctx, current, currentStudents, gradeData, scoreMap, effortData, extras);
+      const error = out.error;
       st.textContent = error ? '⚠ Finalize failed: ' + error.message
         : `✅ Published ${n} to students` + (extras.held.length ? ` · ${extras.held.length} held back` : '');
-      setTimeout(loadView, 1200);
+      // Reload at once, and only after a publish that went through. A delayed reload left the old versions on screen
+      // for over a second, and a Save in that window was refused for the page's own publish. A failed publish keeps the
+      // page as it is, so typed work is not thrown away by a refusal.
+      // `out.data` is set only once the grades themselves were written (a later step may still have failed); a
+      // refusal before any write leaves it null, and the page stays as it is.
+      if (!error || out.data) await loadView();
     }
 
     /** The held-back part of the publish prompt: one line per reason, with its count. */

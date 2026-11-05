@@ -117,6 +117,12 @@
       refreshPreview();
     }
 
+    // The names behind the preview's blank list. The list itself is the database's; this only looks the names up.
+    function blankNames() {
+      const by = new Map((vm?.roster || []).map(r => [r.enrollmentId, lastFirst(r.name)]));
+      return (preview?.blankCadets || []).map(c => by.get(c.enrollment_id) || 'a cadet').sort((a, b) => a.localeCompare(b));
+    }
+
     /* What publishing would do comes from the database, so this page holds no copy of the rule. */
     async function refreshPreview() {
       const tok = ++previewToken;
@@ -142,9 +148,13 @@
       } else {
         const bits = [`${preview.drafts} drafted score(s) would be published`];
         if (preview.heldAi) bits.push(`${preview.heldAi} AI-suggested draft(s) would be left out for a person to review on the grade page`);
-        bits.push(preview.closeApplies ? `the column would also close${preview.openSections ? ` for ${preview.openSections} section(s), so a blank would count as 0` : ' (already closed)'}` : 'the column would stay open');
-        info.textContent = `Publishing now: ${bits.join('; ')}. ${preview.live} score(s) are already published.`;
-        pub.disabled = preview.drafts === 0;
+        bits.push(preview.closeApplies ? `the column would also close${preview.openSections ? ` for ${preview.openSections} section(s)` : ' (already closed)'}` : 'the column would stay open');
+        // The cadets who would drop to 0 come FIRST, with the number: that is the part of a publish that moves totals.
+        const lead = preview.blankCount
+          ? `${preview.blankCount} cadet(s) with no score would count as 0: ${blankNames().join(', ')}. ` : '';
+        const wait = preview.waitingCount ? `${preview.waitingCount} cadet(s) with an extension that has not passed keep waiting. ` : '';
+        info.textContent = `${lead}${wait}Publishing now: ${bits.join('; ')}. ${preview.live} score(s) are already published.`;
+        pub.disabled = preview.drafts === 0 && !preview.blankCount && !(preview.closeApplies && preview.openSections);
       }
       if (un) un.hidden = !(preview.handEntered && (preview.live > 0 || (sectionId ? !!vm.closures[`${sectionId}|${itemId}`] : false)));
     }
@@ -232,14 +242,16 @@
       if (Object.keys(gridInputs()).length) { typed = gridInputs(); note = { kind: 'warn', text: 'You have scores typed that are not saved. Save them first, or clear them, then publish.' }; render(); return; }
       const it = item();
       const where = sectionId ? 'this section' : 'all your sections';
-      const lines = [`Publish the drafted scores of "${it.title}" for ${where}?`, '',
-        `${preview.drafts} score(s) become visible to students.`];
+      const lines = [`Publish the drafted scores of "${it.title}" for ${where}?`, ''];
+      if (preview.blankCount) lines.push(`${preview.blankCount} cadet(s) with no score will count as 0:`, blankNames().join(', '), '');
+      if (preview.waitingCount) lines.push(`${preview.waitingCount} cadet(s) with an extension that has not passed keep waiting.`, '');
+      lines.push(`${preview.drafts} score(s) become visible to students.`);
       if (preview.heldAi) lines.push(`${preview.heldAi} AI-suggested draft(s) are NOT published; a person reviews those on the grade page.`);
-      lines.push(preview.closeApplies ? 'The column also closes, so any blank counts as 0.' : 'The column stays open.');
-      lines.push('', 'You can undo this with "Unpublish this column".');
+      lines.push(preview.closeApplies ? 'The column also closes for the section, so any blank counts as 0.' : 'The column stays open.');
+      lines.push('', 'You can undo this with "Unpublish this column"; that reopens only the columns this publish closed.');
       if (!confirm(lines.join('\n'))) return;
       busy = true;
-      const res = await E.publishColumn(db, itemId, sectionId || null, true);
+      const res = await E.publishColumn(db, itemId, sectionId || null, preview.fingerprint);
       busy = false;
       if (res.error) { note = { kind: 'error', text: E.plainEntryError(res.error) }; render(); return; }
       note = E.publishSummary(res);
@@ -251,13 +263,13 @@
       if (Object.keys(gridInputs()).length) { typed = gridInputs(); note = { kind: 'warn', text: 'You have scores typed that are not saved. Save them first, or clear them, then unpublish.' }; render(); return; }
       const it = item();
       const where = sectionId ? 'this section' : 'all your sections';
-      if (!confirm(`Unpublish the scores of "${it.title}" for ${where}?\n\n${preview.live} published score(s) go back to drafts and leave students' totals. The column reopens, so a blank stops counting as 0.`)) return;
+      if (!confirm(`Unpublish the scores of "${it.title}" for ${where}?\n\n${preview.live} published score(s) go back to drafts and leave students' totals. Columns this publish closed reopen, so their blanks stop counting as 0. A column closed any other way stays closed.`)) return;
       busy = true;
       const res = await E.unpublishColumn(db, itemId, sectionId || null, true);
       busy = false;
       if (res.error) { note = { kind: 'error', text: E.plainEntryError(res.error) }; render(); return; }
       note = res.unpublished || res.reopened
-        ? { kind: 'success', text: `Unpublished ${res.unpublished} score(s); reopened ${res.reopened} section column(s).` }
+        ? { kind: 'success', text: `Unpublished ${res.unpublished} score(s); reopened ${res.reopened} section column(s).${res.keptClosed ? ` ${res.keptClosed} column(s) closed another way stay closed.` : ''}` }
         : { kind: 'info', text: 'Nothing to unpublish: no score was published and no column was closed.' };
       await reloadKeep();
     }

@@ -319,8 +319,12 @@ def main():
               one("SELECT count(*) FROM pg_trigger WHERE tgname IN ('grades_audit','grades_pin_grader','credential_events_append_only','credential_events_no_truncate','grade_events_append_only','grade_events_no_truncate')") == 0
               and one("SELECT count(*) FROM pg_proc WHERE proname IN ('grades_audit','grades_pin_grader','audit_actor','credential_events_append_only','audit_log_append_only','grade_events_put')") == 0)
         now = acl()
-        t.chk("ROLLBACK: every right on grade_events, for every role, is exactly as it was before 049",
-              now == base, {k: (base[k], now[k]) for k in base if base[k] != now[k]})
+        # exact for every role except anon: the rollback deliberately leaves anon with no right at all (nothing uses it)
+        t.chk("ROLLBACK: every right on grade_events is as it was before 049, except that anon holds none",
+              all(now[k] == (False if k[0] == "anon" else base[k]) for k in base),
+              {k: (base[k], now[k]) for k in base if now[k] != (False if k[0] == "anon" else base[k])})
+        t.chk("ROLLBACK: the unauthenticated role holds no write right on grade_events",
+              not any(now[("anon", p_)] for p_ in ("INSERT", "UPDATE", "DELETE", "TRUNCATE")))
         t.chk("ROLLBACK: neither the signed-in nor the unauthenticated role holds TRUNCATE or any right it did not hold",
               not any(now[(r_, p_)] and not base[(r_, p_)] for r_ in ("anon", "authenticated") for p_ in
                       ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER")))

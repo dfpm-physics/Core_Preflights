@@ -362,7 +362,11 @@ export function buildMatrix({ enrollments, offerings, grades, submissions, exten
       if (view.state === CELL.MISSING && signals.understanding == null) signals.understanding = 0;
       return { ...view, source: grade?.source || null, due: local.due, ...signals };
     });
-    const total = totalView(totBy.get(en.enrollmentId));
+    // "counted N of M": how many of this cadet's published items the database's states put in the total (a released
+    // score or a counted 0). A display of the states already on the row; it adds nothing to any number.
+    const counted = cells.filter((c) => c.state === CELL.GRADED || c.state === CELL.MISSING).length;
+    const tv = totalView(totBy.get(en.enrollmentId));
+    const total = tv ? { ...tv, counted, items: cells.length } : null;
     return { ...en, cells, total, band: total ? total.band : null };
   });
 

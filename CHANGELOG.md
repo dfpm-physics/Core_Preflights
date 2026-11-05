@@ -8,6 +8,19 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 step 2: publishing closes a column, counted flag, version and rollback fixes; local)
+
+Migrations 067 and 068 are on the branch only. Nothing is applied to staging or production, and nothing is pushed.
+
+- **Publishing a no-submission column closes it (067).** Decision 1 in `docs/decisions/V2-DATA-MODEL.md` is changed for the publish action only, with the course director's reason (a class view needs a fair comparison: 10 of 10 on one item beside nine published items still blank must read 10 of 100, not 100%). `publish_column` closes the column for the sections it publishes, in the same transaction; each blank counts 0 and a cadet with an extension that has not passed keeps waiting. `publish_preview` lists the cadets who would drop to 0 first, with the number, and returns a fingerprint of everything the publish acts on; `publish_column(uuid, uuid, boolean, text)` refuses a stale or missing fingerprint when blanks are involved. Unpublish reopens only closures a publish made (`column_closures.closed_by_publish`, set from a transaction-local setting, immutable); a column closed any other way stays closed. Numbered 067 rather than 052 because it replaces functions from 065. The Enter scores page shows the list and sends the fingerprint.
+- **Counted flag.** The staff gradebook prints "counted N of M items" under each total, from the database's cell states. It adds no total and changes no number; students do not see it.
+- **A grade's version moves only on a real change (068).** The grade page refused saves because of writes that changed nothing. The page also now keeps its own writes' versions (a half-finished save can be retried) and reloads at once after a publish, and only after one that wrote; a refusal keeps the typed work on screen.
+- **049 rollback** leaves the unauthenticated role with no right on `grade_events` (it held three by default before 049; nothing used them). Rollback is exact for every other role.
+- **Tests:** `test_step2_together_scratch.py` sections 8 and 9 (fail on the old build with `--before 067` / `--before 068`), `scratch_entry_proof.py` updated for the fingerprint, node tests for the entry page, gradebook and version rule.
+- **Not done, deliberately:** no CSP change (no page content was found that uses another image host; live content could not be read); DOMPurify left at 3.0.9 (an upgrade needs a hash computed from the real file); rescore still skips grades with no question scores, because rewriting their points would break the score bound for hand-entered grades. Help docs flagged by the doc-sources check were not re-reviewed.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 step 2: fixes after the trust review of the audit, error log and sign-in redirect)
 
 **What.** Migrations 049 and 051 were edited in place (nothing was applied anywhere), with their rollbacks. Local branch `v2-step2`; nothing deployed.

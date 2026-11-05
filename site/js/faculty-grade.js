@@ -598,6 +598,32 @@ export function staleEnrollments(rows, current, loaded) {
   return out;
 }
 
+/**
+ * Take the version this page's OWN write just produced as the version it holds.
+ *
+ * Why: a save is two upserts (written rows, then effort rows). If the first lands and the second fails, a retry used to
+ * compare the page's load-time versions with a database that now carried the page's own first write, and refused it
+ * as "a colleague changed these", losing the work typed on screen. After a successful upsert the database returns each
+ * row's new version; this records it in the page's grade map, in place. A colleague's write AFTER that moves the
+ * version again, so a true conflict is still refused.
+ *
+ * Pure apart from writing into `gradeMap`. `returned` is the upsert's rows ({ id, enrollment_id, updated_at }); a row
+ * with no version in it (a mock, an older response) leaves the map alone, which is the safe direction: stale.
+ */
+export function applyOwnWrites(students, gradeMap, rows, returned, isFinalized) {
+  const sidOf = {};
+  for (const s of students) sidOf[s.enrollment_id] = s.student_id;
+  const sent = new Map((rows || []).map((r) => [r.enrollment_id, r]));
+  for (const g of returned || []) {
+    const sid = sidOf[g.enrollment_id];
+    if (sid == null || !g.updated_at) continue;
+    const row = sent.get(g.enrollment_id) || {};
+    gradeMap[sid] = { ...(gradeMap[sid] || { qs: {}, diagnostic: null }), gradeId: g.id, updatedAt: g.updated_at,
+                      finalized: !!isFinalized };
+    if (row.question_scores) gradeMap[sid].qs = row.question_scores;
+  }
+}
+
 /** The read behind staleEnrollments(). A failed read throws ReadFailed; a save never proceeds on a guess. */
 async function staleCheck(offering, students, gradeMap, rows) {
   const loaded = {};
@@ -646,8 +672,9 @@ async function writeGrades(ctx, offering, students, gradeData, gradeMap, effortD
   for (const rows of [written, effort]) {
     if (!rows.length) continue;
     const res = await db.from('grades')
-      .upsert(rows, { onConflict: 'enrollment_id,assignment_offering_id' }).select('id');
+      .upsert(rows, { onConflict: 'enrollment_id,assignment_offering_id' }).select('id, enrollment_id, updated_at');
     if (res.error) return res;
+    applyOwnWrites(students, gradeMap, rows, res.data, isFinalized);
     ids.push(...(res.data || []));
   }
   return { data: ids, error: null };

@@ -332,6 +332,9 @@ eq('statistics are counts of database states', [tm.stats.n, tm.stats.ungraded, t
   eq('missing is its own band (no credit)', m.rows[0].band.key, 'd0');
   eq('and nothing counted has no band', m.rows[1].band, null);
   eq('stats tally missing from the database state', m.stats.missing, 1);
+  eq('"counted N of M" counts the database states in the total, and changes no total text',
+     [m.rows[0].total.counted, m.rows[0].total.items, m.rows[0].total.percentText, m.rows[1].total.counted, m.rows[1].total.items],
+     [1, 1, '0', 0, 1]);
 }
 
 // The extension has to survive the trip through buildMatrix for its display facts (the due date the cell shows).
