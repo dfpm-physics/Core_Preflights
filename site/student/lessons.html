@@ -79,7 +79,8 @@
     import { initTheme } from '../js/theme.js';
     import { loadLessonStatuses, STATE } from '../js/student-lessons.js';
     import { releaseNote } from '../js/schema.js';
-    import { esc, deadlineClass, relativeDue, fmtDateTime, iconHTML, runPage, brandMark } from '../js/util.js';
+    import { pointsText, scoreText, gradingNote } from '../js/student-view.js';
+    import { esc, deadlineClass, relativeDue, fmtDateTime, iconHTML, runPage, brandMark, guarded } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
     runPage(ctx, init);
@@ -89,7 +90,7 @@
 
     async function init() {
       initTheme();
-      renderNav(ctx, { active: 'lessons', onCourseChange: () => loadList() });
+      renderNav(ctx, { active: 'lessons', onCourseChange: guarded(() => loadList()) });
       await loadList();
     }
 
@@ -115,8 +116,9 @@
         case STATE.SUBMITTED: return l.due ? 'Submitted · editable until ' + fmtDateTime(l.due) : 'Submitted';
         case STATE.COMPLETE:  return 'Complete · interactive';
         case STATE.GRADING:   return 'Submitted · grading in progress';
-        case STATE.GRADED:    return `Graded ${l.completion.points}/${l.points ?? 2} pts`;
+        case STATE.GRADED:    return `Graded ${scoreText(l.completion.points, l.points) || pointsText(l.completion.points)}`;
         case STATE.MISSED:    return relativeDue(l.due);
+        case STATE.EXCUSED:   return 'Excused · left out of your total';
         default:              return relativeDue(l.due);
       }
     }
@@ -142,7 +144,7 @@
         <span class="status-dot ${l.dot}"></span>
         <div class="li-body">
           <div class="li-title">${l.lesson_number != null ? esc(l.lesson_number) + '. ' : ''}${esc(l.title)}</div>
-          <div class="li-meta"><span>${esc(modeLabel(l))} · ${l.points ?? 2} pts</span>
+          <div class="li-meta"><span>${esc([modeLabel(l), pointsText(l.points)].filter(Boolean).join(' · '))}</span>
             <span class="deadline ${deadlineClass(l.due, l.isPast)}">${esc(statusText(l))}</span></div>
         </div>
         <div class="li-right">${pathTag(l)}<span class="li-arrow">›</span></div>
@@ -315,15 +317,15 @@
 
     function gradeCard(l) {
       const pts = l.completion.points ?? 0;
-      const max = l.points ?? 2;
+      const max = l.points;
       return `<div class="card score-hero">
         <div class="row wrap" style="justify-content:space-between;align-items:center">
           <div><div style="font-size:0.78em;opacity:0.8;text-transform:uppercase;letter-spacing:0.05em">Assignment grade</div>
-            <div style="font-size:2em;font-weight:800">${pts} / ${max} pts</div></div>
+            <div style="font-size:2em;font-weight:800">${esc(scoreText(pts, max) || pointsText(pts))}</div></div>
           <div style="font-size:0.85em;opacity:0.85;text-align:right">
             ${l.completion.path
-              ? `Graded on effort<br>via the ${l.completion.path === 'interaction' ? 'interactive' : 'written'} version`
-              : 'Graded on effort<br>no work was submitted'}</div>
+              ? `${[gradingNote(l.gradingMode)].filter(Boolean).map(x => x + '<br>').join('')}via the ${l.completion.path === 'interaction' ? 'interactive' : 'written'} version`
+              : `${[gradingNote(l.gradingMode)].filter(Boolean).map(x => x + '<br>').join('')}no work was submitted`}</div>
         </div>
         ${l.completion.instructorNote
           ? `<div class="feedback-block" style="margin-top:12px">
@@ -393,8 +395,10 @@
           return `<div class="alert alert-ok">Submitted${l.due ? ` — you can still edit your answers until ${fmtDateTime(l.due)}.` : '.'}</div>`;
         case STATE.GRADING:
           return `<div class="alert alert-info">Submitted. Your instructor is grading this assignment.</div>`;
+        case STATE.EXCUSED:
+          return `<div class="alert alert-info">Your instructor excused this assignment. It is left out of your total.</div>`;
         case STATE.MISSED:
-          return `<div class="alert alert-warn">The deadline has passed and nothing was submitted, so this assignment scores 0.
+          return `<div class="alert alert-warn">The due date has passed and nothing has been submitted yet.
             You can still launch the interactive version below to study.</div>`;
         default:
           return '';
@@ -411,7 +415,7 @@
         <button class="btn btn-secondary btn-sm" id="back-btn" style="margin-bottom:20px">← Back to assignments</button>
         <div class="card">
           <div class="card-title">${l.lesson_number != null ? esc(l.lesson_number) + '. ' : ''}${esc(l.title)}</div>
-          <div class="card-meta">${l.due ? 'Due ' + fmtDateTime(l.due) : 'No due date'} · ${l.points ?? 2} pts · graded on effort</div>
+          <div class="card-meta">${esc([l.due ? 'Due ' + fmtDateTime(l.due) : 'No due date', pointsText(l.points), gradingNote(l.gradingMode).toLowerCase()].filter(Boolean).join(' · '))}</div>
           ${l.description ? `<div style="font-size:0.9em;color:var(--muted);margin-top:6px">${esc(l.description)}</div>` : ''}
         </div>`;
 
@@ -474,8 +478,8 @@
 
       return `<div class="card">
         <div class="card-title">Complete the interactive iPREP lesson</div>
-        <div style="font-size:0.9em;color:var(--text-soft);margin-top:6px">Worth
-          ${l.points ?? 2} points, graded on effort — not on getting the physics right.</div>
+        <div style="font-size:0.9em;color:var(--text-soft);margin-top:6px">${l.points != null ? `Worth
+          ${esc(pointsText(l.points))}` : 'Points are set by your instructor'}${l.gradingMode === 'effort' ? ', graded on effort — not on getting the physics right' : ''}.</div>
         <div class="choice-grid" style="grid-template-columns:1fr">
           <div class="choice-card">
             <div class="choice-head">
@@ -523,8 +527,7 @@
       const heading = isChoice ? 'Choose how to complete this assignment'
                                : 'Complete the written preflight';
       const sub = isChoice
-        ? `Both are worth the same ${l.points ?? 2} points, and both are graded on effort — not on
-           getting the physics right. Pick whichever suits you.`
+        ? `Both are worth the same${l.points != null ? ' ' + pointsText(l.points) : ''}${l.gradingMode === 'effort' ? ', and both are graded on effort — not on getting the physics right' : ''}. Pick whichever suits you.`
         : `Answer the written preflight. The interactive lesson opens as practice once you’ve
            submitted — it doesn’t change your grade.`;
 

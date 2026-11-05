@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Written preflights · PREP</title>
+  <title>Written assignment · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
   <link rel="stylesheet" href="../css/styles.css">
   <style>
@@ -51,7 +51,7 @@
       loadAssignmentStatuses, saveWrittenAnswers, commitSubmission,
     } from '../js/student-data.js';
     import { questionsOf, readingLinkOf, displayPoints, isGradedPath } from '../js/schema.js';
-    import { esc, fmtDateTime, runPage } from '../js/util.js';
+    import { esc, fmtDateTime, runPage, guarded } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
     runPage(ctx, init);
@@ -63,7 +63,7 @@
 
     async function init() {
       initTheme();
-      renderNav(ctx, { active: 'lessons', onCourseChange: () => route() });
+      renderNav(ctx, { active: 'lessons', onCourseChange: guarded(() => route()) });
       await route();
     }
 
@@ -75,7 +75,7 @@
         return false;
       }
       root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
-      const all = await loadAssignmentStatuses(ctx);
+      const all = await loadAssignmentStatuses(ctx, { withCells: true });
       // A written activity that is only PRESENT is not a written preflight — an interaction-only
       // lesson attaches one as `practice`, and opening one here would put a full question set with
       // a live Submit button in front of a cadet whose commit the DB was always going to refuse.
@@ -312,7 +312,13 @@
         btn.disabled = false; btn.textContent = 'Submit assignment'; return;
       }
 
-      await loadData();                                        // re-read the committed state
+      // The work is committed by here. A failed re-read must say so, not leave "Submitting…" on the button.
+      try { await loadData(); } catch (e) {                    // re-read the committed state
+        status.textContent = 'Submitted. The page could not reload: ' + e.message + ' Reload the page to see it.';
+        status.style.color = 'var(--red)';
+        btn.textContent = 'Submitted';
+        return;
+      }
       const again = list.find(x => x.offeringId === current.offeringId);
       if (again) openAssignment(again); else backToLessons();
     }

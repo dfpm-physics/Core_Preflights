@@ -926,8 +926,8 @@ export function releaseNote(lockedCount) {
   if (!lockedCount) return '';
   const n = Number(lockedCount);
   return `${n} more ${n === 1 ? 'assignment is' : 'assignments are'} scheduled this term. `
-    + `Each one opens ${LOOKAHEAD_DAYS} days before it is due — preflights are meant to be done `
-    + `just before the lesson that covers them.`;
+    + `Each one opens ${LOOKAHEAD_DAYS} days before it is due, unless your `
+    + `instructor sets another date. The Schedule page lists every date.`;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════

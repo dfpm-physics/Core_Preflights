@@ -18,6 +18,7 @@
 //   score in the course was readable by anyone holding the anon key.
 
 import { db } from './supabase.js';
+import { scheduleRow, sortRows, gradeRows } from './student-view.js';
 import {
   OFFERING_SELECT, SUBMISSION_SELECT, SUBMISSION_SELECT_STUDENT, MY_WORK_SELECT, GRADE_SELECT_STUDENT,
   shapeOffering, shapeOfferings, withResolvedDue, offeringSections,
@@ -59,6 +60,8 @@ function mySectionId(ctx) {
  *
  * @param {object} ctx
  * @param {object} [opts]
+ * @param {Array<string>|null} [opts.gradesFor=null] fetch grade rows only for these offering ids. The grade
+ *   list passes the ones the database says are released, so a held grade is never downloaded. Null reads all.
  * @param {boolean} [opts.includeLocked=false] return unreleased assignments too, each carrying
  *   `released:false` and `releasesAt`. For surfaces that must reason about an assignment the
  *   student cannot yet see — the artifact receiver, which has to refuse an early submission
@@ -69,19 +72,32 @@ function mySectionId(ctx) {
  *     chosenActivity, answered, qCount, earned }
  *   plus `lockedCount` on the array itself — how many were withheld.
  */
-export async function loadAssignmentStatuses(ctx, { includeLocked = false } = {}) {
+export async function loadAssignmentStatuses(ctx, { includeLocked = false, gradesFor = null, withCells = false } = {}) {
   if (!ctx.currentOffering) return [];
   const enrollmentIds = myEnrollmentIds(ctx);
   const sectionId = mySectionId(ctx);
 
-  const { data: offeringRows } = await db.from('assignment_offerings')
+  // THE DATABASE'S STATE, WHEN A PAGE SHOWS A GRADE OR A STATE WORD. With `withCells` the item's grade is kept only
+  // where the database says it is released: a grade held by a future release time, or a stale zero, is dropped
+  // before anything downloads it, so no page built on this loader can show one. An excused item says so.
+  // Without it the loader is the raw read, which the receiver page relies on.
+  let cells = null;
+  if (withCells) {
+    cells = await loadMyCells(ctx);
+    gradesFor = [...cells.values()].filter(c => c.state === 'released').map(c => c.assignment_offering_id);
+  }
+
+  const { data: offeringRows, error: offeringErr } = await db.from('assignment_offerings')
     .select(OFFERING_SELECT)
     .eq('course_offering_id', ctx.currentOffering)
     .eq('is_published', true)
     .order('position', { ascending: true, nullsFirst: false });
+  // A failed read is an error, never an empty list. An empty list reads as "nothing is due", which
+  // is the one wrong answer a student cannot check.
+  if (offeringErr) throw new Error(`Could not load your assignments: ${offeringErr.message}`);
 
   const offerings = shapeOfferings(offeringRows, ctx);
-  if (!offerings.length) return [];
+  if (!offerings.length) { const none = []; none.cells = cells || new Map(); none.lockedCount = 0; return none; }
 
   // Their work + their grades + any extension. Scoped by enrollment, which is what every
   // per-student table in this model keys on.
@@ -105,7 +121,14 @@ export async function loadAssignmentStatuses(ctx, { includeLocked = false } = {}
       db.from('submissions').select(SUBMISSION_SELECT_STUDENT).in('enrollment_id', enrollmentIds),
       // Which activities they have worked on: the view, because the table no longer returns an interactive row.
       db.from('my_work').select(MY_WORK_SELECT).in('enrollment_id', enrollmentIds),
-      db.from('my_grades').select(GRADE_SELECT_STUDENT).in('enrollment_id', enrollmentIds),
+      // Grades come from the `my_grades` view, never the table: the view is the cadet's one door to a grade
+      // (no `diagnostic`, and only the cells the gradebook shows points for). `gradesFor` narrows it further.
+      Array.isArray(gradesFor) && !gradesFor.length
+        ? Promise.resolve({ data: [] })
+        : (Array.isArray(gradesFor)
+            ? db.from('my_grades').select(GRADE_SELECT_STUDENT).in('enrollment_id', enrollmentIds)
+                .in('assignment_offering_id', gradesFor)
+            : db.from('my_grades').select(GRADE_SELECT_STUDENT).in('enrollment_id', enrollmentIds)),
       // revoked_at IS NULL is the EXTENSION_SELECT contract (schema.js): a revoked extension is
       // not an extension, and this loader feeding one to effectiveDue() would show the cadet an
       // extended deadline that commitSubmission()'s own fresh fetch then refuses.
@@ -116,11 +139,9 @@ export async function loadAssignmentStatuses(ctx, { includeLocked = false } = {}
             .in('activity_id', writtenActivityIds)
         : Promise.resolve({ data: [] }),
     ]);
-    // A failed read of the work rows must not read as "nothing started".
-    if (work.error) throw work.error;
-    // A failed read of submissions or grades must not read as "nothing submitted" or "not graded".
-    if (subs.error) throw subs.error;
-    if (grds.error) throw grds.error;
+    // A failed read of any of these must not read as "nothing started", "nothing submitted" or "not graded".
+    const failed = [subs, work, grds, exts, answers].find(r => r.error);
+    if (failed) throw new Error(`Could not load your work and grades: ${failed.error.message}`);
     const workBySubmission = {};
     (work.data || []).forEach(w => { (workBySubmission[w.submission_id] ||= []).push(w); });
     submissions = (subs.data || []).map(s => shapeSubmission({ ...s, submission_activities: workBySubmission[s.id] || [] }));
@@ -150,7 +171,8 @@ export async function loadAssignmentStatuses(ctx, { includeLocked = false } = {}
 
   const items = offerings.map(o => {
     const submission = subByOffering[o.offeringId] || null;
-    const grade = gradeByOffering[o.offeringId] || null;
+    const cell = cells ? (cells.get(o.offeringId) || null) : null;
+    const grade = (cells && cell?.state !== 'released') ? null : (gradeByOffering[o.offeringId] || null);
     const { due, isPast, source } = effectiveDue(o, sectionId, extByOffering[o.offeringId]);
     const status = deriveStatus({ submission, grade, isPast });
 
@@ -176,6 +198,7 @@ export async function loadAssignmentStatuses(ctx, { includeLocked = false } = {}
       released: isReleased(o, scheduledDue, now),
       releasesAt: releaseAt(o, scheduledDue),
       submission, grade, status, chosenActivity,
+      cell, excused: cell?.state === 'excused',
       qCount: questions.length,
       totalPts: o.pointsPossible || questionPoints(written),
       answered: answeredCount(savedAnswers, questions),
@@ -195,6 +218,7 @@ export async function loadAssignmentStatuses(ctx, { includeLocked = false } = {}
     return (a.position ?? 0) - (b.position ?? 0);
   });
 
+  items.cells = cells || new Map();
   if (includeLocked) { items.lockedCount = 0; return items; }
 
   /* WORK THE STUDENT HAS ALREADY DONE IS NEVER WITHDRAWN.
@@ -205,6 +229,7 @@ export async function loadAssignmentStatuses(ctx, { includeLocked = false } = {}
    * A row that has a submission or a grade has by definition already been seen. */
   const visible = items.filter(a => a.released || a.submission || a.grade);
   visible.lockedCount = items.length - visible.length;
+  visible.cells = items.cells;
   return visible;
 }
 
@@ -214,7 +239,7 @@ export async function loadAssignmentStatuses(ctx, { includeLocked = false } = {}
  * modality 'interactive' inside an assignment — so this is a projection, not a second query.
  */
 export async function loadInteractionStatuses(ctx) {
-  const items = await loadAssignmentStatuses(ctx);
+  const items = await loadAssignmentStatuses(ctx, { withCells: true });
   return items
     .filter(i => i.interactive)
     .map(i => {
@@ -244,7 +269,7 @@ export async function loadInteractionStatuses(ctx) {
 export async function loadStudentDashboard(ctx) {
   if (!ctx.currentOffering) return { noCourse: true };
 
-  const assignments = await loadAssignmentStatuses(ctx);
+  const assignments = await loadAssignmentStatuses(ctx, { withCells: true });
   const interactions = assignments.filter(a => a.interactive).map(a => ({
     offeringId: a.offeringId, title: a.title, done: !!(a.interactive &&
       a.submission?.activities?.[a.interactive.id]),
@@ -254,14 +279,6 @@ export async function loadStudentDashboard(ctx) {
   const overdue   = assignments.filter(a => a.status === 'overdue');
   const completed = assignments.filter(a => a.status === 'graded' || a.status === 'pending');
   const graded    = assignments.filter(a => a.status === 'graded');
-
-  // Average graded percentage across finalized grades only.
-  let earned = 0, possible = 0;
-  graded.forEach(a => {
-    earned += Number(a.earned ?? 0);
-    possible += Number(a.grade?.points_possible ?? a.pointsPossible ?? 0);
-  });
-  const avgPct = possible > 0 ? Math.round((earned / possible) * 100) : null;
 
   const interTodo = interactions.filter(i => !i.done);
 
@@ -273,7 +290,6 @@ export async function loadStudentDashboard(ctx) {
       overdue: overdue.length,
       submitted: assignments.filter(a => a.submission?.status === 'committed').length,
       graded: graded.length,
-      avgPct,
       interactionsToDo: interTodo.length,
       interactionsTotal: interactions.length,
     },
@@ -281,6 +297,60 @@ export async function loadStudentDashboard(ctx) {
     interactions,
     interactionsTodo: interTodo,
   };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * THE SCHEDULE AND THE GRADE LIST
+ *
+ * Both are projections over loadAssignmentStatuses(), the one loader every student surface runs
+ * through, joined to two database functions that hold the one grade rule (migration 039):
+ *   gradebook_cells(offering)   each item's state and score for this student. A grade held by a future
+ *                               release time comes back as "submitted_ungraded" with no score.
+ *   my_course_total(offering)   the running total, as text, with no letter.
+ * Nothing here adds, rounds or compares a score. Both need the grants in migration 060.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/** This student's cells for the current offering, keyed by assignment offering id. Throws on a failed read. */
+export async function loadMyCells(ctx, scope = 'final') {
+  const { data, error } = await db.rpc('gradebook_cells', {
+    p_course_offering: ctx.currentOffering, p_scope: scope });
+  if (error) throw new Error(`Could not load the state of your work: ${error.message}`);
+  return new Map((data || []).map(c => [c.assignment_offering_id, c]));
+}
+
+/** This student's running total for the current offering, or null when the database holds no row. */
+export async function loadMyTotal(ctx, scope = 'final') {
+  const { data, error } = await db.rpc('my_course_total', {
+    p_course_offering: ctx.currentOffering, p_scope: scope });
+  if (error) throw new Error(`Could not load your total: ${error.message}`);
+  return (data && data[0]) || null;
+}
+
+/**
+ * Every item scheduled for the term, dates always shown, work that has not opened marked as locked.
+ * The release time hides the QUESTIONS, never the date or the title.
+ * @returns {Promise<{rows: Array, total: object|null}>}
+ */
+export async function loadSchedule(ctx) {
+  if (!ctx.currentOffering) return { rows: [], total: null, noCourse: true };
+  const [items, total] = await Promise.all([
+    loadAssignmentStatuses(ctx, { includeLocked: true, withCells: true }),
+    loadMyTotal(ctx),
+  ]);
+  return { rows: sortRows(items.map(it => scheduleRow(it, items.cells.get(it.offeringId)))), total };
+}
+
+/**
+ * Every item with its database state, and feedback for the released ones only, plus the running total.
+ * Cells are read first so the grade query can be narrowed to released items.
+ */
+export async function loadMyGrades(ctx) {
+  if (!ctx.currentOffering) return { rows: [], total: null, noCourse: true };
+  const [items, total] = await Promise.all([
+    loadAssignmentStatuses(ctx, { includeLocked: true, withCells: true }),
+    loadMyTotal(ctx),
+  ]);
+  return { rows: gradeRows(items, items.cells), total };
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════

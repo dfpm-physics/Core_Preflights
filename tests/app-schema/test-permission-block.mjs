@@ -14,6 +14,7 @@
 // panel still want a human's eyes on a real screen.
 
 import { check, eq, section, summary, readRepoFile } from './harness.mjs';
+import { pointsText, gradingNote } from '../../site/js/student-view.js';
 
 /* ── Lift permissionBlock() out of site/student/lessons.html ──────────────────
  * Brace-balanced from the function's opening `{`, so the extraction survives the function growing
@@ -41,8 +42,8 @@ const launchNote = () => '<NOTE>';
 const writtenHref = l => `?a=${l.offeringId}`;
 
 const permissionBlock = new Function(
-  'esc', 'STATE', 'launchRow', 'launchNote', 'writtenHref',
-  `${src}; return permissionBlock;`)(esc, STATE, launchRow, launchNote, writtenHref);
+  'esc', 'STATE', 'launchRow', 'launchNote', 'writtenHref', 'pointsText', 'gradingNote',
+  `${src}; return permissionBlock;`)(esc, STATE, launchRow, launchNote, writtenHref, pointsText, gradingNote);
 
 // The course director's wording, revised 2026-08-28 when the permission clause was removed (every
 // remaining assignment became the cadet's own choice). Verbatim, deliberately: this is the
@@ -118,6 +119,6 @@ const bare = { offeringId: 'off-2', state: STATE.NOT_STARTED,
 html = norm(permissionBlock(bare));
 check('a lesson with no question set still renders the fallback',
       text(permissionBlock(bare)).includes(SENTENCE));
-check('a missing points value falls back to 2', html.includes('2 points'));
+check('a missing points value states no default', !html.includes('2 points') && html.includes('Points are set by your instructor'));
 
 summary();

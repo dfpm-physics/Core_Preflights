@@ -21,10 +21,11 @@
     import { initTheme } from '../js/theme.js';
     import { loadStudentLessonDashboard, STATE } from '../js/student-lessons.js';
     import { releaseNote } from '../js/schema.js';
-    import { esc, iconHTML, relativeDue, deadlineClass, fmtDateTime, runPage } from '../js/util.js';
+    import { pointsText, scoreText, gradingNote, totalView } from '../js/student-view.js';
+    import { esc, iconHTML, relativeDue, deadlineClass, fmtDateTime, runPage, guarded } from '../js/util.js';
 
     const ctx = await bootstrap({ require: 'student' });
-    runPage(ctx, () => { initTheme(); renderNav(ctx, { active: 'dashboard' }); return main(); });
+    runPage(ctx, () => { initTheme(); renderNav(ctx, { active: 'dashboard', onCourseChange: guarded(() => main()) }); return main(); });
 
     const firstName = (ctx?.studentRow?.name || '').split(/\s+/)[0] || 'Cadet';
 
@@ -43,28 +44,29 @@
       root.innerHTML = `
         <div class="page-head">
           <h1>Welcome back, ${esc(firstName)}</h1>
-          <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))} · Section ${esc(ctx.sectionCodeOf(ctx.sectionIds[0]) || '—')}</div>
+          <div class="sub">${esc(ctx.courseTitleOf(ctx.currentOffering))} · Section ${esc(ctx.sectionCodeOf(ctx.sectionIds[0]) || '—')}${ctx.currentIsPast ? ' · Past term, read only' : ''}</div>
         </div>
-        ${statTiles(vm.stats)}
+        ${vm.totalError ? `<div class="alert alert-warn">Your running total could not be loaded: ${esc(vm.totalError)}</div>` : ''}
+        ${statTiles(vm.stats, vm)}
         ${upNextSection(vm.upNext, vm.lockedCount)}
         ${vm.missed.length ? missedSection(vm.missed) : ''}
         ${gradedSection(vm.graded)}`;
     }
 
-    function statTiles(s) {
+    function statTiles(s, vm) {
       const tile = (accent, icon, emoji, num, label) => `
         <div class="stat-tile accent-${accent}">
           <div class="stat-ic">${iconHTML(icon, emoji, 'ic')}</div>
           <div class="stat-body"><div class="stat-num">${num}</div><div class="stat-label">${esc(label)}</div></div>
         </div>`;
-      // Points earned, not an average percentage. A lesson is 2 points of EFFORT
-      // (LESSON-UNIFICATION D3) — a correctness percentage here would tell cadets they're graded
-      // on getting it right, which is exactly what the choice UI must not imply.
-      const points = s.available ? `${s.earned}/${s.available}` : '—';
+      // The running total is the database's (my_course_total), printed as it came back. A failed read
+      // says so; it is never shown as 0.
+      const tv = totalView(vm.total);
+      const points = vm.totalError ? 'Unavailable' : (tv && tv.possible ? `${tv.earned}/${tv.possible}` : '—');
       return `<div class="stat-grid">
         ${tile('blue',  'todo',    '📝', s.toDo, 'To do')}
-        ${tile('red',   'overdue', '⏰', s.missed, 'Missed')}
-        ${tile('green', 'award',   '🏅', points, 'Points earned')}
+        ${tile('red',   'overdue', '⏰', s.missed, 'Past due')}
+        ${tile('green', 'award',   '🏅', points, 'Points so far')}
         ${tile('gold',  'done',    '✅', s.graded, 'Graded')}
       </div>`;
     }
@@ -75,14 +77,15 @@
         case STATE.SUBMITTED: return 'Submitted · editable until due';
         case STATE.COMPLETE:  return 'Complete · interactive';
         case STATE.GRADING:   return 'Submitted · grading in progress';
-        case STATE.GRADED:    return `Graded ${l.completion.points}/${l.points ?? 2} pts`;
+        case STATE.GRADED:    return `Graded ${scoreText(l.completion.points, l.points) || pointsText(l.completion.points)}`;
+        case STATE.EXCUSED:   return 'Excused · left out of your total';
         default:              return relativeDue(l.due);
       }
     }
 
     function modeLabel(l) {
       if (l.completion_policy === 'choice' && l.preflight && l.interaction) return 'Your choice of format';
-      if (l.completion_policy === 'interaction') return 'Interactive lesson';
+      if (l.completion_policy === 'interaction') return 'Interactive';
       const n = l.preflight?.questions?.length ?? 0;
       return `${n} question${n === 1 ? '' : 's'}`;
     }
@@ -92,7 +95,7 @@
         <span class="status-dot ${l.dot}"></span>
         <div class="li-body">
           <div class="li-title">${l.lesson_number != null ? esc(l.lesson_number) + '. ' : ''}${esc(l.title)}</div>
-          <div class="li-meta"><span>${esc(modeLabel(l))} · ${l.points ?? 2} pts</span>
+          <div class="li-meta"><span>${esc([modeLabel(l), pointsText(l.points)].filter(Boolean).join(' · '))}</span>
             <span class="deadline ${deadlineClass(l.due, l.isPast)}">${esc(statusText(l))}</span></div>
         </div>
         <span class="li-arrow">›</span>
@@ -123,7 +126,7 @@
 
     function missedSection(items) {
       return `<section class="dash-section">
-        <div class="section-head"><h2>Needs attention</h2><span class="count-pill">${items.length}</span></div>
+        <div class="section-head"><h2>Past due</h2><span class="count-pill">${items.length}</span></div>
         <div class="list">${items.map(lessonItem).join('')}</div></section>`;
     }
 
@@ -138,9 +141,9 @@
     function gradedSection(items) {
       if (!items.length) return '';
       const badge = (l) => {
-        const pts = l.completion.points ?? 0, max = l.points ?? 2;
-        const cls = pts >= max ? 'full' : pts > 0 ? 'partial' : 'zero';
-        return `<span class="score-badge ${cls}">${pts}/${max}</span>`;
+        const pts = l.completion.points ?? 0, max = l.points;
+        const cls = max != null && pts >= max ? 'full' : pts > 0 ? 'partial' : 'zero';
+        return `<span class="score-badge ${cls}">${max != null ? `${pts}/${max}` : pts}</span>`;
       };
       return `<section class="dash-section">
         <div class="section-head"><h2>${iconHTML('done', '✅', 'ic')} Recently graded</h2><span class="count-pill">${items.length}</span></div>
@@ -148,7 +151,7 @@
           <a class="list-item" href="lessons.html?l=${encodeURIComponent(l.id)}">
             <span class="status-dot green"></span>
             <div class="li-body"><div class="li-title">${esc(l.title)}</div>
-              <div class="li-meta">Graded on effort · ${pathWord(l.completion)}</div></div>
+              <div class="li-meta">${esc([gradingNote(l.gradingMode), pathWord(l.completion)].filter(Boolean).join(' · '))}</div></div>
             <div class="li-right">${badge(l)}<span class="li-arrow">›</span></div>
           </a>`).join('')}</div></section>`;
     }

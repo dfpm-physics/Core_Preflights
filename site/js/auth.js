@@ -260,14 +260,22 @@ async function resolveFacultyOfferings(ctx) {
 async function resolveStudentOfferings(ctx) {
   const { data: enr } = await db.from('enrollments')
     .select(ENROLLMENT_SELECT).eq('student_id', ctx.studentRow.student_id);
-  ctx.enrollments = (enr || []).filter(e => e.status === 'active');
+  // ACTIVE AND COMPLETED, not only active (E23). When a term ends its enrollments move to completed, and
+  // a cadet must keep reading that term: the work, the dates, the feedback and the total. A dropped
+  // enrollment reads nothing, the same rule the database's total uses. app.my_offerings() (migration
+  // 060) lets the rows through; this lets the page ask for them.
+  ctx.enrollments = (enr || []).filter(e => e.status === 'active' || e.status === 'completed');
 
   const byOffering = new Map();
   ctx.enrollments.forEach(e => {
     const sec = e.sections;
     const o = sec?.course_offerings;
     if (!o) return;
+    // A term is past when every enrollment the student holds in it is completed.
+    const prev = byOffering.get(o.id);
+    const past = e.status === 'completed' && (prev ? prev.past : true);
     byOffering.set(o.id, {
+      past,
       offeringId: o.id,
       courseId: o.courses?.id,
       courseCode: o.courses?.code,
@@ -291,7 +299,9 @@ function sortAndPick(ctx) {
   // ctx.courses, which was built from staff_assignments, so a hand-edited preference naming an
   // offering the caller does not staff simply falls through to the first real one.
   const stored = getPref(LS_OFFERING);
-  const chosen = ctx.courses.find(c => offeringKey(c) === stored) || ctx.courses[0] || null;
+  // With no usable stored pick, a current term wins over a past one even if the past term sorts first.
+  const chosen = ctx.courses.find(c => offeringKey(c) === stored)
+    || ctx.courses.find(c => !c.past) || ctx.courses[0] || null;
   if (chosen) {
     applyCurrent(ctx, chosen);
     setPref(LS_OFFERING, offeringKey(chosen));
@@ -300,6 +310,7 @@ function sortAndPick(ctx) {
 
 function applyCurrent(ctx, c) {
   ctx.currentOffering = c.offeringId;
+  ctx.currentIsPast = !!c.past;     // students: a completed term, read only
   ctx.currentCourse = c.courseId;
   ctx.currentCourseCode = c.courseCode;
   ctx.currentTermLabel = c.termLabel;

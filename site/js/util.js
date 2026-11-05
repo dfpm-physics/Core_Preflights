@@ -86,6 +86,16 @@ export function showFatal(err, mountId = 'main') {
 }
 
 /**
+ * Wrap a reload (a course switch, a refresh after a save) so that a failed read shows the error instead of
+ * leaving the old page, or a spinner that never stops. runPage covers only the first load.
+ */
+export function guarded(fn, mountId = 'main') {
+  return async (...args) => {
+    try { return await fn(...args); } catch (e) { showFatal(e, mountId); }
+  };
+}
+
+/**
  * Guard a page entry point. Also catches the case that produced a silent spinner most often:
  * `bootstrap()` returning undefined because it fired a redirect that never completed, which
  * left the page sitting on its loading state with no error anywhere.

@@ -30,7 +30,17 @@ interactive lesson, and some offer a choice between the two — the card tells y
 tagged **iPREP** is the interactive lesson, with the written preflight available underneath it
 as a fallback you may take yourself; see *When the interactive lesson is the assignment* below.
 
-**Dashboard** is the short version of the same thing: what is due next, and what you have missed.
+**Dashboard** is the short version of the same thing: what is due next, and what is past due.
+
+**Schedule** lists every assignment of the term with its date, including the ones that have not
+opened yet. An assignment that has not opened shows when its questions open, and has no link until
+then. **My grades** lists every assignment with where it stands (graded, waiting for a grade, not
+submitted, excused, or not due yet), your score and your instructor's comments once a grade is
+released, and your running total. The total is worked out by the system, not by your browser, and it
+leaves out anything still waiting for a grade. The dashboard and the assignment list show the same
+states and the same total: a grade your instructor has not released shows as waiting, and excused work
+is marked excused and left out. After a term ends you can still open it from the
+course menu and read it; it is marked as a past term and nothing in it can be changed.
 
 ## Why you cannot see the whole semester at once
 
