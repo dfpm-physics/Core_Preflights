@@ -7,6 +7,11 @@
 --   * at most 120 rows per lesson and 600 rows overall are stored in any one minute; the rest are dropped.
 -- A dropped row is not an error: the insert reports success, so a lesson page behaves the same either way.
 -- The identity columns (`cadet_id`, `cadet_ref`) are what the sender typed. Nothing may rely on them.
+-- KNOWN LIMITS (kept on purpose). The caps protect storage; they do not promise completeness. The endpoint has no
+-- sender identity, so a count cannot tell one noisy sender from a busy class, and in a minute when a cap is reached the
+-- log is incomplete, with nothing reporting it. A rule that favours one kind of sender would only move the gap. The
+-- count is read at insert time without a lock, so a burst of simultaneous inserts can store slightly more than the cap.
+-- Nothing purges old rows; a retention job is separate work.
 -- Rollback: rollback/051_error_log_intake_ROLLBACK.sql.
 
 BEGIN;

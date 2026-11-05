@@ -52,8 +52,7 @@ def main():
     steps = [
         ("submission_activities", f"""DELETE FROM app.submission_activities
              WHERE submission_id IN (SELECT id FROM app.submissions WHERE {scope})"""),
-        ("grade_events", f"""DELETE FROM app.grade_events
-             WHERE grade_id IN (SELECT id FROM app.grades WHERE {scope})"""),
+        # grade_events is append-only (migration 049): its rows are not deleted and outlive the grade they describe.
         ("grades", f"DELETE FROM app.grades WHERE {scope}"),
         ("extensions", f"DELETE FROM app.extensions WHERE {scope}"),
         ("submissions", f"DELETE FROM app.submissions WHERE {scope}"),

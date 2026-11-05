@@ -48,9 +48,9 @@ export const WRITE_NOTES = {
         + 'migration 006 rejects a self-unlock and a status revert, so edits here are narrow.',
   },
   grade_events: {
-    allow: ['select', 'insert'],
-    note: 'Append-only audit log: there is no UPDATE or DELETE policy for anyone, so history '
-        + 'cannot be rewritten from the API.',
+    allow: ['select'],
+    note: 'Append-only audit log, written by a database trigger from the signed-in session. No API '
+        + 'role can write it, and a trigger refuses UPDATE, DELETE and TRUNCATE for every role.',
   },
   analysis_reports: {
     allow: ['select'],

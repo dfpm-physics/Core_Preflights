@@ -3035,38 +3035,36 @@ export const DB_SCHEMA = {
           "generated": false,
           "comment": null,
           "pk": false
-        }
-      ],
-      "foreignKeys": [
-        {
-          "name": "grade_events_actor_fkey",
-          "columns": [
-            "actor"
-          ],
-          "refTable": "instructors",
-          "refColumns": [
-            "id"
-          ],
-          "onDelete": "set null"
         },
         {
-          "name": "grade_events_grade_id_fkey",
-          "columns": [
-            "grade_id"
-          ],
-          "refTable": "grades",
-          "refColumns": [
-            "id"
-          ],
-          "onDelete": "cascade"
+          "name": "enrollment_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "The enrolment the grade belonged to when the event was written. No foreign key: the event outlives it. Null on rows written before 049.",
+          "pk": false
+        },
+        {
+          "name": "course_offering_id",
+          "type": "uuid",
+          "udt": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "generated": false,
+          "comment": "The course offering the grade belonged to. No foreign key. Null on rows written before 049.",
+          "pk": false
         }
       ],
+      "foreignKeys": [],
       "enums": {},
       "policyCommands": [
-        "INSERT",
         "SELECT"
       ],
-      "writable": true
+      "writable": false
     },
     "grade_excusal_events": {
       "name": "grade_excusal_events",

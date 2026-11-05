@@ -183,7 +183,9 @@ serve(async (req) => {
     );
 
     if (updErr) return ok({ error: "Could not reset the password: " + updErr.message });
-    await logRow("staff_reset_done");
+    // The reset has happened by now, so a failed second row cannot undo it; say so in the function log.
+    const { error: doneErr } = await logRow("staff_reset_done");
+    if (doneErr) console.error("credential_events: the completion row was not written");
 
     // Deliberately NOT returning the password. The caller derives it from the name they are
     // already looking at; putting it in an HTTP response body would write it to any proxy log and

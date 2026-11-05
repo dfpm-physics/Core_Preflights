@@ -43,4 +43,23 @@ check('049 revokes write grants from the API roles', /REVOKE INSERT, UPDATE, DEL
 check('049 reads the actor from the session helper, never a column of the row', /audit_actor\(\)/.test(mig) && !/NEW\.actor/.test(mig));
 check('049 has a rollback', readRepoFile('supabase/migrations/app/rollback/049_grade_audit_ROLLBACK.sql').includes('DROP TABLE IF EXISTS credential_events'));
 
+section('the log outlives its grade and cannot be rewritten');
+check('049: an event has no foreign key to its grade or its actor',
+      /DROP CONSTRAINT IF EXISTS grade_events_grade_id_fkey/.test(mig) && /DROP CONSTRAINT IF EXISTS grade_events_actor_fkey/.test(mig));
+check('049: refuses UPDATE, DELETE and TRUNCATE on both audit tables by trigger',
+      /BEFORE UPDATE OR DELETE ON grade_events/.test(mig) && /BEFORE TRUNCATE ON grade_events/.test(mig)
+      && /BEFORE UPDATE OR DELETE ON credential_events/.test(mig) && /BEFORE TRUNCATE ON credential_events/.test(mig));
+check('049: audits over_max_allowed, enrollment_id and graded_at',
+      /NEW\.over_max_allowed IS DISTINCT FROM OLD\.over_max_allowed/.test(mig) && /NEW\.enrollment_id IS DISTINCT FROM OLD\.enrollment_id/.test(mig)
+      && /NEW\.graded_at IS DISTINCT FROM OLD\.graded_at/.test(mig));
+check('049: a removal keeps the grade, the enrolment and the offering, and staff of the offering read it',
+      /'enrollment', OLD\.enrollment_id/.test(mig) && /event = 'removed' AND grade_events\.course_offering_id IN \(SELECT staff_offerings\(\)\)/.test(mig));
+check('049: a write to an existing row keeps that row\'s grader', /keeps the grader that row already has/.test(mig));
+const rbFull = readRepoFile('supabase/migrations/app/rollback/049_grade_audit_ROLLBACK.sql');
+const rb = rbFull.split(/\r?\n/).filter(l => !l.startsWith('--')).join(' ');
+check('049 rollback: never grants TRUNCATE or any right to the API roles beyond INSERT, UPDATE, DELETE',
+      !/GRANT[^;]*TRUNCATE/i.test(rb) && !/GRANT\s+ALL/i.test(rb) && /GRANT INSERT, UPDATE, DELETE ON grade_events TO anon, authenticated;/.test(rb));
+check('049 rollback: says to put the previous reset functions back first', /BEFORE running this file/.test(rbFull));
+check('the test cleanup does not delete from the audit table', !/DELETE FROM app\.grade_events/.test(readRepoFile('tests/app-schema/cleanup.py')));
+
 summary();

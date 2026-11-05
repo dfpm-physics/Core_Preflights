@@ -8,6 +8,22 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 step 2: fixes after the trust review of the audit, error log and sign-in redirect)
+
+**What.** Migrations 049 and 051 were edited in place (nothing was applied anywhere), with their rollbacks. Local branch `v2-step2`; nothing deployed.
+- **049 rollback.** It now returns the grants on `grade_events` to exactly what they were before 049 (INSERT, UPDATE and DELETE for the two API roles, no TRUNCATE, nothing wider). The proof compares every right for five roles before 049 and after the rollback. Its header says to put the previous reset functions back first.
+- **History outlives its grade.** The foreign keys from `grade_events` to the grade (a cascade) and to the actor are dropped. Each event carries `enrollment_id` and `course_offering_id`; a 'removed' event holds the grade id, the enrolment, the offering and the old points, and staff of the offering can read it. The read policy was widened to match.
+- **Append-only for every role.** One trigger function refuses UPDATE, DELETE and TRUNCATE on `grade_events` and on `credential_events` for the server-side roles too. What a table owner can still do is written in `docs/decisions/V2-DATA-MODEL.md` section 24.2; this log is not proof against the database owner.
+- **Audit coverage.** `over_max_allowed`, `enrollment_id` (logged as 'moved') and `graded_at` are audited, with before and after values.
+- **Grader on an upsert.** A write to an existing row keeps the grader that row already had; a new row is pinned to the session. Finalizing a colleague's untouched draft keeps the colleague as grader, and the audit row names who finalized. The grader cannot be chosen by a client on any path.
+- **Reset functions.** Order written down in the deploy-order note (049 before the functions; previous functions back before the 049 rollback). They still refuse when the first record cannot be written. A failed second record now writes a line to the function log. Source only, not deployed.
+- **Error log (051).** Caps unchanged. No rule that an unauthenticated sender cannot also satisfy was found, so the limit is recorded as a known limit in the file and in the decision record.
+- **Sign-in redirect.** A `next` path must now sit under this site's own path (read from the page address), and the length limit is 8000 instead of 2000 so a long prefilled link survives. `tests/app-schema/test-safe-next.mjs` extended.
+- **Tests.** `scripts/staging/test_grade_audit_scratch.py` extended to cover the real upsert path, the log being unchangeable by each role and by truncate, the removal history, the extra columns and the exact rollback of grants; against the earlier 049 it fails 15 checks. New offline suite `tests/app-schema/test-grade-page-logic.mjs` for the grading page's save path (the rows it builds and the version rule). `test-audit-wiring.mjs`, `test-db-schema.mjs` and `db-schema.js` follow the dropped keys; the test cleanup helper no longer deletes audit rows.
+- **Not done.** The grade-page "changed since loaded" check still refuses all-or-nothing and names a count, and can refuse a save made inside the second after a finalize reloads. The image sources allowed by the page policy are unchanged. The pinned sanitizer version was not checked against advisories. The rescore still skips grades with no per-question scores (by design). No retention job for the error log; its cap is not strict under simultaneous inserts. Nothing applied to staging or production.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 step 2: error log intake limits, and the sign-in redirect accepts only paths on this site)
 
 - **Migration `app/051_error_log_intake.sql`** (with rollback). A trigger on the tutor error log drops a row for a lesson that is not registered and rows beyond 120 per lesson or 600 overall in a minute. A dropped row is not an error, so lesson pages behave the same. The API roles hold no write on the table. The identity columns stay claims.

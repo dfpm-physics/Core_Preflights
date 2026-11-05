@@ -96,7 +96,6 @@ const CASCADE_CHAIN = [
   ['submissions', 'enrollments'],
   ['grades', 'enrollments'],
   ['submission_activities', 'submissions'],
-  ['grade_events', 'grades'],
 ];
 for (const [child, parent] of CASCADE_CHAIN) {
   const fk = (tableMeta(child)?.foreignKeys || [])
@@ -117,8 +116,10 @@ check('referrers(enrollments) finds submissions and grades',
 // only that some policy exists for a write command — so this asserts the one table that has no
 // write policy at all, which is the case the flag can actually detect.
 eq('analysis_reports has no write policy', tableMeta('analysis_reports').writable, false);
-check('grade_events is insert-only (no UPDATE/DELETE policy)',
-      !tableMeta('grade_events').policyCommands.some(c => ['UPDATE', 'DELETE', 'ALL'].includes(c)),
+check('grade_events has no foreign key to grades or instructors (the history outlives both; migration 049)',
+      !(tableMeta('grade_events').foreignKeys || []).length);
+check('grade_events takes no write policy for the API (migration 049 writes it by trigger)',
+      !tableMeta('grade_events').policyCommands.some(c => ['INSERT', 'UPDATE', 'DELETE', 'ALL'].includes(c)),
       `policies: ${tableMeta('grade_events').policyCommands.join(', ')}`);
 
 // Every table RLS-enabled: the page relies on the database, not on its own gate, for enforcement.

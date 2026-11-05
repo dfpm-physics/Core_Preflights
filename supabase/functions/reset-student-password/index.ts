@@ -214,7 +214,9 @@ serve(async (req) => {
     );
 
     if (updErr) return ok({ error: dbError("reset the password", updErr) });
-    await logRow("student_reset_done");
+    // The reset has happened by now, so a failed second row cannot undo it; say so in the function log.
+    const { error: doneErr } = await logRow("student_reset_done");
+    if (doneErr) console.error("credential_events: the completion row was not written");
 
     // Deliberately NOT returning the password. The caller can derive it from the cadet ID they
     // already have; putting it in an HTTP response body would write it to any proxy log and
