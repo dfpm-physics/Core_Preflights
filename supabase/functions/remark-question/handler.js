@@ -35,7 +35,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_BODY_CHARS = 1000;
 
 export const MESSAGES = {
-  not_allowed: 'Only a director of this course can re-mark its answers.',
+  not_allowed: 'Only a director of this course in its current term can re-mark its answers.',
   not_found: 'That question was not found.',
   not_auto_checked: 'This question is not checked automatically, so there is nothing to re-mark.',
   no_key: 'This question has no current key.',

@@ -49,6 +49,9 @@ DEPLOYABLE = {
     "set-own-password": True,
     "provision-students": True,
     "log-tutor-error": False,
+    # Stage E: both take a signed-in caller's token and check it themselves. Deploy after migrations 070 to 075.
+    "check-answer": True,
+    "remark-question": True,
 }
 REFUSED = {"genai-mil-proxy", "asksage-proxy"}
 

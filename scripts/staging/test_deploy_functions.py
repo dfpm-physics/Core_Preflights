@@ -67,12 +67,12 @@ class T(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(t.calls, [])
         self.assertNotIn("tok-secret-value", "\n".join(lines))
-        self.assertEqual(len([l for l in lines if "verify_jwt=" in l]), 7)
+        self.assertEqual(len([l for l in lines if "verify_jwt=" in l]), 9)
 
     def test_commit_posts_each_and_multipart_well_formed(self):
         rc, lines, t = run(["--expect-ref", STG, "--commit"])
         self.assertEqual(rc, 0)
-        self.assertEqual(len(t.calls), 7)
+        self.assertEqual(len(t.calls), 9)
         m, url, h, body = t.calls[0]
         self.assertTrue(url.startswith(f"https://api.supabase.com/v1/projects/{STG}/functions/deploy?slug="))
         b = h["Content-Type"].split("boundary=")[1].encode()
