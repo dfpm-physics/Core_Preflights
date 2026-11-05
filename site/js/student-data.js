@@ -118,6 +118,9 @@ export async function loadAssignmentStatuses(ctx, { includeLocked = false } = {}
     ]);
     // A failed read of the work rows must not read as "nothing started".
     if (work.error) throw work.error;
+    // A failed read of submissions or grades must not read as "nothing submitted" or "not graded".
+    if (subs.error) throw subs.error;
+    if (grds.error) throw grds.error;
     const workBySubmission = {};
     (work.data || []).forEach(w => { (workBySubmission[w.submission_id] ||= []).push(w); });
     submissions = (subs.data || []).map(s => shapeSubmission({ ...s, submission_activities: workBySubmission[s.id] || [] }));
@@ -570,11 +573,14 @@ export async function submitInteractionReport(ctx, { activity, offering, markdow
   // DB-level guard on both is still the hardening follow-up (CHANGELOG 2026-07-23).
   const enrollmentId = myEnrollmentIds(ctx)[0];
   if (enrollmentId) {
-    const { data: g } = await db.from('my_grades')
+    const { data: g, error: gErr } = await db.from('my_grades')
       .select('is_finalized')
       .eq('enrollment_id', enrollmentId)
       .eq('assignment_offering_id', offering.offeringId)
       .maybeSingle();
+    // Fail closed: a read that failed is not "no grade". The database refuses a second report itself (migration 047/048),
+    // so this is the cadet's explanation, not the guard; but a failure here must not pass silently.
+    if (gErr) return { error: gErr };
     if (g?.is_finalized) {
       return { error: new Error('This assignment has already been graded and can’t be resubmitted. '
                               + 'Ask your instructor to reopen it if you need to.') };

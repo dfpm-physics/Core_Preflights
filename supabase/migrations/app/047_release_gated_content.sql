@@ -35,13 +35,21 @@
 --   `assignment_offerings` strips key fields from a snapshot being written.
 --
 -- RELEASE TIME IN THE DATABASE
---   my_released_assignment_offerings(): published items of the caller's active or completed enrolments (a past term stays readable) that are open now, or on
+--   my_released_assignment_offerings(): published items of the caller's active or completed enrolments (a past term stays readable; the site's own reads follow only active ones) that are open now, or on
 --   which the caller already has a submission or a grade (work in progress is never withdrawn). "Open" calls
 --   release_at (038): opens_at when set, else seven days before the SCHEDULED deadline, floored to the start of that
 --   day in America/Denver. An item with no date and no opens_at is open, as on the site. An item whose per-day
 --   deadline value cannot be read is closed (the site shows it; the content stays hidden until the data is fixed).
---   `my_grades` (046) also holds back a grade whose item has a future grades_release_at, the rule gradebook_cells
---   uses for its `released` state, so a held grade is not readable by a direct request.
+--   `my_grades` (046) lists only the grades whose cell the gradebook shows the cadet points for. That is decided in ONE
+--   place, `my_visible_grade_cells()`, which reads the gradebook's own cell function (039) and applies the same test
+--   gradebook_cells applies for a cadet: state `released`, or `in_progress` on an auto-checked item. A grade that is
+--   held, excused, or an AI zero that work has since overtaken is therefore not readable by a direct request either.
+--   The rule is not copied: if the gradebook's states change, the cell function changes and this follows.
+--   THE SERVER ALSO READS THE GRADE ITSELF. A cadet may not see a held grade, so the server may not rely on what the
+--   cadet can see: a report for an effort-graded item is refused (here and in commit_work) while a finalized grade of
+--   that item stands, whatever the view shows. Only staff clearing that grade lets a second report in.
+--   A submission cannot be started on an item that has not opened for the cadet, so the "work in progress is never
+--   withdrawn" rule above cannot be used to open an item by creating a submission row.
 --   `activities_student_read` now uses this set. `assignment_offerings`, `offering_activities`, `assignments` and
 --   `assignment_due_dates` keep their reads, so the calendar of a future item is visible.
 --
@@ -171,6 +179,9 @@ COMMENT ON TABLE content_key_archive IS
   'rollback; drop it after the move has been through one cycle.';
 ALTER TABLE content_key_archive ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON content_key_archive FROM PUBLIC, anon, authenticated;
+-- every row-security table carries 045's block, so a table made after 045 does too
+CREATE POLICY forced_rotation_block ON content_key_archive AS RESTRICTIVE FOR ALL TO authenticated
+  USING (NOT (SELECT session_must_change_password()));
 
 -- ---- 3. file the key fields of one activity's content ---------------------------------------------------------
 -- p_mode 'move': an existing current key is kept as it is (a different value is counted, not applied).
@@ -194,6 +205,12 @@ DECLARE
   v_cur  record;
   v_next integer;
   v_id   uuid;
+  v_ca     text;
+  v_has_ca boolean;
+  v_choice text[];
+  v_val    numeric;
+  v_tolp   numeric;
+  v_tola   numeric;
 BEGIN
   created_questions := '{}'; created_keys := '{}'; nonblank := 0; covered := 0; differing := 0;
   IF NOT _content_has_keys(p_content) THEN
@@ -208,6 +225,28 @@ BEGIN
     IF v_qid IS NULL OR v_qid !~ '^[A-Za-z0-9_.-]{1,64}$' THEN
       RAISE EXCEPTION 'activity %: the question at position % has no usable id, so its key cannot be filed. Nothing was changed.',
         p_activity, ord USING ERRCODE = 'check_violation';
+    END IF;
+
+    -- one key per question id: a repeated id would let one question's key land on another
+    IF (SELECT count(*) FROM jsonb_array_elements(p_content -> 'questions') x
+         WHERE jsonb_typeof(x) = 'object' AND x ->> 'id' = v_qid) > 1 THEN
+      RAISE EXCEPTION 'activity %: the question id "%" is used more than once and one of them carries answer text, so its key cannot be filed. Give each question its own id. Nothing was changed.',
+        p_activity, v_qid USING ERRCODE = 'check_violation';
+    END IF;
+
+    -- the machine fields of a multiple-choice or numerical key, read from the same correct_answer text
+    v_ca := btrim(coalesce(q ->> 'correct_answer', ''));
+    v_has_ca := v_ca <> '' AND (q ->> 'type') IN ('multiple_choice', 'numerical');
+    v_choice := NULL; v_val := NULL; v_tolp := NULL; v_tola := NULL;
+    IF v_has_ca AND (q ->> 'type') = 'multiple_choice' THEN
+      v_choice := ARRAY[v_ca];
+    ELSIF v_has_ca AND v_ca ~ '^[-+]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?$' THEN
+      BEGIN
+        v_val := v_ca::numeric;
+        IF v_val = 0 THEN v_tola := 0; ELSE v_tolp := 5; END IF;     -- the grading rule's documented default is 5 percent
+      EXCEPTION WHEN others THEN
+        v_val := NULL; v_tolp := NULL; v_tola := NULL;
+      END;
     END IF;
 
     SELECT qu.id INTO v_qrow FROM questions qu WHERE qu.activity_id = p_activity AND qu.qid = v_qid;
@@ -231,8 +270,8 @@ BEGIN
       FROM question_keys k WHERE k.question_id = v_qrow AND k.variant_key = '';
 
     IF v_cur.id IS NULL THEN
-      INSERT INTO question_keys (question_id, variant_key, version, reference_text, written_by)
-      VALUES (v_qrow, '', v_next, v_text, 'human')
+      INSERT INTO question_keys (question_id, variant_key, version, correct_choice_ids, value, tol_pct, tol_abs, reference_text, written_by)
+      VALUES (v_qrow, '', v_next, v_choice, v_val, v_tolp, v_tola, v_text, 'human')
       RETURNING id INTO v_id;
       created_keys := created_keys || v_id;
       covered := covered + 1;
@@ -242,7 +281,11 @@ BEGIN
       UPDATE question_keys SET superseded_at = now() WHERE id = v_cur.id;
       INSERT INTO question_keys (question_id, variant_key, version, correct_choice_ids, select_rule, value, tol_abs, tol_pct,
                                  sig_figs, sig_fig_mode, unit, unit_aliases, unit_mode, reference_text, written_by)
-      SELECT k.question_id, k.variant_key, v_next, k.correct_choice_ids, k.select_rule, k.value, k.tol_abs, k.tol_pct,
+      SELECT k.question_id, k.variant_key, v_next,
+             CASE WHEN v_has_ca THEN v_choice ELSE k.correct_choice_ids END, k.select_rule,
+             CASE WHEN v_has_ca THEN v_val ELSE k.value END,
+             CASE WHEN v_has_ca THEN v_tola ELSE k.tol_abs END,
+             CASE WHEN v_has_ca THEN v_tolp ELSE k.tol_pct END,
              k.sig_figs, k.sig_fig_mode, k.unit, k.unit_aliases, k.unit_mode, v_text, 'human'
         FROM question_keys k WHERE k.id = v_cur.id;
       covered := covered + 1;
@@ -349,6 +392,7 @@ CREATE TRIGGER activities_file_keys
 
 CREATE FUNCTION assignment_offerings_strip_snapshot_keys() RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = app, pg_temp
 AS $$
 BEGIN
@@ -401,7 +445,7 @@ AS $$
           OR _item_open_for_section(ao.id, s.id));
 $$;
 COMMENT ON FUNCTION my_released_assignment_offerings() IS
-  'Published items of the caller''s active or completed enrolments (the two statuses my_offerings answers for) that have opened for their section (release_at), plus any item '
+  'Published items of the caller''s active or completed enrolments (a completed one keeps a past term readable) that have opened for their section (release_at), plus any item '
   'they already have a submission or grade on. Content of any other item is not delivered. Migration 047.';
 
 -- The visible activities of those items. A function of its own so the policy does not lean on the read rules of
@@ -420,9 +464,30 @@ DROP POLICY activities_student_read ON activities;
 CREATE POLICY activities_student_read ON activities FOR SELECT TO authenticated
   USING (activities.id IN (SELECT my_released_activity_ids()));
 
--- ---- 6b. a held grade is not readable ------------------------------------------------------------------------
--- my_grades (046) gets the rule gradebook_cells uses for its `released` state: the item's grades_release_at is null or
--- has passed. Same columns, same order, so the view is replaced in place.
+-- ---- 6b. a grade is readable exactly when the gradebook shows the cadet its points ----------------------------------
+-- ONE source: the gradebook's own cell function (039). gradebook_cells hands a cadet points for a cell in state
+-- `released`, or `in_progress` on an auto-checked item, and withholds every other (held, excused, an AI zero that work
+-- has overtaken, not yet due). This function applies that same test, for the caller's own enrolments, and my_grades
+-- joins it. A test compares the two outputs on every state. Cost: one pass of the cell function over the cadet's
+-- course, the same pass gradebook_cells makes for the same cadet.
+CREATE FUNCTION my_visible_grade_cells() RETURNS TABLE (enrollment_id uuid, assignment_offering_id uuid)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = app, pg_temp
+AS $$
+  SELECT c.enrollment_id, c.assignment_offering_id
+    FROM (SELECT DISTINCT s.course_offering_id
+            FROM enrollments e JOIN sections s ON s.id = e.section_id
+           WHERE e.id IN (SELECT my_enrollments())) co
+   CROSS JOIN LATERAL _cells_at(co.course_offering_id, 'final', now()) c
+   WHERE c.enrollment_id IN (SELECT my_enrollments())
+     AND (c.state = 'released' OR (c.state = 'in_progress' AND c.auto_checked));
+$$;
+COMMENT ON FUNCTION my_visible_grade_cells() IS
+  'The caller''s own (enrollment, item) cells whose points the gradebook shows them: the one rule my_grades follows. Migration 047.';
+
+-- Same columns, same order as 046, so the view is replaced in place.
 CREATE OR REPLACE VIEW my_grades WITH (security_barrier = true) AS
   SELECT g.id, g.enrollment_id, g.assignment_offering_id, g.submission_id,
          g.points_earned, g.points_possible, g.effort, g.question_scores,
@@ -430,10 +495,9 @@ CREATE OR REPLACE VIEW my_grades WITH (security_barrier = true) AS
          g.over_max_allowed, g.student_group_id, g.student_group_adjusted,
          g.diagnostic -> 'instructor_note' AS instructor_note
     FROM grades g
-    JOIN assignment_offerings ao ON ao.id = g.assignment_offering_id
    WHERE g.is_finalized
-     AND (ao.grades_release_at IS NULL OR ao.grades_release_at <= now())
-     AND g.enrollment_id IN (SELECT my_enrollments());
+     AND g.enrollment_id IN (SELECT my_enrollments())
+     AND (g.enrollment_id, g.assignment_offering_id) IN (SELECT v.enrollment_id, v.assignment_offering_id FROM my_visible_grade_cells() v);
 
 -- ---- 7. a cadet's work rows ---------------------------------------------------------------------------------
 
@@ -469,6 +533,55 @@ COMMENT ON VIEW my_work IS
 REVOKE ALL ON my_work FROM PUBLIC, anon;
 GRANT SELECT ON my_work TO authenticated;
 
+-- A report for an effort-graded item is refused while a finalized grade of that item stands. Read by the server from
+-- `grades` itself, so a held grade (which the cadet cannot see) still counts. Called by save_interactive_work and by
+-- commit_work; not callable by the web roles.
+CREATE FUNCTION _report_grade_stands(p_enrollment uuid, p_offering uuid, p_activity uuid) RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = app, pg_temp
+AS $$
+  SELECT EXISTS (SELECT 1
+                   FROM grades g
+                   JOIN offering_activities oa ON oa.assignment_offering_id = g.assignment_offering_id
+                                              AND oa.activity_id = p_activity
+                  WHERE g.enrollment_id = p_enrollment AND g.assignment_offering_id = p_offering
+                    AND g.is_finalized AND oa.grading_role = 'graded' AND oa.grading = 'effort');
+$$;
+
+-- A cadet cannot start a submission on an item that has not opened for them. Without this, the "work already begun is
+-- never withdrawn" clause above would let a cadet open any item by inserting a submission row. Checked only for a
+-- request made as an API role on the caller's own enrolment; staff, scripts and the owner are not affected.
+CREATE FUNCTION _may_start_submission(p_offering uuid, p_enrollment uuid) RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = app, pg_temp
+AS $$
+  SELECT CASE WHEN p_enrollment NOT IN (SELECT my_enrollments()) THEN true
+              ELSE EXISTS (SELECT 1 FROM enrollments e JOIN assignment_offerings ao ON ao.id = p_offering
+                            WHERE e.id = p_enrollment
+                              AND _item_open_for_section(ao.id, e.section_id))
+         END;
+$$;
+
+CREATE FUNCTION submissions_open_guard() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = app, pg_temp
+AS $$
+BEGIN
+  IF current_user IN ('anon', 'authenticated') AND pg_trigger_depth() <= 1
+     AND NOT _may_start_submission(NEW.assignment_offering_id, NEW.enrollment_id) THEN
+    RAISE EXCEPTION 'This assignment has not opened yet, so it cannot be started.' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE TRIGGER submissions_open_guard
+  BEFORE INSERT ON submissions
+  FOR EACH ROW EXECUTE FUNCTION submissions_open_guard();
+
 CREATE FUNCTION save_interactive_work(p_submission uuid, p_activity uuid, p_content jsonb, p_markdown text,
                                       p_bytes integer, p_final boolean DEFAULT true)
 RETURNS uuid
@@ -489,6 +602,15 @@ BEGIN
                   WHERE s.id = p_submission AND a.id = p_activity AND a.modality = 'interactive') THEN
     RAISE EXCEPTION 'save_interactive_work: that is not an interactive activity of this assignment'
       USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM submissions s JOIN enrollments e ON e.id = s.enrollment_id
+                  WHERE s.id = p_submission AND _item_open_for_section(s.assignment_offering_id, e.section_id)) THEN
+    RAISE EXCEPTION 'This assignment has not opened yet, so a report cannot be saved to it.' USING ERRCODE = 'P0001';
+  END IF;
+  IF EXISTS (SELECT 1 FROM submissions s
+              WHERE s.id = p_submission AND _report_grade_stands(s.enrollment_id, s.assignment_offering_id, p_activity)) THEN
+    RAISE EXCEPTION 'This assignment has already been graded and can''t be resubmitted. Ask your instructor to reopen it if you need to.'
+      USING ERRCODE = 'P0001';
   END IF;
   INSERT INTO submission_activities (submission_id, activity_id, content, report_markdown, payload_bytes, is_final)
   VALUES (p_submission, p_activity, p_content, p_markdown, p_bytes, coalesce(p_final, true))
@@ -512,6 +634,13 @@ REVOKE ALL ON FUNCTION _file_question_keys(uuid, jsonb, text) FROM PUBLIC, anon,
 REVOKE ALL ON FUNCTION activities_file_keys()                 FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
 REVOKE ALL ON FUNCTION assignment_offerings_strip_snapshot_keys() FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
 REVOKE ALL ON FUNCTION _item_open_for_section(uuid, uuid)     FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
+REVOKE ALL ON FUNCTION _report_grade_stands(uuid, uuid, uuid) FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
+-- the trigger runs with the writer's rights, so this one is callable; it answers true for any enrolment but the caller's
+REVOKE ALL ON FUNCTION _may_start_submission(uuid, uuid)      FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION _may_start_submission(uuid, uuid)   TO authenticated;
+REVOKE ALL ON FUNCTION submissions_open_guard()               FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
+REVOKE ALL ON FUNCTION my_visible_grade_cells()               FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION my_visible_grade_cells()            TO authenticated;
 -- trigger WHEN clauses run with the writer's rights, so these two pure checks stay callable
 REVOKE ALL ON FUNCTION _content_has_keys(jsonb)               FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION _content_has_keys(jsonb)            TO authenticated, service_role, prep_app_dml, prep_app_read;

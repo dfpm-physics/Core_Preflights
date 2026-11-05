@@ -9,10 +9,15 @@
 --   * a snapshot has changed since the move (frozen snapshots do not change, so this means someone cleared the stamp).
 -- A question row the migration made that has since gained other key rows is treated the same way as the first case.
 --
+-- A question id used twice in one activity cannot be restored exactly, so the move refuses such an activity in the
+-- first place, and this rollback refuses (changes nothing) if an archived keyed question's id has since been repeated in
+-- the stored content.
+--
 -- Content edited since the move keeps its edits: only the key fields of questions that were in the archive are put
 -- back, matched by question id. A key written into the key table after the move for a question that had no key field
 -- before it stays in the key table and is NOT put back into content.
 --
+-- Run 048's rollback first if 048 is applied (its functions use this file's helpers).
 -- Deploy the previous site files first or at the same time: with this rolled back, the cadet pages that read `my_work`
 -- and call save_interactive_work find neither.
 
@@ -26,7 +31,18 @@ DO $$
 DECLARE
   r record;
 BEGIN
-  FOR r IN SELECT row_id, created_question_ids, created_key_ids FROM content_key_archive WHERE source = 'activities' LOOP
+  FOR r IN SELECT row_id, created_question_ids, created_key_ids, original FROM content_key_archive WHERE source = 'activities' LOOP
+    IF EXISTS (SELECT 1
+                 FROM (SELECT x ->> 'id' AS id
+                         FROM activities a, jsonb_array_elements(CASE WHEN jsonb_typeof(a.content -> 'questions') = 'array'
+                                                                      THEN a.content -> 'questions' ELSE '[]'::jsonb END) x
+                        WHERE a.id = r.row_id AND jsonb_typeof(x) = 'object'
+                        GROUP BY 1 HAVING count(*) > 1) d
+                WHERE d.id IN (SELECT e ->> 'id' FROM jsonb_array_elements(r.original -> 'questions') e
+                                WHERE jsonb_typeof(e) = 'object'
+                                  AND (e ? 'expected_response' OR e ? 'correct_answer' OR e ? 'answer_key' OR e ? 'solution'))) THEN
+      RAISE EXCEPTION '047 rollback: a question id with a key is used more than once in activity % now, so the key cannot be put back exactly. Nothing was changed.', r.row_id;
+    END IF;
     IF EXISTS (SELECT 1 FROM question_keys k
                 WHERE k.question_id = ANY (r.created_question_ids) AND NOT (k.id = ANY (r.created_key_ids)))
        OR EXISTS (SELECT 1 FROM question_keys k
@@ -64,7 +80,8 @@ BEGIN
     FOR q IN SELECT x FROM jsonb_array_elements(cur -> 'questions') WITH ORDINALITY t(x, o) ORDER BY o LOOP
       IF jsonb_typeof(q) = 'object' THEN
         SELECT e INTO oq FROM jsonb_array_elements(r.original -> 'questions') e
-         WHERE jsonb_typeof(e) = 'object' AND e ->> 'id' = q ->> 'id' LIMIT 1;
+         WHERE jsonb_typeof(e) = 'object' AND e ->> 'id' = q ->> 'id'
+           AND (e ? 'expected_response' OR e ? 'correct_answer' OR e ? 'answer_key' OR e ? 'solution') LIMIT 1;
         IF oq IS NOT NULL THEN
           FOREACH k IN ARRAY ARRAY['expected_response', 'correct_answer', 'answer_key', 'solution'] LOOP
             IF oq ? k THEN
@@ -133,6 +150,11 @@ CREATE OR REPLACE VIEW my_grades WITH (security_barrier = true) AS
      AND g.enrollment_id IN (SELECT my_enrollments());
 
 -- 6. drop what 047 added
+DROP TRIGGER submissions_open_guard ON submissions;
+DROP FUNCTION submissions_open_guard();
+DROP FUNCTION _may_start_submission(uuid, uuid);
+DROP FUNCTION _report_grade_stands(uuid, uuid, uuid);
+DROP FUNCTION my_visible_grade_cells();
 DROP FUNCTION save_interactive_work(uuid, uuid, jsonb, text, integer, boolean);
 DROP VIEW my_work;
 DROP FUNCTION is_written_activity(uuid);

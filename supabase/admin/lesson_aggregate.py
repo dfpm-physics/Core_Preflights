@@ -682,7 +682,27 @@ def _lesson_meta(conn, slug, term=None):
     m["activity_title"] = m["interactive_title"] or m["assignment_title"]
     m["written_content"] = json.loads(m["written_content"]) if m["written_content"] else None
     _attach_answer_keys(conn, m["written_id"], m["written_content"])
+    _warn_missing_guidance(m["written_content"], m["written_id"])
     return m
+
+
+def _warn_missing_guidance(content, activity_id):
+    """Say so, loudly, when a graded written question has answer guidance nowhere.
+
+    Since migration 047 the guidance lives in the key table. A script that reads only `content` finds none, and the
+    summary is then written without the physics source of truth, with no error. This script reads both places; if a
+    question still has neither, the cause is a missing key, not a stale reader, and the operator must know before
+    the readiness summary is written. Prints to stderr and changes nothing.
+    """
+    if not activity_id or not isinstance(content, dict):
+        return
+    missing = [q.get("id") for q in (content.get("questions") or [])
+               if isinstance(q, dict) and q.get("type") == "free_response" and (_num(q.get("points")) or 0) > 0
+               and not (q.get("expected_response") or "").strip()]
+    if missing:
+        print("WARNING: no answer guidance (neither in the lesson content nor in the key table) for written question(s) "
+              + ", ".join(str(i) for i in missing) + ". The readiness summary would be written without it. "
+              "Add the key on the Questions page, or confirm this lesson has none, before writing.", file=sys.stderr)
 
 
 def _attach_answer_keys(conn, activity_id, content):

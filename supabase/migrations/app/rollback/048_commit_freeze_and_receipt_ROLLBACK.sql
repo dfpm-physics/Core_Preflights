@@ -43,6 +43,15 @@ BEGIN
     RAISE EXCEPTION 'save_interactive_work: that is not an interactive activity of this assignment'
       USING ERRCODE = 'invalid_parameter_value';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM submissions s JOIN enrollments e ON e.id = s.enrollment_id
+                  WHERE s.id = p_submission AND _item_open_for_section(s.assignment_offering_id, e.section_id)) THEN
+    RAISE EXCEPTION 'This assignment has not opened yet, so a report cannot be saved to it.' USING ERRCODE = 'P0001';
+  END IF;
+  IF EXISTS (SELECT 1 FROM submissions s
+              WHERE s.id = p_submission AND _report_grade_stands(s.enrollment_id, s.assignment_offering_id, p_activity)) THEN
+    RAISE EXCEPTION 'This assignment has already been graded and can''t be resubmitted. Ask your instructor to reopen it if you need to.'
+      USING ERRCODE = 'P0001';
+  END IF;
   INSERT INTO submission_activities (submission_id, activity_id, content, report_markdown, payload_bytes, is_final)
   VALUES (p_submission, p_activity, p_content, p_markdown, p_bytes, coalesce(p_final, true))
   ON CONFLICT (submission_id, activity_id) DO UPDATE

@@ -187,6 +187,14 @@ From the embedded `offering_activities`, take the entry whose `activities.modali
   `GET {SUPA_URL}/rest/v1/question_keys?select=reference_text,questions!inner(qid,activity_id)&questions.activity_id=eq.{WRITTEN_ACTIVITY_ID}&superseded_at=is.null&variant_key=eq.`
   and match `questions.qid` to the question's `id`. A question's own `expected_response` in `content`, when present
   (a database before 047), wins. Wherever this skill says `expected_response`, it means this value.
+  **If a free-response question that scores points has no guidance in either place, say so at the top of the run
+  report, naming the question, before grading.** A run that reads only `content` after 047 finds none and would grade
+  without it, with no error; the warning is what makes that visible.
+- `CORRECT_ANSWER` per multiple-choice or numerical question: **since 047 it is not in `content.questions` either.**
+  Read the same key row: multiple choice uses `correct_choice_ids` (the correct option text), numerical uses `value`
+  with `tol_pct` (percent) or `tol_abs`, and `reference_text` holds the readable line (`Correct answer: ...`). A
+  question's own `correct_answer` in `content`, when present (a database before 047), wins. Wherever Step 6 says
+  `q.correct_answer`, it means this value; with no key at all, do not score the question: list it as unscored.
 - `POINTS_POSSIBLE` = the offering's `points_possible` (**not** a per-question sum you invent)
 
 An offering may also carry an **interactive** activity (`modality = 'interactive'`). This skill
@@ -316,12 +324,13 @@ Compute:
 For each response (within filtered set), for each question:
 
 **Multiple choice** (`type: "multiple_choice"`):
+- `q.correct_answer` is the `CORRECT_ANSWER` read in Step 2 (key table first; never score against an undefined value).
 - If `answers[q.id]` matches `q.correct_answer` (case-insensitive, trim whitespace): score = q.points
 - Otherwise: score = 0, feedback = `"Incorrect. Correct answer: ${q.correct_answer}"`
 
 **Numerical** (`type: "numerical"`):
 - Parse answer as float. If blank or non-numeric: score = 0, feedback = "No numerical answer provided."
-- Check: `|student_answer - correct_answer| / correct_answer <= tolerance` (default ±5%)
+- Check: `|student_answer - correct_answer| / correct_answer <= tolerance` (the key's `tol_pct`, default ±5%; if the key has `tol_abs` instead, use `|student_answer - correct_answer| <= tol_abs`)
 - Within tolerance: score = q.points
 - Outside tolerance: score = 0, feedback = `"Answer ${student_answer} is outside the ±5% accepted range (expected ≈ ${correct_answer})."`
 

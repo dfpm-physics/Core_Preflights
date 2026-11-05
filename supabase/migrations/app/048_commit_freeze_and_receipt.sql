@@ -14,6 +14,9 @@
 --   3. WORK IS FROZEN AFTER COMMIT. For the API roles, an answer row of a committed submission cannot be inserted,
 --      edited or deleted. save_interactive_work() (047) refuses to replace the report of the activity that carries
 --      credit once it is committed; a practice report on the same assignment can still be saved.
+--      commit_work() and save_interactive_work() also refuse a second report for an effort-graded item while a finalized
+--      grade of that item stands (read from `grades` by the server, so a grade held back from the cadet still counts),
+--      and refuse an item that has not opened. A refusal for a missed deadline names the deadline, in Mountain time.
 --   4. LATE WORK. Past the deadline plus grace, commit_work() refuses unless the item allows late work
 --      (`late_allowed`, 028), and then refuses after the last class day of the term (`late_close_at`, 038); inside
 --      those limits it commits and marks the receipt late. No points are taken off: the late mark is information.
@@ -73,6 +76,7 @@ DECLARE
   v_hash  text;
   v_rec   uuid;
   v_row   record;
+  v_when  text;
 BEGIN
   SELECT ao.id, ao.course_offering_id, ao.is_published, ao.late_allowed INTO v_ao
     FROM assignment_offerings ao WHERE ao.id = p_offering;
@@ -88,7 +92,7 @@ BEGIN
     RAISE EXCEPTION 'commit_work: this assignment is not available to you' USING ERRCODE = 'insufficient_privilege';
   END IF;
 
-  IF p_offering NOT IN (SELECT my_released_assignment_offerings()) THEN
+  IF NOT _item_open_for_section(p_offering, (SELECT e.section_id FROM enrollments e WHERE e.id = v_enr)) THEN
     RAISE EXCEPTION 'This assignment has not opened yet, so it cannot be submitted.' USING ERRCODE = 'P0001';
   END IF;
 
@@ -119,16 +123,24 @@ BEGIN
     RETURN;
   END IF;
 
+  -- an effort-graded report is the first one that counts: while a finalized grade of this item stands, a second report is
+  -- refused. The server reads the grade itself, so a grade held back from the cadet's view still counts.
+  IF _report_grade_stands(v_enr, p_offering, p_activity) THEN
+    RAISE EXCEPTION 'This assignment has already been graded and can''t be resubmitted. Ask your instructor to reopen it if you need to.'
+      USING ERRCODE = 'P0001';
+  END IF;
+
   -- the deadline, from the server clock and the one rule of 038
   SELECT c.due_at, c.is_past INTO v_core FROM _effective_core(v_enr, p_offering) c;
   IF FOUND AND v_core.due_at IS NOT NULL AND v_core.is_past THEN
+    v_when := to_char(v_core.due_at AT TIME ZONE 'America/Denver', 'FMDay, FMMonth FMDD, YYYY "at" HH24:MI') || ' Mountain time';
     IF NOT v_ao.late_allowed THEN
-      RAISE EXCEPTION 'The deadline for this assignment has passed, so it can no longer be submitted. Your saved answers are kept and your instructor can still see them.'
+      RAISE EXCEPTION 'The deadline for this assignment was % and has passed, so it can no longer be submitted. Your saved answers are kept and your instructor can still see them.', v_when
         USING ERRCODE = 'P0001';
     END IF;
     v_close := late_close_at(v_ao.course_offering_id);
     IF v_close IS NOT NULL AND v_now > v_close THEN
-      RAISE EXCEPTION 'The last class day of the term has passed, so this assignment can no longer be submitted.'
+      RAISE EXCEPTION 'The deadline for this assignment was % and the last class day of the term has passed, so it can no longer be submitted.', v_when
         USING ERRCODE = 'P0001';
     END IF;
     v_late := true;
@@ -236,6 +248,15 @@ BEGIN
                   WHERE s.id = p_submission AND a.id = p_activity AND a.modality = 'interactive') THEN
     RAISE EXCEPTION 'save_interactive_work: that is not an interactive activity of this assignment'
       USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM submissions s JOIN enrollments e ON e.id = s.enrollment_id
+                  WHERE s.id = p_submission AND _item_open_for_section(s.assignment_offering_id, e.section_id)) THEN
+    RAISE EXCEPTION 'This assignment has not opened yet, so a report cannot be saved to it.' USING ERRCODE = 'P0001';
+  END IF;
+  IF EXISTS (SELECT 1 FROM submissions s
+              WHERE s.id = p_submission AND _report_grade_stands(s.enrollment_id, s.assignment_offering_id, p_activity)) THEN
+    RAISE EXCEPTION 'This assignment has already been graded and can''t be resubmitted. Ask your instructor to reopen it if you need to.'
+      USING ERRCODE = 'P0001';
   END IF;
   IF EXISTS (SELECT 1 FROM submissions s
               WHERE s.id = p_submission AND s.status = 'committed' AND s.chosen_activity_id = p_activity) THEN

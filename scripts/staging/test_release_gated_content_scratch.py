@@ -334,9 +334,9 @@ def main():
             add("control: my_work has no report column", False, S1, "SELECT report_markdown FROM my_work", (), "error")
             add("control: cadet two does not see cadet one's work in my_work", False, S2,
                 "SELECT count(*) FROM my_work WHERE activity_id = %s", (F["act_int"],), 0)
-            add("control: save_interactive_work saves a report", False, S1,
+            add("B1 save_interactive_work refuses a report while a finalized grade of the item stands (held or not)", False, S1,
                 "SELECT save_interactive_work(%s, %s, '{\"schema\":1,\"effort\":3}'::jsonb, 'again', 5, true) IS NOT NULL",
-                (F["sub1"], F["act_int"]), True)
+                (F["sub1"], F["act_int"]), "error")
             add("control: save_interactive_work refuses another cadet's submission", False, S2,
                 "SELECT save_interactive_work(%s, %s, '{}'::jsonb, 'x', 1, true)", (F["sub1"], F["act_int"]), "error")
             add("control: save_interactive_work refuses a written activity", False, S1,
@@ -375,6 +375,23 @@ def main():
         print("\nCOUNTS BEFORE")
         show("stored", before_counts)
         b_pass, b_fail, b_leaks = run_battery("BEFORE 047 (leak cases are expected to fail here, which shows the tests can fail)")
+
+        # ---- a repeated question id that carries key text: the move must refuse, and change nothing ---------
+        poison_asg, poison_act = uid(), uid()
+        cur.execute("INSERT INTO assignments (id, course_id, kind_id, slug, title) VALUES (%s,%s,'preflight','syn-dup','Synthetic dup')", (poison_asg, F["course_a"]))
+        cur.execute("INSERT INTO activities (id, assignment_id, modality, slug, title, content, position) VALUES (%s,%s,'written','syn-dup-written','d',%s,0)",
+                    (poison_act, poison_asg, json.dumps({"questions": [
+                        {"id": "d", "type": "free_response", "points": 1, "text": "a", "expected_response": "FIRST"},
+                        {"id": "d", "type": "free_response", "points": 1, "text": "b", "expected_response": "SECOND"}]})))
+        with_poison = snapshot_state()
+        refused_dup = not run(mig.name + " (repeated id)", mig.read_text(encoding="utf-8"), True, quiet=True)
+        cur.execute("SET search_path = app, public, extensions")
+        dup_left_alone = snapshot_state() == with_poison and one("SELECT count(*) FROM pg_class WHERE relname = 'content_key_archive' AND relnamespace = 'app'::regnamespace") == 0
+        cur.execute("DELETE FROM activities WHERE id = %s", (poison_act,))
+        cur.execute("DELETE FROM assignments WHERE id = %s", (poison_asg,))
+        print("\nREPEATED ID")
+        print(f"  {'PASS' if (refused_dup and dup_left_alone) else 'FAIL'}  the move refuses a repeated question id that carries key text, and changes nothing")
+        dup_ok = refused_dup and dup_left_alone
 
         # ---- APPLY ------------------------------------------------------------------------------------------
         del conn.notices[:]
@@ -482,7 +499,7 @@ def main():
         print("\nSUMMARY")
         print(f"  BEFORE: {b_pass} passed, {b_fail} failed, {b_leaks} leak case(s) served")
         print(f"  AFTER : {a_pass} passed, {a_fail} failed, {a_leaks} leak case(s) served; state checks: {sum(checks)}/{len(checks)}")
-        code = 0 if (a_fail == 0 and all(checks) and b_leaks > 0) else 1
+        code = 0 if (a_fail == 0 and all(checks) and b_leaks > 0 and dup_ok) else 1
         conn.close()
     finally:
         if sbc.drop_database(acur, name):
