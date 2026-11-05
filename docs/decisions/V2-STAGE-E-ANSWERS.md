@@ -36,7 +36,12 @@ wrong, the attempt number and the attempts left. It never gets the key.
    should keep offering a limit (5).
 7. **Open questions.** (a) Whether Cengage and WebAssign are still used in Spring 2027 is unknown as far as is known, and at
    least one version of a similar class will not use it in the Spring; this build does not depend on either answer.
-   (b) Default used, not yet answered: each student gets the same numbers (`question_keys.variant_key` leaves room).
+   (b) Decided by the course director, 2026-11-05: each student gets the same numbers by default. Instructors may later
+   choose different numbers per student (`question_keys.variant_key` leaves room). That part is not built.
+8. **The website has no connection to AI for writing problems** (course director, 2026-11-05). An instructor makes a
+   problem in one of three ways: types a single set of numbers on the website; prepares a CSV or Excel file of number sets
+   with answers, by hand; or asks their own AI model to write that file, using instructions the system provides, then
+   uploads it. Normal code checks the answer in every case.
 
 ## What it depends on from Stage D (step 2)
 
@@ -55,10 +60,11 @@ wrong, the attempt number and the attempts left. It never gets the key.
 
 ## Not built
 
-- The AI step that writes a key and its range. It must write `question_keys` with `written_by = 'ai'`; publishing is
-  already refused until a person fills `checked_by`. It needs: a prompt that returns value, tolerance kind, sig figs and
-  unit as separate fields; a review screen that shows the key and the accepted range beside the question; and a
-  rejection rule for a value that does not parse as a plain literal.
+- File upload for problems (decision 8), which replaces an AI step inside the website. It needs: one file format for
+  number sets with answers (CSV and Excel); written instructions an instructor can give to their own AI model; a dry run
+  with a preview; and a rejection rule for a value that does not parse as a plain literal. A key from a file that an AI
+  wrote is marked `written_by = 'ai'`, and publishing stays refused until a person fills `checked_by`. A review screen
+  shows the key and the accepted range beside the question.
 - The student page: question display, the answer box, the response for each answer, score so far read from the grade row.
   It needs the student read of questions above, the deployed function, and the 7-day release rule.
 - `remark_question`: re-marking stored attempts after a key correction. The raw answers are stored, so it can re-run the
