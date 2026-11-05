@@ -8,6 +8,16 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage E, problem file upload, built offline, not deployed)
+
+**What:** one file format and one reader for making auto-checked problems from a spreadsheet, `site/js/problem-file.js` (CSV only; it reads numbers with `numeric-answer.js` and has no other dependency). An upload panel on `site/faculty/questions.html`: dry run, then a preview with each question, its key and the range of answers accepted, then one click to save; the instructions an instructor can copy into their own AI model, with one invented example and the rule that a person checks every key; a review panel where a person ticks each AI-written key. `faculty-questions.js` gained `isAiUnchecked`, `uncheckedAiQuestions` and `markKeysChecked` (sends only `checked_at`; the database names the checker). Suite `test-problem-file.mjs` (260 checks, offline, added to the CI list) and a scratch-database proof, `scripts/staging/scratch_problem_file_proof.py` (29 checks).
+
+**Rules:** a cell that reads as formula text, a comma in a number, a unit in a number cell, or an empty key refuses the whole file, and every bad row is listed with its row and column. A key from a file marked `ai` is stored `written_by = 'ai'`; publishing stays refused until a person records a check. If the file has no `written_by` column the form asks. Same numbers for every student; a `variant` column is kept and must be empty today.
+
+**Deliberately not done:** no Excel reader (none exists in the repository; a workbook is recognised and answered with the steps to save a CSV); no per-student numbers; no new migration (the existing rules were enough, shown on a scratch database); nothing applied to staging or production, and no save or publish clicked on staging. The panel was opened and its dry run exercised in a browser on a local address against staging's sign-in, but the save and review steps were not clicked through, because staging holds no new-page item with questions. The older `Import from CSV` button is unchanged.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 Stage E, answer checking, built offline, not deployed)
 
 **What:** one number reader and checker (`site/js/numeric-answer.js`, copied into `supabase/functions/check-answer/`); the `check-answer` function logic; migrations `app/070` and `app/071` with rollbacks (deadline, attempt limit, key version, lock, attempt row, `auto_checked` grade, all in the database, execute for `service_role` only); two offline suites; a scratch-database proof and load test (`scripts/staging/scratch_stage_e_proof.py`); `docs/decisions/V2-STAGE-E-ANSWERS.md` with the decisions, Stage D dependencies and the gate test list.

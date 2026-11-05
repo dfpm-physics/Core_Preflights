@@ -45,6 +45,7 @@ OFFLINE = [
     "test-faculty-terms.mjs",
     "test-numeric-answer.mjs",
     "test-check-answer-function.mjs",
+    "test-problem-file.mjs",
 ]
 # Python tests that make no network call and need no database (each stubs or never opens a connection).
 PY_OFFLINE = [

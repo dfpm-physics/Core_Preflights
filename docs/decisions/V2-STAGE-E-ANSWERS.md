@@ -60,11 +60,26 @@ wrong, the attempt number and the attempts left. It never gets the key.
 
 ## Not built
 
-- File upload for problems (decision 8), which replaces an AI step inside the website. It needs: one file format for
-  number sets with answers (CSV and Excel); written instructions an instructor can give to their own AI model; a dry run
-  with a preview; and a rejection rule for a value that does not parse as a plain literal. A key from a file that an AI
-  wrote is marked `written_by = 'ai'`, and publishing stays refused until a person fills `checked_by`. A review screen
-  shows the key and the accepted range beside the question.
+- Problem file upload (decision 8) is built, offline and on a scratch database; not applied to staging or production, and
+  not clicked through on a real item (staging holds no new-page item with questions, and staging is frozen). What exists:
+  one format and one reader, `site/js/problem-file.js` (CSV, UTF-8, one row per question; types number, choice, select;
+  columns in `COLUMNS`); the upload panel on `site/faculty/questions.html` (dry run, then a preview with each question, its
+  key and the range of answers accepted, then one click to save); the instructions an instructor copies into their own AI
+  model (`aiInstructions()`, shown in the panel); a review panel where a person ticks each AI-written key.
+  Rules kept: any cell that reads as formula text, a comma in a number, a unit in a number cell, or an empty key refuses the
+  whole file and every bad row is listed with its row and column; numbers are read by `numeric-answer.js`, and each number
+  key is typed back through the real checker before it is accepted. A key from a file marked `ai` is stored
+  `written_by = 'ai'` and the item cannot be published until a person records a check; the database fills in who. No new
+  migration was needed: the rules from migration 030 already enforce it. Proof: `tests/app-schema/test-problem-file.mjs`
+  (offline) and `scripts/staging/scratch_problem_file_proof.py` (scratch database).
+  Choices made here: (1) Excel is not read. The repository has no `.xlsx` reader, and adding a library is a build-step
+  decision; a workbook is recognised and the person is told to save a CSV. (2) A `variant` column exists and must be empty
+  today, so a file written now stays valid when different numbers per student are built (several rows with one
+  `question_id` and different `variant` values). Keys are written with `variant_key = ''`. (3) The older `Import from CSV`
+  button is left in place beside the new one; it has its own column names and writes only human-written keys. (4) A number
+  key with no tolerance is accepted with a warning, since exact match is a legitimate key. (5) A comma in a number cell is
+  refused even in the thousands shape (1,000), because a file is plain data; the student answer box still reads 1,000.
+  Still not built: reading `.xlsx`; per-student numbers; a key-check step that records which numbers the person saw.
 - The student page: question display, the answer box, the response for each answer, score so far read from the grade row.
   It needs the student read of questions above, the deployed function, and the 7-day release rule.
 - `remark_question`: re-marking stored attempts after a key correction. The raw answers are stored, so it can re-run the

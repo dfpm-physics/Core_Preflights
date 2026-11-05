@@ -791,3 +791,33 @@ export async function writeImport(db, activityId, plan) {
   }
   return { count: plan.toWrite.length };
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * Answers written by an AI model: a person checks each one before the item can be published
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * True for a live question whose current key an AI model wrote and no person has checked. The database refuses to
+ * publish an item that holds one; this is how the page finds them. A key a person edits by hand becomes a new
+ * human-written version, so it leaves this list.
+ */
+export const isAiUnchecked = (q) => !!(q && !q.isRetired && q.keyRow && q.keyRow.written_by === 'ai'
+  && !q.keyRow.checked_by && !q.keyRow.checked_at);
+
+export const uncheckedAiQuestions = (questions) => (questions || []).filter(isAiUnchecked);
+
+/**
+ * Record that a person checked these keys. Sends only `checked_at`; the database fills `checked_by` from the
+ * signed-in caller, so the page cannot name someone else. Touches only keys that are still current and still
+ * unchecked, and says how many it changed so a key replaced meanwhile is not reported as checked.
+ * Returns { checked, missed } or { error }.
+ */
+export async function markKeysChecked(db, keyIds) {
+  const ids = [...new Set(keyIds || [])];
+  if (!ids.length) return { checked: 0, missed: 0 };
+  const r = await db.from('question_keys').update({ checked_at: new Date().toISOString() })
+    .in('id', ids).is('superseded_at', null).is('checked_by', null).select('id');
+  if (r.error) return { error: r.error };
+  const checked = (r.data || []).length;
+  return { checked, missed: ids.length - checked };
+}
