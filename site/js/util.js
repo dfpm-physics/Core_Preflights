@@ -41,17 +41,31 @@ export function iconHTML(name, emoji = '•', cls = 'ic') {
   const src = ICON_BASE + 'ic-' + name + '.png';
   const def = ICON_BASE + 'ic-' + DEFAULT_ICON + '.png';
   const cl = esc(cls);
-  const toEmoji = `this.replaceWith(Object.assign(document.createElement('span'),` +
-    `{className:'icon-fallback ${cl}',textContent:'${esc(emoji)}'}))`;
-
+  // The fallback is a data attribute read by one listener below, not an onerror attribute: the pages' content
+  // security policy does not run inline handlers.
+  //
   // The default icon itself can only fall back to the emoji (avoid a self-loop).
   if (name === DEFAULT_ICON) {
-    return `<img class="${cl}" alt="" src="${esc(src)}" onerror="${toEmoji}">`;
+    return `<img class="${cl}" alt="" src="${esc(src)}" data-icon-emoji="${esc(emoji)}" data-icon-class="${cl}">`;
   }
   // First error → swap to the default PNG; second error (default also missing) → emoji.
-  const onerr = `if(!this.dataset.fb){this.dataset.fb=1;this.src='${esc(def)}';}else{${toEmoji};}`;
-  return `<img class="${cl}" alt="" src="${esc(src)}" onerror="${onerr}">`;
+  return `<img class="${cl}" alt="" src="${esc(src)}" data-icon-emoji="${esc(emoji)}" ` +
+         `data-icon-class="${cl}" data-icon-default="${esc(def)}">`;
 }
+
+/** The one listener behind iconHTML(): image errors do not bubble, so it listens in the capture phase. */
+export function onIconError(ev) {
+  const img = ev && ev.target;
+  if (!img || img.tagName !== 'IMG' || !img.dataset || !('iconEmoji' in img.dataset)) return;
+  if (img.dataset.iconDefault && !img.dataset.fb) {
+    img.dataset.fb = '1';
+    img.src = img.dataset.iconDefault;
+    return;
+  }
+  img.replaceWith(Object.assign(document.createElement('span'),
+    { className: `icon-fallback ${img.dataset.iconClass || ''}`.trim(), textContent: img.dataset.iconEmoji }));
+}
+if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('error', onIconError, true);
 
 /* ── Failure surfacing ────────────────────────────────────────────────────────
  * Every portal page opens with a `.center-load` spinner and replaces it once its data

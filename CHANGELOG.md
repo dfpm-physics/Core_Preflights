@@ -8,6 +8,18 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 step 2: libraries pinned with integrity values, and a content security policy on every shipped page)
+
+**What.** Page and tool changes only. Nothing applied or deployed.
+- **Pinned.** The four external libraries the pages load (the database client, the markdown renderer, the sanitizer, the compression library) are now loaded from an exact-version URL with an `integrity` value and `crossorigin="anonymous"`. The database client was `@2` (whatever version the network served that day); it is now `2.119.0`, the version the network was serving when this was written. The sanitizer stays at 3.0.9 and the renderer at 12.0.0: a newer sanitizer is a behaviour change to check against rendered reports, and was left for its own decision.
+- **Policy.** Each of the 33 shipped pages under `site/` (not `site/gemini/` or `site/genai/`) carries a `<meta http-equiv="Content-Security-Policy">`, because GitHub Pages cannot send headers. Scripts may come only from this origin, from the exact pinned URLs, and from inline scripts whose SHA-256 is listed; connections go to this origin and the database host. A meta policy cannot carry `frame-ancestors`, so that is not covered.
+- **Inline handlers removed** so the policy can omit `unsafe-inline` for scripts: the four decorative icons on the sign-in page, the icon fallback built by `iconHTML()` in `util.js` (now data attributes and one capture-phase listener), and the Reload button on the staff student page.
+- **Check.** `scripts/checks/csp_pages.py` fails on an unpinned or unlisted script tag, a missing or wrong integrity value, an inline handler, or a policy that no longer matches its page; `--write` rebuilds the tags. `csp_pages_test.py` (25 checks, in the offline list) runs it over the real pages and over invented pages that each break one rule.
+- **Browser check** (local copy on a staging-only server): the sign-in page, 12 staff pages, the student dashboard and the submit page loaded with no policy message. An injected inline script, a script from another package on the same host, and a request to another host were each blocked. The submit page's hash flow (compressed report in the URL hash, decompress, render, sanitize) showed its preview; nothing was submitted. The icon fallback was exercised through both steps.
+- **Not done.** `site/gemini/` and `site/genai/` are untouched and remain unpinned and without a policy. Policy edits are required whenever an inline script changes (run `--write`). Style attributes still need `unsafe-inline` for styles.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 step 2: a stale page cannot overwrite a grade; rescoring; checked reads)
 
 **What.** Page and test changes only. No migration (050 is not used) and nothing applied.
