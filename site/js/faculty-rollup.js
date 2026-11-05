@@ -626,15 +626,8 @@ export async function setFlagOverride(ctx, { offeringId, enrollmentId, flag, cle
   const { error } = await db.from('grades').update({ diagnostic: nextDiagnostic }).eq('id', row.id);
   if (error) return { error };
 
-  // Append-only audit, best-effort — the same posture as finalizeScores(): a failed log entry
-  // must not make a successful decision look like it did not happen.
-  const { error: logErr } = await db.from('grade_events').insert({
-    grade_id: row.id,
-    event: cleared ? 'flag_cleared' : 'flag_restored',
-    actor: ctx.user.id,
-    detail: { flag, from: from ?? null, ...(why ? { reason: why } : {}) },
-  });
-  if (logErr) console.warn('[rollup] override saved, but the audit entry failed:', logErr.message);
+  // The audit row ('flag_override_changed', with the overrides before and after) is written by the database
+  // (migration 049); the reason travels inside the override itself.
 
   return { error: null };
 }

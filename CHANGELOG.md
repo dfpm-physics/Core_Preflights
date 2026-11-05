@@ -8,6 +8,19 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 step 2: the grade audit is written by the database, migration 049)
+
+**What.** Migration 049 (not applied anywhere), its rollback, a scratch proof, an offline wiring test and the page and function changes that go with it.
+- **Audit by trigger.** Every change to a grade's points, state, source, effort, per-question scores or grader, and a reviewer's flag override, leaves one `grade_events` row. The actor is read from the signed-in session; a server-side process logs with no actor. A write that changes nothing audited leaves no row.
+- **Grader pinned.** A staff session that sets or changes `graded_by` gets its own id there.
+- **No write from the API.** The staff insert policy and the write grants on `grade_events` are removed. `faculty-grade.js` and `faculty-rollup.js` no longer write the table; two offline tests that asserted those writes now assert there are none.
+- **Reset log.** New append-only table `credential_events`. `reset-student-password` and `reset-staff-password` write it with the caller they verified from the token, once when a reset is requested and once when it is done, and refuse the reset if the first record cannot be written. Source only: **no function was deployed.** Deploy both after 049 is applied, or resets refuse.
+- **Excused changes** were already logged by 033 from the session; the scratch proof shows the row names the signed-in Director.
+- **Proof.** `scripts/staging/test_grade_audit_scratch.py`: 45 passed, 0 failed (before 049 the three gaps are served; after, none). `test_step2_together_scratch.py` includes 049: 53 passed. `test-audit-wiring.mjs` is in the offline list.
+- **Not done.** No past change is reconstructed; the log starts at apply time. The `reopen_extended_grades.py` script keeps its own event row, so a run logs twice. The reason an extension reopened a grade is no longer copied into the event; the extension row keeps it.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 step 2: the student and entry branches merged into `v2-step2`)
 
 **What.** `v2-step2-student` and `v2-step2-entry` were merged into `v2-step2` as two local merge commits, so migrations

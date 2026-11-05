@@ -169,12 +169,21 @@ serve(async (req) => {
       });
     }
 
+    // The actor is the caller verified from the sign-in token above, never a request value. The reset is
+    // refused if the record cannot be written. A second row follows once the reset is done.
+    const logRow = (event: string) => supabaseAdmin.from("credential_events").insert({
+      event, actor: caller.id, course_offering_id: courseOfferingId, target_staff: instructorId,
+    });
+    const { error: logErr } = await logRow("staff_reset_requested");
+    if (logErr) return ok({ error: "Could not record the reset: " + logErr.message });
+
     const { error: updErr } = await supabaseAdmin.auth.admin.updateUserById(
       instructorId,
       { password, app_metadata: { must_change_password: true } }
     );
 
     if (updErr) return ok({ error: "Could not reset the password: " + updErr.message });
+    await logRow("staff_reset_done");
 
     // Deliberately NOT returning the password. The caller derives it from the name they are
     // already looking at; putting it in an HTTP response body would write it to any proxy log and

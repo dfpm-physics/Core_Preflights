@@ -238,7 +238,7 @@ edFin[1002].modified = true;
 eq('writableCount sees the effort edit', G.writableCount(ctx, OFFERING, STUDENTS, {}, GRADE_MAP, edFin), 1);
 await G.finalizeScores(ctx, OFFERING, STUDENTS, {}, GRADE_MAP, edFin);
 eq('the row is published', lastGradeUpserts()[0].payload[0].is_finalized, true);
-check('and an audit event is appended',
-      CALLS.some(c => c.table === 'grade_events' && c.verb === 'insert'));
+check('and the page writes no audit row (the database does, migration 049)',
+      !CALLS.some(c => c.table === 'grade_events'));
 
 summary();

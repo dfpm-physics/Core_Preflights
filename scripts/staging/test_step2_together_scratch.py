@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Step 2 together: one invented course walked across the student, staff-entry and trust migrations, on ONE
-throwaway database built with every migration in order (023, 024 to 043, then 044 to 048, 059, 060, 065, 066).
+throwaway database built with every migration in order (023, 024 to 043, then 044 to 049, 059, 060, 065, 066).
 
 It stands in for plan section 8's "agree for the same cadet" as far as a scratch database can. Sessions are simulated
 (the `authenticated` role plus `request.jwt.claims`), so it proves the database rules, not the browser pages and not
@@ -37,7 +37,7 @@ import install_staging as ins  # noqa: E402
 import v2_gate_lib as gl  # noqa: E402
 from scratch_lib import Scratch, Tally  # noqa: E402
 
-STEP2 = ["044", "045", "046", "047", "048", "059", "060", "065", "066"]
+STEP2 = ["044", "045", "046", "047", "048", "049", "059", "060", "065", "066"]
 
 
 def main():
@@ -134,6 +134,9 @@ def main():
         t.chk("the export's total column holds the same text the cadet sees", st is not None and st[3] == mt[3], (st, mt))
         t.chk("the other cadet reads nothing of it", pts(stu2, Q) is None)
         t.chk("the other cadet cannot read this cadet's total as their own", my_total(stu2) != mt or my_total(stu2) is None)
+
+        t.chk("the typed score and its publishing each left an audit row naming the Director (049)",
+              one("SELECT count(*) FROM grade_events WHERE actor = %s AND event IN ('created', 'finalized')", (director,)) >= 2)
 
         print("\n=== 3. a held grade ===")
         t.chk("the cadet has no my_grades row for a grade held by its release time", pts(stu1, H) is None)

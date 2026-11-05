@@ -625,17 +625,8 @@ export async function finalizeScores(ctx, offering, students, gradeData, gradeMa
         .eq('assignment_offering_id', offering.offeringId);
       if (error) console.warn('[grade] published, but confirming effort failed:', error.message);
     }
-
-    // Append-only audit. Best-effort: a failed log entry must not lose the grades that were
-    // just published, so the error is reported but not thrown.
-    const events = (res.data || []).map(g => ({
-      grade_id: g.id, event: 'finalized', actor: ctx.user.id,
-      detail: { offering: offering.offeringId, slug: offering.slug },
-    }));
-    if (events.length) {
-      const { error } = await db.from('grade_events').insert(events);
-      if (error) console.warn('[grade] finalized, but the audit event failed:', error.message);
-    }
+    // The audit row for each publish is written by the database (migration 049), from the signed-in
+    // session. The page writes no grade_events row.
   }
 
   const more = [...(extras.flipItems || []), ...(extras.zeroItems || [])];
@@ -649,11 +640,7 @@ export async function finalizeScores(ctx, offering, students, gradeData, gradeMa
 export async function reopenScore(ctx, offeringId, enrollmentId) {
   const res = await db.from('grades').update({ is_finalized: false })
     .eq('assignment_offering_id', offeringId).eq('enrollment_id', enrollmentId).select('id');
-  if (!res.error && res.data?.length) {
-    await db.from('grade_events').insert({
-      grade_id: res.data[0].id, event: 'reopened', actor: ctx.user.id, detail: {},
-    });
-  }
+  // The audit row ('reopened') is written by the database (migration 049).
   return res;
 }
 
@@ -773,15 +760,8 @@ async function reopenForExtension(ctx, offeringId, enrollmentId, iso, reason) {
     return false;
   }
 
-  // `cause` is the whole point of logging this separately: a month later, a bare 'reopened'
-  // event beside a grade nobody remembers touching reads as an unexplained retraction. The
-  // extension's own reason is copied in rather than referenced, so the entry still says why
-  // if the extension is later amended or removed.
-  const { error: logErr } = await db.from('grade_events').insert({
-    grade_id: grade.id, event: 'reopened', actor: ctx.user.id,
-    detail: { cause: 'extension', extended_due_at: iso, reason },
-  });
-  if (logErr) console.warn('[grade] re-opened by extension, but the audit event failed:', logErr.message);
+  // The 'reopened' audit row is written by the database (migration 049). The reason for it is the
+  // extension itself, which keeps its own reason and its granter in the `extensions` table.
   return true;
 }
 
@@ -1504,22 +1484,8 @@ export async function applyPublishPlan(ctx, items, offerings, { via = 'publish-a
     }
   }
 
-  // Append-only audit, best-effort — the same bargain as finalizeScores(): a failed log entry must
-  // not cost the grades that were just published.
-  const detail = (g, extra = {}) => ({
-    offering: g.assignment_offering_id, slug: offById[g.assignment_offering_id]?.slug || '',
-    via, bulk: true, ...extra,
-  });
-  const events = [
-    ...created.map(g => ({ grade_id: g.id, event: 'created', actor: ctx.user.id,
-                           detail: detail(g, { no_submission: true }) })),
-    ...[...published, ...created].map(g => ({ grade_id: g.id, event: 'finalized', actor: ctx.user.id,
-                                              detail: detail(g) })),
-  ];
-  for (const batch of chunks(events, 200)) {
-    const { error: e } = await db.from('grade_events').insert(batch);
-    if (e) { console.warn('[publish] published, but the audit event failed:', e.message); break; }
-  }
+  // The audit rows for these writes ('created', 'finalized') are written by the database (migration 049).
+  void via;
 
   return { published: published.length, created: created.length, error };
 }

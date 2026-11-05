@@ -340,10 +340,8 @@ eq('one zero upsert', ups.length, 1);
 eq('…that never overwrites a row written in the meantime', ups[0].opts,
    { onConflict: 'enrollment_id,assignment_offering_id', ignoreDuplicates: true });
 eq('counts come back', [out.published, out.created, out.error], [250, 1, null]);
-const evs = CALLS.filter(c => c.table === 'grade_events').flatMap(c => c.payload);
-eq('audit: one created + 251 finalized', [evs.filter(e => e.event === 'created').length,
-                                           evs.filter(e => e.event === 'finalized').length], [1, 251]);
-check('audit says how it was published', evs.every(e => e.detail.via === 'publish-all' && e.detail.bulk === true));
+check('the page writes no audit rows: the database logs the 1 created and 251 finalized (migration 049)',
+      !CALLS.some(c => c.table === 'grade_events'));
 
 section('viewPublishPlan: a viewer who cannot see the whole course never creates a zero');
 

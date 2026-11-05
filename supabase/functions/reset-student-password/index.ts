@@ -195,6 +195,15 @@ serve(async (req) => {
       });
     }
 
+    // ── The record ───────────────────────────────────────────────────────────────────────
+    // The actor is the caller verified from the sign-in token above, never a request value. The reset is
+    // refused if the record cannot be written. A second row follows once the reset is done.
+    const logRow = (event: string) => supabaseAdmin.from("credential_events").insert({
+      event, actor: caller.id, course_offering_id: courseOfferingId, target_student: student.student_id,
+    });
+    const { error: logErr } = await logRow("student_reset_requested");
+    if (logErr) return ok({ error: dbError("record the reset", logErr) });
+
     // ── The reset ────────────────────────────────────────────────────────────────────────
     const { error: updErr } = await supabaseAdmin.auth.admin.updateUserById(
       student.auth_user_id,
@@ -205,6 +214,7 @@ serve(async (req) => {
     );
 
     if (updErr) return ok({ error: dbError("reset the password", updErr) });
+    await logRow("student_reset_done");
 
     // Deliberately NOT returning the password. The caller can derive it from the cadet ID they
     // already have; putting it in an HTTP response body would write it to any proxy log and
