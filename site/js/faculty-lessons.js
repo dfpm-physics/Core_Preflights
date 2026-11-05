@@ -50,6 +50,7 @@
 
 import { db } from './supabase.js';
 import { NEW_PAGE_COLUMN, refuseIfNewPage } from './new-page-guard.js';
+import { checkedRows } from './checked-read.js';
 import {
   OFFERING_SELECT, shapeOffering, questionsOf, lessonNumber, chunked, policyOf,
   ACCESS_OPEN, ACCESS_BY_PERMISSION, writtenAccessOf,
@@ -526,37 +527,52 @@ export function pointsChanged(oldQs, newQs) {
  * Preserves the 3-state status: `zero` stays 0, `full`/`warn` take the new value (warn is full
  * credit with a flag). Questions absent from a row are left alone — they were never graded.
  *
- * @returns {number} rows rewritten (0 if none existed or the write failed).
+ * A GRADE WITH NO PER-QUESTION SCORES IS LEFT EXACTLY AS IT IS. A hand-entered score, a typed
+ * total for a cadet with no submission, and an effort grade all keep `question_scores` empty, and
+ * summing nothing gave 0 — so a point-value change zeroed every one of them, published or not. A
+ * row is rewritten only when it holds a score for at least one question whose value changed.
+ * Only those rows are sent, and `is_finalized` rides through from the row as read.
+ *
+ * A failed read or write THROWS (a ReadFailed or the database's own error). It used to return 0,
+ * which the page reported as "nothing needed updating" while some grades kept the old value.
+ *
+ * @returns {number} rows rewritten.
  */
 export async function retroactivelyUpdateGrades(offeringId, questions, pointsPossible) {
   const qs_ = questions || [];
-  const { data: grades, error } = await db.from('grades')
+  const grades = checkedRows(await db.from('grades')
     .select('id, enrollment_id, question_scores, is_finalized, points_possible')
-    .eq('assignment_offering_id', offeringId);
-  if (error || !grades?.length) return 0;
+    .eq('assignment_offering_id', offeringId), 'the existing grades');
+  if (!grades.length) return 0;
 
   const possible = Number(pointsPossible ?? 0);
-  const rows = grades.map(row => {
+  const rows = [];
+  for (const row of grades) {
     const qs = { ...(row.question_scores || {}) };
+    let touched = false;
     qs_.forEach(q => {
       if (!qs[q.id]) return;                       // never graded — nothing to correct
+      touched = true;
       const status = qs[q.id].status || (Number(qs[q.id].score) > 0 ? 'full' : 'zero');
       qs[q.id] = { ...qs[q.id], max: pointsOf(q), score: status === 'zero' ? 0 : pointsOf(q) };
     });
+    if (!touched) continue;                        // hand-entered, effort or ungraded: not ours to rescore
     const total = qs_.reduce((s, q) => s + (Number(qs[q.id]?.score) || 0), 0);
-    return {
+    rows.push({
       enrollment_id: row.enrollment_id,
       assignment_offering_id: offeringId,
       question_scores: qs,
       points_earned: Math.min(Math.round(total * 1000) / 1000, possible),
       points_possible: possible,
       is_finalized: row.is_finalized,
-    };
-  });
+    });
+  }
+  if (!rows.length) return 0;
 
   const { error: upErr } = await db.from('grades')
     .upsert(rows, { onConflict: 'enrollment_id,assignment_offering_id' });
-  return upErr ? 0 : rows.length;
+  if (upErr) throw upErr;
+  return rows.length;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -783,8 +799,15 @@ export async function saveLesson(ctx, model, editingOfferingId) {
       if (error) return { ...out, error };
       wanted.push({ id: existing.written.id, modality: 'written' });
       if (pointsChanged(prevQs, content.questions) && editingOfferingId) {
-        out.rescored = await retroactivelyUpdateGrades(
-          editingOfferingId, content.questions, model.pointsPossible);
+        try {
+          out.rescored = await retroactivelyUpdateGrades(
+            editingOfferingId, content.questions, model.pointsPossible);
+        } catch (e) {
+          // The lesson itself is saved; its existing grades are not rewritten. Say so, once, as the error.
+          return { ...out, error: new Error(
+            'The lesson was saved, but its existing grades could not be updated to the new point values ('
+            + (e?.message || 'unknown error') + '). Some grades still hold the old values.') };
+        }
       }
     } else {
       const { data, error } = await db.from('activities').insert({

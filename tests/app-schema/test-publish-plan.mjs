@@ -24,6 +24,8 @@ import { check, eq, section, summary, installBrowser } from './harness.mjs';
 installBrowser({ pathname: '/site/faculty/admin.html' });
 
 let CALLS = [];
+// What the database holds now for the version check before a save (updated_at is the version).
+let CURRENT_GRADES = [];
 const stubFrom = (table) => {
   const call = { table, verb: 'select', payload: null, opts: null, filters: [] };
   const c = {};
@@ -38,7 +40,8 @@ const stubFrom = (table) => {
   // read answers nothing, which is the empty course the offline suite wants.
   c.then = (res) => {
     let data = [];
-    if (call.verb === 'update') {
+    if (call.verb === 'select' && table === 'grades') data = CURRENT_GRADES;
+    else if (call.verb === 'update') {
       const ids = call.filters.find(f => f[0] === 'in' && f[1] === 'id')?.[2] || [];
       data = ids.map(id => ({ id, assignment_offering_id: 'off-1' }));
     } else if (Array.isArray(call.payload)) {
@@ -270,6 +273,9 @@ const SAVE_GRADES = {
                                        q3: { score: 1, max: 1, feedback: '', status: 'full' } },
                 finalized: false, source: 'ai_suggested' },
 };
+for (const g of Object.values(SAVE_GRADES)) g.updatedAt = 'v1';
+CURRENT_GRADES = Object.entries(SAVE_GRADES).map(([sid, g]) => ({
+  id: g.gradeId, enrollment_id: `enr-${String(sid).slice(-2)}`, updated_at: 'v1' }));
 const SAVE_SUBS = Object.fromEntries(SAVE_STUDENTS.map(s => [s.student_id, { chosenActivityId: 'act-w' }]));
 const SAVE_ANSWERS = Object.fromEntries(SAVE_STUDENTS.map(s => [s.student_id, ANSWERS]));
 const saveStale = G.staleZeroIds(SAVE_OFF, SAVE_STUDENTS, SAVE_GRADES, SAVE_SUBS, SAVE_ANSWERS);

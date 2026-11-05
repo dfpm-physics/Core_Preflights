@@ -8,6 +8,17 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 step 2: a stale page cannot overwrite a grade; rescoring; checked reads)
+
+**What.** Page and test changes only. No migration (050 is not used) and nothing applied.
+- **Version check on a grade save (E7).** `writeGrades` reads the current `updated_at` of the rows it is about to write and refuses the whole save, writing nothing, if any grade changed, vanished or appeared since the page loaded. The design is in `docs/decisions/V2-DATA-MODEL.md` section 24.1, with what it does not cover.
+- **Rescore (E8).** `retroactivelyUpdateGrades` skips grades with no per-question scores, so a hand-entered 1.5 no longer becomes 0, and it throws on a failed read or write. `saveLesson` returns that as an error saying the lesson was saved and some grades keep the old values.
+- **Checked reads (E9).** New `site/js/checked-read.js`. `loadGradingData` returns an error in place of the cards when any read fails; `gradeMatrix` and `buildBackup` throw, and the Export, Backup and Blackboard-fill handlers in `admin.html` show the message and make no file.
+- **Tests.** New `test-grade-safety.mjs` (39 checks, in the offline list; its E7 checks fail on the old code). Two existing tests now answer the version read.
+- **Not done.** The student pages were already checked on the student branch. `faculty-export.js` was not changed. `site/faculty/lessons.html` is untouched.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 step 2: the grade audit is written by the database, migration 049)
 
 **What.** Migration 049 (not applied anywhere), its rollback, a scratch proof, an offline wiring test and the page and function changes that go with it.

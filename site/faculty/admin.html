@@ -2105,25 +2105,34 @@
       document.getElementById('ex-csv').addEventListener('click', async () => {
         const st = document.getElementById('ex-status');
         const pick = document.getElementById('ex-scope').value;
-        const ids = pick === '__all__' ? await allSectionIds(ctx) : [pick];
         st.style.color = 'var(--muted)'; st.textContent = 'Building…';
-        const matrix = await A.gradeMatrix(ctx, ids);
-        if (!matrix.students.length) { st.style.color = 'var(--red)'; st.textContent = 'No students in scope.'; return; }
-        triggerDownload(A.buildGradesCsv(matrix, (id) => codeOf[id]),
-          A.exportFilename('Grades', 'csv'), 'text/csv');
-        st.style.color = 'var(--green)';
-        st.textContent = `✓ ${matrix.students.length} students, ${matrix.columns.length} assignments`;
+        // A read that fails stops the export with a message. It must never produce a file that looks complete.
+        try {
+          const ids = pick === '__all__' ? await allSectionIds(ctx, { strict: true }) : [pick];
+          const matrix = await A.gradeMatrix(ctx, ids);
+          if (!matrix.students.length) { st.style.color = 'var(--red)'; st.textContent = 'No students in scope.'; return; }
+          triggerDownload(A.buildGradesCsv(matrix, (id) => codeOf[id]),
+            A.exportFilename('Grades', 'csv'), 'text/csv');
+          st.style.color = 'var(--green)';
+          st.textContent = `✓ ${matrix.students.length} students, ${matrix.columns.length} assignments`;
+        } catch (e) {
+          st.style.color = 'var(--red)'; st.textContent = '⚠ ' + (e?.message || 'The export failed.') + ' No file was made.';
+        }
       });
 
       document.getElementById('ex-json').addEventListener('click', async () => {
         const st = document.getElementById('bk-status');
         st.style.color = 'var(--muted)'; st.textContent = 'Building…';
-        const ids = await allSectionIds(ctx);
-        const backup = await A.buildBackup(ctx, ids);
-        triggerDownload(JSON.stringify(backup, null, 2),
-          A.exportFilename('Backup', 'json'), 'application/json');
-        st.style.color = 'var(--green)';
-        st.textContent = `✓ ${backup.enrollments.length} enrollments, ${backup.grades.length} grades`;
+        try {
+          const ids = await allSectionIds(ctx, { strict: true });
+          const backup = await A.buildBackup(ctx, ids);
+          triggerDownload(JSON.stringify(backup, null, 2),
+            A.exportFilename('Backup', 'json'), 'application/json');
+          st.style.color = 'var(--green)';
+          st.textContent = `✓ ${backup.enrollments.length} enrollments, ${backup.grades.length} grades`;
+        } catch (e) {
+          st.style.color = 'var(--red)'; st.textContent = '⚠ ' + (e?.message || 'The backup failed.') + ' No file was made.';
+        }
       });
 
       /* ── Publish everything that is due ────────────────────────────────────────
@@ -2249,7 +2258,7 @@
 
       async function loadFillData() {
         if (bbData) return bbData;
-        const matrix = await A.gradeMatrix(ctx, await allSectionIds(ctx));
+        const matrix = await A.gradeMatrix(ctx, await allSectionIds(ctx, { strict: true }));
         const byCadet = Object.fromEntries(matrix.students.map(s => [s.studentId, s.enrollmentId]));
         bbData = {
           // The lesson number comes off the SLUG (`preflight-08`), which is stable, rather than
@@ -2277,7 +2286,13 @@
         const reader = new FileReader();
         reader.onload = async (e) => {
           const text = new TextDecoder('utf-8', { ignoreBOM: true }).decode(e.target.result);
-          const data = await loadFillData();
+          let data;
+          try { data = await loadFillData(); } catch (err) {
+            // The roster could not be read, so the file cannot be matched to anyone. Say so; do not show an empty match.
+            const box = document.getElementById('bb-preview');
+            if (box) box.innerHTML = `<div class="alert alert-error">${esc(err?.message || 'The roster could not be loaded.')}</div>`;
+            return;
+          }
           const parsed = BB.readFile(text, data.offerings);
           const i = bbFiles.findIndex(f => f.name === file.name);
           const entry = { name: file.name, label: file.name, ...parsed };

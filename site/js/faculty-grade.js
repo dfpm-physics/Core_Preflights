@@ -21,6 +21,7 @@
 import { db } from './supabase.js';
 import { withoutNewPageItems, refuseIfNewPage } from './new-page-guard.js';
 import { lastFirst } from './util.js';
+import { ReadFailed, checkedRows, checkedOne, checkedAll } from './checked-read.js';
 import {
   OFFERING_SELECT, GRADE_SELECT, SUBMISSION_SELECT, EXTENSION_SELECT,
   shapeOffering, withResolvedDue, offeringSections,
@@ -29,13 +30,15 @@ import {
 } from './schema.js';
 
 /** Scheduled assignments for the current offering, for the picker. */
-export async function gradeAssignmentList(ctx) {
+export async function gradeAssignmentList(ctx, { strict = false } = {}) {
   if (!ctx.currentOffering) return [];
   // Items entered on the newer page are left out until this page can grade them. See new-page-guard.js.
-  const { data } = await withoutNewPageItems(db.from('assignment_offerings')
+  const res = await withoutNewPageItems(db.from('assignment_offerings')
     .select('id, due_at, position, is_published, points_possible, assignments!inner(slug, title)')
     .eq('course_offering_id', ctx.currentOffering))
     .order('position', { ascending: false, nullsFirst: false });
+  // `strict`: the export and the backup must not mistake a failed read for an empty course.
+  const data = strict ? checkedRows(res, 'the list of assignments') : res.data;
   return (data || []).map(r => ({
     id: r.id,
     slug: r.assignments?.slug,
@@ -63,10 +66,11 @@ export async function gradeAssignmentList(ctx) {
 export function mySectionIds(ctx) { return actionableSections(ctx).ids; }
 
 /** Every section in the current offering (directors/admins see all of them anyway). */
-export async function allSectionIds(ctx) {
+export async function allSectionIds(ctx, { strict = false } = {}) {
   if (!ctx.currentOffering) return [];
-  const { data } = await db.from('sections').select('id')
+  const res = await db.from('sections').select('id')
     .eq('course_offering_id', ctx.currentOffering).order('code');
+  const data = strict ? checkedRows(res, 'the sections of this course') : res.data;
   return (data || []).map(s => s.id);
 }
 
@@ -80,6 +84,18 @@ export async function allSectionIds(ctx) {
  *   extensionMap: studentId -> ISO date
  */
 export async function loadGradingData(ctx, offeringId, sectionIds) {
+  try {
+    return await readGradingData(ctx, offeringId, sectionIds);
+  } catch (e) {
+    if (!(e instanceof ReadFailed)) throw e;
+    // A failed read is an error on the page, never a card showing "not graded". The pages already show
+    // `refusal.message` in place of the cards. `readFailed` lets a caller tell it from a refusal.
+    return { offering: null, students: [], responseMap: {}, gradeMap: {}, extensionMap: {}, submissionMap: {},
+             refusal: { message: e.message }, readFailed: true };
+  }
+}
+
+async function readGradingData(ctx, offeringId, sectionIds) {
   const empty = { offering: null, students: [], responseMap: {}, gradeMap: {}, extensionMap: {}, submissionMap: {} };
   if (!offeringId) return empty;
 
@@ -88,15 +104,15 @@ export async function loadGradingData(ctx, offeringId, sectionIds) {
   const refused = await refuseIfNewPage(db, offeringId, 'grade');
   if (refused) return { ...empty, refusal: refused.error };
 
-  const { data: offeringRow } = await db.from('assignment_offerings')
-    .select(OFFERING_SELECT).eq('id', offeringId).maybeSingle();
+  const offeringRow = checkedOne(await db.from('assignment_offerings')
+    .select(OFFERING_SELECT).eq('id', offeringId).maybeSingle(), 'this assignment');
   const offering = withResolvedDue(shapeOffering(offeringRow), offeringSections(ctx));
   if (!offering) return empty;
 
   const scope = (sectionIds && sectionIds.length) ? sectionIds : ['00000000-0000-0000-0000-000000000000'];
-  const { data: enrolRows } = await db.from('enrollments')
+  const enrolRows = checkedRows(await db.from('enrollments')
     .select('id, student_id, section_id, status, students!inner(student_id, name)')
-    .in('section_id', scope).eq('status', 'active');
+    .in('section_id', scope).eq('status', 'active'), 'the students in these sections');
 
   const students = (enrolRows || [])
     .map(e => ({
@@ -123,6 +139,8 @@ export async function loadGradingData(ctx, offeringId, sectionIds) {
       .eq('assignment_offering_id', offeringId).in('enrollment_id', enrollmentIds)
       .is('revoked_at', null),
   ]);
+  // Any of the three failing means the cards would show work as missing, ungraded or on time when it is not.
+  checkedAll([subs, grds, exts], 'the work, grades and extensions for this assignment');
 
   const responseMap = {}, submissionMap = {}, gradeMap = {}, extensionMap = {};
 
@@ -553,6 +571,45 @@ export function confirmEffortRows(ctx, offering, students, gradeData, gradeMap =
 }
 
 /**
+ * Which of the rows about to be written belong to a grade someone else has since changed.
+ *
+ * THE VERSION IS `updated_at`. Every change to a grade moves it (the `grades_touch` trigger), so the value this page read
+ * when it loaded is the version it is editing. A row is stale when the grade now carries a different `updated_at`, when
+ * the grade this page held has gone, or when this page held none and one now exists. A page that did not load a version
+ * for a grade it holds cannot be shown to be current, so that is stale too.
+ *
+ * Why it exists: Save sends rows built from page-load memory with a blind upsert. A colleague who published cadet X
+ * after this page loaded had X returned to this page's draft the moment it saved, and the cadet stopped seeing the grade.
+ *
+ * Pure: takes the rows, what the database holds now (enrollment id -> { updated_at }), and what the page loaded
+ * (enrollment id -> { gradeId, updatedAt }). Returns the enrollment ids to refuse.
+ */
+export function staleEnrollments(rows, current, loaded) {
+  const out = [];
+  for (const r of rows) {
+    const now = current[r.enrollment_id];
+    const held = loaded[r.enrollment_id];
+    if (held && held.gradeId) {
+      if (!now || !held.updatedAt || now.updated_at !== held.updatedAt) out.push(r.enrollment_id);
+    } else if (now) {
+      out.push(r.enrollment_id);
+    }
+  }
+  return out;
+}
+
+/** The read behind staleEnrollments(). A failed read throws ReadFailed; a save never proceeds on a guess. */
+async function staleCheck(offering, students, gradeMap, rows) {
+  const loaded = {};
+  for (const s of students) if (gradeMap[s.student_id]) loaded[s.enrollment_id] = gradeMap[s.student_id];
+  const res = await db.from('grades').select('id, enrollment_id, updated_at')
+    .eq('assignment_offering_id', offering.offeringId).in('enrollment_id', rows.map(r => r.enrollment_id));
+  const current = {};
+  for (const g of checkedRows(res, 'the current grades before saving')) current[g.enrollment_id] = g;
+  return staleEnrollments(rows, current, loaded);
+}
+
+/**
  * TWO UPSERTS, NOT ONE, and they cannot be merged.
  *
  * The written rows and the effort rows carry different columns — question_scores and a summed
@@ -568,6 +625,22 @@ async function writeGrades(ctx, offering, students, gradeData, gradeMap, effortD
   const written = gradeRows(ctx, offering, students, gradeData, isFinalized, gradeMap, skipIds);
   const effort = effortRows(ctx, offering, students, effortData, isFinalized, gradeMap);
   if (!written.length && !effort.length) return { data: [], error: null, skipped: true };
+
+  // Version check. All or nothing: a save that refuses some rows and writes others leaves a screen nobody can read.
+  try {
+    const stale = await staleCheck(offering, students, gradeMap, [...written, ...effort]);
+    if (stale.length) {
+      const err = new Error(
+        `${stale.length} grade${stale.length === 1 ? ' has' : 's have'} changed since this page was loaded (a colleague ` +
+        `saved or published, or an analysis run wrote it). Nothing was saved. Reload the page to see the current ` +
+        `grades, then make your changes again.`);
+      err.stale = stale;
+      return { data: null, error: err };
+    }
+  } catch (e) {
+    if (e instanceof ReadFailed) return { data: null, error: e };
+    throw e;
+  }
 
   const ids = [];
   for (const rows of [written, effort]) {

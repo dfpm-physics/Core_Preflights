@@ -18,6 +18,7 @@ import { db } from './supabase.js';
 import { lastFirst, splitName } from './util.js';
 import { gradeAssignmentList } from './faculty-grade.js';
 import { fetchAll } from './schema.js';
+import { checkedRows, checkedAll } from './checked-read.js';
 
 /* ── Roles: TWO, as of 2026-07-27 ─────────────────────────────────────────────
  * `grader` is withdrawn. It was defined as "grades only, no authoring" and never meant anything:
@@ -356,7 +357,7 @@ export function removeStaffSection(ctx, instructorId, sectionId) {
  * @returns {{ columns, students, cell(enrollmentId, columnId) }}
  */
 export async function gradeMatrix(ctx, sectionIds) {
-  const columns = (await gradeAssignmentList(ctx))
+  const columns = (await gradeAssignmentList(ctx, { strict: true }))
     .filter(a => a.is_published)
     .reverse();                       // oldest first reads correctly left-to-right in a gradebook
 
@@ -364,9 +365,9 @@ export async function gradeMatrix(ctx, sectionIds) {
     return { columns, students: [], cell: () => null };
   }
 
-  const { data: enrollments } = await db.from('enrollments')
+  const enrollments = checkedRows(await db.from('enrollments')
     .select('id, student_id, section_id, students!inner(student_id, name)')
-    .in('section_id', sectionIds).eq('status', 'active');
+    .in('section_id', sectionIds).eq('status', 'active'), 'the students to export');
 
   const students = (enrollments || []).map(e => ({
     enrollmentId: e.id,
@@ -377,10 +378,10 @@ export async function gradeMatrix(ctx, sectionIds) {
 
   // Finalized only. A student with no finalized grade exports BLANK, never zero — a zero posts
   // to Blackboard as a real score the instructor never gave.
-  const { data: grades } = await fetchAll(() => db.from('grades')
+  const grades = checkedRows(await fetchAll(() => db.from('grades')
     .select('enrollment_id, assignment_offering_id, points_earned, is_finalized')
     .in('enrollment_id', students.map(s => s.enrollmentId))
-    .eq('is_finalized', true));
+    .eq('is_finalized', true)), 'the grades to export');
 
   const byKey = {};
   (grades || []).forEach(g => { byKey[`${g.enrollment_id}|${g.assignment_offering_id}`] = g.points_earned; });
@@ -424,7 +425,7 @@ export function buildGradesCsv(matrix, sectionCodeOf) {
  * by the page, scoped to the offering, and orders by nothing it does not select.
  */
 export async function buildBackup(ctx, sectionIds) {
-  const [{ data: offerings }, { data: enrollments }] = await Promise.all([
+  const [offeringsRes, enrollmentsRes] = await Promise.all([
     db.from('assignment_offerings')
       .select('id, points_possible, grading_mode, opens_at, due_at, is_published, position, assignments!inner(slug, title, description)')
       .eq('course_offering_id', ctx.currentOffering),
@@ -432,9 +433,11 @@ export async function buildBackup(ctx, sectionIds) {
       .select('id, status, student_id, section_id, students!inner(student_id, name)')
       .in('section_id', sectionIds),
   ]);
+  checkedAll([offeringsRes, enrollmentsRes], 'the course for the backup');
+  const offerings = offeringsRes.data, enrollments = enrollmentsRes.data;
 
   const enrollmentIds = (enrollments || []).map(e => e.id);
-  const [{ data: submissions }, { data: grades }] = await Promise.all([
+  const [subsRes, gradesRes] = await Promise.all([
     enrollmentIds.length
       ? fetchAll(() => db.from('submissions').select('*').in('enrollment_id', enrollmentIds))
       : Promise.resolve({ data: [] }),
@@ -442,6 +445,9 @@ export async function buildBackup(ctx, sectionIds) {
       ? fetchAll(() => db.from('grades').select('*').in('enrollment_id', enrollmentIds))
       : Promise.resolve({ data: [] }),
   ]);
+  // A partial backup that looks complete is worse than none.
+  checkedAll([subsRes, gradesRes], 'the work and grades for the backup');
+  const submissions = subsRes.data, grades = gradesRes.data;
 
   return {
     exported_at: new Date().toISOString(),

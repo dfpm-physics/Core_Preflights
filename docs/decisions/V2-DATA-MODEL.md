@@ -1090,6 +1090,29 @@ Migrations `048` and `059`, with rollbacks, not applied anywhere; proved on thro
 - **Choices, and why.** The server decides time: no client value is accepted, so a changed device clock does nothing. The grace stays 120 seconds and the late rule is the assignment's `late_allowed`. An unreadable deadline commits as on time, because a missing schedule must not refuse a cadet. Practice reports are not committed and stay saveable. The receipt hash covers content plus markdown. The lesson-opening lookup lives in 048 because the receiver page needs it with it. Keys in the lesson editor are sent only when edited, so a save never blanks a key; a new lesson or copy keeps the keys shown. The 059 guard is limited to old versions and API roles so `save_question` and the 047 filing still work.
 - **Known limits.** A cadet can still send any report through `commit_work`; only the first committed report counts. Work committed before 048 has no receipt. The tutor runs on claude.ai, so effort cannot be proved from here.
 
+### 24.1 Saving a grade from an old page (design, added 2026-11-05)
+
+The Grade page builds the rows it saves from what it read when it loaded, then upserts them. A colleague who published
+or changed a grade in between had it returned to this page's draft.
+
+- **The version is `grades.updated_at`.** Every change to a grade moves it (`grades_touch`), so the value the page read is
+  the version it is editing. No new column and no migration: the number 050 is not used.
+- **The rule.** Before a save writes, the page reads the current `updated_at` of every grade it is about to write. A row is
+  stale if the version differs, if the grade it held is gone, if it held none and one now exists, or if it held a grade
+  with no version. If any row is stale the whole save is refused and nothing is written, and the message tells the
+  instructor to reload and make the changes again. Refusing everything is deliberate: a save that writes some rows and not
+  others leaves a screen nobody can read.
+- **What it does not cover.** The check is a read followed by a write, so two saves inside the same few milliseconds are
+  not stopped; closing that needs the check inside one statement (a database function that compares the version in its own
+  `WHERE`), which is a later change. The publish-all flip of other people's drafts (`applyPublishPlan`) is not version
+  checked; it is limited to rows still unpublished. The check is made by the page, not the database, so it protects against
+  a stale page and not against a client that skips it.
+- **Rescoring (E8).** A change to a question's value rewrites only grades that hold a score for a changed question. A grade
+  with no per-question scores (hand-entered, typed, effort) is not sent at all, and a failed read or write is an error the
+  page shows.
+- **Checked reads (E9).** `site/js/checked-read.js` is the one way a loader reads a result: an error throws, naming what
+  could not be read. The grading page, the grade export and the backup use it, so a failed read shows a message and no file.
+
 After `039`:
 
 - Regenerate `site/js/db-schema.js` with `scripts/app/gen_db_schema.py`.

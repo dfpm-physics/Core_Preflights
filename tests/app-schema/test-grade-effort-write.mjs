@@ -24,6 +24,8 @@ import { check, eq, section, summary, installBrowser } from './harness.mjs';
 installBrowser({ pathname: '/site/faculty/grade.html' });
 
 let CALLS = [];
+// What the database holds now for the version check before a save (migration-free: updated_at is the version).
+let CURRENT_GRADES = [];
 const stubFrom = (table) => {
   const state = { table, verb: 'select' };
   const c = {};
@@ -34,7 +36,7 @@ const stubFrom = (table) => {
     c[verb] = (payload) => { state.verb = verb; CALLS.push({ table, verb, payload }); return c; };
   // Every write here is followed by .select('id'); resolve with one row per payload row so the
   // grade_events fan-out in finalizeScores has something to map over.
-  c.then = (res) => res({
+  c.then = (res) => state.verb === 'select' && table === 'grades' ? res({ data: CURRENT_GRADES, error: null }) : res({
     data: Array.isArray(CALLS.at(-1)?.payload)
       ? CALLS.at(-1).payload.map((_, i) => ({ id: `g-${i}` })) : [],
     error: null,
@@ -69,8 +71,9 @@ const ARTIFACT = {
 };
 const GRADE_MAP = {
   1002: { gradeId: 'g-1002', qs: {}, finalized: true, effort: 4, pointsEarned: 2,
-          diagnostic: ARTIFACT, source: 'derived' },
+          diagnostic: ARTIFACT, source: 'derived', updatedAt: 'v1' },
 };
+CURRENT_GRADES = [{ id: 'g-1002', enrollment_id: 'enr-1002', updated_at: 'v1' }];
 
 const freshEffort = () => G.buildEffortData(
   OFFERING, STUDENTS, GRADE_MAP,
@@ -199,6 +202,7 @@ eq('…it is an empty object', Object.keys(bare.diagnostic || {}).length, 0);
 section('the two row kinds go in SEPARATE upserts, never one array');
 
 CALLS = [];
+CURRENT_GRADES = [...CURRENT_GRADES, { id: 'g-1005', enrollment_id: 'enr-1005', updated_at: 'v1' }];
 const gdWritten = G.buildGradeData(
   OFFERING,
   [{ student_id: 1005, name: 'Wrote, Wendy', enrollment_id: 'enr-1005', section_id: 'sec-a' }],
@@ -216,7 +220,7 @@ edBoth[1002].points = 0;
 edBoth[1002].modified = true;
 
 await G.saveScores(ctx, OFFERING, bothStudents, gdWritten,
-  { ...GRADE_MAP, 1005: { gradeId: 'g-1005', qs: {}, finalized: false, source: 'ai_suggested' } },
+  { ...GRADE_MAP, 1005: { gradeId: 'g-1005', qs: {}, finalized: false, source: 'ai_suggested', updatedAt: 'v1' } },
   edBoth);
 
 const ups = lastGradeUpserts();
