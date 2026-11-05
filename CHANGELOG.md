@@ -8,6 +8,16 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage E, answer checking, built offline, not deployed)
+
+**What:** one number reader and checker (`site/js/numeric-answer.js`, copied into `supabase/functions/check-answer/`); the `check-answer` function logic; migrations `app/070` and `app/071` with rollbacks (deadline, attempt limit, key version, lock, attempt row, `auto_checked` grade, all in the database, execute for `service_role` only); two offline suites; a scratch-database proof and load test (`scripts/staging/scratch_stage_e_proof.py`); `docs/decisions/V2-STAGE-E-ANSWERS.md` with the decisions, Stage D dependencies and the gate test list.
+
+**Why:** online numeric homework must work on the first homework due date. Open: whether Cengage and WebAssign are used in Spring 2027 is unknown as far as is known (at least one version of a similar class will not use it); the build does not depend on it. Default used, still unanswered: each student gets the same numbers.
+
+**Deliberately not done:** nothing deployed or applied to staging or production; no AI key-writing step; no student page; no re-mark function; `check-answer` not added to the deploy list; `site/faculty/` untouched. The scratch proof's last pass (80 checks, 0 failed, load of 150 students) is recorded in the decision doc.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 Stage C staff pages, on staging, `v2` branch)
 
 - **Rough Items page for directors, `site/faculty/items.html`, on staging only.** It enters work of all seven
