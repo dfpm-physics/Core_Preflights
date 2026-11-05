@@ -734,7 +734,9 @@ Headers: READ_HEADERS
 
 **Guard 1 — a finalized row is dropped whole.** `is_finalized = true` is an instructor's published
 decision; a re-run must not silently revert it. (The pre-`app` skill had no such guard and would
-have overwritten a finalized score.) Report the count as `skipped_finalized`.
+have overwritten a finalized score.) Report the count as `skipped_finalized`. If a person finalizes a
+row between this read and the write, the database refuses that row (on an item with an `ai_drafted`
+path) and the bulk request fails as a whole: re-read, drop that row, and write the rest again.
 
 **Guard 2 — an instructor draft protects a QUESTION, not a student.** `source = 'instructor'` with
 `is_finalized = false` is a saved but unpublished draft, and it is the case that actually bites on

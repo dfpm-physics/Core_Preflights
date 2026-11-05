@@ -36,6 +36,14 @@ BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL search_path = app, public;
 
+-- 078 holds the line these rules used to hold for an AI-drafted item. Without it the finalize gap is open, so refuse.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'grades_ai_drafts_need_a_person' AND NOT tgisinternal) THEN
+    RAISE EXCEPTION '079 refused: migration 078 is not applied. Apply 078 first.' USING ERRCODE = 'check_violation';
+  END IF;
+END $$;
+
 DROP TRIGGER IF EXISTS assignment_offerings_new_stay_unpublished ON assignment_offerings;
 DROP FUNCTION IF EXISTS assignment_offerings_new_stay_unpublished();
 

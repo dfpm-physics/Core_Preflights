@@ -570,7 +570,7 @@ def _offering_activity_ids(conn, offering_id):
     cur.execute("""
         select max(case when act.modality = 'interactive' then act.id::text end) as interactive_id,
                max(case when act.modality = 'written' and not /*SKIP*/ then act.id::text end) as written_id,
-               coalesce(bool_or(act.modality = 'written' and /*SKIP*/), false) as written_withheld
+               coalesce(bool_or(act.modality = 'written' and /*SKIP*/ and oa.grading_role = 'graded' and oa.is_visible), false) as written_withheld
           from offering_activities oa
           join assignment_offerings ao on ao.id = oa.assignment_offering_id
           join activities act on act.id = oa.activity_id
@@ -656,7 +656,7 @@ def _lesson_meta(conn, slug, term=None):
                max(case when act.modality = 'written' and not /*SKIP*/ then act.slug end)     as written_slug,
                max(case when act.modality = 'written' and not /*SKIP*/
                         then act.content::text end)                              as written_content,
-               coalesce(bool_or(act.modality = 'written' and /*SKIP*/), false)   as written_withheld
+               coalesce(bool_or(act.modality = 'written' and /*SKIP*/ and oa.grading_role = 'graded' and oa.is_visible), false) as written_withheld
           from assignment_offerings ao
           join assignments          a  on a.id  = ao.assignment_id
           join course_offerings     co on co.id = ao.course_offering_id
@@ -1675,6 +1675,7 @@ def cmd_worklist(args, conn):
            -- left out whole.
            and not exists (select 1 from offering_activities ob
                             where ob.assignment_offering_id = ao.id
+                              and ob.grading_role = 'graded' and ob.is_visible     -- a hidden or practice path takes no part
                               and /*INELIGIBLE*/)
          -- d.track breaks the tie between tracks sharing one deadline. Without it the order of
          -- two otherwise-identical rows is whatever the plan happens to emit, and --latest picks

@@ -8,6 +8,21 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (second fix round on the roll-in: Published control, database rules, hand pulls; branch `v2-step2-rollin`, local, not applied anywhere)
+
+**What.**
+- **Assignments page: a Published control.** The form has a "Published (visible to students)" box above Save. Publishing is the last write of a save, so a refusal leaves a complete, saved, unpublished item and says so, using the older editor's sentence. A prefill link's publish flag only ticks the box for the director to review; saving is the director's act, and choosing an existing assignment for a link does not carry the flag. The list banner and the browser-harness line that said the page saves unpublished were reworded.
+- **Migration 078 (not yet applied; edited in place):** a path graded `ai_drafted` also cannot be moved to another item while grades exist; a finalized mark on such an item is deleted only by a staff session (removing the item or the enrollment still cascades); the "nothing audited changed" exemption now also compares the over-max flag, the graded-at stamp and the instructor note a cadet reads. Its rollback also refuses while an `ai_drafted` path sits on an older-page item. Migration 079 refuses to run unless 078 is applied.
+- **Hand-started rollup pull:** a Choice item whose typed side is marked by a person refuses unless `--tutor-only` is given, and with that flag says the typed side is not in the pull. A hidden or practice person-marked path no longer takes the item out of the nightly list.
+- **Free-response editor:** question points of Infinity or beyond 1000 are refused (they were stored as null). One stale page sentence and a harness line now say Assignments page.
+- `docs/decisions/V2-DATA-MODEL.md` section 24.3 states the Choice-item limit as it is (nightly list and hand pull), what 078 now covers, and the operator scripts it stops. The preflight-analyze skill says what to do when a person finalizes a row between its read and its write.
+
+**Proofs.** Each new check was shown failing against the previous code first (the 079 rollback refusal and the hand-pull refusal included), then passing. Scratch databases through migration 079, all dropped afterwards: 118, 44, 14, 77, 11, 19 and 165 checks passed. Offline suites: 67 of 67 clean (see the run recorded with the commit). The page policy hash of every page was recomputed; the Assignments page and the entry page changed and were updated.
+
+**Not done.** Nothing applied to any database; no Fall row written; `lessons.html` and `faculty-lessons.js` untouched; no page opened in a browser. Open minors, not fixed: the older "Item" wording across the entry and backlog pages and two Health fix texts; the question editor redraws when the answer keys arrive late (focus can be lost); typing before the key read finishes replaces stored guidance; a saved item holding a numerical or multiple-choice question cannot be re-saved untouched if the key read fails; Add can be clicked before the question-id read returns; an AI-drafted question with empty guidance is a hint, not a refusal; the editor's own rows are not on the shared form grid; the questions page still says its assignment "stays unpublished"; Publish-all skips online-question items (needs a decision); the staging proof has no fingerprint round trip.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (Assignments page: tutor links, release date, two paths on one item; branch `v2-step2-rollin`, local, not pushed)
 
 **What was done.** The Assignments page (`site/faculty/items.html`, `site/js/faculty-items.js`) now covers what the older lesson editor did for tutors, in the new item model.

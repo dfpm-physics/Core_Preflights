@@ -15,20 +15,25 @@
 --      graded ai_drafted, a write that finalizes a mark, or that un-finalizes a finalized one, is refused unless the
 --      session names a staff member (audit_actor() is not null). A script on the service key or on a pooled data role
 --      names no one, so a nightly upsert that writes is_finalized = false over a released mark is refused too. An update
---      that changes nothing audited on an already finalized row is let through. It does not read `source`: the grade page
+--      that changes nothing audited on an already finalized row (points, source, effort, per-question scores, grader,
+--      enrollment, the over-max flag, the graded-at stamp, and the instructor note a cadet reads inside diagnostic) is let
+--      through. It does not read `source`: the grade page
 --      keeps `ai_suggested` when a person accepts an untouched draft, and refusing that value would block the review it
 --      exists to allow.
 --      The rule applies to the typed path only. An offering that offers a choice (a typed path graded ai_drafted and a
 --      tutor path) also takes a cadet's tutor report, which writes a derived, finalized grade as the cadet commits. That
 --      grade is let through when it is derived from a committed submission whose chosen path is not the ai_drafted one.
---   2. offering_activities_ai_drafted_stays  (BEFORE UPDATE OF grading, and BEFORE DELETE, on offering_activities). A
---      path graded ai_drafted cannot be switched to another grading, or removed, while the offering holds any grade,
---      unless the session names a staff member. Without this the first rule could be stepped around by editing the path.
---      A delete that is part of removing the whole offering is not affected.
+--   2. offering_activities_ai_drafted_stays  (BEFORE UPDATE OF grading, assignment_offering_id, and BEFORE DELETE, on
+--      offering_activities). A path graded ai_drafted cannot be switched to another grading, moved to another item, or
+--      removed, while the offering holds any grade, unless the session names a staff member. Without this the first rule
+--      could be stepped around by editing the path. A delete that is part of removing the whole offering is not affected.
+--   3. grades_ai_drafts_keep_released  (BEFORE DELETE on grades, finalized rows only). On an offering that has an
+--      ai_drafted path, a finalized mark is deleted only by a session that names a staff member. A delete that is part of
+--      removing the whole offering, or the enrollment, is not affected (the parent row is already gone when it fires).
 --
 -- WHAT IT DOES NOT DO
---   It changes no stored row and no other function, and it does not apply to an item with no ai_drafted path. It does
---   not stop a deleted grade row. It trusts the session to say who is signed in: it stops a script that names no one, and
+--   It changes no stored row and no other function, and it does not apply to an item with no ai_drafted path. It leaves
+--   an unfinalized draft deletable and rewritable by a script (that is the nightly job's work). It trusts the session to say who is signed in: it stops a script that names no one, and
 --   it is not a defence against a connection that supplies its own session claims.
 --
 -- Rollback: rollback/078_ai_drafts_need_a_person_ROLLBACK.sql.
@@ -70,7 +75,10 @@ BEGIN
      AND NEW.effort           IS NOT DISTINCT FROM OLD.effort
      AND NEW.question_scores  IS NOT DISTINCT FROM OLD.question_scores
      AND NEW.graded_by        IS NOT DISTINCT FROM OLD.graded_by
-     AND NEW.enrollment_id    IS NOT DISTINCT FROM OLD.enrollment_id THEN
+     AND NEW.enrollment_id    IS NOT DISTINCT FROM OLD.enrollment_id
+     AND NEW.over_max_allowed IS NOT DISTINCT FROM OLD.over_max_allowed
+     AND NEW.graded_at        IS NOT DISTINCT FROM OLD.graded_at
+     AND (NEW.diagnostic -> 'instructor_note') IS NOT DISTINCT FROM (OLD.diagnostic -> 'instructor_note') THEN
     RETURN NEW;                                   -- already finalized by a person, nothing audited changes
   END IF;
   RAISE EXCEPTION
@@ -99,7 +107,8 @@ AS $$
 BEGIN
   IF audit_actor() IS NULL
      AND OLD.grading = 'ai_drafted'
-     AND (TG_OP = 'DELETE' OR NEW.grading IS DISTINCT FROM 'ai_drafted')
+     AND (TG_OP = 'DELETE' OR NEW.grading IS DISTINCT FROM 'ai_drafted'
+          OR NEW.assignment_offering_id IS DISTINCT FROM OLD.assignment_offering_id)
      AND EXISTS (SELECT 1 FROM assignment_offerings ao WHERE ao.id = OLD.assignment_offering_id)
      AND EXISTS (SELECT 1 FROM grades g WHERE g.assignment_offering_id = OLD.assignment_offering_id) THEN
     RAISE EXCEPTION
@@ -116,11 +125,39 @@ COMMENT ON FUNCTION offering_activities_ai_drafted_stays() IS
   'Keeps an ai_drafted path in place while the offering holds grades, unless the session names a staff member. Migration 078.';
 
 CREATE TRIGGER offering_activities_ai_drafted_stays
-  BEFORE UPDATE OF grading OR DELETE ON offering_activities
+  BEFORE UPDATE OF grading, assignment_offering_id OR DELETE ON offering_activities
   FOR EACH ROW
   EXECUTE FUNCTION offering_activities_ai_drafted_stays();
 
+CREATE FUNCTION grades_ai_drafts_keep_released() RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = app, pg_temp
+AS $$
+BEGIN
+  IF audit_actor() IS NULL
+     AND EXISTS (SELECT 1 FROM offering_activities oa
+                  WHERE oa.assignment_offering_id = OLD.assignment_offering_id AND oa.grading = 'ai_drafted')
+     AND EXISTS (SELECT 1 FROM assignment_offerings ao WHERE ao.id = OLD.assignment_offering_id)
+     AND EXISTS (SELECT 1 FROM enrollments e WHERE e.id = OLD.enrollment_id) THEN
+    RAISE EXCEPTION
+      'grade on assignment offering %: a released mark on an AI-drafted item is deleted only by a signed-in staff member (grades_ai_drafts_keep_released)',
+      OLD.assignment_offering_id USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN OLD;
+END; $$;
+
+COMMENT ON FUNCTION grades_ai_drafts_keep_released() IS
+  'Refuses deleting a finalized mark on an item with an ai_drafted path unless the session names a staff member. Removing the whole offering or enrollment is not affected. Migration 078.';
+
+CREATE TRIGGER grades_ai_drafts_keep_released
+  BEFORE DELETE ON grades
+  FOR EACH ROW WHEN (OLD.is_finalized)
+  EXECUTE FUNCTION grades_ai_drafts_keep_released();
+
 REVOKE ALL ON FUNCTION grades_ai_drafts_need_a_person()
+  FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
+REVOKE ALL ON FUNCTION grades_ai_drafts_keep_released()
   FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
 REVOKE ALL ON FUNCTION offering_activities_ai_drafted_stays()
   FROM PUBLIC, anon, authenticated, service_role, prep_app_dml, prep_app_read;
@@ -130,10 +167,10 @@ COMMIT;
 -- =====================================================================================
 -- VERIFY (read-only; run after applying)
 -- =====================================================================================
---   -- 3 rows
+--   -- 4 rows
 --   SELECT tgname FROM pg_trigger WHERE tgname IN ('grades_ai_drafts_need_a_person', 'grades_ai_drafts_need_a_person_ins',
---     'offering_activities_ai_drafted_stays') AND NOT tgisinternal;
+--     'grades_ai_drafts_keep_released', 'offering_activities_ai_drafted_stays') AND NOT tgisinternal;
 --   -- must be 0 rows: nobody can execute either function directly
 --   SELECT grantee FROM information_schema.routine_privileges
---    WHERE specific_schema = 'app' AND routine_name IN ('grades_ai_drafts_need_a_person', 'offering_activities_ai_drafted_stays')
+--    WHERE specific_schema = 'app' AND routine_name IN ('grades_ai_drafts_need_a_person', 'grades_ai_drafts_keep_released', 'offering_activities_ai_drafted_stays')
 --      AND grantee IN ('anon', 'authenticated', 'service_role', 'prep_app_dml', 'prep_app_read');

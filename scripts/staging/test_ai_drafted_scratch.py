@@ -321,6 +321,61 @@ def main():
                       (NOGR["activities"][0], NOGR["ao"]), role="service_role")
         t.chk("PATH: with no grades yet a script may still change it", r == ("ok", 1), r)
 
+        print("\n=== AFTER 078: a path cannot be moved to another item; a released mark cannot be deleted or quietly edited ===")
+        GRADE_ROW = ("INSERT INTO grades (enrollment_id, assignment_offering_id, points_earned, points_possible, source, is_finalized) "
+                     "VALUES (%s,%s,1,2,'ai_suggested',%s)")
+        MV = written_item("ai_drafted")
+        cur.execute("BEGIN")
+        b.publish(MV)
+        term2 = b.term("spring-2027", "Spring 2027", "2027-01-10", "2027-05-10")
+        co2 = b.offering(course, term2, False)
+        ao2 = str(uuid.uuid4())
+        cur.execute("INSERT INTO assignment_offerings (id, assignment_id, course_offering_id, due_by_day, grading_mode, points_possible, is_published, entered_on_new_page) "
+                    "VALUES (%s,%s,%s,'{}'::jsonb,'points',2,false,false)", (ao2, MV["assignment"], co2))
+        cur.execute("COMMIT")
+        r = s.attempt(director, GRADE_ROW, (enr1, MV["ao"], True), keep=True)
+        t.chk("MOVE: setup, a staff member releases a mark on the item", r == ("ok", 1), r)
+        r = s.attempt(None, "UPDATE offering_activities SET assignment_offering_id = %s WHERE activity_id = %s AND assignment_offering_id = %s",
+                      (ao2, MV["activities"][0], MV["ao"]), role="service_role")
+        t.chk("MOVE: a script cannot move an ai_drafted path to another item while grades exist", refuses(r, "offering_activities_ai_drafted_stays"), r)
+        r = s.attempt(None, "UPDATE offering_activities SET position = 3 WHERE activity_id = %s AND assignment_offering_id = %s",
+                      (MV["activities"][0], MV["ao"]), role="service_role")
+        t.chk("MOVE: an ordinary update of the same path is still allowed", r == ("ok", 1), r)
+
+        r = s.attempt(None, "DELETE FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", (enr1, MV["ao"]), role="service_role")
+        t.chk("DELETE: a script cannot delete a released mark on an ai_drafted item", refuses(r, "grades_ai_drafts_keep_released"), r)
+        r = s.attempt(director, "DELETE FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", (enr1, MV["ao"]))
+        t.chk("DELETE: a signed-in staff member may", r == ("ok", 1), r)
+        r = s.attempt(None, GRADE_ROW, (enr2, MV["ao"], False), role="service_role", keep=True)
+        r = s.attempt(None, "DELETE FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", (enr2, MV["ao"]), role="service_role")
+        t.chk("DELETE: a script may delete an unfinalized draft", r == ("ok", 1), r)
+        r = s.attempt(None, "DELETE FROM grades WHERE enrollment_id = %s AND assignment_offering_id = %s", (enr1, plain["ao"]), role="service_role")
+        t.chk("DELETE: a released mark on an item with no ai_drafted path is unchanged (a script may delete)", r[0] == "ok", r)
+        CASC = written_item("ai_drafted")
+        cur.execute("BEGIN")
+        b.publish(CASC)
+        cur.execute("COMMIT")
+        s.attempt(director, GRADE_ROW, (enr1, CASC["ao"], True), keep=True)
+        r = sql_try("DELETE FROM assignment_offerings WHERE id = %s", (CASC["ao"],))
+        t.chk("DELETE: removing the whole item still removes its released marks (the cascade is not blocked)", r == ("ok", 1), r)
+        cur.execute("BEGIN")
+        enr4, stu4 = b.cadet(3000000774, "Dot Invented", sec)
+        cur.execute("COMMIT")
+        s.attempt(director, GRADE_ROW, (enr4, MV["ao"], True), keep=True)
+        r = sql_try("DELETE FROM enrollments WHERE id = %s", (enr4,))
+        t.chk("DELETE: removing an enrollment still removes its released marks (the cascade is not blocked)", r == ("ok", 1), r)
+
+        r = s.attempt(director, GRADE_ROW, (enr3, MV["ao"], True), keep=True)
+        for label, setter in (("graded_at", "graded_at = now() - interval '1 day'"),
+                              ("over_max_allowed", "over_max_allowed = true"),
+                              ("the note a cadet reads (diagnostic.instructor_note)", "diagnostic = jsonb_set(diagnostic, '{instructor_note}', '\"x\"')")):
+            r = s.attempt(None, f"UPDATE grades SET {setter} WHERE enrollment_id = %s AND assignment_offering_id = %s",  # noqa: S608
+                          (enr3, MV["ao"]), role="service_role")
+            t.chk(f"EXEMPT: a script cannot change {label} on a released mark", refuses(r, "grades_ai_drafts_need_a_person"), r)
+        r = s.attempt(None, "UPDATE grades SET diagnostic = diagnostic || '{\"q2_effort\": 3}'::jsonb WHERE enrollment_id = %s AND assignment_offering_id = %s",
+                      (enr3, MV["ao"]), role="service_role")
+        t.chk("EXEMPT: another key of diagnostic stays open to a script (it never reaches points or a cadet)", r == ("ok", 1), r)
+
         print("\n=== AFTER 078: one Choice item end to end (tutor submit by a cadet session, overnight draft, staff finalize, upsert) ===")
         MX = new_item([{"modality": "written", "delivery": "typed_response", "grading": "ai_drafted", "warn": True},
                        {"modality": "interactive"}])
@@ -433,11 +488,16 @@ def main():
                              {"modality": "interactive"}], {"entered_on_new_page": True}),
             ("mixed_ai", [{"modality": "written", "delivery": "typed_response", "grading": "ai_drafted", "warn": True},
                           {"modality": "interactive"}], {"entered_on_new_page": True}),
+            # a person-marked typed path that is hidden from cadets takes no part in the item, so it must not hide the item
+            ("mixed_hidden", [{"modality": "written", "delivery": "typed_response", "grading": "human_graded", "warn": True},
+                              {"modality": "interactive"}], {"entered_on_new_page": True}),
         ]:
             wl[key] = new_item(paths, due_by_day={"M": past}, **kw)
             cur.execute("BEGIN")
             b.publish(wl[key])
             cur.execute("COMMIT")
+        sql_do("UPDATE offering_activities SET is_visible = false WHERE assignment_offering_id = %s AND delivery = 'typed_response'",
+               (wl["mixed_hidden"]["ao"],))
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             la.cmd_worklist(Namespace(course="aid-101", day=None, as_of=None, latest=False, json=True), s.conn)
@@ -448,6 +508,10 @@ def main():
         t.chk("WORKLIST: a choice item whose typed path a person marks is not listed (the tutor path cannot carry it in)",
               wl["mixed_human"]["slug"] not in listed, sorted(listed))
         t.chk("WORKLIST: a choice item whose typed path is ai_drafted is listed", wl["mixed_ai"]["slug"] in listed)
+        t.chk("WORKLIST: a hidden person-marked typed path does not hide the item (only a graded, visible one does)",
+              wl["mixed_hidden"]["slug"] in listed, sorted(listed))
+        t.chk("PULL: and a hidden person-marked typed path is not reported as a withheld side",
+              not la._lesson_meta(s.conn, wl["mixed_hidden"]["slug"], None).get("written_withheld"))
         # the pull must not hand the job the typed side either
         for key, expect in (("mixed_human", False), ("mixed_ai", True), ("fall", True)):
             got = la._offering_activity_ids(s.conn, wl[key]["ao"])
@@ -489,7 +553,14 @@ def main():
         t.chk("ROLLBACK 079 can be applied over again (079 re-applies)", s.apply_file(M79))
         t.chk("ROLLBACK 078 refuses while an ai_drafted path exists and 079 is applied", not s.apply_file(R78, rollback=True, quiet=True))
         t.chk("ROLLBACK 079 applies once more", s.apply_file(R79, rollback=True))
-        t.chk("ROLLBACK 078 applies once the step 1 grade rule is back", s.apply_file(R78, rollback=True))
+        t.chk("ROLLBACK 078 refuses while an ai_drafted path sits on an older-page item (the step 1 rule does not cover it)",
+              one("SELECT count(*) FROM offering_activities oa JOIN assignment_offerings ao ON ao.id = oa.assignment_offering_id "
+                  "WHERE oa.grading = 'ai_drafted' AND NOT ao.entered_on_new_page") > 0 and not s.apply_file(R78, rollback=True, quiet=True))
+        r = s.attempt(director, "UPDATE offering_activities oa SET grading = 'human_graded' FROM assignment_offerings ao "
+                                "WHERE ao.id = oa.assignment_offering_id AND oa.grading = 'ai_drafted' AND NOT ao.entered_on_new_page", keep=True)
+        t.chk("ROLLBACK 078: a staff member moves those paths off ai_drafted", r[0] == "ok" and r[1] > 0, r)
+        t.chk("ROLLBACK 078 applies once the step 1 grade rule is back and no ai_drafted path sits outside it", s.apply_file(R78, rollback=True))
+        t.chk("APPLY 079 without 078 present is refused", not s.apply_file(M79, quiet=True))
         r = s.attempt(None, "UPDATE grades SET points_earned = 2 WHERE enrollment_id = %s AND assignment_offering_id = %s", (enr1, AI["ao"]), role="service_role")
         t.chk("ROLLBACK 078: the gap is open again", r == ("ok", 1), r)
         sql_do("UPDATE offering_activities SET grading = 'human_graded' WHERE grading = 'ai_drafted'")

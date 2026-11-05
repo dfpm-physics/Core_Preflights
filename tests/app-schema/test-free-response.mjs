@@ -224,6 +224,11 @@ section('checks on the question set');
   const problems = F.checkEditor(bad);
   check('a blank question text is named', problems.some(p => /Question 3 needs its text/.test(p)), problems);
   check('negative points are named', problems.some(p => /Question 3 needs points/.test(p)));
+  for (const v of ['Infinity', '1e999', '-Infinity', 1e400, 1e7]) {
+    const e = F.emptyEditor();
+    e.questions.push({ ...F.newQuestion('free_response', e.questions), text: 'Why?', points: v });
+    check(`points of ${String(v)} are refused (stored as null otherwise)`, F.checkEditor(e).some(p => /needs points/.test(p)));
+  }
   check('a non-number answer is named', problems.some(p => /Question 4 needs a number/.test(p)));
   check('a tolerance out of range is named', problems.some(p => /Question 4 needs a tolerance/.test(p)));
   check('a multiple-choice question with empty options is named', problems.some(p => /Question 5 needs at least two/.test(p)));

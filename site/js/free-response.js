@@ -205,6 +205,9 @@ export function questionPoints(editor) {
   return (editor.questions || []).reduce((n, q) => n + (isNaN(Number(q.points)) ? 0 : Number(q.points)), 0);
 }
 
+/** A question's points are stored as a number; Infinity and 1e999 would be stored as null. Nothing real is worth this much. */
+const MAX_QUESTION_POINTS = 1000;
+
 const NUMBER_RE = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/;
 
 /** Problems with the question set, as plain sentences. An empty list means it may be saved. */
@@ -217,7 +220,7 @@ export function checkEditor(editor) {
     if (!String(q.text || '').trim()) out.push(`${n} needs its text.`);
     const pts = Number(q.points);
     // The reading-time question is worth 0 and is saved as 0 whatever the box held, so it needs no check.
-    if (q.role !== 'reading_time' && (q.points === '' || q.points == null || isNaN(pts) || pts < 0)) out.push(`${n} needs points (0 or more).`);
+    if (q.role !== 'reading_time' && (q.points === '' || q.points == null || !Number.isFinite(pts) || pts < 0 || pts > MAX_QUESTION_POINTS)) out.push(`${n} needs points (0 or more).`);
     if (q.type === 'multiple_choice') {
       const opts = (q.options || []).filter(o => String(o).trim().length > 2);
       if (opts.length < 2) out.push(`${n} needs at least two answer options.`);

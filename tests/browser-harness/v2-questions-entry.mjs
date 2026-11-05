@@ -280,7 +280,7 @@ check('each row shows its key version', (await d.$$eval('#q-table tbody tr', rs 
 // human-graded item: prose is offered
 check('Questions button opens the human-graded item', await openQuestions(d, `${TAG} human`));
 text = await pageText(d);
-check('the human-graded page says its points are set on the Items page', /human graded/.test(text) && /set on the Items page/.test(text));
+check('the human-graded page says its points are set on the Assignments page', /human graded/.test(text) && /set on the Assignments page/.test(text));
 const hf = await d.evaluate(async () => { document.getElementById('add-btn').click(); await new Promise(r => setTimeout(r, 200));
   const v = [...document.querySelectorAll('#q-format option')].map(o => o.value); document.querySelector('#q-modal [data-close]').click(); return v; });
 check('prose is offered on a human-graded item', hf.includes('prose') && hf.length === 4, JSON.stringify(hf));
