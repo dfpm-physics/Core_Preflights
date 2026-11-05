@@ -103,7 +103,7 @@
     // document.referrer, but a later render must not re-read a value that has gone stale.
     const back = S.backTarget(document.referrer);
 
-    let vm = null, rows = [], totals = null, classStats = null, editingId = null;
+    let vm = null, rows = [], totals = null, editingId = null;
 
     async function init() {
       initTheme();
@@ -113,37 +113,33 @@
       await load();
     }
 
-    async function load() {
+    // Returns true when the page was read and drawn. `saved` is the sentence for a change that was just written:
+    // if the re-read then fails, the page says the change WAS saved and that the read failed, never only the failure.
+    async function load(saved = null) {
       const root = document.getElementById('main');
       root.innerHTML = `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
 
       const res = await S.loadStudentDetail(ctx, enrollmentId);
-      if (res.noCourse)   return fail('No course access.');
-      if (res.notFound)   return fail('That student is not in any section you can see.');
-      if (res.otherCourse) return fail('That student is enrolled in a different course. Switch course from the user menu.');
-      if (res.error)      return fail('Could not load: ' + res.error.message);
+      if (res.noCourse)   return fail('No course access.', saved);
+      if (res.notFound)   return fail('That student is not in any section you can see.', saved);
+      if (res.otherCourse) return fail('That student is enrolled in a different course. Switch course from the user menu.', saved);
+      if (res.error)      return fail('Could not load: ' + res.error.message, saved);
 
       vm = res;
       rows = S.lessonRows(res);
-      totals = S.studentTotals(rows);
+      totals = S.studentTotal(res.dbTotal);
       render();
-
-      // Cohort context arrives after first paint. It is a much wider read than the rest of this
-      // page and the page is useful without it, so it must never gate the render.
-      S.loadClassContext(ctx, res.enrollment.sectionId).then(cs => {
-        classStats = cs?.section || null;
-        const host = document.getElementById('sd-compare');
-        if (host && classStats) host.outerHTML = compareCard();
-        const ta = document.getElementById('sd-comment-text');
-        if (ta && !ta.dataset.touched) ta.value = buildComment();
-      });
+      return true;
     }
 
-    function fail(msg) {
+    function fail(msg, saved = null) {
       document.getElementById('main').innerHTML =
         `<div class="page-head"><h1>Student</h1></div>
-         <div class="alert alert-warn">${esc(msg)}</div>
-         <a class="btn btn-secondary btn-sm" href="${esc(back)}">← Back</a>`;
+         ${saved ? `<div class="alert alert-success">${esc(saved)} Your change was saved.</div>` : ''}
+         <div class="alert alert-${saved ? 'error' : 'warn'}">${esc(msg)}${saved ? ' The page could not be read back, so nothing below is shown. Reload to see the saved change.' : ''}</div>
+         <a class="btn btn-secondary btn-sm" href="${esc(back)}">← Back</a>
+         ${saved ? ' <button class="btn btn-primary btn-sm" onclick="location.reload()">Reload</button>' : ''}`;
+      return false;
     }
 
     /* ── render ────────────────────────────────────────────────────────── */
@@ -169,13 +165,13 @@
         </div>
 
         <div class="stat-grid" style="margin-bottom:20px">
-          ${statTile('Points to date', totals.pct == null ? '—' : `${Math.round(totals.pct * 100)}%`,
-                     `${totals.earned} of ${totals.possible} · ${totals.counted} assignment(s) due`, 'blue')}
-          ${statTile('Missing', String(rows.filter(r => r.cell.state === CELL.MISSING).length),
-                     'past due, nothing submitted', 'red')}
-          ${statTile('Awaiting grading', String(rows.filter(r => r.cell.state === CELL.UNGRADED).length),
-                     'submitted, not yet scored', 'amber')}
-          <div id="sd-compare"></div>
+          ${totalTile()}
+          ${statTile('Counted as 0', String(rows.filter(r => r.cell.state === CELL.MISSING).length),
+                     'missing; in the total as 0', 'red')}
+          ${statTile('Awaiting a score', String(rows.filter(r => r.cell.state === CELL.UNGRADED).length),
+                     'work in or not entered; not in the total', 'amber')}
+          ${statTile('Drafted, not published', String(rows.filter(r => r.cell.state === CELL.DRAFT || r.cell.state === CELL.HELD).length),
+                     'a score exists; not in the total yet', 'blue')}
         </div>
 
         ${lessonTable()}
@@ -192,7 +188,7 @@
         b.addEventListener('click', () => removeEi(b.dataset.eiDel)));
       document.getElementById('sd-copy')?.addEventListener('click', copyComment);
       document.getElementById('sd-comment-text')?.addEventListener('input', e => {
-        e.target.dataset.touched = '1';   // stop the async class-context fill from clobbering edits
+        e.target.dataset.touched = '1';
       });
     }
 
@@ -203,14 +199,16 @@
         <div class="stat-sub">${esc(sub)}</div></div></div>`;
     }
 
-    function compareCard() {
-      if (!classStats || totals.pct == null || classStats.median == null) return '<div id="sd-compare"></div>';
-      const d = Math.round((totals.pct - classStats.median) * 100);
-      const word = d > 1 ? `+${d} pts vs section` : d < -1 ? `${d} pts vs section` : 'level with section';
-      return `<div id="sd-compare" class="stat-tile accent-${d < -5 ? 'red' : d > 5 ? 'green' : 'blue'}">
-        <div class="stat-body"><div class="stat-num">${Math.round(classStats.median * 100)}%</div>
-        <div class="stat-label">Section median</div>
-        <div class="stat-sub">${esc(word)}</div></div></div>`;
+    // The total is the database's own text (course_totals): never rounded here, so 89.99 reads 89.99.
+    function totalTile() {
+      if (!totals) return statTile('Points to date', '—', 'the total could not be read', 'red');
+      if (totals.percentText == null) {
+        return statTile('Points to date', totals.bonusOnly ? `${totals.earnedText} pts` : '—',
+                        totals.bonusOnly ? 'bonus only; nothing else counts yet' : 'nothing counts yet', 'blue');
+      }
+      const more = [totals.letter, totals.rank != null ? `rank ${totals.rank}` : ''].filter(Boolean).join(' · ');
+      return statTile('Points to date', `${totals.percentText}%`,
+                      `${totals.earnedText} of ${totals.possibleText}${more ? ' · ' + more : ''}`, 'blue');
     }
 
     function lessonTable() {
@@ -225,8 +223,7 @@
           ${work(r)}</td>
         <td class="sd-num muted" style="font-size:.8em">${r.due ? esc(fmtDate(new Date(r.due))) : '—'}</td>
         <td class="sd-num">${statusChip(r)}</td>
-        <td class="sd-num">${r.cell.points == null ? '<span class="muted">—</span>'
-            : `${r.cell.points}<span class="muted">/${r.cell.possible}</span>`}</td>
+        <td class="sd-num">${pointsCell(r.cell)}</td>
         <td class="sd-num">${dial(r.effort, 'Engagement, 0–5. A measurement, not a grade.')}</td>
         <td class="sd-num">${dial(r.understanding, 'Demonstrated understanding, 0–5. A measurement, not a grade.')}</td>
         <td class="sd-num"><button class="btn btn-ghost btn-sm" data-grade="${esc(r.offeringId)}"
@@ -252,10 +249,19 @@
       return `<span class="sd-dial"${style} title="${esc(title)}">${v}/5</span>`;
     }
 
+    function pointsCell(c) {
+      if (c.state === CELL.EXCUSED) return '<span class="muted" title="Excused; leaves the total">EX</span>';
+      if (c.points == null) return '<span class="muted">—</span>';
+      const frac = `${c.points}<span class="muted">/${c.possible}</span>`;
+      return c.state === CELL.DRAFT || c.state === CELL.HELD ? `<span class="muted" title="Not in the total yet">${frac}</span>` : frac;
+    }
+
     function statusChip(r) {
       switch (r.cell.state) {
         case CELL.GRADED:   return '<span class="score-badge full">graded</span>';
-        case CELL.DRAFT:    return '<span class="tag-ai">AI suggestion</span>';
+        case CELL.DRAFT:    return '<span class="tag-ai" title="A score is drafted and not published, so it is not in the total">drafted, not published</span>';
+        case CELL.HELD:     return '<span class="score-badge pending" title="Published, held until its release date">held</span>';
+        case CELL.EXCUSED:  return '<span class="score-badge pending">excused</span>';
         case CELL.UNGRADED: return '<span class="score-badge pending">ungraded</span>';
         case CELL.MISSING:  return '<span class="score-badge zero">missing</span>';
         default:            return '<span class="muted" style="font-size:.8em">not due</span>';
@@ -310,7 +316,7 @@
 
     function buildComment() {
       return S.commentCard({
-        student: vm.student, enrollment: vm.enrollment, totals, rows, ei: vm.ei, classStats,
+        student: vm.student, enrollment: vm.enrollment, totals, rows, ei: vm.ei,
         freeText: '',
       });
     }
@@ -393,14 +399,14 @@
       btn.disabled = false; btn.textContent = label;
       if (error) { err.textContent = 'Save failed: ' + error.message; return; }
       document.getElementById('ei-modal').classList.remove('open');
-      await load();
+      await load('Extra instruction saved.');
     }
 
     async function removeEi(id) {
       if (!confirm('Delete this EI session? This cannot be undone.')) return;
       const { error } = await EI.deleteEi(id);
       if (error) { alert('Could not delete: ' + error.message); return; }
-      await load();
+      await load('Session deleted.');
     }
 
     /* ═══════════════════ Grade one submission, in a modal ═══════════════════
@@ -688,7 +694,7 @@
       // Reload the page behind the modal, then re-open on the same assignment: the lesson table,
       // the totals and the diagnostics all just changed, and leaving them stale would make the row
       // behind the modal disagree with the modal on top of it.
-      await load();
+      if (!(await load(finalize ? 'Grade published.' : 'Draft saved.'))) return;
       await openGrade(sgOffering.offeringId);
       document.getElementById('sg-status').textContent = finalize ? '✅ Published' : '✓ Saved draft';
       setTimeout(() => { const s = document.getElementById('sg-status'); if (s) s.textContent = ''; }, 4000);
@@ -698,7 +704,7 @@
       if (!confirm(`Reopen this grade for ${sgStudent.name}? Their score is hidden until you re-finalize.`)) return;
       const { error } = await G.reopenScore(ctx, sgOffering.offeringId, sgStudent.enrollment_id);
       if (error) { document.getElementById('sg-error').textContent = 'Could not reopen: ' + error.message; return; }
-      await load();
+      if (!(await load('Grade reopened.'))) return;
       await openGrade(sgOffering.offeringId);
     }
 
@@ -741,7 +747,7 @@
       if (reopened) alert(`Extension granted.\n\n${sgStudent.name} had a published grade, so it ` +
                           `has been re-opened — otherwise the extension would not have let them ` +
                           `back in. Their score is hidden until you finalize again.`);
-      await load();
+      if (!(await load('Extension saved.'))) return;
       await openGrade(sgOffering.offeringId);
     }
 
@@ -758,7 +764,7 @@
           : 'Failed to remove extension: ' + error.message);
         return;
       }
-      await load();
+      if (!(await load('Extension removed.'))) return;
       await openGrade(sgOffering.offeringId);
     }
   </script>

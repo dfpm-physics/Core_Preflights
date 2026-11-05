@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enter scores · PREP</title>
+  <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+</head>
+<body>
+  <header id="topnav"></header>
+  <main class="page-wide" id="main">
+    <div class="center-load"><span class="spinner"></span><span>Loading…</span></div>
+  </main>
+
+  <script type="module">
+    import { bootstrap } from '../js/auth.js';
+    import { renderNav } from '../js/nav.js';
+    import { initTheme } from '../js/theme.js';
+    import { db } from '../js/supabase.js';
+    import { esc, runPage, lastFirst } from '../js/util.js';
+    import * as P from '../js/faculty-entry-parse.js';
+    import * as E from '../js/faculty-entry.js';
+
+    const ctx = await bootstrap({ require: 'faculty' });
+    runPage(ctx, init);
+
+    let vm = null;            // what loadEntry returned
+    let itemId = null;        // the item on screen
+    let sectionId = '';       // '' = all my sections
+    let busy = false;
+    let parsed = null;        // a read grade file
+    let mapping = {};         // file column key -> item
+    let importOpts = { skipUnmatched: false, allowPublished: false, acceptNameMatches: false, acceptMax: {} };
+    let note = null;          // { kind, text } shown above the table
+    let preview = null;       // what publishing the item on screen would do, from the database (publish_preview)
+    let previewToken = 0;     // only the newest answer is used
+    let typed = {};           // scores typed but not yet saved, kept across a re-draw so a failure never eats them
+
+    const $ = (id) => document.getElementById(id);
+    const isDirector = () => ctx.isDirectorForCurrent();
+    const item = () => vm?.items.find(i => i.id === itemId) || null;
+    const mine = () => (vm?.roster || []).filter(r => (r.status === 'active' || r.status === 'completed')
+      && (!sectionId || r.sectionId === sectionId))
+      .sort((a, b) => lastFirst(a.name).localeCompare(lastFirst(b.name)));
+
+    function init() {
+      initTheme();
+      renderNav(ctx, { active: 'entry', onCourseChange: () => { itemId = null; parsed = null; return load(); } });
+      return load();
+    }
+
+    const head = (extra = '') => `<div class="page-head"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div><h1>Enter scores</h1><div class="sub">Type or import scores for work that is graded outside PREP, in ${esc(ctx.courseTitleOf(ctx.currentOffering) || '')}.</div></div>${extra}</div></div>`;
+
+    async function load() {
+      const root = $('main');
+      if (!ctx.currentOffering) { root.innerHTML = head() + `<div class="alert alert-warn">No course access found.</div>`; return; }
+      root.innerHTML = head() + `<div class="center-load"><span class="spinner"></span><span>Loading…</span></div>`;
+      vm = await E.loadEntry(db, ctx.currentOffering);
+      typed = {};
+      if (vm.error) {
+        console.error('entry load failed', vm.error);
+        root.innerHTML = head() + `<div class="alert alert-error">Could not load this page: ${esc(E.plainEntryError(vm.error))}</div>`;
+        return;
+      }
+      if (!vm.items.length) {
+        root.innerHTML = head() + `<div class="empty-state"><div class="es-ic">✏️</div><h3>Nothing to enter yet</h3>
+          <p>Items graded by hand entry or by import appear here. A Director adds them on the Items page.</p></div>`;
+        return;
+      }
+      if (!itemId || !item()) itemId = vm.items[0].id;
+      render();
+    }
+
+    function render() {
+      const it = item();
+      const rows = mine();
+      const secOpts = `<option value="">All my sections</option>` + vm.sections.map(s => `<option value="${esc(s.id)}"${s.id === sectionId ? ' selected' : ''}>${esc(s.code)}</option>`).join('');
+      const itemOpts = vm.items.map(i => `<option value="${esc(i.id)}"${i.id === itemId ? ' selected' : ''}>${esc(i.title)}${i.pointsCents != null ? ` (${P.centsText(i.pointsCents)} pts)` : ''}${i.published ? '' : ' — not published to students'}</option>`).join('');
+      const closed = sectionId ? !!vm.closures[`${sectionId}|${itemId}`] : null;
+      const closedCodes = vm.sections.filter(s2 => vm.closures[`${s2.id}|${itemId}`]).map(s2 => s2.code);
+      const body = rows.map(r => {
+        const k = `${r.enrollmentId}|${itemId}`;
+        const g = vm.grades[k], x = vm.excused[k];
+        const sec = vm.sections.find(s => s.id === r.sectionId)?.code || '';
+        return `<tr data-e="${esc(r.enrollmentId)}"${x ? ' class="muted"' : ''}>
+          <td>${esc(lastFirst(r.name))}</td><td>${esc(sec)}</td>
+          <td>${g?.cents != null ? esc(P.centsText(g.cents)) : '<span class="muted">not entered</span>'}</td>
+          <td>${g?.cents == null ? '' : (g.finalized ? 'Published' : 'Draft')}</td>
+          <td><input class="score-in" type="text" inputmode="decimal" autocomplete="off" aria-label="Score for ${esc(lastFirst(r.name))}" style="width:90px" value="${esc(typed[r.enrollmentId] ?? '')}" ${x ? 'disabled' : ''}>
+              <span class="cell-err" style="color:var(--danger,#b00020);font-size:.85em"></span></td>
+          <td>${x ? `<span class="score-badge">Excused</span> <span class="muted">${esc(x.reason)}</span>${isDirector() ? ` <button class="btn btn-ghost btn-sm" data-unex="${esc(x.id)}">Remove</button>` : ''}`
+              : (isDirector() ? `<button class="btn btn-ghost btn-sm" data-ex="${esc(r.enrollmentId)}">Excuse</button>` : '')}</td></tr>`;
+      }).join('');
+      $('main').innerHTML = head() + `
+        ${note ? `<div class="alert alert-${note.kind}" id="note">${esc(note.text)}</div>` : ''}
+        <div class="row wrap" style="gap:14px;align-items:flex-end;margin-bottom:12px">
+          <div class="field" style="margin:0"><label for="f-item">Item</label><select id="f-item">${itemOpts}</select></div>
+          <div class="field" style="margin:0"><label for="f-sec">Section</label><select id="f-sec">${secOpts}</select></div>
+          <button class="btn btn-primary" id="save-btn">Save entered scores</button>
+          <button class="btn btn-ghost" id="pub-btn" disabled>Publish this column</button>
+          <button class="btn btn-ghost" id="unpub-btn" hidden>Unpublish this column</button>
+          ${closed != null && closed ? `<button class="btn btn-ghost" id="reopen-btn">Reopen column</button>` : ''}
+          <button class="btn btn-ghost" id="imp-btn">Import a file…</button>
+        </div>
+        <div class="field-hint" id="pub-info" style="margin-bottom:6px">Reading what publishing would do…</div>
+        <div class="field-hint" style="margin-bottom:10px">Scores are saved as drafts. Leave a box empty to change nothing. Tab or Enter moves down; pasting a list fills down. Publishing can be undone with "Unpublish this column". ${sectionId ? (closed ? 'This column is closed for this section.' : '') : (closedCodes.length ? `Closed for: ${esc(closedCodes.join(', '))}.` : '')}</div>
+        <div id="import-panel"></div>
+        ${rows.length ? `<div class="table-wrap"><table id="entry-table"><thead><tr><th>Cadet</th><th>Section</th><th>Score</th><th>State</th><th>New score</th><th>Excused</th></tr></thead><tbody>${body}</tbody></table></div>`
+          : `<div class="empty-state"><h3>No cadets</h3><p>No enrolled cadets in this selection.</p></div>`}`;
+      wire();
+      renderImport();
+      refreshPreview();
+    }
+
+    /* What publishing would do comes from the database, so this page holds no copy of the rule. */
+    async function refreshPreview() {
+      const tok = ++previewToken;
+      preview = null;
+      const res = await E.publishPreview(db, itemId, sectionId || null);
+      if (tok !== previewToken) return;
+      const info = $('pub-info'), pub = $('pub-btn'), un = $('unpub-btn');
+      if (!info || !pub) return;
+      if (res.error) {
+        info.textContent = `Could not read what publishing would do: ${E.plainEntryError(res.error)} Publishing is off until this loads.`;
+        info.style.color = 'var(--danger,#b00020)';
+        pub.disabled = true;
+        return;
+      }
+      preview = res.preview;
+      info.style.color = '';
+      if (!preview.itemPublished) {
+        info.textContent = 'This item is not published to students yet, so publishing its scores would show them nothing. Publish the item first. Publishing the column is off until then.';
+        pub.disabled = true;
+      } else if (!preview.handEntered) {
+        info.textContent = 'This item is not entered by hand or by import, so its scores are published from the grade page.';
+        pub.disabled = true;
+      } else {
+        const bits = [`${preview.drafts} drafted score(s) would be published`];
+        if (preview.heldAi) bits.push(`${preview.heldAi} AI-suggested draft(s) would be left out for a person to review on the grade page`);
+        bits.push(preview.closeApplies ? `the column would also close${preview.openSections ? ` for ${preview.openSections} section(s), so a blank would count as 0` : ' (already closed)'}` : 'the column would stay open');
+        info.textContent = `Publishing now: ${bits.join('; ')}. ${preview.live} score(s) are already published.`;
+        pub.disabled = preview.drafts === 0;
+      }
+      if (un) un.hidden = !(preview.handEntered && (preview.live > 0 || (sectionId ? !!vm.closures[`${sectionId}|${itemId}`] : false)));
+    }
+
+    function wire() {
+      $('f-item').onchange = (e) => { itemId = e.target.value; note = null; parsed = null; render(); };
+      $('f-sec').onchange = (e) => { sectionId = e.target.value; note = null; render(); };
+      $('save-btn').onclick = saveGrid;
+      $('pub-btn').onclick = publish;
+      $('unpub-btn').onclick = unpublish;
+      $('imp-btn').onclick = () => { parsed = parsed || { picking: true }; renderImport(); };
+      const re = $('reopen-btn'); if (re) re.onclick = reopen;
+      const inputs = [...document.querySelectorAll('.score-in')];
+      inputs.forEach((inp, i) => {
+        inp.addEventListener('input', () => { validateRow(inp); typed[inp.closest('tr').dataset.e] = inp.value; });
+        inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); (inputs[i + 1] || inp).focus(); } });
+        inp.addEventListener('paste', (ev) => {
+          const t = (ev.clipboardData || window.clipboardData).getData('text');
+          const lines = t.split(/\r?\n/).filter((l, n, a) => !(n === a.length - 1 && l === ''));
+          if (lines.length < 2) return;
+          ev.preventDefault();
+          lines.forEach((l, n) => { const target = inputs[i + n]; if (target && !target.disabled) { target.value = l.split('\t').pop().trim(); validateRow(target); typed[target.closest('tr').dataset.e] = target.value; } });
+        });
+      });
+      document.querySelectorAll('[data-ex]').forEach(b => b.onclick = () => doExcuse(b.dataset.ex));
+      document.querySelectorAll('[data-unex]').forEach(b => b.onclick = () => doUnexcuse(b.dataset.unex));
+    }
+
+    function validateRow(inp) {
+      const c = P.checkCell(inp.value, item());
+      inp.nextElementSibling.textContent = c.ok ? '' : c.reason;
+      return c.ok;
+    }
+
+    function gridInputs() {
+      const out = {};
+      document.querySelectorAll('#entry-table tbody tr').forEach(tr => {
+        const v = tr.querySelector('.score-in')?.value ?? '';
+        if (v.trim() !== '') out[tr.dataset.e] = v;
+      });
+      return out;
+    }
+
+    async function saveGrid() {
+      if (busy) return;
+      const r = P.buildEntryChanges({ item: item(), inputs: gridInputs(), existing: vm.grades });
+      typed = gridInputs();
+      if (r.errors.length) { note = { kind: 'error', text: `${r.errors.length} score(s) cannot be saved: ${r.errors[0].reason}. Nothing was saved.` }; render(); return; }
+      if (!r.changes.length) { note = { kind: 'info', text: r.same ? 'Every score typed is already entered. Nothing to save.' : 'Nothing typed. Nothing to save.' }; typed = {}; render(); return; }
+      const pubn = r.changes.filter(c => c.finalized).length;
+      if (pubn && !confirm(`${pubn} of these replace a score already published to students. Replace them?`)) return;
+      await write(r.changes, { source: 'instructor', allowPublished: pubn > 0 });
+    }
+
+    async function write(changes, opts) {
+      busy = true; $('save-btn') && ($('save-btn').disabled = true);
+      const res = await E.enterGrades(db, itemId, changes, opts);
+      busy = false;
+      if (res.error) { console.error('enter failed', res.error); note = { kind: 'error', text: E.plainEntryError(res.error) }; render(); return false; }
+      note = E.writeSummary(res);
+      parsed = null; typed = {};
+      await reloadKeep();
+      return true;
+    }
+
+    // After a write the page re-reads. The write has already happened, so a failed read is shown beside a success
+    // note, never instead of it, and no stale table is drawn.
+    async function reloadKeep() {
+      const keepItem = itemId, keepSec = sectionId;
+      const fresh = await E.loadEntry(db, ctx.currentOffering);
+      const after = E.afterWrite(note, fresh);
+      if (!after.vm) {
+        console.error('reload after a write failed', fresh.error);
+        vm = null;
+        $('main').innerHTML = head() + after.banners.map(b => `<div class="alert alert-${b.kind}">${esc(b.text)}</div>`).join('')
+          + `<button class="btn btn-primary" id="reload-btn">Reload</button>`;
+        $('reload-btn').onclick = () => { note = null; load(); };
+        return;
+      }
+      vm = after.vm; itemId = keepItem; sectionId = keepSec; render();
+    }
+
+    async function publish() {
+      if (busy || !preview) return;
+      if (Object.keys(gridInputs()).length) { typed = gridInputs(); note = { kind: 'warn', text: 'You have scores typed that are not saved. Save them first, or clear them, then publish.' }; render(); return; }
+      const it = item();
+      const where = sectionId ? 'this section' : 'all your sections';
+      const lines = [`Publish the drafted scores of "${it.title}" for ${where}?`, '',
+        `${preview.drafts} score(s) become visible to students.`];
+      if (preview.heldAi) lines.push(`${preview.heldAi} AI-suggested draft(s) are NOT published; a person reviews those on the grade page.`);
+      lines.push(preview.closeApplies ? 'The column also closes, so any blank counts as 0.' : 'The column stays open.');
+      lines.push('', 'You can undo this with "Unpublish this column".');
+      if (!confirm(lines.join('\n'))) return;
+      busy = true;
+      const res = await E.publishColumn(db, itemId, sectionId || null, true);
+      busy = false;
+      if (res.error) { note = { kind: 'error', text: E.plainEntryError(res.error) }; render(); return; }
+      note = E.publishSummary(res);
+      await reloadKeep();
+    }
+
+    async function unpublish() {
+      if (busy || !preview) return;
+      if (Object.keys(gridInputs()).length) { typed = gridInputs(); note = { kind: 'warn', text: 'You have scores typed that are not saved. Save them first, or clear them, then unpublish.' }; render(); return; }
+      const it = item();
+      const where = sectionId ? 'this section' : 'all your sections';
+      if (!confirm(`Unpublish the scores of "${it.title}" for ${where}?\n\n${preview.live} published score(s) go back to drafts and leave students' totals. The column reopens, so a blank stops counting as 0.`)) return;
+      busy = true;
+      const res = await E.unpublishColumn(db, itemId, sectionId || null, true);
+      busy = false;
+      if (res.error) { note = { kind: 'error', text: E.plainEntryError(res.error) }; render(); return; }
+      note = res.unpublished || res.reopened
+        ? { kind: 'success', text: `Unpublished ${res.unpublished} score(s); reopened ${res.reopened} section column(s).` }
+        : { kind: 'info', text: 'Nothing to unpublish: no score was published and no column was closed.' };
+      await reloadKeep();
+    }
+
+    async function reopen() {
+      const id = vm.closures[`${sectionId}|${itemId}`];
+      if (!id || !confirm('Reopen this column? Blanks stop counting as 0 until it is closed again.')) return;
+      const res = await E.reopenColumn(db, id);
+      note = res.error ? { kind: 'error', text: E.plainEntryError(res.error) } : { kind: 'success', text: 'Column reopened.' };
+      if (res.error) { render(); return; }
+      await reloadKeep();
+    }
+
+    async function doExcuse(enrollmentId) {
+      const reason = prompt('Why is this cadet excused from this item? A reason is required and is logged with your name.');
+      if (reason == null) return;
+      const res = await E.excuse(db, enrollmentId, itemId, reason);
+      note = res.error ? { kind: 'error', text: E.plainEntryError(res.error) } : { kind: 'success', text: 'Excused. The item no longer counts in this cadet\'s total.' };
+      if (res.error) { render(); return; }
+      await reloadKeep();
+    }
+    async function doUnexcuse(id) {
+      const reason = prompt('Why is the excusal being removed? A reason is required and is logged.');
+      if (reason == null) return;
+      const res = await E.revokeExcusal(db, id, reason);
+      note = res.error ? { kind: 'error', text: E.plainEntryError(res.error) } : { kind: 'success', text: 'Excusal removed.' };
+      if (res.error) { render(); return; }
+      await reloadKeep();
+    }
+
+    /* ── Import ─────────────────────────────────────────────────────────── */
+    function renderImport() {
+      const box = $('import-panel');
+      if (!box) return;
+      if (!parsed) { box.innerHTML = ''; return; }
+      if (parsed.picking) {
+        box.innerHTML = `<div class="card" style="padding:14px;margin-bottom:14px"><label for="imp-file"><strong>Choose a Gradescope or Teams grade file (.csv)</strong></label>
+          <div class="field-hint">In Teams, export to Excel and save as CSV first. Nothing changes until you review the plan and confirm.</div>
+          <input type="file" id="imp-file" accept=".csv,.txt,text/csv"> <button class="btn btn-ghost btn-sm" id="imp-cancel">Cancel</button></div>`;
+        $('imp-cancel').onclick = () => { parsed = null; renderImport(); };
+        $('imp-file').onchange = async (e) => {
+          const f = e.target.files[0]; if (!f) return;
+          const p = P.parseGradeFile(await f.text());
+          if (p.error) { parsed = { picking: true }; renderImport(); $('imp-file').insertAdjacentHTML('afterend', `<div class="alert alert-error" style="margin-top:8px">${esc(p.error)}</div>`); return; }
+          parsed = p; mapping = {};
+          p.columns.forEach(c => { const g = p.singleColumn ? item() : P.guessItem(c.name, vm.items); if (g) mapping[c.key] = g; });
+          importOpts = { skipUnmatched: false, allowPublished: false, acceptNameMatches: false, acceptMax: {} };
+          renderImport();
+        };
+        return;
+      }
+      const plan = P.buildImportPlan({ parsed, mapping, roster: vm.roster, existing: vm.grades, options: importOpts });
+      const colRows = parsed.columns.map(c => `<tr><td>${esc(c.name)}${c.maxCents != null ? ` <span class="muted">(out of ${P.centsText(c.maxCents)})</span>` : ''}</td>
+        <td><select data-col="${esc(c.key)}"><option value="">Do not import</option>${vm.items.map(i => `<option value="${esc(i.id)}"${mapping[c.key]?.id === i.id ? ' selected' : ''}>${esc(i.title)}</option>`).join('')}</select></td></tr>`).join('');
+      const list = (a) => a.map(x => `<li>${esc(x)}</li>`).join('');
+      const chg = plan.changes.slice(0, 200).map(c => `<tr><td>${esc(c.name)}</td><td>${esc(vm.items.find(i => i.id === c.itemId)?.title || '')}</td>
+        <td>${c.old != null ? esc(P.centsText(c.old)) : '<span class="muted">none</span>'}</td><td><strong>${esc(P.centsText(c.cents))}</strong></td><td>${c.finalized ? 'replaces published' : c.kind}${c.method === 'name' ? ' · matched by name' : ''}</td></tr>`).join('');
+      box.innerHTML = `<div class="card" style="padding:14px;margin-bottom:14px">
+        <div class="row" style="justify-content:space-between"><strong>Import preview · ${esc(parsed.format)}</strong><button class="btn btn-ghost btn-sm" id="imp-cancel">Cancel</button></div>
+        <table style="margin:10px 0"><thead><tr><th>File column</th><th>Fills item</th></tr></thead><tbody>${colRows}</tbody></table>
+        <div class="field-hint">${plan.counts.rows} row(s) in the file, ${plan.counts.matched} matched to a cadet, ${plan.counts.unmatched} not matched. ${plan.counts.changes} score(s) would change, ${plan.same} already match.</div>
+        ${plan.blockers.length ? `<div class="alert alert-error"><strong>Fix the file first. Nothing has been changed.</strong><ul>${list(plan.blockers)}</ul></div>` : ''}
+        ${plan.duplicates.length ? `<div class="alert alert-error"><ul>${plan.duplicates.map(d => `<li>${esc(d.name)}: lines ${d.rowNos.join(', ')}</li>`).join('')}</ul></div>` : ''}
+        ${plan.held.length ? `<div class="alert alert-warn"><ul>${list(plan.held)}</ul>
+           ${plan.unmatched.length ? `<label class="check-inline"><input type="checkbox" id="opt-skip"${importOpts.skipUnmatched ? ' checked' : ''}> <span>Skip the ${plan.unmatched.length} unmatched row(s)</span></label>` : ''}
+           ${plan.nameMatched.length ? `<label class="check-inline"><input type="checkbox" id="opt-name"${importOpts.acceptNameMatches ? ' checked' : ''}> <span>Accept the ${plan.nameMatched.length} row(s) matched by name alone</span></label>` : ''}
+           ${plan.maxMismatch.map(mm => `<label class="check-inline"><input type="checkbox" data-max="${esc(mm.key)}"${importOpts.acceptMax[mm.key] === mm.token ? ' checked' : ''}> <span>Import "${esc(mm.name)}" as written, although it is out of ${esc(mm.fileMaxList.map(P.centsText).join(' and '))} and the item is worth ${P.centsText(mm.itemPointsCents)}</span></label>`).join('')}
+           ${plan.changes.some(c => c.finalized) ? `<label class="check-inline"><input type="checkbox" id="opt-pub"${importOpts.allowPublished === plan.overwritesPublished ? ' checked' : ''}> <span>Allow replacing ${plan.overwritesPublished} published score(s)</span></label>` : ''}</div>` : ''}
+        ${plan.unmatched.length ? `<details><summary>${plan.unmatched.length} unmatched row(s)</summary><ul>${plan.unmatched.map(u => `<li>Line ${u.rowNo}: ${esc(u.name)} (${esc(u.reason)})</li>`).join('')}</ul></details>` : ''}
+        ${plan.notes.length ? `<div class="alert alert-info"><ul>${list(plan.notes)}</ul></div>` : ''}
+        ${plan.changes.length ? `<div class="table-wrap" style="max-height:320px;overflow:auto"><table><thead><tr><th>Cadet</th><th>Item</th><th>Now</th><th>New</th><th></th></tr></thead><tbody>${chg}</tbody></table></div>${plan.changes.length > 200 ? `<div class="field-hint">Showing the first 200 of ${plan.changes.length}.</div>` : ''}` : ''}
+        <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn btn-primary" id="imp-apply"${plan.canApply ? '' : ' disabled'}>Import ${plan.changes.length} score(s)</button></div></div>`;
+      $('imp-cancel').onclick = () => { parsed = null; renderImport(); };
+      box.querySelectorAll('[data-col]').forEach(s => s.onchange = () => { const it = vm.items.find(i => i.id === s.value); if (it) mapping[s.dataset.col] = it; else delete mapping[s.dataset.col];
+        // A tick belongs to the mapping it was given under. Changing a column clears them, so nothing is approved that was not shown.
+        importOpts.allowPublished = false; importOpts.acceptMax = {}; renderImport(); });
+      const sk = $('opt-skip'); if (sk) sk.onchange = () => { importOpts.skipUnmatched = sk.checked; renderImport(); };
+      const pb = $('opt-pub'); if (pb) pb.onchange = () => { importOpts.allowPublished = pb.checked ? plan.overwritesPublished : false; renderImport(); };
+      const nm = $('opt-name'); if (nm) nm.onchange = () => { importOpts.acceptNameMatches = nm.checked; renderImport(); };
+      box.querySelectorAll('[data-max]').forEach(c => c.onchange = () => { importOpts.acceptMax[c.dataset.max] = c.checked ? plan.maxMismatch.find(m => m.key === c.dataset.max)?.token : ''; renderImport(); });
+      $('imp-apply').onclick = async () => {
+        if (busy || !plan.canApply) return;
+        // One call per item: each is all-or-nothing, and an item that fails is named.
+        const byItem = new Map();
+        plan.changes.forEach(c => (byItem.get(c.itemId) || byItem.set(c.itemId, []).get(c.itemId)).push(c));
+        busy = true; let done = 0, saved = 0, replaced = 0;
+        for (const [iid, list2] of byItem) {
+          const res = await E.enterGrades(db, iid, list2, { source: 'imported', allowPublished: plan.overwritesPublished > 0 });
+          if (res.error) {
+            busy = false;
+            note = { kind: 'error', text: `${E.plainEntryError(res.error)} ${done ? `${done} item(s) were already saved before this one.` : 'Nothing was saved.'}` };
+            if (done) await reloadKeep(); else render();
+            return;
+          }
+          done += 1; saved += res.saved; replaced += res.replacedPublished;
+        }
+        busy = false; parsed = null;
+        const w = E.writeSummary({ saved, replacedPublished: replaced });
+        note = { kind: w.kind, text: `Imported. ${w.text}${replaced ? '' : ' Review them, then publish the column.'}` };
+        await reloadKeep();
+      };
+    }
+  </script>
+</body>
+</html>

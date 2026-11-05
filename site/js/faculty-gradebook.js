@@ -1,8 +1,14 @@
-// faculty-gradebook.js — the grid (roadmap P1.1), and the arithmetic under it.
+// faculty-gradebook.js — the grid (roadmap P1.1).
 //
-// Everything here except loadGradebook() is pure, because everything here except loadGradebook()
-// is a rule somebody will argue with: what counts toward a percentage, what a blank cell means,
-// what colour 61% is. Rules that get argued with need to be testable.
+// ONE CALCULATION (step 2). A cell's state, a cadet's total, percent, letter and rank are NOT computed here.
+// They are what the database functions gradebook_cells and course_totals return, read through
+// faculty-totals.js, and this module lays them out. Until step 2 this file kept its own copy of the rule
+// (totalsFor, countsTowardTotal, gradedScopes) and it disagreed with the database on drafts, excused work,
+// bonus items and a held score. The copy is gone; do not write another. What stays local is display only:
+// the deadline and lateness a cell shows (cellState), the shortcodes, the 0-5 colours, and a colour band
+// chosen from the database's exact percent text.
+//
+// Everything here except loadGradebook() is pure, so it is testable without a database.
 //
 // TWO LAYERS, KEPT APART
 //   The grade is 2 points. The diagnostics are 0-5. Both are live and they are NOT the same
@@ -24,6 +30,7 @@
 //   page, so the two loaders stay separate on cost, not on truth.
 
 import { db } from './supabase.js';
+import { loadCellsAndTotals } from './faculty-totals.js';
 import {
   chunked, fetchAll, lessonNumber, effectiveDue, submissionLateness,
   withResolvedDue, offeringSections,
@@ -132,10 +139,38 @@ export const BANDS = [
   { key: 'd5', label: '90–100%', test: () => true },
 ];
 
-/** @param pct 0..1, or null when there is nothing to judge yet. */
-export function bandOf(pct) {
-  if (pct == null || !Number.isFinite(pct)) return null;
-  return BANDS.find((b) => b.test(pct)) || BANDS[BANDS.length - 1];
+/**
+ * The colour band for a cadet, from course_totals' percent_key_text (plain digits, 22 decimals, cut and never
+ * rounded). Compared as exact integers: a float would call 89.9999999999999999999999 "90" and tint a cadet one band
+ * too high, which is the mistake GRADE-RULES section 3 forbids. -> a BANDS entry, or null when there is no percent.
+ */
+export function bandOfKey(text) {
+  const m = /^(\d+)(?:\.(\d+))?$/.exec(String(text ?? ''));
+  if (!m) return null;
+  const scaled = BigInt(m[1] + (m[2] || '').padEnd(22, '0').slice(0, 22));   // percent x 10^22
+  const at = (n) => BigInt(n) * 10n ** 22n;
+  if (scaled <= 0n) return BANDS[0];
+  if (scaled < at(60)) return BANDS[1];
+  if (scaled < at(70)) return BANDS[2];
+  if (scaled < at(80)) return BANDS[3];
+  if (scaled < at(90)) return BANDS[4];
+  return BANDS[5];
+}
+
+/**
+ * One cadet's total as the page prints it. Every field is text the database produced. Nothing is added, divided or
+ * rounded. -> null when the database returned no total row for this cadet (which is not a total of zero).
+ */
+export function totalView(t) {
+  if (!t) return null;
+  return {
+    earnedText: t.earned_text, possibleText: t.possible_text, percentText: t.percent_text ?? null,
+    percentKeyText: t.percent_key_text ?? null, letter: t.letter ?? null, gpa: t.gpa ?? null,
+    nearLine: t.near_line_letter ?? null, rank: t.rank ?? null, tieGroup: t.tie_group ?? null,
+    bonusOnly: !!t.bonus_only, missing: t.missing_count ?? 0, ungraded: t.ungraded_count ?? 0,
+    unreleased: t.unreleased_count ?? 0, excused: t.excused_count ?? 0,
+    band: bandOfKey(t.percent_key_text),
+  };
 }
 
 /* ---------------------------------------------------------------------------
@@ -188,29 +223,49 @@ export function cellSignals(grade) {
  * ------------------------------------------------------------------------- */
 
 export const CELL = {
-  GRADED: 'graded',     // finalized grade
-  DRAFT: 'draft',       // a grade exists but nobody has confirmed it
-  UNGRADED: 'ungraded', // work arrived, no grade yet
-  MISSING: 'missing',   // deadline passed, nothing arrived
-  PENDING: 'pending',   // not due yet — absence means nothing
+  GRADED: 'graded',     // released: the score counts in the total
+  DRAFT: 'draft',       // a score is drafted (typed, imported or suggested) and is NOT published, so it is not in the total
+  UNGRADED: 'ungraded', // work arrived, no score yet
+  MISSING: 'missing',   // counts 0 in the total
+  PENDING: 'pending',   // not due yet, or in progress — absence means nothing
+  EXCUSED: 'excused',   // leaves the total
+  HELD: 'held',         // scored and published, held by a release date: not in the total until it opens
 };
 
 /**
+ * What one cell is, from the DATABASE's row for it (gradebook_cells). This is the only place a state is decided for
+ * a staff page. A state the page does not recognise is drawn as nothing, never as a number.
+ */
+export function dbCellView(dbc) {
+  const pts = dbc?.points_earned == null ? null : Number(dbc.points_earned);
+  const base = { possible: Number(dbc?.points_possible ?? 0), late: !!dbc?.is_late, noWork: !!dbc?.no_work_received,
+                 badDate: !!dbc?.deadline_invalid };
+  switch (dbc?.state) {
+    case 'released': return { ...base, state: CELL.GRADED, points: pts, isFinalized: true };
+    case 'graded_unreleased': return { ...base, state: CELL.HELD, points: pts, isFinalized: true };
+    case 'submitted_ungraded':
+      return dbc.has_draft_score
+        ? { ...base, state: CELL.DRAFT, points: pts, isFinalized: false }
+        : { ...base, state: CELL.UNGRADED, points: null, isFinalized: false };
+    case 'missing': return { ...base, state: CELL.MISSING, points: 0, isFinalized: false };
+    case 'excused': return { ...base, state: CELL.EXCUSED, points: null, isFinalized: false };
+    default: return { ...base, state: CELL.PENDING, points: null, isFinalized: false };
+  }
+}
+
+/**
+ * The LOCAL facts about one cell: its deadline (section override, extension) and whether work was late. The state and
+ * points it also returns are a fallback for display only and feed no total. A page shows the database's state
+ * (dbCellView) over this one.
+ *
  * What one cell is, and it must never be ambiguous: a blank that could mean either "not due" or
  * "never handed in" is the defect that makes a gradebook untrustworthy. Five states, each with a
  * distinct rendering, and PENDING is the only one that renders as nothing.
  *
  * `extensionISO` must already be filtered to non-revoked rows — same contract as effectiveDue().
  *
- * `columnGraded` — has this column been graded for THIS student's section (see gradedScopes)? It
- * changes nothing about the arithmetic and only one thing about the display: a MISSING cell reads
- * `—` while grading is still outstanding and `0` once it is done. That distinction is the
- * director's (2026-07-28) and it is a real one. Before grading, `—` says "nothing arrived", which
- * is a fact about the student and still provisional — an instructor may yet accept late work or
- * grant an extension. After grading it is settled, and what the student has is not an absence but
- * a zero. The old display said `—` forever, so the gradebook never showed the number the student's
- * total was already built from: MISSING has always counted as zero-out-of-full (see totalsFor),
- * which meant a column of dashes silently summed to a percentage nobody could reconcile.
+ * `columnGraded` is always false now and is kept only so older callers still pass it. Whether a missing cell reads
+ * as a counted 0 or as "nothing entered yet" is decided by the database (gradebook_cells), not here.
  */
 export function cellState({ grade, submission, offering, sectionId, extensionISO = null,
                             columnGraded = false, now = new Date() }) {
@@ -240,70 +295,11 @@ export function cellState({ grade, submission, offering, sectionId, extensionISO
   }
   return {
     state: isPast ? CELL.MISSING : CELL.PENDING,
-    // A graded-out column makes the zero explicit. Before that it stays null, because "we have
-    // not looked at this yet" and "we looked, and there was nothing" are different claims and the
-    // cell should not make the stronger one early. Either way totalsFor() reads it as 0 — the
-    // number moved onto the screen, it did not move into the arithmetic.
+    // Display fallback only. The page shows the database's state and points over this (dbCellView).
     points: (isPast && columnGraded) ? 0 : null,
     possible: Number(offering?.pointsPossible ?? 0),
     isFinalized: false, source: null, late: false, columnGraded, due,
   };
-}
-
-/**
- * Which (section, offering) pairs have been graded — the input `columnGraded` above needs.
- *
- * "Graded" = at least one FINALIZED grade exists for that section on that column. Finalized is the
- * right test rather than "a grade row exists", because an unconfirmed AI suggestion is exactly the
- * state where an instructor has not yet decided anything, and turning a classmate's dash into a
- * zero off the back of a draft would be announcing a decision nobody made.
- *
- * Per SECTION, not per column, because grading runs section by section on split M/T deadlines: an
- * M-day section finished on Tuesday must not turn the T-day section's absences into zeros a day
- * before that section's work is even due.
- *
- * One finalized row is enough. An instructor finalizes a section's column in one pass, and
- * requiring "all submitters graded" would mean a single reopened grade flipped a whole column of
- * zeros back to dashes — noisier, and wrong in the more alarming direction.
- */
-export function gradedScopes(enrollments, grades) {
-  const sectionOf = new Map((enrollments || []).map((e) => [e.enrollmentId, e.sectionId]));
-  const out = new Set();
-  for (const g of grades || []) {
-    if (!g?.is_finalized) continue;
-    const section = sectionOf.get(g.enrollment_id);
-    if (section) out.add(`${section}|${g.assignment_offering_id}`);
-  }
-  return out;
-}
-
-/**
- * Does this cell count toward the student's percentage yet?
- *
- * Only once its deadline has passed. This is the due-date-aware rule the roadmap flags in P3.2
- * ("without that rule, importing mid-term tanks every average") and it matters more here than
- * there: without it, on the first day of term every cadet reads 0% because 39 lessons they cannot
- * yet have done are already counted against them. A MISSING cell counts as a zero out of full —
- * that is the point of it — but a PENDING cell is not in the sum at all.
- */
-export function countsTowardTotal(cell) {
-  return cell.state !== CELL.PENDING;
-}
-
-/** Sum a student's row into {earned, possible, pct}. pct is null while nothing has come due. */
-export function totalsFor(cells) {
-  let earned = 0, possible = 0, counted = 0;
-  for (const c of cells) {
-    if (!countsTowardTotal(c)) continue;
-    counted += 1;
-    possible += Number(c.possible) || 0;
-    // UNGRADED contributes its possible but no points — an ungraded submission is not a zero, it
-    // is unfinished work by the INSTRUCTOR, so it drags the percentage exactly as a missing one
-    // does until somebody grades it. Shown as such rather than quietly excluded, because
-    // excluding it hides the instructor's own backlog from the instructor.
-    earned += Number(c.points) || 0;
-  }
-  return { earned, possible, counted, pct: possible > 0 ? earned / possible : null };
 }
 
 /* ---------------------------------------------------------------------------
@@ -311,13 +307,19 @@ export function totalsFor(cells) {
  * ------------------------------------------------------------------------- */
 
 /**
- * Assemble the grid. Pure: give it rows and it gives you a table, so every rule above is testable
- * without a database.
+ * Assemble the grid. Pure: give it rows and it gives you a table.
  *
- * Returns { columns[], rows[], stats } where a row carries its own cells in column order.
+ * `dbCells` (gradebook_cells) and `dbTotals` (course_totals) are required. A cell's state and points are the
+ * database's; its deadline, lateness and colour signals are local display facts. A cadet with no database cells or no
+ * total row gets blank cells and no total, never a guess.
+ *
+ * Returns { columns[], rows[], stats } where a row carries its own cells in column order and its `total`.
  */
-export function buildMatrix({ enrollments, offerings, grades, submissions, extensions,
+export function buildMatrix({ enrollments, offerings, grades, submissions, extensions, dbCells, dbTotals,
                               now = new Date() }) {
+  if (!Array.isArray(dbCells) || !Array.isArray(dbTotals)) {
+    throw new Error('buildMatrix: the database cells and totals are required; the grid does not compute its own');
+  }
   const cols = [...(offerings || [])].sort((a, b) => {
     const da = a.dueAt ? +new Date(a.dueAt) : Infinity;
     const dbb = b.dueAt ? +new Date(b.dueAt) : Infinity;
@@ -334,61 +336,53 @@ export function buildMatrix({ enrollments, offerings, grades, submissions, exten
   const subBy = new Map((submissions || []).map((s) => [key(s.enrollment_id, s.assignment_offering_id), s]));
   const extBy = new Map((extensions || []).map((x) =>
     [key(x.enrollment_id, x.assignment_offering_id), x.extended_due_at]));
-  const graded = gradedScopes(enrollments, grades);
+  const dbBy = new Map(dbCells.map((c) => [key(c.enrollment_id, c.assignment_offering_id), c]));
+  const totBy = new Map(dbTotals.map((t) => [t.enrollment_id, t]));
 
   const rows = (enrollments || []).map((en) => {
     const cells = columns.map((c) => {
       const grade = gradeBy.get(key(en.enrollmentId, c.offeringId)) || null;
-      const cell = cellState({
+      const local = cellState({
         grade,
         submission: subBy.get(key(en.enrollmentId, c.offeringId)) || null,
         offering: c.offering,
         sectionId: en.sectionId,
         extensionISO: extBy.get(key(en.enrollmentId, c.offeringId)) || null,
-        columnGraded: graded.has(key(en.sectionId, c.offeringId)),
         now,
       });
-      // The two 0–5 signals live alongside the state, not inside it: a colour is a property of the
-      // cell, but it is not what the cell IS (its state is), and cellState has a wall of tests
-      // pinning exactly what it returns.
+      const dbc = dbBy.get(key(en.enrollmentId, c.offeringId));
+      // The database's state wins outright. With no database row the cell is blank, not the local guess.
+      const view = dbc ? dbCellView(dbc)
+        : { state: CELL.PENDING, points: null, possible: Number(c.pointsPossible ?? 0), isFinalized: false,
+            late: false, noWork: false, badDate: false };
       const signals = cellSignals(grade);
-      // A graded non-submission demonstrated NOTHING, and "not demonstrated" is literally 0 on the
-      // understanding scale (INTERACTION-DATA-CONTRACT §5.1) — it is not "unknown", which is what
-      // null means and what leaves a cell uncoloured. Without this the hard zeros were the only
-      // uncoloured cells in an otherwise coloured column, reading as "no data" when they are the
-      // most definite data on the row. Note the guard: this only ever fills a gap, so a diagnostic
-      // that somehow exists on a missing cell still wins.
-      if (cell.state === CELL.MISSING && cell.columnGraded && signals.understanding == null) {
-        signals.understanding = 0;
-      }
-      return { ...cell, ...signals };
+      // A counted zero demonstrated NOTHING, and "not demonstrated" is literally 0 on the understanding scale
+      // (INTERACTION-DATA-CONTRACT 5.1); it is not "unknown", which is what null means and leaves a cell
+      // uncoloured. This only ever fills a gap, so a diagnostic that exists on a missing cell still wins.
+      if (view.state === CELL.MISSING && signals.understanding == null) signals.understanding = 0;
+      return { ...view, source: grade?.source || null, due: local.due, ...signals };
     });
-    const totals = totalsFor(cells);
-    return { ...en, cells, totals, band: bandOf(totals.pct) };
+    const total = totalView(totBy.get(en.enrollmentId));
+    return { ...en, cells, total, band: total ? total.band : null };
   });
 
   return { columns, rows, stats: matrixStats(rows) };
 }
 
 /**
- * Class-level numbers, computed here so the page and the per-student comparison card agree by
- * construction rather than by two people writing the same average twice.
+ * Counts of the database's states across the grid. There is deliberately no median or mean: a class average of
+ * percentages is a second calculation, and the rank in course_totals already says where a cadet stands.
  */
 export function matrixStats(rows) {
-  const pcts = rows.map((r) => r.totals.pct).filter((p) => p != null);
+  const n = (state) => rows.reduce((s, r) => s + r.cells.filter((c) => c.state === state).length, 0);
   return {
     n: rows.length,
-    median: median(pcts),
-    mean: pcts.length ? pcts.reduce((a, b) => a + b, 0) / pcts.length : null,
-    missing: rows.reduce((s, r) => s + r.cells.filter((c) => c.state === CELL.MISSING).length, 0),
-    ungraded: rows.reduce((s, r) => s + r.cells.filter((c) => c.state === CELL.UNGRADED).length, 0),
+    missing: n(CELL.MISSING),
+    ungraded: n(CELL.UNGRADED),
+    drafts: n(CELL.DRAFT),
+    held: n(CELL.HELD),
+    excused: n(CELL.EXCUSED),
   };
-}
-
-function median(xs) {
-  if (!xs.length) return null;
-  const s = [...xs].sort((a, b) => a - b), m = s.length >> 1;
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
 /* ---------------------------------------------------------------------------
@@ -476,5 +470,10 @@ export async function loadGradebook(ctx, sectionIds) {
     extensions.push(...(x.data || []));
   }
 
-  return { noCourse: false, enrollments, offerings, grades, submissions, extensions };
+  // The cells and the totals come from the database, scoped by the database to the sections the caller may see.
+  // A failed read is an error here, so the grid is never drawn without them.
+  const ct = await loadCellsAndTotals(db, ctx.currentOffering, 'final');
+  if (ct.error) return { error: ct.error };
+
+  return { noCourse: false, enrollments, offerings, grades, submissions, extensions, dbCells: ct.cells, dbTotals: ct.totals };
 }

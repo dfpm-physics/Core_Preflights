@@ -188,12 +188,23 @@
         <td class="gb-name"><a href="student.html?e=${encodeURIComponent(r.enrollmentId)}">${esc(lastFirst(r.name))}</a></td>
         <td class="gb-sec">${esc(ctx.sectionCodeOf(r.sectionId) || '')}</td>
         ${r.cells.map((c, i) => cellHTML(c, columns[i], r)).join('')}
-        <td class="gb-total ${r.band ? 'band-' + r.band.key : ''}">
-          ${r.totals.pct == null ? '<span class="muted">—</span>'
-            : `<strong>${Math.round(r.totals.pct * 100)}%</strong><span class="gb-frac">${r.totals.earned}/${r.totals.possible}</span>`}
-        </td></tr>`).join('');
+        <td class="gb-total ${r.band ? 'band-' + r.band.key : ''}">${totalHTML(r.total)}</td></tr>`).join('');
 
       return `<div class="table-wrap gb-wrap"><table class="gb"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+    }
+
+    // A total is the database's own text (course_totals). Nothing here adds, divides or rounds, so the figure
+    // on this page is the one the student, the export and the backlog show.
+    function totalHTML(t) {
+      if (!t) return '<span class="muted" title="The database returned no total for this cadet">—</span>';
+      if (t.percentText == null) {
+        return t.bonusOnly
+          ? `<strong>${esc(t.earnedText)} pts</strong><span class="gb-frac">bonus only</span>`
+          : '<span class="muted">—</span><span class="gb-frac">nothing counts yet</span>';
+      }
+      const extra = [t.letter, t.rank != null ? `#${t.rank}` : ''].filter(Boolean).join(' · ');
+      return `<strong>${esc(t.percentText)}%</strong>${t.nearLine ? ' <span class="muted" title="Within the near-line width of a letter line">≈</span>' : ''}`
+        + `<span class="gb-frac">${esc(t.earnedText)}/${esc(t.possibleText)}${extra ? ' · ' + esc(extra) : ''}</span>`;
     }
 
     // A 0–5 zone index → its ramp CSS variable. GB.zoneIndex() is the rollup's own arithmetic;
@@ -227,27 +238,33 @@
           const d = decor(c);
           return `<td class="gb-cell${d.tintCls}"${d.style} title="${esc(t + d.sig)}">${c.points}${late}</td>`;
         }
+        // A drafted score: typed, imported or suggested, and NOT published. It is not in the total, so it is marked
+        // as something that still needs a person, never drawn like a grade.
         case GB.CELL.DRAFT: {
           const d = decor(c);
-          return `<td class="gb-cell gb-draft${d.tintCls}"${d.style} title="${esc(t + ' — suggested, not finalized' + d.sig)}">${c.points}<sup>?</sup>${late}</td>`;
+          return `<td class="gb-cell gb-draft${d.tintCls}"${d.style} title="${esc(t + ' — drafted, not published; not in the total' + d.sig)}">${c.points}<sup>?</sup>${late}</td>`;
         }
+        // Published but held by a release date: the cadet cannot see it and it is not in the total yet.
+        case GB.CELL.HELD: {
+          const d = decor(c);
+          return `<td class="gb-cell gb-draft${d.tintCls}"${d.style} title="${esc(t + ' — published, held until its release date; not in the total yet' + d.sig)}">${c.points}<sup>H</sup>${late}</td>`;
+        }
+        case GB.CELL.EXCUSED:
+          return `<td class="gb-cell gb-pending" title="${esc(t)} — excused; leaves the total"><span class="muted">EX</span></td>`;
         // Submitted, waiting on the instructor. Was a middle dot, which at 0.84em in a grid of
         // 0/1/2 was indistinguishable from an empty cell — so the one state that represents the
         // INSTRUCTOR's backlog was the least visible thing on the page. A tick says "work is in"
         // at a glance and cannot be misread as a score, and it carries the same gold the draft
         // marker uses, which already means "still needs you" everywhere else on this grid.
         case GB.CELL.UNGRADED:
-          return `<td class="gb-cell gb-ungraded" title="${esc(t)} — submitted, not yet graded">✓${late}</td>`;
-        // Nothing submitted. A dash while the column is still being graded; a hard 0 once it has
-        // been (GB.gradedScopes) — which is what the student's total has counted all along. The
-        // zero is tinted like every other graded cell: buildMatrix gives it understanding 0, so it
-        // takes the bottom of the ramp rather than being the one blank-coloured cell in the column.
+          // Past due on work that takes no submission, with the column still open: nothing has been entered.
+          if (c.noWork) return `<td class="gb-cell gb-missing gb-nosub" title="${esc(t)} — no score entered yet; left out of the total until you enter one or close the column">—</td>`;
+          return `<td class="gb-cell gb-ungraded" title="${esc(t)} — work in, awaiting a score">✓${late}</td>`;
+        // Counted as 0 by the database. The zero is tinted like every other graded cell: buildMatrix gives it
+        // understanding 0, so it takes the bottom of the ramp rather than being the one blank-coloured cell.
         case GB.CELL.MISSING: {
-          if (!c.columnGraded) {
-            return `<td class="gb-cell gb-missing gb-nosub" title="${esc(t)} — nothing submitted, not yet graded">—</td>`;
-          }
           const d = decor(c);
-          return `<td class="gb-cell gb-missing${d.tintCls}"${d.style} title="${esc(t + ' — nothing submitted; graded as 0 of ' + c.possible + d.sig)}">0</td>`;
+          return `<td class="gb-cell gb-missing${d.tintCls}"${d.style} title="${esc(t + ' — no score; counts as 0 of ' + c.possible + d.sig)}">0</td>`;
         }
         default:
           return `<td class="gb-cell gb-pending" title="${esc(t)} — not due yet"></td>`;
@@ -268,15 +285,16 @@
     // is not a number: the dash, the tick, the draft marker, the clock, and the blank.
     function legend(stats) {
       return `<div class="gb-legend">
-        <span><b class="gb-key gb-missing gb-nosub">—</b> not submitted, not yet graded</span>
-        <span><b class="gb-key gb-ungraded">✓</b> submitted, awaiting grading</span>
-        <span><b class="gb-key gb-draft">2<sup>?</sup></b> AI suggestion, not finalized</span>
-        <span><b class="gb-key">⏰</b> arrived late</span>
-        <span class="gb-leg-sep">cell colour = understanding ${rampSwatch()} low→high · number = effort (0/1/2)</span>
-        <span class="muted">Blank = not due yet, and not counted.</span>
+        <span><b class="gb-key gb-missing gb-nosub">—</b> no score entered yet</span>
+        <span><b class="gb-key gb-ungraded">✓</b> work in, awaiting a score</span>
+        <span><b class="gb-key gb-draft">2<sup>?</sup></b> drafted, not published (not in the total)</span>
+        <span><b class="gb-key gb-draft">2<sup>H</sup></b> published, held by a release date</span>
+        <span><b class="gb-key">EX</b> excused</span>
+        <span><b class="gb-key">⏰</b> marked late</span>
+        <span class="gb-leg-sep">cell colour = understanding ${rampSwatch()} low→high · number = points earned</span>
+        <span class="muted">Blank = not due yet, and not counted. Totals are exact and are not rounded.</span>
         <span class="grow"></span>
-        <span class="muted">Median ${stats.median == null ? '—' : Math.round(stats.median * 100) + '%'}
-          · ${stats.missing} missing · ${stats.ungraded} awaiting grading</span>
+        <span class="muted">${stats.missing} counted as 0 · ${stats.ungraded} awaiting a score · ${stats.drafts} drafted</span>
       </div>`;
     }
 

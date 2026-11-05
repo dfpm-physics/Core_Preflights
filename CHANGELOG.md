@@ -124,6 +124,66 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 - **Tests.** New `test-student-loader.mjs` (30 checks, offline, in the CI list), written failing first. `test-permission-block.mjs` had two stale assumptions from the earlier step-2 work (a missing helper, and the removed default of 2 points) and was failing; fixed. `v2-student-read.mjs` now aborts any browser write before it leaves the page: the only attempts were the site's own preference upsert on sign-in and page load (`user_preferences`), 4 per run. It also reports the dashboard and assignment list as skipped, with the error shown, while 060 is absent.
 - **Not done / for the merge.** The dashboard and assignment list now need migration 060 on the database, so 060 must be applied before this code is served. Conflicts with the other branch: 046 drops the cadet row policy on `grades` and offers `my_grades`; this branch's two grade reads still say `from('grades')` and must change to `my_grades` (its `instructor_note` is a column there), or cadets will see no grades. `my_grades` has no release-time rule, so a held grade stays readable by a direct request until the view or the policy gets one. 047's `my_released_assignment_offerings()` requires `status = 'active'`, which undoes 060's widening for completed terms. Not touched: `site/faculty/`, `site/js/faculty-*`, any applied database.
 
+## 2026-11-05 — Matthew Recker via Claude (Stage D staff entry, step 2, branch `v2-step2-entry`, not committed)
+
+- **Score entry page `site/faculty/entry.html`.** Type scores for an item graded outside PREP, down a whole column
+  (Enter moves down, pasting a list fills down), or import a Gradescope or Teams CSV. The import shows a preview first:
+  duplicate cadets and unreadable scores block it, unmatched rows hold it until skipped, and replacing a published
+  score needs a tick. A third decimal is refused, never rounded. Scores save as drafts.
+- **Publish a column** publishes every drafted score of an item for a section, and for work with no submission also
+  closes the column. **Excused** control, Directors only, with a required reason. **Backlog and export page
+  `site/faculty/backlog.html`:** piles for work to grade, drafts to publish, scores to enter, held and date problems, the
+  near-line list, a gradebook CSV and a per-course Blackboard CSV.
+- **Migration `app/065`** (`enter_grades`, `publish_preview`, `publish_column`, `unpublish_column`, a no-NaN check, grants on
+  `gradebook_cells` and `course_totals`), with its rollback. Code: `faculty-entry-parse.js`, `faculty-entry.js`,
+  `faculty-backlog.js`, `faculty-export.js`, and new `faculty-totals.js` (paged reads of the two database functions).
+- **Review fixes (2026-11-05, two reviews, each claim checked first; all were right).**
+  - **One calculation.** The staff gradebook and student detail pages no longer compute a total, a state or a class
+    median. They print what `gradebook_cells` and `course_totals` return: drafts, held scores, excused work and bonus
+    items now show correctly, and 89.99 reads 89.99. Drafted scores show as "?", held as "H", excused as "EX".
+  - **Import:** an ID that is not on the roster never falls through to a name match; a name match needs a person to accept
+    it. A file Max Points that differs from the item's points holds the import until the person accepts one or the other.
+  - **Publish:** shows a preview first, and says plainly when it published nothing. It publishes only typed and imported
+    scores; AI suggestions stay drafts and are counted for a person to review (CORE.md section 6). The column closes
+    only when the item takes no submission, and the page and database now agree. New **Unpublish**.
+  - **Replacing a published score** is reported as such. **NaN and infinity** are refused in the page, the function and
+    by a table check. **A failed re-read after a successful save** now says the change was saved and the read failed.
+  - **Backlog and export** read the two functions in pages; a large course was being cut at about 1000 rows.
+  - **Rollback grants:** the 065 rollback revokes only `course_totals`; it leaves `gradebook_cells` granted, which `060`
+    owns. 065's own grant of it is idempotent.
+- **Proved:** offline suites 43/43 (2837 checks). Migration `065` and the Director-only excusal rule on a scratch
+  database, 75 checks, then dropped. **Not run:** anything against staging data; no page was clicked through in a browser.
+- **Deliberately not done:** nothing applied to staging; the frozen `lessons.html` and `faculty-lessons.js` untouched;
+  no student page touched. Several help docs now show as possibly stale in `check_doc_sources.py`; those are from other
+  commits and were not reviewed here.
+- **Section transfer keeps a blank where it was (review A, M8; migration `app/066`, with rollback).** A cadet moved between a
+  section whose column is closed and one whose column is open used to change between a counted 0 and a left-out blank, with
+  no event. A new table `closure_carry` and two triggers keep the state the cadet had until a person closes or reopens that
+  column in the new section; `_cells_at` reads it. On a scratch database, swapping six cadets changed 6 of 14 cells before and
+  0 after; the total vectors (105) and the entry proof (77) hold. Nothing was backfilled, so moves made before it are not
+  recorded. Scores, deadlines and extensions are untouched.
+- **Blackboard export rebuilt as a fill of the file the staff member uploads, like the live preflight fill.** Read from the
+  published code: the Director drops Blackboard's own gradebook download, one file per Blackboard course; cadets match by
+  cadet ID only and a file with no ID column is refused; the same file shape comes back (delimiter, line ending, BOM,
+  quoting), with only the identity columns and the columns that received a value; a blank is a blank, never a zero.
+  The new export keeps all of that and adds every kind of item (matched by exact title; a preflight still by the PF token
+  and lesson number) and the Prog and Final columns (matched by the names saved in the course settings; a column of the
+  same name plus "letter" takes the letter). Values are `gradebook_cells` and `course_totals` text, never recomputed.
+  The earlier button that wrote a file with its own invented headers is gone. `blackboard-fill.js` gained `matchTargets`,
+  a text-value path in `fillGrid` and a third argument to `readFile`; its preflight behaviour is unchanged (136 checks of the
+  existing suite, same count before and after). New suite `test-blackboard-export.mjs` (47 checks, Blackboard-shaped
+  fixtures, invented names). **Choices this changes:** one file out, not a "both percent and letter" column pair, and the
+  live total, because the live workflow never adds a column; a letter goes only into a column the file already has.
+  **Not run:** the page in a browser.
+- **Review A2 majors.** (1) Two Gradescope columns with one name each keep their own scores and maximum; two same-named
+  columns with only some maximums block the import. (2) An import approval belongs to what was shown: "allow replacing
+  published" is tied to the count on screen and "accept this maximum" to the item, its points and the file maxima; a changed
+  mapping voids both, and the page also clears them. (3) **Not reproduced:** `enter_grades` on an item whose mode is effort
+  stores the typed score, because the effort trigger has acted only on a row that carries an effort since migration `014`;
+  a check now holds that, and no refusal was added. (4) Rows that disagree on the maximum are held in all three formats and
+  the notes match; the Gradescope whole-course format has no status column, so it cannot blank Missing rows, as before.
+  Offline suites 44/44 (2896 checks).
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 Stage C staff pages, on staging, `v2` branch)
 
 - **Rough Items page for directors, `site/faculty/items.html`, on staging only.** It enters work of all seven

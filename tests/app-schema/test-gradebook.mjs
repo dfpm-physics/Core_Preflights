@@ -92,31 +92,6 @@ eq('a genuine collision gets a deterministic suffix in column order',
    G.uniqueCodes([{ slug: 'preflight-02' }, { slug: 'pre-flight-02' }, { slug: 'preflight-02' }]),
    ['PF02', 'PF02b', 'PF02c']);
 
-/* ══ 3. bandOf ════════════════════════════════════════════════════════════════ */
-
-section('faculty-gradebook.js — bandOf');
-
-// THE rule of this section: zero is its own band, never the bottom of "under 60%". A cadet who
-// handed in nothing and a cadet who scored 12% must not share a colour.
-eq('exactly zero is the No-credit band, not the failing band', G.bandOf(0)?.key, 'd0');
-eq('…and it is labelled as such', G.bandOf(0)?.label, 'No credit');
-check('…which is a different band from anything above zero', G.bandOf(0).key !== G.bandOf(0.01).key);
-
-eq('just under 60% is d1', G.bandOf(0.599)?.key, 'd1');
-eq('exactly 60% moves up to d2', G.bandOf(0.60)?.key, 'd2');
-eq('just under 70% is still d2', G.bandOf(0.699)?.key, 'd2');
-eq('exactly 70% moves up to d3', G.bandOf(0.70)?.key, 'd3');
-eq('just under 80% is still d3', G.bandOf(0.799)?.key, 'd3');
-eq('exactly 80% moves up to d4', G.bandOf(0.80)?.key, 'd4');
-eq('just under 90% is still d4', G.bandOf(0.899)?.key, 'd4');
-eq('exactly 90% moves up to d5', G.bandOf(0.90)?.key, 'd5');
-eq('full marks is d5', G.bandOf(1.0)?.key, 'd5');
-
-// null is "nothing has come due yet" and must stay visually distinct from "scored zero".
-eq('null has no band at all', G.bandOf(null), null);
-eq('undefined has no band', G.bandOf(undefined), null);
-eq('NaN has no band', G.bandOf(NaN), null);
-
 /* ══ 4. cellState ═════════════════════════════════════════════════════════════ */
 
 section('faculty-gradebook.js — cellState');
@@ -220,115 +195,70 @@ eq('a graded column does not put a 0 on work that is not due yet',
 eq('…nor does an active extension, which makes the cell PENDING',
    G.cellState({ grade: null, submission: null, offering: offering(), sectionId: SEC_M,
                  extensionISO: FUTURE, columnGraded: true, now: NOW }).points, null);
-/* The colour of that zero. "Not demonstrated" is 0 on the understanding scale, not null — null
- * means "not assessed" and leaves the cell uncoloured, which made the hard zeros the only blank-
- * coloured cells in an otherwise coloured column. Asserted through buildMatrix because that is
- * where the fill happens; cellState stays purely about state. */
-const missingCol = { offeringId: 'o-missing', slug: 'preflight-09', title: 'PF9',
-                     pointsPossible: 2, dueAt: PAST, position: 9, dueBySection: {}, dueByDay: {} };
-const zeroMatrix = G.buildMatrix({
-  enrollments: [{ enrollmentId: 'e-1', sectionId: SEC_M, name: 'Nobody Home' },
-                { enrollmentId: 'e-2', sectionId: SEC_M, name: 'Did The Work' }],
-  offerings: [missingCol],
-  // e-2 is graded and finalized, which is what marks the column graded for this section.
-  grades: [{ enrollment_id: 'e-2', assignment_offering_id: 'o-missing', points_earned: 2,
-             points_possible: 2, is_finalized: true, source: 'instructor', diagnostic: {} }],
-  submissions: [{ enrollment_id: 'e-2', assignment_offering_id: 'o-missing',
-                  status: 'committed', committed_at: PAST }],
-  extensions: [], now: NOW,
-});
-const zeroCell = zeroMatrix.rows[0].cells[0];
-eq('the non-submitter is MISSING in a graded column', zeroCell.state, G.CELL.MISSING);
-eq('…and is coloured as understanding 0, not left uncoloured', zeroCell.understanding, 0);
-eq('…which is the bottom of the ramp', G.zoneIndex(zeroCell.understanding), 0);
-// Effort is a different claim: nobody measured any, so it stays absent rather than being invented.
-eq('…while effort stays null — no effort was measured, which is not the same as zero effort',
-   zeroCell.effort, null);
+/* ══ 5. The database's cells and totals are the only ones ═══════════════════════
+ * Everything below was a second calculation (totalsFor, countsTowardTotal, gradedScopes) until step 2. A staff
+ * page that adds its own total will disagree with the student's page, the export and the backlog, so the grid now
+ * shows what gradebook_cells and course_totals return and adds nothing. The cases are the ones the two rules
+ * disagreed on. */
 
-const ungradedCol = G.buildMatrix({
-  enrollments: [{ enrollmentId: 'e-1', sectionId: SEC_M, name: 'Nobody Home' }],
-  offerings: [missingCol], grades: [], submissions: [], extensions: [], now: NOW,
-});
-eq('a missing cell in an UNGRADED column stays uncoloured — nothing has been judged yet',
-   ungradedCol.rows[0].cells[0].understanding, null);
+section('faculty-gradebook.js — no second total is left');
+check('totalsFor is gone', G.totalsFor === undefined);
+check('countsTowardTotal is gone', G.countsTowardTotal === undefined);
+check('gradedScopes is gone', G.gradedScopes === undefined);
+check('the percent-number band is gone; a band comes from the database text', G.bandOf === undefined && typeof G.bandOfKey === 'function');
+check('there is no median or mean to compute', !('median' in G.matrixStats([])) && !('mean' in G.matrixStats([])));
 
-eq('the total is identical either way — this is a display change, not an arithmetic one',
-   G.totalsFor([G.cellState({ grade: null, submission: null, offering: offering(),
-                              sectionId: SEC_M, columnGraded: true, now: NOW })]).pct,
-   G.totalsFor([G.cellState({ grade: null, submission: null, offering: offering(),
-                              sectionId: SEC_M, columnGraded: false, now: NOW })]).pct);
+section('faculty-gradebook.js — dbCellView: the database state decides');
 
-section('faculty-gradebook.js — gradedScopes');
+const dbc = (o = {}) => ({ enrollment_id: 'e1', section_id: SEC_M, assignment_offering_id: 'o1', state: 'released',
+  has_draft_score: false, is_late: false, no_work_received: false, deadline_invalid: false, late_closed: false,
+  points_earned: 8, points_possible: 10, ...o });
+eq('released is GRADED with its points', [G.dbCellView(dbc()).state, G.dbCellView(dbc()).points], [G.CELL.GRADED, 8]);
+eq('a draft score is a DRAFT, not a grade', G.dbCellView(dbc({ state: 'submitted_ungraded', has_draft_score: true })).state, G.CELL.DRAFT);
+eq('…and keeps the drafted points so the instructor can see them', G.dbCellView(dbc({ state: 'submitted_ungraded', has_draft_score: true })).points, 8);
+eq('work in with no score is UNGRADED, with no points', [G.dbCellView(dbc({ state: 'submitted_ungraded', points_earned: null })).state, G.dbCellView(dbc({ state: 'submitted_ungraded', points_earned: null })).points], [G.CELL.UNGRADED, null]);
+eq('missing is MISSING and counts 0', [G.dbCellView(dbc({ state: 'missing', points_earned: null })).state, G.dbCellView(dbc({ state: 'missing', points_earned: null })).points], [G.CELL.MISSING, 0]);
+eq('excused is EXCUSED and shows no points', [G.dbCellView(dbc({ state: 'excused' })).state, G.dbCellView(dbc({ state: 'excused' })).points], [G.CELL.EXCUSED, null]);
+eq('held by a release date is HELD', G.dbCellView(dbc({ state: 'graded_unreleased' })).state, G.CELL.HELD);
+eq('in progress and not due are both PENDING', [G.dbCellView(dbc({ state: 'in_progress' })).state, G.dbCellView(dbc({ state: 'not_due', points_earned: null })).state], [G.CELL.PENDING, G.CELL.PENDING]);
+eq('late comes from the database', G.dbCellView(dbc({ is_late: true })).late, true);
+check('a state the page does not know is not drawn as a number', G.dbCellView(dbc({ state: 'something_new' })).state === G.CELL.PENDING && G.dbCellView(dbc({ state: 'something_new' })).points == null);
 
-const ENR = [
-  { enrollmentId: 'e-m1', sectionId: SEC_M },
-  { enrollmentId: 'e-m2', sectionId: SEC_M },
-  { enrollmentId: 'e-t1', sectionId: SEC_T },
-];
-const scopes = G.gradedScopes(ENR, [
-  { enrollment_id: 'e-m1', assignment_offering_id: 'o1', is_finalized: true },
-  { enrollment_id: 'e-t1', assignment_offering_id: 'o1', is_finalized: false },
-  { enrollment_id: 'e-m1', assignment_offering_id: 'o2', is_finalized: false },
-]);
-check('one finalized grade marks that section+column graded', scopes.has(`${SEC_M}|o1`));
-// The M/T split is the whole reason this is per-section: an M-day section finished on Tuesday
-// must not turn the T-day section's absences into zeros before that section's work is even due.
-check('…and does not mark the other section of the same column', !scopes.has(`${SEC_T}|o1`));
-// A draft is exactly the state where the instructor has decided nothing. Announcing a classmate's
-// zero off the back of an unconfirmed AI suggestion would be reporting a decision nobody made.
-check('an unfinalized grade does not count as graded', !scopes.has(`${SEC_M}|o2`));
-check('a column with no grades at all is not graded', !scopes.has(`${SEC_M}|o3`));
-eq('a grade for an enrollment outside the scope is ignored rather than throwing',
-   G.gradedScopes(ENR, [{ enrollment_id: 'nobody', assignment_offering_id: 'o1',
-                          is_finalized: true }]).size, 0);
-eq('no enrollments, no grades, no scopes', G.gradedScopes(null, null).size, 0);
+section('faculty-gradebook.js — bandOfKey: an exact band from the database text');
+eq('no text, no band', G.bandOfKey(null), null);
+eq('zero is its own band', G.bandOfKey('0')?.key, 'd0');
+eq('a hair above zero is not', G.bandOfKey('0.0000000000000000000001')?.key, 'd1');
+eq('59.99 is d1', G.bandOfKey('59.99')?.key, 'd1');
+eq('exactly 60 is d2', G.bandOfKey('60')?.key, 'd2');
+eq('exactly 90 is d5', G.bandOfKey('90.0000000000000000000000')?.key, 'd5');
+eq('a float would call this 90; it is below the line', G.bandOfKey('89.9999999999999999999999')?.key, 'd4');
+eq('over 100 stays in the top band (bonus)', G.bandOfKey('104.5')?.key, 'd5');
+eq('junk is no band', G.bandOfKey('NaN'), null);
 
-/* ══ 5. countsTowardTotal / totalsFor ═════════════════════════════════════════ */
-
-section('faculty-gradebook.js — totals');
-
-const cell = (state, points, possible = 2) =>
-  ({ state, points, possible, isFinalized: false, source: null, late: false, due: null });
-
-eq('PENDING is the only state kept out of the sum',
-   [G.CELL.GRADED, G.CELL.DRAFT, G.CELL.UNGRADED, G.CELL.MISSING, G.CELL.PENDING]
-     .map((s) => G.countsTowardTotal(cell(s, null))),
-   [true, true, true, true, false]);
-
-// PENDING must leave BOTH sides of the fraction alone. Counting it in the denominator only is the
-// day-one 0% bug: 39 lessons nobody could have done yet, all counted against every cadet.
-const withPending = G.totalsFor([cell(G.CELL.GRADED, 2), cell(G.CELL.PENDING, null),
-                                 cell(G.CELL.PENDING, null)]);
-eq('a not-yet-due cell is in neither the numerator nor the denominator',
-   [withPending.earned, withPending.possible, withPending.pct], [2, 2, 1]);
-eq('…and is not counted as a cell at all', withPending.counted, 1);
-
-// MISSING is a zero out of full — that is the entire point of distinguishing it from PENDING.
-const withMissing = G.totalsFor([cell(G.CELL.GRADED, 2), cell(G.CELL.MISSING, null)]);
-eq('a missing cell scores zero out of full', [withMissing.earned, withMissing.possible], [2, 4]);
-eq('…so it halves a perfect score', withMissing.pct, 0.5);
-
-// UNGRADED drags the average exactly as MISSING does, deliberately: it is unfinished work by the
-// INSTRUCTOR, and excluding it would hide the grading backlog from the person who owes it.
-const withUngraded = G.totalsFor([cell(G.CELL.GRADED, 2), cell(G.CELL.UNGRADED, null)]);
-eq('an ungraded submission also scores zero out of full',
-   [withUngraded.earned, withUngraded.possible, withUngraded.pct], [2, 4, 0.5]);
-
-// null, not 0 and not NaN: on the first day of term there is nothing to judge, and a 0% would be
-// a false statement about every cadet in the course.
-const allPending = G.totalsFor([cell(G.CELL.PENDING, null), cell(G.CELL.PENDING, null)]);
-eq('a row where nothing has come due has a null percentage, not zero', allPending.pct, null);
-check('…and specifically not NaN', !Number.isNaN(allPending.pct));
-eq('…and no band, so it renders as nothing', G.bandOf(allPending.pct), null);
-eq('an empty row is the same', G.totalsFor([]).pct, null);
+section('faculty-gradebook.js — totalView: text straight from course_totals');
+const dbt = (o = {}) => ({ enrollment_id: 'e1', section_id: SEC_M, student_id: 3000000001, earned_text: '8', possible_text: '10',
+  percent_text: '80', percent_key_text: '80.0000000000000000000000', letter: 'B-', gpa: 2.7, near_line_letter: null, rank: 3, tie_group: null,
+  missing_count: 0, ungraded_count: 0, unreleased_count: 0, excused_count: 0, bonus_only: false, no_work_count: 0, invalid_deadline_count: 0, ...o });
+{
+  const v = G.totalView(dbt());
+  eq('the percent is the database text, not a rounded number', [v.percentText, v.earnedText, v.possibleText, v.letter, v.rank], ['80', '8', '10', 'B-', 3]);
+  eq('a band comes with it', v.band.key, 'd4');
+  eq('a repeating percent keeps its ellipsis, never a rounded 67', G.totalView(dbt({ percent_text: '66.666666…', percent_key_text: '66.6666666666666666666666' })).percentText, '66.666666…');
+  eq('nothing counted yet has no percent and no band', [G.totalView(dbt({ earned_text: '0', possible_text: '0', percent_text: null, percent_key_text: null, letter: null })).percentText, G.totalView(dbt({ percent_key_text: null, percent_text: null })).band], [null, null]);
+  eq('a bonus-only cadet is marked so the page prints points, not a dash', G.totalView(dbt({ earned_text: '3', possible_text: '0', percent_text: null, percent_key_text: null, bonus_only: true })).bonusOnly, true);
+  eq('no row, no view', G.totalView(undefined), null);
+}
 
 /* ══ 6. buildMatrix ═══════════════════════════════════════════════════════════ */
 
 section('faculty-gradebook.js — buildMatrix');
 
+const need = (f) => { try { f(); return null; } catch (e) { return e; } };
+check('a grid with no database cells is refused, not drawn from a local guess',
+  need(() => G.buildMatrix({ enrollments: [], offerings: [], grades: [], submissions: [], extensions: [] })) instanceof Error);
+
 /* Ordering. Columns run by deadline, then by the author's position for a tie, then anything with
- * no deadline at all lands at the end — a grid that does not run left-to-right in time is not a
- * grid a human can read a term off. */
+ * no deadline at all lands at the end. */
 const orderOfferings = [
   offering({ offeringId: 'c-late',  slug: 'preflight-03', dueAt: '2026-07-15T05:59:00.000Z',
              position: 9, pointsPossible: 2 }),
@@ -341,89 +271,83 @@ const orderOfferings = [
 ];
 const ordered = G.buildMatrix({
   enrollments: [{ enrollmentId: 'e1', studentId: 3000000001, name: 'Alpha', sectionId: SEC_M }],
-  offerings: orderOfferings, grades: [], submissions: [], extensions: [], now: NOW,
+  offerings: orderOfferings, grades: [], submissions: [], extensions: [], dbCells: [], dbTotals: [], now: NOW,
 });
 eq('columns sort by due date, then position, with undated last',
    ordered.columns.map((c) => c.offeringId), ['a-pos1', 'b-pos2', 'c-late', 'd-undated']);
 eq('…and each column carries a unique shortcode',
    ordered.columns.map((c) => c.code), ['PF01', 'PF02', 'PF03', 'PF04']);
-
-// The cells are a bare array with no column key of their own, so "cells are in column order" is
-// the invariant the renderer relies on. Distinct point values per column make it checkable.
 eq('a row\'s cells are in column order',
    ordered.rows[0].cells.map((c) => c.possible),
    ordered.columns.map((c) => c.pointsPossible));
-
-// An enrollment with nothing at all must still produce a full-width row; a short row would shift
-// every cell after it into the wrong column.
-eq('an enrollment with no grades and no submissions still gets a full row of cells',
+eq('an enrollment the database has no cells for still gets a full row',
    ordered.rows[0].cells.length, ordered.columns.length);
-eq('…all of which are MISSING or PENDING by deadline',
-   ordered.rows[0].cells.map((c) => c.state),
-   [G.CELL.MISSING, G.CELL.MISSING, G.CELL.MISSING, G.CELL.PENDING]);
-eq('…and the undated column is the PENDING one', ordered.columns[3].dueAt, null);
+eq('…none of them drawn as a number or a zero',
+   ordered.rows[0].cells.map((c) => [c.state, c.points]), ordered.columns.map(() => [G.CELL.PENDING, null]));
+eq('…and no total, which is not the same as a total of zero', ordered.rows[0].total, null);
 
-/* Statistics, over a set small enough to compute by hand.
- * Two 2-point columns, both past due:
- *   e1  2/2 + 2/2 = 4/4 = 1.0
- *   e2  2/2 + missing = 2/4 = 0.5
- *   e3  missing + missing = 0/4 = 0.0
- *   e4  ungraded + missing = 0/4 = 0.0
- * median of [0, 0, 0.5, 1] = 0.25 · mean = 1.5/4 = 0.375 · missing cells = 4 · ungraded = 1 */
-const statCols = [
-  offering({ offeringId: 'k1', slug: 'preflight-01', dueAt: PAST, position: 1, pointsPossible: 2 }),
-  offering({ offeringId: 'k2', slug: 'preflight-02', dueAt: PAST, position: 2, pointsPossible: 2 }),
+/* THE CASE THE TWO RULES DISAGREED ON. One item worth 10.
+ *   A  a draft of 8 typed on the entry page, not published.   old grid: 8/10 = 80%.  Database: the draft is out.
+ *   B  published 10.
+ *   C  excused.                                               old grid: 0 earned, 10 possible.  Database: out.
+ *   D  a bonus item worth 5, scored 5.                        old grid: 5 possible.  Database: possible 0.
+ * The grid must print the database's numbers for all four, whatever those numbers are. */
+const item10 = offering({ offeringId: 'o1', slug: 'quiz-1', title: 'Quiz 1', pointsPossible: 10, dueAt: PAST });
+const bonus5 = offering({ offeringId: 'o2', slug: 'quiz-2', title: 'Bonus', pointsPossible: 5, dueAt: PAST, position: 2 });
+const people = ['A', 'B', 'C', 'D'].map((n, i) => ({ enrollmentId: 'e' + n, studentId: 3000000010 + i, name: 'Cadet ' + n, sectionId: SEC_M }));
+const cellsDb = [
+  dbc({ enrollment_id: 'eA', assignment_offering_id: 'o1', state: 'submitted_ungraded', has_draft_score: true, points_earned: 8 }),
+  dbc({ enrollment_id: 'eB', assignment_offering_id: 'o1', state: 'released', points_earned: 10 }),
+  dbc({ enrollment_id: 'eC', assignment_offering_id: 'o1', state: 'excused', points_earned: null }),
+  dbc({ enrollment_id: 'eD', assignment_offering_id: 'o1', state: 'released', points_earned: 10 }),
+  dbc({ enrollment_id: 'eD', assignment_offering_id: 'o2', state: 'released', points_earned: 5, points_possible: 5 }),
 ];
-const full = (e, o) => ({ enrollment_id: e, assignment_offering_id: o,
-                          points_earned: 2, points_possible: 2, is_finalized: true });
-const stats = G.buildMatrix({
-  enrollments: [
-    { enrollmentId: 'e1', sectionId: SEC_M }, { enrollmentId: 'e2', sectionId: SEC_M },
-    { enrollmentId: 'e3', sectionId: SEC_M }, { enrollmentId: 'e4', sectionId: SEC_M },
-  ],
-  offerings: statCols,
-  grades: [full('e1', 'k1'), full('e1', 'k2'), full('e2', 'k1')],
-  submissions: [{ enrollment_id: 'e4', assignment_offering_id: 'k1',
-                  status: 'committed', committed_at: PAST }],
-  extensions: [], now: NOW,
-});
-eq('each row totals to its hand-computed percentage',
-   stats.rows.map((r) => r.totals.pct), [1, 0.5, 0, 0]);
-// Note e3 and e4 (both 0.0) land in d0 while e2 (0.5) lands in d1 — the zero-is-its-own-band rule
-// from §3, arriving where it actually matters: on a real row of a real grid.
-eq('…and each row gets the band for that percentage',
-   stats.rows.map((r) => r.band.key), ['d5', 'd1', 'd0', 'd0']);
-eq('the class median is the middle of the four', stats.stats.median, 0.25);
-eq('the class mean is the average of the four', stats.stats.mean, 0.375);
-eq('every row is counted', stats.stats.n, 4);
-eq('missing cells are tallied across the whole grid', stats.stats.missing, 4);
-eq('ungraded cells are tallied separately, as the instructor\'s own backlog',
-   stats.stats.ungraded, 1);
+const totalsDb = [
+  dbt({ enrollment_id: 'eA', earned_text: '0', possible_text: '0', percent_text: null, percent_key_text: null, letter: null, rank: null, ungraded_count: 1 }),
+  dbt({ enrollment_id: 'eB', earned_text: '10', possible_text: '10', percent_text: '100', percent_key_text: '100.0000000000000000000000', letter: 'A', rank: 1 }),
+  dbt({ enrollment_id: 'eC', earned_text: '0', possible_text: '0', percent_text: null, percent_key_text: null, letter: null, rank: null, excused_count: 1 }),
+  dbt({ enrollment_id: 'eD', earned_text: '15', possible_text: '10', percent_text: '150', percent_key_text: '150.0000000000000000000000', letter: 'A', rank: 1 }),
+];
+const tm = G.buildMatrix({ enrollments: people, offerings: [item10, bonus5],
+  grades: [{ enrollment_id: 'eA', assignment_offering_id: 'o1', points_earned: 8, points_possible: 10, is_finalized: false, source: 'instructor' }],
+  submissions: [], extensions: [], dbCells: cellsDb, dbTotals: totalsDb, now: NOW });
+const row = (n) => tm.rows.find((r) => r.name === 'Cadet ' + n);
+eq('A: the draft shows as a draft with its points', [row('A').cells[0].state, row('A').cells[0].points], [G.CELL.DRAFT, 8]);
+eq('A: and is NOT in the total, which says so', [row('A').total.earnedText, row('A').total.possibleText, row('A').total.percentText], ['0', '0', null]);
+eq('B: a published score counts', [row('B').cells[0].state, row('B').total.percentText], [G.CELL.GRADED, '100']);
+eq('C: an excused item shows as excused and leaves the total', [row('C').cells[0].state, row('C').total.possibleText], [G.CELL.EXCUSED, '0']);
+eq('D: a bonus item adds earned and no possible, and the percent passes 100', [row('D').total.earnedText, row('D').total.possibleText, row('D').total.percentText], ['15', '10', '150']);
+check('D: and is in the top band', row('D').band?.key === 'd5');
+eq('a total is never a number the page computed',
+   tm.rows.every((r) => r.total === null || typeof r.total.percentText === 'string' || r.total.percentText === null), true);
+eq('statistics are counts of database states', [tm.stats.n, tm.stats.ungraded, tm.stats.drafts, tm.stats.excused, tm.stats.missing], [4, 0, 1, 1, 0]);
 
-// A class where nothing has come due yet has no median and no mean — the same null the row-level
-// percentage uses, for the same reason.
-const early = G.buildMatrix({
-  enrollments: [{ enrollmentId: 'e1', sectionId: SEC_M }],
-  offerings: [offering({ offeringId: 'f1', slug: 'preflight-01', dueAt: FUTURE })],
-  grades: [], submissions: [], extensions: [], now: NOW,
-});
-eq('before any deadline the class statistics are null, not zero',
-   [early.stats.median, early.stats.mean], [null, null]);
+// The old grid also called an M-day section's blank a zero off a finalized classmate; here a blank is whatever the database says.
+{
+  const m = G.buildMatrix({ enrollments: [people[0], people[1]], offerings: [item10], grades: [], submissions: [], extensions: [],
+    dbCells: [dbc({ enrollment_id: 'eA', state: 'missing', points_earned: null }), dbc({ enrollment_id: 'eB', state: 'not_due', points_earned: null })],
+    dbTotals: [dbt({ enrollment_id: 'eA', earned_text: '0', possible_text: '10', percent_text: '0', percent_key_text: '0', letter: 'F' }), dbt({ enrollment_id: 'eB', earned_text: '0', possible_text: '0', percent_text: null, percent_key_text: null, letter: null })],
+    now: NOW });
+  eq('missing is a 0 and not-due is nothing', [m.rows[0].cells[0].state, m.rows[0].cells[0].points, m.rows[1].cells[0].state, m.rows[1].cells[0].points], [G.CELL.MISSING, 0, G.CELL.PENDING, null]);
+  eq('missing is its own band (no credit)', m.rows[0].band.key, 'd0');
+  eq('and nothing counted has no band', m.rows[1].band, null);
+  eq('stats tally missing from the database state', m.stats.missing, 1);
+}
 
-// The extension has to survive the trip through buildMatrix, not just cellState — extBy is keyed
-// on the same enrollment/offering pair as grades and submissions, and a mismatch there would look
-// exactly like "no extensions exist".
-const extended = G.buildMatrix({
-  enrollments: [{ enrollmentId: 'e1', sectionId: SEC_M }, { enrollmentId: 'e2', sectionId: SEC_M }],
-  offerings: [offering({ offeringId: 'x1', slug: 'preflight-01', dueAt: PAST })],
-  grades: [], submissions: [],
-  extensions: [{ enrollment_id: 'e2', assignment_offering_id: 'x1', extended_due_at: FUTURE }],
-  now: NOW,
-});
-eq('an extension row reaches the cell it belongs to, and only that one',
-   extended.rows.map((r) => r.cells[0].state), [G.CELL.MISSING, G.CELL.PENDING]);
-eq('…so the extended cadet has no percentage yet rather than a zero',
-   extended.rows[1].totals.pct, null);
+// The extension has to survive the trip through buildMatrix for its display facts (the due date the cell shows).
+{
+  const extended = G.buildMatrix({
+    enrollments: [{ enrollmentId: 'e1', sectionId: SEC_M }, { enrollmentId: 'e2', sectionId: SEC_M }],
+    offerings: [offering({ offeringId: 'x1', slug: 'preflight-01', dueAt: PAST })],
+    grades: [], submissions: [],
+    extensions: [{ enrollment_id: 'e2', assignment_offering_id: 'x1', extended_due_at: FUTURE }],
+    dbCells: [dbc({ enrollment_id: 'e1', assignment_offering_id: 'x1', state: 'missing', points_earned: null }), dbc({ enrollment_id: 'e2', assignment_offering_id: 'x1', state: 'not_due', points_earned: null })],
+    dbTotals: [], now: NOW,
+  });
+  eq('the state is the database\'s for both cadets', extended.rows.map((r) => r.cells[0].state), [G.CELL.MISSING, G.CELL.PENDING]);
+  check('the extended cadet\'s cell shows the extended date', +new Date(extended.rows[1].cells[0].due) === +new Date(FUTURE));
+}
+
 
 /* ══════════════════════════════════════════════════════════════════════════
  * Colour layer — zoneIndex + cellSignals (director request: tint = understanding,
@@ -496,7 +420,8 @@ const coloured = G.buildMatrix({
              diagnostic: { q2_effort: 4, q3_understanding: 2 } }],
   submissions: [{ enrollment_id: 'e1', assignment_offering_id: 'x1', status: 'committed',
                   committed_at: PAST }],
-  extensions: [], now: NOW,
+  extensions: [], dbTotals: [],
+  dbCells: [dbc({ enrollment_id: 'e1', assignment_offering_id: 'x1', state: 'released', points_earned: 2, points_possible: 2 })], now: NOW,
 });
 {
   const cell = coloured.rows[0].cells[0];
@@ -510,7 +435,8 @@ const coloured = G.buildMatrix({
 const bare = G.buildMatrix({
   enrollments: [{ enrollmentId: 'e9', sectionId: SEC_M }],
   offerings: [offering({ offeringId: 'x1', slug: 'preflight-01', dueAt: PAST })],
-  grades: [], submissions: [], extensions: [], now: NOW,
+  grades: [], submissions: [], extensions: [], dbTotals: [],
+  dbCells: [dbc({ enrollment_id: 'e9', assignment_offering_id: 'x1', state: 'not_due', points_earned: null })], now: NOW,
 });
 eq('a cell with no grade has null signals, so it renders plain',
    [bare.rows[0].cells[0].effort, bare.rows[0].cells[0].understanding], [null, null]);

@@ -82,6 +82,9 @@ export const FACULTY_LINKS = [
   // An instructor who types the URL gets a plain "directors only" state, and the database refuses
   // the writes regardless.
   { key: 'items',        label: 'Items',        href: 'items.html',             icon: 'grades',        emoji: '🧾', directorOnly: true },
+  // Enter scores and Backlog: staff pages for hand-entered work. Ungated; the database decides who may write.
+  { key: 'entry',        label: 'Enter scores', href: 'entry.html',             icon: 'grades',        emoji: '✏️' },
+  { key: 'backlog',      label: 'Backlog',      href: 'backlog.html',           icon: 'progress',      emoji: '📋' },
   // NO Extensions entry. It was its own destination from 2026-07-22 until 2026-07-30, on the
   // argument that a recurring review should not be buried inside an administrative page. The
   // director's call reverses that: it is the **Extensions tab of Course Admin** now, beside
