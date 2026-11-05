@@ -49,6 +49,7 @@ sys.path.insert(0, str(HERE))
 import db_target  # noqa: E402
 import scratch_build_check as sbc  # noqa: E402
 import scratch_stage_e_proof as p  # noqa: E402
+import v2_gate_lib as lib  # noqa: E402
 from scratch_stage_e_proof import J, call, check, connect, now_utc, one, section  # noqa: E402
 
 NUM_KEY = {"value": 9.8, "tol_pct": 2, "tol_abs": None}
@@ -231,10 +232,10 @@ def run_remark_checks(cur, surl, fx):
            for k in "ABCE"}
     check("grades before the correction: A 3, B 0, C 0, E 2", [float(pts[k]) for k in "ABCE"] == [3.0, 0.0, 0.0, 2.0], str(pts))
     # an instructor takes over C's grade
-    cur.execute("ALTER TABLE app.grades DISABLE TRIGGER grades_new_items_stay_unfinalized")
+    rule_live = lib.triggers_off(cur, "grades", ("grades_new_items_stay_unfinalized",))   # absent once 079 is applied
     cur.execute("UPDATE app.grades SET source='instructor', points_earned = 1.5, graded_by = %s WHERE enrollment_id=%s AND assignment_offering_id=%s",
                 (D, fx.cadet["C"][1], it["ao"]))
-    cur.execute("ALTER TABLE app.grades ENABLE TRIGGER grades_new_items_stay_unfinalized")
+    lib.triggers_on(cur, "grades", rule_live)
 
     old_key = one(cur, "SELECT id FROM app.question_keys WHERE question_id=%s AND superseded_at IS NULL", q1)
     new_key = correct_key(cur, q1, 12, 2)
@@ -625,11 +626,14 @@ def run_fix_checks(cur, surl, fx):
     check("a first answer makes an auto_checked grade of 2", g[1] == "auto_checked" and float(g[0]) == 2.0, str(g))
     set_uid(cur, D)
     e = refused(cur, "UPDATE app.grades SET points_earned = 1.5 WHERE enrollment_id=%s AND assignment_offering_id=%s", (A, pc["ao"]))
-    check("at step 1 the new-page rule refuses a person's write outright", e is not None and "grades_new_items_stay_unfinalized" in e, str(e))
+    if lib.existing_triggers(cur, "grades", ("grades_new_items_stay_unfinalized",)):
+        check("at step 1 the new-page rule refuses a person's write outright", e is not None and "grades_new_items_stay_unfinalized" in e, str(e))
+    else:
+        check("with 079 applied the new-page rule is gone and a person's write is not refused by it", e is None or "grades_new_items_stay_unfinalized" not in e, str(e))
     # step 2 drops that rule; the correction must hold without it
-    cur.execute("ALTER TABLE app.grades DISABLE TRIGGER grades_new_items_stay_unfinalized")
+    rule_live = lib.triggers_off(cur, "grades", ("grades_new_items_stay_unfinalized",))   # absent once 079 is applied
     cur.execute("UPDATE app.grades SET points_earned = 1.5 WHERE enrollment_id=%s AND assignment_offering_id=%s", (A, pc["ao"]))
-    cur.execute("ALTER TABLE app.grades ENABLE TRIGGER grades_new_items_stay_unfinalized")
+    lib.triggers_on(cur, "grades", rule_live)
     clear_uid(cur)
     g = grade_of(cur, A, pc["ao"])
     check("a person's write moves it to source instructor, graded_by that person", g[1] == "instructor" and float(g[0]) == 1.5 and str(g[2]) == str(D), str(g))
@@ -638,7 +642,7 @@ def run_fix_checks(cur, surl, fx):
     g = grade_of(cur, A, pc["ao"])
     check("later answers do not overwrite it", g[1] == "instructor" and float(g[0]) == 1.5, str(g))
     # the per-question scores too, with the step 1 rule off
-    cur.execute("ALTER TABLE app.grades DISABLE TRIGGER grades_new_items_stay_unfinalized")
+    rule_live = lib.triggers_off(cur, "grades", ("grades_new_items_stay_unfinalized",))   # absent once 079 is applied
     try:
         ans(cur, fx, "B", pc, "q1", "9.8")
         set_uid(cur, D)
@@ -650,7 +654,7 @@ def run_fix_checks(cur, surl, fx):
         g = grade_of(cur, B, pc["ao"])
         check("...and the next answer still does not overwrite it", g[1] == "instructor" and float(g[0]) == 2.0, str(g))
     finally:
-        cur.execute("ALTER TABLE app.grades ENABLE TRIGGER grades_new_items_stay_unfinalized")
+        lib.triggers_on(cur, "grades", rule_live)
 
     section("fixes: two offerings sharing one activity keep separate attempts and grades")
     b = fx.b
@@ -706,8 +710,8 @@ def run_fix_checks(cur, surl, fx):
     ans(cur, fx, "A", rg, "q1", "9.8"); ans(cur, fx, "A", rg, "q2", "0"); ans(cur, fx, "A", rg, "q3", None, choices=["b"])
     pp = lambda: float(one(cur, "SELECT points_possible FROM app.assignment_offerings WHERE id=%s", rg["ao"]))
     # step 1 refuses a points change on a published new-page item; step 2 removes that rule, so the proof turns it off here
-    for t in ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished"):
-        cur.execute(f"ALTER TABLE app.assignment_offerings DISABLE TRIGGER {t}")
+    ao_rules = lib.triggers_off(cur, "assignment_offerings",   # those that exist: 079 removes them
+                                ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished"))
     check("before: grade 4 of 4", float(grade_of(cur, A, rg["ao"])[0]) == 4.0 and pp() == 4.0, f"{grade_of(cur, A, rg['ao'])} {pp()}")
     cur.execute("UPDATE app.questions SET is_retired = true WHERE id=%s", (rg["q"]["q1"],))
     g = grade_of(cur, A, rg["ao"])
@@ -718,8 +722,7 @@ def run_fix_checks(cur, surl, fx):
     cur.execute("UPDATE app.questions SET points = 1 WHERE id=%s", (rg["q"]["q3"],))
     g = grade_of(cur, A, rg["ao"])
     check("...and still not after lowering another", float(g[0]) <= pp(), f"{g} {pp()}")
-    for t in ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished"):
-        cur.execute(f"ALTER TABLE app.assignment_offerings ENABLE TRIGGER {t}")
+    lib.triggers_on(cur, "assignment_offerings", ao_rules)
 
     section("fixes: late work when the term has no last class day is refused in plain words")
     term_id = one(cur, "SELECT term_id FROM app.course_offerings WHERE id=%s", fx.co)
@@ -754,9 +757,9 @@ def run_fix_checks(cur, surl, fx):
     cur.execute("ALTER TABLE offering_activities ENABLE TRIGGER offering_activities_same_assignment")
     sp["activities"], sp["q"] = sh["activities"], sh["q"]
     b.publish(sh)
-    cur.execute("ALTER TABLE app.assignment_offerings DISABLE TRIGGER assignment_offerings_publish_needs_active")   # a past term was published while it was active
+    pna_live = lib.triggers_off(cur, "assignment_offerings", ("assignment_offerings_publish_needs_active",))   # a past term was published while it was active
     b.publish(sp)
-    cur.execute("ALTER TABLE app.assignment_offerings ENABLE TRIGGER assignment_offerings_publish_needs_active")
+    lib.triggers_on(cur, "assignment_offerings", pna_live)
     past_staff = b.staff("proof-past-director", "Test Past Director")
     b.assign(past_staff, co_past, "director")
     cur.execute("COMMIT")

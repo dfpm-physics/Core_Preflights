@@ -1566,6 +1566,7 @@ def cmd_worklist(args, conn):
               f"instruction to run.\n")
     cur = conn.cursor(cursor_factory=RealDictCursor)
     _refuse_null_delivery(cur, args.course)
+    flags = eligibility_flags(cur)        # (has the marker column, has the ai_drafted option)
     cur.execute("""
         with offering as (
           select co.id
@@ -1668,8 +1669,8 @@ def cmd_worklist(args, conn):
          -- from the top.
          order by d.due_at desc, a.slug, d.track
     """.replace("/*TRACK_COVERED*/", track_covered_sql("ar.payload", "d.section_ids"))
-       .replace("/*ELIGIBLE*/", eligible_path_sql("oa", "ao", *eligibility_flags(cur)))
-       .replace("/*INELIGIBLE*/", ineligible_typed_sql("ob", "ao", *eligibility_flags(cur))),
+       .replace("/*ELIGIBLE*/", eligible_path_sql("oa", "ao", *flags))
+       .replace("/*INELIGIBLE*/", ineligible_typed_sql("ob", "ao", *flags)),
         {"course": args.course, "day": day, "kind": KIND, "as_of": as_of})
     rows = cur.fetchall()
     if not rows:

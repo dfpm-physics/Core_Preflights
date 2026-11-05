@@ -735,6 +735,14 @@ def rules(conn):
         check("section 6 the trigger sets the flag on the bonus grade", c.fetchone()[0] is True)
     run_world(conn, bonus)
 
+    # Migration 079 removes the step 1 rules. These sections prove them, so they run only on a database that still has them.
+    cur0 = conn.cursor()
+    cur0.execute("SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgname = 'assignment_offerings_new_stay_unpublished'")
+    step1_rules = cur0.fetchone()[0] > 0
+    cur0.close()
+    if not step1_rules:
+        print("  [skip] migration 079 is applied: the step 1 publishing and finalizing rules are gone, so their sections do not run")
+
     # ---- section 1: new items stay unpublished and unfinalized -------------------------------------------
     def new_items(w):
         c = w.cur
@@ -750,7 +758,8 @@ def rules(conn):
         plain = w.item("plain", 10)
         pg = w.grade(e, plain, 5, final=False)
         accepted(c, "UPDATE grades SET is_finalized = true WHERE id = %s", (pg,), "section 6 finalizing on any other item passes")
-    run_world(conn, new_items)
+    if step1_rules:
+        run_world(conn, new_items)
 
     def inactive(w):
         c = w.cur
@@ -765,7 +774,8 @@ def rules(conn):
                  "section 1 one active offering per course allows the switch once the first is off")
         accepted(c, "UPDATE assignment_offerings SET is_published = true WHERE id = %s", (it["ao"],),
                  "section 1 publishing on an active offering passes")
-    run_world(conn, inactive)
+    if step1_rules:
+        run_world(conn, inactive)
 
     # ---- section 3: grading_mode follows the paths of a flagged item ---------------------------------------
     def mode(w):
@@ -828,6 +838,8 @@ def rules(conn):
                 "assignment_offerings_marker_one_way", "section 1 the marker cannot be cleared")
         accepted(c, "UPDATE assignment_offerings SET entered_on_new_page = true WHERE id = %s", (flagged["ao"],),
                  "section 1 setting the marker again is a no-op")
+        if not step1_rules:
+            return
         # an unflagged item with an in-person path cannot publish, whoever asks
         ip = w.item("exam", 20, how="inperson", publish=False)
         refused(c, "UPDATE assignment_offerings SET is_published = true WHERE id = %s", (ip["ao"],),

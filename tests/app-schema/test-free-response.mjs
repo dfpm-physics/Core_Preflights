@@ -285,4 +285,97 @@ section('saving the questions of an existing item');
   eq('a form with no question set leaves the activity alone', writesTo('activities', 'update').length, 0);
 }
 
+/* ───────────────────────────────────────────────────────────────────────────────────────── */
+section('review fixes: a question id is never handed to a different question');
+{
+  const stored = { questions: [
+    { id: 'q1', role: 'reading_time', type: 'free_response', text: F.READING_TIME_TEXT, points: 0 },
+    { id: 'q2', role: 'reading_reflection', type: 'free_response', text: F.READING_REFLECTION_TEXT, points: 1 },
+    { id: 'q3', role: 'free_response', type: 'free_response', text: 'Three', points: 1 },
+    { id: 'q4', role: 'free_response', type: 'free_response', text: 'Four', points: 1 }] };
+  const e = F.editorFromContent(stored, { q4: 'old guidance' });
+  F.removeQuestion(e, e.questions.findIndex(q => q.id === 'q4'));
+  const added = F.newQuestion('free_response', e.questions, e.used_ids);
+  eq('after removing q4, a new question is not q4', added.id, 'q5');
+  const e2 = F.editorFromContent({ questions: stored.questions.slice(0, 3) }, { q4: 'a key for a question no longer in the list' });
+  eq('an id that only a stored key names is not reused', F.newQuestion('free_response', e2.questions, e2.used_ids).id, 'q5');
+  const e3 = F.editorFromContent({ questions: stored.questions.slice(0, 3) }, {}, ['q9']);
+  eq('an id the activity has a row for is not reused', F.newQuestion('free_response', e3.questions, e3.used_ids).id, 'q10');
+  const e4 = F.editorFromContent(stored, null);
+  F.pinOff(e4, 'reading_reflection');
+  F.pinOn(e4, 'reading_reflection');
+  eq('turning a pinned question off remembers its id', e4.questions.find(q => q.role === 'reading_reflection').id, 'q5');
+  check('a stored question may not change type', F.canChangeType(e4.questions.find(q => q.id === 'q3')) === false);
+  check('a question added this session may', F.canChangeType(F.newQuestion('free_response', e4.questions, e4.used_ids)) === true);
+  check('a pinned question may not', F.canChangeType(e4.questions.find(q => q.role === 'reading_time')) === false);
+  const saved = F.contentFromEditor(F.editorFromContent(stored, null), { keepKeys: false });
+  check('nothing page-only is stored (no _stored, no used_ids)', !JSON.stringify(saved).includes('_stored') && !('used_ids' in saved));
+}
+
+section('review fixes: the reading-time question is never given points');
+{
+  const e = F.emptyEditor();
+  e.questions[0].points = 1;
+  eq('a save writes 0 for it whatever the box held', F.contentFromEditor(e, { keepKeys: true }).questions[0].points, 0);
+  check('and it is not refused for that', !F.checkEditor(e).some(p => /Question 1/.test(p)));
+  const ui = read('site/js/free-response-ui.js');
+  check('the page draws no points box for the reading-time question', /role !== 'reading_time'|role === 'reading_time'/.test(ui));
+}
+
+section('review fixes: a numerical answer and its tolerance are checked the way a number input would');
+{
+  const bad = (answer, tolerance = 0.05) => {
+    const e = F.emptyEditor();
+    e.questions.push({ ...F.newQuestion('numerical', e.questions), text: 'N', correct_answer: answer, tolerance });
+    return F.checkEditor(e);
+  };
+  for (const a of [' ', '', 'Infinity', '0x10', '1e999', 'abc', '1,5', '--3'])
+    check(`correct answer ${JSON.stringify(a)} is refused`, bad(a).some(p => /correct answer/.test(p)));
+  for (const a of ['9.81', ' 9.81 ', '-3', '+2.5e3', '.5', '5.'])
+    check(`correct answer ${JSON.stringify(a)} is accepted`, bad(a).length === 0);
+  check('an empty tolerance is refused', bad('1', '').some(p => /tolerance/.test(p)));
+  check('a tolerance above 1 is refused', bad('1', 1.5).some(p => /tolerance/.test(p)));
+  const e = F.emptyEditor();
+  e.questions.push({ ...F.newQuestion('numerical', e.questions), text: 'N', correct_answer: ' 9.81 ', tolerance: '0.02' });
+  const q = F.contentFromEditor(e, { keepKeys: true }).questions.at(-1);
+  eq('the answer is stored trimmed and the tolerance as a number', [q.correct_answer, q.tolerance], ['9.81', 0.02]);
+}
+
+section('review fixes: the reading fields are trimmed, blank means none, and a reference file is a .pdf');
+{
+  const e = F.emptyEditor();
+  e.reading_link = '  ';
+  e.reference_pages = '170-179 ';
+  e.reference_pdf = ' Text_Book_PDFs/215 Sections/X.pdf ';
+  const c = F.contentFromEditor(e, { keepKeys: true });
+  eq('a blank reading link is stored as none', c.reading_link, null);
+  eq('pages are trimmed', c.reference_pages, '170-179');
+  eq('the reference file is trimmed', c.reference_pdf, 'Text_Book_PDFs/215 Sections/X.pdf');
+  check('a blank reading link is not refused', !F.checkEditor(e).some(p => /reading link/.test(p)));
+  e.reference_pdf = 'Text_Book_PDFs/';
+  check('a directory as the reference file is refused', F.checkEditor(e).some(p => /\.pdf/.test(p)));
+}
+
+section('review fixes: a key read that finishes late fills only boxes that are still empty');
+{
+  const e = F.editorFromContent({ questions: [{ id: 'q3', role: 'free_response', type: 'free_response', text: 'Three', points: 1 }] }, null);
+  e.questions[0].expected_response = 'typed meanwhile';
+  const e2 = F.editorFromContent({ questions: [{ id: 'q4', role: 'free_response', type: 'free_response', text: 'Four', points: 1 }] }, null);
+  F.applyKeys(e, { q3: 'stored guidance' });
+  F.applyKeys(e2, { q4: 'stored guidance' });
+  eq('a box with text in it keeps it', e.questions[0].expected_response, 'typed meanwhile');
+  eq('an empty box is filled', e2.questions[0].expected_response, 'stored guidance');
+}
+
+section('review fixes: the page places the reading fields under More options and offers no Remove on pinned cards');
+{
+  const ui = read('site/js/free-response-ui.js');
+  const pg = read('site/faculty/items.html');
+  check('the editor takes a second place for the reading fields', /moreHost/.test(ui));
+  check('the page gives it a place inside the More options form', /id="i-more"[\s\S]*id="i-written-more"[\s\S]*<\/details>/.test(pg));
+  check('Remove is not drawn on a pinned card', /pinned \? '' : `<button[^>]*data-act="remove"/.test(ui));
+  check('a refusal about the reading link opens More options', I.moreOptionsTarget('The reading link must start with http://') === 'i-written-more');
+}
+
+
 if (!summary()) process.exit(1);

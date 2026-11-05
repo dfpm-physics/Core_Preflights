@@ -9,7 +9,7 @@ import { esc } from './util.js';
 import { uploadFigure } from './faculty-lessons.js';
 import {
   QUESTION_TYPES, TYPE_LABEL, READING_TIME_NOTE, newQuestion, pinnedState, pinOn, pinOff,
-  ragLabel, parseRagManifest, showKeys, PINNED_ROLES,
+  ragLabel, parseRagManifest, showKeys, PINNED_ROLES, removeQuestion, canChangeType,
 } from './free-response.js';
 
 const ROLE_LABEL = { reading_time: 'Reading time question', reading_reflection: 'Reading reflection question' };
@@ -32,24 +32,27 @@ export function mountFreeResponse(host, opts = {}) {
   let editor = null;
   let manifest = [];
   let notice = '';
+  let pdfOther = false;          // "Other" was picked and nothing has been typed yet
 
   const get = () => editor;
-  const set = (e) => { editor = e; notice = ''; draw(); };
+  const set = (e) => { editor = e; notice = ''; pdfOther = false; draw(); };
   const setManifest = (list) => { manifest = list || []; if (editor) draw(); };
 
   function pdfSelect() {
     const cur = editor.reference_pdf || '';
     const known = manifest.includes(cur);
+    const other = (cur && !known) || pdfOther;
     const opts2 = ['<option value="">No reference file</option>']
       .concat(manifest.map(p => `<option value="${esc(p)}"${p === cur ? ' selected' : ''}>${esc(ragLabel(p))}</option>`))
-      .concat([`<option value="__other"${cur && !known ? ' selected' : ''}>Other (type the path)</option>`]);
+      .concat([`<option value="__other"${other ? ' selected' : ''}>Other (type the path)</option>`]);
     return `<select data-f="pdf">${opts2.join('')}</select>` +
-      (cur && !known ? `<input type="text" data-f="pdf-text" value="${esc(cur)}" placeholder="Text_Book_PDFs/…" style="margin-top:6px">` : '');
+      (other ? `<input type="text" data-f="pdf-text" value="${esc(cur)}" placeholder="Text_Book_PDFs/…" style="margin-top:6px">` : '');
   }
 
   function qHtml(q, i) {
     const pinned = PINNED_ROLES.includes(q.role);
     const typeSel = pinned ? `<span class="muted">${esc(ROLE_LABEL[q.role])}</span>` :
+      !canChangeType(q) ? `<span class="muted" title="To change the type, remove this question and add a new one.">${esc(TYPE_LABEL[q.type])}</span>` :
       `<select data-q="${i}" data-f="type">${QUESTION_TYPES.map(t =>
         `<option value="${t}"${t === q.type ? ' selected' : ''}>${esc(TYPE_LABEL[t])}</option>`).join('')}</select>`;
     let body = `<div class="field"><label>Question text</label><textarea data-q="${i}" data-f="text" rows="2">${esc(q.text)}</textarea></div>`;
@@ -65,20 +68,21 @@ export function mountFreeResponse(host, opts = {}) {
           <input type="text" data-q="${i}" data-f="correct_answer" value="${esc(q.correct_answer ?? '')}"></div>`;
     } else {
       body += `<div class="field"><label>What a good answer looks like (for the grader; students never see this)</label>
-          <textarea data-q="${i}" data-f="expected_response" rows="2">${esc(q.expected_response ?? '')}</textarea></div>`;
+          <textarea data-q="${i}" data-f="expected_response" rows="2">${esc(q.expected_response ?? '')}</textarea>
+          ${q._stored ? '<div class="field-hint">Emptying this box does not remove guidance already stored. Replace it with new text to change it.</div>' : ''}</div>`;
     }
     const fig = q.figure_url
       ? `<span class="muted">Figure attached.</span> <button type="button" class="btn btn-ghost btn-sm" data-q="${i}" data-act="fig-clear">Remove figure</button>`
       : `<label class="btn btn-ghost btn-sm" style="cursor:pointer">Add figure<input type="file" accept="image/*" data-q="${i}" data-f="figure" style="display:none"></label>`;
     return `<div class="card" style="padding:10px;margin-bottom:10px" data-card="${i}">
       <div class="row" style="justify-content:space-between;gap:8px;align-items:center"><strong>Question ${i + 1}</strong>${typeSel}
-        <span class="field" style="margin:0"><label style="font-weight:500">Points</label>
-          <input type="text" data-q="${i}" data-f="points" value="${esc(q.points)}" style="width:60px"></span></div>
+        ${q.role === 'reading_time' ? '<span class="muted">0 points</span>' : `<span class="field" style="margin:0"><label style="font-weight:500">Points</label>
+          <input type="text" data-q="${i}" data-f="points" value="${esc(q.points)}" style="width:60px"></span>`}</div>
       ${body}
       <div class="row" style="gap:8px">${fig}
         <button type="button" class="btn btn-ghost btn-sm" data-q="${i}" data-act="up"${i === 0 ? ' disabled' : ''}>Up</button>
         <button type="button" class="btn btn-ghost btn-sm" data-q="${i}" data-act="down"${i === editor.questions.length - 1 ? ' disabled' : ''}>Down</button>
-        <button type="button" class="btn btn-ghost btn-sm" data-q="${i}" data-act="remove">Remove</button></div></div>`;
+        ${pinned ? '' : `<button type="button" class="btn btn-ghost btn-sm" data-q="${i}" data-act="remove">Remove</button>`}</div></div>`;
   }
 
   function draw() {
@@ -132,12 +136,13 @@ export function mountFreeResponse(host, opts = {}) {
       draw(); opts.onChange && opts.onChange(); return;
     }
     if (el.dataset.f === 'pdf') {
-      if (el.value === '__other') { editor.reference_pdf = editor.reference_pdf || 'Text_Book_PDFs/'; } else editor.reference_pdf = el.value;
+      if (el.value === '__other') { pdfOther = true; editor.reference_pdf = ''; } else { pdfOther = false; editor.reference_pdf = el.value; }
       draw(); return;
     }
     if (el.dataset.f === 'type') {
       const i = Number(el.dataset.q); const old = editor.questions[i];
-      const fresh = newQuestion(el.value, []);
+      if (!canChangeType(old)) return;
+      const fresh = newQuestion(el.value, [], editor.used_ids);
       editor.questions[i] = { ...fresh, id: old.id, role: old.role, text: old.text, points: old.points, figure_url: old.figure_url };
       draw(); opts.onChange && opts.onChange(); return;
     }
@@ -155,9 +160,9 @@ export function mountFreeResponse(host, opts = {}) {
   const onClick = (ev) => {
     const b = ev.target instanceof HTMLElement ? ev.target.closest('button') : null;
     if (!b || !editor) return;
-    if (b.dataset.add) { editor.questions.push(newQuestion(b.dataset.add, editor.questions)); draw(); opts.onChange && opts.onChange(); return; }
+    if (b.dataset.add) { editor.questions.push(newQuestion(b.dataset.add, editor.questions, editor.used_ids)); draw(); opts.onChange && opts.onChange(); return; }
     const i = Number(b.dataset.q), qs = editor.questions;
-    if (b.dataset.act === 'remove') qs.splice(i, 1);
+    if (b.dataset.act === 'remove') { if (PINNED_ROLES.includes(qs[i]?.role)) return; removeQuestion(editor, i); }
     else if (b.dataset.act === 'up' && i > 0) [qs[i - 1], qs[i]] = [qs[i], qs[i - 1]];
     else if (b.dataset.act === 'down' && i < qs.length - 1) [qs[i + 1], qs[i]] = [qs[i], qs[i + 1]];
     else if (b.dataset.act === 'fig-clear') delete qs[i].figure_url;

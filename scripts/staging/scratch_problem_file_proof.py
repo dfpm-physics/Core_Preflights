@@ -45,6 +45,7 @@ sys.path.insert(0, str(HERE))
 import db_target  # noqa: E402
 import scratch_build_check as sbc  # noqa: E402
 import scratch_stage_e_proof as se  # noqa: E402
+import v2_gate_lib as lib  # noqa: E402
 from scratch_stage_e_proof import check, section  # noqa: E402
 
 NODE_READER = """
@@ -329,16 +330,16 @@ def run_checks(cur, fx, node):
             cur.execute("COMMIT")
             return str(e).strip().splitlines()[0]
     why = director_publish()
-    check("with the step 1 rules in force a director's publish is refused and the message says why",
-          why is not None and ("stay_unpublished" in why or "cannot be published yet" in why), str(why))
     trig = ("assignment_offerings_new_paths_stay_unpublished", "assignment_offerings_new_stay_unpublished")
-    for t in trig:
-        cur.execute(f"ALTER TABLE app.assignment_offerings DISABLE TRIGGER {t}")
+    rules_in_force = bool(lib.existing_triggers(cur, "assignment_offerings", trig))      # migration 079 removes them
+    if rules_in_force:
+        check("with the step 1 rules in force a director's publish is refused and the message says why",
+              why is not None and ("stay_unpublished" in why or "cannot be published yet" in why), str(why))
+    live = lib.triggers_off(cur, "assignment_offerings", trig)
     try:
         why = director_publish()
     finally:
-        for t in trig:
-            cur.execute(f"ALTER TABLE app.assignment_offerings ENABLE TRIGGER {t}")
+        lib.triggers_on(cur, "assignment_offerings", live)
     check("with those two rules gone (step 2) a director's own publish statement succeeds, points equal to the questions", why is None, str(why))
     check("...and the item is published", one(cur, "SELECT is_published FROM app.assignment_offerings WHERE id=%s", dir_item["ao"]) is True)
 

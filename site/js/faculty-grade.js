@@ -1319,8 +1319,23 @@ export function seesWholeOffering(ctx) {
 }
 
 /** A shapeOffering() result (deadlines resolved) → the fields planPublish() and zeroRow() read. */
+/**
+ * Does this assignment take work submitted online, which is the only kind a deadline can leave unsubmitted? A graded path
+ * delivered as a typed response or a tutor does. In person, done elsewhere and online questions have no submission to
+ * wait for: planning a zero for every cadet on them would grade the whole class 0 the day the deadline passes. A row from
+ * before delivery was recorded is judged by its modality. Input with no `activities` (an already planned offering) keeps
+ * the answer it was given.
+ */
+export function takesOnlineWork(o) {
+  if (typeof o.takesWork === 'boolean' && !Array.isArray(o.activities)) return o.takesWork;
+  if (!Array.isArray(o.activities)) return true;
+  return o.activities.some(a => a.gradingRole === 'graded'
+    && (a.delivery ? ['typed_response', 'interactive_tutor'].includes(a.delivery) : ['written', 'interactive'].includes(a.modality)));
+}
+
 export function planOffering(o) {
   return {
+    takesWork: takesOnlineWork(o),
     id: o.offeringId ?? o.id,
     slug: o.slug || '',
     title: o.title || o.slug || '—',
@@ -1438,6 +1453,7 @@ export function planPublish({ offerings, students, submissions, grades, extensio
 
   const items = [];
   for (const off of offerings || []) {
+    if (off.takesWork === false) continue;       // nothing is submitted online here, so nothing is owed or planned
     for (const st of students || []) {
       const k = key(st.enrollment_id, off.id);
       const g = gradeBy[k] || null;

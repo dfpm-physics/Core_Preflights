@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-5JeSJanCENNmR+8avfsxv+8XOaI/O2BM8RvhWDwtHpY=' 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js 'sha256-O1yQJpi2tk+FUEfwpxi0rUB9mwFk14n/BCfN/1plBv8=' 'sha256-zadicE9YH0uQ9C7PeVOGnWGqQm6uxNJfz67hPQxQY40='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://dfpm-physics.github.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assignments · PREP</title>
   <script>(function(){try{var s=localStorage.getItem('cp.theme');var m=s||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');if(m==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
@@ -89,7 +89,7 @@
     import { esc, runPage, wireModalDismiss } from '../js/util.js';
     import * as I from '../js/faculty-items.js';
     import { mountFreeResponse, loadManifest } from '../js/free-response-ui.js';
-    import { emptyEditor, editorFromContent } from '../js/free-response.js';
+    import { emptyEditor, editorFromContent, applyKeys } from '../js/free-response.js';
     import { loadQuestionKeys } from '../js/faculty-lessons.js';
 
     const ctx = await bootstrap({ require: 'faculty' });
@@ -175,7 +175,7 @@
 
     function rowHtml(it) {
       const state = it.isNew
-        ? `<span class="score-badge pending">Unpublished</span>`
+        ? `<span class="score-badge ${it.isPublished ? 'full' : 'pending'}">${it.isPublished ? 'Published' : 'Unpublished'}</span>`
         : `<span class="score-badge ${it.isPublished ? 'full' : 'pending'}">${it.isPublished ? 'Published' : 'Draft'}</span>
            <div class="muted" style="font-size:0.78em;margin-top:3px">Entered on the older page</div>`;
       const actions = it.isNew
@@ -328,10 +328,17 @@
       fr.set(emptyEditor());
       if (path && path.delivery === 'typed_response' && path.modality === 'written') {
         fr.set(editorFromContent(path.content, null));
-        loadQuestionKeys(path.activityId).then(r => {
-          if (editing !== item) return;
-          if (r.error) { note.textContent = 'The answer keys could not be read, so their boxes are blank. Saving leaves the stored keys as they are.'; note.style.display = 'block'; return; }
-          fr.set(editorFromContent(path.content, r.keys));
+        // The keys arrive after the form is usable. They are put into the boxes that are still empty and never replace
+        // what the person has typed meanwhile; the ids the activity has rows for are remembered so none is reused.
+        Promise.all([loadQuestionKeys(path.activityId), I.loadQuestionIds(db, path.activityId)]).then(([r, ids]) => {
+          if (editing !== item || !fr.get()) return;
+          if (r.error) {
+            applyKeys(fr.get(), {}, ids.qids);
+            note.textContent = 'The answer keys could not be read, so their boxes are blank. Saving leaves the stored keys as they are. Do not type new guidance in a blank box until this is fixed: it would replace the stored one.';
+            note.style.display = 'block'; return;
+          }
+          applyKeys(fr.get(), r.keys, ids.qids);
+          fr.redraw();
         });
       } else if (item) fr.set(null);
       showInteractive();
@@ -423,6 +430,7 @@
         }
         closeForm();
         await load();
+        if (res.rescored) window.alert(res.rescored + ' grade(s) already given were updated to the new question points.');
       } finally { saving = false; $('im-save').disabled = false; }
     }
 

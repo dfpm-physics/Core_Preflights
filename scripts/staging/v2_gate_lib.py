@@ -62,10 +62,14 @@ class Builder:
         other cadet can share. The cadet's own existing row never counts as a clash.
         """
         short = f"cadet{str(cadet_id)[-4:]}@{DOMAIN}"
-        self.cur.execute("""SELECT 1 FROM students WHERE lower(email) = lower(%s) AND student_id <> %s
-                            UNION ALL
-                            SELECT 1 FROM auth.users WHERE lower(email) = lower(%s) AND id IS DISTINCT FROM %s""",
-                         (short, cadet_id, short, uid))
+        # A throwaway database builds auth.users as a stub with no email column; then only the students table can clash.
+        self.cur.execute("SELECT count(*) FROM information_schema.columns WHERE table_schema = 'auth' "
+                         "AND table_name = 'users' AND column_name = 'email'")
+        auth_has_email = self.cur.fetchone()[0] > 0
+        auth_half = ("UNION ALL SELECT 1 FROM auth.users WHERE lower(email) = lower(%s) AND id IS DISTINCT FROM %s"
+                     if auth_has_email else "")
+        self.cur.execute("SELECT 1 FROM students WHERE lower(email) = lower(%s) AND student_id <> %s " + auth_half,
+                         (short, cadet_id) + ((short, uid) if auth_has_email else ()))
         if self.cur.fetchone():
             return f"cadet{cadet_id}@{DOMAIN}"
         return short

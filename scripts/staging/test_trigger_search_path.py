@@ -231,9 +231,12 @@ def run_mode(conn, mode, path):
         check("assignment_offerings_snapshot_guard + freeze_*", freeze)
 
         # ---- the v2 triggers (migrations 026 to 039): each must exist, pin its path, and refuse under both paths ----
-        wanted = ["assignment_offerings_marker_one_way", "assignment_offerings_new_paths_stay_unpublished",
-                  "offering_activities_new_paths_stay_unpublished", "column_closures_no_direct_delete",
+        wanted = ["assignment_offerings_marker_one_way", "column_closures_no_direct_delete",
                   "question_keys_stamp", "grades_group_adjusted", "grades_group_adjusted_ins"]
+        # Migration 079 removes the two publishing rules; a database that still has them is checked, one that does not is not.
+        cur.execute("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal AND tgname IN "
+                    "('assignment_offerings_new_paths_stay_unpublished', 'offering_activities_new_paths_stay_unpublished')")
+        wanted += [r[0] for r in cur.fetchall()]
 
         def v2_catalog():
             cur.execute("SELECT t.tgname, p.proconfig::text FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid "

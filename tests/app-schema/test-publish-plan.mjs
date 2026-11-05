@@ -365,4 +365,20 @@ const whole = await G.viewPublishPlan(
   { offering: VIEW_OFF, students: [st(96)] }, NOW);
 eq('a viewer who sees every section gets the zero', whole.items.map(kindOf), ['zero']);
 
+section('an assignment that takes no online work is never planned (publish all would zero every cadet on it)');
+
+const shaped = (acts) => ({ offeringId: 'off-9', slug: 'x', title: 'X', dueAt: M_DUE, dueBySection: { 'sec-M': M_DUE },
+                            activities: acts, pointsPossible: 2 });
+const planFor = (acts) => G.planPublish({ offerings: [G.planOffering(shaped(acts))], canZero: true, writtenContent: {}, siblings: [],
+                                          students: [st(70)], submissions: [], grades: [], extensions: [] }, NOW);
+eq('an in-person item produces no plan items', planFor([{ gradingRole: 'graded', modality: 'external', delivery: 'in_person' }]).length, 0);
+eq('an elsewhere item produces none', planFor([{ gradingRole: 'graded', modality: 'external', delivery: 'elsewhere' }]).length, 0);
+eq('an online-questions item produces none', planFor([{ gradingRole: 'graded', modality: 'questions', delivery: 'online_questions' }]).length, 0);
+eq('a typed-response item still plans the zero', planFor([{ gradingRole: 'graded', modality: 'written', delivery: 'typed_response' }]).map(kindOf), ['zero']);
+eq('a tutor item still plans the zero', planFor([{ gradingRole: 'graded', modality: 'interactive', delivery: 'interactive_tutor' }]).length, 1);
+eq('an older row with no delivery recorded is treated by its modality (written plans the zero)',
+   planFor([{ gradingRole: 'graded', modality: 'written', delivery: null }]).map(kindOf), ['zero']);
+eq('an item that offers a choice with one online path plans the zero',
+   planFor([{ gradingRole: 'graded', modality: 'written', delivery: 'typed_response' }, { gradingRole: 'graded', modality: 'interactive', delivery: 'interactive_tutor' }]).map(kindOf), ['zero']);
+
 process.exit(summary() ? 0 : 1);

@@ -151,16 +151,16 @@ check("the query has no test on the active flag", "where co.is_active" not in sq
 
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 section("lesson_aggregate.py: _lesson_meta and --term")
-cur = Cur([[]])
+cur = Cur([[{"n": 1}], [{"n": 1}], []])
 LA._lesson_meta(Conn(cur), "preflight-08", term=None)
-sql, params = cur.calls[0]
+sql, params = cur.calls[-1]
 check("no term: the active test is still applied",
       "(%(term)s is not null or co.is_active)" in squash(sql))
 eq("no term: the term parameter is null", params["term"], None)
 
-cur = Cur([[]])
+cur = Cur([[{"n": 1}], [{"n": 1}], []])
 LA._lesson_meta(Conn(cur), "lesson-02-x", term="training-fall-2026")
-sql, params = cur.calls[0]
+sql, params = cur.calls[-1]
 eq("a named term is passed as the filter", params["term"], "training-fall-2026")
 check("a named term still narrows by term code", "(%(term)s is null or t.code = %(term)s)" in squash(sql))
 check("the active test is skipped when a term is named (the clause is true when the term is not null)",
@@ -187,7 +187,7 @@ check("the check reads delivery on active offerings of that course",
       "oa.delivery is null" in squash(cur.calls[0][0]) and "co.is_active" in squash(cur.calls[0][0])
       and cur.calls[0][1] == {"course": "phys-215"})
 
-cur = Cur([[{"n": 0}], [{"n": 1}], []])
+cur = Cur([[{"n": 0}], [{"n": 1}], [{"n": 1}], []])
 out = io.StringIO()
 saved = sys.stdout
 sys.stdout = out
@@ -195,8 +195,8 @@ try:
     LA.cmd_worklist(Args(), Conn(cur))
 finally:
     sys.stdout = saved
-check("with no null delivery the marker column is looked up and then the worklist query is sent", len(cur.calls) == 3)
-wsql, wparams = cur.calls[2]
+check("with no null delivery the marker column and the ai_drafted option are looked up, then the worklist query is sent", len(cur.calls) == 4)
+wsql, wparams = cur.calls[3]
 w = squash(wsql)
 check("it keeps only published work", "and ao.is_published" in w)
 check("it requires a graded path that is eligible: a tutor, or a typed response drafted by AI or entered the older way",

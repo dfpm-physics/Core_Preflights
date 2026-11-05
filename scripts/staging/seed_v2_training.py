@@ -79,6 +79,10 @@ def publish_into(b, co, item):
     c.execute("SELECT is_active FROM course_offerings WHERE id = %s", (co,))
     if c.fetchone()[0]:
         return b.publish(item)
+    # Migration 079 removes that rule; a database without it has nothing to switch off.
+    c.execute("SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'assignment_offerings_publish_needs_active' AND NOT tgisinternal)")
+    if not c.fetchone()[0]:
+        return b.publish(item)
     c.execute("ALTER TABLE assignment_offerings DISABLE TRIGGER assignment_offerings_publish_needs_active")
     try:
         b.publish(item)

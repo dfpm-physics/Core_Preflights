@@ -795,6 +795,17 @@ export const KEYS_SECOND_CONFIRM =
  * path, then the date rows. A failure after the offering row is returned with `partial`, a sentence saying what was
  * already saved.
  */
+/**
+ * Every question id the activity has a row for, including ones no longer in its content and ones with no key. The
+ * editor never hands out any of them again. A failed read returns an empty list and the error; the editor then still
+ * avoids every id in the stored content and every id that has a key.
+ */
+export async function loadQuestionIds(db, activityId) {
+  const { data, error } = await db.from('questions').select('qid').eq('activity_id', activityId);
+  if (error) return { qids: [], error };
+  return { qids: (data || []).map(r => r.qid).filter(Boolean), error: null };
+}
+
 export async function updateItem(db, ctx, item, form, ack = null) {
   const fresh = await db.from('assignment_offerings')
     .select(`id,updated_at,${NEW_PAGE_COLUMN}`).eq('id', item.offeringId).maybeSingle();

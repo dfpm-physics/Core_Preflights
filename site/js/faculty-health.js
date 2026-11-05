@@ -543,6 +543,7 @@ export const CHECKS = [
     fix: 'Run <code>python scripts/fall2026/set_due_dates.py --course &lt;code&gt;</code>. It is dry-run by default and idempotent, and writes all three storage locations. Check the dates against the syllabus, not just against emptiness — and note that a repair moving any deadline EARLIER is a decision for the course director, not an automatic fix.',
     detect: (m) => m.allLessons.filter(L =>
       (m.tracksPerCourse.get(L.courseOfferingId)?.size || 0) > 1 &&
+      L.dueAt &&   // an item with no deadline at all has nothing to be per-day about
       (!L.dueByDay || !Object.keys(L.dueByDay).length))
       .map(L => ({ where: `${L.offeringLabel} · ${L.slug}`, href: L.href, detail: 'due_by_day is empty' })),
   },

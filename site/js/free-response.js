@@ -43,18 +43,25 @@ export const READING_TIME_NOTE =
 export const QUESTION_TYPES = ['free_response', 'numerical', 'multiple_choice'];
 export const TYPE_LABEL = { free_response: 'Free response', numerical: 'Numerical', multiple_choice: 'Multiple choice' };
 
-/** The next unused `qN` id in a list. */
-export function nextQid(questions) {
+/**
+ * The next `qN` id nobody has used. `used` holds ids that are not in the list but must not be given out again: the ids
+ * the stored item had when it was opened, the ids it has keys for, and every question removed in this session. An id
+ * is the key that cadets' answers, scores and the grader's guidance hang on, so a removed question's id is never
+ * handed to a different question.
+ */
+export function nextQid(questions, used = []) {
   let max = 0;
-  (questions || []).forEach(q => { const m = /^q(\d+)$/.exec(q?.id || ''); if (m) max = Math.max(max, +m[1]); });
+  const see = (id) => { const m = /^q(\d+)$/.exec(id || ''); if (m) max = Math.max(max, +m[1]); };
+  (questions || []).forEach(q => see(q?.id));
+  (used || []).forEach(see);
   return 'q' + (max + 1);
 }
 
 /** A new ordinary question. It carries the `free_response` role from the start (see stampRoles in faculty-lessons.js). */
-export function newQuestion(type, questions) {
+export function newQuestion(type, questions, used = []) {
   const t = QUESTION_TYPES.includes(type) ? type : 'free_response';
   return {
-    id: nextQid(questions), type: t, role: FREE_RESPONSE_ROLE, text: '', points: 1,
+    id: nextQid(questions, used), type: t, role: FREE_RESPONSE_ROLE, text: '', points: 1,
     options: t === 'multiple_choice' ? ['A. ', 'B. ', 'C. ', 'D. '] : undefined,
     correct_answer: '', expected_response: '', figure_url: '',
     ...(t === 'numerical' ? { tolerance: 0.05 } : {}),
@@ -62,11 +69,11 @@ export function newQuestion(type, questions) {
 }
 
 /** The standard question for a pinned role. */
-export function pinnedQuestion(role, questions) {
+export function pinnedQuestion(role, questions, used = []) {
   return role === 'reading_time'
-    ? { id: nextQid(questions), type: 'free_response', text: READING_TIME_TEXT, points: 0,
+    ? { id: nextQid(questions, used), type: 'free_response', text: READING_TIME_TEXT, points: 0,
         student_note: READING_TIME_NOTE, role: 'reading_time', figure_url: '' }
-    : { id: nextQid(questions), type: 'free_response', text: READING_REFLECTION_TEXT, points: 1,
+    : { id: nextQid(questions, used), type: 'free_response', text: READING_REFLECTION_TEXT, points: 1,
         expected_response: READING_REFLECTION_GUIDANCE, role: 'reading_reflection', figure_url: '' };
 }
 
@@ -78,17 +85,20 @@ export function emptyEditor() {
   questions.push(pinnedQuestion('reading_time', questions));
   questions.push(pinnedQuestion('reading_reflection', questions));
   return { questions: inOrder(stampRoles(questions)), reading_link: '', reference_pdf: '', reference_pages: '',
-           access: ACCESS_OPEN };
+           access: ACCESS_OPEN, used_ids: [] };
 }
 
 /**
  * The editor for a stored typed-response path. Roles are adopted (a legacy list is claimed, not duplicated), then
  * every ordinary question is stamped `free_response`, exactly as the older editor does on opening. `keys` is the map
  * from loadQuestionKeys(); pass null when it could not be read (the boxes then stay blank and a save leaves keys alone).
+ * `storedIds` is every question id the activity has a row for (keys may be missing for some), so none is reused.
+ * A question that came from storage is marked `_stored`: its type is fixed (see canChangeType below).
  */
-export function editorFromContent(content, keys = null) {
+export function editorFromContent(content, keys = null, storedIds = []) {
   const c = content || {};
-  const questions = (Array.isArray(c.questions) ? c.questions : []).map(q => ({ ...q, options: q.options ? [...q.options] : q.options }));
+  const questions = (Array.isArray(c.questions) ? c.questions : []).map(q => ({ ...q, options: q.options ? [...q.options] : q.options, _stored: true }));
+  const used = new Set([...questions.map(q => q.id), ...(storedIds || []), ...Object.keys(keys || {})].filter(Boolean));
   adoptPinnedRoles(questions);
   stampRoles(questions);
   inOrder(questions);
@@ -97,8 +107,33 @@ export function editorFromContent(content, keys = null) {
     questions,
     reading_link: c.reading_link || '', reference_pdf: c.reference_pdf || '', reference_pages: c.reference_pages || '',
     access: writtenAccessOf({ written: c }),
+    used_ids: [...used],
   };
 }
+
+/** Fill the key boxes that are still empty from a key read that finished after the person began typing. Never
+ *  overwrites a box with text in it. Also remembers the ids those keys belong to. */
+export function applyKeys(editor, keys, storedIds = []) {
+  for (const q of editor.questions) {
+    const text = keys?.[q.id];
+    if (!text) continue;
+    const field = (q.type === 'multiple_choice' || q.type === 'numerical') ? 'correct_answer' : 'expected_response';
+    if (String(q[field] ?? '').trim() === '') showKeys([q], { [q.id]: text });
+  }
+  editor.used_ids = [...new Set([...(editor.used_ids || []), ...(storedIds || []), ...Object.keys(keys || {})])];
+  return editor;
+}
+
+/** Remove question `i`. Its id is remembered, so a question added later gets a new one. */
+export function removeQuestion(editor, i) {
+  const [gone] = editor.questions.splice(i, 1);
+  if (gone?.id) editor.used_ids = [...new Set([...(editor.used_ids || []), gone.id])];
+  return gone;
+}
+
+/** Whether a question may change type. One that came from storage may not: its answers, scores and key belong to the
+ *  type it has. To change it the director removes it and adds a new one, which gets a new id. */
+export const canChangeType = (q) => !q._stored && !PINNED_ROLES.includes(q.role);
 
 /** Which pinned questions the list holds, for the two toggles. */
 export const pinnedState = (editor) => pinnedPresence(editor.questions);
@@ -106,7 +141,7 @@ export const pinnedState = (editor) => pinnedPresence(editor.questions);
 /** Turn a pinned question on. Adds the standard one unless the list already holds that role. */
 export function pinOn(editor, role) {
   if (editor.questions.some(q => q.role === role)) return 'present';
-  editor.questions.push(pinnedQuestion(role, editor.questions));
+  editor.questions.push(pinnedQuestion(role, editor.questions, editor.used_ids));
   inOrder(editor.questions);
   return 'added';
 }
@@ -122,6 +157,7 @@ export function pinOff(editor, role) {
   const standard = role === 'reading_time' ? READING_TIME_TEXT : READING_REFLECTION_TEXT;
   const text = (q.text || '').trim();
   if (!text || text === standard.trim()) {
+    editor.used_ids = [...new Set([...(editor.used_ids || []), q.id])];
     editor.questions = editor.questions.filter(x => x !== q);
     return 'removed';
   }
@@ -136,12 +172,21 @@ export function pinOff(editor, role) {
  * a key box the person did not touch is not sent and the stored key stays as it is.
  */
 export function contentFromEditor(editor, { keepKeys }) {
-  const questions = questionsForSave(inOrder(stampRoles(editor.questions.map(q => ({ ...q })))), { keepKeys });
+  const questions = questionsForSave(inOrder(stampRoles(editor.questions.map(q => ({ ...q })))), { keepKeys }).map(q => {
+    const { _stored, ...out } = q;                                     // page-only marker, never stored
+    if (out.role === 'reading_time') out.points = 0;                   // the reading-time answer is never graded or shown per cadet
+    if (out.type === 'numerical') {
+      if (out.correct_answer != null) out.correct_answer = String(out.correct_answer).trim();
+      if (out.tolerance !== '' && out.tolerance != null) out.tolerance = Number(out.tolerance);
+    }
+    return out;
+  });
+  const clean = (v) => String(v ?? '').trim() || null;                 // trimmed, and blank means none, as the older save does
   return {
     questions,
-    reading_link: editor.reading_link || null,
-    reference_pdf: editor.reference_pdf || null,
-    reference_pages: editor.reference_pages || null,
+    reading_link: clean(editor.reading_link),
+    reference_pdf: clean(editor.reference_pdf),
+    reference_pages: clean(editor.reference_pages),
     access: editor.access === ACCESS_BY_PERMISSION ? ACCESS_BY_PERMISSION : ACCESS_OPEN,
   };
 }
@@ -150,6 +195,8 @@ export function contentFromEditor(editor, { keepKeys }) {
 export function questionPoints(editor) {
   return (editor.questions || []).reduce((n, q) => n + (isNaN(Number(q.points)) ? 0 : Number(q.points)), 0);
 }
+
+const NUMBER_RE = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/;
 
 /** Problems with the question set, as plain sentences. An empty list means it may be saved. */
 export function checkEditor(editor) {
@@ -160,21 +207,27 @@ export function checkEditor(editor) {
     const n = `Question ${i + 1}`;
     if (!String(q.text || '').trim()) out.push(`${n} needs its text.`);
     const pts = Number(q.points);
-    if (q.points === '' || q.points == null || isNaN(pts) || pts < 0) out.push(`${n} needs points (0 or more).`);
+    // The reading-time question is worth 0 and is saved as 0 whatever the box held, so it needs no check.
+    if (q.role !== 'reading_time' && (q.points === '' || q.points == null || isNaN(pts) || pts < 0)) out.push(`${n} needs points (0 or more).`);
     if (q.type === 'multiple_choice') {
       const opts = (q.options || []).filter(o => String(o).trim().length > 2);
       if (opts.length < 2) out.push(`${n} needs at least two answer options.`);
       if (!String(q.correct_answer || '').trim()) out.push(`${n} needs its correct answer.`);
     }
     if (q.type === 'numerical') {
-      if (q.correct_answer === '' || q.correct_answer == null || isNaN(Number(q.correct_answer))) out.push(`${n} needs a number as its correct answer.`);
+      // A plain decimal, optionally with an exponent. Number() alone also takes a blank, "Infinity" and "0x10", none of
+      // which the key-filing step files as a number.
+      const ca = String(q.correct_answer ?? '').trim();
+      if (!NUMBER_RE.test(ca) || !Number.isFinite(Number(ca))) out.push(`${n} needs a number as its correct answer.`);
       const tol = Number(q.tolerance);
-      if (isNaN(tol) || tol < 0 || tol > 1) out.push(`${n} needs a tolerance between 0 and 1.`);
+      if (q.tolerance === '' || q.tolerance == null || isNaN(tol) || tol < 0 || tol > 1) out.push(`${n} needs a tolerance between 0 and 1.`);
     }
   });
-  if (editor.reading_link && !/^https?:\/\//i.test(String(editor.reading_link).trim())) {
+  if (String(editor.reading_link || '').trim() && !/^https?:\/\//i.test(String(editor.reading_link).trim())) {
     out.push('The reading link must start with http:// or https://.');
   }
+  const pdf = String(editor.reference_pdf || '').trim();
+  if (pdf && !/\.pdf$/i.test(pdf)) out.push('The reference file must be a file name ending in .pdf. Pick one from the list, or leave it empty.');
   return out;
 }
 

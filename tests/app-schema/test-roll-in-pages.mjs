@@ -157,6 +157,17 @@ const finds2 = H.runChecks(H.shapeHealth(rawFor([
 ]))).find(c => c.id === 'artifact-url-missing').findings;
 eq('the artifact-link finding links the same way', finds2[0]?.href, 'items.html?a=nolink');
 
+// A course with both tracks: an item with no deadline at all is not "missing its per-day deadline"; one that has a
+// deadline but no per-day map still is.
+const twoTrack = (assignments) => ({ ...rawFor(assignments), sections: [
+  { id: 'sec', code: 'M1', meeting_days: ['M'], course_offering_id: 'co-real' },
+  { id: 'sec2', code: 'T1', meeting_days: ['T'], course_offering_id: 'co-real' }] });
+const dbd = (assignments) => H.runChecks(H.shapeHealth(twoTrack(assignments))).find(c => c.id === 'due-by-day-empty').findings.map(f => f.where.split(' · ').pop());
+eq('an item with no deadline at all is not flagged for a missing per-day deadline',
+  dbd([hRow('nodate', [{ modality: 'written', delivery: 'typed_response', grading: 'ai_drafted' }], { due_at: null, due_by_day: {} })]), []);
+eq('an item with a single deadline and no per-day map still is',
+  dbd([hRow('onedate', [{ modality: 'written', delivery: 'typed_response', grading: 'ai_drafted' }], { due_by_day: {} })]), ['onedate']);
+
 const loadQ = [];
 RESPONSES = { 'assignment_offerings.select': (st) => { loadQ.push({ t: 'assignment_offerings', cols: st.cols }); return []; } };
 try { await H.loadHealth(); } catch { /* only the query matters */ }

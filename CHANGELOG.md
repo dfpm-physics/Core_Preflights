@@ -8,6 +8,24 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (fix round on the roll-in: database rules, worklist, editor, Grade and Health; branch `v2-step2-rollin`, local, not applied anywhere)
+
+**What.**
+- Merged `v2-step2` (the screen rework) and `v2-stage-c-fixes` into the roll-in branch. Screen wording and layout follow the rework; behaviour follows the roll-in. The "More options" form now carries the reading fields, so a new assignment opens short.
+- Grade picker and Health work from the two earlier commits on this branch are included.
+- Migration 078 (not yet applied): a tutor-derived grade on a Choice item that also has an AI-drafted path now passes; before, it blocked the cadet's submission. A released mark can no longer be taken back by a script, and an AI-drafted path cannot be edited away once grades exist. Migration 079 now keeps the one-way rule on the new-page marker. Rollbacks updated.
+- Nightly worklist: a Choice item whose typed side is marked by a person is left out whole; a database with no marker column no longer widens what is drafted.
+- Free-response editor: a removed question's id is never reused; a stored question cannot change type; the reading-time question is always worth 0; numerical answers and tolerances are checked as a number input would; reading fields are trimmed; the key read cannot overwrite typing.
+- Grade publish plan no longer plans zeros for in-person, elsewhere and online-question items. Health no longer reports an empty due-by-day for an item with no due date.
+- Stale tests and seeds that named the dropped triggers now check that a trigger exists first.
+- `docs/decisions/V2-DATA-MODEL.md` section 24.3 records what the AI-draft rules guard and the known limits.
+
+**Proofs.** Offline: 64 suites, 4173 checks, clean. Scratch databases (dropped afterwards) through migration 079: 87, 165, 77, 74, 178, 19 and 32 checks passed.
+
+**Not done.** Nothing applied to any database; no Fall row written; `lessons.html` and `faculty-lessons.js` untouched; plan steps 6 and 7 not started; no page checked in a browser. Open minors: figure link paste and thumbnail, duplicated helper code, line endings of the new migration files.
+
+---
+
 ## 2026-11-05 — Matthew Recker via Claude (roll-in of the older assignment editor, part 1: the AI-drafted option and the end of the step 1 rules; branch `v2-step2-rollin`, local, not applied anywhere)
 
 **What.** Three migrations and one proof, on branch `v2-step2-rollin` cut from `v2-step2` at `256e94b`. Nothing is applied to staging or production.
