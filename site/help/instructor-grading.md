@@ -23,6 +23,10 @@ Past six assignments the boxes collapse back into one summary — *Grade assignm
 the Grade page with the assignment picker empty. Six named assignments is a worklist; sixteen is
 wallpaper.
 
+**Going on to the rollup.** Once an assignment is picked, **Open rollup →** beside the Section picker
+opens that assignment's rollup. If you picked one section, the rollup opens on that section. The
+button is disabled on a draft, because nobody can have submitted to it yet.
+
 **A box counts everything on that assignment still waiting on you** — work you have not graded and
 AI-suggested grades you have not finalized alike, since both are cleared the same way and in the
 same place. There is no separate "review the AI" box: a suggestion is not a grade until you say so,

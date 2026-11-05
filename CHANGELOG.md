@@ -10,6 +10,24 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ## 2026-11-04 — Matthew Recker via Claude
 
+### Grade page: an "Open rollup" button
+
+**What.** Once an assignment is picked on `site/faculty/grade.html`, a button beside the Section
+picker opens that assignment's rollup (`report.html?i=<offering id>`). One picked section carries
+across as `&section=`. "All sections" does not, because `report.html` has no URL value for it, so a
+director who picked it lands on the usual default scope. A draft shows the button disabled, as
+`lessons.html` does, because an instructor's rollup list omits drafts and `report.html` answers a
+miss by redirecting to the dashboard. `site/help/instructor-grading.md` says all of this.
+
+**Why.** The instructor asked for a direct route. From this page the rollup was a trip back through
+the dashboard or the Assignments page.
+
+**Verified** in headless Chrome against live data, signed in as the test faculty account on phys-110,
+read-only: hidden before a pick, correct link, section carried and dropped, arrival on the rollup
+with no redirect, no page errors. The draft state was tested by rewriting `is_published` in the
+browser's responses. **This is the only verification, and it used Node** (CORE.md §2). The driving
+script was a one-off and is not in the repo. An instructor (non-director) login was not tried.
+
 ### PHYS 310 Lesson 31, Fuel Cycle — written and Gemini preflight, published
 
 **What.** recker's instruction: *"create the preflight for lesson 31 nuclear fuel cycle."* This run

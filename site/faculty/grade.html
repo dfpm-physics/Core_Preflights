@@ -17,6 +17,8 @@
     <div class="toolbar">
       <div class="field grow"><label for="asgn">Assignment</label><select id="asgn"></select></div>
       <div class="field"><label for="section">Section</label><select id="section"></select></div>
+      <!-- The rollup is the other half of working an assignment. Filled by updateRollupLink(). -->
+      <div class="field" id="rollup-slot" hidden></div>
       <div class="field lamp-filter">
         <label id="lamp-label">Show answers</label>
         <div class="lamp-row" role="group" aria-labelledby="lamp-label" id="lamps">
@@ -130,7 +132,7 @@
     // Cadets whose saved grade is a zero written before they handed in (G.staleZeroIds).
     let staleIds = new Set();
     let maxTotal = 0, extSid = null;
-    let cachedMy = [], cachedAll = [];
+    let cachedMy = [], cachedAll = [], asgnList = [];
     // ?a=<assignment offering uuid> — how the dashboard's per-lesson due-out boxes and the
     // gradebook land you on the lesson they were counting, instead of on an empty picker.
     // Consumed once, on the first populate(), then forgotten so a course switch does not re-apply it.
@@ -163,7 +165,7 @@
         G.mySectionIds(ctx),
         ctx.isDirectorForCurrent() ? G.allSectionIds(ctx) : Promise.resolve([]),
       ]);
-      cachedMy = my; cachedAll = all;
+      cachedMy = my; cachedAll = all; asgnList = asgns;
 
       // A ?a= deep link wins over the retained pick, once. It is dropped if it names an
       // assignment this offering does not hold — a link built for phys-215 opened after a course
@@ -188,6 +190,7 @@
       if (reset) {
         container().innerHTML = `<div class="muted">Select an assignment to begin grading.</div>`;
         document.getElementById('grade-actions').style.display = 'none';
+        updateRollupLink();
         renderQueue();
       }
       else if (asgnSel().value) loadView();
@@ -228,6 +231,7 @@
       const asgnId = asgnSel().value;
       const actions = document.getElementById('grade-actions');
       lastPick = { asgn: asgnId, sec: secSel().value };
+      updateRollupLink();
       if (!asgnId) {
         container().innerHTML = `<div class="muted">Select an assignment to begin grading.</div>`;
         actions.style.display = 'none';
@@ -302,6 +306,27 @@
       // Deliberately not awaited: the queue is cross-assignment and reloads from scratch, and the
       // grading view the reader asked for must not wait on a panel above it.
       renderQueue();
+    }
+
+    /* The route from here to this assignment's rollup, which otherwise meant going back through the
+       dashboard or the Assignments page. `?i=` is the offering id, the same value this picker holds.
+       One picked section carries across. "All sections" does not, because report.html has no URL
+       value for it, so that reader lands on its usual default scope.
+       A draft gets the disabled button lessons.html gives it: an instructor's rollup list omits
+       unpublished offerings, and report.html answers a miss by redirecting to the dashboard. An
+       unsaved-work prompt is not needed here, because the page's beforeunload guard covers a link. */
+    function updateRollupLink() {
+      const slot = document.getElementById('rollup-slot');
+      const a = asgnList.find(x => x.id === asgnSel().value);
+      slot.hidden = !a;
+      if (!a) { slot.innerHTML = ''; return; }
+      const sec = secSel().value;
+      const section = sec && sec !== '__all__' ? `&section=${encodeURIComponent(sec)}` : '';
+      slot.innerHTML = a.is_published
+        ? `<a class="btn btn-secondary" href="report.html?i=${esc(encodeURIComponent(a.id))}${esc(section)}"
+              title="Open the readiness rollup for this assignment">Open rollup →</a>`
+        : `<button class="btn btn-secondary" disabled
+              title="This assignment is still a draft — no one can have submitted to it yet, so there is nothing to roll up.">Open rollup →</button>`;
     }
 
     const isZeroPointQuestion = q => Number(q?.points) === 0;

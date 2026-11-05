@@ -56,7 +56,7 @@
       "doc": "site/help/instructor-grading.md",
       "kind": "help",
       "tier": "instructor",
-      "reviewed": "2026-11-03",
+      "reviewed": "2026-11-04",
       "sources": [
         ".ai/instructions/CORE.md",
         ".ai/instructions/PROJECT.md",
