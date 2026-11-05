@@ -69,7 +69,6 @@
 // report.html did not have to change to keep working.
 
 import { db } from './supabase.js';
-import { withoutNewPageItems } from './new-page-guard.js';
 import {
   OFFERING_SELECT, SUBMISSION_SELECT, GRADE_SELECT, PRESENCE_SUBMISSION_SELECT,
   shapeOfferings, withResolvedDue, offeringSections,
@@ -104,10 +103,9 @@ export async function loadManager(ctx) {
   const isDirector = ctx.isDirectorForCurrent();
   const sectionIds = ctx.sectionIds || [];
 
-  // Items entered on the newer page are left out until this page can read them. See new-page-guard.js.
-  let offeringQ = withoutNewPageItems(db.from('assignment_offerings')
+  let offeringQ = db.from('assignment_offerings')
     .select(OFFERING_SELECT)
-    .eq('course_offering_id', ctx.currentOffering))
+    .eq('course_offering_id', ctx.currentOffering)
     .order('position', { ascending: true, nullsFirst: false });
   if (!isDirector) offeringQ = offeringQ.eq('is_published', true);
 

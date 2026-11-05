@@ -25,7 +25,6 @@
 // entry to that array — nothing else on the page needs to change.
 
 import { esc, pct } from './util.js';
-import { withoutNewPageItems } from './new-page-guard.js';
 
 // Resolved at CALL time, not at import time. config.js is a classic script that assigns
 // window.db, and reading it here at module scope would both couple the load order and make
@@ -168,12 +167,10 @@ export async function loadHealth({ lessonWindow = 6, errorDays = 14 } = {}) {
     db.from('enrollments')
       .select('id,student_id,section_id,status,students(student_id,name)')
       .eq('status', 'active'),
-    // Items entered on the newer page are left out: with no per-day schedule they would raise the
-    // empty-schedule check. See new-page-guard.js.
-    withoutNewPageItems(db.from('assignment_offerings')
+    db.from('assignment_offerings')
       .select('id,course_offering_id,is_published,opens_at,due_at,due_by_day,points_possible,' +
               'grading_mode,assignments!inner(id,slug,title),' +
-              'offering_activities(grading_role,is_visible,activities(id,slug,modality,title,content))'))
+              'offering_activities(grading_role,is_visible,activities(id,slug,modality,title,content))')
       .order('due_at', { ascending: true }),
     db.from('tutor_error_log')
       .select('id,logged_at,slug,kind,cadet_ref,cadet_id,http_status,model')

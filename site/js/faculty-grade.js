@@ -19,7 +19,6 @@
 // points_possible by a CHECK. Both replace application-level care that the old model lacked.
 
 import { db } from './supabase.js';
-import { withoutNewPageItems, refuseIfNewPage } from './new-page-guard.js';
 import { lastFirst } from './util.js';
 import { ReadFailed, checkedRows, checkedOne, checkedAll } from './checked-read.js';
 import {
@@ -32,10 +31,9 @@ import {
 /** Scheduled assignments for the current offering, for the picker. */
 export async function gradeAssignmentList(ctx, { strict = false } = {}) {
   if (!ctx.currentOffering) return [];
-  // Items entered on the newer page are left out until this page can grade them. See new-page-guard.js.
-  const res = await withoutNewPageItems(db.from('assignment_offerings')
+  const res = await db.from('assignment_offerings')
     .select('id, due_at, position, is_published, points_possible, assignments!inner(slug, title)')
-    .eq('course_offering_id', ctx.currentOffering))
+    .eq('course_offering_id', ctx.currentOffering)
     .order('position', { ascending: false, nullsFirst: false });
   // `strict`: the export and the backup must not mistake a failed read for an empty course.
   const data = strict ? checkedRows(res, 'the list of assignments') : res.data;
@@ -98,11 +96,6 @@ export async function loadGradingData(ctx, offeringId, sectionIds) {
 async function readGradingData(ctx, offeringId, sectionIds) {
   const empty = { offering: null, students: [], responseMap: {}, gradeMap: {}, extensionMap: {}, submissionMap: {} };
   if (!offeringId) return empty;
-
-  // An item entered on the newer page is not this page's to grade. The picker already leaves it out;
-  // this catches a link, a bookmark or a student page that names one. `refusal` carries the sentence.
-  const refused = await refuseIfNewPage(db, offeringId, 'grade');
-  if (refused) return { ...empty, refusal: refused.error };
 
   const offeringRow = checkedOne(await db.from('assignment_offerings')
     .select(OFFERING_SELECT).eq('id', offeringId).maybeSingle(), 'this assignment');

@@ -168,24 +168,33 @@ eq('a shaped offering carries the flag', S.shapeOffering({ id: 'o', entered_on_n
 eq('a row from a query that never named the column shapes to false',
   S.shapeOffering({ id: 'o', assignments: {}, offering_activities: [] }).enteredOnNewPage, false);
 
-section('pages that leave flagged items out');
+section('pages no longer leave flagged items out (migration 079; the older editor still refuses them)');
 reset();
 const Gr = await import('../../site/js/faculty-grade.js');
 await Gr.gradeAssignmentList(ctx);
-eq('the Grade picker filters the marker to false',
-  QUERIES.find(q => q.table === 'assignment_offerings')?.filters.entered_on_new_page, false);
+eq('the Grade picker does not filter on the marker',
+  QUERIES.find(q => q.table === 'assignment_offerings')?.filters.entered_on_new_page, undefined);
+eq('the Grade picker still asks for this course offering',
+  QUERIES.find(q => q.table === 'assignment_offerings')?.filters.course_offering_id, 'co-real');
+
+reset({ 'assignment_offerings.select': markerIs(true) });
+const gd = await Gr.loadGradingData(ctx, 'off-flagged', []);
+check('the Grade page does not refuse a flagged item', gd.refusal?.code !== 'new_page_item', gd.refusal);
+check('... and never asks which page owns it',
+  !QUERIES.some(q => q.table === 'assignment_offerings' && q.cols === MARKER_COLS));
+reset();
 
 reset({ 'assignment_offerings.select': () => [], 'enrollments.select': () => [] });
 const Ro = await import('../../site/js/faculty-rollup.js');
 try { await Ro.loadManager(ctx); } catch { /* only the query matters here */ }
-eq('the Report list filters the marker to false',
-  QUERIES.find(q => q.table === 'assignment_offerings')?.filters.entered_on_new_page, false);
+eq('the Report list does not filter on the marker',
+  QUERIES.find(q => q.table === 'assignment_offerings')?.filters.entered_on_new_page, undefined);
 
 reset();
 const H = await import('../../site/js/faculty-health.js');
 try { await H.loadHealth(); } catch { /* only the query matters here */ }
-eq('the Health page filters the marker to false',
-  QUERIES.find(q => q.table === 'assignment_offerings')?.filters.entered_on_new_page, false);
+eq('the Health page does not filter on the marker',
+  QUERIES.find(q => q.table === 'assignment_offerings')?.filters.entered_on_new_page, undefined);
 eq('... and still reads course offerings by the active flag',
   QUERIES.find(q => q.table === 'course_offerings')?.filters.is_active, true);
 

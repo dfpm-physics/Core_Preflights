@@ -16,6 +16,8 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 - `079_drop_step1_rules.sql`: removes the five step 1 rules (six triggers) listed in `docs/decisions/V2-DATA-MODEL.md` section 1. Apply order 077, 078, 079. Rollback restores them.
 - `scripts/staging/test_ai_drafted_scratch.py`: 55 checks on a throwaway database, each migration shown refused before and passing after, and each rollback run. `v2_gate_lib.publish` no longer fails on a database without the rule it switches off; the Stage E, entry and step 2 scratch proofs stop at 076, because 079 removes triggers they switch off.
 
+- The three page exclusions are out: the Grade picker, the Report list and the Health page no longer leave out items made on the newer pages, and the Grade page no longer refuses one. `lessons.html` and `faculty-lessons.js` are untouched and still refuse such an item, so `new-page-guard.js` stays. `test-new-page-guard.mjs` now asserts the absence (38 checks); the offline set is 59 suites, 3872 checks.
+
 **Why.** Matthew asked for free-response preflights graded overnight by the AI to be creatable on the Assignments page, and for the older assignments tab to be rolled in. The five-rule drop is on the critical path: with the step 1 rules in place no item made on the newer pages can be published or finalized.
 
 **Not done.** Nothing applied to any database. No Fall row written. `lessons.html` and `faculty-lessons.js` untouched. The page parts of the roll-in are later commits on this branch.
