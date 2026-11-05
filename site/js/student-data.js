@@ -19,7 +19,7 @@
 
 import { db } from './supabase.js';
 import {
-  OFFERING_SELECT, SUBMISSION_SELECT, SUBMISSION_SELECT_STUDENT, GRADE_SELECT_STUDENT,
+  OFFERING_SELECT, SUBMISSION_SELECT, SUBMISSION_SELECT_STUDENT, MY_WORK_SELECT, GRADE_SELECT_STUDENT,
   shapeOffering, shapeOfferings, withResolvedDue, offeringSections,
   shapeSubmission, effectiveDue, deriveStatus, isOpen,
   releaseAt, isReleased, LOOKAHEAD_DAYS,
@@ -97,9 +97,11 @@ export async function loadAssignmentStatuses(ctx, { includeLocked = false } = {}
 
   let submissions = [], grades = [], extensions = [], answerRows = [];
   if (enrollmentIds.length) {
-    const [subs, grds, exts, answers] = await Promise.all([
+    const [subs, work, grds, exts, answers] = await Promise.all([
       db.from('submissions').select(SUBMISSION_SELECT_STUDENT).in('enrollment_id', enrollmentIds),
-      db.from('grades').select(GRADE_SELECT_STUDENT).in('enrollment_id', enrollmentIds),
+      // Which activities they have worked on: the view, because the table no longer returns an interactive row.
+      db.from('my_work').select(MY_WORK_SELECT).in('enrollment_id', enrollmentIds),
+      db.from('my_grades').select(GRADE_SELECT_STUDENT).in('enrollment_id', enrollmentIds),
       // revoked_at IS NULL is the EXTENSION_SELECT contract (schema.js): a revoked extension is
       // not an extension, and this loader feeding one to effectiveDue() would show the cadet an
       // extended deadline that commitSubmission()'s own fresh fetch then refuses.
@@ -110,7 +112,11 @@ export async function loadAssignmentStatuses(ctx, { includeLocked = false } = {}
             .in('activity_id', writtenActivityIds)
         : Promise.resolve({ data: [] }),
     ]);
-    submissions = (subs.data || []).map(shapeSubmission);
+    // A failed read of the work rows must not read as "nothing started".
+    if (work.error) throw work.error;
+    const workBySubmission = {};
+    (work.data || []).forEach(w => { (workBySubmission[w.submission_id] ||= []).push(w); });
+    submissions = (subs.data || []).map(s => shapeSubmission({ ...s, submission_activities: workBySubmission[s.id] || [] }));
     grades = grds.data || [];
     extensions = exts.data || [];
     answerRows = answers.data || [];
@@ -553,7 +559,7 @@ export async function submitInteractionReport(ctx, { activity, offering, markdow
   // DB-level guard on both is still the hardening follow-up (CHANGELOG 2026-07-23).
   const enrollmentId = myEnrollmentIds(ctx)[0];
   if (enrollmentId) {
-    const { data: g } = await db.from('grades')
+    const { data: g } = await db.from('my_grades')
       .select('is_finalized')
       .eq('enrollment_id', enrollmentId)
       .eq('assignment_offering_id', offering.offeringId)
@@ -603,14 +609,17 @@ export async function submitInteractionReport(ctx, { activity, offering, markdow
     ? { ...data, transport }
     : (data ?? null);
 
-  const { error: workErr } = await db.from('submission_activities').upsert({
-    submission_id: submission.id,
-    activity_id: activity.id,
-    content,
-    report_markdown: markdown,
-    payload_bytes: markdown ? markdown.length : null,
-    is_final: true,
-  }, { onConflict: 'submission_id,activity_id' });
+  // Through a function, not the table: since migration 047 a cadet cannot select an interactive row, and an
+  // upsert needs the row to be selectable. The function checks the submission is theirs and the activity is an
+  // interactive one of that assignment. The values stored are exactly the ones the table write stored.
+  const { error: workErr } = await db.rpc('save_interactive_work', {
+    p_submission: submission.id,
+    p_activity: activity.id,
+    p_content: content,
+    p_markdown: markdown,
+    p_bytes: markdown ? markdown.length : null,
+    p_final: true,
+  });
   if (workErr) return { error: workErr };
 
   if (offered?.gradingRole !== 'graded') {

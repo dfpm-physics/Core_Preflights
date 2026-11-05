@@ -312,7 +312,7 @@ prose that reads them. Fold them into the readiness summary instead.
   list of individual answers.
 - **The graded concept question(s)** — each report row's `responses[]` carries the verbatim
   `answer` with the `status` it earned, and the top-level `questions` block carries the prompt and
-  its `expected_response`. Use the expected response as the physics source of truth: describe the
+  its `expected_response` (read from the key table by `lesson_aggregate.py pull` since migration 047, not from the activity's content). Use the expected response as the physics source of truth: describe the
   gap between it and what the cohort wrote, not merely what the cohort got wrong.
 - **Cite `numbers.questions[qid]`** for the outcome split — `full` / `warn` / `zero` / `ungraded`.
   Write "23/32 earned full credit on Q3" from that block; do not count report rows by hand, which

@@ -681,7 +681,35 @@ def _lesson_meta(conn, slug, term=None):
     m["slug"] = m["interactive_slug"] or m["assignment_slug"]
     m["activity_title"] = m["interactive_title"] or m["assignment_title"]
     m["written_content"] = json.loads(m["written_content"]) if m["written_content"] else None
+    _attach_answer_keys(conn, m["written_id"], m["written_content"])
     return m
+
+
+def _attach_answer_keys(conn, activity_id, content):
+    """Put each question's stored key text back on it as `expected_response`, for the summary prompt.
+
+    Since migration 047 the guidance is no longer inside `activities.content`; it lives in the staff-only key
+    table (`question_keys.reference_text`, current version, joined to `questions` by the question's id). A value
+    already present in `content` (a database before 047) is left alone, so this works on both sides of the
+    migration. Reads only; a database without the key table (before migration 030) is left as it was.
+    """
+    if not activity_id or not isinstance(content, dict):
+        return
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            select q.qid, k.reference_text
+              from questions q
+              join question_keys k on k.question_id = q.id and k.variant_key = '' and k.superseded_at is null
+             where q.activity_id = %s and k.reference_text is not null
+        """, (activity_id,))
+        keys = dict(cur.fetchall())
+    except Exception:  # noqa: BLE001 -- no key table yet; nothing to attach
+        conn.rollback()
+        return
+    for q in (content.get("questions") or []):
+        if isinstance(q, dict) and q.get("id") in keys and not q.get("expected_response"):
+            q["expected_response"] = keys[q["id"]]
 
 
 # The two pinned questions, and how to find them when nobody marked them.

@@ -184,17 +184,12 @@ export async function changePassword(currentPw, newPw, email) {
  * account), both of which leave the user on the default derived from their cadet ID — a value
  * printed on the roster and, in a squadron, effectively public.
  *
- * READS BOTH LOCATIONS ON PURPOSE. The flag now lives in `app_metadata`, which only the service
- * role can write; it previously lived in `user_metadata`, which the user's own session can write
- * — meaning a cadet could have cleared it from a browser console and kept the default password,
- * the exact state the flag exists to prevent. Accounts flagged before the move still carry the
- * old copy, so both are honoured until every one of them has rotated. `set-own-password` clears
- * both, so this pair converges on its own and the `user_metadata` read can be deleted once no
- * flagged accounts predate 2026-07-21.
+ * READS `app_metadata` ONLY. That copy can be written only by the service role. The older copy in
+ * `user_metadata` can be written by the user's own session, so nothing may trust it, and it is no
+ * longer read here, in auth.js, in `set-own-password`, or by the database.
  */
 export function mustChangePassword(user) {
-  return user?.app_metadata?.must_change_password === true
-      || user?.user_metadata?.must_change_password === true;
+  return user?.app_metadata?.must_change_password === true;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════

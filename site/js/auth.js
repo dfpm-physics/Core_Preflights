@@ -78,6 +78,57 @@ export async function bootstrap(opts = {}) {
     return;
   }
 
+  // ── Forced password rotation (moved up, before anything that reads the database) ──
+  // Set by `provision-students` (a new account) and the two staff-initiated resets. Each leaves
+  // the user on a default someone else knows, so it cannot be carried into normal use: every page
+  // bounces to the account page until the user picks their own.
+  //
+  // THE DATABASE ENFORCES IT TOO (migration 045). A session whose token carries the flag can read
+  // and write nothing in schema `app` except its own roster row, which is why the role lookup
+  // above still works. So this block must run BEFORE anything else reads the database (the
+  // preferences and the offerings below), and the account page gets a context with no offerings.
+  //
+  // The flag is read from `app_metadata` ONLY. That bag is writable only by the service role.
+  // `user_metadata` is writable by the user, so it is not consulted here or anywhere else.
+  //
+  // ── THE COPY IN HAND IS NOT THE ANSWER, IT IS THE QUESTION ───────────────────────────────
+  // `session.user` is a snapshot minted when the session started and cached in localStorage. It
+  // can say "must change" about an account that changed its password minutes ago, because
+  // clearing the flag is a server-side write nothing pushes back down (fixed 2026-07-29; the
+  // other half of the fix is the re-sign-in in account.js changePassword()).
+  //
+  // So a set flag triggers ONE server round trip to ask whether it is still set:
+  //   still set   -> redirect (or, on the account page, carry on with no offerings)
+  //   cleared     -> the TOKEN still carries the flag and the database honours the token, so
+  //                  refresh it, then carry on with the fresh copy
+  //   error       -> the session is dead server-side (a password change destroys it). Sign out and
+  //                  send them to the login page, the one place that can hand back a live one.
+  const onAccountPage = /\/account\.html$/.test(location.pathname);
+  let forced = user.app_metadata?.must_change_password === true;
+  if (forced) {
+    const { data: fresh, error: freshErr } = await db.auth.getUser();
+    if (freshErr || !fresh?.user) {
+      await db.auth.signOut();
+      go(`${loginPath}?err=stale`);
+      return;
+    }
+    user = fresh.user;
+    forced = user.app_metadata?.must_change_password === true;
+    if (forced && !onAccountPage) {
+      go(`${APP_ROOT}${role === 'faculty' ? 'faculty' : 'student'}/account.html?rotate=1`);
+      return;
+    }
+    if (!forced) {
+      const { data: renewed, error: renewErr } = await db.auth.refreshSession();
+      if (renewErr || !renewed?.session) {
+        await db.auth.signOut();
+        go(`${loginPath}?err=stale`);
+        return;
+      }
+      user = renewed.session.user;
+    }
+  }
+
   // ── Preferences (P1.3) ────────────────────────────────────────────────────
   // Before offerings are resolved, because sortAndPick() reads cp.currentOffering out of the
   // local cache — hydrating after it would apply the stored course one navigation late.
@@ -85,7 +136,7 @@ export async function bootstrap(opts = {}) {
   // The theme is re-applied only when the row actually disagreed with this browser's cache.
   // The <head> snippet has already painted the cached value, so a no-op reassignment on every
   // page load would be pure churn; the correction is the exception, not the rule.
-  const { changed } = await hydratePrefs(user.id);
+  const { changed } = forced ? { changed: [] } : await hydratePrefs(user.id);
   if (changed.includes('cp.theme')) {
     const mode = localStorage.getItem('cp.theme');
     applyTheme(mode || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
@@ -94,48 +145,6 @@ export async function bootstrap(opts = {}) {
 
   // ── Enforce required role ─────────────────────────────────────────────────
   if (opts.require && role !== opts.require) { go(roleHome(role)); return; }
-
-  // ── Forced password rotation ──────────────────────────────────────────────
-  // Set by `provision-students` (a new account) and `reset-student-password` (a staff reset).
-  // Both leave the user on the default derived from their cadet ID — a value on the roster and,
-  // in a squadron, effectively public. So it cannot be carried into normal use: every page
-  // bounces here until the user picks their own.
-  //
-  // The flag lives on the auth user rather than in a table because schema `app` DDL is sealed
-  // (PLAN-2026-07-20-ACCOUNTS.md §3). It reads BOTH metadata bags: `app_metadata` is where it
-  // lives now — service-role-only, so the user cannot clear it themselves — and `user_metadata`
-  // is the pre-2026-07-21 location, honoured until every account flagged there has rotated.
-  // The account page is exempt from the REDIRECT, or it would loop.
-  //
-  // ── THE COPY IN HAND IS NOT THE ANSWER, IT IS THE QUESTION ───────────────────────────────
-  // `session.user` is a snapshot minted when the session started and cached in localStorage. It
-  // can say "must change" about an account that changed its password minutes ago, because
-  // clearing the flag is a server-side write nothing pushes back down. Trusting it is what
-  // trapped people on this page for the rest of the token's hour (fixed 2026-07-29; the other
-  // half of the fix is the re-sign-in in account.js changePassword()).
-  //
-  // So a set flag triggers ONE server round trip to ask whether it is still set. Only flagged
-  // sessions pay for it, which is a handful of sign-ins per term. Three outcomes:
-  //   still set   → redirect, exactly as before
-  //   cleared     → carry on with the fresh copy, so the account page also stops showing the banner
-  //   error       → the session is dead server-side (a password change destroys it). Sign out and
-  //                 send them to the login page, which is the one place that can hand back a live
-  //                 one. Only reachable for an already-flagged session, so a transient network
-  //                 blip costs a sign-in, not a lost session.
-  if (user.app_metadata?.must_change_password || user.user_metadata?.must_change_password) {
-    const { data: fresh, error: freshErr } = await db.auth.getUser();
-    if (freshErr || !fresh?.user) {
-      await db.auth.signOut();
-      go(`${loginPath}?err=stale`);
-      return;
-    }
-    user = fresh.user;
-    if ((user.app_metadata?.must_change_password || user.user_metadata?.must_change_password)
-        && !/\/account\.html$/.test(location.pathname)) {
-      go(`${APP_ROOT}${role === 'faculty' ? 'faculty' : 'student'}/account.html?rotate=1`);
-      return;
-    }
-  }
 
   const ctx = {
     user, role, studentRow, instructorRow,
@@ -152,7 +161,11 @@ export async function bootstrap(opts = {}) {
     signOut: async () => { resetPrefs(); await db.auth.signOut(); go(loginPath); },
   };
 
-  if (role === 'faculty') await resolveFacultyOfferings(ctx);
+  // A flagged session may read nothing (see above), so it gets no offerings: the account page
+  // needs only the identity already in hand.
+  ctx.forcedRotation = forced;
+  if (forced) { /* no offerings */ }
+  else if (role === 'faculty') await resolveFacultyOfferings(ctx);
   else await resolveStudentOfferings(ctx);
 
   ctx.isDirectorForCurrent = () => isDirectorForCurrent(ctx);

@@ -145,10 +145,21 @@ export function unpackDashGrade(row) {
  */
 export const SUBMISSION_SELECT_STUDENT =
   'id,enrollment_id,assignment_offering_id,chosen_activity_id,status,committed_at,' +
-  'unlocked_by,unlocked_at,updated_at,' +
-  'submission_activities(id,activity_id,payload_bytes,is_final,updated_at)';
+  'unlocked_by,unlocked_at,updated_at';
 
-/* `instructor_note` is projected as a SINGLE JSONB KEY, never the column around it. An interactive
+/* A cadet's work rows (which activities they have worked on, and whether each is final), read from the
+ * `my_work` view and never from `submission_activities` embedded in a submission: since migration 047 the
+ * table gives a cadet only the rows of a WRITTEN activity, and the stored report and assessment of an
+ * interactive one are not readable at all. The view has no answers, report or assessment column. The
+ * cadet's saved written answers are still fetched from the table by activity id (loadAssignmentStatuses).
+ * Rows from here are grafted onto each submission as `submission_activities` before shapeSubmission(). */
+export const MY_WORK_SELECT = 'id,submission_id,enrollment_id,activity_id,payload_bytes,is_final,updated_at';
+
+/* Read from the `my_grades` view, never from `grades`: the view carries every grade column except
+ * `diagnostic` and exposes the one key of it a cadet is shown as `instructor_note` (migration 046).
+ * The table gives a cadet no row at all. This select must never name `diagnostic`.
+ *
+ * `instructor_note` is a SINGLE JSONB KEY, never the column around it. An interactive
  * grade has no question_scores, so it has nowhere else to carry the instructor's reason — and a
  * score withheld without one is the thing the course rule exists to prevent. Selecting
  * `diagnostic` outright would undo the privacy fix documented above: that column holds the whole
@@ -158,7 +169,7 @@ export const SUBMISSION_SELECT_STUDENT =
 export const GRADE_SELECT_STUDENT =
   'id,enrollment_id,assignment_offering_id,submission_id,points_earned,points_possible,' +
   'effort,question_scores,source,is_finalized,graded_by,graded_at,updated_at,' +
-  'instructor_note:diagnostic->instructor_note';
+  'instructor_note';
 
 /** A per-student deadline override, with its grant and revocation provenance (migration 007).
  *  ALWAYS pair this with `.is('revoked_at', null)` when computing a deadline — see the note
@@ -213,7 +224,10 @@ function accessOf(content) {
 export function shapeOffering(row) {
   if (!row) return null;
   const a = row.assignments || {};
+  // An activity the database has not delivered (the item has not opened for this student yet, migration 047)
+  // arrives as null. The item is still listed, by its calendar fields, with no activities.
   const activities = (row.offering_activities || [])
+    .filter(oa => oa && oa.activities)
     .map(oa => {
       const act = oa.activities || {};
       return {

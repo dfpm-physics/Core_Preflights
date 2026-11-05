@@ -69,9 +69,14 @@ section('the app client cannot reach schema `public`');
   check('student sees no submission that is not theirs',
         (subs || []).every(r => (enroll || []).some(e => e.id === r.enrollment_id)));
 
-  const { data: grades } = await client.from('grades').select('id, is_finalized');
+  // Cadets read their grades through my_grades (migration 046); the table itself gives them no row, which is
+  // what keeps `diagnostic` out of their reach. Needs 046 applied: before it, the second check fails.
+  const { data: grades } = await client.from('my_grades').select('id, is_finalized');
   check('student sees no unfinalized grade',
         (grades || []).every(g => g.is_finalized === true));
+  const { data: tableGrades } = await client.from('grades').select('id');
+  check('student reads no row of the grades table itself (it holds the diagnostic)', (tableGrades || []).length === 0,
+        `saw ${(tableGrades || []).length}`);
 
   // Directors/admins can read every roster row; a student must not.
   const { data: allSections } = await client.from('sections').select('id');

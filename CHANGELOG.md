@@ -8,6 +8,83 @@ Newest entries first. Dates are `YYYY-MM-DD`.
 
 ---
 
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage D: answer keys out of content, release time in row-level security; `v2-step2` branch)
+
+- **Migration `app/047_release_gated_content.sql`, with its rollback.** Not applied anywhere; proved on a throwaway
+  database with simulated claims (`scripts/staging/test_release_gated_content_scratch.py`: before 27 passed and 12
+  withholding cases failed, after 44 passed and none failed, then rollback restored content, snapshots, frozen stamps,
+  question rows and key rows exactly, then a second apply and edits, then the rollback refused as designed).
+- **Keys leave `activities.content` and `content_snapshot`.** `expected_response`, `correct_answer`, `answer_key` and
+  `solution` are filed in the staff-only key table (`questions` + `question_keys`, 030). An existing current key is never
+  changed. The move counts its work and raises on a mismatch; the exact before-state is kept in `content_key_archive`
+  (staff-only), which the rollback uses and then drops. A trigger files any key written into `content` afterwards and
+  strips it in the same statement; a blank field changes nothing, new text becomes a new key version.
+- **Release time in row-level security.** A cadet reads an activity's content only once the item has opened for their
+  section (`release_at`, 038: `opens_at`, else seven days before the scheduled deadline floored to the start of the day
+  in Denver), or once they have a submission or a grade on it. Titles, dates and the schedule row of a future item stay
+  readable. `my_grades` also holds back a grade whose item has a future `grades_release_at`.
+- **Interactive work rows.** A cadet no longer reads or edits the stored report and assessment of an interactive
+  activity. State comes from the new `my_work` view; the report is saved through `save_interactive_work()`. Written
+  answers are unchanged. Site: `schema.js`, `student-data.js`.
+- **Readers of the key.** `supabase/admin/lesson_aggregate.py` and the `preflight-analyze` and `lesson-aggregate` skill
+  text now read the key from the key table, falling back to `content` when present, so they work on both sides of the
+  migration. **They must be on the branch the live runs use before this migration is applied there.**
+- **Deliberately not done.** Nothing applied or deployed. The lesson editor (frozen) shows key boxes blank after the
+  move and saving them blank leaves stored keys alone. Snapshot question text is not hidden (only keys are removed).
+  The commit path, deadlines and late marking are untouched. Three help pages are flagged by the doc-source check
+  because the skill files changed; their content is not affected and they were not re-dated.
+- **Before applying on the live database:** export `activities`, `assignment_offerings` (content and snapshot columns)
+  and `question_keys` to JSON, compare counts to the migration's printed counts, and read the verify queries at the end of
+  the file.
+
+---
+
+## 2026-11-05 — Matthew Recker via Claude (v2 Stage D: same-offering checks, forced password change; `v2-step2` branch)
+
+- **Migration `app/044_same_offering_checks.sql`, with its rollback.** Eleven triggers make a row that names two things
+  name two things of the same course offering: a staff assignment's section belongs to its offering; a due date's
+  section, and a grade's, submission's, extension's, attempt's and group snapshot's enrollment, belong to the same
+  offering as the item; a group on a snapshot or a group grade belongs to the item's offering; an item's assignment
+  belongs to the offering's course or to no course (a shared library assignment, `course_id` NULL, is allowed on purpose);
+  an item's activity path is an activity of the item's own assignment. They apply to every role, on insert and on an
+  update of the checked columns only, and refuse with SQLSTATE 23514. Policies are unchanged. Rows that already disagree
+  are counted in a warning when the file runs and are left as they are.
+- **Test first:** `scripts/staging/test_same_offering_scratch.py` builds schema `app` through 043 in a throwaway database
+  on the staging server, loads invented rows for two offerings, and runs 33 cases before and after the migration,
+  including a signed-in director. Before: 15 passed, 18 failed, 18 bad rows accepted. After: 33 passed, 0 failed.
+- **Migration `app/045_forced_password_change.sql`, with its rollback.** A session whose token carries
+  `app_metadata.must_change_password` can no longer read or write anything in schema `app` except its own roster row:
+  `current_uid()` returns NULL for it and one restrictive policy sits on every table. `user_metadata` is not read by the
+  database, by `set-own-password` (which no longer waives the current-password check on that copy, and no longer writes
+  it), by `site/js/auth.js`, or by `site/js/account.js`. `auth.js` now makes the flag check before it reads preferences or
+  offerings, gives a flagged session on the account page a context with no offerings, and refreshes the token when the flag
+  turns out to be cleared, because the database reads the token.
+- **Migration `app/046_diagnostic_and_staff_reads.sql`, with its rollback.** A cadet no longer reads `grades.diagnostic`. Cadets read their own
+  finalized grades through the new view `my_grades` (every grade column except `diagnostic`, plus `instructor_note`), and the
+  cadet row policy on the table is dropped. The staff list (`instructors`) is read by staff, and by each user for their own row.
+  `assignments` and `activities` are read by staff of the course they belong to, by any staff for the shared library, and by a global
+  admin for all (helper `staff_courses()`). The column, its writers (`/preflight-analyze`, `/lesson-aggregate`, the commit trigger,
+  the repair scripts) and every staff read are unchanged, so neither skill needs a change. Site: `student-data.js` reads `my_grades`
+  and `GRADE_SELECT_STUDENT` names `instructor_note`; the live suites `test-rest.mjs` and `test-isolation.mjs` follow.
+- **Test first:** `scripts/staging/test_diagnostic_reads_scratch.py` builds the schema through 045 in a throwaway database on the
+  staging server and runs 29 cases with simulated signed-in claims, before and after, plus a check of the view's columns and of
+  the writers. Before: 12 passed, 17 failed, 7 leak cases served (a cadet read the diagnostic, read 4 staff rows including the admin,
+  and a director read another course's library). After: 29 passed, 0 failed. Re-ran `test_same_offering_scratch.py` (044): 33 of 33
+  after (15 of 33 before).
+- **Not done:** nothing applied or deployed. `submission_activities.content` (an interactive activity's assessment, readable by its
+  author) is migration 047's change. The live suites above were edited and not run. The real REST path and the cadet pages were not
+  exercised in a browser. The analysis skills were read, not changed: when this is applied to production they keep working, and the
+  site files and the migration must go out together.
+- **Test first:** `scripts/staging/test_forced_rotation_scratch.py` (throwaway database, simulated signed-in claims, as the
+  044 test does). Before: 30 passed, 19 failed, 19 flagged cases served, and 47 tables lacked the block. After: 49 passed,
+  0 failed, every table carries it. Offline suites that touch `auth.js` (nav, imports, config, edge functions, lesson-due,
+  help-status, and the rest of the offline set) pass; `node --check site/js/auth.js` passes.
+- **Not done:** neither migration is applied anywhere, staging or production; both rollbacks are written and not run. The
+  `set-own-password` edit is not deployed. Nothing was run against a real session: the account page under a flagged
+  session, the sign-out button, a password change followed by the sign-in, and the staff and cadet reset paths all still
+  need a real sign-in on staging. Accounts flagged only in `user_metadata` (before 2026-07-21) are no longer forced; none
+  was looked up. No existing row was repaired. Nothing was committed or pushed.
+
 ## 2026-11-05 — Matthew Recker via Claude (v2 Stage C staff pages, on staging, `v2` branch)
 
 - **Rough Items page for directors, `site/faculty/items.html`, on staging only.** It enters work of all seven

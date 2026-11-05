@@ -182,6 +182,11 @@ From the embedded `offering_activities`, take the entry whose `activities.modali
 - `QUESTIONS` = `activities.content.questions` (the array the old `assignments.questions` held)
 - `REFERENCE_PDF` = `activities.content.reference_pdf` (may be null)
 - `REFERENCE_PAGES` = `activities.content.reference_pages` (may be null, e.g. `"45-52, 60"`)
+- `EXPECTED_RESPONSE` per question: **since migration 047 the answer guidance is not in `content.questions`.**
+  Read the current key text with
+  `GET {SUPA_URL}/rest/v1/question_keys?select=reference_text,questions!inner(qid,activity_id)&questions.activity_id=eq.{WRITTEN_ACTIVITY_ID}&superseded_at=is.null&variant_key=eq.`
+  and match `questions.qid` to the question's `id`. A question's own `expected_response` in `content`, when present
+  (a database before 047), wins. Wherever this skill says `expected_response`, it means this value.
 - `POINTS_POSSIBLE` = the offering's `points_possible` (**not** a per-question sum you invent)
 
 An offering may also carry an **interactive** activity (`modality = 'interactive'`). This skill

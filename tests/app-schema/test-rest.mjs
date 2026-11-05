@@ -72,8 +72,8 @@ check('…and no question_scores', !DASH_GRADE_SELECT.includes('question_scores'
 await shapeOk('SUBMISSION_SELECT_STUDENT on submissions', () =>
   db.from('submissions').select(SUBMISSION_SELECT_STUDENT).in('enrollment_id', [NIL]));
 
-await shapeOk('GRADE_SELECT_STUDENT on grades', () =>
-  db.from('grades').select(GRADE_SELECT_STUDENT).in('enrollment_id', [NIL]));
+await shapeOk('GRADE_SELECT_STUDENT on my_grades (migration 046)', () =>
+  db.from('my_grades').select(GRADE_SELECT_STUDENT).in('enrollment_id', [NIL]));
 
 await shapeOk('the written-answers fetch the student loader splits out', () =>
   db.from('submission_activities').select('submission_id,activity_id,content')
@@ -94,8 +94,8 @@ check('…and no submission_activities.content — the interactive `d`',
  * instead: the bare column is not selected, and the only jsonb path taken is that one key. */
 check('the student grade select does not ask for the diagnostic column',
       !/(^|,)\s*diagnostic\s*(,|$)/.test(GRADE_SELECT_STUDENT));
-check('…and the only key it projects out of it is instructor_note',
-      (GRADE_SELECT_STUDENT.match(/diagnostic->>?[a-z_]+/g) || []).join() === 'diagnostic->instructor_note');
+check('…nor any path into it: the one key a cadet sees is the view column instructor_note',
+      !GRADE_SELECT_STUDENT.includes('diagnostic') && /(^|,)instructor_note(,|$)/.test(GRADE_SELECT_STUDENT));
 // …while the faculty ones still do. The rollup's flag pills are built from exactly these.
 check('the faculty selects still carry them, or the rollup goes blank',
       SUBMISSION_SELECT.includes('content') && GRADE_SELECT.includes('diagnostic'));

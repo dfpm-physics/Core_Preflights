@@ -77,9 +77,9 @@ serve(async (req) => {
       await supabaseAdmin.auth.admin.getUserById(caller.id);
     if (getErr) return ok({ error: "Could not read your account: " + getErr.message });
 
-    const mustChange =
-      adminUser.user?.app_metadata?.must_change_password === true ||
-      adminUser.user?.user_metadata?.must_change_password === true;  // legacy location
+    // app_metadata ONLY. user_metadata is writable by the user's own session, so a flag read from
+    // there would let anyone waive the current-password check by setting it on themselves.
+    const mustChange = adminUser.user?.app_metadata?.must_change_password === true;
 
     if (!mustChange) {
       if (!currentPassword) return ok({ error: "Enter your current password." });
@@ -99,13 +99,10 @@ serve(async (req) => {
       if (pwErr) return ok({ error: "That is not your current password." });
     }
 
-    // Clear the flag in BOTH places. app_metadata is where it lives now; user_metadata is
-    // cleared too so an account flagged before this function shipped does not stay in a
-    // redirect loop against a copy nothing else reads.
+    // Clear the flag where it lives. Nothing reads user_metadata any more, so it is left alone.
     const { error: updErr } = await supabaseAdmin.auth.admin.updateUserById(caller.id, {
       password: String(newPassword),
       app_metadata: { must_change_password: false },
-      user_metadata: { must_change_password: false },
     });
 
     if (updErr) return ok({ error: "Could not update your password: " + updErr.message });
